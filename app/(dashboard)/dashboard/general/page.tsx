@@ -49,7 +49,9 @@ export default function GeneralPage() {
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name" className="mb-2">
+                Name
+              </Label>
               <Input
                 id="name"
                 name="name"
@@ -59,7 +61,9 @@ export default function GeneralPage() {
               />
             </div>
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="mb-2">
+                Email
+              </Label>
               <Input
                 id="email"
                 name="email"

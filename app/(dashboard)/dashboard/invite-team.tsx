@@ -38,7 +38,9 @@ export function InviteTeamMember() {
       <CardContent>
         <form action={inviteAction} className="space-y-4">
           <div>
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="mb-2">
+              Email
+            </Label>
             <Input
               id="email"
               name="email"
@@ -56,11 +58,11 @@ export function InviteTeamMember() {
               className="flex space-x-4"
               disabled={!isOwner}
             >
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 mt-2">
                 <RadioGroupItem value="member" id="member" />
                 <Label htmlFor="member">Member</Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 mt-2">
                 <RadioGroupItem value="owner" id="owner" />
                 <Label htmlFor="owner">Owner</Label>
               </div>
