@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
 
   let res = NextResponse.next();
 
-  if (sessionCookie && request.method === "GET") {
+  if (sessionCookie && request.method === 'GET') {
     try {
       const parsed = await verifyToken(sessionCookie.value);
       const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -24,12 +24,12 @@ export async function middleware(request: NextRequest) {
         name: 'session',
         value: await signToken({
           ...parsed,
-          expires: expiresInOneDay.toISOString(),
+          expires: expiresInOneDay.toISOString()
         }),
         httpOnly: true,
         secure: true,
         sameSite: 'lax',
-        expires: expiresInOneDay,
+        expires: expiresInOneDay
       });
     } catch (error) {
       console.error('Error updating session:', error);
@@ -45,4 +45,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  runtime: 'nodejs'
 };
