@@ -28,6 +28,26 @@ import { RncSearch } from '@/components/RncSearch';
 interface Cliente { id: number; razonSocial: string; rnc: string | null; email: string | null; telefono: string | null; }
 interface Producto { id: number; nombre: string; descripcion: string | null; precioDOP: number; tasaItbis: string; tipo: string; referencia: string | null; }
 
+/** Datos de un borrador guardado para pre-rellenar el form */
+export interface BorradorInicial {
+  id:                   number;
+  tipoEcf:              string;
+  clientId:             number | null;
+  rncComprador:         string | null;
+  razonSocialComprador: string | null;
+  emailComprador:       string | null;
+  telefonoComprador:    string | null;
+  tipoPago:             number | null;
+  fechaLimitePago:      string | null;
+  ncfModificado:        string | null;
+  notas:                string | null;
+  terminosCondiciones:  string | null;
+  pieFactura:           string | null;
+  retenciones:          string | null; // JSON string
+  comentario:           string | null;
+  lineasJson:           string | null; // JSON string de ItemLinea[]
+}
+
 interface ItemLinea {
   id: number;
   productoId?: number;
@@ -858,11 +878,38 @@ interface EmpresaPerfil {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: EmpresaPerfil | null }) {
+export default function NuevaFacturaForm({
+  initialPerfil,
+  initialData,
+}: {
+  initialPerfil: EmpresaPerfil | null;
+  initialData?:  BorradorInicial | null;
+}) {
   const router = useRouter();
   const empresa = initialPerfil;
 
-  const [tipoEcf, setTipoEcf]         = useState('31');
+  // Ítems pre-cargados desde borrador (si existe lineasJson)
+  const itemsIniciales: ItemLinea[] = (() => {
+    if (!initialData?.lineasJson) return [];
+    try {
+      const parsed = JSON.parse(initialData.lineasJson) as Array<Partial<ItemLinea>>;
+      return parsed.map((it, i) => ({
+        id:                     i + 1,
+        productoId:             it.productoId,
+        nombreItem:             it.nombreItem ?? '',
+        referencia:             it.referencia ?? '',
+        descripcionItem:        it.descripcionItem ?? '',
+        cantidadItem:           it.cantidadItem ?? 1,
+        precioUnitarioItem:     it.precioUnitarioItem ?? 0,
+        descuentoPct:           it.descuentoPct ?? 0,
+        tasaItbis:              (it.tasaItbis ?? 'exento') as ItemLinea['tasaItbis'],
+        indicadorBienoServicio: (it.indicadorBienoServicio ?? '2') as '1' | '2',
+        unidadMedida:           it.unidadMedida,
+      }));
+    } catch { return []; }
+  })();
+
+  const [tipoEcf, setTipoEcf]         = useState(initialData?.tipoEcf ?? '31');
   const [categoriaId, setCategoriaId] = useState('factura-venta');
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
@@ -870,15 +917,22 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const categoriaActual  = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
   const tiposCategoria   = categoriaActual.tipos;
 
+  // Si hay borrador: pre-cargar cliente como "manual" (sin objeto Cliente completo)
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
-  const [rncManual, setRncManual]             = useState('');
-  const [rncManualNombre, setRncManualNombre] = useState('');
-  const [emailManual, setEmailManual]         = useState('');
-  const [telefonoManual, setTelefonoManual]   = useState('');
+  const [rncManual, setRncManual]             = useState(initialData?.rncComprador ?? '');
+  const [rncManualNombre, setRncManualNombre] = useState(initialData?.razonSocialComprador ?? '');
+  const [emailManual, setEmailManual]         = useState(initialData?.emailComprador ?? '');
+  const [telefonoManual, setTelefonoManual]   = useState(initialData?.telefonoComprador ?? '');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
 
-  // Plazos de pago
-  const [plazoId, setPlazoId]               = useState('contado');
+  // Plazos de pago — mapear tipoPago DGII → plazoId local
+  const tipoPagoToPlazaId = (tp: number | null): string => {
+    if (!tp || tp === 1) return 'contado';
+    if (tp === 3) return 'gratuito';
+    if (tp === 4) return 'uso';
+    return 'credito-30'; // tp === 2
+  };
+  const [plazoId, setPlazoId]               = useState(() => tipoPagoToPlazaId(initialData?.tipoPago ?? null));
   const [customPlazos, setCustomPlazos]     = useState<Plazo[]>([]);
   const [showNuevoPlazo, setShowNuevoPlazo] = useState(false);
   const [npNombre, setNpNombre]             = useState('');
@@ -886,13 +940,18 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const [npError, setNpError]               = useState<string | null>(null);
 
   const [fechaEmision, setFechaEmision]       = useState(() => new Date().toISOString().slice(0, 10));
-  const [fechaLimitePago, setFechaLimitePago] = useState('');
-  const [ncfModificado, setNcfModificado]     = useState('');
+  const [fechaLimitePago, setFechaLimitePago] = useState(initialData?.fechaLimitePago ?? '');
+  const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
 
-  const [items, setItems] = useState<ItemLinea[]>([itemVacio()]);
+  const [items, setItems] = useState<ItemLinea[]>(
+    itemsIniciales.length ? itemsIniciales : [itemVacio()]
+  );
   const [showNuevoProductoIdx, setShowNuevoProductoIdx] = useState<number | null>(null);
 
-  const [retenciones, setRetenciones]   = useState<Retencion[]>([]);
+  const [retenciones, setRetenciones] = useState<Retencion[]>(() => {
+    if (!initialData?.retenciones) return [];
+    try { return JSON.parse(initialData.retenciones); } catch { return []; }
+  });
 
   // NCF gear modal
   const [showEditarNcf, setShowEditarNcf] = useState(false);
@@ -900,9 +959,9 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const [ncfSiguienteNum, setNcfSiguienteNum] = useState('');
   const [ncfFechaVenc, setNcfFechaVenc] = useState('');
 
-  const [notas, setNotas]               = useState('');
-  const [terminosCondiciones, setTerminos] = useState('');
-  const [pieFactura, setPieFactura]     = useState('');
+  const [notas, setNotas]               = useState(initialData?.notas ?? '');
+  const [terminosCondiciones, setTerminos] = useState(initialData?.terminosCondiciones ?? '');
+  const [pieFactura, setPieFactura]     = useState(initialData?.pieFactura ?? '');
 
   // Pago recibido
   const [pagoRecibido, setPagoRecibido] = useState(false);
@@ -1175,6 +1234,22 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
       almacenId:      almacenId      || undefined,
       listaPreciosId: listaPreciosId || undefined,
       vendedorId:     vendedorId     || undefined,
+      // Para editar borradores
+      clientId:   clienteSeleccionado?.id ?? undefined,
+      lineasJson: JSON.stringify(
+        items.filter(i => i.nombreItem.trim()).map(i => ({
+          nombreItem:             i.nombreItem,
+          descripcionItem:        i.descripcionItem,
+          cantidadItem:           i.cantidadItem,
+          precioUnitarioItem:     i.precioUnitarioItem,
+          descuentoPct:           i.descuentoPct,
+          tasaItbis:              i.tasaItbis,
+          indicadorBienoServicio: i.indicadorBienoServicio,
+          unidadMedida:           i.unidadMedida,
+          referencia:             i.referencia,
+          productoId:             i.productoId,
+        }))
+      ),
     };
   }
 

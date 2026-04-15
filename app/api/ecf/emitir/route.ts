@@ -74,6 +74,10 @@ const emitirSchema = z.object({
   pagoCuenta:   z.string().optional(),
   pagoValor:    z.number().min(0).optional(),
   pagoFecha:    z.string().optional(),
+
+  // Para editar borradores
+  clientId:      z.number().int().positive().optional(),
+  lineasJson:    z.string().optional(), // JSON del form (ItemLinea[]) para restaurar edición
 });
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -161,6 +165,7 @@ export async function POST(request: NextRequest) {
 
       const [saved] = await db.insert(ecfDocuments).values({
         teamId,
+        clientId:             data.clientId     ?? null,
         encf:                 encfBorrador,
         tipoEcf:              data.tipoEcf,
         estado:               'BORRADOR',
@@ -171,6 +176,10 @@ export async function POST(request: NextRequest) {
         totalItbis:           Math.round(totales.totalItbis * 100),
         ncfModificado:        data.ncfModificado,
         fechaEmision:         new Date(),
+        // Campos para poder restaurar el form al editar el borrador
+        lineasJson:       data.lineasJson     ?? null,
+        tipoPago:         data.tipoPago       ?? 1,
+        fechaLimitePago:  data.fechaLimitePago ?? null,
         ...extraFields,
       }).returning();
 

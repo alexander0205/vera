@@ -227,6 +227,11 @@ export const ecfDocuments = pgTable('ecf_documents', {
   //   04=corrección info, 05=cambio productos, 06=devolución, 07=omisión, 08=errores secuencia, 09=cese, 10=pérdida)
   tipoAnulacion: varchar('tipo_anulacion', { length: 2 }).default('04'),
 
+  // Datos para editar borradores (no van al XML, solo para restaurar el form)
+  lineasJson:       text('lineas_json'),         // JSON con ItemLinea[] del form
+  tipoPago:         integer('tipo_pago').default(1),  // 1=contado,2=crédito,3=gratuito,4=uso
+  fechaLimitePago:  varchar('fecha_limite_pago', { length: 10 }), // YYYY-MM-DD
+
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
