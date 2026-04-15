@@ -2277,18 +2277,20 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
             <div className="px-6 py-5 bg-gray-50">
               <div className="relative bg-white border border-gray-200 rounded-lg shadow-sm text-sm overflow-hidden">
 
-                {/* ── BORRADOR watermark ── */}
-                <div
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
-                  style={{ zIndex: 10 }}
-                >
-                  <span
-                    className="text-gray-200 font-black tracking-widest"
-                    style={{ fontSize: 100, transform: 'rotate(-30deg)', lineHeight: 1, userSelect: 'none' }}
+                {/* ── BORRADOR watermark (solo en modo borrador) ── */}
+                {modo === 'borrador' && (
+                  <div
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+                    style={{ zIndex: 10 }}
                   >
-                    BORRADOR
-                  </span>
-                </div>
+                    <span
+                      className="text-gray-200 font-black tracking-widest"
+                      style={{ fontSize: 100, transform: 'rotate(-30deg)', lineHeight: 1, userSelect: 'none' }}
+                    >
+                      BORRADOR
+                    </span>
+                  </div>
+                )}
 
                 {/* ── Encabezado ── */}
                 <div className="flex items-start justify-between px-7 py-5 border-b border-gray-100">
@@ -2304,7 +2306,7 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-medium text-teal-600 uppercase tracking-wide">{TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF]}</p>
-                    <p className="font-mono font-bold text-base text-gray-900">{secuencia?.encf ?? `E${tipoEcf}0000000001`}</p>
+                    <p className="font-mono font-bold text-sm text-gray-900 whitespace-nowrap">{secuencia?.encf ?? `E${tipoEcf}0000000001`}</p>
                     <p className="text-xs text-gray-400">Fecha: {fechaEmision}</p>
                     {fechaLimitePago && <p className="text-xs text-gray-400">Vence: {fechaLimitePago}</p>}
                   </div>
@@ -2380,14 +2382,11 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
 
                 {/* ── Footer tabla: total líneas + totales ── */}
                 <div className="border-t border-gray-100 px-7 py-4 flex items-start justify-between gap-4">
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1 min-w-0 pr-4">
                     <p className="text-xs text-gray-500">
                       Total de líneas: <span className="font-semibold text-gray-700">{items.filter(i => i.nombreItem.trim()).length}</span>
                     </p>
-                    <p className="text-xs text-gray-400 italic mt-2">{numeroALetras(totalNeto)}</p>
-                    {empresa?.firma && (
-                      <img src={empresa.firma} alt="Firma" className="h-10 object-contain mt-3" />
-                    )}
+                    <p className="text-xs text-gray-400 italic mt-2 break-words">{numeroALetras(totalNeto)}</p>
                   </div>
                   <div className="space-y-1 min-w-[200px]">
                     <div className="flex justify-between text-xs text-gray-500">
