@@ -109,8 +109,12 @@ const S = StyleSheet.create({
     fontFamily:        'Helvetica',
     fontSize:          9,
     backgroundColor:   '#ffffff',
-    paddingTop:        36,
-    paddingBottom:     56,
+    // paddingTop generoso para que el contenido normal no tape el header fijo.
+    // El header fijo ocupa ~90pt (logo/nombre ~60 + margen 8 + divider 1 + gap).
+    // En p.1 el buyer row aparece después del header; en p.2+ la tabla sigue
+    // justo después del header repetido.
+    paddingTop:        110,
+    paddingBottom:     72,   // espacio para el footer absoluto
     paddingHorizontal: 40,
     color:             '#1a1a1a',
   },
@@ -131,12 +135,12 @@ const S = StyleSheet.create({
     transform:   'rotate(-30deg)',
   },
 
-  // ── Header ──
+  // ── Header (fixed) ──
   header: {
     flexDirection:  'row',
     justifyContent: 'space-between',
     alignItems:     'flex-start',
-    marginBottom:   12,
+    marginBottom:   8,
   },
   headerLeft: {
     flex: 1,
@@ -437,8 +441,8 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           </View>
         )}
 
-        {/* ── Header ── */}
-        <View style={S.header}>
+        {/* ── Header (fixed → se repite en cada página) ── */}
+        <View style={S.header} fixed>
           {/* Izquierda: logo/nombre + metadatos */}
           <View style={S.headerLeft}>
             {data.emisor.logo ? (
@@ -484,10 +488,10 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           </View>
         </View>
 
-        {/* ── Línea divisora ── */}
-        <View style={S.divider} />
+        {/* ── Línea divisora (fixed junto al header) ── */}
+        <View style={S.divider} fixed />
 
-        {/* ── Datos del comprador ── */}
+        {/* ── Datos del comprador (solo página 1 — sin fixed) ── */}
         <View style={S.buyerRow}>
           <View style={S.buyerLeft}>
             {data.comprador.razonSocial ? (
@@ -519,8 +523,8 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
         </View>
 
         {/* ── Tabla de ítems ── */}
-        {/* Encabezado */}
-        <View style={S.tableHeader}>
+        {/* Encabezado de columnas (fixed → se repite en cada página) */}
+        <View style={S.tableHeader} fixed>
           <Text style={[S.thCell, S.colCant]}>Cantidad</Text>
           <Text style={[S.thCell, S.colDesc]}>Descripción</Text>
           <Text style={[S.thCell, S.colUnidad]}>Unidad de{'\n'}medida</Text>
