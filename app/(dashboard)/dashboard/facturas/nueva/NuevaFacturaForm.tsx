@@ -929,10 +929,12 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const [correoDocumentoId, setCorreoDocumentoId]     = useState<number | null>(null);
   const [correoEncf, setCorreoEncf]                   = useState<string>('');
 
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  const [resultado, setResultado] = useState<ResultadoEmision | null>(null);
-  const [vistaPrevia, setVistaPrevia] = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState<string | null>(null);
+  const [resultado, setResultado]       = useState<ResultadoEmision | null>(null);
+  const [vistaPrevia, setVistaPrevia]   = useState(false);
+  const [previewDocId, setPreviewDocId] = useState<number | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   // ── TOP SECTION: Almacén / Lista de precios / Vendedor ──────────────────────
   const [showAlmacen, setShowAlmacen]               = useState(false);
@@ -1232,6 +1234,30 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
     if (items.filter(i => i.nombreItem.trim()).every(i => i.precioUnitarioItem <= 0))
       return 'Los ítems deben tener un precio mayor a 0';
     return null;
+  }
+
+  /** Guarda como borrador y abre el PDF real en el modal de preview */
+  async function handleVistaPrevia() {
+    const err = items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null;
+    if (err) { setError(err); return; }
+
+    setLoadingPreview(true);
+    setError(null);
+    try {
+      const res  = await fetch('/api/ecf/emitir', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(buildPayload('borrador')),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Error guardando borrador'); return; }
+      setPreviewDocId(data.documentoId);
+      setVistaPrevia(true);
+    } catch {
+      setError('Error de conexión al guardar el borrador');
+    } finally {
+      setLoadingPreview(false);
+    }
   }
 
   async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
@@ -2197,10 +2223,10 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
               <Button
                 type="button"
                 variant="outline"
-                disabled={loading}
+                disabled={loading || loadingPreview}
                 className="text-gray-600"
-                onClick={() => setVistaPrevia(true)}>
-                Vista previa
+                onClick={handleVistaPrevia}>
+                {loadingPreview ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Guardando…</> : 'Vista previa'}
               </Button>
 
               {/* Guardar y crear nueva */}
@@ -2264,201 +2290,77 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
           </div>
         </form>
 
-        {/* Modal Vista Previa */}
+        {/* Modal Vista Previa — PDF real en iframe */}
         <Dialog open={vistaPrevia} onOpenChange={setVistaPrevia}>
-          <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0">
-            <DialogHeader className="px-6 pt-5 pb-3 border-b flex-row items-center justify-between">
+          <DialogContent className="max-w-4xl h-[95vh] flex flex-col p-0 gap-0">
+
+            {/* Header */}
+            <DialogHeader className="px-6 pt-4 pb-3 border-b shrink-0">
               <DialogTitle className="text-base font-semibold">
                 Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}
+                <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                  BORRADOR
+                </span>
               </DialogTitle>
             </DialogHeader>
 
-            {/* Documento */}
-            <div className="px-6 py-5 bg-gray-50">
-              <div className="relative bg-white border border-gray-200 rounded-lg shadow-sm text-sm overflow-hidden">
-
-                {/* ── BORRADOR watermark — siempre en preview web porque
-                     el doc aún no se ha emitido. El PDF lo controla con doc.estado. ── */}
-                <div
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
-                  style={{ zIndex: 10 }}
-                >
-                  <span
-                    className="text-gray-200 font-black tracking-widest"
-                    style={{ fontSize: 100, transform: 'rotate(-30deg)', lineHeight: 1, userSelect: 'none' }}
-                  >
-                    BORRADOR
-                  </span>
+            {/* Iframe PDF — crece para llenar el modal */}
+            <div className="flex-1 min-h-0 bg-gray-100">
+              {previewDocId ? (
+                <iframe
+                  src={`/api/pdf/factura/${previewDocId}`}
+                  className="w-full h-full border-0"
+                  title="Vista previa del comprobante"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  Cargando PDF…
                 </div>
-
-                {/* ── Encabezado ── */}
-                <div className="flex items-start justify-between px-7 py-5 border-b border-gray-100">
-                  <div className="flex items-center gap-3">
-                    {empresa?.logo
-                      ? <img src={empresa.logo} alt="Logo" className="h-10 max-w-[140px] object-contain" />
-                      : <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center text-teal-700 font-bold text-xs">ECF</div>
-                    }
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">{empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Mi Empresa'}</p>
-                      {empresa?.rnc && <p className="text-xs text-gray-400">RNC: {empresa.rnc}</p>}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-medium text-teal-600 uppercase tracking-wide">{TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF]}</p>
-                    <p className="font-mono font-bold text-sm text-gray-900 whitespace-nowrap">{secuencia?.encf ?? `E${tipoEcf}0000000001`}</p>
-                    <p className="text-xs text-gray-400">Fecha: {fechaEmision}</p>
-                    {fechaLimitePago && <p className="text-xs text-gray-400">Vence: {fechaLimitePago}</p>}
-                  </div>
-                </div>
-
-                {/* ── Comprador + Pago ── */}
-                <div className="px-7 py-4 border-b border-gray-100 grid grid-cols-2 gap-6">
-                  <div>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">{regla?.compradorLabel ?? 'Comprador'}</p>
-                    <p className="font-medium text-gray-900">{(clienteSeleccionado?.razonSocial ?? rncManualNombre) || '—'}</p>
-                    {(clienteSeleccionado?.rnc ?? rncManual) && (
-                      <p className="text-xs text-gray-500">RNC: {clienteSeleccionado?.rnc ?? rncManual}</p>
-                    )}
-                    {telefonoManual && <p className="text-xs text-gray-500">Teléfono: {telefonoManual}</p>}
-                    {(clienteSeleccionado?.email ?? emailManual) && (
-                      <p className="text-xs text-gray-500">{clienteSeleccionado?.email ?? emailManual}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Valor restante por pagar</p>
-                    <p className="font-bold text-gray-900 text-base">RD$ {totalNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-gray-500 mt-1">{plazoActual?.label}</p>
-                  </div>
-                </div>
-
-                {/* ── Tabla de ítems ── */}
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-[10px] text-gray-500 uppercase tracking-wide">
-                      <th className="text-right px-4 py-2 w-10">Cant.</th>
-                      <th className="text-left px-3 py-2">Descripción</th>
-                      <th className="text-center px-3 py-2 hidden sm:table-cell">Unidad</th>
-                      <th className="text-right px-3 py-2">Precio</th>
-                      <th className="text-right px-3 py-2 hidden sm:table-cell">Descuento</th>
-                      <th className="text-right px-3 py-2">Impuesto</th>
-                      <th className="text-right px-4 py-2">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.filter(i => i.nombreItem.trim()).map((item, idx) => {
-                      const base  = item.cantidadItem * item.precioUnitarioItem;
-                      const desc  = base * (item.descuentoPct / 100);
-                      const neto  = base - desc;
-                      const tasa  = item.tasaItbis === 'exento' ? 0 : parseFloat(item.tasaItbis);
-                      const valor = neto + neto * tasa;
-                      return (
-                        <tr key={item.id} className={`border-t border-gray-100 ${idx % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
-                          <td className="text-right px-4 py-2.5 text-gray-600 tabular-nums">{item.cantidadItem}</td>
-                          <td className="px-3 py-2.5">
-                            <p className="font-medium text-gray-900">{item.nombreItem}</p>
-                            {item.descripcionItem && <p className="text-xs text-gray-400">{item.descripcionItem}</p>}
-                          </td>
-                          <td className="text-center px-3 py-2.5 text-gray-500 text-xs hidden sm:table-cell">
-                            {item.unidadMedida || '—'}
-                          </td>
-                          <td className="text-right px-3 py-2.5 text-gray-600 tabular-nums">
-                            RD${item.precioUnitarioItem.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="text-right px-3 py-2.5 text-gray-500 text-xs hidden sm:table-cell">
-                            {item.descuentoPct > 0 ? `${item.descuentoPct}%` : '—'}
-                          </td>
-                          <td className="text-right px-3 py-2.5 text-gray-500 text-xs">
-                            {item.tasaItbis === 'exento' ? 'E' : `${(tasa * 100).toFixed(0)}%`}
-                          </td>
-                          <td className="text-right px-4 py-2.5 font-medium text-gray-900 tabular-nums">
-                            RD${valor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* ── Footer tabla: total líneas + totales ── */}
-                <div className="border-t border-gray-100 px-7 py-4 flex items-start justify-between gap-4">
-                  <div className="space-y-1 flex-1 min-w-0 pr-4">
-                    <p className="text-xs text-gray-500">
-                      Total de líneas: <span className="font-semibold text-gray-700">{items.filter(i => i.nombreItem.trim()).length}</span>
-                    </p>
-                    <p className="text-xs text-gray-400 italic mt-2 break-words">{numeroALetras(totalNeto)}</p>
-                  </div>
-                  <div className="space-y-1 min-w-[200px]">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Subtotal</span>
-                      <span className="tabular-nums">RD${totales.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    {totales.itbis > 0 && (
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>ITBIS</span>
-                        <span className="tabular-nums">RD${totales.itbis.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    )}
-                    {totalRetenciones > 0 && (
-                      <div className="flex justify-between text-xs text-red-500">
-                        <span>Retenciones</span>
-                        <span className="tabular-nums">-RD${totalRetenciones.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-2">
-                      <span>Total</span>
-                      <span className="tabular-nums">RD${totalNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Notas / términos / pie ── */}
-                {(terminosCondiciones || notas || pieFactura) && (
-                  <div className="px-7 py-4 border-t border-gray-100 bg-gray-50/50 space-y-2">
-                    {terminosCondiciones && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Términos y condiciones</p>
-                        <p className="text-xs text-gray-600">{terminosCondiciones}</p>
-                      </div>
-                    )}
-                    {notas && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Notas</p>
-                        <p className="text-xs text-gray-600">{notas}</p>
-                      </div>
-                    )}
-                    {pieFactura && (
-                      <p className="text-[10px] text-gray-400 text-center pt-1">{pieFactura}</p>
-                    )}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
-            {/* ── Botones al estilo Alegra ── */}
-            <div className="px-6 py-4 border-t flex items-center justify-between">
+            {/* Botones */}
+            <div className="px-6 py-4 border-t shrink-0 flex items-center justify-between bg-white">
               <Button variant="ghost" size="sm" onClick={() => setVistaPrevia(false)} className="text-gray-500">
                 ← Volver a editar
               </Button>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => window.print()} className="flex items-center gap-1.5">
-                  <Printer className="h-3.5 w-3.5" />Imprimir
-                </Button>
-                <Button
-                  variant="outline" size="sm"
-                  className="flex items-center gap-1.5"
-                  onClick={() => emitir('borrador', { andThen: 'imprimir' })}
-                >
-                  <Download className="h-3.5 w-3.5" />Descargar
-                </Button>
+                {previewDocId && (
+                  <>
+                    <Button
+                      variant="outline" size="sm"
+                      className="flex items-center gap-1.5"
+                      onClick={() => window.open(`/api/pdf/factura/${previewDocId}`, '_blank')}
+                    >
+                      <Printer className="h-3.5 w-3.5" />Imprimir
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      className="flex items-center gap-1.5"
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = `/api/pdf/factura/${previewDocId}`;
+                        a.download = `borrador-${previewDocId}.pdf`;
+                        a.click();
+                      }}
+                    >
+                      <Download className="h-3.5 w-3.5" />Descargar
+                    </Button>
+                  </>
+                )}
                 <Button
                   size="sm"
+                  disabled={loading}
                   className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-1.5"
                   onClick={() => { setVistaPrevia(false); emitir('emitir'); }}
                 >
-                  <CheckCircle className="h-3.5 w-3.5" />Emitir
+                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                  Emitir
                 </Button>
               </div>
             </div>
+
           </DialogContent>
         </Dialog>
 
