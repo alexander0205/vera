@@ -8,7 +8,7 @@ import { eq, and } from 'drizzle-orm';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams } from '@/lib/db/schema';
+import { ecfDocuments, teams, clients } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
 
@@ -74,6 +74,17 @@ export async function GET(
 
     const { doc, team } = row;
 
+    // Cargar teléfono del cliente si existe referencia
+    let telefonoComprador: string | undefined;
+    if (doc.clientId) {
+      const [cl] = await db
+        .select({ telefono: clients.telefono })
+        .from(clients)
+        .where(eq(clients.id, doc.clientId))
+        .limit(1);
+      telefonoComprador = cl?.telefono ?? undefined;
+    }
+
     // Generar QR con la URL de validación DGII
     const qrText = `https://dgii.gov.do/e-CF?encf=${doc.encf}&rnc=${team.rnc ?? ''}`;
     const qrDataUrl = await QRCode.toDataURL(qrText, {
@@ -82,54 +93,63 @@ export async function GET(
       errorCorrectionLevel: 'M',
     });
 
-    // Reconstruir items desde xmlOriginal si hay; sino crear resumen
-    // Por simplicidad usamos los datos almacenados (monto total)
-    const subtotal = doc.montoTotal - doc.totalItbis;
+    // Montos en centavos → DOP (el PDF espera valores en pesos, no centavos)
+    const montoTotalDOP  = doc.montoTotal / 100;
+    const totalItbisDOP  = doc.totalItbis / 100;
+    const subtotalDOP    = montoTotalDOP - totalItbisDOP;
+
+    // Items: los detalles están en xmlOriginal; usamos un resumen hasta
+    // implementar almacenamiento de líneas en JSON.
     const items = [
       {
-        nombreItem: 'Ver XML para detalle de líneas',
-        cantidadItem: 1,
-        precioUnitarioItem: subtotal,
-        subtotalConItbis: doc.montoTotal,
-        tasaItbis: doc.totalItbis > 0 ? doc.totalItbis / subtotal : undefined,
+        nombreItem:          doc.razonSocialComprador
+          ? `Factura a ${doc.razonSocialComprador}`
+          : 'Servicios / Productos',
+        cantidadItem:        1,
+        precioUnitarioItem:  subtotalDOP,
+        subtotalConItbis:    montoTotalDOP,
+        tasaItbis:           totalItbisDOP > 0 ? totalItbisDOP / subtotalDOP : undefined,
       },
     ];
 
     const pdfData: FacturaPDFData = {
-      encf: doc.encf,
-      tipoEcf: doc.tipoEcf,
+      encf:          doc.encf,
+      tipoEcf:       doc.tipoEcf,
       tipoEcfNombre: TIPO_NOMBRE[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`,
-      fechaEmision: new Date(doc.fechaEmision).toLocaleDateString('es-DO', {
+      fechaEmision:  new Date(doc.fechaEmision).toLocaleDateString('es-DO', {
         year: 'numeric', month: 'long', day: 'numeric',
       }),
-      tipoPagoNombre: 'Contado',
-      estado: doc.estado,
+      tipoPagoNombre: TIPO_PAGO_NOMBRE[1] ?? 'Contado',
+      estado:        doc.estado,
+      esBorrador:    doc.estado === 'BORRADOR',
       codigoSeguridad: doc.codigoSeguridad ?? undefined,
-      trackId: doc.trackId ?? undefined,
+      trackId:       doc.trackId ?? undefined,
+      moneda:        'DOP',
 
       emisor: {
-        razonSocial: team.razonSocial ?? team.name,
-        nombreComercial: team.nombreComercial ?? undefined,
-        rnc: team.rnc ?? '',
-        direccion: team.direccion ?? undefined,
-        telefono: (team as any).telefono ?? undefined,
-        sitioWeb: (team as any).sitioWeb ?? undefined,
-        emailFacturacion: (team as any).emailFacturacion ?? undefined,
-        logo: (team as any).logo ?? undefined,
-        firma: (team as any).firma ?? undefined,
-        colorPrimario: (team as any).colorPrimario ?? '#1e40af',
+        razonSocial:      team.razonSocial ?? team.name,
+        nombreComercial:  team.nombreComercial ?? undefined,
+        rnc:              team.rnc ?? '',
+        direccion:        team.direccion ?? undefined,
+        telefono:         team.telefono ?? undefined,
+        sitioWeb:         team.sitioWeb ?? undefined,
+        emailFacturacion: team.emailFacturacion ?? undefined,
+        logo:             team.logo ?? undefined,
+        firma:            team.firma ?? undefined,
+        colorPrimario:    team.colorPrimario ?? '#1e40af',
       },
 
       comprador: {
         razonSocial: doc.razonSocialComprador ?? undefined,
-        rnc: doc.rncComprador ?? undefined,
-        email: doc.emailComprador ?? undefined,
+        rnc:         doc.rncComprador ?? undefined,
+        email:       doc.emailComprador ?? undefined,
+        telefono:    telefonoComprador,
       },
 
       items,
-      subtotal,
-      totalItbis: doc.totalItbis,
-      montoTotal: doc.montoTotal,
+      subtotal:   subtotalDOP,
+      totalItbis: totalItbisDOP,
+      montoTotal: montoTotalDOP,
       qrDataUrl,
       pieFactura: doc.pieFactura ?? undefined,
     };

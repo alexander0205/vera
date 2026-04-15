@@ -17,7 +17,7 @@ import {
 import {
   Plus, Loader2, CheckCircle, AlertTriangle, ArrowLeft, Search, X,
   UserPlus, PackagePlus, Settings, Check, ChevronDown, ChevronUp,
-  MessageCircle, DollarSign, Printer, Mail, Save, FileText,
+  MessageCircle, DollarSign, Printer, Mail, Save, FileText, Download,
 } from 'lucide-react';
 import { TIPOS_ECF, TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { CATEGORIAS_ECF, getCategoriaDeEcf } from '@/lib/ecf/categorias';
@@ -39,6 +39,7 @@ interface ItemLinea {
   descuentoPct: number;
   tasaItbis: 'exento' | '0.18' | '0.16' | '0';
   indicadorBienoServicio: '1' | '2';
+  unidadMedida?: string;
 }
 
 interface ResultadoEmision {
@@ -814,6 +815,37 @@ function ModalNuevoVendedor({ open, onClose, onCreated }: {
   );
 }
 
+// ─── Monto en letras (español dominicano) ────────────────────────────────────
+
+function numeroALetras(n: number): string {
+  const UNI = ['', 'Un', 'Dos', 'Tres', 'Cuatro', 'Cinco', 'Seis', 'Siete', 'Ocho', 'Nueve',
+    'Diez', 'Once', 'Doce', 'Trece', 'Catorce', 'Quince', 'Dieciséis', 'Diecisiete', 'Dieciocho', 'Diecinueve'];
+  const DEC = ['', '', 'Veinte', 'Treinta', 'Cuarenta', 'Cincuenta', 'Sesenta', 'Setenta', 'Ochenta', 'Noventa'];
+  const CEN = ['', 'Cien', 'Doscientos', 'Trescientos', 'Cuatrocientos', 'Quinientos',
+    'Seiscientos', 'Setecientos', 'Ochocientos', 'Novecientos'];
+
+  function cientos(x: number): string {
+    if (x === 0) return '';
+    if (x < 20) return UNI[x];
+    if (x < 30) return x === 20 ? 'Veinte' : 'Veinti' + UNI[x % 10].toLowerCase();
+    if (x < 100) return DEC[Math.floor(x / 10)] + (x % 10 ? ' y ' + UNI[x % 10].toLowerCase() : '');
+    if (x === 100) return 'Cien';
+    return CEN[Math.floor(x / 100)] + (x % 100 ? ' ' + cientos(x % 100) : '');
+  }
+
+  const entero   = Math.floor(n);
+  const centavos = Math.round((n - entero) * 100);
+  let texto = '';
+  const mill = Math.floor(entero / 1_000_000);
+  const mil  = Math.floor((entero % 1_000_000) / 1_000);
+  const res  = entero % 1_000;
+  if (mill) texto += (mill === 1 ? 'Un millón' : cientos(mill) + ' millones') + ' ';
+  if (mil)  texto += (mil  === 1 ? 'Mil'       : cientos(mil)  + ' mil')      + ' ';
+  if (res)  texto += cientos(res);
+  if (!texto) texto = 'Cero';
+  return texto.trim() + (centavos ? ` con ${centavos}/100` : '') + ' pesos dominicanos';
+}
+
 // ─── Tipo de perfil de empresa ────────────────────────────────────────────────
 
 interface EmpresaPerfil {
@@ -1044,6 +1076,7 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
         precioUnitarioItem: p.precioDOP,
         tasaItbis: regla?.permiteItbis ? tasa : 'exento',
         indicadorBienoServicio: p.tipo === 'bien' ? '1' : '2',
+        unidadMedida: (p as any).unidad ?? '',
       };
     }));
   }
@@ -2233,110 +2266,200 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
 
         {/* Modal Vista Previa */}
         <Dialog open={vistaPrevia} onOpenChange={setVistaPrevia}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
-            <DialogHeader className="px-6 pt-5 pb-3 border-b">
-              <DialogTitle className="text-base font-semibold">Vista previa del comprobante</DialogTitle>
+          <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0">
+            <DialogHeader className="px-6 pt-5 pb-3 border-b flex-row items-center justify-between">
+              <DialogTitle className="text-base font-semibold">
+                Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}
+              </DialogTitle>
             </DialogHeader>
 
-            {/* Documento simulado */}
-            <div className="p-6 bg-gray-50">
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm text-sm">
-                {/* Header */}
-                <div className="flex items-start justify-between px-8 py-5 border-b border-gray-100">
+            {/* Documento */}
+            <div className="px-6 py-5 bg-gray-50">
+              <div className="relative bg-white border border-gray-200 rounded-lg shadow-sm text-sm overflow-hidden">
+
+                {/* ── BORRADOR watermark ── */}
+                <div
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+                  style={{ zIndex: 10 }}
+                >
+                  <span
+                    className="text-gray-200 font-black tracking-widest"
+                    style={{ fontSize: 100, transform: 'rotate(-30deg)', lineHeight: 1, userSelect: 'none' }}
+                  >
+                    BORRADOR
+                  </span>
+                </div>
+
+                {/* ── Encabezado ── */}
+                <div className="flex items-start justify-between px-7 py-5 border-b border-gray-100">
                   <div className="flex items-center gap-3">
                     {empresa?.logo
-                      ? <img src={empresa.logo} alt="Logo" className="h-10 max-w-[120px] object-contain" />
+                      ? <img src={empresa.logo} alt="Logo" className="h-10 max-w-[140px] object-contain" />
                       : <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center text-teal-700 font-bold text-xs">ECF</div>
                     }
                     <div>
-                      <p className="font-semibold text-gray-900">{empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Mi Empresa'}</p>
+                      <p className="font-semibold text-gray-900 text-sm">{empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Mi Empresa'}</p>
                       {empresa?.rnc && <p className="text-xs text-gray-400">RNC: {empresa.rnc}</p>}
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-teal-600 font-medium">{TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}</p>
-                    <p className="font-mono font-bold text-lg text-gray-800">{secuencia?.encf ?? `E${tipoEcf}0000000001`}</p>
-                    <p className="text-xs text-gray-400">Fecha: {today}</p>
+                    <p className="text-[10px] font-medium text-teal-600 uppercase tracking-wide">{TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF]}</p>
+                    <p className="font-mono font-bold text-base text-gray-900">{secuencia?.encf ?? `E${tipoEcf}0000000001`}</p>
+                    <p className="text-xs text-gray-400">Fecha: {fechaEmision}</p>
+                    {fechaLimitePago && <p className="text-xs text-gray-400">Vence: {fechaLimitePago}</p>}
                   </div>
                 </div>
 
-                {/* Cliente */}
-                <div className="px-8 py-4 border-b border-gray-100 grid grid-cols-2 gap-4">
+                {/* ── Comprador + Pago ── */}
+                <div className="px-7 py-4 border-b border-gray-100 grid grid-cols-2 gap-6">
                   <div>
-                    <p className="text-xs text-gray-400 uppercase mb-1">Comprador</p>
-                    <p className="font-medium text-gray-800">{(clienteSeleccionado?.razonSocial ?? rncManualNombre) || '—'}</p>
-                    {(clienteSeleccionado?.rnc ?? rncManual) && <p className="text-xs text-gray-500">RNC: {clienteSeleccionado?.rnc ?? rncManual}</p>}
-                    {telefonoManual && <p className="text-xs text-gray-500">Tel: {telefonoManual}</p>}
-                    {(clienteSeleccionado?.email ?? emailManual) && <p className="text-xs text-gray-500">{clienteSeleccionado?.email ?? emailManual}</p>}
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">{regla?.compradorLabel ?? 'Comprador'}</p>
+                    <p className="font-medium text-gray-900">{(clienteSeleccionado?.razonSocial ?? rncManualNombre) || '—'}</p>
+                    {(clienteSeleccionado?.rnc ?? rncManual) && (
+                      <p className="text-xs text-gray-500">RNC: {clienteSeleccionado?.rnc ?? rncManual}</p>
+                    )}
+                    {telefonoManual && <p className="text-xs text-gray-500">Teléfono: {telefonoManual}</p>}
+                    {(clienteSeleccionado?.email ?? emailManual) && (
+                      <p className="text-xs text-gray-500">{clienteSeleccionado?.email ?? emailManual}</p>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase mb-1">Pago</p>
-                    <p className="text-gray-700">{plazoActual?.label}</p>
-                    {fechaLimitePago && <p className="text-xs text-gray-500">Vence: {fechaLimitePago}</p>}
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Valor restante por pagar</p>
+                    <p className="font-bold text-gray-900 text-base">RD$ {totalNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-gray-500 mt-1">{plazoActual?.label}</p>
                   </div>
                 </div>
 
-                {/* Tabla */}
+                {/* ── Tabla de ítems ── */}
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                      <th className="text-left px-6 py-2">Descripción</th>
-                      <th className="text-right px-3 py-2">Cant.</th>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[10px] text-gray-500 uppercase tracking-wide">
+                      <th className="text-right px-4 py-2 w-10">Cant.</th>
+                      <th className="text-left px-3 py-2">Descripción</th>
+                      <th className="text-center px-3 py-2 hidden sm:table-cell">Unidad</th>
                       <th className="text-right px-3 py-2">Precio</th>
-                      <th className="text-right px-3 py-2">ITBIS</th>
-                      <th className="text-right px-6 py-2">Total</th>
+                      <th className="text-right px-3 py-2 hidden sm:table-cell">Descuento</th>
+                      <th className="text-right px-3 py-2">Impuesto</th>
+                      <th className="text-right px-4 py-2">Valor</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.filter(i => i.nombreItem.trim()).map((item) => {
+                    {items.filter(i => i.nombreItem.trim()).map((item, idx) => {
                       const base  = item.cantidadItem * item.precioUnitarioItem;
                       const desc  = base * (item.descuentoPct / 100);
                       const neto  = base - desc;
                       const tasa  = item.tasaItbis === 'exento' ? 0 : parseFloat(item.tasaItbis);
+                      const valor = neto + neto * tasa;
                       return (
-                        <tr key={item.id} className="border-t border-gray-100">
-                          <td className="px-6 py-2.5">
-                            <p className="font-medium text-gray-800">{item.nombreItem}</p>
+                        <tr key={item.id} className={`border-t border-gray-100 ${idx % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                          <td className="text-right px-4 py-2.5 text-gray-600 tabular-nums">{item.cantidadItem}</td>
+                          <td className="px-3 py-2.5">
+                            <p className="font-medium text-gray-900">{item.nombreItem}</p>
                             {item.descripcionItem && <p className="text-xs text-gray-400">{item.descripcionItem}</p>}
-                            {item.referencia && <p className="text-xs text-gray-400">Ref: {item.referencia}</p>}
                           </td>
-                          <td className="text-right px-3 py-2.5 text-gray-600">{item.cantidadItem}</td>
-                          <td className="text-right px-3 py-2.5 text-gray-600">RD$ {item.precioUnitarioItem.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                          <td className="text-right px-3 py-2.5 text-gray-500 text-xs">{item.tasaItbis === 'exento' ? 'Exento' : `${(tasa*100).toFixed(0)}%`}</td>
-                          <td className="text-right px-6 py-2.5 font-medium text-gray-800">RD$ {(neto + neto * tasa).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                          <td className="text-center px-3 py-2.5 text-gray-500 text-xs hidden sm:table-cell">
+                            {item.unidadMedida || '—'}
+                          </td>
+                          <td className="text-right px-3 py-2.5 text-gray-600 tabular-nums">
+                            RD${item.precioUnitarioItem.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="text-right px-3 py-2.5 text-gray-500 text-xs hidden sm:table-cell">
+                            {item.descuentoPct > 0 ? `${item.descuentoPct}%` : '—'}
+                          </td>
+                          <td className="text-right px-3 py-2.5 text-gray-500 text-xs">
+                            {item.tasaItbis === 'exento' ? 'E' : `${(tasa * 100).toFixed(0)}%`}
+                          </td>
+                          <td className="text-right px-4 py-2.5 font-medium text-gray-900 tabular-nums">
+                            RD${valor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
 
-                {/* Totales */}
-                <div className="px-8 py-4 flex justify-between items-end border-t border-gray-100">
-                  {empresa?.firma
-                    ? <img src={empresa.firma} alt="Firma" className="h-10 object-contain" />
-                    : <div />
-                  }
-                  <div className="space-y-1 min-w-[220px]">
-                    <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>RD$ {totales.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
-                    {totales.itbis > 0 && <div className="flex justify-between text-xs text-gray-500"><span>ITBIS</span><span>RD$ {totales.itbis.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>}
-                    {totalRetenciones > 0 && <div className="flex justify-between text-xs text-red-500"><span>Retenciones</span><span>-RD$ {totalRetenciones.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>}
-                    <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-2 text-base"><span>Total</span><span>RD$ {totalNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
+                {/* ── Footer tabla: total líneas + totales ── */}
+                <div className="border-t border-gray-100 px-7 py-4 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500">
+                      Total de líneas: <span className="font-semibold text-gray-700">{items.filter(i => i.nombreItem.trim()).length}</span>
+                    </p>
+                    <p className="text-xs text-gray-400 italic mt-2">{numeroALetras(totalNeto)}</p>
+                    {empresa?.firma && (
+                      <img src={empresa.firma} alt="Firma" className="h-10 object-contain mt-3" />
+                    )}
+                  </div>
+                  <div className="space-y-1 min-w-[200px]">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">RD${totales.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {totales.itbis > 0 && (
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>ITBIS</span>
+                        <span className="tabular-nums">RD${totales.itbis.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    {totalRetenciones > 0 && (
+                      <div className="flex justify-between text-xs text-red-500">
+                        <span>Retenciones</span>
+                        <span className="tabular-nums">-RD${totalRetenciones.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-2">
+                      <span>Total</span>
+                      <span className="tabular-nums">RD${totalNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Notas */}
-                {(terminosCondiciones || notas) && (
-                  <div className="px-8 py-4 border-t border-gray-100 grid grid-cols-2 gap-4 bg-gray-50/50">
-                    {terminosCondiciones && <div><p className="text-xs font-medium text-gray-500 mb-1">Términos y condiciones</p><p className="text-xs text-gray-600">{terminosCondiciones}</p></div>}
-                    {notas && <div><p className="text-xs font-medium text-gray-500 mb-1">Notas</p><p className="text-xs text-gray-600">{notas}</p></div>}
+                {/* ── Notas / términos / pie ── */}
+                {(terminosCondiciones || notas || pieFactura) && (
+                  <div className="px-7 py-4 border-t border-gray-100 bg-gray-50/50 space-y-2">
+                    {terminosCondiciones && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Términos y condiciones</p>
+                        <p className="text-xs text-gray-600">{terminosCondiciones}</p>
+                      </div>
+                    )}
+                    {notas && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Notas</p>
+                        <p className="text-xs text-gray-600">{notas}</p>
+                      </div>
+                    )}
+                    {pieFactura && (
+                      <p className="text-[10px] text-gray-400 text-center pt-1">{pieFactura}</p>
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setVistaPrevia(false)}>Cerrar</Button>
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => { setVistaPrevia(false); }}>Editar</Button>
+            {/* ── Botones al estilo Alegra ── */}
+            <div className="px-6 py-4 border-t flex items-center justify-between">
+              <Button variant="ghost" size="sm" onClick={() => setVistaPrevia(false)} className="text-gray-500">
+                ← Volver a editar
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => window.print()} className="flex items-center gap-1.5">
+                  <Printer className="h-3.5 w-3.5" />Imprimir
+                </Button>
+                <Button
+                  variant="outline" size="sm"
+                  className="flex items-center gap-1.5"
+                  onClick={() => emitir('borrador', { andThen: 'imprimir' })}
+                >
+                  <Download className="h-3.5 w-3.5" />Descargar
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-1.5"
+                  onClick={() => { setVistaPrevia(false); emitir('emitir'); }}
+                >
+                  <CheckCircle className="h-3.5 w-3.5" />Emitir
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
