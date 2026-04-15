@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CircleIcon, Loader2 } from 'lucide-react';
+import { CircleIcon, Loader2, FlaskConical } from 'lucide-react';
 import { signIn, signUp } from './actions';
 import { ActionState } from '@/lib/auth/middleware';
+
+const DEV_EMAIL    = 'admin@emitedo.test';
+const DEV_PASSWORD = 'Admin1234!';
+const IS_DEV       = process.env.NODE_ENV === 'development';
 
 export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   const searchParams = useSearchParams();
@@ -19,6 +23,10 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
     mode === 'signin' ? signIn : signUp,
     { error: '' }
   );
+
+  // Campos controlados — pre-cargados en dev para facilitar pruebas
+  const [email,    setEmail]    = useState(IS_DEV && mode === 'signin' ? DEV_EMAIL    : '');
+  const [password, setPassword] = useState(IS_DEV && mode === 'signin' ? DEV_PASSWORD : '');
 
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
@@ -34,6 +42,18 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        {/* Banner dev — solo en desarrollo */}
+        {IS_DEV && mode === 'signin' && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2.5">
+            <FlaskConical className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+            <div className="text-xs text-amber-700 space-y-0.5">
+              <p className="font-semibold">Modo desarrollo — credenciales pre-cargadas</p>
+              <p>Email: <span className="font-mono bg-amber-100 px-1 rounded">{DEV_EMAIL}</span></p>
+              <p>Password: <span className="font-mono bg-amber-100 px-1 rounded">{DEV_PASSWORD}</span></p>
+            </div>
+          </div>
+        )}
+
         <form className="space-y-6" action={formAction}>
           <input type="hidden" name="redirect" value={redirect || ''} />
           <input type="hidden" name="priceId" value={priceId || ''} />
@@ -51,7 +71,8 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
                 name="email"
                 type="email"
                 autoComplete="email"
-                defaultValue={state.email}
+                value={state.email ?? email}
+                onChange={e => setEmail(e.target.value)}
                 required
                 maxLength={50}
                 className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
@@ -72,10 +93,9 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete={
-                  mode === 'signin' ? 'current-password' : 'new-password'
-                }
-                defaultValue={state.password}
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                value={state.password ?? password}
+                onChange={e => setPassword(e.target.value)}
                 required
                 minLength={8}
                 maxLength={100}
@@ -83,6 +103,13 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
                 placeholder="Enter your password"
               />
             </div>
+            {mode === 'signin' && (
+              <div className="mt-2 text-right">
+                <Link href="/forgot-password" className="text-sm text-orange-600 hover:text-orange-500">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
+            )}
           </div>
 
           {state?.error && (

@@ -13,7 +13,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/sign-in', request.url));
   }
 
-  let res = NextResponse.next();
+  // Pasar el pathname como header para que los Server Components puedan leerlo
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', pathname);
+
+  let res = NextResponse.next({ request: { headers: requestHeaders } });
 
   if (sessionCookie && request.method === 'GET') {
     try {

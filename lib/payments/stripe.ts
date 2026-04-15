@@ -6,10 +6,17 @@ import {
   getUser,
   updateTeamSubscription
 } from '@/lib/db/queries';
+import { getPlanByPriceId } from '@/lib/config/plans';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-04-30.basil'
 });
+
+// Plan definitions — sourced from env
+export const PLAN_STARTER_PRICE_ID  = process.env.STRIPE_PRICE_STARTER  ?? '';
+export const PLAN_BUSINESS_PRICE_ID = process.env.STRIPE_PRICE_BUSINESS ?? '';
+export const PLAN_PRO_PRICE_ID      = process.env.STRIPE_PRICE_PRO      ?? '';
+
 
 export async function createCheckoutSession({
   team,
@@ -36,10 +43,10 @@ export async function createCheckoutSession({
     success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.BASE_URL}/pricing`,
     customer: team.stripeCustomerId || undefined,
-    client_reference_id: user.id.toString(),
+    client_reference_id: `${user.id}:${team.id}`, // "userId:teamId" para el webhook
     allow_promotion_codes: true,
     subscription_data: {
-      trial_period_days: 14
+      trial_period_days: 15,
     }
   });
 
@@ -129,11 +136,12 @@ export async function handleSubscriptionChange(
   }
 
   if (status === 'active' || status === 'trialing') {
-    const plan = subscription.items.data[0]?.plan;
+    const priceId = subscription.items.data[0]?.price?.id ?? '';
+    const planDef = getPlanByPriceId(priceId);
     await updateTeamSubscription(team.id, {
       stripeSubscriptionId: subscriptionId,
-      stripeProductId: plan?.product as string,
-      planName: (plan?.product as Stripe.Product).name,
+      stripeProductId: (subscription.items.data[0]?.price?.product as string) ?? null,
+      planName: planDef.name,
       subscriptionStatus: status
     });
   } else if (status === 'canceled' || status === 'unpaid') {

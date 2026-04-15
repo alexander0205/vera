@@ -1,66 +1,44 @@
-import { stripe } from '../payments/stripe';
+/**
+ * Seed de desarrollo para EmiteDO
+ * Crea: usuario de prueba, empresa (RNC), clientes y secuencias de e-NCF
+ *
+ * Uso: pnpm db:seed
+ */
+
 import { db } from './drizzle';
-import { users, teams, teamMembers } from './schema';
+import { users, teams, teamMembers, clients, sequences } from './schema';
 import { hashPassword } from '@/lib/auth/session';
 
-async function createStripeProducts() {
-  console.log('Creating Stripe products and prices...');
-
-  const baseProduct = await stripe.products.create({
-    name: 'Base',
-    description: 'Base subscription plan',
-  });
-
-  await stripe.prices.create({
-    product: baseProduct.id,
-    unit_amount: 800, // $8 in cents
-    currency: 'usd',
-    recurring: {
-      interval: 'month',
-      trial_period_days: 7,
-    },
-  });
-
-  const plusProduct = await stripe.products.create({
-    name: 'Plus',
-    description: 'Plus subscription plan',
-  });
-
-  await stripe.prices.create({
-    product: plusProduct.id,
-    unit_amount: 1200, // $12 in cents
-    currency: 'usd',
-    recurring: {
-      interval: 'month',
-      trial_period_days: 7,
-    },
-  });
-
-  console.log('Stripe products and prices created successfully.');
-}
-
 async function seed() {
-  const email = 'test@test.com';
-  const password = 'admin123';
+  console.log('🌱 Iniciando seed de EmiteDO...\n');
+
+  // ─── Usuario de prueba ────────────────────────────────────────────────────
+  const email = 'admin@emitedo.test';
+  const password = 'Admin1234!';
   const passwordHash = await hashPassword(password);
 
   const [user] = await db
     .insert(users)
-    .values([
-      {
-        email: email,
-        passwordHash: passwordHash,
-        role: "owner",
-      },
-    ])
+    .values({
+      name: 'Admin EmiteDO',
+      email,
+      passwordHash,
+      role: 'owner',
+    })
     .returning();
 
-  console.log('Initial user created.');
+  console.log(`✓ Usuario creado: ${email} / ${password}`);
 
+  // ─── Empresa / Tenant (RNC de prueba) ────────────────────────────────────
   const [team] = await db
     .insert(teams)
     .values({
-      name: 'Test Team',
+      name: 'SolucionesDO SRL',
+      rnc: '130123456',
+      razonSocial: 'SolucionesDO SRL',
+      nombreComercial: 'SolucionesDO',
+      direccion: 'Av. Winston Churchill, Santo Domingo, RD',
+      dgiiEnvironment: 'TesteCF',
     })
     .returning();
 
@@ -70,15 +48,72 @@ async function seed() {
     role: 'owner',
   });
 
-  await createStripeProducts();
+  console.log(`✓ Empresa creada: ${team.name} (RNC: ${team.rnc})`);
+
+  // ─── Clientes de prueba ───────────────────────────────────────────────────
+  const clientesData = [
+    {
+      teamId: team.id,
+      rnc: '101123456',
+      razonSocial: 'Distribuidora González SRL',
+      email: 'gonzalez@test.com',
+      telefono: '809-555-0001',
+      direccion: 'Santiago de los Caballeros, RD',
+    },
+    {
+      teamId: team.id,
+      rnc: '131234567',
+      razonSocial: 'Importadora del Este SA',
+      email: 'impeste@test.com',
+      telefono: '809-555-0002',
+      direccion: 'San Pedro de Macorís, RD',
+    },
+    {
+      teamId: team.id,
+      rnc: '001456789',
+      razonSocial: 'Consumidor Final',
+      email: undefined,
+      telefono: undefined,
+      direccion: undefined,
+    },
+  ];
+
+  const insertedClients = await db
+    .insert(clients)
+    .values(clientesData)
+    .returning();
+
+  console.log(`✓ ${insertedClients.length} clientes creados`);
+
+  // ─── Secuencias e-NCF (TesteCF) ───────────────────────────────────────────
+  // La DGII asigna rangos; en desarrollo usamos rangos de prueba
+  const vencimiento = new Date('2027-12-31');
+
+  const secuenciasData = [
+    { teamId: team.id, tipoEcf: '31', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(1000), fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '32', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(5000), fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '33', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(500),  fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '34', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(500),  fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '41', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(500),  fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '43', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(200),  fechaVencimiento: vencimiento },
+  ];
+
+  await db.insert(sequences).values(secuenciasData);
+  console.log(`✓ ${secuenciasData.length} tipos de secuencias e-NCF registrados`);
+
+  console.log('\n─────────────────────────────────────────');
+  console.log('✅ Seed completado. Credenciales de prueba:');
+  console.log(`   Email:    ${email}`);
+  console.log(`   Password: ${password}`);
+  console.log(`   URL:      http://localhost:3000/sign-in`);
+  console.log('─────────────────────────────────────────\n');
 }
 
 seed()
   .catch((error) => {
-    console.error('Seed process failed:', error);
+    console.error('❌ Seed falló:', error);
     process.exit(1);
   })
   .finally(() => {
-    console.log('Seed process finished. Exiting...');
     process.exit(0);
   });

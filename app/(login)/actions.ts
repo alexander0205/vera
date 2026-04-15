@@ -18,13 +18,14 @@ import {
 } from '@/lib/db/schema';
 import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { createCheckoutSession } from '@/lib/payments/stripe';
 import { getUser, getUserWithTeam } from '@/lib/db/queries';
 import {
   validatedAction,
   validatedActionWithUser
 } from '@/lib/auth/middleware';
+import { rateLimit } from '@/lib/rate-limit';
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -51,6 +52,13 @@ const signInSchema = z.object({
 
 export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const { email, password } = data;
+
+  const reqHeaders = await headers();
+  const ip = reqHeaders.get('x-forwarded-for') ?? 'unknown';
+  const rl = rateLimit(`login:${ip}`, 10, 60_000);
+  if (!rl.allowed) {
+    return { error: 'Demasiados intentos. Intenta en 1 minuto.' };
+  }
 
   const userWithTeam = await db
     .select({
@@ -218,7 +226,8 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  redirect('/dashboard');
+  // Sin plan seleccionado → ir directo a pricing para elegir plan de prueba
+  redirect('/pricing?welcome=1');
 });
 
 export async function signOut() {
