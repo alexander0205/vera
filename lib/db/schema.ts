@@ -112,7 +112,7 @@ export const clients = pgTable('clients', {
   teamId: integer('team_id')
     .notNull()
     .references(() => teams.id),
-  rnc: varchar('rnc', { length: 11 }),
+  rnc: varchar('rnc', { length: 20 }),
   razonSocial: varchar('razon_social', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }),
   telefono: varchar('telefono', { length: 20 }),
@@ -194,7 +194,7 @@ export const ecfDocuments = pgTable('ecf_documents', {
   pdfUrl: text('pdf_url'),
 
   // Datos del comprador (desnormalizados para acceso rápido)
-  rncComprador: varchar('rnc_comprador', { length: 11 }),
+  rncComprador: varchar('rnc_comprador', { length: 20 }),
   razonSocialComprador: varchar('razon_social_comprador', { length: 255 }),
   emailComprador: varchar('email_comprador', { length: 255 }),
 
@@ -263,7 +263,7 @@ export const cotizaciones = pgTable('cotizaciones', {
   numero: varchar('numero', { length: 20 }).notNull(),
   estado: varchar('estado', { length: 20 }).notNull().default('borrador'),
   razonSocialComprador: varchar('razon_social_comprador', { length: 255 }),
-  rncComprador: varchar('rnc_comprador', { length: 11 }),
+  rncComprador: varchar('rnc_comprador', { length: 20 }),
   emailComprador: varchar('email_comprador', { length: 255 }),
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   fechaVencimiento: timestamp('fecha_vencimiento'),
