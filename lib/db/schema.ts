@@ -175,7 +175,7 @@ export const ecfDocuments = pgTable('ecf_documents', {
   clientId: integer('client_id').references(() => clients.id),
 
   // Identificación
-  encf: varchar('encf', { length: 13 }).notNull(),        // E310000000001
+  encf: varchar('encf', { length: 40 }).notNull(),        // E310000000001 (real) o BOR-XXXXXXXX (borrador)
   tipoEcf: varchar('tipo_ecf', { length: 2 }).notNull(),  // "31", "32", etc.
 
   // Estado del ciclo de vida

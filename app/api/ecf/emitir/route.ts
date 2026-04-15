@@ -155,8 +155,9 @@ export async function POST(request: NextRequest) {
     // ── MODO BORRADOR: guardar sin enviar a DGII ───────────────────────────────
     if (data.modo === 'borrador') {
       const totales = calcularTotales(data.items);
-      // Para borrador usamos un encf provisional
-      const encfBorrador = `BORRADOR-${Date.now()}`;
+      // Placeholder provisional para borradores — no es un e-NCF real.
+      // Formato: BOR-{tipoEcf}-{timestamp base36 últimos 8 chars} → ≤ 20 chars
+      const encfBorrador = `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
       const [saved] = await db.insert(ecfDocuments).values({
         teamId,
