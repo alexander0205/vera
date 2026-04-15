@@ -2277,20 +2277,19 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
             <div className="px-6 py-5 bg-gray-50">
               <div className="relative bg-white border border-gray-200 rounded-lg shadow-sm text-sm overflow-hidden">
 
-                {/* ── BORRADOR watermark (solo en modo borrador) ── */}
-                {modo === 'borrador' && (
-                  <div
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
-                    style={{ zIndex: 10 }}
+                {/* ── BORRADOR watermark — siempre en preview web porque
+                     el doc aún no se ha emitido. El PDF lo controla con doc.estado. ── */}
+                <div
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+                  style={{ zIndex: 10 }}
+                >
+                  <span
+                    className="text-gray-200 font-black tracking-widest"
+                    style={{ fontSize: 100, transform: 'rotate(-30deg)', lineHeight: 1, userSelect: 'none' }}
                   >
-                    <span
-                      className="text-gray-200 font-black tracking-widest"
-                      style={{ fontSize: 100, transform: 'rotate(-30deg)', lineHeight: 1, userSelect: 'none' }}
-                    >
-                      BORRADOR
-                    </span>
-                  </div>
-                )}
+                    BORRADOR
+                  </span>
+                </div>
 
                 {/* ── Encabezado ── */}
                 <div className="flex items-start justify-between px-7 py-5 border-b border-gray-100">
