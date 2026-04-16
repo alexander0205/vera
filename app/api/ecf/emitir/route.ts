@@ -95,13 +95,14 @@ export async function POST(request: NextRequest) {
     // 3. Obtener perfil de la empresa
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
 
-    if (!team?.rnc) {
-      return NextResponse.json({ error: 'RNC no configurado. Completa el perfil de tu empresa.' }, { status: 422 });
-    }
-
     // 4. Verificar límite del plan (solo en modo emitir, no borrador)
     const body = await request.json();
     const modoPrevio = body?.modo ?? 'emitir';
+
+    // RNC solo obligatorio para emitir (borradores no generan XML)
+    if (modoPrevio !== 'borrador' && !team?.rnc) {
+      return NextResponse.json({ error: 'RNC no configurado. Completa el perfil de tu empresa.' }, { status: 422 });
+    }
 
     if (modoPrevio !== 'borrador') {
       const [monthlyCount, planLimit] = await Promise.all([

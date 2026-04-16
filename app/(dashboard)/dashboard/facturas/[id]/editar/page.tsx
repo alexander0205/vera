@@ -5,7 +5,7 @@
  */
 import { notFound, redirect } from 'next/navigation';
 import { Suspense } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, clients } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -87,13 +87,29 @@ export default async function EditarBorradorPage({
     lineasJson:           doc.lineasJson,
   };
 
+  const sinItems = !doc.lineasJson;
+
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-      </div>
-    }>
-      <EditarBorradorClient initialPerfil={perfil} initialData={initialData} />
-    </Suspense>
+    <div>
+      {/* Aviso cuando el borrador fue guardado sin ítems (formato anterior) */}
+      {sinItems && (
+        <div className="mx-auto max-w-5xl px-4 pt-4">
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+            <p>
+              Este borrador fue guardado antes de que el sistema almacenara los ítems.
+              <strong className="ml-1">Agrega los productos/servicios nuevamente</strong> y haz Vista previa para continuar.
+            </p>
+          </div>
+        </div>
+      )}
+      <Suspense fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        </div>
+      }>
+        <EditarBorradorClient initialPerfil={perfil} initialData={initialData} />
+      </Suspense>
+    </div>
   );
 }

@@ -971,7 +971,7 @@ export default function NuevaFacturaForm({
   const [pagoValor, setPagoValor]       = useState('');
 
   // Comentario interno
-  const [comentario, setComentario]     = useState('');
+  const [comentario, setComentario]     = useState(initialData?.comentario ?? '');
 
   // Split guardar dropdown
   const [showGuardarMenu, setShowGuardarMenu] = useState(false);
