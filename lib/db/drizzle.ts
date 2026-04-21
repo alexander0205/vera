@@ -14,7 +14,12 @@ const globalForDb = globalThis as unknown as { _pgClient?: ReturnType<typeof pos
 
 export const client =
   globalForDb._pgClient ??
-  postgres(process.env.POSTGRES_URL, { max: 10 });
+  postgres(process.env.POSTGRES_URL, {
+    max: 10,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    ssl: 'require',
+  });
 
 if (process.env.NODE_ENV !== 'production') {
   globalForDb._pgClient = client;
