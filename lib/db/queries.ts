@@ -254,7 +254,7 @@ export async function getDashboardStats(teamId: number) {
     secuenciasDisponibles,
     plan: teamRow[0]?.planName ?? 'Gratis',
     rnc: teamRow[0]?.rnc ?? null,
-    tieneCertificado: !!teamRow[0]?.certP12,
+    tieneCertificado: !!teamRow[0]?.certP12Ciphered,
   };
 }
 

@@ -17,7 +17,7 @@ import {
 import {
   Plus, Loader2, CheckCircle, AlertTriangle, ArrowLeft, Search, X,
   UserPlus, PackagePlus, Settings, Check, ChevronDown, ChevronUp,
-  MessageCircle, DollarSign, Printer, Mail, Save, FileText,
+  MessageCircle, DollarSign, Printer, Mail, Save, FileText, Download,
 } from 'lucide-react';
 import { TIPOS_ECF, TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { CATEGORIAS_ECF, getCategoriaDeEcf } from '@/lib/ecf/categorias';
@@ -27,6 +27,26 @@ import { RncSearch } from '@/components/RncSearch';
 
 interface Cliente { id: number; razonSocial: string; rnc: string | null; email: string | null; telefono: string | null; }
 interface Producto { id: number; nombre: string; descripcion: string | null; precioDOP: number; tasaItbis: string; tipo: string; referencia: string | null; }
+
+/** Datos de un borrador guardado para pre-rellenar el form */
+export interface BorradorInicial {
+  id:                   number;
+  tipoEcf:              string;
+  clientId:             number | null;
+  rncComprador:         string | null;
+  razonSocialComprador: string | null;
+  emailComprador:       string | null;
+  telefonoComprador:    string | null;
+  tipoPago:             number | null;
+  fechaLimitePago:      string | null;
+  ncfModificado:        string | null;
+  notas:                string | null;
+  terminosCondiciones:  string | null;
+  pieFactura:           string | null;
+  retenciones:          string | null; // JSON string
+  comentario:           string | null;
+  lineasJson:           string | null; // JSON string de ItemLinea[]
+}
 
 interface ItemLinea {
   id: number;
@@ -39,6 +59,7 @@ interface ItemLinea {
   descuentoPct: number;
   tasaItbis: 'exento' | '0.18' | '0.16' | '0';
   indicadorBienoServicio: '1' | '2';
+  unidadMedida?: string;
 }
 
 interface ResultadoEmision {
@@ -814,6 +835,37 @@ function ModalNuevoVendedor({ open, onClose, onCreated }: {
   );
 }
 
+// ─── Monto en letras (español dominicano) ────────────────────────────────────
+
+function numeroALetras(n: number): string {
+  const UNI = ['', 'Un', 'Dos', 'Tres', 'Cuatro', 'Cinco', 'Seis', 'Siete', 'Ocho', 'Nueve',
+    'Diez', 'Once', 'Doce', 'Trece', 'Catorce', 'Quince', 'Dieciséis', 'Diecisiete', 'Dieciocho', 'Diecinueve'];
+  const DEC = ['', '', 'Veinte', 'Treinta', 'Cuarenta', 'Cincuenta', 'Sesenta', 'Setenta', 'Ochenta', 'Noventa'];
+  const CEN = ['', 'Cien', 'Doscientos', 'Trescientos', 'Cuatrocientos', 'Quinientos',
+    'Seiscientos', 'Setecientos', 'Ochocientos', 'Novecientos'];
+
+  function cientos(x: number): string {
+    if (x === 0) return '';
+    if (x < 20) return UNI[x];
+    if (x < 30) return x === 20 ? 'Veinte' : 'Veinti' + UNI[x % 10].toLowerCase();
+    if (x < 100) return DEC[Math.floor(x / 10)] + (x % 10 ? ' y ' + UNI[x % 10].toLowerCase() : '');
+    if (x === 100) return 'Cien';
+    return CEN[Math.floor(x / 100)] + (x % 100 ? ' ' + cientos(x % 100) : '');
+  }
+
+  const entero   = Math.floor(n);
+  const centavos = Math.round((n - entero) * 100);
+  let texto = '';
+  const mill = Math.floor(entero / 1_000_000);
+  const mil  = Math.floor((entero % 1_000_000) / 1_000);
+  const res  = entero % 1_000;
+  if (mill) texto += (mill === 1 ? 'Un millón' : cientos(mill) + ' millones') + ' ';
+  if (mil)  texto += (mil  === 1 ? 'Mil'       : cientos(mil)  + ' mil')      + ' ';
+  if (res)  texto += cientos(res);
+  if (!texto) texto = 'Cero';
+  return texto.trim() + (centavos ? ` con ${centavos}/100` : '') + ' pesos dominicanos';
+}
+
 // ─── Tipo de perfil de empresa ────────────────────────────────────────────────
 
 interface EmpresaPerfil {
@@ -826,11 +878,38 @@ interface EmpresaPerfil {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: EmpresaPerfil | null }) {
+export default function NuevaFacturaForm({
+  initialPerfil,
+  initialData,
+}: {
+  initialPerfil: EmpresaPerfil | null;
+  initialData?:  BorradorInicial | null;
+}) {
   const router = useRouter();
   const empresa = initialPerfil;
 
-  const [tipoEcf, setTipoEcf]         = useState('31');
+  // Ítems pre-cargados desde borrador (si existe lineasJson)
+  const itemsIniciales: ItemLinea[] = (() => {
+    if (!initialData?.lineasJson) return [];
+    try {
+      const parsed = JSON.parse(initialData.lineasJson) as Array<Partial<ItemLinea>>;
+      return parsed.map((it, i) => ({
+        id:                     i + 1,
+        productoId:             it.productoId,
+        nombreItem:             it.nombreItem ?? '',
+        referencia:             it.referencia ?? '',
+        descripcionItem:        it.descripcionItem ?? '',
+        cantidadItem:           it.cantidadItem ?? 1,
+        precioUnitarioItem:     it.precioUnitarioItem ?? 0,
+        descuentoPct:           it.descuentoPct ?? 0,
+        tasaItbis:              (it.tasaItbis ?? 'exento') as ItemLinea['tasaItbis'],
+        indicadorBienoServicio: (it.indicadorBienoServicio ?? '2') as '1' | '2',
+        unidadMedida:           it.unidadMedida,
+      }));
+    } catch { return []; }
+  })();
+
+  const [tipoEcf, setTipoEcf]         = useState(initialData?.tipoEcf ?? '31');
   const [categoriaId, setCategoriaId] = useState('factura-venta');
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
@@ -838,15 +917,22 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const categoriaActual  = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
   const tiposCategoria   = categoriaActual.tipos;
 
+  // Si hay borrador: pre-cargar cliente como "manual" (sin objeto Cliente completo)
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
-  const [rncManual, setRncManual]             = useState('');
-  const [rncManualNombre, setRncManualNombre] = useState('');
-  const [emailManual, setEmailManual]         = useState('');
-  const [telefonoManual, setTelefonoManual]   = useState('');
+  const [rncManual, setRncManual]             = useState(initialData?.rncComprador ?? '');
+  const [rncManualNombre, setRncManualNombre] = useState(initialData?.razonSocialComprador ?? '');
+  const [emailManual, setEmailManual]         = useState(initialData?.emailComprador ?? '');
+  const [telefonoManual, setTelefonoManual]   = useState(initialData?.telefonoComprador ?? '');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
 
-  // Plazos de pago
-  const [plazoId, setPlazoId]               = useState('contado');
+  // Plazos de pago — mapear tipoPago DGII → plazoId local
+  const tipoPagoToPlazaId = (tp: number | null): string => {
+    if (!tp || tp === 1) return 'contado';
+    if (tp === 3) return 'gratuito';
+    if (tp === 4) return 'uso';
+    return 'credito-30'; // tp === 2
+  };
+  const [plazoId, setPlazoId]               = useState(() => tipoPagoToPlazaId(initialData?.tipoPago ?? null));
   const [customPlazos, setCustomPlazos]     = useState<Plazo[]>([]);
   const [showNuevoPlazo, setShowNuevoPlazo] = useState(false);
   const [npNombre, setNpNombre]             = useState('');
@@ -854,13 +940,18 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const [npError, setNpError]               = useState<string | null>(null);
 
   const [fechaEmision, setFechaEmision]       = useState(() => new Date().toISOString().slice(0, 10));
-  const [fechaLimitePago, setFechaLimitePago] = useState('');
-  const [ncfModificado, setNcfModificado]     = useState('');
+  const [fechaLimitePago, setFechaLimitePago] = useState(initialData?.fechaLimitePago ?? '');
+  const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
 
-  const [items, setItems] = useState<ItemLinea[]>([itemVacio()]);
+  const [items, setItems] = useState<ItemLinea[]>(
+    itemsIniciales.length ? itemsIniciales : [itemVacio()]
+  );
   const [showNuevoProductoIdx, setShowNuevoProductoIdx] = useState<number | null>(null);
 
-  const [retenciones, setRetenciones]   = useState<Retencion[]>([]);
+  const [retenciones, setRetenciones] = useState<Retencion[]>(() => {
+    if (!initialData?.retenciones) return [];
+    try { return JSON.parse(initialData.retenciones); } catch { return []; }
+  });
 
   // NCF gear modal
   const [showEditarNcf, setShowEditarNcf] = useState(false);
@@ -868,9 +959,9 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const [ncfSiguienteNum, setNcfSiguienteNum] = useState('');
   const [ncfFechaVenc, setNcfFechaVenc] = useState('');
 
-  const [notas, setNotas]               = useState('');
-  const [terminosCondiciones, setTerminos] = useState('');
-  const [pieFactura, setPieFactura]     = useState('');
+  const [notas, setNotas]               = useState(initialData?.notas ?? '');
+  const [terminosCondiciones, setTerminos] = useState(initialData?.terminosCondiciones ?? '');
+  const [pieFactura, setPieFactura]     = useState(initialData?.pieFactura ?? '');
 
   // Pago recibido
   const [pagoRecibido, setPagoRecibido] = useState(false);
@@ -880,7 +971,7 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const [pagoValor, setPagoValor]       = useState('');
 
   // Comentario interno
-  const [comentario, setComentario]     = useState('');
+  const [comentario, setComentario]     = useState(initialData?.comentario ?? '');
 
   // Split guardar dropdown
   const [showGuardarMenu, setShowGuardarMenu] = useState(false);
@@ -897,10 +988,12 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
   const [correoDocumentoId, setCorreoDocumentoId]     = useState<number | null>(null);
   const [correoEncf, setCorreoEncf]                   = useState<string>('');
 
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  const [resultado, setResultado] = useState<ResultadoEmision | null>(null);
-  const [vistaPrevia, setVistaPrevia] = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState<string | null>(null);
+  const [resultado, setResultado]       = useState<ResultadoEmision | null>(null);
+  const [vistaPrevia, setVistaPrevia]   = useState(false);
+  const [previewDocId, setPreviewDocId] = useState<number | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   // ── TOP SECTION: Almacén / Lista de precios / Vendedor ──────────────────────
   const [showAlmacen, setShowAlmacen]               = useState(false);
@@ -1044,6 +1137,7 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
         precioUnitarioItem: p.precioDOP,
         tasaItbis: regla?.permiteItbis ? tasa : 'exento',
         indicadorBienoServicio: p.tipo === 'bien' ? '1' : '2',
+        unidadMedida: (p as any).unidad ?? '',
       };
     }));
   }
@@ -1140,6 +1234,22 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
       almacenId:      almacenId      || undefined,
       listaPreciosId: listaPreciosId || undefined,
       vendedorId:     vendedorId     || undefined,
+      // Para editar borradores
+      clientId:   clienteSeleccionado?.id ?? undefined,
+      lineasJson: JSON.stringify(
+        items.filter(i => i.nombreItem.trim()).map(i => ({
+          nombreItem:             i.nombreItem,
+          descripcionItem:        i.descripcionItem,
+          cantidadItem:           i.cantidadItem,
+          precioUnitarioItem:     i.precioUnitarioItem,
+          descuentoPct:           i.descuentoPct,
+          tasaItbis:              i.tasaItbis,
+          indicadorBienoServicio: i.indicadorBienoServicio,
+          unidadMedida:           i.unidadMedida,
+          referencia:             i.referencia,
+          productoId:             i.productoId,
+        }))
+      ),
     };
   }
 
@@ -1199,6 +1309,30 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
     if (items.filter(i => i.nombreItem.trim()).every(i => i.precioUnitarioItem <= 0))
       return 'Los ítems deben tener un precio mayor a 0';
     return null;
+  }
+
+  /** Guarda como borrador y abre el PDF real en el modal de preview */
+  async function handleVistaPrevia() {
+    const err = items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null;
+    if (err) { setError(err); return; }
+
+    setLoadingPreview(true);
+    setError(null);
+    try {
+      const res  = await fetch('/api/ecf/emitir', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(buildPayload('borrador')),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Error guardando borrador'); return; }
+      setPreviewDocId(data.documentoId);
+      setVistaPrevia(true);
+    } catch {
+      setError('Error de conexión al guardar el borrador');
+    } finally {
+      setLoadingPreview(false);
+    }
   }
 
   async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
@@ -2164,10 +2298,10 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
               <Button
                 type="button"
                 variant="outline"
-                disabled={loading}
+                disabled={loading || loadingPreview}
                 className="text-gray-600"
-                onClick={() => setVistaPrevia(true)}>
-                Vista previa
+                onClick={handleVistaPrevia}>
+                {loadingPreview ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Guardando…</> : 'Vista previa'}
               </Button>
 
               {/* Guardar y crear nueva */}
@@ -2231,113 +2365,77 @@ export default function NuevaFacturaForm({ initialPerfil }: { initialPerfil: Emp
           </div>
         </form>
 
-        {/* Modal Vista Previa */}
+        {/* Modal Vista Previa — PDF real en iframe */}
         <Dialog open={vistaPrevia} onOpenChange={setVistaPrevia}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
-            <DialogHeader className="px-6 pt-5 pb-3 border-b">
-              <DialogTitle className="text-base font-semibold">Vista previa del comprobante</DialogTitle>
+          <DialogContent className="max-w-4xl h-[95vh] flex flex-col p-0 gap-0">
+
+            {/* Header */}
+            <DialogHeader className="px-6 pt-4 pb-3 border-b shrink-0">
+              <DialogTitle className="text-base font-semibold">
+                Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}
+                <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                  BORRADOR
+                </span>
+              </DialogTitle>
             </DialogHeader>
 
-            {/* Documento simulado */}
-            <div className="p-6 bg-gray-50">
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm text-sm">
-                {/* Header */}
-                <div className="flex items-start justify-between px-8 py-5 border-b border-gray-100">
-                  <div className="flex items-center gap-3">
-                    {empresa?.logo
-                      ? <img src={empresa.logo} alt="Logo" className="h-10 max-w-[120px] object-contain" />
-                      : <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center text-teal-700 font-bold text-xs">ECF</div>
-                    }
-                    <div>
-                      <p className="font-semibold text-gray-900">{empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Mi Empresa'}</p>
-                      {empresa?.rnc && <p className="text-xs text-gray-400">RNC: {empresa.rnc}</p>}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-teal-600 font-medium">{TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}</p>
-                    <p className="font-mono font-bold text-lg text-gray-800">{secuencia?.encf ?? `E${tipoEcf}0000000001`}</p>
-                    <p className="text-xs text-gray-400">Fecha: {today}</p>
-                  </div>
+            {/* Iframe PDF — crece para llenar el modal */}
+            <div className="flex-1 min-h-0 bg-gray-100">
+              {previewDocId ? (
+                <iframe
+                  src={`/api/pdf/factura/${previewDocId}`}
+                  className="w-full h-full border-0"
+                  title="Vista previa del comprobante"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  Cargando PDF…
                 </div>
+              )}
+            </div>
 
-                {/* Cliente */}
-                <div className="px-8 py-4 border-b border-gray-100 grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase mb-1">Comprador</p>
-                    <p className="font-medium text-gray-800">{(clienteSeleccionado?.razonSocial ?? rncManualNombre) || '—'}</p>
-                    {(clienteSeleccionado?.rnc ?? rncManual) && <p className="text-xs text-gray-500">RNC: {clienteSeleccionado?.rnc ?? rncManual}</p>}
-                    {telefonoManual && <p className="text-xs text-gray-500">Tel: {telefonoManual}</p>}
-                    {(clienteSeleccionado?.email ?? emailManual) && <p className="text-xs text-gray-500">{clienteSeleccionado?.email ?? emailManual}</p>}
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 uppercase mb-1">Pago</p>
-                    <p className="text-gray-700">{plazoActual?.label}</p>
-                    {fechaLimitePago && <p className="text-xs text-gray-500">Vence: {fechaLimitePago}</p>}
-                  </div>
-                </div>
-
-                {/* Tabla */}
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                      <th className="text-left px-6 py-2">Descripción</th>
-                      <th className="text-right px-3 py-2">Cant.</th>
-                      <th className="text-right px-3 py-2">Precio</th>
-                      <th className="text-right px-3 py-2">ITBIS</th>
-                      <th className="text-right px-6 py-2">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.filter(i => i.nombreItem.trim()).map((item) => {
-                      const base  = item.cantidadItem * item.precioUnitarioItem;
-                      const desc  = base * (item.descuentoPct / 100);
-                      const neto  = base - desc;
-                      const tasa  = item.tasaItbis === 'exento' ? 0 : parseFloat(item.tasaItbis);
-                      return (
-                        <tr key={item.id} className="border-t border-gray-100">
-                          <td className="px-6 py-2.5">
-                            <p className="font-medium text-gray-800">{item.nombreItem}</p>
-                            {item.descripcionItem && <p className="text-xs text-gray-400">{item.descripcionItem}</p>}
-                            {item.referencia && <p className="text-xs text-gray-400">Ref: {item.referencia}</p>}
-                          </td>
-                          <td className="text-right px-3 py-2.5 text-gray-600">{item.cantidadItem}</td>
-                          <td className="text-right px-3 py-2.5 text-gray-600">RD$ {item.precioUnitarioItem.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                          <td className="text-right px-3 py-2.5 text-gray-500 text-xs">{item.tasaItbis === 'exento' ? 'Exento' : `${(tasa*100).toFixed(0)}%`}</td>
-                          <td className="text-right px-6 py-2.5 font-medium text-gray-800">RD$ {(neto + neto * tasa).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Totales */}
-                <div className="px-8 py-4 flex justify-between items-end border-t border-gray-100">
-                  {empresa?.firma
-                    ? <img src={empresa.firma} alt="Firma" className="h-10 object-contain" />
-                    : <div />
-                  }
-                  <div className="space-y-1 min-w-[220px]">
-                    <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>RD$ {totales.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
-                    {totales.itbis > 0 && <div className="flex justify-between text-xs text-gray-500"><span>ITBIS</span><span>RD$ {totales.itbis.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>}
-                    {totalRetenciones > 0 && <div className="flex justify-between text-xs text-red-500"><span>Retenciones</span><span>-RD$ {totalRetenciones.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>}
-                    <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-2 text-base"><span>Total</span><span>RD$ {totalNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
-                  </div>
-                </div>
-
-                {/* Notas */}
-                {(terminosCondiciones || notas) && (
-                  <div className="px-8 py-4 border-t border-gray-100 grid grid-cols-2 gap-4 bg-gray-50/50">
-                    {terminosCondiciones && <div><p className="text-xs font-medium text-gray-500 mb-1">Términos y condiciones</p><p className="text-xs text-gray-600">{terminosCondiciones}</p></div>}
-                    {notas && <div><p className="text-xs font-medium text-gray-500 mb-1">Notas</p><p className="text-xs text-gray-600">{notas}</p></div>}
-                  </div>
+            {/* Botones */}
+            <div className="px-6 py-4 border-t shrink-0 flex items-center justify-between bg-white">
+              <Button variant="ghost" size="sm" onClick={() => setVistaPrevia(false)} className="text-gray-500">
+                ← Volver a editar
+              </Button>
+              <div className="flex gap-2">
+                {previewDocId && (
+                  <>
+                    <Button
+                      variant="outline" size="sm"
+                      className="flex items-center gap-1.5"
+                      onClick={() => window.open(`/api/pdf/factura/${previewDocId}`, '_blank')}
+                    >
+                      <Printer className="h-3.5 w-3.5" />Imprimir
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      className="flex items-center gap-1.5"
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = `/api/pdf/factura/${previewDocId}`;
+                        a.download = `borrador-${previewDocId}.pdf`;
+                        a.click();
+                      }}
+                    >
+                      <Download className="h-3.5 w-3.5" />Descargar
+                    </Button>
+                  </>
                 )}
+                <Button
+                  size="sm"
+                  disabled={loading}
+                  className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-1.5"
+                  onClick={() => { setVistaPrevia(false); emitir('emitir'); }}
+                >
+                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                  Emitir
+                </Button>
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setVistaPrevia(false)}>Cerrar</Button>
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => { setVistaPrevia(false); }}>Editar</Button>
-            </div>
           </DialogContent>
         </Dialog>
 

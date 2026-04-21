@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Package,
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
-  Printer, X, ChevronUp, Search, UserCircle, AlertCircle,
+  Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -530,6 +530,16 @@ function Sidebar({
           <span className="flex-1 text-left">Buscar...</span>
           <kbd className="text-xs bg-white/10 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
         </button>
+
+        {/* Activar facturación electrónica */}
+        <Link
+          href="/dashboard/habilitacion"
+          onClick={onClose}
+          className="flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 hover:text-amber-100 text-sm transition-colors"
+        >
+          <Zap className="h-4 w-4 shrink-0 text-amber-300" />
+          <span className="flex-1 text-left text-xs font-semibold">Activar facturación e-CF</span>
+        </Link>
 
         {/* Top items — todos visibles, disabled según plan */}
         {TOP_ITEMS.map(item => {

@@ -11,6 +11,13 @@ export type EstadoDgii =
   | 'AceptadoCondicional'
   | 'En Proceso';
 
+/** Respuesta completa del endpoint ValidarSemilla */
+export interface DgiiTokenResponse {
+  token:    string;
+  expira:   string;   // ISO 8601 UTC — "yyyy-MM-ddTHH:mm:ssZ"
+  expedido: string;   // ISO 8601 UTC — fecha de emisión
+}
+
 export interface DgiiTrackIdResponse {
   trackId: string;
   estado: EstadoDgii;
@@ -52,7 +59,7 @@ export class DgiiClient {
     return res.text();
   }
 
-  async validarSemilla(semillaFirmada: string): Promise<string> {
+  async validarSemilla(semillaFirmada: string): Promise<DgiiTokenResponse> {
     const url = `${this.baseUrl}/autenticacion/api/Autenticacion/ValidarSemilla`;
     const formData = new FormData();
     const blob = new Blob([semillaFirmada], { type: 'application/xml' });
@@ -61,7 +68,9 @@ export class DgiiClient {
     const res = await fetch(url, { method: 'POST', body: formData });
     if (!res.ok) throw new Error(`Error validando semilla: ${res.status}`);
     const data = await res.json();
-    return data.token;
+    // La DGII devuelve: { token, expira, expedido }
+    if (!data.token) throw new Error('La DGII no devolvió token en ValidarSemilla');
+    return data as DgiiTokenResponse;
   }
 
   setToken(token: string, expiresAt: Date) {
@@ -134,9 +143,17 @@ export class DgiiClient {
 
   // ─── Consulta de estado ───────────────────────────────────────────────────
 
+  /**
+   * Consulta el estado de un e-CF por trackId.
+   * Endpoint correcto: GET /consultaresultado/api/Consultas/Estado?trackId={trackId}
+   * (con timeout de 20 s para evitar colgarse en rate-limit de la DGII)
+   */
   async consultarEstado(trackId: string): Promise<DgiiTrackIdResponse> {
-    const url = `${this.baseUrl}/recepcion/api/trackid/${trackId}`;
-    const res = await fetch(url, { headers: this.getAuthHeaders() });
+    const url = `${this.baseUrl}/consultaresultado/api/Consultas/Estado?trackId=${encodeURIComponent(trackId)}`;
+    const res = await fetch(url, {
+      headers: this.getAuthHeaders(),
+      signal:  AbortSignal.timeout(20_000),
+    });
     if (!res.ok) throw new Error(`Error consultando estado: ${res.status}`);
     return res.json();
   }
@@ -145,8 +162,11 @@ export class DgiiClient {
     rnc: string,
     encf: string
   ): Promise<DgiiTrackIdResponse> {
-    const url = `${this.baseUrl}/recepcion/api/trackid/${rnc}/${encf}`;
-    const res = await fetch(url, { headers: this.getAuthHeaders() });
+    const url = `${this.baseUrl}/consultaresultado/api/Consultas/Estado?rncEmisor=${encodeURIComponent(rnc)}&ncfElectronico=${encodeURIComponent(encf)}`;
+    const res = await fetch(url, {
+      headers: this.getAuthHeaders(),
+      signal:  AbortSignal.timeout(20_000),
+    });
     if (!res.ok) throw new Error(`Error consultando por eNCF: ${res.status}`);
     return res.json();
   }

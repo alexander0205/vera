@@ -8,9 +8,33 @@ import { eq, and } from 'drizzle-orm';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams } from '@/lib/db/schema';
+import { ecfDocuments, teams, clients } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
+import { extraerItems } from '@/lib/pdf/extraerItems';
+
+/**
+ * Extrae la fecha/hora de firma del XML firmado.
+ * Busca `<SigningTime>` (XMLDSig estándar) o el `FechaFirma` en el cuerpo del e-CF.
+ * Devuelve formato legible "DD/MM/YYYY HH:mm" — o null si no se encuentra.
+ */
+function extraerFechaFirma(xmlFirmado: string | null): string | null {
+  if (!xmlFirmado) return null;
+  // Intentar <SigningTime> del bloque XMLDSig
+  const m1 = xmlFirmado.match(/<SigningTime[^>]*>([^<]+)<\/SigningTime>/i);
+  // O <FechaFirma> que algunos formatos DGII incluyen
+  const m2 = xmlFirmado.match(/<FechaFirma[^>]*>([^<]+)<\/FechaFirma>/i);
+  const iso = (m1?.[1] ?? m2?.[1] ?? '').trim();
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso; // devolver el raw si no parsea
+  const dd = d.getDate().toString().padStart(2, '0');
+  const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mi = d.getMinutes().toString().padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+}
 
 const TIPO_NOMBRE: Record<string, string> = {
   '31': 'Factura Fiscal',
@@ -74,6 +98,17 @@ export async function GET(
 
     const { doc, team } = row;
 
+    // Cargar teléfono del cliente si existe referencia
+    let telefonoComprador: string | undefined;
+    if (doc.clientId) {
+      const [cl] = await db
+        .select({ telefono: clients.telefono })
+        .from(clients)
+        .where(eq(clients.id, doc.clientId))
+        .limit(1);
+      telefonoComprador = cl?.telefono ?? undefined;
+    }
+
     // Generar QR con la URL de validación DGII
     const qrText = `https://dgii.gov.do/e-CF?encf=${doc.encf}&rnc=${team.rnc ?? ''}`;
     const qrDataUrl = await QRCode.toDataURL(qrText, {
@@ -82,54 +117,63 @@ export async function GET(
       errorCorrectionLevel: 'M',
     });
 
-    // Reconstruir items desde xmlOriginal si hay; sino crear resumen
-    // Por simplicidad usamos los datos almacenados (monto total)
-    const subtotal = doc.montoTotal - doc.totalItbis;
-    const items = [
+    // Montos en centavos → DOP (el PDF espera valores en pesos, no centavos)
+    const montoTotalDOP  = doc.montoTotal / 100;
+    const totalItbisDOP  = doc.totalItbis / 100;
+    const subtotalDOP    = montoTotalDOP - totalItbisDOP;
+
+    // Extraer ítems reales desde lineasJson (prioridad) o xmlOriginal.
+    const items = extraerItems(doc.xmlOriginal, doc.lineasJson) ?? [
       {
-        nombreItem: 'Ver XML para detalle de líneas',
-        cantidadItem: 1,
-        precioUnitarioItem: subtotal,
-        subtotalConItbis: doc.montoTotal,
-        tasaItbis: doc.totalItbis > 0 ? doc.totalItbis / subtotal : undefined,
+        nombreItem:          doc.razonSocialComprador
+          ? `Factura a ${doc.razonSocialComprador}`
+          : 'Servicios / Productos',
+        cantidadItem:        1,
+        precioUnitarioItem:  subtotalDOP,
+        subtotalConItbis:    montoTotalDOP,
+        tasaItbis:           totalItbisDOP > 0 ? totalItbisDOP / subtotalDOP : undefined,
       },
     ];
 
     const pdfData: FacturaPDFData = {
-      encf: doc.encf,
-      tipoEcf: doc.tipoEcf,
+      encf:          doc.encf,
+      tipoEcf:       doc.tipoEcf,
       tipoEcfNombre: TIPO_NOMBRE[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`,
-      fechaEmision: new Date(doc.fechaEmision).toLocaleDateString('es-DO', {
+      fechaEmision:  new Date(doc.fechaEmision).toLocaleDateString('es-DO', {
         year: 'numeric', month: 'long', day: 'numeric',
       }),
-      tipoPagoNombre: 'Contado',
-      estado: doc.estado,
+      tipoPagoNombre: TIPO_PAGO_NOMBRE[1] ?? 'Contado',
+      estado:        doc.estado,
+      esBorrador:    doc.estado === 'BORRADOR',
       codigoSeguridad: doc.codigoSeguridad ?? undefined,
-      trackId: doc.trackId ?? undefined,
+      trackId:       doc.trackId ?? undefined,
+      fechaFirma:    extraerFechaFirma(doc.xmlFirmado) ?? undefined,
+      moneda:        'DOP',
 
       emisor: {
-        razonSocial: team.razonSocial ?? team.name,
-        nombreComercial: team.nombreComercial ?? undefined,
-        rnc: team.rnc ?? '',
-        direccion: team.direccion ?? undefined,
-        telefono: (team as any).telefono ?? undefined,
-        sitioWeb: (team as any).sitioWeb ?? undefined,
-        emailFacturacion: (team as any).emailFacturacion ?? undefined,
-        logo: (team as any).logo ?? undefined,
-        firma: (team as any).firma ?? undefined,
-        colorPrimario: (team as any).colorPrimario ?? '#1e40af',
+        razonSocial:      team.razonSocial ?? team.name,
+        nombreComercial:  team.nombreComercial ?? undefined,
+        rnc:              team.rnc ?? '',
+        direccion:        team.direccion ?? undefined,
+        telefono:         team.telefono ?? undefined,
+        sitioWeb:         team.sitioWeb ?? undefined,
+        emailFacturacion: team.emailFacturacion ?? undefined,
+        logo:             team.logo ?? undefined,
+        firma:            team.firma ?? undefined,
+        colorPrimario:    team.colorPrimario ?? '#1e40af',
       },
 
       comprador: {
         razonSocial: doc.razonSocialComprador ?? undefined,
-        rnc: doc.rncComprador ?? undefined,
-        email: doc.emailComprador ?? undefined,
+        rnc:         doc.rncComprador ?? undefined,
+        email:       doc.emailComprador ?? undefined,
+        telefono:    telefonoComprador,
       },
 
       items,
-      subtotal,
-      totalItbis: doc.totalItbis,
-      montoTotal: doc.montoTotal,
+      subtotal:   subtotalDOP,
+      totalItbis: totalItbisDOP,
+      montoTotal: montoTotalDOP,
       qrDataUrl,
       pieFactura: doc.pieFactura ?? undefined,
     };

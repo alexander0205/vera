@@ -251,10 +251,21 @@ export default function FacturasPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
-                        <Link href={`/api/pdf/factura/${doc.id}`} target="_blank"
-                          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Ver PDF">
-                          <FileText className="h-3.5 w-3.5" />
-                        </Link>
+                        {doc.estado === 'BORRADOR' ? (
+                          /* Borradores: botón Editar en vez de PDF */
+                          <Link
+                            href={`/dashboard/facturas/${doc.id}/editar`}
+                            className="px-2 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
+                            title="Continuar editando borrador"
+                          >
+                            Editar
+                          </Link>
+                        ) : (
+                          <Link href={`/api/pdf/factura/${doc.id}`} target="_blank"
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Ver PDF">
+                            <FileText className="h-3.5 w-3.5" />
+                          </Link>
+                        )}
                         <button
                           onClick={() => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' })}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Enviar por email">

@@ -14,6 +14,7 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 // Plan definitions — sourced from env
 export const PLAN_STARTER_PRICE_ID  = process.env.STRIPE_PRICE_STARTER  ?? '';
+export const PLAN_INVOICE_PRICE_ID  = process.env.STRIPE_PRICE_INVOICE  ?? '';
 export const PLAN_BUSINESS_PRICE_ID = process.env.STRIPE_PRICE_BUSINESS ?? '';
 export const PLAN_PRO_PRICE_ID      = process.env.STRIPE_PRICE_PRO      ?? '';
 

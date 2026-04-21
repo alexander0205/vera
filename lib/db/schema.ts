@@ -49,15 +49,34 @@ export const teams = pgTable('teams', {
   razonSocial: varchar('razon_social', { length: 255 }),
   nombreComercial: varchar('nombre_comercial', { length: 255 }),
   direccion: varchar('direccion', { length: 500 }),
+  provincia: varchar('provincia', { length: 100 }),
+  municipio: varchar('municipio', { length: 100 }),
 
-  // Certificado digital P12 (base64) — solo en servidor
-  certP12: text('cert_p12'),
-  certPassword: text('cert_password'),
+  // ── Certificado P12 — cifrado AES-256-GCM ────────────────────────────────
+  // (reemplaza certP12 / certPassword — ver lib/crypto/cert.ts)
+  certP12Ciphered:  text('cert_p12_ciphered'),
+  certP12Iv:        text('cert_p12_iv'),
+  certP12AuthTag:   text('cert_p12_auth_tag'),
+  certPinCiphered:  text('cert_pin_ciphered'),
+  certPinIv:        text('cert_pin_iv'),
+  certPinAuthTag:   text('cert_pin_auth_tag'),
+  // Metadatos públicos del certificado (sin cifrar — para mostrar en UI)
+  certTitular:      text('cert_titular'),
+  certSerial:       text('cert_serial'),
+  certVencimiento:  timestamp('cert_vencimiento'),
 
-  // DGII
+  // ── DGII ─────────────────────────────────────────────────────────────────
   dgiiEnvironment: varchar('dgii_environment', { length: 20 }).default('TesteCF'),
-  dgiiToken: text('dgii_token'),
+  // Token DGII cifrado AES-256-GCM
+  dgiiTokenCiphered:  text('dgii_token_ciphered'),
+  dgiiTokenIv:        text('dgii_token_iv'),
+  dgiiTokenAuthTag:   text('dgii_token_auth_tag'),
   dgiiTokenExpiresAt: timestamp('dgii_token_expires_at'),
+
+  // ── Habilitación DGII — JSON blob con estado del wizard ──────────────────
+  // { fase, subPaso, pruebasEmitidas:{'31':4,...}, xmls:{postulacion:'...', declaracion:'...'}, ... }
+  habilitacionState: text('habilitacion_state'),
+  habilitacionCompletadoAt: timestamp('habilitacion_completado_at'),
 
   // ── Perfil visual (PDF, portal) ───────────────────────────────────────────
   logo: text('logo'),                          // base64 data URL
@@ -112,7 +131,7 @@ export const clients = pgTable('clients', {
   teamId: integer('team_id')
     .notNull()
     .references(() => teams.id),
-  rnc: varchar('rnc', { length: 11 }),
+  rnc: varchar('rnc', { length: 20 }),
   razonSocial: varchar('razon_social', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }),
   telefono: varchar('telefono', { length: 20 }),
@@ -175,7 +194,7 @@ export const ecfDocuments = pgTable('ecf_documents', {
   clientId: integer('client_id').references(() => clients.id),
 
   // Identificación
-  encf: varchar('encf', { length: 13 }).notNull(),        // E310000000001
+  encf: varchar('encf', { length: 40 }).notNull(),        // E310000000001 (real) o BOR-XXXXXXXX (borrador)
   tipoEcf: varchar('tipo_ecf', { length: 2 }).notNull(),  // "31", "32", etc.
 
   // Estado del ciclo de vida
@@ -194,7 +213,7 @@ export const ecfDocuments = pgTable('ecf_documents', {
   pdfUrl: text('pdf_url'),
 
   // Datos del comprador (desnormalizados para acceso rápido)
-  rncComprador: varchar('rnc_comprador', { length: 11 }),
+  rncComprador: varchar('rnc_comprador', { length: 20 }),
   razonSocialComprador: varchar('razon_social_comprador', { length: 255 }),
   emailComprador: varchar('email_comprador', { length: 255 }),
 
@@ -227,12 +246,63 @@ export const ecfDocuments = pgTable('ecf_documents', {
   //   04=corrección info, 05=cambio productos, 06=devolución, 07=omisión, 08=errores secuencia, 09=cese, 10=pérdida)
   tipoAnulacion: varchar('tipo_anulacion', { length: 2 }).default('04'),
 
+  // Datos para editar borradores (no van al XML, solo para restaurar el form)
+  lineasJson:       text('lineas_json'),         // JSON con ItemLinea[] del form
+  tipoPago:         integer('tipo_pago').default(1),  // 1=contado,2=crédito,3=gratuito,4=uso
+  fechaLimitePago:  varchar('fecha_limite_pago', { length: 10 }), // YYYY-MM-DD
+
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-// ─── DGII — Padrón de Contribuyentes (RNC) ───────────────────────────────────
+// ─── EmiteDO — e-CFs RECIBIDOS de otros contribuyentes ──────────────────────
+// Cuando otra empresa nos envía un e-CF (tipos 31, 33, 34, 44), se guarda aquí.
+// El team identifica al receptor (nosotros). El emisor se guarda desnormalizado.
+
+export const ecfDocumentsRecibidos = pgTable('ecf_documents_recibidos', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+
+  // Identificación del e-CF recibido
+  encf:       varchar('encf', { length: 40 }).notNull(),
+  tipoEcf:    varchar('tipo_ecf', { length: 2 }).notNull(),
+
+  // Emisor (quién nos envió)
+  rncEmisor:         varchar('rnc_emisor', { length: 20 }).notNull(),
+  razonSocialEmisor: varchar('razon_social_emisor', { length: 255 }),
+
+  // Receptor (debe coincidir con teams.rnc)
+  rncReceptor: varchar('rnc_receptor', { length: 20 }).notNull(),
+
+  // Totales (centavos)
+  montoTotal: integer('monto_total').notNull().default(0),
+  totalItbis: integer('total_itbis').notNull().default(0),
+
+  // XML recibido + ARECF que respondimos
+  xmlRecibido:    text('xml_recibido').notNull(),
+  arecfFirmado:   text('arecf_firmado'),
+
+  // Estado del acuse: RECIBIDO | NO_RECIBIDO
+  estadoAcuse:    varchar('estado_acuse', { length: 20 }).notNull().default('RECIBIDO'),
+  // Código de rechazo (si estadoAcuse = NO_RECIBIDO):
+  // 1=Error especificación, 2=Error firma digital, 3=Envío duplicado, 4=RNC no corresponde
+  codigoRechazo:  varchar('codigo_rechazo', { length: 2 }),
+
+  // Aprobación comercial (B2B): APROBADO | RECHAZADO | CONDICIONAL | PENDIENTE
+  estadoComercial:     varchar('estado_comercial', { length: 20 }).notNull().default('PENDIENTE'),
+  acecfRecibido:       text('acecf_recibido'),
+  fechaEstadoComercial: timestamp('fecha_estado_comercial'),
+
+  fechaRecepcion: timestamp('fecha_recepcion').notNull().defaultNow(),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('ecf_recibidos_team_idx').on(t.teamId),
+  index('ecf_recibidos_encf_idx').on(t.teamId, t.rncEmisor, t.encf),
+]);
+
+// ─── DGII — Padrón de contribuyentes (RNC) ───────────────────────────────────
 // Descargado del ZIP público de la DGII (~600K registros)
 // Permite búsqueda de nombre por RNC y viceversa
 
@@ -263,7 +333,7 @@ export const cotizaciones = pgTable('cotizaciones', {
   numero: varchar('numero', { length: 20 }).notNull(),
   estado: varchar('estado', { length: 20 }).notNull().default('borrador'),
   razonSocialComprador: varchar('razon_social_comprador', { length: 255 }),
-  rncComprador: varchar('rnc_comprador', { length: 11 }),
+  rncComprador: varchar('rnc_comprador', { length: 20 }),
   emailComprador: varchar('email_comprador', { length: 255 }),
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   fechaVencimiento: timestamp('fecha_vencimiento'),
@@ -459,6 +529,34 @@ export const listasPrecios_items = pgTable('listas_precios_items', {
   precio:         integer('precio').notNull().default(0),  // centavos DOP * 100
 });
 
+// ─── EmiteDO: Audit Log de Seguridad ─────────────────────────────────────────
+// Registra accesos y operaciones sobre datos sensibles (certs, firmas, DGII).
+// Distinto de activityLogs (que es para el historial UX del usuario).
+
+export const auditLogs = pgTable('audit_logs', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').references(() => teams.id),
+  userId:    integer('user_id').references(() => users.id),
+  actor:     text('actor').notNull(),                        // email o 'system'
+  action:    varchar('action', { length: 50 }).notNull(),    // ver AuditAction en lib/audit.ts
+  resource:  text('resource'),                               // encf, serial del cert, etc.
+  ipAddress: varchar('ip_address', { length: 45 }),
+  metadata:  text('metadata'),                               // JSON string con detalles
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('audit_logs_team_idx').on(t.teamId),
+  index('audit_logs_action_idx').on(t.action),
+  index('audit_logs_created_idx').on(t.createdAt),
+]);
+
+// ─── EmiteDO: Rate Limits (distribuido — funciona en multi-instancia) ─────────
+
+export const rateLimits = pgTable('rate_limits', {
+  key:     text('key').primaryKey(),
+  count:   integer('count').notNull().default(1),
+  resetAt: timestamp('reset_at').notNull(),
+});
+
 // ─── Auth: Password Reset Tokens ─────────────────────────────────────────────
 
 export const passwordResetTokens = pgTable('password_reset_tokens', {
@@ -555,6 +653,8 @@ export type Sequence = typeof sequences.$inferSelect;
 export type NewSequence = typeof sequences.$inferInsert;
 export type EcfDocument = typeof ecfDocuments.$inferSelect;
 export type NewEcfDocument = typeof ecfDocuments.$inferInsert;
+export type EcfDocumentRecibido = typeof ecfDocumentsRecibidos.$inferSelect;
+export type NewEcfDocumentRecibido = typeof ecfDocumentsRecibidos.$inferInsert;
 export type RncPadron = typeof rncPadron.$inferSelect;
 export type Cotizacion = typeof cotizaciones.$inferSelect;
 export type NewCotizacion = typeof cotizaciones.$inferInsert;
@@ -577,6 +677,8 @@ export type NewPayment = typeof payments.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type OutboundWebhook = typeof outboundWebhooks.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type NewAuditLog = typeof auditLogs.$inferInsert;
 
 export enum ActivityType {
   SIGN_UP = 'SIGN_UP',

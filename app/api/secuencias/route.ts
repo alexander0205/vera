@@ -12,7 +12,7 @@ import { eq, and } from 'drizzle-orm';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 
 // Tipos válidos de e-CF (incluye 'sin-ncf')
-const TIPOS_VALIDOS = [...Object.keys(TIPOS_ECF), 'sin-ncf'] as [string, ...string[]];
+const TIPOS_VALIDOS = [...Object.keys(TIPOS_ECF), 'sin-ncf'] as unknown as [string, ...string[]];
 
 const registrarSchema = z.object({
   tipoEcf:          z.string().min(2).max(10).refine(v => TIPOS_VALIDOS.includes(v), {
