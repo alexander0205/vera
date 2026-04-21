@@ -8,15 +8,23 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
-import { DgiiClient, type DgiiEnvironment } from '@/lib/dgii/client';
+import { getDgiiAuth as getDgiiToken } from '@/lib/dgii/auth';
+
+const MAPA_ESTADOS: Record<string, string> = {
+  Aceptado:            'ACEPTADO',
+  AceptadoCondicional: 'ACEPTADO_CONDICIONAL',
+  Rechazado:           'RECHAZADO',
+  EnProceso:           'EN_PROCESO',
+  'En Proceso':        'EN_PROCESO',
+};
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const trackId = searchParams.get('trackId');
-  const docIdStr = searchParams.get('docId');
+  const url      = new URL(req.url);
+  const trackId  = url.searchParams.get('trackId');
+  const docIdStr = url.searchParams.get('docId');
 
   if (!trackId || !docIdStr) {
     return NextResponse.json({ error: 'trackId y docId son requeridos' }, { status: 400 });
@@ -38,20 +46,28 @@ export async function GET(req: NextRequest) {
 
   if (!row) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
 
-  const { doc, team } = row;
+  const { doc } = row;
 
   if (!doc.trackId) {
-    return NextResponse.json({ error: 'Este documento no tiene trackId de seguimiento' }, { status: 422 });
+    return NextResponse.json(
+      { error: 'Este documento no tiene trackId de seguimiento' },
+      { status: 422 },
+    );
   }
 
-  // Consultar DGII
-  const client = new DgiiClient((team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF');
-
-  // Autenticar si el equipo tiene token vigente
-  if (team.dgiiToken && team.dgiiTokenExpiresAt && new Date() < team.dgiiTokenExpiresAt) {
-    client.setToken(team.dgiiToken, team.dgiiTokenExpiresAt);
+  // Obtener cliente DGII autenticado — reutiliza token de DB o re-autentica y lo guarda
+  let client: Awaited<ReturnType<typeof getDgiiToken>>['client'];
+  try {
+    ({ client } = await getDgiiToken(teamId));
+  } catch (authErr) {
+    console.error('[ecf/estado] Error autenticando con DGII:', authErr);
+    return NextResponse.json(
+      { error: 'No se pudo autenticar contra la DGII para consultar el estado.' },
+      { status: 502 },
+    );
   }
 
+  // Consultar estado del trackId en la DGII
   let estadoDgii: string;
   let mensajes: unknown;
 
@@ -63,17 +79,9 @@ export async function GET(req: NextRequest) {
     console.error('[ecf/estado] Error consultando DGII:', err);
     return NextResponse.json(
       { error: 'No se pudo consultar la DGII. Intenta más tarde.' },
-      { status: 502 }
+      { status: 502 },
     );
   }
-
-  // Mapear estado DGII → estado interno
-  const MAPA_ESTADOS: Record<string, string> = {
-    'Aceptado':             'ACEPTADO',
-    'AceptadoCondicional':  'ACEPTADO_CONDICIONAL',
-    'Rechazado':            'RECHAZADO',
-    'EnProceso':            'EN_PROCESO',
-  };
 
   const estadoNuevo = MAPA_ESTADOS[estadoDgii] ?? doc.estado;
 
@@ -90,9 +98,9 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: true,
+    ok:             true,
     docId,
-    trackId: doc.trackId,
+    trackId:        doc.trackId,
     estadoAnterior: doc.estado,
     estadoActual:   estadoNuevo,
     actualizado:    estadoNuevo !== doc.estado,

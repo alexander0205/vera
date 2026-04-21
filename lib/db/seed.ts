@@ -90,12 +90,20 @@ async function seed() {
   const vencimiento = new Date('2027-12-31');
 
   const secuenciasData = [
+    // Tipos de uso general
     { teamId: team.id, tipoEcf: '31', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(1000), fechaVencimiento: vencimiento },
     { teamId: team.id, tipoEcf: '32', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(5000), fechaVencimiento: vencimiento },
     { teamId: team.id, tipoEcf: '33', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(500),  fechaVencimiento: vencimiento },
     { teamId: team.id, tipoEcf: '34', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(500),  fechaVencimiento: vencimiento },
     { teamId: team.id, tipoEcf: '41', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(500),  fechaVencimiento: vencimiento },
     { teamId: team.id, tipoEcf: '43', secuenciaActual: BigInt(1), secuenciaHasta: BigInt(200),  fechaVencimiento: vencimiento },
+    // Tipos especializados — requeridos por DGII en el Set de Pruebas de habilitación.
+    // Rangos desde 1000 para coincidir con el patrón real de asignación DGII
+    // (E440000001000, E450000001000, etc. — verificado en habilitación real de RNC 131988032)
+    { teamId: team.id, tipoEcf: '44', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '45', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '46', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: vencimiento },
+    { teamId: team.id, tipoEcf: '47', secuenciaActual: BigInt(1000), secuenciaHasta: BigInt(2000), fechaVencimiento: vencimiento },
   ];
 
   await db.insert(sequences).values(secuenciasData);

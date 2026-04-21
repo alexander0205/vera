@@ -25,9 +25,12 @@ import { eq, and } from 'drizzle-orm';
 import { getNextEncf } from '@/lib/dgii/sequence';
 import { buildEcfXml } from '@/lib/dgii/xml-builder';
 import { DgiiSigner } from '@/lib/dgii/signer';
-import { DgiiClient, type DgiiEnvironment } from '@/lib/dgii/client';
+import { type DgiiEnvironment } from '@/lib/dgii/client';
+import { getDgiiAuth as getDgiiToken } from '@/lib/dgii/auth';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo, parseDgiiError } from '@/lib/logger';
+import { decryptField, isEncrypted } from '@/lib/crypto/cert';
+import { logAudit, getIp } from '@/lib/audit';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -60,6 +63,8 @@ const emitirSchema = z.object({
   fechaLimitePago:      z.string().optional(),
   items:                z.array(itemSchema).min(1),
   ncfModificado:        z.string().optional(),
+  codigoModificacion:   z.string().optional(), // 1=Anulación, 2=Modificación Texto, 3=Devolución (tipo 34) | 1=Cambia código, 2=Disminución, 3=Reemplazo (tipo 33)
+  razonModificacion:    z.string().optional(),
 
   // Campos extra
   notas:               z.string().optional(),
@@ -78,6 +83,10 @@ const emitirSchema = z.object({
   // Para editar borradores
   clientId:      z.number().int().positive().optional(),
   lineasJson:    z.string().optional(), // JSON del form (ItemLinea[]) para restaurar edición
+
+  // Override del e-NCF (SOLO para habilitación DGII — genera códigos de prueba
+  // hardcodeados sin tocar la secuencia real del equipo).
+  encfOverride:  z.string().regex(/^E\d{12}$/).optional(),
 });
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -110,7 +119,8 @@ export async function POST(request: NextRequest) {
         Promise.resolve(getPlanLimit(team.planName)),
       ]);
 
-      if (monthlyCount >= planLimit) {
+      // planLimit === -1 → ilimitado (plan Pro), saltar verificación
+      if (planLimit !== -1 && monthlyCount >= planLimit) {
         const currentPlan = getPlan(team.planName);
         const nextPlan = PLANS.find(p => p.limits.docs > currentPlan.limits.docs || p.limits.docs === -1);
         const sugerencia = nextPlan
@@ -189,7 +199,9 @@ export async function POST(request: NextRequest) {
 
     // ── MODO EMITIR ────────────────────────────────────────────────────────────
 
-    if (!team.certP12 || !team.certPassword) {
+    const hasCipheredCert = isEncrypted(team.certP12Ciphered, team.certP12Iv, team.certP12AuthTag);
+
+    if (!hasCipheredCert) {
       await logError({
         teamId: teamId,
         userId: user.id,
@@ -203,7 +215,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. Obtener próxima secuencia (+ fecha vencimiento para XML)
+    // 5. Obtener próxima secuencia
+    //    - Modo habilitación → usa encfOverride (hardcoded desde el wizard)
+    //      para que la DGII valide el formato sin consumir la secuencia real.
+    //    - Modo normal → genera desde la tabla `sequences` del equipo.
     const seqRow = await db
       .select()
       .from(sequences)
@@ -211,7 +226,9 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .then(rows => rows[0]);
 
-    const { encf } = await getNextEncf(teamId, data.tipoEcf);
+    const encf = data.encfOverride
+      ? data.encfOverride
+      : (await getNextEncf(teamId, data.tipoEcf)).encf;
 
     // 6. Calcular totales
     const totales = calcularTotales(data.items);
@@ -223,7 +240,7 @@ export async function POST(request: NextRequest) {
     const xmlOriginal = buildEcfXml({
       tipoEcf:              data.tipoEcf,
       encf,
-      rncEmisor:            team.rnc,
+      rncEmisor:            team.rnc!,
       razonSocialEmisor:    team.razonSocial ?? team.name,
       nombreComercialEmisor: team.nombreComercial ?? undefined,
       direccionEmisor:      team.direccion ?? undefined,
@@ -243,27 +260,33 @@ export async function POST(request: NextRequest) {
           : undefined,
       })),
       ...totales,
-      ncfModificado: data.ncfModificado,
+      ncfModificado:      data.ncfModificado,
+      codigoModificacion: data.codigoModificacion,
+      razonModificacion:  data.razonModificacion,
     });
 
-    // 8. Firmar XML
-    const p12Buffer = Buffer.from(team.certP12, 'base64');
-    const signer = new DgiiSigner({
-      p12Buffer,
-      password: team.certPassword,
-      environment: (team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF',
-    });
-
-    // 8b. Autenticar + firmar + enviar — todo en un bloque para capturar errores DGII
-    let token: string;
-    let expiresAt: Date;
+    // 8. Obtener token DGII — reutiliza el de la DB si sigue vigente,
+    //    re-autentica y guarda el nuevo si expiró.
+    let client: Awaited<ReturnType<typeof getDgiiToken>>['client'];
     try {
-      ({ token, expiresAt } = await signer.authenticate());
+      ({ client } = await getDgiiToken(teamId));
+      logAudit({
+        teamId, userId: user.id, actor: user.email,
+        action: 'DGII_AUTH',
+        ip:     getIp(request),
+        meta:   { ambiente: team.dgiiEnvironment, rnc: team.rnc },
+      });
     } catch (authErr: unknown) {
       const msg = authErr instanceof Error ? authErr.message : String(authErr);
+      logAudit({
+        teamId, userId: user.id, actor: user.email,
+        action: 'DGII_AUTH_FAIL',
+        ip:     getIp(request),
+        meta:   { ambiente: team.dgiiEnvironment, rnc: team.rnc, error: msg },
+      });
       await logError({
         teamId, userId: user.id,
-        source: '/api/ecf/emitir [AUTH]',
+        source:  '/api/ecf/emitir [AUTH]',
         message: `Error autenticando con DGII ${team.dgiiEnvironment}: ${msg}`,
         details: { rncEmisor: team.rnc, ambiente: team.dgiiEnvironment, error: msg },
       });
@@ -279,12 +302,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const xmlFirmado = signer.signXml(xmlOriginal, 'ECF');
+    // 8b. Descifrar P12 para firmar el XML (el token de sesión ya está en `client`)
+    const p12Base64 = decryptField({
+      ciphered: team.certP12Ciphered!,
+      iv:       team.certP12Iv!,
+      authTag:  team.certP12AuthTag!,
+    });
+    const certPin = decryptField({
+      ciphered: team.certPinCiphered!,
+      iv:       team.certPinIv!,
+      authTag:  team.certPinAuthTag!,
+    });
+
+    logAudit({
+      teamId,
+      userId:   user.id,
+      actor:    user.email,
+      action:   'CERT_ACCESS_FOR_SIGN',
+      resource: team.certSerial ?? undefined,
+      ip:       getIp(request),
+      meta:     { tipoEcf: data.tipoEcf, encf },
+    });
+
+    // 8c. Crear signer y firmar XML
+    const p12Buffer = Buffer.from(p12Base64, 'base64');
+    const signer = new DgiiSigner({
+      p12Buffer,
+      password:    certPin,
+      environment: (team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF',
+    });
+
+    const xmlFirmado      = signer.signXml(xmlOriginal, 'ECF');
     const codigoSeguridad = signer.extractSecurityCode(xmlFirmado);
 
-    // 9. Enviar a DGII
-    const client = new DgiiClient((team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF');
-    client.setToken(token, expiresAt);
+    logAudit({
+      teamId, userId: user.id, actor: user.email,
+      action:   'ECF_SIGN',
+      resource: encf,
+      ip:       getIp(request),
+      meta:     { tipoEcf: data.tipoEcf, rnc: team.rnc },
+    });
+
+    // 9. Enviar a DGII (client ya tiene el token de sesión configurado)
 
     const esRfce = data.tipoEcf === '32' && totales.montoTotal < 250000;
     let trackId: string;
@@ -292,12 +351,26 @@ export async function POST(request: NextRequest) {
 
     try {
       if (esRfce) {
-        const rfceXml = signer.toRfce(xmlFirmado);
-        const rfceRes = await client.enviarRfce(rfceXml, team.rnc, encf);
-        trackId = rfceRes.trackId;
-        estadoInicial = 'EN_PROCESO';
+        // 1. Convertir el ECF-32 firmado a estructura RFCE (unsigned)
+        const rfceXmlUnsigned = signer.toRfce(xmlFirmado);
+        // 2. Firmar el RFCE con rootElement 'RFCE' (requerido por la DGII)
+        const rfceXmlFirmado = signer.signXml(rfceXmlUnsigned, 'RFCE');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rfceRes = await client.enviarRfce(rfceXmlFirmado, team.rnc!, encf) as any;
+
+        // El endpoint FC de DGII puede responder sincrónicamente sin trackId:
+        //   { codigo: 1, estado: "Aceptado", encf: "...", mensajes: null }
+        // o asincrónicamente con trackId:
+        //   { trackId: "xxx", estado: "En Proceso" }
+        trackId = rfceRes.trackId ?? '';
+        const estadoRfceDgii: string = rfceRes.estado ?? '';
+        estadoInicial = rfceRes.trackId
+          ? 'EN_PROCESO'
+          : (estadoRfceDgii === 'Aceptado' || estadoRfceDgii === 'AceptadoCondicional')
+            ? 'ACEPTADO'
+            : 'EN_PROCESO';
       } else {
-        const ecfRes = await client.enviarEcf(xmlFirmado, team.rnc, encf);
+        const ecfRes = await client.enviarEcf(xmlFirmado, team.rnc!, encf);
         trackId = ecfRes.trackId;
         estadoInicial = 'EN_PROCESO';
       }
@@ -326,6 +399,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 10. Guardar en BD
+    // lineasJson: usar el que vino en el body (formulario) o construirlo desde los items
+    // para que los PDFs siempre tengan la fuente estructurada disponible.
+    const lineasJsonParaGuardar = data.lineasJson
+      ?? JSON.stringify(data.items.map(item => ({
+          nombreItem:         item.nombreItem,
+          descripcionItem:    item.descripcionItem,
+          cantidadItem:       item.cantidadItem,
+          precioUnitarioItem: item.precioUnitarioItem,
+          descuentoMonto:     item.descuentoMonto ?? 0,
+          tasaItbis:          item.tasaItbis ?? 0,
+          subtotalConItbis:   item.precioUnitarioItem * item.cantidadItem * (1 + (item.tasaItbis ?? 0)),
+          unidadMedida:       item.unidadMedidaItem,
+        })));
+
     const [saved] = await db.insert(ecfDocuments).values({
       teamId,
       encf,
@@ -342,6 +429,7 @@ export async function POST(request: NextRequest) {
       totalItbis:           Math.round(totales.totalItbis * 100),
       ncfModificado:        data.ncfModificado,
       fechaEmision,
+      lineasJson:           lineasJsonParaGuardar,
       ...extraFields,
     }).returning();
 
@@ -352,6 +440,14 @@ export async function POST(request: NextRequest) {
       source: '/api/ecf/emitir',
       message: `e-CF emitido correctamente: ${encf}`,
       details: { encf, tipoEcf: data.tipoEcf, trackId, montoTotal: totales.montoTotal },
+    });
+
+    logAudit({
+      teamId, userId: user.id, actor: user.email,
+      action: 'ECF_SEND',
+      resource: encf,
+      ip: getIp(request),
+      meta: { tipoEcf: data.tipoEcf, trackId, montoTotal: totales.montoTotal, ambiente: team.dgiiEnvironment },
     });
 
     // Dispatch outbound webhooks (fire-and-forget)

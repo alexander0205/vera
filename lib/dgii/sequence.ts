@@ -38,7 +38,9 @@ export async function getNextEncf(
     );
   }
 
-  if (new Date() > seq.fechaVencimiento) {
+  // Algunos tipos (32, 34, sin-ncf) no requieren fecha de vencimiento.
+  // Solo verificamos si la secuencia tiene fecha definida.
+  if (seq.fechaVencimiento && new Date() > seq.fechaVencimiento) {
     throw new Error(
       `Las secuencias para el tipo ${tipoEcf} han vencido. ` +
         `Solicita nuevas secuencias en la Oficina Virtual de la DGII.`

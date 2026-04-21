@@ -25,7 +25,7 @@ async function PricingPageInner({
   return (
     <main>
       <SiteHeader />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
 
         {/* Banner: nueva empresa */}
         {isNewCompany && (
@@ -81,7 +81,7 @@ async function PricingPageInner({
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {PLANS.map((plan) => (
             <PricingCard key={plan.key} plan={plan} />
           ))}

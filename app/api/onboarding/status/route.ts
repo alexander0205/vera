@@ -16,7 +16,7 @@ export async function GET() {
   ]);
 
   return NextResponse.json({
-    tieneCertificado: !!team?.certP12,
+    tieneCertificado: !!team?.certP12Ciphered,
     tieneSecuencias: (seqCount[0]?.c ?? 0) > 0,
     tieneClientes: (clientCount[0]?.c ?? 0) > 0,
     tieneFacturas: (docCount[0]?.c ?? 0) > 0,

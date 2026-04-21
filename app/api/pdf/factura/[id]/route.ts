@@ -11,6 +11,30 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, clients } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
+import { extraerItems } from '@/lib/pdf/extraerItems';
+
+/**
+ * Extrae la fecha/hora de firma del XML firmado.
+ * Busca `<SigningTime>` (XMLDSig estándar) o el `FechaFirma` en el cuerpo del e-CF.
+ * Devuelve formato legible "DD/MM/YYYY HH:mm" — o null si no se encuentra.
+ */
+function extraerFechaFirma(xmlFirmado: string | null): string | null {
+  if (!xmlFirmado) return null;
+  // Intentar <SigningTime> del bloque XMLDSig
+  const m1 = xmlFirmado.match(/<SigningTime[^>]*>([^<]+)<\/SigningTime>/i);
+  // O <FechaFirma> que algunos formatos DGII incluyen
+  const m2 = xmlFirmado.match(/<FechaFirma[^>]*>([^<]+)<\/FechaFirma>/i);
+  const iso = (m1?.[1] ?? m2?.[1] ?? '').trim();
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso; // devolver el raw si no parsea
+  const dd = d.getDate().toString().padStart(2, '0');
+  const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mi = d.getMinutes().toString().padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+}
 
 const TIPO_NOMBRE: Record<string, string> = {
   '31': 'Factura Fiscal',
@@ -98,9 +122,8 @@ export async function GET(
     const totalItbisDOP  = doc.totalItbis / 100;
     const subtotalDOP    = montoTotalDOP - totalItbisDOP;
 
-    // Items: los detalles están en xmlOriginal; usamos un resumen hasta
-    // implementar almacenamiento de líneas en JSON.
-    const items = [
+    // Extraer ítems reales desde lineasJson (prioridad) o xmlOriginal.
+    const items = extraerItems(doc.xmlOriginal, doc.lineasJson) ?? [
       {
         nombreItem:          doc.razonSocialComprador
           ? `Factura a ${doc.razonSocialComprador}`
@@ -124,6 +147,7 @@ export async function GET(
       esBorrador:    doc.estado === 'BORRADOR',
       codigoSeguridad: doc.codigoSeguridad ?? undefined,
       trackId:       doc.trackId ?? undefined,
+      fechaFirma:    extraerFechaFirma(doc.xmlFirmado) ?? undefined,
       moneda:        'DOP',
 
       emisor: {

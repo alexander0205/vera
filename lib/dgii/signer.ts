@@ -48,8 +48,28 @@ export class DgiiSigner {
   async authenticate(): Promise<{ token: string; expiresAt: Date }> {
     const result = await this.ecf.authenticate();
     if (!result) throw new Error('No se pudo obtener token de la DGII');
-    const token = result as unknown as string;
-    const expiresAt = new Date(Date.now() + 55 * 60 * 1000); // 55 min
+
+    // El SDK dgii-ecf devuelve: { token: string, expira: string, expedido: string }
+    // Defender ambos formatos por compatibilidad.
+    let token: string;
+    let expiresAt: Date;
+
+    if (typeof result === 'string') {
+      token = result;
+      expiresAt = new Date(Date.now() + 55 * 60 * 1000);
+    } else if (typeof result === 'object' && result !== null) {
+      const r = result as { token?: string; expira?: string; expedido?: string };
+      if (!r.token) throw new Error('Token no presente en la respuesta de la DGII');
+      token = r.token;
+      // `expira` viene como ISO string; si no es parseable, default a 55 min
+      const parsed = r.expira ? new Date(r.expira) : null;
+      expiresAt = parsed && !isNaN(parsed.getTime())
+        ? parsed
+        : new Date(Date.now() + 55 * 60 * 1000);
+    } else {
+      throw new Error('Formato de token desconocido devuelto por la DGII');
+    }
+
     return { token, expiresAt };
   }
 
@@ -77,12 +97,16 @@ export class DgiiSigner {
   }
 
   /**
-   * Convierte e-CF tipo 32 firmado a formato RFCE
-   * Para facturas de consumo menores a DOP 250,000
+   * Convierte e-CF tipo 32 firmado a formato RFCE (sin firma).
+   * Para facturas de consumo menores a DOP 250,000.
+   *
+   * Nota: el RFCE resultante es unsigned — usar signXml(rfce, 'RFCE') antes de enviar.
    */
   toRfce(signedEcf32Xml: string): string {
+    // convertECF32ToRFCE devuelve { xml: string, securityCode: string }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (convertECF32ToRFCE as any)(signedEcf32Xml) as string;
+    const result = (convertECF32ToRFCE as any)(signedEcf32Xml) as { xml: string; securityCode: string };
+    return result.xml;
   }
 
   // ─── Envío directo usando el cliente integrado ────────────────────────────

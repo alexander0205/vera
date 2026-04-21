@@ -53,6 +53,7 @@ export interface FacturaPDFData {
   estado:                 string;
   codigoSeguridad?:       string;
   trackId?:               string;
+  fechaFirma?:            string;  // Fecha/hora de la firma digital (DGII lo exige visible)
 
   emisor:    EmisorPDF;
   comprador: CompradorPDF;
@@ -475,6 +476,16 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
                 <Text style={S.emisorMetaLabel}>RNC emisor: </Text>{data.emisor.rnc}
               </Text>
             )}
+            {data.emisor.direccion && (
+              <Text style={S.emisorMeta}>
+                <Text style={S.emisorMetaLabel}>Dirección: </Text>{data.emisor.direccion}
+              </Text>
+            )}
+            {data.emisor.telefono && (
+              <Text style={S.emisorMeta}>
+                <Text style={S.emisorMetaLabel}>Tel: </Text>{data.emisor.telefono}
+              </Text>
+            )}
           </View>
 
           {/* Derecha: tipo + NCF */}
@@ -607,6 +618,11 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
               {data.codigoSeguridad && (
                 <Text style={S.codigoSeguridad}>
                   Código de seguridad: {data.codigoSeguridad}
+                </Text>
+              )}
+              {data.fechaFirma && (
+                <Text style={[S.footerCenterText, { marginTop: 1 }]}>
+                  Fecha Firma: {data.fechaFirma}
                 </Text>
               )}
               {data.trackId && (
