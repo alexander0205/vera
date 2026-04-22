@@ -404,14 +404,14 @@ function buildIdDocXml(data: EcfData): string {
     </IdDoc>`;
   }
 
-  // Tipo 34 — Nota de Crédito: añade IndicadorNotaCredito entre eNCF y FechaVencimientoSecuencia
+  // Tipo 34 — Nota de Crédito: tiene IndicadorNotaCredito y NO tiene FechaVencimientoSecuencia
+  // (la nota hereda la secuencia del NCF original — confirmado por DGII XSD)
   if (t === '34') {
     return `
     <IdDoc>
       <TipoeCF>${t}</TipoeCF>
       <eNCF>${data.encf}</eNCF>
       <IndicadorNotaCredito>${data.indicadorNotaCredito ?? 1}</IndicadorNotaCredito>
-      ${fv}
       <IndicadorMontoGravado>0</IndicadorMontoGravado>
       <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
       <TipoPago>${tp}</TipoPago>
