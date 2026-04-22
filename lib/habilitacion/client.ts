@@ -21,7 +21,7 @@ export interface HabilitacionState {
     /** Total de NCFs consumidos por tipo REAL (exitosos + fallidos).
      *  Persiste entre reintentos para nunca reusar un NCF ya enviado a DGII. */
     encfConsumed?: Record<string, number>;
-    trackIds?: { tipo: string; encf: string; trackId: string }[];
+    trackIds?: { tipo: string; encf: string; trackId: string; documentoId?: number }[];
     fc250Done?: boolean;
     confirmed?: boolean;
     /** Configuración del ítem de prueba — persiste entre sesiones */
@@ -196,8 +196,9 @@ export function buildEncfPrueba(tipoEcf: string, indice: number): string {
  * llevar un contador de intentos fallidos.
  */
 export function buildEncfPruebaRandom(tipoEcf: string): string {
-  // Rango alto para no chocar jamás con secuencias de producción (que empiezan en 1)
-  const num = Math.floor(8_000_000_000 + Math.random() * 1_999_999_998);
+  // Rango válido DGII para simulación testecf: 1 a 10,000,000
+  // Confirmado en documentación DGII — fuera de este rango se rechaza con "secuencia no autorizada".
+  const num = Math.floor(1 + Math.random() * 9_999_999);
   return `E${tipoEcf}${num.toString().padStart(10, '0')}`;
 }
 

@@ -31,8 +31,12 @@ export const HabilitacionStateSchema = z.object({
       encf:    z.string(),
       trackId: z.string(),
     })).optional(),
-    fc250Done: z.boolean().optional(),
-    confirmed: z.boolean().optional(),
+    fc250Done:  z.boolean().optional(),
+    confirmed:  z.boolean().optional(),
+    itemNombre: z.string().optional(),
+    itemPrecio: z.string().optional(),
+    itemTarifa: z.string().optional(),
+    itemTipo:   z.string().optional(),
   }).partial().optional(),
 
   representaciones: z.object({

@@ -9,6 +9,7 @@ import {
   date,
   boolean,
   index,
+  uuid,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -51,6 +52,11 @@ export const teams = pgTable('teams', {
   direccion: varchar('direccion', { length: 500 }),
   provincia: varchar('provincia', { length: 100 }),
   municipio: varchar('municipio', { length: 100 }),
+  actividadEconomica: varchar('actividad_economica', { length: 20 }),
+  // Representante legal — requerido para postulación DGII
+  cedulaRepresentante: varchar('cedula_representante', { length: 11 }),
+  nombreRepresentante: varchar('nombre_representante', { length: 255 }),
+  correoRepresentante: varchar('correo_representante', { length: 255 }),
 
   // ── Certificado P12 — cifrado AES-256-GCM ────────────────────────────────
   // (reemplaza certP12 / certPassword — ver lib/crypto/cert.ts)
@@ -67,7 +73,11 @@ export const teams = pgTable('teams', {
 
   // ── DGII ─────────────────────────────────────────────────────────────────
   dgiiEnvironment: varchar('dgii_environment', { length: 20 }).default('TesteCF'),
-  // Token DGII cifrado AES-256-GCM
+  // Token de enrutamiento público — va en la URL que el cliente copia al portal DGII
+  // Ej: api.emitedo.com/dgii/v1/{dgiiRoutingToken}/fe/recepcion/api/ecf
+  // Generado una sola vez al crear el team, nunca cambia.
+  dgiiRoutingToken: uuid('dgii_routing_token').defaultRandom().unique(),
+  // Token DGII cifrado AES-256-GCM (JWT para llamar la API de DGII — distinto al anterior)
   dgiiTokenCiphered:  text('dgii_token_ciphered'),
   dgiiTokenIv:        text('dgii_token_iv'),
   dgiiTokenAuthTag:   text('dgii_token_auth_tag'),

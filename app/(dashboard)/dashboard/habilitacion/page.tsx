@@ -21,6 +21,7 @@ interface Perfil {
   rnc?: string; razonSocial?: string; nombreComercial?: string;
   direccion?: string; provincia?: string; municipio?: string;
   telefono?: string; emailFacturacion?: string;
+  dgiiRoutingToken?: string;
 }
 interface CertInfo {
   tieneCertificado: boolean; errorLectura?: boolean;
@@ -50,16 +51,22 @@ const PHASE_TITLES = [
 
 const EMITEDO = {
   tipoSoftware:    'EXTERNO',
-  nombreSoftware:  'EmiteDo',
+  nombreSoftware:  'EmiteDO',
   version:         '1',
-  rncProveedor:    '132596161',
-  nombreProveedor: 'Yisrael Technology LLC',
+  rncProveedor:    '1333307391',
+  nombreProveedor: 'Yisrael Technology SRL',
 };
 
+// Base de la URL pública — el cliente copia esta URL al portal DGII.
+// DGII agrega el sufijo automáticamente (/fe/recepcion/api/ecf, etc.)
+// Las 3 URLs son idénticas — la diferencia la pone el sufijo de DGII.
+// Se omite el protocolo (https://) porque el portal DGII ya lo tiene como prefijo fijo.
+const API_HOST = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://api.emitedo.com')
+  .replace(/^https?:\/\//, '');
 const URLS_BASE = {
-  recepcion:    'https://api.emitedo.com/dgii/{rnc}/recepcion',
-  aprobacion:   'https://api.emitedo.com/dgii/{rnc}/aprobacion',
-  autenticacion:'https://api.emitedo.com/dgii/{rnc}/autenticacion',
+  recepcion:    `${API_HOST}/api/dgii/v1/{token}`,
+  aprobacion:   `${API_HOST}/api/dgii/v1/{token}`,
+  autenticacion:`${API_HOST}/api/dgii/v1/{token}`,
 };
 
 const PDFS = [
@@ -160,8 +167,8 @@ const PRUEBA_ECF_TYPES: PruebaType[] = [
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const fmtSize = (b: number) => b < 1024 ? `${b} B` : `${(b / 1024).toFixed(0)} KB`;
 
-function withRnc(url: string, rnc: string) {
-  return url.replace('{rnc}', rnc || 'TU_RNC');
+function withToken(url: string, token: string) {
+  return url.replace('{token}', token || 'cargando...');
 }
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
@@ -182,6 +189,42 @@ function CopyRow({ label, value }: { label: string; value: string }) {
       </button>
     </div>
   );
+}
+
+// Campo estilo portal DGII — label + asterisco arriba, valor en input con copy button dentro.
+// Si `isUrl=true` muestra "https://" como prefijo visual gris (no se copia).
+function DgiiField({ label, value, span, required = true, isUrl = false }: {
+  label: string; value: string; span?: 'full' | '2'; required?: boolean; isUrl?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const spanCls = span === 'full' ? 'col-span-full' : span === '2' ? 'col-span-2' : '';
+  return (
+    <div className={spanCls}>
+      <label className="block text-sm text-gray-700 mb-1">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      <div className="flex items-center border border-gray-300 rounded-md bg-white overflow-hidden focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-400">
+        {isUrl && (
+          <span className="shrink-0 px-3 py-2 text-sm text-gray-400 bg-gray-50 border-r border-gray-200 select-none">
+            https://
+          </span>
+        )}
+        <span className="flex-1 px-3 py-2 text-sm text-gray-900 truncate min-w-0">{value}</span>
+        <button
+          onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
+          className="shrink-0 px-3 py-2 border-l border-gray-200 bg-gray-50 hover:bg-teal-50 text-gray-400 hover:text-teal-600 transition-colors"
+          title="Copiar"
+        >
+          {copied ? <Check className="h-4 w-4 text-teal-500" /> : <Copy className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Alias legacy — no eliminar, lo usan otras secciones
+function CopyField({ label, value, span }: { label: string; value: string; span?: 'full' | '2' }) {
+  return <DgiiField label={label} value={value} span={span} required={false} />;
 }
 
 function InfoBox({ color, title, children }: { color: 'blue'|'amber'|'teal'|'red'; title: string; children: React.ReactNode }) {
@@ -907,7 +950,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
 function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
   const xmlInputRef = useRef<HTMLInputElement>(null);
 
-  const [rnc,             setRnc]             = useState('');
+  const [dgiiToken,       setDgiiToken]       = useState('');
   const [sub,             setSub]             = useState(0);
   const [xmlFile,         setXmlFile]         = useState<File | null>(null);
   const [signing,         setSigning]         = useState(false);
@@ -920,7 +963,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
   const [xmlFirmado,     setXmlFirmado]     = useState<{ base64: string; name: string } | null>(null);
 
   useEffect(() => {
-    fetch('/api/equipo/perfil').then(r => r.json()).then(d => setRnc(d.rnc ?? ''));
+    fetch('/api/equipo/perfil').then(r => r.json()).then(d => setDgiiToken(d.dgiiRoutingToken ?? ''));
     // Cargar estado persistido
     import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
       cargarEstado().then(({ state }) => {
@@ -938,9 +981,9 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
   }, []);
 
   const urls = {
-    recepcion:    withRnc(URLS_BASE.recepcion,     rnc),
-    aprobacion:   withRnc(URLS_BASE.aprobacion,    rnc),
-    autenticacion:withRnc(URLS_BASE.autenticacion, rnc),
+    recepcion:    withToken(URLS_BASE.recepcion,     dgiiToken),
+    aprobacion:   withToken(URLS_BASE.aprobacion,    dgiiToken),
+    autenticacion:withToken(URLS_BASE.autenticacion, dgiiToken),
   };
 
   async function handleFirmar() {
@@ -1031,13 +1074,16 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             </a>
           </div>
 
-          {/* 2 — Datos a copiar */}
-          <div className="grid lg:grid-cols-2 gap-4">
+          {/* 2 — Formulario estilo portal DGII */}
+          <div className="space-y-6">
 
             {/* Software */}
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b flex items-center justify-between">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Datos del software</p>
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">⚙️ Datos del software de facturación.</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Los campos se ven iguales en el sitio de la DGII:</p>
+                </div>
                 <DgiiScreenshot
                   src="/dgii-guia/paso1-datos-software.png"
                   alt="Formulario de datos del software en el portal DGII"
@@ -1045,26 +1091,28 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
                   label="Ver dónde pegar"
                 />
               </div>
-              <div className="px-4 divide-y divide-gray-50">
-                <CopyRow label="Tipo de software"     value={EMITEDO.tipoSoftware} />
-                <CopyRow label="Nombre del software"  value={EMITEDO.nombreSoftware} />
-                <CopyRow label="Versión"              value={EMITEDO.version} />
-                <CopyRow label="URL de recepción"     value={urls.recepcion} />
-                <CopyRow label="URL de aprobación"    value={urls.aprobacion} />
-                <CopyRow label="URL de autenticación" value={urls.autenticacion} />
+              <div className="grid grid-cols-3 gap-4">
+                <DgiiField label="Tipo de software"            value={EMITEDO.tipoSoftware}  required={false} />
+                <DgiiField label="Nombre del software"         value={EMITEDO.nombreSoftware} />
+                <DgiiField label="Versión del software"        value={EMITEDO.version} />
+                <DgiiField label="URL de recepción"            value={urls.recepcion}     span="full" isUrl />
+                <DgiiField label="URL de aprobación comercial" value={urls.aprobacion}    span="full" isUrl />
+                <DgiiField label="URL de autenticación"        value={urls.autenticacion} span="full" isUrl />
               </div>
             </div>
 
             {/* Proveedor */}
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Datos del proveedor</p>
+            <div>
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-gray-800">👤 Datos del proveedor electrónico.</p>
               </div>
-              <div className="px-4 divide-y divide-gray-50">
-                <CopyRow label="RNC del proveedor" value={EMITEDO.rncProveedor} />
-                <CopyRow label="Razón social"       value={EMITEDO.nombreProveedor} />
+              <div className="grid grid-cols-3 gap-4">
+                <DgiiField label="RNC / Cédula"   value={EMITEDO.rncProveedor} />
+                <DgiiField label="Razón social"    value={EMITEDO.nombreProveedor} span="2" />
+                <DgiiField label="Nombre comercial" value={EMITEDO.nombreSoftware} span="full" required={false} />
               </div>
             </div>
+
           </div>
 
 
@@ -1349,7 +1397,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
   // Polling de validación DGII — arranca cuando termina la emisión.
   // Consulta el estado final de cada trackId contra CerteCF.
   const [polling,          setPolling]          = useState(false);
-  const [pendingTrackIds,  setPendingTrackIds]  = useState<{ tipo: string; encf: string; trackId: string }[]>([]);
+  const [pendingTrackIds,  setPendingTrackIds]  = useState<{ tipo: string; encf: string; trackId: string; documentoId?: number }[]>([]);
   const [validatedByTipo,  setValidatedByTipo]  = useState<Record<string, number>>({});
 
   // FC <250Mil
@@ -1358,6 +1406,25 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
   const [download32bError, setDownload32bError] = useState<string | null>(null);
 
   const [confirmed, setConfirmed] = useState(false);
+
+  /** Descarga el XML firmado de un e-CF emitido durante las pruebas. */
+  async function downloadXml(documentoId: number, encf: string) {
+    try {
+      const res = await fetch(`/api/ecf/xml?id=${documentoId}`);
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${encf}.xml`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // silencioso — si falla el usuario puede reintentar
+    }
+  }
 
   /** Descarga el PDF de la Factura de Consumo RFCE (<RD$250K) del Set de Pruebas. */
   async function handleDownload32b() {
@@ -1616,7 +1683,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
     }).catch(() => {});
 
     const counterLocal: Record<string, number> = { ...counts };
-    const trackIdsLocal: { tipo: string; encf: string; trackId: string }[] = [];
+    const trackIdsLocal: { tipo: string; encf: string; trackId: string; documentoId?: number }[] = [];
 
     for (const batchInfo of PRUEBA_BATCHES) {
       const types = PRUEBA_ECF_TYPES.filter(t => t.batch === batchInfo.id && t.required !== null);
@@ -1669,7 +1736,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               itemTarifa: tarifaDec,
               itemTipo:   itemTipoCode,
             });
-            trackIdsLocal.push({ tipo: t.tipo, encf: result.encf, trackId: result.trackId });
+            trackIdsLocal.push({ tipo: t.tipo, encf: result.encf, trackId: result.trackId, documentoId: result.documentoId });
             ok = i;
             counterLocal[t.tipo] = i;
             setCounts({ ...counterLocal });
@@ -1973,6 +2040,36 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               </p>
             </div>
           </div>
+
+          {/* ── Panel de descarga de XMLs generados ── */}
+          {pendingTrackIds.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+                <div className="flex items-center gap-2">
+                  <Download className="h-3.5 w-3.5 text-gray-500" />
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                    XMLs generados — descargar para inspección
+                  </p>
+                </div>
+                <span className="text-[10px] text-gray-400">{pendingTrackIds.length} archivos</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {pendingTrackIds.map(doc => (
+                  <button
+                    key={doc.encf}
+                    onClick={() => doc.documentoId && downloadXml(doc.documentoId, doc.encf)}
+                    disabled={!doc.documentoId}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                    <span className="flex-1 text-xs font-mono text-gray-800">{doc.encf}.xml</span>
+                    <span className="text-[10px] text-gray-400 shrink-0">Tipo {doc.tipo.replace(/[grb]/g, '')}</span>
+                    <span className="text-[10px] text-teal-600 font-medium shrink-0">↓ Descargar</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Navegación: se bloquea durante emisión y polling — solo aparece
               cuando todo está aceptado (auto-avance ya se dispara, pero dejamos
@@ -2344,17 +2441,17 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
 // ─── Phase 3: URLs de producción ─────────────────────────────────────────────
 
 function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
-  const [rnc,       setRnc]       = useState('');
+  const [dgiiToken, setDgiiToken] = useState('');
   const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    fetch('/api/equipo/perfil').then(r => r.json()).then(d => setRnc(d.rnc ?? ''));
+    fetch('/api/equipo/perfil').then(r => r.json()).then(d => setDgiiToken(d.dgiiRoutingToken ?? ''));
   }, []);
 
   const urls = {
-    recepcion:    withRnc(URLS_BASE.recepcion,     rnc),
-    aprobacion:   withRnc(URLS_BASE.aprobacion,    rnc),
-    autenticacion:withRnc(URLS_BASE.autenticacion, rnc),
+    recepcion:    withToken(URLS_BASE.recepcion,     dgiiToken),
+    aprobacion:   withToken(URLS_BASE.aprobacion,    dgiiToken),
+    autenticacion:withToken(URLS_BASE.autenticacion, dgiiToken),
   };
 
   return (

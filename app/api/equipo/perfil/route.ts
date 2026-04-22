@@ -73,17 +73,19 @@ export async function GET(_req: NextRequest) {
     .limit(1);
 
   return NextResponse.json({
-    razonSocial:      team.razonSocial,
-    nombreComercial:  team.nombreComercial,
-    rnc:              team.rnc,
-    direccion:        team.direccion,
-    provincia:        team.provincia,
-    municipio:        team.municipio,
-    telefono:         (team as any).telefono,
-    sitioWeb:         (team as any).sitioWeb,
-    emailFacturacion: (team as any).emailFacturacion,
-    colorPrimario:    (team as any).colorPrimario ?? '#1e40af',
-    logo:             (team as any).logo,
-    firma:            (team as any).firma,
+    razonSocial:       team.razonSocial,
+    nombreComercial:   team.nombreComercial,
+    rnc:               team.rnc,
+    direccion:         team.direccion,
+    provincia:         team.provincia,
+    municipio:         team.municipio,
+    telefono:          (team as any).telefono,
+    sitioWeb:          (team as any).sitioWeb,
+    emailFacturacion:  (team as any).emailFacturacion,
+    colorPrimario:     (team as any).colorPrimario ?? '#1e40af',
+    logo:              (team as any).logo,
+    firma:             (team as any).firma,
+    // Token de enrutamiento DGII — va en la URL que el cliente copia al portal
+    dgiiRoutingToken:  team.dgiiRoutingToken,
   });
 }
