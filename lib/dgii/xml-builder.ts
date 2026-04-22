@@ -220,8 +220,14 @@ function buildCompradorXml(data: EcfData): string {
     // Tipos 46/47 requieren <Comprador> en el XML (DGII lo valida).
     // Si no se provee compradorExtranjero, se usa un placeholder mínimo.
     const c = data.compradorExtranjero ?? { nombre: 'Comprador Exterior' };
+    // Tipo 46 (Exportaciones): DGII exige RNCComprador aunque sea comprador extranjero.
+    // Usar RNC 99999999901 (Comprador del Exterior) cuando no se provee uno explícito.
+    const rncExterno = data.tipoEcf === '46'
+      ? (data.rncComprador ?? '99999999901')
+      : data.rncComprador;  // tipo 47: sin RNC
     return `
     <Comprador>
+      ${opt('RNCComprador', rncExterno)}
       ${opt('IdentificadorExtranjero', c.identificacion)}
       <RazonSocialComprador>${escXml(c.nombre)}</RazonSocialComprador>
       ${opt('PaisComprador', c.pais)}
@@ -250,10 +256,11 @@ function buildCompradorXml(data: EcfData): string {
 function buildReferenciaXml(data: EcfData): string {
   if (!data.ncfModificado) return '';
   // Orden obligatorio según XSD: NCFModificado → RNCOtroContribuyente → FechaNCFModificado → CodigoModificacion → RazonModificacion
-  // FechaNCFModificado es obligatoria cuando hay CodigoModificacion — si no se provee, usar fecha de hoy.
+  // FechaNCFModificado SIEMPRE se incluye cuando hay NCFModificado para que RazonModificacion
+  // tenga un elemento precedente válido (si no, el XSD la rechaza como fuera de secuencia).
   const fechaRef = data.fechaNcfModificado
     ? formatDate(data.fechaNcfModificado)
-    : (data.codigoModificacion ? formatDate(new Date()) : undefined);
+    : formatDate(new Date());
   return `
   <InformacionReferencia>
     <NCFModificado>${data.ncfModificado}</NCFModificado>
@@ -291,8 +298,9 @@ function buildOtraMonedaXml(data: EcfData): string {
 }
 
 function buildItemXml(item: EcfItem): string {
-  // IndicadorFacturacion: 1=Afecta ITBIS, 2=Exento — debe aparecer ANTES de NombreItem (requisito XSD)
-  const indicadorFacturacion = (item.tasaItbis && item.tasaItbis > 0) ? 1 : 2;
+  // IndicadorFacturacion: 1=Gravado ITBIS, 2=Propina Legal, 3=Exento, 4=No Facturable
+  // Para items sin ITBIS usamos 3 (Exento), no 2 (Propina Legal).
+  const indicadorFacturacion = (item.tasaItbis && item.tasaItbis > 0) ? 1 : 3;
 
   return `
     <Item>
@@ -310,33 +318,16 @@ function buildItemXml(item: EcfItem): string {
 }
 
 /**
- * Tipos 41 (Compras) y 47 (Pagos al Exterior): los Items son Retenciones, no líneas de productos.
- * Genera un Item de Retencion ISR (01) calculado como 5% del montoTotal.
- * El porcentaje es orientativo — DGII valida el formato, no la lógica de negocio en pruebas.
- */
-function buildRetencionItemsXml(montoTotal: number): string {
-  const montoIsr = (montoTotal * 0.05);
-  return `
-    <Item>
-      <NumeroLinea>1</NumeroLinea>
-      <Retencion>
-        <TipoRetencion>01</TipoRetencion>
-        <MontoRetencion>${montoIsr.toFixed(2)}</MontoRetencion>
-      </Retencion>
-    </Item>`;
-}
-
-/**
  * Construye el bloque <IdDoc> adaptado a cada tipo de e-CF.
  *
- * Diferencias por tipo (confirmadas por errores XSD de DGII):
- *   31/32/33/45 — estructura estándar
- *   34          — añade <IndicadorNotaCredito> justo después de <eNCF>
- *   41          — sin <TipoIngresos>
- *   43          — solo <TipoPago> (sin IndicadorEnvioDiferido, IndicadorMontoGravado, TipoIngresos, TablaFormasPago)
- *   44          — sin <IndicadorMontoGravado>; acepta <IndicadorEnvioDiferido> y <IndicadorServicioTodoIncluido>
- *   46          — sin <IndicadorMontoGravado>; acepta <IndicadorEnvioDiferido>
- *   47          — sin <IndicadorMontoGravado> ni <TipoIngresos>
+ * Diferencias por tipo (confirmadas por aceptación/rechazo real de DGII TesteCF):
+ *   31/33/45 — estándar: FechaVencimientoSecuencia + IndicadorMontoGravado + TipoIngresos
+ *   32       — SIN FechaVencimientoSecuencia (B2C — DGII lo rechaza con ese campo)
+ *   34       — SIN FechaVencimientoSecuencia; añade IndicadorNotaCredito después de eNCF
+ *   41       — SIN TipoIngresos; mantiene FechaVencimientoSecuencia e IndicadorMontoGravado
+ *   43       — solo FechaVencimientoSecuencia + TipoPago (sin IndicadorMontoGravado, TipoIngresos)
+ *   44/46    — sin IndicadorMontoGravado; usa TipoIngresos directamente
+ *   47       — sin IndicadorMontoGravado ni TipoIngresos
  */
 function buildIdDocXml(data: EcfData): string {
   const t   = data.tipoEcf;
@@ -351,6 +342,21 @@ function buildIdDocXml(data: EcfData): string {
         </FormaDePago>
       </TablaFormasPago>`;
 
+  // Tipo 32 — Factura de Consumo (B2C): sin FechaVencimientoSecuencia
+  // Confirmado: tipo 32 fue ACEPTADO por DGII sin este campo. Incluirlo causa rechazo.
+  if (t === '32') {
+    return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      <IndicadorMontoGravado>0</IndicadorMontoGravado>
+      <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
+      <TipoPago>${tp}</TipoPago>
+      ${fl}
+      ${tabla}
+    </IdDoc>`;
+  }
+
   // Tipo 43 — Gastos Menores: IdDoc ultra-simplificado (sin IndicadorMontoGravado ni TipoIngresos)
   if (t === '43') {
     return `
@@ -362,14 +368,28 @@ function buildIdDocXml(data: EcfData): string {
     </IdDoc>`;
   }
 
-  // Tipos 41/47 — sin TipoIngresos
-  if (t === '41' || t === '47') {
+  // Tipo 41 — Compras: con IndicadorMontoGravado, sin TipoIngresos
+  if (t === '41') {
     return `
     <IdDoc>
       <TipoeCF>${t}</TipoeCF>
       <eNCF>${data.encf}</eNCF>
       ${fv}
       <IndicadorMontoGravado>0</IndicadorMontoGravado>
+      <TipoPago>${tp}</TipoPago>
+      ${fl}
+      ${tabla}
+    </IdDoc>`;
+  }
+
+  // Tipo 47 — Pagos al Exterior: sin IndicadorMontoGravado ni TipoIngresos
+  // Confirmado por DGII XSD: después de eNCF+FechaVencimientoSecuencia va directo a TipoPago
+  if (t === '47') {
+    return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      ${fv}
       <TipoPago>${tp}</TipoPago>
       ${fl}
       ${tabla}
@@ -420,7 +440,7 @@ function buildIdDocXml(data: EcfData): string {
     </IdDoc>`;
   }
 
-  // Tipos 31, 32, 33, 45 — estructura estándar
+  // Tipos 31, 33, 45 — estructura estándar con FechaVencimientoSecuencia
   return `
     <IdDoc>
       <TipoeCF>${t}</TipoeCF>
@@ -479,11 +499,9 @@ function buildTotalesXml(data: EcfData): string {
 export function buildEcfXml(data: EcfData): string {
   validar(data);
 
-  // Tipos 41/47 usan Items-Retenciones en lugar de líneas normales de producto
-  const usaRetenciones = data.tipoEcf === '41' || data.tipoEcf === '47';
-  const itemsXml = usaRetenciones
-    ? buildRetencionItemsXml(data.montoTotal)
-    : data.items.map(buildItemXml).join('');
+  // Todos los tipos usan items normales con IndicadorFacturacion.
+  // El <Retencion> dentro de <Item> NO es válido según el XSD de DGII (confirmado por error de campo).
+  const itemsXml = data.items.map(buildItemXml).join('');
 
   const idDocXml       = buildIdDocXml(data);
   const totalesXml     = buildTotalesXml(data);
