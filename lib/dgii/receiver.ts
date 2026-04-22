@@ -135,11 +135,11 @@ function construirArecfManual(
   aceptado: boolean,
 ): string {
   const now = new Date();
-  const fecha = `${now.getDate().toString().padStart(2, '0')}-` +
-                `${(now.getMonth() + 1).toString().padStart(2, '0')}-` +
-                `${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:` +
-                `${now.getMinutes().toString().padStart(2, '0')}:` +
-                `${now.getSeconds().toString().padStart(2, '0')}`;
+  const fecha = `${now.getUTCDate().toString().padStart(2, '0')}-` +
+                `${(now.getUTCMonth() + 1).toString().padStart(2, '0')}-` +
+                `${now.getUTCFullYear()} ${now.getUTCHours().toString().padStart(2, '0')}:` +
+                `${now.getUTCMinutes().toString().padStart(2, '0')}:` +
+                `${now.getUTCSeconds().toString().padStart(2, '0')}`;
   const estado = aceptado ? '0' : '1';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <ARECF xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">

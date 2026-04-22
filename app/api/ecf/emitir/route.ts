@@ -235,7 +235,12 @@ export async function POST(request: NextRequest) {
 
     // 7. Construir XML
     const fechaEmision = new Date();
-    const fechaVencimientoSecuencia = seqRow?.fechaVencimiento ?? new Date('2027-12-31');
+    // fechaVencimiento viene de la tabla sequences (fecha que la DGII autorizó para ese tipo).
+    // Si se usa encfOverride (modo habilitación DGII) → siempre 31-12-2028 (confirmado testecf).
+    // En producción sin override → la fecha real de la tabla sequences.
+    const fechaVencimientoSecuencia = data.encfOverride
+      ? new Date('2028-12-31T12:00:00.000Z')
+      : (seqRow?.fechaVencimiento ?? new Date('2028-12-31T12:00:00.000Z'));
 
     const xmlOriginal = buildEcfXml({
       tipoEcf:              data.tipoEcf,

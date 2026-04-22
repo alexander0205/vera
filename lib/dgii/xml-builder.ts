@@ -119,20 +119,20 @@ export interface EcfData {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(date: Date): string {
-  const d = date.getDate().toString().padStart(2, '0');
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  const y = date.getFullYear();
+  const d = date.getUTCDate().toString().padStart(2, '0');
+  const m = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  const y = date.getUTCFullYear();
   return `${d}-${m}-${y}`;
 }
 
 /** Formato requerido por FechaHoraFirma: DD-MM-YYYY HH:MM:SS */
 function formatDateTime(date: Date): string {
-  const d = date.getDate().toString().padStart(2, '0');
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  const y = date.getFullYear();
-  const h = date.getHours().toString().padStart(2, '0');
-  const min = date.getMinutes().toString().padStart(2, '0');
-  const s = date.getSeconds().toString().padStart(2, '0');
+  const d = date.getUTCDate().toString().padStart(2, '0');
+  const m = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  const y = date.getUTCFullYear();
+  const h = date.getUTCHours().toString().padStart(2, '0');
+  const min = date.getUTCMinutes().toString().padStart(2, '0');
+  const s = date.getUTCSeconds().toString().padStart(2, '0');
   return `${d}-${m}-${y} ${h}:${min}:${s}`;
 }
 
@@ -228,8 +228,8 @@ function buildCompradorXml(data: EcfData): string {
   }
 
   if (rule.compradorRule === 'OPCIONAL' && !data.rncComprador) {
-    // Tipo 32 sin RNC → solo email (si hay)
-    if (!data.emailComprador) return '';
+    // Tipo 32 sin RNC → solo email (si hay). El elemento <Comprador> es requerido por el XSD aunque esté vacío.
+    if (!data.emailComprador) return '\n    <Comprador/>';
     return `
     <Comprador>
       ${opt('EmailComprador', data.emailComprador)}
@@ -299,8 +299,6 @@ function buildItemXml(item: EcfItem): string {
       <PrecioUnitarioItem>${item.precioUnitarioItem.toFixed(2)}</PrecioUnitarioItem>
       ${opt('DescuentoMonto', item.descuentoMonto?.toFixed(2))}
       <MontoItem>${item.montoItem.toFixed(2)}</MontoItem>
-      ${optNonZero('TasaITBIS', item.tasaItbis)}
-      ${optNonZero('MontoITBIS', item.montoItbis?.toFixed(2))}
     </Item>`;
 }
 
@@ -315,18 +313,25 @@ export function buildEcfXml(data: EcfData): string {
   const exportacionXml = buildExportacionXml(data);
   const monedaXml      = buildOtraMonedaXml(data);
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <ECF>
   <Encabezado>
     <Version>1.0</Version>
     <IdDoc>
       <TipoeCF>${data.tipoEcf}</TipoeCF>
       <eNCF>${data.encf}</eNCF>
-      <FechaVencimientoSecuencia>${formatDate(data.fechaVencimientoSecuencia)}</FechaVencimientoSecuencia>
+      ${data.tipoEcf !== '32' ? `<FechaVencimientoSecuencia>${formatDate(data.fechaVencimientoSecuencia)}</FechaVencimientoSecuencia>` : ''}
       ${opt('IndicadorEnvioDiferido', data.tipoEcf === '43' ? 1 : undefined)}
-      ${opt('TipoIngresos', data.tipoIngresos ?? (data.tipoEcf === '32' ? '01' : undefined))}
+      <IndicadorMontoGravado>0</IndicadorMontoGravado>
+      <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
       <TipoPago>${data.tipoPago ?? 1}</TipoPago>
       ${opt('FechaLimitePago', data.fechaLimitePago ? formatDate(data.fechaLimitePago) : undefined)}
+      <TablaFormasPago>
+        <FormaDePago>
+          <FormaPago>${data.tipoPago ?? 1}</FormaPago>
+          <MontoPago>${data.montoTotal.toFixed(2)}</MontoPago>
+        </FormaDePago>
+      </TablaFormasPago>
     </IdDoc>
     <Emisor>
       <RNCEmisor>${data.rncEmisor}</RNCEmisor>
@@ -343,10 +348,11 @@ export function buildEcfXml(data: EcfData): string {
       ${optNonZero('MontoGravadoI2', data.montoGravadoI2?.toFixed(2))}
       ${optNonZero('MontoGravadoI3', data.montoGravadoI3?.toFixed(2))}
       ${optNonZero('MontoExento', data.montoExento?.toFixed(2))}
-      ${optNonZero('ITBIS1', data.itbis1?.toFixed(2))}
-      ${optNonZero('ITBIS2', data.itbis2?.toFixed(2))}
-      ${optNonZero('ITBIS3', data.itbis3?.toFixed(2))}
-      <TotalITBIS>${data.totalItbis.toFixed(2)}</TotalITBIS>
+      ${(data.itbis1 && data.itbis1 > 0) ? '<ITBIS1>18</ITBIS1>' : ''}
+      ${optNonZero('TotalITBIS', data.totalItbis > 0 ? data.totalItbis.toFixed(2) : undefined)}
+      ${(data.itbis1 && data.itbis1 > 0) ? `<TotalITBIS1>${data.itbis1.toFixed(2)}</TotalITBIS1>` : ''}
+      ${(data.itbis2 && data.itbis2 > 0) ? `<TotalITBIS2>${data.itbis2.toFixed(2)}</TotalITBIS2>` : ''}
+      ${(data.itbis3 && data.itbis3 > 0) ? `<TotalITBIS3>${data.itbis3.toFixed(2)}</TotalITBIS3>` : ''}
       ${optNonZero('TotalITBISRetenido', data.totalITBISRetenido?.toFixed(2))}
       ${optNonZero('TotalISRRetenido',   data.totalISRRetenido?.toFixed(2))}
       <MontoTotal>${data.montoTotal.toFixed(2)}</MontoTotal>
