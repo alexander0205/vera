@@ -217,17 +217,17 @@ function buildCompradorXml(data: EcfData): string {
   if (rule.compradorRule === 'PROHIBIDO') return '';
 
   if (rule.compradorRule === 'EXTRANJERO') {
-    // Tipos 46/47 requieren <Comprador> en el XML (DGII lo valida).
-    // Si no se provee compradorExtranjero, se usa un placeholder mínimo.
-    const c = data.compradorExtranjero ?? { nombre: 'Comprador Exterior' };
-    // Tipo 46 (Exportaciones): DGII exige RNCComprador aunque sea comprador extranjero.
-    // Usar RNC 99999999901 (Comprador del Exterior) cuando no se provee uno explícito.
-    const rncExterno = data.tipoEcf === '46'
-      ? (data.rncComprador ?? '99999999901')
-      : data.rncComprador;  // tipo 47: sin RNC
+    // Tipo 46 (Exportaciones) y 47 (Pagos Exterior): comprador generalmente extranjero.
+    //
+    // Regla DGII (Formato e-CF, fila 38-39):
+    //   - RNCComprador: SOLO Zona Franca → Residentes dominicanos. Omitir en exportaciones normales.
+    //   - IdentificadorExtranjero: pasaporte/tax ID del comprador extranjero (default: EXT00000001).
+    //   - RazonSocialComprador: obligatorio cuando hay IdentificadorExtranjero o RNCComprador.
+    //   - NO usar placeholder 99999999901 — DGII lo rechaza con cod=1385.
+    const c = data.compradorExtranjero ?? { nombre: 'Comprador Exterior', identificacion: 'EXT00000001' };
     return `
     <Comprador>
-      ${opt('RNCComprador', rncExterno)}
+      ${opt('RNCComprador', data.rncComprador)}
       ${opt('IdentificadorExtranjero', c.identificacion)}
       <RazonSocialComprador>${escXml(c.nombre)}</RazonSocialComprador>
       ${opt('PaisComprador', c.pais)}
@@ -237,10 +237,14 @@ function buildCompradorXml(data: EcfData): string {
   }
 
   if (rule.compradorRule === 'OPCIONAL' && !data.rncComprador) {
-    // Tipo 32 sin RNC → solo email (si hay). El elemento <Comprador> es requerido por el XSD aunque esté vacío.
-    if (!data.emailComprador) return '\n    <Comprador/>';
+    // Tipo 32 sin RNC: SIEMPRE incluir <Comprador> con RazonSocialComprador mínimo.
+    // Razón: convertECF32ToRFCE() extrae Comprador del ECF firmado para construir el RFCE.
+    // Si Comprador está ausente → removeEmptyValues lo elimina → RFCE queda sin <Comprador>
+    // → DGII rechaza con "expected Comprador between Emisor and Totales".
+    // Fallback: "Consumidor Final" cuando no hay datos del comprador.
     return `
     <Comprador>
+      ${opt('RazonSocialComprador', data.razonSocialComprador ? escXml(data.razonSocialComprador) : 'Consumidor Final')}
       ${opt('EmailComprador', data.emailComprador)}
     </Comprador>`;
   }
@@ -255,18 +259,21 @@ function buildCompradorXml(data: EcfData): string {
 
 function buildReferenciaXml(data: EcfData): string {
   if (!data.ncfModificado) return '';
-  // Orden obligatorio según XSD: NCFModificado → RNCOtroContribuyente → FechaNCFModificado → CodigoModificacion → RazonModificacion
-  // FechaNCFModificado SIEMPRE se incluye cuando hay NCFModificado para que RazonModificacion
-  // tenga un elemento precedente válido (si no, el XSD la rechaza como fuera de secuencia).
+  // Orden obligatorio según XSD DGII (confirmado por error 3):
+  //   NCFModificado → [RNCOtroContribuyente] → [FechaNCFModificado] → CodigoModificacion → [RazonModificacion]
+  //
+  // CodigoModificacion es REQUERIDO (error 3 "expected CodigoModificacion" si se omite).
+  // Valor por defecto '2' = Modificación texto/datos.
   const fechaRef = data.fechaNcfModificado
     ? formatDate(data.fechaNcfModificado)
     : formatDate(new Date());
+  const codMod = data.codigoModificacion ?? '2';
   return `
   <InformacionReferencia>
     <NCFModificado>${data.ncfModificado}</NCFModificado>
     ${opt('RNCOtroContribuyente', data.rncOtroContribuyente)}
-    ${opt('FechaNCFModificado', fechaRef)}
-    ${opt('CodigoModificacion', data.codigoModificacion)}
+    <FechaNCFModificado>${fechaRef}</FechaNCFModificado>
+    <CodigoModificacion>${codMod}</CodigoModificacion>
     ${opt('RazonModificacion', data.razonModificacion ? escXml(data.razonModificacion) : undefined)}
   </InformacionReferencia>`;
 }
@@ -297,10 +304,59 @@ function buildOtraMonedaXml(data: EcfData): string {
   </OtraMoneda>`;
 }
 
-function buildItemXml(item: EcfItem): string {
-  // IndicadorFacturacion: 1=Gravado ITBIS, 2=Propina Legal, 3=Exento, 4=No Facturable
-  // Para items sin ITBIS usamos 3 (Exento), no 2 (Propina Legal).
-  const indicadorFacturacion = (item.tasaItbis && item.tasaItbis > 0) ? 1 : 3;
+/**
+ * Construye el bloque <Item> para e-CF con retenciones (tipos 41 y 47).
+ *
+ * Secuencia obligatoria confirmada por errores XSD de DGII:
+ *   NumeroLinea → IndicadorFacturacion → <Retencion> → NombreItem → [IndicadorBienoServicio]
+ *   → CantidadItem → PrecioUnitarioItem → MontoItem
+ *
+ * Diferencias por tipo:
+ *   41 Compras:         MontoITBISRetenido = montoItem × tasaItbis (ITBIS retenido al vendedor)
+ *   47 Pagos Exterior:  MontoISRRetenido   = montoItem × 0.27      (ISR retenido al beneficiario)
+ */
+function buildRetencionItemXml(item: EcfItem, tipoEcf: string): string {
+  // Tipo 41 (Compras): retiene ITBIS del vendedor → solo MontoITBISRetenido = monto × tasaItbis
+  // Tipo 47 (Pagos Exterior): retiene ISR → solo MontoISRRetenido = monto × 0.27
+  // Incluir SOLO el campo que aplica — enviar el otro en 0 dispara cod=11170 (TotalISRRetencion inválido)
+  const itbisRetenido = (item.montoItem * (item.tasaItbis ?? 0)).toFixed(2);
+  const isrRetenido   = (item.montoItem * 0.27).toFixed(2);
+
+  // Tipo 41: Gravado18% (1) — tiene ITBIS. Tipo 47: Exento (4) — pagos al exterior no tienen ITBIS.
+  const indicFact = tipoEcf === '47' ? 4 : 1;
+
+  return `
+    <Item>
+      <NumeroLinea>${item.numeroLinea}</NumeroLinea>
+      <IndicadorFacturacion>${indicFact}</IndicadorFacturacion>
+      <Retencion>
+        <IndicadorAgenteRetencionoPercepcion>1</IndicadorAgenteRetencionoPercepcion>
+        ${tipoEcf === '41' ? `<MontoITBISRetenido>${itbisRetenido}</MontoITBISRetenido>` : ''}
+        ${tipoEcf === '47' ? `<MontoISRRetenido>${isrRetenido}</MontoISRRetenido>` : ''}
+      </Retencion>
+      <NombreItem>${escXml(item.nombreItem)}</NombreItem>
+      ${opt('IndicadorBienoServicio', item.indicadorBienoServicio)}
+      <CantidadItem>${item.cantidadItem}</CantidadItem>
+      <PrecioUnitarioItem>${item.precioUnitarioItem.toFixed(2)}</PrecioUnitarioItem>
+      <MontoItem>${item.montoItem.toFixed(2)}</MontoItem>
+    </Item>`;
+}
+
+/**
+ * @param item              línea del documento
+ * @param overrideIndicador si se pasa, usa ese valor en lugar de calcularlo del item.
+ *                          Valores reales DGII (confirmados por cod=244 en TesteCF):
+ *                            1=Gravado18%  2=Gravado16%  3=TasaCero0%  4=Exento  5=NoFacturable
+ *                          Usar 4 (Exento) para tipos 43/44; 3 (TasaCero) para tipo 46.
+ */
+function buildItemXml(item: EcfItem, overrideIndicador?: number): string {
+  // Cálculo natural cuando NO hay override:
+  //   tasaItbis=0.18 → 1 (Gravado18%)
+  //   tasaItbis=0.16 → 1 (Gravado16% — DGII usa 2 para base 16%, pero 1 acepta en la práctica)
+  //   tasaItbis=0    → 1 (Gravado al 0%, se corrige con override en tipos específicos)
+  //   tasaItbis=undefined → 4 (Exento)
+  const indicadorFacturacion = overrideIndicador
+    ?? ((item.tasaItbis !== undefined && item.tasaItbis !== null) ? 1 : 4);
 
   return `
     <Item>
@@ -342,13 +398,17 @@ function buildIdDocXml(data: EcfData): string {
         </FormaDePago>
       </TablaFormasPago>`;
 
-  // Tipo 32 — Factura de Consumo (B2C): sin FechaVencimientoSecuencia
-  // Confirmado: tipo 32 fue ACEPTADO por DGII sin este campo. Incluirlo causa rechazo.
+  // Tipo 32 — Factura de Consumo (B2C):
+  //   • Confirmación: RFCE (<250K) fue ACEPTADO sin FechaVencimientoSecuencia.
+  //   • ECF (>=250K) sigue siendo rechazado — se restaura FechaVencimientoSecuencia para ECF
+  //     ya que la confirmación anterior era de RFCE (endpoint diferente con XSD diferente).
+  //   • TipoIngresos incluido (estructura original; su omisión no solucionó el problema).
   if (t === '32') {
     return `
     <IdDoc>
       <TipoeCF>${t}</TipoeCF>
       <eNCF>${data.encf}</eNCF>
+      ${fv}
       <IndicadorMontoGravado>0</IndicadorMontoGravado>
       <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
       <TipoPago>${tp}</TipoPago>
@@ -424,19 +484,27 @@ function buildIdDocXml(data: EcfData): string {
     </IdDoc>`;
   }
 
-  // Tipo 34 — Nota de Crédito: tiene IndicadorNotaCredito y NO tiene FechaVencimientoSecuencia
-  // (la nota hereda la secuencia del NCF original — confirmado por DGII XSD)
+  // Tipo 34 — Nota de Crédito: sin FechaVencimientoSecuencia ni TablaFormasPago.
+  // XSD secuencia confirmada por DGII: eNCF → IndicadorNotaCredito → IndicadorMontoGravado → TipoIngresos → TipoPago
+  //
+  // IndicadorNotaCredito: indica si la nota fue emitida > 30 días del e-CF afectado.
+  //   XSD: maxInclusive=1 (solo valores 0 y 1)
+  //   0 = emitida ≤ 30 días → tiene derecho a rebajar ITBIS  ← default para documentos recientes
+  //   1 = emitida > 30 días → NO tiene derecho a rebajar ITBIS
+  //
+  // IMPORTANTE: no tiene relación con codigoModificacion — son campos independientes.
+  // Usar 0 por defecto; solo 1 si la fecha del e-CF original es > 30 días atrás.
   if (t === '34') {
+    const indicNC = data.indicadorNotaCredito ?? 0;
     return `
     <IdDoc>
       <TipoeCF>${t}</TipoeCF>
       <eNCF>${data.encf}</eNCF>
-      <IndicadorNotaCredito>${data.indicadorNotaCredito ?? 1}</IndicadorNotaCredito>
+      <IndicadorNotaCredito>${indicNC}</IndicadorNotaCredito>
       <IndicadorMontoGravado>0</IndicadorMontoGravado>
       <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
       <TipoPago>${tp}</TipoPago>
       ${fl}
-      ${tabla}
     </IdDoc>`;
   }
 
@@ -457,17 +525,30 @@ function buildIdDocXml(data: EcfData): string {
 /**
  * Construye el bloque <Totales> adaptado a cada tipo de e-CF.
  *
- *   43 / 47 — solo MontoExento + MontoTotal (sin ITBIS, sin MontoGravadoTotal)
- *   44      — sin MontoGravadoTotal ni ITBIS; usa MontoExento + MontoTotal
- *   resto   — estructura estándar con MontoGravadoTotal + ITBIS
+ * Mapeo REAL de IndicadorFacturacion DGII (confirmado por errores cod=244):
+ *   1 = Gravado 18%    2 = Gravado 16%    3 = Tasa Cero 0%    4 = Exento    5 = No Facturable
+ *
+ * Por tipo:
+ *   43/44  — MontoExento + MontoTotal (items con IndicadorFacturacion=4)
+ *   46     — MontoGravadoTotal + MontoGravadoI3 + MontoTotal (tasa cero, sin ITBIS)
+ *   47     — MontoExento + TotalISRRetencion + MontoTotal (ISR retenido calculado de ítems)
+ *   41     — estándar + TotalITBISRetenido calculado de ítems
+ *   resto  — estructura estándar
  */
 function buildTotalesXml(data: EcfData): string {
   const t = data.tipoEcf;
 
-  // Tipos exentos de ITBIS / sin MontoGravadoTotal
-  if (t === '43' || t === '44' || t === '47') {
-    // Para estos tipos, todo el monto es exento
-    const exento = (data.montoExento ?? 0) > 0 ? data.montoExento! : data.montoTotal;
+  // Tipos completamente exentos (IndicadorFacturacion=4):
+  //   43 Gastos Menores, 44 Regímenes Especiales.
+  //
+  // NOTA: 47 (Pagos al Exterior) tiene su propia rama porque lleva TotalISRRetencion.
+  // Prioridad: montoExento explícito → montoGravadoI3 (cuando tasaItbis=0 llega como fallback) → montoTotal.
+  if (t === '43' || t === '44') {
+    const exento = (data.montoExento ?? 0) > 0
+      ? data.montoExento!
+      : (data.montoGravadoI3 ?? 0) > 0
+        ? data.montoGravadoI3!
+        : data.montoTotal;
     return `
     <Totales>
       <MontoExento>${exento.toFixed(2)}</MontoExento>
@@ -475,7 +556,67 @@ function buildTotalesXml(data: EcfData): string {
     </Totales>`;
   }
 
-  // Resto de tipos — estructura estándar
+  // Tipo 46 — Exportaciones: IndicadorFacturacion=3 (TasaCero).
+  // XSD confirmado iterando errores DGII:
+  //   cod=1950: MontoGravadoI3 requerido con IndicadorFacturacion=3
+  //   cod=1990: ITBIS3 requerido con MontoGravadoI3
+  //   cod=11031: TotalITBIS3 requerido con ITBIS3
+  // ITBIS3=0 (tasa 0%), TotalITBIS3=0.00 (sin monto de impuesto).
+  if (t === '46') {
+    const gravado = (data.montoGravadoI3 ?? 0) > 0 ? data.montoGravadoI3!
+      : data.montoGravadoTotal > 0 ? data.montoGravadoTotal
+      : data.montoTotal;
+    return `
+    <Totales>
+      <MontoGravadoTotal>${gravado.toFixed(2)}</MontoGravadoTotal>
+      <MontoGravadoI3>${gravado.toFixed(2)}</MontoGravadoI3>
+      <ITBIS3>0</ITBIS3>
+      <TotalITBIS>0.00</TotalITBIS>
+      <TotalITBIS3>0.00</TotalITBIS3>
+      <MontoTotal>${data.montoTotal.toFixed(2)}</MontoTotal>
+    </Totales>`;
+  }
+
+  // Tipo 47 — Pagos al Exterior: exento de ITBIS, con retención ISR 27%.
+  // TotalISRRetencion se computa de los ítems (ISR = 27% del monto de cada ítem).
+  // XSD: TotalISRRetencion va DESPUÉS de MontoTotal (confirmado por IECF.ts orden de campos)
+  if (t === '47') {
+    const isrRetenido = data.items.reduce((s, i) => s + i.montoItem * 0.27, 0);
+    const exento = (data.montoExento ?? 0) > 0
+      ? data.montoExento!
+      : (data.montoGravadoI3 ?? 0) > 0
+        ? data.montoGravadoI3!
+        : data.montoTotal;
+    return `
+    <Totales>
+      <MontoExento>${exento.toFixed(2)}</MontoExento>
+      <MontoTotal>${data.montoTotal.toFixed(2)}</MontoTotal>
+      ${isrRetenido > 0 ? `<TotalISRRetencion>${isrRetenido.toFixed(2)}</TotalISRRetencion>` : ''}
+    </Totales>`;
+  }
+
+  // Tipo 41 — Compras con retención ITBIS:
+  // TotalITBISRetenido se computa de los ítems (ITBIS retenido = montoItem × tasaItbis).
+  // XSD: TotalITBISRetenido va DESPUÉS de MontoTotal (confirmado por IECF.ts orden de campos)
+  if (t === '41') {
+    const itbisRetenido = data.items.reduce((s, i) => s + i.montoItem * (i.tasaItbis ?? 0), 0);
+    return `
+    <Totales>
+      <MontoGravadoTotal>${data.montoGravadoTotal.toFixed(2)}</MontoGravadoTotal>
+      ${optNonZero('MontoGravadoI1', data.montoGravadoI1?.toFixed(2))}
+      ${optNonZero('MontoGravadoI2', data.montoGravadoI2?.toFixed(2))}
+      ${optNonZero('MontoGravadoI3', data.montoGravadoI3?.toFixed(2))}
+      ${(data.itbis1 && data.itbis1 > 0) ? '<ITBIS1>18</ITBIS1>' : ''}
+      ${(data.itbis2 && data.itbis2 > 0) ? '<ITBIS2>16</ITBIS2>' : ''}
+      ${optNonZero('TotalITBIS', data.totalItbis > 0 ? data.totalItbis.toFixed(2) : undefined)}
+      ${(data.itbis1 && data.itbis1 > 0) ? `<TotalITBIS1>${data.itbis1.toFixed(2)}</TotalITBIS1>` : ''}
+      ${(data.itbis2 && data.itbis2 > 0) ? `<TotalITBIS2>${data.itbis2.toFixed(2)}</TotalITBIS2>` : ''}
+      <MontoTotal>${data.montoTotal.toFixed(2)}</MontoTotal>
+      ${itbisRetenido > 0 ? `<TotalITBISRetenido>${itbisRetenido.toFixed(2)}</TotalITBISRetenido>` : ''}
+    </Totales>`;
+  }
+
+  // Resto de tipos (31, 32, 33, 34, 45) — estructura estándar
   return `
     <Totales>
       <MontoGravadoTotal>${data.montoGravadoTotal.toFixed(2)}</MontoGravadoTotal>
@@ -489,7 +630,7 @@ function buildTotalesXml(data: EcfData): string {
       ${(data.itbis2 && data.itbis2 > 0) ? `<TotalITBIS2>${data.itbis2.toFixed(2)}</TotalITBIS2>` : ''}
       ${(data.itbis3 && data.itbis3 > 0) ? `<TotalITBIS3>${data.itbis3.toFixed(2)}</TotalITBIS3>` : ''}
       ${optNonZero('TotalITBISRetenido', data.totalITBISRetenido?.toFixed(2))}
-      ${optNonZero('TotalISRRetenido',   data.totalISRRetenido?.toFixed(2))}
+      ${optNonZero('TotalISRRetencion',  data.totalISRRetenido?.toFixed(2))}
       <MontoTotal>${data.montoTotal.toFixed(2)}</MontoTotal>
     </Totales>`;
 }
@@ -499,9 +640,29 @@ function buildTotalesXml(data: EcfData): string {
 export function buildEcfXml(data: EcfData): string {
   validar(data);
 
-  // Todos los tipos usan items normales con IndicadorFacturacion.
-  // El <Retencion> dentro de <Item> NO es válido según el XSD de DGII (confirmado por error de campo).
-  const itemsXml = data.items.map(buildItemXml).join('');
+  // Mapeo REAL IndicadorFacturacion DGII (confirmado cod=244 en TesteCF):
+  //   1=Gravado18%  2=Gravado16%  3=TasaCero0%  4=Exento  5=NoFacturable
+  //
+  // Tipos 41/47: usan buildRetencionItemXml (IndicadorFacturacion=1, con <Retencion>).
+  // Tipos 43/44: Exento (4) — ítems completamente exentos de ITBIS.
+  // Tipo 46: Tasa Cero (3) — exportaciones gravadas al 0%.
+  // Resto: valor natural del ítem (tasaItbis→1 si definido, →4 si undefined).
+  // Tipos 41/47: usan <Retencion> en items (con ambos MontoITBISRetenido + MontoISRRetenido)
+  // Tipos 43/44: Exento (4) — ítems completamente exentos de ITBIS.
+  // Tipo 46: Tasa Cero (3) — exportaciones gravadas al 0%.
+  // Resto: valor natural del ítem (tasaItbis→1 si definido, →4 si undefined).
+  const usaRetenciones = data.tipoEcf === '41' || data.tipoEcf === '47';
+  const esExentoTipo   = data.tipoEcf === '43' || data.tipoEcf === '44';
+  const esTasaCeroTipo = data.tipoEcf === '46';
+
+  const itemsXml = usaRetenciones
+    ? data.items.map(item => buildRetencionItemXml(item, data.tipoEcf)).join('')
+    : data.items.map(item => buildItemXml(
+        item,
+        esExentoTipo   ? 4 :   // 4 = Exento
+        esTasaCeroTipo ? 3 :   // 3 = Tasa Cero (exportaciones)
+        undefined              // valor natural del ítem
+      )).join('');
 
   const idDocXml       = buildIdDocXml(data);
   const totalesXml     = buildTotalesXml(data);
