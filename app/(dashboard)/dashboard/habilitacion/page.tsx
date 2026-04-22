@@ -1711,9 +1711,9 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
         // E310000001000 como referencia segura.
         const esNota        = realTipo === '33' || realTipo === '34';
         const ncfReferencia = esNota ? 'E310000001000' : undefined;
-        const codModif      = realTipo === '33' ? '1'            // 33 → 1 = Cambia código
-                            : realTipo === '34' ? '1'            // 34 → 1 = Anulación
-                            : undefined;
+        // IMPORTANTE: código 1 (Anula) solo aplica a Nota de Crédito (tipo 34).
+        // Para Nota de Débito (tipo 33) no se incluye codigoModificacion.
+        const codModif      = realTipo === '34' ? '1' : undefined;  // 34 → 1 = Anulación
         const razonModif    = esNota ? 'Prueba de certificación DGII' : undefined;
 
         let ok = counterLocal[t.tipo] ?? 0;
@@ -1722,6 +1722,10 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
             // NCF aleatorio en rango alto — nunca choca con producción ni con
             // intentos previos, sin necesidad de llevar contador de fallidos.
             const encfHardcoded = buildEncfPruebaRandom(realTipo);
+
+            // Tipos 43, 44, 46, 47 son exentos de ITBIS — forzar tarifa 0
+            const tarifaEfectiva = (['43', '44', '46', '47'].includes(realTipo)
+              ? 0 : tarifaDec) as 0 | 0.16 | 0.18;
 
             const result = await emitirEcfPrueba({
               tipoEcf: realTipo,
@@ -1733,7 +1737,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               razonModificacion:    razonModif,
               itemNombre: nombre,
               itemPrecio: realPrecio,
-              itemTarifa: tarifaDec,
+              itemTarifa: tarifaEfectiva,
               itemTipo:   itemTipoCode,
             });
             trackIdsLocal.push({ tipo: t.tipo, encf: result.encf, trackId: result.trackId, documentoId: result.documentoId });

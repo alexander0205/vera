@@ -106,8 +106,11 @@ export interface EcfData {
   ncfModificado?:         string;
   rncOtroContribuyente?:  string;   // RNC del comprador cuando se modifica un e-CF de otro contribuyente
   fechaNcfModificado?:    Date;
-  codigoModificacion?:    string;   // 1=Total, 2=Parcial, 3=Anulación
+  codigoModificacion?:    string;   // tipo 34: 1=Anula, 2=Modifica texto, 3=Devuelve, 4=Descuento, 5=Otro
   razonModificacion?:     string;
+
+  // Tipo 34 — Nota de Crédito
+  indicadorNotaCredito?:  number;  // 1=Corrección nombre/desc, 2=Corrección valores, 3=Devuelve mercancía, 4=Anula NCF, 5=Otro
 
   // Exportaciones (46)
   informacionExportacion?: InformacionExportacion;
@@ -214,9 +217,9 @@ function buildCompradorXml(data: EcfData): string {
   if (rule.compradorRule === 'PROHIBIDO') return '';
 
   if (rule.compradorRule === 'EXTRANJERO') {
-    // Si no hay datos de comprador extranjero, omitir la sección (pruebas habilitación)
-    if (!data.compradorExtranjero) return '';
-    const c = data.compradorExtranjero;
+    // Tipos 46/47 requieren <Comprador> en el XML (DGII lo valida).
+    // Si no se provee compradorExtranjero, se usa un placeholder mínimo.
+    const c = data.compradorExtranjero ?? { nombre: 'Comprador Exterior' };
     return `
     <Comprador>
       ${opt('IdentificadorExtranjero', c.identificacion)}
@@ -247,11 +250,15 @@ function buildCompradorXml(data: EcfData): string {
 function buildReferenciaXml(data: EcfData): string {
   if (!data.ncfModificado) return '';
   // Orden obligatorio según XSD: NCFModificado → RNCOtroContribuyente → FechaNCFModificado → CodigoModificacion → RazonModificacion
+  // FechaNCFModificado es obligatoria cuando hay CodigoModificacion — si no se provee, usar fecha de hoy.
+  const fechaRef = data.fechaNcfModificado
+    ? formatDate(data.fechaNcfModificado)
+    : (data.codigoModificacion ? formatDate(new Date()) : undefined);
   return `
   <InformacionReferencia>
     <NCFModificado>${data.ncfModificado}</NCFModificado>
     ${opt('RNCOtroContribuyente', data.rncOtroContribuyente)}
-    ${opt('FechaNCFModificado', data.fechaNcfModificado ? formatDate(data.fechaNcfModificado) : undefined)}
+    ${opt('FechaNCFModificado', fechaRef)}
     ${opt('CodigoModificacion', data.codigoModificacion)}
     ${opt('RazonModificacion', data.razonModificacion ? escXml(data.razonModificacion) : undefined)}
   </InformacionReferencia>`;
@@ -302,46 +309,154 @@ function buildItemXml(item: EcfItem): string {
     </Item>`;
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
+/**
+ * Tipos 41 (Compras) y 47 (Pagos al Exterior): los Items son Retenciones, no líneas de productos.
+ * Genera un Item de Retencion ISR (01) calculado como 5% del montoTotal.
+ * El porcentaje es orientativo — DGII valida el formato, no la lógica de negocio en pruebas.
+ */
+function buildRetencionItemsXml(montoTotal: number): string {
+  const montoIsr = (montoTotal * 0.05);
+  return `
+    <Item>
+      <NumeroLinea>1</NumeroLinea>
+      <Retencion>
+        <TipoRetencion>01</TipoRetencion>
+        <MontoRetencion>${montoIsr.toFixed(2)}</MontoRetencion>
+      </Retencion>
+    </Item>`;
+}
 
-export function buildEcfXml(data: EcfData): string {
-  validar(data);
-
-  const itemsXml       = data.items.map(buildItemXml).join('');
-  const compradorXml   = buildCompradorXml(data);
-  const referenciaXml  = buildReferenciaXml(data);
-  const exportacionXml = buildExportacionXml(data);
-  const monedaXml      = buildOtraMonedaXml(data);
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<ECF>
-  <Encabezado>
-    <Version>1.0</Version>
-    <IdDoc>
-      <TipoeCF>${data.tipoEcf}</TipoeCF>
-      <eNCF>${data.encf}</eNCF>
-      ${data.tipoEcf !== '32' ? `<FechaVencimientoSecuencia>${formatDate(data.fechaVencimientoSecuencia)}</FechaVencimientoSecuencia>` : ''}
-      ${opt('IndicadorEnvioDiferido', data.tipoEcf === '43' ? 1 : undefined)}
-      <IndicadorMontoGravado>0</IndicadorMontoGravado>
-      <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
-      <TipoPago>${data.tipoPago ?? 1}</TipoPago>
-      ${opt('FechaLimitePago', data.fechaLimitePago ? formatDate(data.fechaLimitePago) : undefined)}
+/**
+ * Construye el bloque <IdDoc> adaptado a cada tipo de e-CF.
+ *
+ * Diferencias por tipo (confirmadas por errores XSD de DGII):
+ *   31/32/33/45 — estructura estándar
+ *   34          — añade <IndicadorNotaCredito> justo después de <eNCF>
+ *   41          — sin <TipoIngresos>
+ *   43          — solo <TipoPago> (sin IndicadorEnvioDiferido, IndicadorMontoGravado, TipoIngresos, TablaFormasPago)
+ *   44          — sin <IndicadorMontoGravado>; acepta <IndicadorEnvioDiferido> y <IndicadorServicioTodoIncluido>
+ *   46          — sin <IndicadorMontoGravado>; acepta <IndicadorEnvioDiferido>
+ *   47          — sin <IndicadorMontoGravado> ni <TipoIngresos>
+ */
+function buildIdDocXml(data: EcfData): string {
+  const t   = data.tipoEcf;
+  const tp  = data.tipoPago ?? 1;
+  const fv  = `<FechaVencimientoSecuencia>${formatDate(data.fechaVencimientoSecuencia)}</FechaVencimientoSecuencia>`;
+  const fl  = opt('FechaLimitePago', data.fechaLimitePago ? formatDate(data.fechaLimitePago) : undefined);
+  const tabla = `
       <TablaFormasPago>
         <FormaDePago>
-          <FormaPago>${data.tipoPago ?? 1}</FormaPago>
+          <FormaPago>${tp}</FormaPago>
           <MontoPago>${data.montoTotal.toFixed(2)}</MontoPago>
         </FormaDePago>
-      </TablaFormasPago>
-    </IdDoc>
-    <Emisor>
-      <RNCEmisor>${data.rncEmisor}</RNCEmisor>
-      <RazonSocialEmisor>${escXml(data.razonSocialEmisor)}</RazonSocialEmisor>
-      ${opt('NombreComercial', data.nombreComercialEmisor ? escXml(data.nombreComercialEmisor) : undefined)}
-      <DireccionEmisor>${escXml(data.direccionEmisor ?? 'Sin dirección')}</DireccionEmisor>
-      <FechaEmision>${formatDate(data.fechaEmision)}</FechaEmision>
-    </Emisor>
-    ${compradorXml}
-    ${exportacionXml}
+      </TablaFormasPago>`;
+
+  // Tipo 43 — Gastos Menores: IdDoc ultra-simplificado (sin IndicadorMontoGravado ni TipoIngresos)
+  if (t === '43') {
+    return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      ${fv}
+      <TipoPago>${tp}</TipoPago>
+    </IdDoc>`;
+  }
+
+  // Tipos 41/47 — sin TipoIngresos
+  if (t === '41' || t === '47') {
+    return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      ${fv}
+      <IndicadorMontoGravado>0</IndicadorMontoGravado>
+      <TipoPago>${tp}</TipoPago>
+      ${fl}
+      ${tabla}
+    </IdDoc>`;
+  }
+
+  // Tipo 44 — sin IndicadorMontoGravado (usa TipoIngresos directamente)
+  if (t === '44') {
+    return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      ${fv}
+      <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
+      <TipoPago>${tp}</TipoPago>
+      ${fl}
+      ${tabla}
+    </IdDoc>`;
+  }
+
+  // Tipo 46 — sin IndicadorMontoGravado (usa TipoIngresos directamente)
+  if (t === '46') {
+    return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      ${fv}
+      <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
+      <TipoPago>${tp}</TipoPago>
+      ${fl}
+      ${tabla}
+    </IdDoc>`;
+  }
+
+  // Tipo 34 — Nota de Crédito: añade IndicadorNotaCredito entre eNCF y FechaVencimientoSecuencia
+  if (t === '34') {
+    return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      <IndicadorNotaCredito>${data.indicadorNotaCredito ?? 1}</IndicadorNotaCredito>
+      ${fv}
+      <IndicadorMontoGravado>0</IndicadorMontoGravado>
+      <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
+      <TipoPago>${tp}</TipoPago>
+      ${fl}
+      ${tabla}
+    </IdDoc>`;
+  }
+
+  // Tipos 31, 32, 33, 45 — estructura estándar
+  return `
+    <IdDoc>
+      <TipoeCF>${t}</TipoeCF>
+      <eNCF>${data.encf}</eNCF>
+      ${fv}
+      <IndicadorMontoGravado>0</IndicadorMontoGravado>
+      <TipoIngresos>${data.tipoIngresos ?? '01'}</TipoIngresos>
+      <TipoPago>${tp}</TipoPago>
+      ${fl}
+      ${tabla}
+    </IdDoc>`;
+}
+
+/**
+ * Construye el bloque <Totales> adaptado a cada tipo de e-CF.
+ *
+ *   43 / 47 — solo MontoExento + MontoTotal (sin ITBIS, sin MontoGravadoTotal)
+ *   44      — sin MontoGravadoTotal ni ITBIS; usa MontoExento + MontoTotal
+ *   resto   — estructura estándar con MontoGravadoTotal + ITBIS
+ */
+function buildTotalesXml(data: EcfData): string {
+  const t = data.tipoEcf;
+
+  // Tipos exentos de ITBIS / sin MontoGravadoTotal
+  if (t === '43' || t === '44' || t === '47') {
+    // Para estos tipos, todo el monto es exento
+    const exento = (data.montoExento ?? 0) > 0 ? data.montoExento! : data.montoTotal;
+    return `
+    <Totales>
+      <MontoExento>${exento.toFixed(2)}</MontoExento>
+      <MontoTotal>${data.montoTotal.toFixed(2)}</MontoTotal>
+    </Totales>`;
+  }
+
+  // Resto de tipos — estructura estándar
+  return `
     <Totales>
       <MontoGravadoTotal>${data.montoGravadoTotal.toFixed(2)}</MontoGravadoTotal>
       ${optNonZero('MontoGravadoI1', data.montoGravadoI1?.toFixed(2))}
@@ -356,7 +471,42 @@ export function buildEcfXml(data: EcfData): string {
       ${optNonZero('TotalITBISRetenido', data.totalITBISRetenido?.toFixed(2))}
       ${optNonZero('TotalISRRetenido',   data.totalISRRetenido?.toFixed(2))}
       <MontoTotal>${data.montoTotal.toFixed(2)}</MontoTotal>
-    </Totales>
+    </Totales>`;
+}
+
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
+export function buildEcfXml(data: EcfData): string {
+  validar(data);
+
+  // Tipos 41/47 usan Items-Retenciones en lugar de líneas normales de producto
+  const usaRetenciones = data.tipoEcf === '41' || data.tipoEcf === '47';
+  const itemsXml = usaRetenciones
+    ? buildRetencionItemsXml(data.montoTotal)
+    : data.items.map(buildItemXml).join('');
+
+  const idDocXml       = buildIdDocXml(data);
+  const totalesXml     = buildTotalesXml(data);
+  const compradorXml   = buildCompradorXml(data);
+  const referenciaXml  = buildReferenciaXml(data);
+  const exportacionXml = buildExportacionXml(data);
+  const monedaXml      = buildOtraMonedaXml(data);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ECF>
+  <Encabezado>
+    <Version>1.0</Version>
+    ${idDocXml}
+    <Emisor>
+      <RNCEmisor>${data.rncEmisor}</RNCEmisor>
+      <RazonSocialEmisor>${escXml(data.razonSocialEmisor)}</RazonSocialEmisor>
+      ${opt('NombreComercial', data.nombreComercialEmisor ? escXml(data.nombreComercialEmisor) : undefined)}
+      <DireccionEmisor>${escXml(data.direccionEmisor ?? 'Sin dirección')}</DireccionEmisor>
+      <FechaEmision>${formatDate(data.fechaEmision)}</FechaEmision>
+    </Emisor>
+    ${compradorXml}
+    ${exportacionXml}
+    ${totalesXml}
     ${monedaXml}
   </Encabezado>
   <DetallesItems>
