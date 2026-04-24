@@ -1706,49 +1706,89 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
             : precioBase;
         const requiereRnc = ['31','33','34','41','44','45'].includes(realTipo);
 
-        // Tipos 33 (nota débito) y 34 (nota crédito) requieren referencia a un e-CF
-        // previo. Como el Batch 1 emite los tipo 31 primero, siempre existe
-        // E310000001000 como referencia segura.
+        // Tipos 33 (nota débito) y 34 (nota crédito) requieren referenciar un e-CF
+        // tipo 31 real ya enviado a la DGII.  Buscamos el NCF primero en la emisión
+        // actual (trackIdsLocal) y, si el tipo 31 fue emitido en una sesión anterior,
+        // en los trackIds ya persistidos que se cargaron en pendingTrackIds al montar.
         const esNota        = realTipo === '33' || realTipo === '34';
-        const ncfReferencia = esNota ? 'E310000001000' : undefined;
-        // IMPORTANTE: código 1 (Anula) solo aplica a Nota de Crédito (tipo 34).
-        // Para Nota de Débito (tipo 33) no se incluye codigoModificacion.
-        const codModif      = realTipo === '34' ? '1' : undefined;  // 34 → 1 = Anulación
-        const razonModif    = esNota ? 'Prueba de certificación DGII' : undefined;
+        const ncfReferencia = esNota
+          ? (trackIdsLocal.find(e => e.tipo === '31')?.encf ??
+             pendingTrackIds.find(e => e.tipo === '31')?.encf)
+          : undefined;
+
+        // Guardia: si no encontramos un tipo 31 previo, las notas fallarán en DGII.
+        if (esNota && !ncfReferencia) {
+          setEmitError(
+            `Tipo ${t.tipo} requiere un tipo 31 (Crédito Fiscal) ya emitido como referencia. ` +
+            `Asegúrate de que el Batch 1 (tipo 31) fue aceptado antes de emitir notas.`,
+          );
+          setStatuses(s => ({ ...s, [t.tipo]: 'rechazado' }));
+          setCurrentType(null);
+          return;
+        }
+
+        // Código de modificación:
+        //   '1' = Anulación     → montoTotal DEBE ser 0 (no aplica para pruebas con monto)
+        //   '2' = Corrección    → montoTotal DEBE ser 0
+        //   '3' = Devolución/Descuento → montoTotal > 0 ✓ (compatible con item de prueba)
+        // Usamos '3' para tipos 33 y 34 ya que el item de prueba tiene monto > 0.
+        const codModif   = esNota ? '3' : undefined;
+        const razonModif = esNota ? 'Prueba de certificación DGII' : undefined;
 
         let ok = counterLocal[t.tipo] ?? 0;
         for (let i = ok + 1; i <= t.required!; i++) {
-          try {
-            // NCF aleatorio en rango alto — nunca choca con producción ni con
-            // intentos previos, sin necesidad de llevar contador de fallidos.
-            const encfHardcoded = buildEncfPruebaRandom(realTipo);
+          // Hasta 3 intentos por e-CF: cada intento genera un NCF aleatorio nuevo,
+          // lo que evita la colisión "código ya utilizado" sin llevar contador manual.
+          const MAX_RETRIES = 3;
+          let lastErr: Error | null = null;
+          let succeeded = false;
 
-            // Tipos 43, 44, 46, 47 son exentos de ITBIS — forzar tarifa 0
-            const tarifaEfectiva = (['43', '44', '46', '47'].includes(realTipo)
-              ? 0 : tarifaDec) as 0 | 0.16 | 0.18;
+          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              const encfHardcoded = buildEncfPruebaRandom(realTipo);
 
-            const result = await emitirEcfPrueba({
-              tipoEcf: realTipo,
-              encf: encfHardcoded,
-              rncComprador:         requiereRnc ? '131988032' : undefined,
-              razonSocialComprador: requiereRnc ? 'Cliente Certificación DGII' : undefined,
-              ncfModificado:        ncfReferencia,
-              codigoModificacion:   codModif,
-              razonModificacion:    razonModif,
-              itemNombre: nombre,
-              itemPrecio: realPrecio,
-              itemTarifa: tarifaEfectiva,
-              itemTipo:   itemTipoCode,
-            });
-            trackIdsLocal.push({ tipo: t.tipo, encf: result.encf, trackId: result.trackId, documentoId: result.documentoId });
-            ok = i;
-            counterLocal[t.tipo] = i;
-            setCounts({ ...counterLocal });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            setEmitError(`Tipo ${t.tipo}: ${msg}`);
+              // Tipos exentos de ITBIS — forzar tarifa 0
+              // Tipo 41 siempre usa 18% (IndicadorFacturacion=1 fijo); si el usuario eligió 16%
+              // DGII rechaza con cod=1930 porque MontoGravadoI2 no concuerda con IndicadorFacturacion=1.
+              const tarifaEfectiva = (['43', '44', '46', '47'].includes(realTipo)
+                ? 0
+                : realTipo === '41'
+                  ? 0.18
+                  : tarifaDec) as 0 | 0.16 | 0.18;
+
+              const result = await emitirEcfPrueba({
+                tipoEcf: realTipo,
+                encf:    encfHardcoded,
+                rncComprador:         requiereRnc ? '131988032' : undefined,
+                razonSocialComprador: requiereRnc ? 'Cliente Certificación DGII' : undefined,
+                ncfModificado:        ncfReferencia,
+                codigoModificacion:   codModif,
+                razonModificacion:    razonModif,
+                itemNombre: nombre,
+                itemPrecio: realPrecio,
+                itemTarifa: tarifaEfectiva,
+                // Tipo 47 (Pagos al Exterior): DGII cod=294 — solo permite IndicadorBienoServicio=2 (Servicio)
+                itemTipo:   realTipo === '47' ? 2 : itemTipoCode,
+              });
+              trackIdsLocal.push({ tipo: t.tipo, encf: result.encf, trackId: result.trackId, documentoId: result.documentoId });
+              ok = i;
+              counterLocal[t.tipo] = i;
+              setCounts({ ...counterLocal });
+              succeeded = true;
+              break; // Éxito — salir del loop de reintentos
+            } catch (err) {
+              lastErr = err instanceof Error ? err : new Error(String(err));
+              if (attempt < MAX_RETRIES) {
+                // Pausa breve antes de reintentar con un nuevo NCF aleatorio
+                await new Promise(r => setTimeout(r, 600));
+              }
+            }
+          }
+
+          if (!succeeded) {
+            const msg = lastErr?.message ?? 'Error desconocido';
+            setEmitError(`Tipo ${t.tipo} (tras ${MAX_RETRIES} intentos): ${msg}`);
             setStatuses(s => ({ ...s, [t.tipo]: 'rechazado' }));
-            // Persistir lo que se logró + el NCF consumido (para que el reintento use el siguiente)
             await guardarEstado({
               pruebas: { emitidas: counterLocal, trackIds: trackIdsLocal },
             }).catch(() => {});

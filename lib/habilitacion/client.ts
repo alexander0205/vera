@@ -18,9 +18,6 @@ export interface HabilitacionState {
   };
   pruebas?: {
     emitidas?: Record<string, number>;
-    /** Total de NCFs consumidos por tipo REAL (exitosos + fallidos).
-     *  Persiste entre reintentos para nunca reusar un NCF ya enviado a DGII. */
-    encfConsumed?: Record<string, number>;
     trackIds?: { tipo: string; encf: string; trackId: string; documentoId?: number }[];
     fc250Done?: boolean;
     confirmed?: boolean;

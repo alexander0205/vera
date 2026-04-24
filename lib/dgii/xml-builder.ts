@@ -264,7 +264,7 @@ interface IdDocConfig {
 //                                               fv     img    ti     tabla  nc
 const IDDOC_CONFIG: Record<string, IdDocConfig> = {
   '31': { fv: true,  img: true,  ti: true,  tabla: true,  nc: false }, // Crédito Fiscal
-  '32': { fv: true,  img: true,  ti: true,  tabla: true,  nc: false }, // Consumo
+  '32': { fv: false, img: true,  ti: true,  tabla: true,  nc: false }, // Consumo — DGII /recepcion no acepta FechaVencimientoSecuencia (RFCE es más laxo pero el XSD regular no lo permite)
   '33': { fv: true,  img: true,  ti: true,  tabla: true,  nc: false }, // Nota Débito
   '34': { fv: false, img: true,  ti: true,  tabla: false, nc: true  }, // Nota Crédito — sin FV ni TablaFormasPago
   '41': { fv: true,  img: true,  ti: false, tabla: true,  nc: false }, // Compras
