@@ -2,7 +2,14 @@
 
 /**
  * Componente reutilizable para seleccionar Provincia y Municipio
- * de la República Dominicana. Fuente de datos: lib/dgii/provincias.ts
+ * de la República Dominicana.
+ *
+ * Fuente de datos: /api/catalogos/provincias y /api/catalogos/municipios
+ * (que proxean a ecf-api, respetando los códigos DGII oficiales).
+ *
+ * Props:
+ *   provincia / municipio  → código DGII (ej. "01", "01001")
+ *   onProvinciaChange / onMunicipioChange → emiten el código DGII
  *
  * Usado en: /dashboard/configuracion y /dashboard/habilitacion
  */
@@ -10,67 +17,93 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PROVINCIAS, getMunicipios } from '@/lib/dgii/provincias';
 
-const PROVINCIA_NAMES = PROVINCIAS.map(p => p.nombre);
+interface CatalogItem {
+  codigo: string;
+  nombre: string;
+}
 
 // ─── AutocompleteInput ────────────────────────────────────────────────────────
 
 function AutocompleteInput({
-  value, onChange, options, placeholder, disabled, hasError,
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+  hasError,
+  loading,
 }: {
   value: string;
-  onChange: (v: string) => void;
-  options: string[];
+  onChange: (codigo: string) => void;
+  options: CatalogItem[];
   placeholder?: string;
   disabled?: boolean;
   hasError?: boolean;
+  loading?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(value);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen]   = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef      = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setQuery(value); }, [value]);
+  // Sync display when value (code) or options change
+  useEffect(() => {
+    const match = options.find(o => o.codigo === value);
+    setQuery(match ? match.nombre : value ?? '');
+  }, [value, options]);
 
   const filtered = options
-    .filter(o => o.toLowerCase().includes(query.toLowerCase()))
+    .filter(o => o.nombre.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 40);
 
-  function select(opt: string) {
-    onChange(opt);
-    setQuery(opt);
+  function select(item: CatalogItem) {
+    onChange(item.codigo);
+    setQuery(item.nombre);
     setOpen(false);
+  }
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setQuery(e.target.value);
+    // Si el texto no coincide con el valor actual, emitir '' para invalidar
+    const match = options.find(o => o.nombre === e.target.value);
+    onChange(match ? match.codigo : '');
+    setOpen(true);
   }
 
   function handleBlur(e: React.FocusEvent) {
     if (containerRef.current?.contains(e.relatedTarget as Node)) return;
     setOpen(false);
+    // Si no hay coincidencia exacta, restaurar el nombre del código actual
+    const match = options.find(o => o.codigo === value);
+    setQuery(match ? match.nombre : '');
   }
+
+  const isDisabled = disabled || loading;
 
   return (
     <div ref={containerRef} className="relative" onBlur={handleBlur}>
       <Input
-        value={query}
-        disabled={disabled}
+        value={loading ? 'Cargando…' : query}
+        disabled={isDisabled}
         placeholder={placeholder}
         autoComplete="off"
-        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
-        onFocus={() => { if (!disabled) setOpen(true); }}
+        onChange={handleInputChange}
+        onFocus={() => { if (!isDisabled) setOpen(true); }}
         className={[
-          disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : '',
-          hasError ? 'border-red-400' : '',
+          isDisabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : '',
+          hasError   ? 'border-red-400' : '',
         ].filter(Boolean).join(' ')}
       />
-      {open && filtered.length > 0 && !disabled && (
+      {open && filtered.length > 0 && !isDisabled && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
-          {filtered.map(opt => (
+          {filtered.map(item => (
             <button
-              key={opt}
+              key={item.codigo}
               type="button"
-              onMouseDown={e => { e.preventDefault(); select(opt); }}
+              onMouseDown={e => { e.preventDefault(); select(item); }}
               className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors first:rounded-t-xl last:rounded-b-xl"
             >
-              {opt}
+              {item.nombre}
             </button>
           ))}
         </div>
@@ -82,10 +115,12 @@ function AutocompleteInput({
 // ─── ProvinciaMunicipioSelect ─────────────────────────────────────────────────
 
 export interface ProvinciaMunicipioSelectProps {
+  /** Código DGII de provincia, ej. "01" */
   provincia: string;
+  /** Código DGII de municipio, ej. "01001" */
   municipio: string;
-  onProvinciaChange: (v: string) => void;
-  onMunicipioChange: (v: string) => void;
+  onProvinciaChange: (codigo: string) => void;
+  onMunicipioChange: (codigo: string) => void;
   /** Marca campos requeridos con * */
   required?: boolean;
   /** Mensajes de error por campo */
@@ -102,15 +137,39 @@ export function ProvinciaMunicipioSelect({
   errors,
   className = 'grid grid-cols-2 gap-3',
 }: ProvinciaMunicipioSelectProps) {
-  const municipios = getMunicipios(provincia);
+  const [provincias,   setProvincias]   = useState<CatalogItem[]>([]);
+  const [municipios,   setMunicipios]   = useState<CatalogItem[]>([]);
+  const [loadingProv,  setLoadingProv]  = useState(true);
+  const [loadingMun,   setLoadingMun]   = useState(false);
 
-  function handleProvinciaChange(v: string) {
-    onProvinciaChange(v);
-    // Si el municipio actual no pertenece a la nueva provincia, limpiar
-    const muns = getMunicipios(v);
-    if (!muns.includes(municipio)) {
-      onMunicipioChange('');
+  // Cargar provincias al montar
+  useEffect(() => {
+    setLoadingProv(true);
+    fetch('/api/catalogos/provincias')
+      .then(r => r.json())
+      .then((data: CatalogItem[]) => setProvincias(Array.isArray(data) ? data : []))
+      .catch(() => setProvincias([]))
+      .finally(() => setLoadingProv(false));
+  }, []);
+
+  // Cargar municipios cuando cambia la provincia seleccionada
+  useEffect(() => {
+    if (!provincia) {
+      setMunicipios([]);
+      return;
     }
+    setLoadingMun(true);
+    fetch(`/api/catalogos/municipios?provincia=${encodeURIComponent(provincia)}`)
+      .then(r => r.json())
+      .then((data: CatalogItem[]) => setMunicipios(Array.isArray(data) ? data : []))
+      .catch(() => setMunicipios([]))
+      .finally(() => setLoadingMun(false));
+  }, [provincia]);
+
+  function handleProvinciaChange(codigo: string) {
+    onProvinciaChange(codigo);
+    // Limpiar municipio si cambia la provincia
+    onMunicipioChange('');
   }
 
   return (
@@ -122,8 +181,9 @@ export function ProvinciaMunicipioSelect({
         </Label>
         <AutocompleteInput
           value={provincia}
-          options={PROVINCIA_NAMES}
+          options={provincias}
           placeholder="Buscar provincia…"
+          loading={loadingProv}
           hasError={!!errors?.provincia}
           onChange={handleProvinciaChange}
         />
@@ -141,7 +201,8 @@ export function ProvinciaMunicipioSelect({
           value={municipio}
           options={municipios}
           placeholder={provincia ? 'Buscar municipio…' : 'Selecciona provincia primero'}
-          disabled={!provincia || municipios.length === 0}
+          disabled={!provincia}
+          loading={loadingMun}
           hasError={!!errors?.municipio}
           onChange={onMunicipioChange}
         />

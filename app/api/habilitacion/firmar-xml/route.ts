@@ -32,10 +32,11 @@ const bodySchema = z.object({
 
 // ─── Mapeo proposito → tipoDocumento (según swagger ecf-api) ─────────────────
 
-function mapTipoDocumento(proposito: string): TipoDocumentoFirma {
-  if (proposito === 'postulacion')       return 'Postulacion';
+function mapTipoDocumento(proposito: string): TipoDocumentoFirma | undefined {
+  if (proposito === 'postulacion')        return 'Postulacion';
   if (proposito === 'declaracion-jurada') return 'DeclaracionJurada';
-  return 'Otro';
+  // 'otro' → omitir para que ecf-api auto-detecte el tipo del XML
+  return undefined;
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────

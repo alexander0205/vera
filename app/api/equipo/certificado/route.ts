@@ -15,10 +15,15 @@ import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ec
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function parseCN(subject: string | null): string {
+/**
+ * Extrae el Common Name (CN) del subject del certificado.
+ * ecf-api devuelve subject como objeto { CN, O, C, ... }.
+ */
+function parseCN(subject: Record<string, string> | null): string {
   if (!subject) return '';
-  const cn = subject.split(',').find(p => p.trim().startsWith('CN='));
-  return cn ? cn.replace('CN=', '').trim() : subject;
+  // Objeto: { CN: "131988032", O: "EMPRESA SRL", C: "DO" }
+  if (typeof subject === 'object') return subject['CN'] ?? subject['O'] ?? '';
+  return '';
 }
 
 // ─── GET — info del certificado activo ───────────────────────────────────────
