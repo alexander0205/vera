@@ -235,10 +235,10 @@ export const ncfRangos = {
 export interface CertificateResponseDto {
   id:         string;
   rnc:        string;
-  /** Objeto con campos del subject (CN, O, C, etc.) */
-  subject:    Record<string, string> | null;
-  /** Objeto con campos del issuer */
-  issuer:     Record<string, string> | null;
+  /** String formato "CN=xxx, O=yyy, C=DO" o null */
+  subject:    string | null;
+  /** String formato "CN=xxx, O=yyy, C=DO" o null */
+  issuer:     string | null;
   validFrom:  string;
   validTo:    string;
   /** Solo un certificado por RNC puede estar activo a la vez. */

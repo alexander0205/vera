@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       if (err instanceof EcfApiError) {
+        console.error('[/api/habilitacion/firmar-xml] EcfApiError', err.status, err.message);
         if (err.status === 422 || err.status === 404) {
           // Sin P12 activo o contribuyente no encontrado
           return NextResponse.json(
@@ -113,8 +114,20 @@ export async function POST(request: NextRequest) {
         if (err.status === 400) {
           return NextResponse.json({ error: 'El XML enviado no es válido.' }, { status: 400 });
         }
+        if (err.status === 401 || err.status === 403) {
+          console.error('[/api/habilitacion/firmar-xml] Unauthorized — verificar ECF_API_KEY');
+          return NextResponse.json({ error: 'Error de configuración interna' }, { status: 500 });
+        }
+        // Cualquier otro status de ecf-api (e.g. 500)
+        return NextResponse.json({ error: 'Error al firmar el XML' }, { status: 500 });
       }
-      console.error('[/api/habilitacion/firmar-xml] ecf-api', err);
+      // TypeError: fetch failed (ECONNREFUSED) — ecf-api no está corriendo
+      const isNetworkError = err instanceof TypeError && (err as TypeError).message.includes('fetch');
+      if (isNetworkError) {
+        console.error('[/api/habilitacion/firmar-xml] ecf-api no disponible (ECONNREFUSED)');
+        return NextResponse.json({ error: 'Servicio de firma no disponible. Intenta más tarde.' }, { status: 503 });
+      }
+      console.error('[/api/habilitacion/firmar-xml] ecf-api unexpected error:', err);
       return NextResponse.json({ error: 'Error al firmar el XML' }, { status: 500 });
     }
 
