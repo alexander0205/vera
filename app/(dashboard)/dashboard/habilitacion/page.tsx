@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,17 +58,7 @@ const EMITEDO = {
   nombreProveedor: 'Yisrael Technology SRL',
 };
 
-// Base de la URL pública — el cliente copia esta URL al portal DGII.
-// DGII agrega el sufijo automáticamente (/fe/recepcion/api/ecf, etc.)
-// Las 3 URLs son idénticas — la diferencia la pone el sufijo de DGII.
-// Se omite el protocolo (https://) porque el portal DGII ya lo tiene como prefijo fijo.
-const API_HOST = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://api.emitedo.com')
-  .replace(/^https?:\/\//, '');
-const URLS_BASE = {
-  recepcion:    `${API_HOST}/api/dgii/v1/{token}`,
-  aprobacion:   `${API_HOST}/api/dgii/v1/{token}`,
-  autenticacion:`${API_HOST}/api/dgii/v1/{token}`,
-};
+// La webhookBaseUrl viene de ecf-api en tiempo real — se carga en el componente.
 
 const PDFS = [
   { tipo: '31',  nombre: 'Factura de Crédito Fiscal',        tam: '~45 KB' },
@@ -82,53 +73,6 @@ const PDFS = [
   { tipo: '46',  nombre: 'Exportaciones',                    tam: '~36 KB' },
   { tipo: '47',  nombre: 'Pagos al Exterior',                tam: '~36 KB' },
 ];
-
-// ─── República Dominicana — provincias y municipios ──────────────────────────
-
-const DR_PROVINCIAS = [
-  'Azua','Bahoruco','Barahona','Dajabón','Distrito Nacional',
-  'Duarte','El Seibo','Elías Piña','Espaillat','Hato Mayor',
-  'Hermanas Mirabal','Independencia','La Altagracia','La Romana',
-  'La Vega','María Trinidad Sánchez','Monseñor Nouel','Monte Cristi',
-  'Monte Plata','Pedernales','Peravia','Puerto Plata','Samaná',
-  'San Cristóbal','San José de Ocoa','San Juan','San Pedro de Macorís',
-  'Sánchez Ramírez','Santiago','Santiago Rodríguez','Santo Domingo','Valverde',
-];
-
-const DR_MUNICIPIOS: Record<string, string[]> = {
-  'Azua':                   ['Azua','Las Charcas','Las Yayas de Viajama','Padre Las Casas','Peralta','Sabana Yegua','Pueblo Viejo','Tábara Arriba','Guayabal','Estebanía'],
-  'Bahoruco':               ['Neiba','Galván','Los Ríos','Tamayo','Vicente Noble','El Palmar'],
-  'Barahona':               ['Barahona','Cabral','El Peñón','Enriquillo','Fundación','Jaquimeyes','La Ciénaga','Las Salinas','Paraíso','Polo'],
-  'Dajabón':                ['Dajabón','El Pino','Loma de Cabrera','Partido','Restauración'],
-  'Distrito Nacional':      ['Santo Domingo de Guzmán'],
-  'Duarte':                 ['San Francisco de Macorís','Arenoso','Castillo','Eugenio María de Hostos','Las Guáranas','Pimentel','Villa Riva'],
-  'El Seibo':               ['Santa Cruz de El Seibo','Miches'],
-  'Elías Piña':             ['Comendador','Bánica','El Llano','Hondo Valle','Pedro Santana','La Descubierta'],
-  'Espaillat':              ['Moca','Cayetano Germosén','Gaspar Hernández','Jamao al Norte'],
-  'Hato Mayor':             ['Hato Mayor del Rey','El Valle','Sabana de la Mar'],
-  'Hermanas Mirabal':       ['Salcedo','Tenares','Villa Tapia'],
-  'Independencia':          ['Jimaní','Cristóbal','Duvergé','La Descubierta','Mella','Postrer Río'],
-  'La Altagracia':          ['Higüey','San Rafael del Yuma'],
-  'La Romana':              ['La Romana','Guaymate','Villa Hermosa'],
-  'La Vega':                ['La Concepción de La Vega','Constanza','Jarabacoa','Jima Abajo'],
-  'María Trinidad Sánchez': ['Nagua','Cabrera','El Factor','Río San Juan'],
-  'Monseñor Nouel':         ['Bonao','Maimón','Piedra Blanca'],
-  'Monte Cristi':           ['Monte Cristi','Castañuelas','Guayubín','Las Matas de Santa Cruz','Pepillo Salcedo','Villa Vásquez'],
-  'Monte Plata':            ['Monte Plata','Bayaguana','Peralvillo','Rancho Arriba','Sabana Grande de Boyá','Yamasá'],
-  'Pedernales':             ['Pedernales','Oviedo'],
-  'Peravia':                ['Baní','Nizao'],
-  'Puerto Plata':           ['Puerto Plata','Altamira','Guananico','Imbert','Los Hidalgos','Luperón','Sosúa','Villa Isabela','Villa Montellano'],
-  'Samaná':                 ['Santa Bárbara de Samaná','Las Terrenas','Sánchez'],
-  'San Cristóbal':          ['San Cristóbal','Bajos de Haina','Cambita Garabitos','Los Cacaos','Sabana Grande de Palenque','San Gregorio de Nigua','Yaguate'],
-  'San José de Ocoa':       ['San José de Ocoa','Rancho Arriba','Sabana Larga'],
-  'San Juan':               ['San Juan de la Maguana','Bohechío','El Cercado','Juan de Herrera','Las Matas de Farfán','Vallejuelo'],
-  'San Pedro de Macorís':   ['San Pedro de Macorís','Consuelo','Guayacanes','Los Llanos','Quisqueya','Ramón Santana'],
-  'Sánchez Ramírez':        ['Cotuí','Cevicos','Fantino','La Mata'],
-  'Santiago':               ['Santiago de los Caballeros','Bisonó','Jánico','Licey al Medio','Puñal','Sabana Iglesia','San José de Las Matas','Tamboril','Villa González'],
-  'Santiago Rodríguez':     ['Sabaneta','Los Almácigos','Monción'],
-  'Santo Domingo':          ['Santo Domingo Este','Santo Domingo Norte','Santo Domingo Oeste','Boca Chica','Los Alcarrizos','Pedro Brand','San Antonio de Guerra'],
-  'Valverde':               ['Mao','Esperanza','Laguna Salada'],
-};
 
 // ─── Pruebas de simulación e-CF — tipos y tandas según set oficial DGII ──────
 
@@ -167,9 +111,6 @@ const PRUEBA_ECF_TYPES: PruebaType[] = [
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const fmtSize = (b: number) => b < 1024 ? `${b} B` : `${(b / 1024).toFixed(0)} KB`;
 
-function withToken(url: string, token: string) {
-  return url.replace('{token}', token || 'cargando...');
-}
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
@@ -259,62 +200,6 @@ function NavFooter({
           {nextLoading && <Loader2 className="h-4 w-4 animate-spin" />}
           {nextLabel} {!nextLoading && <ChevronRight className="h-4 w-4" />}
         </Button>
-      )}
-    </div>
-  );
-}
-
-// ─── AutocompleteInput ────────────────────────────────────────────────────────
-
-function AutocompleteInput({
-  value, onChange, options, placeholder, disabled,
-}: {
-  value: string; onChange: (v: string) => void;
-  options: string[]; placeholder?: string; disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(value);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => { setQuery(value); }, [value]);
-
-  const filtered = options.filter(o =>
-    o.toLowerCase().includes(query.toLowerCase())
-  ).slice(0, 30);
-
-  function select(opt: string) {
-    onChange(opt); setQuery(opt); setOpen(false);
-  }
-
-  function handleBlur(e: React.FocusEvent) {
-    if (containerRef.current?.contains(e.relatedTarget as Node)) return;
-    setOpen(false);
-  }
-
-  return (
-    <div ref={containerRef} className="relative" onBlur={handleBlur}>
-      <Input
-        value={query}
-        disabled={disabled}
-        placeholder={placeholder}
-        autoComplete="off"
-        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
-        onFocus={() => { if (!disabled) setOpen(true); }}
-        className={disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''}
-      />
-      {open && filtered.length > 0 && !disabled && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
-          {filtered.map(opt => (
-            <button
-              key={opt}
-              type="button"
-              onMouseDown={e => { e.preventDefault(); select(opt); }}
-              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors first:rounded-t-xl last:rounded-b-xl"
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
       )}
     </div>
   );
@@ -807,33 +692,14 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
                 className={errors.direccion ? 'border-red-400' : ''} />
               {errors.direccion && <p className="text-xs text-red-500 mt-1">{errors.direccion}</p>}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs mb-1.5 block">Provincia <span className="text-red-500">*</span></Label>
-                <AutocompleteInput
-                  value={provincia}
-                  options={DR_PROVINCIAS}
-                  placeholder="Buscar provincia…"
-                  onChange={v => {
-                    setProvincia(v);
-                    setMunicipio('');
-                    setErrors(e => ({...e, provincia:'', municipio:''}));
-                  }}
-                />
-                {errors.provincia && <p className="text-xs text-red-500 mt-1">{errors.provincia}</p>}
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">Municipio <span className="text-red-500">*</span></Label>
-                <AutocompleteInput
-                  value={municipio}
-                  options={DR_MUNICIPIOS[provincia] ?? []}
-                  placeholder={provincia ? 'Buscar municipio…' : 'Selecciona provincia'}
-                  disabled={!provincia}
-                  onChange={v => { setMunicipio(v); setErrors(e => ({...e, municipio:''})); }}
-                />
-                {errors.municipio && <p className="text-xs text-red-500 mt-1">{errors.municipio}</p>}
-              </div>
-            </div>
+            <ProvinciaMunicipioSelect
+              provincia={provincia}
+              municipio={municipio}
+              onProvinciaChange={v => { setProvincia(v); setErrors(e => ({...e, provincia:'', municipio:''})); }}
+              onMunicipioChange={v => { setMunicipio(v); setErrors(e => ({...e, municipio:''})); }}
+              required
+              errors={errors}
+            />
           </div>
         </div>
 
@@ -950,7 +816,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
 function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
   const xmlInputRef = useRef<HTMLInputElement>(null);
 
-  const [dgiiToken,       setDgiiToken]       = useState('');
+  const [webhookBaseUrl,  setWebhookBaseUrl]  = useState('');
   const [sub,             setSub]             = useState(0);
   const [xmlFile,         setXmlFile]         = useState<File | null>(null);
   const [signing,         setSigning]         = useState(false);
@@ -963,7 +829,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
   const [xmlFirmado,     setXmlFirmado]     = useState<{ base64: string; name: string } | null>(null);
 
   useEffect(() => {
-    fetch('/api/equipo/perfil').then(r => r.json()).then(d => setDgiiToken(d.dgiiRoutingToken ?? ''));
+    fetch('/api/ecf/urls-dgii').then(r => r.json()).then(d => setWebhookBaseUrl(d.webhookBaseUrl ?? ''));
     // Cargar estado persistido
     import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
       cargarEstado().then(({ state }) => {
@@ -981,9 +847,9 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
   }, []);
 
   const urls = {
-    recepcion:    withToken(URLS_BASE.recepcion,     dgiiToken),
-    aprobacion:   withToken(URLS_BASE.aprobacion,    dgiiToken),
-    autenticacion:withToken(URLS_BASE.autenticacion, dgiiToken),
+    recepcion:    webhookBaseUrl || 'Cargando…',
+    aprobacion:   webhookBaseUrl || 'Cargando…',
+    autenticacion:webhookBaseUrl || 'Cargando…',
   };
 
   async function handleFirmar() {
@@ -2485,17 +2351,17 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
 // ─── Phase 3: URLs de producción ─────────────────────────────────────────────
 
 function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
-  const [dgiiToken, setDgiiToken] = useState('');
+  const [webhookBaseUrl, setWebhookBaseUrl] = useState('');
   const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    fetch('/api/equipo/perfil').then(r => r.json()).then(d => setDgiiToken(d.dgiiRoutingToken ?? ''));
+    fetch('/api/ecf/urls-dgii').then(r => r.json()).then(d => setWebhookBaseUrl(d.webhookBaseUrl ?? ''));
   }, []);
 
   const urls = {
-    recepcion:    withToken(URLS_BASE.recepcion,     dgiiToken),
-    aprobacion:   withToken(URLS_BASE.aprobacion,    dgiiToken),
-    autenticacion:withToken(URLS_BASE.autenticacion, dgiiToken),
+    recepcion:    webhookBaseUrl || 'Cargando…',
+    aprobacion:   webhookBaseUrl || 'Cargando…',
+    autenticacion:webhookBaseUrl || 'Cargando…',
   };
 
   return (

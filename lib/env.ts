@@ -7,6 +7,9 @@ const REQUIRED_ENV_VARS = [
   // Identidad del Proveedor de Servicios ante la DGII
   'PROVIDER_RNC',
   'PROVIDER_RAZON_SOCIAL',
+  // ECF API — proveedor de NCF electrónicos
+  'ECF_API_URL',
+  'ECF_API_KEY',
 ] as const;
 
 export function validateEnv() {

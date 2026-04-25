@@ -1,18 +1,11 @@
 /**
  * POST /api/habilitacion/consultar-estados
  *
- * Consulta en batch el estado final de los e-CF enviados durante la Fase 1
- * (Set de Pruebas). Se autentica con DGII UNA sola vez y consulta cada trackId
- * contra `GET /consultaresultado/api/ConsultaResultado/TrackId/{trackId}`.
+ * Consulta en batch el estado de los e-CF emitidos durante la Fase 1.
+ * Usa ecf-api en lugar de ir a DGII directamente — no requiere P12 local.
  *
- * El wizard de habilitación llama este endpoint cada ~5 segundos mientras
- * hay trackIds en estado "En Proceso".
- *
- * Body:
- *   { trackIds: string[] }
- *
- * Respuesta:
- *   { results: [{ trackId, estado, codigo, mensajes }] }
+ * Body:  { trackIds: string[] }
+ * Respuesta: { results: [{ trackId, estado, estadoInterno, mensajes }] }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,26 +13,24 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq, and } from 'drizzle-orm';
-import { getDgiiAuth as getDgiiToken } from '@/lib/dgii/auth';
-
-// ─── Schema ───────────────────────────────────────────────────────────────────
+import { eq, and, inArray } from 'drizzle-orm';
+import { emision, EcfApiError } from '@/lib/ecf-api/client';
 
 const bodySchema = z.object({
-  // Acepta strings vacíos (RFCE síncronos) — los filtramos abajo antes de consultar DGII
   trackIds: z.array(z.string()).min(1).max(50),
 });
 
-// DGII → estado interno (mismo mapeo que /api/ecf/estado)
 const MAPA_ESTADOS: Record<string, string> = {
+  ACEPTADO:             'ACEPTADO',
+  ACEPTADO_CONDICIONAL: 'ACEPTADO_CONDICIONAL',
+  RECHAZADO:            'RECHAZADO',
+  EN_PROCESO:           'EN_PROCESO',
+  // Compatibilidad con respuestas legadas de DGII via ecf-api
   Aceptado:             'ACEPTADO',
   AceptadoCondicional:  'ACEPTADO_CONDICIONAL',
   Rechazado:            'RECHAZADO',
-  EnProceso:            'EN_PROCESO',
   'En Proceso':         'EN_PROCESO',
 };
-
-// ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const user = await getUser();
@@ -51,76 +42,73 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'trackIds requerido', detalles: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: 'trackIds requerido' }, { status: 400 });
   }
 
-  // Filtrar trackIds vacíos — RFCE síncronos no tienen trackId
+  // Filtrar vacíos (RFCE síncronos no tienen trackId — ya tienen estado final)
   const trackIds = parsed.data.trackIds.filter(id => id.length > 0);
   if (trackIds.length === 0) {
     return NextResponse.json({ ok: true, results: [] });
   }
 
-  // Obtener cliente DGII autenticado — reutiliza token de DB o re-autentica y lo guarda
-  let client: Awaited<ReturnType<typeof getDgiiToken>>['client'];
-  try {
-    ({ client } = await getDgiiToken(teamId));
-  } catch (authErr) {
-    console.error('[consultar-estados] auth error:', authErr);
-    return NextResponse.json(
-      { error: 'No se pudo autenticar contra la DGII.' },
-      { status: 502 },
-    );
-  }
+  // Buscar los documentos por trackId para obtener el ecfApiEmisionId
+  const docs = await db
+    .select({ trackId: ecfDocuments.trackId, ecfApiEmisionId: ecfDocuments.ecfApiEmisionId })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.teamId, teamId),
+      inArray(ecfDocuments.trackId, trackIds),
+    ));
 
-  // Consultar en lotes de 5 para no saturar la DGII con requests paralelas
-  const BATCH_SIZE = 5;
+  const emisionIdByTrackId = Object.fromEntries(
+    docs.map(d => [d.trackId!, d.ecfApiEmisionId]),
+  );
+
   const results: object[] = [];
 
-  for (let i = 0; i < trackIds.length; i += BATCH_SIZE) {
-    const lote = trackIds.slice(i, i + BATCH_SIZE);
+  await Promise.all(
+    trackIds.map(async (trackId) => {
+      const ecfApiEmisionId = emisionIdByTrackId[trackId];
 
-    const loteResults = await Promise.all(
-      lote.map(async (trackId) => {
-        try {
-          const respuesta     = await client.consultarEstado(trackId);
-          const estadoDgii    = respuesta.estado ?? 'En Proceso';
-          const estadoInterno = MAPA_ESTADOS[estadoDgii] ?? 'EN_PROCESO';
-          const mensajes      = respuesta.mensajes ?? null;
+      if (!ecfApiEmisionId) {
+        results.push({ trackId, estado: 'En Proceso', estadoInterno: 'EN_PROCESO', mensajes: null });
+        return;
+      }
 
-          // Actualizar el documento en BD si el estado cambió
-          await db
-            .update(ecfDocuments)
-            .set({
-              estado:       estadoInterno,
-              mensajesDgii: mensajes ? JSON.stringify(mensajes) : null,
-              updatedAt:    new Date(),
-            })
-            .where(and(
-              eq(ecfDocuments.teamId, teamId),
-              eq(ecfDocuments.trackId, trackId),
-            ));
+      try {
+        const resp = await emision.consultarEstado(ecfApiEmisionId);
+        const estadoInterno = MAPA_ESTADOS[resp.estado] ?? 'EN_PROCESO';
 
-          return { trackId, estado: estadoDgii, estadoInterno, mensajes };
-        } catch (err) {
-          // Error puntual — no romper el batch, reportar el error
-          return {
-            trackId,
-            estado:        'En Proceso',
-            estadoInterno: 'EN_PROCESO',
-            mensajes:      null,
-            error:         err instanceof Error ? err.message : String(err),
-          };
+        await db
+          .update(ecfDocuments)
+          .set({ estado: estadoInterno, updatedAt: new Date() })
+          .where(and(
+            eq(ecfDocuments.teamId, teamId),
+            eq(ecfDocuments.trackId, trackId),
+          ));
+
+        results.push({
+          trackId,
+          estado:        resp.estado,
+          estadoInterno,
+          mensajes:      resp.mensajesDgii ?? null,
+        });
+      } catch (err) {
+        if (err instanceof EcfApiError && err.status === 400) {
+          // ecf-api: emision sin trackId (RFCE síncrono) — ya tiene estado final
+          results.push({ trackId, estado: 'Aceptado', estadoInterno: 'ACEPTADO', mensajes: null });
+          return;
         }
-      }),
-    );
-
-    results.push(...loteResults);
-
-    // Pequeña pausa entre lotes para respetar rate-limit de la DGII
-    if (i + BATCH_SIZE < trackIds.length) {
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }
+        results.push({
+          trackId,
+          estado:        'En Proceso',
+          estadoInterno: 'EN_PROCESO',
+          mensajes:      null,
+          error:         'Error consultando estado',
+        });
+      }
+    }),
+  );
 
   return NextResponse.json({ ok: true, results });
 }

@@ -95,6 +95,10 @@ export const teams = pgTable('teams', {
   sitioWeb: varchar('sitio_web', { length: 200 }),
   emailFacturacion: varchar('email_facturacion', { length: 255 }),
   colorPrimario: varchar('color_primario', { length: 7 }).default('#1e40af'),
+
+  // ── ECF API — identificador del contribuyente en el proveedor NCF ─────────
+  // Asignado al registrar la empresa en ecf-api. Null = aún no registrada.
+  ecfCodigoPublico: varchar('ecf_codigo_publico', { length: 50 }),
 });
 
 export const teamMembers = pgTable('team_members', {
@@ -260,6 +264,9 @@ export const ecfDocuments = pgTable('ecf_documents', {
   lineasJson:       text('lineas_json'),         // JSON con ItemLinea[] del form
   tipoPago:         integer('tipo_pago').default(1),  // 1=contado,2=crédito,3=gratuito,4=uso
   fechaLimitePago:  varchar('fecha_limite_pago', { length: 10 }), // YYYY-MM-DD
+
+  // ID de la emisión en ecf-api (para consultar estado sin ir a DGII directo)
+  ecfApiEmisionId: varchar('ecf_api_emision_id', { length: 50 }),
 
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),

@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "emitedo-dev",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev", "--port", "3001"],
-      "port": 3001
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "PATH=/Users/alexanderferreras/.nvm/versions/node/v20.19.6/bin:$PATH pnpm dev"],
+      "autoPort": true
     }
   ]
 }
