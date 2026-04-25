@@ -1,36 +1,27 @@
+/**
+ * GET/POST/DELETE /api/equipo/certificado
+ *
+ * Proxea las operaciones de certificado a ecf-api.
+ * emitedo ya no almacena el P12 local — ecf-api gestiona certs y firma.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/lib/db/drizzle';
-import { teams } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser, getTeamProfile } from '@/lib/db/queries';
-import { eq } from 'drizzle-orm';
-import { P12Reader } from 'dgii-ecf';
-import { encryptField, decryptField, isEncrypted } from '@/lib/crypto/cert';
+import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { logAudit, getIp } from '@/lib/audit';
 import { rateLimitDb } from '@/lib/rate-limit';
+import { certificados, EcfApiError } from '@/lib/ecf-api/client';
+import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ecf-api/contribuyente';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function parseCN(subject: string): string {
-  const parts = subject.split(',');
-  const cn    = parts.find(p => p.trim().startsWith('CN='));
+function parseCN(subject: string | null): string {
+  if (!subject) return '';
+  const cn = subject.split(',').find(p => p.trim().startsWith('CN='));
   return cn ? cn.replace('CN=', '').trim() : subject;
 }
 
-function extractCertInfo(certP12: string, certPassword: string) {
-  const reader = new P12Reader(certPassword);
-  const info   = reader.getCertificateInfoFromBase64(certP12);
-  return {
-    titular:     parseCN(info.subject),
-    subject:     info.subject,
-    serial:      info.serialNumber,
-    vencimiento: info.validTo instanceof Date
-      ? info.validTo.toISOString()
-      : String(info.validTo),
-  };
-}
-
-// ─── GET — devuelve info del certificado actual ───────────────────────────────
+// ─── GET — info del certificado activo ───────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,60 +31,46 @@ export async function GET(request: NextRequest) {
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
 
-    const team = await getTeamProfile(teamId);
-    const hasCiphered = isEncrypted(team?.certP12Ciphered, team?.certP12Iv, team?.certP12AuthTag);
+    let codigoPublico: string;
+    try {
+      codigoPublico = await ensureContribuyente(teamId);
+    } catch (err) {
+      if (err instanceof ContribuyenteCamposFaltantesError) {
+        return NextResponse.json({ tieneCertificado: false, camposFaltantes: err.faltantes });
+      }
+      console.error('[GET /api/equipo/certificado] ensureContribuyente', err);
+      return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+    }
 
-    if (!hasCiphered) {
+    let certs;
+    try {
+      certs = await certificados.list(codigoPublico);
+    } catch (err) {
+      console.error('[GET /api/equipo/certificado] certificados.list', err);
+      return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+    }
+
+    const activo = certs.find(c => c.activo && !c.revocadoEn);
+    if (!activo) {
       return NextResponse.json({ tieneCertificado: false });
     }
 
-    logAudit({
-      teamId,
-      userId: user.id,
-      actor:  user.email,
-      action: 'CERT_VIEW',
-      ip:     getIp(request),
+    logAudit({ teamId, userId: user.id, actor: user.email, action: 'CERT_VIEW', ip: getIp(request) });
+
+    return NextResponse.json({
+      tieneCertificado: true,
+      titular:          parseCN(activo.subject),
+      serial:           activo.id,
+      vencimiento:      activo.validTo,
+      cifrado:          true,
     });
-
-    // Si ya tenemos los metadatos denormalizados, los devolvemos sin descifrar
-    if (team?.certTitular) {
-      return NextResponse.json({
-        tieneCertificado: true,
-        titular:          team.certTitular,
-        serial:           team.certSerial ?? undefined,
-        vencimiento:      team.certVencimiento?.toISOString() ?? undefined,
-        cifrado:          true,
-      });
-    }
-
-    // Fallback: descifrar para extraer metadatos (cert recién subido sin metadatos)
-    try {
-      const plainP12 = decryptField({
-        ciphered: team!.certP12Ciphered!,
-        iv:       team!.certP12Iv!,
-        authTag:  team!.certP12AuthTag!,
-      });
-      const plainPin = decryptField({
-        ciphered: team!.certPinCiphered!,
-        iv:       team!.certPinIv!,
-        authTag:  team!.certPinAuthTag!,
-      });
-      const certData = extractCertInfo(plainP12, plainPin);
-      return NextResponse.json({
-        tieneCertificado: true,
-        cifrado:          true,
-        ...certData,
-      });
-    } catch {
-      return NextResponse.json({ tieneCertificado: true, errorLectura: true });
-    }
   } catch (err) {
     console.error('[GET /api/equipo/certificado]', err);
     return NextResponse.json({ error: 'Error interno' }, { status: 500 });
   }
 }
 
-// ─── POST — sube y guarda un nuevo certificado ────────────────────────────────
+// ─── POST — sube un nuevo certificado a ecf-api ───────────────────────────────
 
 const schema = z.object({
   certP12:      z.string().min(1), // base64 del archivo P12/PFX
@@ -108,7 +85,6 @@ export async function POST(request: NextRequest) {
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
 
-    // Rate limit: máximo 10 intentos por hora por equipo
     const rl = await rateLimitDb(`cert_upload:${teamId}`, 10, 60 * 60_000);
     if (!rl.allowed) {
       return NextResponse.json(
@@ -125,67 +101,57 @@ export async function POST(request: NextRequest) {
 
     const { certP12, certPassword } = parsed.data;
 
-    // Validar que el P12 se puede leer con la contraseña dada
-    let certData: ReturnType<typeof extractCertInfo>;
+    let codigoPublico: string;
     try {
-      const reader = new P12Reader(certPassword);
-      const certs  = reader.getKeyFromStringBase64(certP12);
-      if (!certs.key || !certs.cert) {
+      codigoPublico = await ensureContribuyente(teamId);
+    } catch (err) {
+      if (err instanceof ContribuyenteCamposFaltantesError) {
         return NextResponse.json(
-          { error: 'El certificado no contiene clave privada o certificado público. Verifica el archivo y la contraseña.' },
+          { error: `Completa los siguientes campos antes de subir el certificado: ${err.faltantes.map(f => f.label).join(', ')}` },
           { status: 422 },
         );
       }
-      certData = extractCertInfo(certP12, certPassword);
-    } catch {
-      return NextResponse.json(
-        { error: 'No se pudo leer el certificado. Verifica que el archivo y la contraseña sean correctos.' },
-        { status: 422 },
-      );
+      console.error('[POST /api/equipo/certificado] ensureContribuyente', err);
+      return NextResponse.json({ error: 'Error interno' }, { status: 500 });
     }
 
-    // Cifrar con AES-256-GCM antes de persistir
-    const p12Enc = encryptField(certP12);
-    const pinEnc = encryptField(certPassword);
+    // Decodificar base64 → Buffer para multipart upload
+    const p12Buffer = Buffer.from(certP12, 'base64');
 
-    await db
-      .update(teams)
-      .set({
-        certP12Ciphered:  p12Enc.ciphered,
-        certP12Iv:        p12Enc.iv,
-        certP12AuthTag:   p12Enc.authTag,
-        certPinCiphered:  pinEnc.ciphered,
-        certPinIv:        pinEnc.iv,
-        certPinAuthTag:   pinEnc.authTag,
-        // Metadatos públicos sin cifrar (para mostrar en UI sin descifrar)
-        certTitular:     certData.titular,
-        certSerial:      certData.serial,
-        certVencimiento: certData.vencimiento ? new Date(certData.vencimiento) : null,
-        updatedAt:       new Date(),
-      })
-      .where(eq(teams.id, teamId));
+    let cert;
+    try {
+      cert = await certificados.upload(codigoPublico, p12Buffer, certPassword);
+    } catch (err) {
+      if (err instanceof EcfApiError) {
+        const esErrorNegocio = err.status >= 400 && err.status < 500;
+        if (esErrorNegocio) {
+          let mensaje = 'No se pudo subir el certificado. Verifica el archivo y la contraseña.';
+          try {
+            const parsed = JSON.parse(err.message);
+            mensaje = Array.isArray(parsed.message) ? parsed.message.join('. ') : (parsed.message ?? mensaje);
+          } catch { mensaje = err.message || mensaje; }
+          return NextResponse.json({ error: mensaje }, { status: 422 });
+        }
+      }
+      console.error('[POST /api/equipo/certificado] certificados.upload', err);
+      return NextResponse.json({ error: 'Error interno al subir el certificado' }, { status: 500 });
+    }
 
     logAudit({
-      teamId,
-      userId:   user.id,
-      actor:    user.email,
+      teamId, userId: user.id, actor: user.email,
       action:   'CERT_UPLOAD',
-      resource: certData.serial,
+      resource: cert.id,
       ip:       getIp(request),
-      meta: {
-        titular:     certData.titular,
-        vencimiento: certData.vencimiento,
-        serial:      certData.serial,
-      },
+      meta:     { subject: cert.subject, validTo: cert.validTo },
     });
 
     return NextResponse.json({
       ok:               true,
       tieneCertificado: true,
       cifrado:          true,
-      titular:          certData.titular,
-      serial:           certData.serial,
-      vencimiento:      certData.vencimiento,
+      titular:          parseCN(cert.subject),
+      serial:           cert.id,
+      vencimiento:      cert.validTo,
     });
   } catch (err) {
     console.error('[POST /api/equipo/certificado]', err);
@@ -193,7 +159,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── DELETE — elimina el certificado almacenado ───────────────────────────────
+// ─── DELETE — revoca el certificado activo en ecf-api ────────────────────────
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -203,28 +169,42 @@ export async function DELETE(request: NextRequest) {
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
 
-    await db
-      .update(teams)
-      .set({
-        certP12Ciphered: null,
-        certP12Iv:       null,
-        certP12AuthTag:  null,
-        certPinCiphered: null,
-        certPinIv:       null,
-        certPinAuthTag:  null,
-        certTitular:     null,
-        certSerial:      null,
-        certVencimiento: null,
-        updatedAt:       new Date(),
-      })
-      .where(eq(teams.id, teamId));
+    let codigoPublico: string;
+    try {
+      codigoPublico = await ensureContribuyente(teamId);
+    } catch (err) {
+      if (err instanceof ContribuyenteCamposFaltantesError) {
+        return NextResponse.json({ error: 'Perfil incompleto' }, { status: 422 });
+      }
+      console.error('[DELETE /api/equipo/certificado] ensureContribuyente', err);
+      return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+    }
+
+    let certs;
+    try {
+      certs = await certificados.list(codigoPublico);
+    } catch (err) {
+      console.error('[DELETE /api/equipo/certificado] certificados.list', err);
+      return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+    }
+
+    const activo = certs.find(c => c.activo && !c.revocadoEn);
+    if (!activo) {
+      return NextResponse.json({ ok: true, tieneCertificado: false });
+    }
+
+    try {
+      await certificados.revoke(activo.id);
+    } catch (err) {
+      console.error('[DELETE /api/equipo/certificado] certificados.revoke', err);
+      return NextResponse.json({ error: 'Error al revocar el certificado' }, { status: 500 });
+    }
 
     logAudit({
-      teamId,
-      userId: user.id,
-      actor:  user.email,
-      action: 'CERT_DELETE',
-      ip:     getIp(request),
+      teamId, userId: user.id, actor: user.email,
+      action:   'CERT_DELETE',
+      resource: activo.id,
+      ip:       getIp(request),
     });
 
     return NextResponse.json({ ok: true, tieneCertificado: false });

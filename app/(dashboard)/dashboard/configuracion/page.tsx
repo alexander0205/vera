@@ -9,6 +9,7 @@ import {
   Building2, Palette, ImageIcon, PenLine,
   CheckCircle, Loader2, Upload, X, Eye, Database, RefreshCw,
 } from 'lucide-react';
+import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 
 // ─── Padrón DGII Card ─────────────────────────────────────────────────────────
 
@@ -243,6 +244,8 @@ export default function ConfiguracionPage() {
   const [logo, setLogo]                         = useState('');
   const [firma, setFirma]                       = useState('');
   const [previewPDF, setPreviewPDF]             = useState(false);
+  const [provincia, setProvincia]               = useState('');
+  const [municipio, setMunicipio]               = useState('');
 
   // Cargar datos actuales
   useEffect(() => {
@@ -259,6 +262,8 @@ export default function ConfiguracionPage() {
         setColorPrimario(d.colorPrimario ?? '#1e40af');
         setLogo(d.logo ?? '');
         setFirma(d.firma ?? '');
+        setProvincia(d.provincia ?? '');
+        setMunicipio(d.municipio ?? '');
       })
       .finally(() => setLoading(false));
   }, []);
@@ -273,6 +278,7 @@ export default function ConfiguracionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           razonSocial, nombreComercial, rnc, direccion,
+          provincia, municipio,
           telefono, sitioWeb, emailFacturacion, colorPrimario,
           logo, firma,
         }),
@@ -358,8 +364,16 @@ export default function ConfiguracionPage() {
           <div className="space-y-1.5 md:col-span-2">
             <Label>Dirección</Label>
             <Input value={direccion} onChange={e => setDireccion(e.target.value)}
-              placeholder="Calle, No., Ciudad, Provincia" />
+              placeholder="Calle y número" />
           </div>
+          {/* Provincia / Municipio en cascada */}
+          <ProvinciaMunicipioSelect
+            provincia={provincia}
+            municipio={municipio}
+            onProvinciaChange={setProvincia}
+            onMunicipioChange={setMunicipio}
+            className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4"
+          />
           <div className="space-y-1.5">
             <Label>Email de facturación</Label>
             <Input type="email" value={emailFacturacion}
