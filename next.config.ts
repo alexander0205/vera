@@ -9,7 +9,11 @@ const nextConfig: NextConfig = {
   experimental: {
     ppr: true,
     clientSegmentCache: true,
-  }
+  },
+  turbopack: {
+    // Fijar el root para evitar warning de múltiples lockfiles
+    root: __dirname,
+  },
 };
 
 export default nextConfig;
