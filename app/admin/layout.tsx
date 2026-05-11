@@ -3,8 +3,8 @@ import { getUser } from '@/lib/db/queries';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
-  if (!user || user.role !== 'admin') {
-    redirect('/dashboard');
+  if (!user || user.role !== 'owner') {
+    redirect('/lite');
   }
   return (
     <div className="min-h-screen bg-gray-50">

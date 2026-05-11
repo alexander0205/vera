@@ -230,6 +230,7 @@ export async function emitirEcfPrueba(params: {
     codigoModificacion: params.codigoModificacion,
     razonModificacion: params.razonModificacion,
     tipoPago: 1 as const,
+    skipRangeValidation: true,
     items: [{
       nombreItem:             params.itemNombre,
       cantidadItem:           1,

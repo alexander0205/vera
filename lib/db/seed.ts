@@ -8,6 +8,7 @@
 import { db } from './drizzle';
 import { users, teams, teamMembers, clients, sequences } from './schema';
 import { hashPassword } from '@/lib/auth/session';
+import { TEST_CONTRIBUYENTE } from '@/lib/config/test-data';
 
 async function seed() {
   console.log('🌱 Iniciando seed de EmiteDO...\n');
@@ -33,11 +34,11 @@ async function seed() {
   const [team] = await db
     .insert(teams)
     .values({
-      name: 'SolucionesDO SRL',
-      rnc: '130123456',
-      razonSocial: 'SolucionesDO SRL',
-      nombreComercial: 'SolucionesDO',
-      direccion: 'Av. Winston Churchill, Santo Domingo, RD',
+      name: TEST_CONTRIBUYENTE.razonSocial,
+      rnc: TEST_CONTRIBUYENTE.rnc,
+      razonSocial: TEST_CONTRIBUYENTE.razonSocial,
+      nombreComercial: 'Yisrael Technology',
+      direccion: TEST_CONTRIBUYENTE.direccion,
       dgiiEnvironment: 'TesteCF',
     })
     .returning();
@@ -50,31 +51,15 @@ async function seed() {
 
   console.log(`✓ Empresa creada: ${team.name} (RNC: ${team.rnc})`);
 
-  // ─── Clientes de prueba ───────────────────────────────────────────────────
+  // ─── Cliente de prueba ────────────────────────────────────────────────────
   const clientesData = [
     {
-      teamId: team.id,
-      rnc: '101123456',
-      razonSocial: 'Distribuidora González SRL',
-      email: 'gonzalez@test.com',
-      telefono: '809-555-0001',
-      direccion: 'Santiago de los Caballeros, RD',
-    },
-    {
-      teamId: team.id,
-      rnc: '131234567',
-      razonSocial: 'Importadora del Este SA',
-      email: 'impeste@test.com',
-      telefono: '809-555-0002',
-      direccion: 'San Pedro de Macorís, RD',
-    },
-    {
-      teamId: team.id,
-      rnc: '001456789',
-      razonSocial: 'Consumidor Final',
-      email: undefined,
-      telefono: undefined,
-      direccion: undefined,
+      teamId:     team.id,
+      rnc:        TEST_CONTRIBUYENTE.rnc,
+      razonSocial: TEST_CONTRIBUYENTE.razonSocial,
+      email:      TEST_CONTRIBUYENTE.email,
+      telefono:   TEST_CONTRIBUYENTE.telefono,
+      direccion:  TEST_CONTRIBUYENTE.direccion,
     },
   ];
 

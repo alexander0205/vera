@@ -27,12 +27,14 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       'X-Api-Key': API_KEY,
+      ...extraHeaders,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -287,11 +289,11 @@ export const emision = {
   list: (codigoPublico: string) =>
     request<EmisionResponseDto[]>('GET', `/contribuyentes/${codigoPublico}/emision`),
 
-  emitir: (codigoPublico: string, tipo: string, dto: unknown) =>
-    request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/ecf${tipo}`, dto),
+  emitir: (codigoPublico: string, tipo: string, dto: unknown, extraHeaders?: Record<string, string>) =>
+    request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/ecf${tipo}`, dto, extraHeaders),
 
-  emitirRfce32: (codigoPublico: string, dto: unknown) =>
-    request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/rfce32`, dto),
+  emitirRfce32: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>
+    request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/rfce32`, dto, extraHeaders),
 
   consultarEstado: (emisionId: string) =>
     request<EmisionResponseDto>('GET', `/emisiones/${emisionId}/estado-dgii`),

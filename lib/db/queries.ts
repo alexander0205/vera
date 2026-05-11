@@ -319,5 +319,7 @@ export async function getMonthlyEcfCount(teamId: number): Promise<number> {
  * Returns the monthly e-CF limit for a team based on its current plan.
  */
 export function getPlanLimit(planName: string | null, status?: string | null): number {
+  // 'admin' = acceso manual sin Stripe → sin límite
+  if (status === 'admin') return -1;
   return getPlanDocLimit(planName, status === 'trialing');
 }

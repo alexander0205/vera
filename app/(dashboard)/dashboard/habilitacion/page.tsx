@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
+import { TEST_CONTRIBUYENTE } from '@/lib/config/test-data';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,18 +92,20 @@ const PRUEBA_BATCHES = [
   { id: 3, label: 'Tercera tanda — RFCE', desc: 'Resumen de Facturas de Consumo Electrónicas' },
 ];
 
+// La DGII exige exactamente 1 comprobante por tipo en el Set de Pruebas de Habilitación.
+// Ref: portal DGII "Estado actual de las pruebas de simulación" — todos muestran /1.
 const PRUEBA_ECF_TYPES: PruebaType[] = [
-  { tipo: '31',  nombre: 'Factura de Crédito Fiscal',         required: 4,    batch: 1 },
-  { tipo: '32g', nombre: 'Factura de Consumo (≥RD$250,000)',  required: 2,    batch: 1 },
-  { tipo: '41',  nombre: 'Compras',                            required: 2,    batch: 1 },
-  { tipo: '43',  nombre: 'Gastos Menores',                     required: 2,    batch: 1 },
-  { tipo: '44',  nombre: 'Regímenes Especiales',               required: 2,    batch: 1 },
-  { tipo: '45',  nombre: 'Gubernamental',                      required: 2,    batch: 1 },
-  { tipo: '46',  nombre: 'Exportaciones',                      required: 2,    batch: 1 },
-  { tipo: '47',  nombre: 'Pagos al Exterior',                  required: 2,    batch: 1 },
+  { tipo: '31',  nombre: 'Factura de Crédito Fiscal',         required: 1,    batch: 1 },
+  { tipo: '32g', nombre: 'Factura de Consumo (≥RD$250,000)',  required: 1,    batch: 1 },
+  { tipo: '41',  nombre: 'Compras',                            required: 1,    batch: 1 },
+  { tipo: '43',  nombre: 'Gastos Menores',                     required: 1,    batch: 1 },
+  { tipo: '44',  nombre: 'Regímenes Especiales',               required: 1,    batch: 1 },
+  { tipo: '45',  nombre: 'Gubernamental',                      required: 1,    batch: 1 },
+  { tipo: '46',  nombre: 'Exportaciones',                      required: 1,    batch: 1 },
+  { tipo: '47',  nombre: 'Pagos al Exterior',                  required: 1,    batch: 1 },
   { tipo: '33',  nombre: 'Nota de Débito',                     required: 1,    batch: 2 },
-  { tipo: '34',  nombre: 'Nota de Crédito',                    required: 2,    batch: 2 },
-  { tipo: '32r', nombre: 'Tipo 32 RFCE — Resumen FC',          required: 4,    batch: 3 },
+  { tipo: '34',  nombre: 'Nota de Crédito',                    required: 1,    batch: 2 },
+  { tipo: '32r', nombre: 'Tipo 32 RFCE — Resumen FC',          required: 1,    batch: 3 },
   { tipo: '32b', nombre: 'Factura de Consumo (<RD$250,000)',   required: null, batch: 4 },
 ];
 
@@ -1570,7 +1573,10 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
           : (t.tipo === '32r' || t.tipo === '32b')
             ? Math.min(precioBase, 100000)
             : precioBase;
-        const requiereRnc = ['31','33','34','41','44','45'].includes(realTipo);
+        // rncComprador obligatorio: tipos B2B + compras + gubernamental + 32≥250K + exportaciones
+        const requiereRnc = ['31','33','34','41','44','45','46'].includes(realTipo) || t.tipo === '32g';
+        // razonSocialComprador obligatorio también para exportaciones (tipo 46)
+        const requiereRazonSocial = requiereRnc || realTipo === '46';
 
         // Tipos 33 (nota débito) y 34 (nota crédito) requieren referenciar un e-CF
         // tipo 31 real ya enviado a la DGII.  Buscamos el NCF primero en la emisión
@@ -1625,8 +1631,8 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               const result = await emitirEcfPrueba({
                 tipoEcf: realTipo,
                 encf:    encfHardcoded,
-                rncComprador:         requiereRnc ? '131988032' : undefined,
-                razonSocialComprador: requiereRnc ? 'Cliente Certificación DGII' : undefined,
+                rncComprador:         requiereRnc          ? TEST_CONTRIBUYENTE.rnc         : undefined,
+                razonSocialComprador: requiereRazonSocial  ? TEST_CONTRIBUYENTE.razonSocial : undefined,
                 ncfModificado:        ncfReferencia,
                 codigoModificacion:   codModif,
                 razonModificacion:    razonModif,

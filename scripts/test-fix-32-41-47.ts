@@ -13,6 +13,7 @@ config({ path: resolve(__dirname, '../.env') });
 
 import { db } from '../lib/db/drizzle';
 import { teams } from '../lib/db/schema';
+import { TEST_CONTRIBUYENTE } from '../lib/config/test-data';
 import { eq } from 'drizzle-orm';
 import { decryptField, isEncrypted } from '../lib/crypto/cert';
 import { DgiiSigner } from '../lib/dgii/signer';
@@ -88,8 +89,8 @@ function datos41(rnc: string, razonSocial: string): EcfData {
     direccionEmisor: 'C/ Prueba #1, Santo Domingo, RD',
     fechaEmision: hoy,
     fechaVencimientoSecuencia: new Date(hoy.getFullYear(), 11, 31),
-    rncComprador: '131988032',
-    razonSocialComprador: 'Cliente Certificación DGII',
+    rncComprador: TEST_CONTRIBUYENTE.rnc,
+    razonSocialComprador: TEST_CONTRIBUYENTE.razonSocial,
     tipoPago: 1,
     items: [{
       numeroLinea: 1,

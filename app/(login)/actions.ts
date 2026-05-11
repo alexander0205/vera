@@ -105,7 +105,10 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     return createCheckoutSession({ team: foundTeam, priceId });
   }
 
-  redirect('/dashboard');
+  // Owner (plataforma) → panel de admin
+  if (foundUser.role === 'owner') redirect('/admin');
+
+  redirect('/lite');
 });
 
 const signUpSchema = z.object({

@@ -90,6 +90,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const modoPrevio = body?.modo ?? 'emitir';
+    // Solo para pruebas internas — no está en el schema público
+    const skipRangeValidation: boolean = body?.skipRangeValidation === true;
 
     if (modoPrevio !== 'borrador' && !team?.rnc) {
       return NextResponse.json(
@@ -102,7 +104,7 @@ export async function POST(request: NextRequest) {
     if (modoPrevio !== 'borrador') {
       const [monthlyCount, planLimit] = await Promise.all([
         getMonthlyEcfCount(teamId),
-        Promise.resolve(getPlanLimit(team.planName)),
+        Promise.resolve(getPlanLimit(team.planName, team.subscriptionStatus)),
       ]);
 
       if (planLimit !== -1 && monthlyCount >= planLimit) {
@@ -200,14 +202,30 @@ export async function POST(request: NextRequest) {
       ncfModificado:        data.ncfModificado,
       codigoModificacion:   data.codigoModificacion,
       encfOverride:         data.encfOverride,
+      skipRangeValidation,
     });
+
+    // Para pruebas de habilitación: inyectar X-Dgii-Ambiente.
+    // dev → TesteCF, prod → CerteCF (según ECF_HABILITACION_AMBIENTE o NODE_ENV).
+    const habilitacionHeaders: Record<string, string> | undefined = skipRangeValidation
+      ? { 'X-Dgii-Ambiente': process.env.ECF_HABILITACION_AMBIENTE
+            ?? (process.env.NODE_ENV === 'production' ? 'CerteCF' : 'TesteCF') }
+      : undefined;
+
+    // ── Log server-side del body exacto que se envía a ecf-api ──────────────────
+    console.log(
+      `[ecf/emitir] → ecf-api | tipo=${tipo} esRfce=${esRfce} contribuyente=${codigoPublico}`,
+      '\nDTO:', JSON.stringify(ecfApiDto, null, 2),
+      habilitacionHeaders ? `\nHeaders: ${JSON.stringify(habilitacionHeaders)}` : '',
+    );
 
     // Llamar a ecf-api
     let resultado;
+    console.log({codigoPublico, tipo, ecfApiDto, habilitacionHeaders})
     try {
       resultado = esRfce
-        ? await emision.emitirRfce32(codigoPublico, ecfApiDto)
-        : await emision.emitir(codigoPublico, tipo, ecfApiDto);
+        ? await emision.emitirRfce32(codigoPublico, ecfApiDto, habilitacionHeaders)
+        : await emision.emitir(codigoPublico, tipo, ecfApiDto, habilitacionHeaders);
     } catch (err) {
       if (err instanceof EcfApiError) {
         const esErrorNegocio = err.status >= 400 && err.status < 500;

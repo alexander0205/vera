@@ -33,11 +33,14 @@ export default async function Layout({ children }: { children: React.ReactNode }
           .where(eq(teams.id, teamId))
           .limit(1);
 
-        // Tiene plan activo si: planName existe Y no está cancelado/sin pagar
+        // Tiene plan activo si:
+        //   • status = 'admin' (acceso manual sin Stripe), O
+        //   • planName existe Y no está cancelado/sin pagar
         const hasActivePlan =
-          !!team?.planName &&
-          team.subscriptionStatus !== 'canceled' &&
-          team.subscriptionStatus !== 'unpaid';
+          team?.subscriptionStatus === 'admin' ||
+          (!!team?.planName &&
+            team.subscriptionStatus !== 'canceled' &&
+            team.subscriptionStatus !== 'unpaid');
 
         if (!hasActivePlan) {
           redirect('/pricing?reason=no-plan');

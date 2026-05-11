@@ -87,6 +87,16 @@ export async function POST(req: NextRequest) {
             eq(ecfDocuments.trackId, trackId),
           ));
 
+        // Log para depuración — ver qué dice DGII cuando rechaza
+        if (estadoInterno === 'RECHAZADO' || estadoInterno === 'ACEPTADO_CONDICIONAL') {
+          console.warn(
+            `[consultar-estados] DGII ${estadoInterno} | trackId=${trackId}`,
+            '\nMensajes:', JSON.stringify(resp.mensajesDgii, null, 2),
+          );
+        } else {
+          console.log(`[consultar-estados] DGII ${estadoInterno} | trackId=${trackId}`);
+        }
+
         results.push({
           trackId,
           estado:        resp.estado,
