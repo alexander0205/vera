@@ -152,12 +152,16 @@ function EstadoDgiiCard({
             <span className="text-gray-500">e-NCF:</span>
             <span className="text-gray-900 font-mono truncate">{factura.encf}</span>
           </div>
-          {factura.trackId && (
+          {factura.codigoSeguridad && (
             <div className="flex justify-between gap-2">
-              <span className="text-gray-500">Track ID:</span>
-              <span className="text-gray-900 font-mono truncate text-[11px]" title={factura.trackId}>{factura.trackId}</span>
+              <span className="text-gray-500">Código de seguridad:</span>
+              <span className="text-gray-900 font-mono">{factura.codigoSeguridad}</span>
             </div>
           )}
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500">Fecha emisión:</span>
+            <span className="text-gray-900">{fmtDate(factura.fechaEmision)}</span>
+          </div>
         </div>
       </div>
       {verUrl && (
@@ -737,20 +741,6 @@ export default function FacturaDetallePage() {
             )}
           </SectionCard>
 
-          {/* Mensajes DGII si hay */}
-          {factura.mensajesDgii && (
-            <section className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
-              <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                <h2 className="text-sm font-semibold text-amber-800 flex-1">Mensajes de la DGII</h2>
-              </header>
-              <div className="px-4 pb-4 md:px-5">
-                <pre className="text-xs text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-3 overflow-auto max-h-48">
-                  {JSON.stringify(factura.mensajesDgii, null, 2)}
-                </pre>
-              </div>
-            </section>
-          )}
         </div>
 
         {/* ━━━ RIGHT: sticky sidebar ━━━ */}
