@@ -5,7 +5,8 @@
  * Protegido por CRON_SECRET (header Authorization: Bearer <secret>).
  * Programado en vercel.json — schedule diario.
  *
- * Llama internamente a la misma lógica de POST /api/rnc/sync pero sin SSE.
+ * UPSERT en batches usando UNNEST. Compatible con schema rnc_padron actual:
+ *   rnc | nombre | nombre_comercial | categoria | estado | actividad
  */
 
 import { NextRequest } from 'next/server';
@@ -20,17 +21,7 @@ const BATCH_SIZE   = 5000;
 
 export const maxDuration = 300;
 
-interface PadronRow {
-  rnc: string;
-  razon_social: string | null;
-  nombre_comercial: string | null;
-  actividad_economica: string | null;
-  estado: string | null;
-  tipo: string | null;
-}
-
 export async function GET(req: NextRequest) {
-  // Auth: CRON_SECRET (Vercel cron auto-incluye este header)
   const auth = req.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
@@ -46,54 +37,69 @@ export async function GET(req: NextRequest) {
 
     // 2. Extraer TXT
     const zip = new AdmZip(zipBuf);
-    const entries = zip.getEntries();
-    const txtEntry = entries.find(e => e.entryName.toUpperCase().endsWith('.TXT'));
+    const txtEntry = zip.getEntries().find(e =>
+      e.entryName.toUpperCase().endsWith('.TXT') ||
+      e.entryName.toUpperCase().includes('RNC'),
+    );
     if (!txtEntry) throw new Error('TXT no encontrado en ZIP');
-    const txt = iconv.decode(txtEntry.getData(), 'win1252');
+    const content = iconv.decode(txtEntry.getData(), 'win1252');
+    const lines = content.split(/\r?\n/).filter(l => l.trim().length > 0);
 
-    // 3. Parsear
-    const rows: PadronRow[] = [];
-    for (const line of txt.split('\n')) {
-      const parts = line.split('|');
-      if (parts.length < 4) continue;
-      const rnc = parts[0]?.trim();
-      if (!rnc) continue;
-      rows.push({
-        rnc,
-        razon_social: parts[1]?.trim() || null,
-        nombre_comercial: parts[2]?.trim() || null,
-        actividad_economica: parts[3]?.trim() || null,
-        estado: parts[9]?.trim() || null,
-        tipo: parts[10]?.trim() || null,
-      });
-    }
+    // 3. Truncar y reinsertar (UPSERT también funciona pero TRUNCATE es atómico para refresh completo)
+    await client`TRUNCATE TABLE rnc_padron`;
 
-    // 4. UPSERT en batches
+    // 4. UPSERT en batches usando UNNEST
     let inserted = 0;
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const chunk = rows.slice(i, i + BATCH_SIZE);
-      const values = chunk
-        .map((_, idx) => {
-          const o = idx * 6;
-          return `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6})`;
-        })
-        .join(', ');
-      const params = chunk.flatMap(r => [
-        r.rnc, r.razon_social, r.nombre_comercial, r.actividad_economica, r.estado, r.tipo,
-      ]);
-      await client.unsafe(
-        `INSERT INTO rnc_padron (rnc, razon_social, nombre_comercial, actividad_economica, estado, tipo)
-         VALUES ${values}
-         ON CONFLICT (rnc) DO UPDATE SET
-           razon_social = EXCLUDED.razon_social,
-           nombre_comercial = EXCLUDED.nombre_comercial,
-           actividad_economica = EXCLUDED.actividad_economica,
-           estado = EXCLUDED.estado,
-           tipo = EXCLUDED.tipo`,
-        params,
-      );
-      inserted += chunk.length;
+    let rncs: string[] = [];
+    let nombres: string[] = [];
+    let nombresCom: string[] = [];
+    let cats: string[] = [];
+    let estados: string[] = [];
+    let activs: string[] = [];
+
+    async function flushBatch() {
+      if (rncs.length === 0) return;
+      await client`
+        INSERT INTO rnc_padron
+          (rnc, nombre, nombre_comercial, categoria, estado, actividad)
+        SELECT
+          UNNEST(${client.array(rncs)}::text[]),
+          UNNEST(${client.array(nombres)}::text[]),
+          NULLIF(UNNEST(${client.array(nombresCom)}::text[]), ''),
+          NULLIF(UNNEST(${client.array(cats)}::text[]), ''),
+          UNNEST(${client.array(estados)}::text[]),
+          NULLIF(UNNEST(${client.array(activs)}::text[]), '')
+        ON CONFLICT (rnc) DO UPDATE SET
+          nombre = EXCLUDED.nombre,
+          nombre_comercial = EXCLUDED.nombre_comercial,
+          categoria = EXCLUDED.categoria,
+          estado = EXCLUDED.estado,
+          actividad = EXCLUDED.actividad,
+          actualizado_at = NOW()
+      `;
+      inserted += rncs.length;
+      rncs = []; nombres = []; nombresCom = []; cats = []; estados = []; activs = [];
     }
+
+    for (const line of lines) {
+      const parts = line.split('|');
+      if (parts.length < 2) continue;
+      const rnc = (parts[0] ?? '').trim().substring(0, 20);
+      const nom = (parts[1] ?? '').trim().substring(0, 255);
+      if (!rnc || !nom) continue;
+
+      rncs.push(rnc);
+      nombres.push(nom);
+      nombresCom.push((parts[2] ?? '').trim().substring(0, 255));
+      cats.push((parts[3] ?? '').trim().substring(0, 3));
+      estados.push((parts[5] ?? '').trim() || '2');
+      activs.push((parts[6] ?? '').trim().substring(0, 10));
+
+      if (rncs.length >= BATCH_SIZE) {
+        await flushBatch();
+      }
+    }
+    await flushBatch();
 
     // 5. Marcar última sync
     const now = new Date().toISOString();
@@ -108,11 +114,10 @@ export async function GET(req: NextRequest) {
       await db.insert(systemSettings).values({ key: 'rnc_last_sync', value: now });
     }
 
-    const duration = ((Date.now() - started) / 1000).toFixed(1);
     return Response.json({
       ok: true,
       inserted,
-      durationSec: duration,
+      durationSec: ((Date.now() - started) / 1000).toFixed(1),
       syncedAt: now,
     });
   } catch (e) {
