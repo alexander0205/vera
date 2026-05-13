@@ -80,21 +80,21 @@ export function BottomActionBar({
                 type="button"
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 onClick={() => { setShowGuardarMenu(false); onEmitir('borrador'); }}>
-                <FileText className="h-4 w-4 text-gray-400" />
+                <FileText className="h-4 w-4 text-gray-600" />
                 Guardar como borrador
               </button>
               <button
                 type="button"
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'imprimir' }); }}>
-                <Printer className="h-4 w-4 text-gray-400" />
+                <Printer className="h-4 w-4 text-gray-600" />
                 Guardar e imprimir
               </button>
               <button
                 type="button"
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'correo' }); }}>
-                <Mail className="h-4 w-4 text-gray-400" />
+                <Mail className="h-4 w-4 text-gray-600" />
                 Guardar y enviar por correo
               </button>
             </div>

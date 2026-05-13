@@ -75,13 +75,13 @@ export function RetencionesSection({
                 <SelectValue placeholder="Seleccionar retención..." />
               </SelectTrigger>
               <SelectContent>
-                <div className="px-2 py-1 text-xs font-semibold text-gray-400 uppercase">ITBIS</div>
+                <div className="px-2 py-1 text-xs font-semibold text-gray-600 uppercase">ITBIS</div>
                 {RETENCIONES_PREDEFINIDAS.filter(r => r.tipo === 'itbis').map(r => (
                   <SelectItem key={r.id} value={`${r.id}__${idx}`}>
-                    {r.nombre} — {r.porcentaje}% <span className="text-xs text-gray-400 ml-1">({r.descripcion})</span>
+                    {r.nombre} — {r.porcentaje}% <span className="text-xs text-gray-600 ml-1">({r.descripcion})</span>
                   </SelectItem>
                 ))}
-                <div className="px-2 py-1 text-xs font-semibold text-gray-400 uppercase border-t mt-1">ISR</div>
+                <div className="px-2 py-1 text-xs font-semibold text-gray-600 uppercase border-t mt-1">ISR</div>
                 {RETENCIONES_PREDEFINIDAS.filter(r => r.tipo === 'isr').map(r => (
                   <SelectItem key={r.id} value={`${r.id}__${idx}`}>
                     {r.nombre} — {r.porcentaje}%
@@ -90,7 +90,7 @@ export function RetencionesSection({
               </SelectContent>
             </Select>
             <div className="relative w-36 shrink-0">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">RD$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-600">RD$</span>
               <Input
                 type="number" min={0} step={0.01}
                 className="h-9 text-sm pl-9 text-right"

@@ -4,8 +4,9 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Autocomplete } from '../components/Autocomplete';
 import { calcularMontoItem } from '../utils/calculos';
 import { TASA_ITBIS } from '../utils/types';
@@ -32,13 +33,34 @@ export function ItemsTable({
         <table className="w-full min-w-[900px]">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/60">
-              <th className="text-left text-xs font-medium text-gray-500 px-4 py-3 w-[22%]">Producto</th>
+              <th className="text-left text-xs font-medium text-gray-500 px-4 py-3 w-[22%]">
+                <span className="inline-flex items-center gap-1">
+                  Producto
+                  <Tooltip text="DGII #84 · nombreItem · máx 80 caracteres">
+                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  </Tooltip>
+                </span>
+              </th>
               <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">Referencia</th>
-              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">Precio</th>
+              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">
+                <span className="inline-flex items-center gap-1">
+                  Precio
+                  <Tooltip text="DGII #94 · precioUnitarioItem">
+                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  </Tooltip>
+                </span>
+              </th>
               <th className="text-center text-xs font-medium text-gray-500 px-2 py-3 w-[7%]">Desc %</th>
               <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[10%]">Impuesto</th>
               <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[18%]">Descripción</th>
-              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3 w-[8%]">Cantidad</th>
+              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3 w-[8%]">
+                <span className="inline-flex items-center gap-1">
+                  Cantidad
+                  <Tooltip text="DGII #91 · cantidadItem">
+                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  </Tooltip>
+                </span>
+              </th>
               <th className="text-right text-xs font-medium text-gray-500 px-2 py-3 w-[10%]">Total</th>
               <th className="w-8"></th>
             </tr>
@@ -58,7 +80,7 @@ export function ItemsTable({
                     renderOption={(p) => (
                       <div>
                         <p className="font-medium">{p.nombre}</p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-gray-600">
                           DOP {p.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })} · {p.tasaItbis === 'exento' ? 'Exento' : `ITBIS ${parseFloat(p.tasaItbis) * 100}%`}
                         </p>
                       </div>
@@ -91,7 +113,7 @@ export function ItemsTable({
                       onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
                       className="h-9 text-sm text-center pr-5"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-600">%</span>
                   </div>
                 </td>
                 <td className="px-2 py-2">
@@ -113,7 +135,7 @@ export function ItemsTable({
                 </td>
                 <td className="px-2 py-2">
                   <textarea
-                    className="w-full h-[68px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                    className="w-full h-[68px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
                     placeholder="Descripción..."
                     value={item.descripcionItem}
                     onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
@@ -160,7 +182,7 @@ export function ItemsTable({
           + Agregar línea
         </button>
         <div className="flex items-center gap-6">
-          <button type="button" className="text-gray-400 text-sm font-medium flex items-center gap-1 cursor-not-allowed" title="Próximamente">
+          <button type="button" className="text-gray-600 text-sm font-medium flex items-center gap-1 cursor-not-allowed" title="Próximamente">
             + Agregar Conduce
           </button>
         </div>

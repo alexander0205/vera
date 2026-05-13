@@ -22,9 +22,11 @@ export function Autocomplete<T extends { id: number }>({
   const [open, setOpen]         = useState(false);
   const [loading, setLoading]   = useState(false);
   const [dropRect, setDropRect] = useState<DOMRect | null>(null);
+  const [highlight, setHighlight] = useState(0);
   const timer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef              = useRef<HTMLDivElement>(null);
   const dropRef                 = useRef<HTMLDivElement>(null);
+  const listboxId               = useRef(`autocomplete-listbox-${Math.random().toString(36).slice(2, 9)}`).current;
 
   // Calcula posición del dropdown en coordenadas del viewport (fixed)
   const calcRect = useCallback(() => {
@@ -62,6 +64,7 @@ export function Autocomplete<T extends { id: number }>({
       try {
         const r = await onSearch(v);
         setResults(r);
+        setHighlight(0);
         calcRect();
         setOpen(true);
       } finally {
@@ -75,6 +78,27 @@ export function Autocomplete<T extends { id: number }>({
     setQuery('');
     setOpen(false);
     setResults([]);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || results.length === 0) {
+      if (e.key === 'Escape') setOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight((h) => (h + 1) % results.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => (h - 1 + results.length) % results.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const item = results[highlight];
+      if (item) select(item);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+    }
   }
 
   if (value) {
@@ -91,6 +115,8 @@ export function Autocomplete<T extends { id: number }>({
   const dropdown = open && dropRect ? (
     <div
       ref={dropRef}
+      id={listboxId}
+      role="listbox"
       style={{
         position: 'fixed',
         top:   dropRect.bottom + 4,
@@ -104,10 +130,13 @@ export function Autocomplete<T extends { id: number }>({
       {results.length === 0 ? (
         <div className="px-4 py-3 text-sm text-gray-500">No se han encontrado resultados</div>
       ) : (
-        results.map((item) => (
+        results.map((item, idx) => (
           <button key={item.id} type="button"
-            className="w-full text-left px-4 py-2.5 hover:bg-gray-50 text-sm border-b border-gray-100 last:border-0"
+            role="option"
+            aria-selected={idx === highlight}
+            className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-100 last:border-0 ${idx === highlight ? 'bg-teal-50' : 'hover:bg-gray-50'}`}
             onMouseDown={(e) => e.preventDefault()}
+            onMouseEnter={() => setHighlight(idx)}
             onClick={() => select(item)}>
             {renderOption(item)}
           </button>
@@ -127,15 +156,21 @@ export function Autocomplete<T extends { id: number }>({
   return (
     <div ref={wrapperRef} className="relative">
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-600" />
         <Input
           className="pl-8 h-9 text-sm"
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleInput(e.target.value)}
           onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
+          onKeyDown={handleKeyDown}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          aria-activedescendant={open && results[highlight] ? `${listboxId}-${results[highlight].id}` : undefined}
         />
-        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-400" />}
+        {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-600" />}
       </div>
       {typeof document !== 'undefined' && dropdown && createPortal(dropdown, document.body)}
     </div>

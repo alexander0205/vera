@@ -80,7 +80,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
                 if (t.disabled) {
                   return (
                     <div key={t.value} title="Próximamente"
-                      className="relative flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium cursor-not-allowed opacity-40 bg-white border-gray-200 text-gray-400 select-none">
+                      className="relative flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium cursor-not-allowed opacity-40 bg-white border-gray-200 text-gray-600 select-none">
                       {t.label}
                     </div>
                   );
@@ -99,7 +99,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
                 );
               })}
             </div>
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs text-gray-600 mt-2">
               Ten en cuenta que, una vez creado, no podrás cambiar el tipo del artículo.
             </p>
           </div>

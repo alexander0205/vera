@@ -50,7 +50,7 @@ export function HeaderDocumento({
             className="w-[140px] h-[45px] border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-teal-400 transition-colors shrink-0"
             title="Subir logo en Configuración"
           >
-            <span className="text-[10px] text-gray-400 text-center leading-tight px-1">
+            <span className="text-[10px] text-gray-600 text-center leading-tight px-1">
               Colocar mi logo<br />178 x 51 pixeles
             </span>
           </a>
@@ -60,7 +60,7 @@ export function HeaderDocumento({
             {empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Tu empresa'}
           </p>
           {empresa?.rnc && (
-            <p className="text-xs text-gray-400 mt-0.5">RNC: {empresa.rnc}</p>
+            <p className="text-xs text-gray-600 mt-0.5">RNC: {empresa.rnc}</p>
           )}
         </div>
       </div>
@@ -75,7 +75,7 @@ export function HeaderDocumento({
             onChangeTipo(cat.tipos[0].codigo);
           }}
         >
-          <SelectTrigger className="w-auto ml-auto border-0 bg-transparent text-gray-400 hover:text-gray-600 text-xs h-6 pr-1 shadow-none focus:ring-0 justify-end gap-1">
+          <SelectTrigger className="w-auto ml-auto border-0 bg-transparent text-gray-600 hover:text-gray-600 text-xs h-6 pr-1 shadow-none focus:ring-0 justify-end gap-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
@@ -115,7 +115,7 @@ export function HeaderDocumento({
             <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Sin secuencias disponibles</span>
           )}
           {!secuencia?.sinNcf && (
-            <button type="button" onClick={onEditarNcf} className="text-gray-400 hover:text-gray-600 ml-0.5">
+            <button type="button" onClick={onEditarNcf} className="text-gray-600 hover:text-gray-600 ml-0.5">
               <Settings className="h-4 w-4" />
             </button>
           )}

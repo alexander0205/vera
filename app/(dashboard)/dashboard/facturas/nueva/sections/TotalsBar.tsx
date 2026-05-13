@@ -26,7 +26,7 @@ export function TotalsBar({ empresa, totales, retenciones, totalNeto }: Props) {
           className="w-[178px] h-[51px] border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-teal-400 transition-colors shrink-0 group"
           title="Agregar firma en Configuración"
         >
-          <span className="text-[10px] text-gray-400 group-hover:text-teal-500 text-center leading-tight px-2 transition-colors">
+          <span className="text-[10px] text-gray-600 group-hover:text-teal-500 text-center leading-tight px-2 transition-colors">
             Agregar firma<br />en Configuración
           </span>
         </a>

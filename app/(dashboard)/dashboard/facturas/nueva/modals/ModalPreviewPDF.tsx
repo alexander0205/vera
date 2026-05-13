@@ -37,7 +37,7 @@ export function ModalPreviewPDF({
               title="Vista previa del comprobante"
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-gray-400">
+            <div className="flex items-center justify-center h-full text-gray-600">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
               Cargando PDF…
             </div>

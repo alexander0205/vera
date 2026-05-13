@@ -93,7 +93,7 @@ export function PagoRecibido({
               </SelectContent>
             </Select>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">RD$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-600 font-medium">RD$</span>
               <Input
                 type="number" min={0} step={0.01}
                 className="h-9 text-sm pl-10"

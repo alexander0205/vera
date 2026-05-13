@@ -5,9 +5,11 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, Info, Plus } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
+import { Tooltip } from '@/components/ui/tooltip';
+import { getCampoHint, esCampoRequerido } from '@/lib/factura/validator/ui-helpers';
 import { Autocomplete } from '../components/Autocomplete';
 import type { Cliente, Plazo } from '../utils/types';
 
@@ -79,7 +81,7 @@ export function ClienteSection({
               renderOption={(c) => (
                 <div>
                   <p className="font-medium">{c.razonSocial}</p>
-                  <p className="text-xs text-gray-400">{[c.rnc, c.email].filter(Boolean).join(' · ')}</p>
+                  <p className="text-xs text-gray-600">{[c.rnc, c.email].filter(Boolean).join(' · ')}</p>
                 </div>
               )}
             />
@@ -94,9 +96,12 @@ export function ClienteSection({
 
         <div className="space-y-2.5">
           <div>
-            <Label className="text-xs text-gray-400 uppercase tracking-wide">
+            <Label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1">
               {regla?.rncLabel ?? 'RNC o Cédula'}
-              {regla?.requiereRncComprador && <span className="text-red-500 ml-0.5">*</span>}
+              {regla?.requiereRncComprador && <span className="text-red-500 ml-0.5" aria-label="campo obligatorio">*</span>}
+              <Tooltip text={getCampoHint(tipoEcf, 'rncComprador') || 'DGII #38 · 9 u 11 dígitos'}>
+                <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+              </Tooltip>
             </Label>
             <RncSearch
               className="mt-1"
@@ -117,7 +122,7 @@ export function ClienteSection({
             />
           </div>
           <div>
-            <Label className="text-xs text-gray-400 uppercase tracking-wide">Teléfono</Label>
+            <Label className="text-xs text-gray-600 uppercase tracking-wide">Teléfono</Label>
             <Input
               className="mt-1 h-9"
               placeholder="___-___-____"
@@ -129,7 +134,7 @@ export function ClienteSection({
 
         {!clienteSeleccionado && (
           <div>
-            <Label className="text-xs text-gray-400 uppercase tracking-wide">Email (para envío)</Label>
+            <Label className="text-xs text-gray-600 uppercase tracking-wide">Email (para envío)</Label>
             <Input className="mt-1 h-9" type="email" placeholder="facturacion@empresa.com" value={emailManual} onChange={(e) => setEmailManual(e.target.value)} />
           </div>
         )}
@@ -144,11 +149,11 @@ export function ClienteSection({
         {regla?.requiereNcfModificado && (
           <>
             <div>
-              <Label className="text-xs text-gray-400 uppercase tracking-wide">e-NCF que se modifica <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide">e-NCF que se modifica <span className="text-red-500">*</span></Label>
               <Input className="mt-1 h-9" placeholder="E310000000001" value={ncfModificado} onChange={(e) => setNcfModificado(e.target.value.toUpperCase())} maxLength={13} />
             </div>
             <div>
-              <Label className="text-xs text-gray-400 uppercase tracking-wide">Código de modificación <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide">Código de modificación <span className="text-red-500">*</span></Label>
               <Select value={codigoModificacion || undefined} onValueChange={setCodigoModificacion}>
                 <SelectTrigger className="mt-1 h-9">
                   <SelectValue placeholder="Selecciona el motivo…" />
@@ -163,7 +168,7 @@ export function ClienteSection({
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-gray-400 uppercase tracking-wide">Fecha del e-NCF original <span className="text-red-500">*</span></Label>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide">Fecha del e-NCF original <span className="text-red-500">*</span></Label>
               <Input
                 className="mt-1 h-9"
                 type="date"
@@ -179,7 +184,7 @@ export function ClienteSection({
       {/* RIGHT: dates */}
       <div className="space-y-3">
         <div>
-          <Label className="text-xs text-gray-400 uppercase tracking-wide">Fecha <span className="text-red-500">*</span></Label>
+          <Label className="text-xs text-gray-600 uppercase tracking-wide">Fecha <span className="text-red-500">*</span></Label>
           <Input
             className="mt-1 h-9"
             type="date"
@@ -188,7 +193,7 @@ export function ClienteSection({
           />
         </div>
         <div>
-          <Label className="text-xs text-gray-400 uppercase tracking-wide">Plazo de pago</Label>
+          <Label className="text-xs text-gray-600 uppercase tracking-wide">Plazo de pago</Label>
           <Select value={plazoId} onValueChange={onPlazoChange}>
             <SelectTrigger className="mt-1 h-9">
               <SelectValue />
@@ -205,7 +210,7 @@ export function ClienteSection({
         </div>
         {(plazoActual?.esManual || (plazoActual?.dias != null)) && (
           <div>
-            <Label className="text-xs text-gray-400 uppercase tracking-wide">
+            <Label className="text-xs text-gray-600 uppercase tracking-wide">
               Vencimiento {plazoActual?.esManual && <span className="text-red-500">*</span>}
             </Label>
             <Input
@@ -219,7 +224,13 @@ export function ClienteSection({
         )}
         {muestraTipoIngresos && (
           <div>
-            <Label className="text-xs text-gray-400 uppercase tracking-wide">Tipo de ingresos</Label>
+            <Label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1">
+              Tipo de ingresos
+              {esCampoRequerido(tipoEcf, 'tipoIngresos') && <span className="text-red-500 ml-0.5" aria-label="campo obligatorio">*</span>}
+              <Tooltip text={getCampoHint(tipoEcf, 'tipoIngresos') || 'DGII · enum 1-6'}>
+                <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+              </Tooltip>
+            </Label>
             <Select value={tipoIngresos || '1'} onValueChange={setTipoIngresos}>
               <SelectTrigger className="mt-1 h-9">
                 <SelectValue />

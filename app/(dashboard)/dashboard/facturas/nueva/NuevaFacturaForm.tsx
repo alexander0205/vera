@@ -154,6 +154,8 @@ export default function NuevaFacturaForm({
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState<string | null>(null);
   const [resultado, setResultado]       = useState<ResultadoEmision | null>(null);
+  const [draftKey] = useState(() => `emitedo:draft:${initialData?.id ?? 'new'}`);
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const [vistaPrevia, setVistaPrevia]   = useState(false);
   const [previewDocId, setPreviewDocId] = useState<number | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -197,6 +199,47 @@ export default function NuevaFacturaForm({
       if (prefs.vendedor)     setShowVendedor(true);
     } catch {}
   }, []);
+
+  // ── Autosave: restore draft on mount (only when no initialData) ───────────
+  useEffect(() => {
+    if (initialData) { setDraftHydrated(true); return; }
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.tipoEcf)             setTipoEcf(data.tipoEcf);
+        if (data.rncManual)           setRncManual(data.rncManual);
+        if (data.rncManualNombre)     setRncManualNombre(data.rncManualNombre);
+        if (data.emailManual)         setEmailManual(data.emailManual);
+        if (data.telefonoManual)      setTelefonoManual(data.telefonoManual);
+        if (data.notas)               setNotas(data.notas);
+        if (data.terminosCondiciones) setTerminos(data.terminosCondiciones);
+        if (data.comentario)          setComentario(data.comentario);
+        if (data.tipoIngresos)        setTipoIngresos(data.tipoIngresos);
+        if (Array.isArray(data.retenciones)) setRetenciones(data.retenciones);
+      }
+    } catch {}
+    setDraftHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Autosave: persist draft (debounced) ───────────────────────────────────
+  useEffect(() => {
+    if (!draftHydrated) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({
+          tipoEcf, rncManual, rncManualNombre, emailManual, telefonoManual,
+          notas, terminosCondiciones, comentario, tipoIngresos, retenciones,
+          savedAt: Date.now(),
+        }));
+      } catch {}
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [
+    draftHydrated, draftKey, tipoEcf, rncManual, rncManualNombre, emailManual,
+    telefonoManual, notas, terminosCondiciones, comentario, tipoIngresos, retenciones,
+  ]);
 
   function toggleOpcion(key: string, value: boolean) {
     try {
@@ -447,6 +490,10 @@ export default function NuevaFacturaForm({
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modo)) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
+      // Clear draft only on a fully successful emisión (not draft saves)
+      if (modo === 'emitir') {
+        try { localStorage.removeItem(draftKey); } catch {}
+      }
       if (opts?.andThen === 'nueva') {
         resetForm();
         return;
@@ -476,6 +523,21 @@ export default function NuevaFacturaForm({
     e.preventDefault();
     await emitir('emitir');
   }
+
+  // ─── Cmd/Ctrl + Enter → emitir ────────────────────────────────────────────
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!loading && !resultado) {
+          void emitir('emitir');
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, resultado]);
 
   // ─── Guardar NCF modal ────────────────────────────────────────────────────
   async function handleGuardarNcf() {
@@ -532,6 +594,7 @@ export default function NuevaFacturaForm({
   // ─── Formulario ───────────────────────────────────────────────────────────
   return (
     <div className="bg-[#eef0f7] min-h-full">
+      <a href="#main-content" className="skip-link">Saltar al contenido</a>
       <div className="p-6">
         <NavBar
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
@@ -548,6 +611,7 @@ export default function NuevaFacturaForm({
         )}
 
         <form
+          id="main-content"
           onSubmit={handleSubmit}
           onKeyDown={(e) => {
             // Prevent accidental Enter submit (only TEXTAREA + explicit submit button allowed)

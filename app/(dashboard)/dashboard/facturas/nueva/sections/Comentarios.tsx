@@ -19,14 +19,14 @@ export function Comentarios({ comentario, setComentario }: Props) {
       </div>
       <div className="px-6 pb-5">
         <textarea
-          className="w-full min-h-[80px] text-sm border border-gray-200 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-400"
+          className="w-full min-h-[80px] text-sm border border-gray-200 rounded-lg p-3 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-600"
           placeholder="Escribe un comentario"
           maxLength={280}
           value={comentario}
           onChange={(e) => setComentario(e.target.value)}
         />
         <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-gray-400">{comentario.length}/280</p>
+          <p className="text-xs text-gray-600">{comentario.length}/280</p>
           {comentario.trim() && (
             <Button
               type="button" size="sm"

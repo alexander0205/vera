@@ -72,7 +72,7 @@ export function ModalEditarNCF({
           <div className="space-y-1.5">
             <Label className="text-sm">Pie de factura</Label>
             <textarea
-              className="w-full min-h-[80px] text-sm border border-gray-200 rounded-md p-2 resize-y focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+              className="w-full min-h-[80px] text-sm border border-gray-200 rounded-md p-2 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
               placeholder="Texto que aparecerá al pie del comprobante..."
               value={ncfPieFactura}
               onChange={(e) => setNcfPieFactura(e.target.value)}
