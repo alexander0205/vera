@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Info, X, Settings2 } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Autocomplete } from '../components/Autocomplete';
@@ -23,6 +22,9 @@ interface Props {
   onRemoveItem: (id: number) => void;
   onUpdateItem: (id: number, field: keyof ItemLinea, value: string | number) => void;
   onOpenNuevoProducto: (idx: number) => void;
+  /** Estado lifted al padre — controla visibilidad de columnas Referencia/Descripción */
+  showReferencia: boolean;
+  showDescripcion: boolean;
 }
 
 function readColsPref(): { referencia: boolean; descripcion: boolean } {
@@ -48,68 +50,10 @@ function writeColsPref(cols: { referencia: boolean; descripcion: boolean }) {
 export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto,
   onAddItem, onRemoveItem, onUpdateItem, onOpenNuevoProducto,
+  showReferencia, showDescripcion,
 }: Props) {
-  // Hide Referencia + Descripción by default; persist user choice
-  const [showReferencia, setShowReferencia]   = useState(false);
-  const [showDescripcion, setShowDescripcion] = useState(false);
-  const [showColsMenu, setShowColsMenu]       = useState(false);
-
-  // Load prefs on mount; auto-show columns if any item has content (borrador edit)
-  useEffect(() => {
-    const prefs = readColsPref();
-    const hasRef = items.some(i => (i.referencia ?? '').trim().length > 0);
-    const hasDesc = items.some(i => (i.descripcionItem ?? '').trim().length > 0);
-    setShowReferencia(prefs.referencia || hasRef);
-    setShowDescripcion(prefs.descripcion || hasDesc);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function toggleReferencia(v: boolean) { setShowReferencia(v); writeColsPref({ referencia: v, descripcion: showDescripcion }); }
-  function toggleDescripcion(v: boolean) { setShowDescripcion(v); writeColsPref({ referencia: showReferencia, descripcion: v }); }
-
   return (
     <div>
-      {/* Top action row — Columnas toggle */}
-      <div className="flex items-center justify-end pb-2 -mt-1">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowColsMenu(v => !v)}
-            aria-label="Mostrar/ocultar columnas"
-            className="text-gray-500 hover:text-gray-700 text-xs font-medium flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-50 transition-colors"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-            Columnas
-          </button>
-          {showColsMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowColsMenu(false)} aria-hidden="true" />
-              <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-52">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mostrar columnas</p>
-                <label className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-gray-50 rounded px-2 -mx-1">
-                  <span className="text-sm text-gray-700">Referencia</span>
-                  <input
-                    type="checkbox"
-                    checked={showReferencia}
-                    onChange={(e) => toggleReferencia(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                  />
-                </label>
-                <label className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-gray-50 rounded px-2 -mx-1">
-                  <span className="text-sm text-gray-700">Descripción</span>
-                  <input
-                    type="checkbox"
-                    checked={showDescripcion}
-                    onChange={(e) => toggleDescripcion(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                  />
-                </label>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
       {/* ───────── MOBILE: card list (< md) ───────── */}
       <div className="md:hidden divide-y divide-gray-100 -mx-4 md:-mx-5">
         {items.map((item, idx) => (
@@ -409,15 +353,12 @@ export function ItemsTable({
         </table>
       </div>
 
-      <div className="pt-3 mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50">
+      <div className="pt-3 mt-1 border-t border-gray-50">
         <button
           type="button"
           onClick={onAddItem}
           className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
           + Agregar línea
-        </button>
-        <button type="button" className="text-gray-600 text-sm font-medium hidden md:flex items-center gap-1 cursor-not-allowed py-2 -my-2" title="Próximamente">
-          + Agregar Conduce
         </button>
       </div>
     </div>

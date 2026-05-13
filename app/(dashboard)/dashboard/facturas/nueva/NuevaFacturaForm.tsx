@@ -18,6 +18,7 @@ import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
 import { DetallesSection } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
+import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
 import { Terminos, Notas } from './sections/TerminosNotas';
@@ -126,6 +127,35 @@ export default function NuevaFacturaForm({
     if (!initialData?.retenciones) return [];
     try { return JSON.parse(initialData.retenciones); } catch { return []; }
   });
+
+  // ── Items columns visibility (Referencia/Descripción) — persistido ────────
+  const [showItemRef, setShowItemRef] = useState(false);
+  const [showItemDesc, setShowItemDesc] = useState(false);
+  useEffect(() => {
+    try {
+      const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
+      const cols = prefs.itemsCols ?? {};
+      // Auto-show si borrador tiene contenido
+      const hasRef = (initialData?.lineasJson ? JSON.parse(initialData.lineasJson) : items).some(
+        (i: { referencia?: string }) => (i.referencia ?? '').trim().length > 0,
+      );
+      const hasDesc = (initialData?.lineasJson ? JSON.parse(initialData.lineasJson) : items).some(
+        (i: { descripcionItem?: string }) => (i.descripcionItem ?? '').trim().length > 0,
+      );
+      setShowItemRef(Boolean(cols.referencia) || hasRef);
+      setShowItemDesc(Boolean(cols.descripcion) || hasDesc);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  function persistCols(ref: boolean, desc: boolean) {
+    try {
+      const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
+      prefs.itemsCols = { referencia: ref, descripcion: desc };
+      localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
+    } catch {}
+  }
+  function handleToggleRef(v: boolean) { setShowItemRef(v); persistCols(v, showItemDesc); }
+  function handleToggleDesc(v: boolean) { setShowItemDesc(v); persistCols(showItemRef, v); }
 
   // ── NCF gear modal ─────────────────────────────────────────────────────────
   const [showEditarNcf, setShowEditarNcf]     = useState(false);
@@ -687,7 +717,19 @@ export default function NuevaFacturaForm({
                 />
               </SectionCard>
 
-              <SectionCard number={3} title="Productos y servicios" icon={Package}>
+              <SectionCard
+                number={3}
+                title="Productos y servicios"
+                icon={Package}
+                actions={
+                  <ColumnasToggle
+                    showReferencia={showItemRef}
+                    showDescripcion={showItemDesc}
+                    onToggleReferencia={handleToggleRef}
+                    onToggleDescripcion={handleToggleDesc}
+                  />
+                }
+              >
                 <ItemsTable
                   items={items}
                   regla={regla}
@@ -697,6 +739,8 @@ export default function NuevaFacturaForm({
                   onRemoveItem={removeItem}
                   onUpdateItem={updateItem}
                   onOpenNuevoProducto={(idx) => setShowNuevoProductoIdx(idx)}
+                  showReferencia={showItemRef}
+                  showDescripcion={showItemDesc}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}
