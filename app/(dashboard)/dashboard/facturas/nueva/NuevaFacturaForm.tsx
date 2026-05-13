@@ -5,16 +5,22 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
+  StickyNote, ScrollText, MessageSquare, CreditCard,
+} from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 
 import { NavBar, TopBar } from './sections/TopBar';
-import { HeaderDocumento } from './sections/HeaderDocumento';
+import { CompactHeader } from './sections/CompactHeader';
+import { SectionCard } from './sections/SectionCard';
+import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
+import { DetallesSection } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
 import { RetencionesSection } from './sections/RetencionesSection';
-import { TotalsBar } from './sections/TotalsBar';
-import { TerminosNotas } from './sections/TerminosNotas';
+import { ResumenSidebar } from './sections/ResumenSidebar';
+import { Terminos, Notas } from './sections/TerminosNotas';
 import { PieFactura } from './sections/PieFactura';
 import { PagoRecibido } from './sections/PagoRecibido';
 import { Comentarios } from './sections/Comentarios';
@@ -107,10 +113,8 @@ export default function NuevaFacturaForm({
   const [fechaEmision, setFechaEmision]       = useState(() => new Date().toISOString().slice(0, 10));
   const [fechaLimitePago, setFechaLimitePago] = useState(initialData?.fechaLimitePago ?? '');
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
-  // Tipos 33, 34 — referencia al NCF que se modifica
   const [codigoModificacion, setCodigoModificacion] = useState<string>('');
   const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
-  // Tipos 31, 32, 44, 45, 46 — clasificación del ingreso
   const [tipoIngresos, setTipoIngresos]       = useState<string>('1');
 
   // ── Items (useReducer) ─────────────────────────────────────────────────────
@@ -182,7 +186,7 @@ export default function NuevaFacturaForm({
   const [showNuevaLista, setShowNuevaLista]       = useState(false);
   const [showNuevoVendedor, setShowNuevoVendedor] = useState(false);
 
-  // ── Próximo NCF (con caché por tipo) ───────────────────────────────────────
+  // ── Próximo NCF ───────────────────────────────────────────────────────────
   const onPieDeFactura = useCallback((p: string) => setPieFactura(p), []);
   const { secuencia, invalidar: invalidarSecuencia } = useSecuencia(tipoEcf, onPieDeFactura);
 
@@ -463,7 +467,6 @@ export default function NuevaFacturaForm({
     const err = modo === 'borrador' ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null) : validar();
     if (err) { setError(err); return; }
 
-    // Validación schema-driven (solo en modo emisión, no para borradores)
     if (modo === 'emitir') {
       try {
         const payload = buildPayload('emitir');
@@ -480,7 +483,6 @@ export default function NuevaFacturaForm({
           return;
         }
       } catch (e) {
-        // Si el validator falla por tipoEcf desconocido o similar, seguimos sin bloquear
         console.warn('[validator] fallo silencioso:', e);
       }
     }
@@ -490,7 +492,6 @@ export default function NuevaFacturaForm({
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modo)) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
-      // Clear draft only on a fully successful emisión (not draft saves)
       if (modo === 'emitir') {
         try { localStorage.removeItem(draftKey); } catch {}
       }
@@ -614,7 +615,6 @@ export default function NuevaFacturaForm({
           id="main-content"
           onSubmit={handleSubmit}
           onKeyDown={(e) => {
-            // Prevent accidental Enter submit (only TEXTAREA + explicit submit button allowed)
             const t = e.target as HTMLElement;
             const isInput = t.tagName === 'INPUT' || t.tagName === 'SELECT';
             const isSubmitBtn = t.tagName === 'BUTTON' && (t as HTMLButtonElement).type === 'submit';
@@ -637,86 +637,127 @@ export default function NuevaFacturaForm({
             onOpenNuevoVendedor={() => setShowNuevoVendedor(true)}
           />
 
-          {/* ── WHITE DOCUMENT CARD ─────────────────────────────────────── */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <HeaderDocumento
-              empresa={empresa}
-              categoriaId={categoriaId} setCategoriaId={setCategoriaId}
-              tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
-              secuencia={secuencia}
-              onEditarNcf={() => {
-                setNcfSiguienteNum('');
-                setNcfFechaVenc(secuencia?.fechaVencimiento ? secuencia.fechaVencimiento.slice(0, 10) : '');
-                setNcfPieFactura(secuencia?.pieDeFactura ?? '');
-                setNcfError(null);
-                setShowEditarNcf(true);
-              }}
-            />
+          {/* ── SPLIT LAYOUT: form left, sticky sidebar right ─────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 lg:gap-5">
+            {/* LEFT column */}
+            <div className="space-y-4 min-w-0">
+              <CompactHeader
+                empresa={empresa}
+                categoriaId={categoriaId} setCategoriaId={setCategoriaId}
+                tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
+                secuencia={secuencia}
+                fechaEmision={fechaEmision}
+                onEditarNcf={() => {
+                  setNcfSiguienteNum('');
+                  setNcfFechaVenc(secuencia?.fechaVencimiento ? secuencia.fechaVencimiento.slice(0, 10) : '');
+                  setNcfPieFactura(secuencia?.pieDeFactura ?? '');
+                  setNcfError(null);
+                  setShowEditarNcf(true);
+                }}
+              />
 
-            <ClienteSection
-              clienteSeleccionado={clienteSeleccionado}
-              buscarClientes={buscarClientes}
-              onSelectCliente={seleccionarCliente}
-              onClearCliente={limpiarCliente}
-              onOpenNuevoCliente={() => setShowNuevoCliente(true)}
-              regla={regla}
-              rncManual={rncManual} rncManualNombre={rncManualNombre}
-              setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
-              emailManual={emailManual} setEmailManual={setEmailManual}
-              telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
-              tipoEcf={tipoEcf} totalDocumento={totales.total}
-              ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
-              codigoModificacion={codigoModificacion} setCodigoModificacion={setCodigoModificacion}
-              fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
-              tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
-              fechaEmision={fechaEmision} setFechaEmision={setFechaEmision}
-              plazoId={plazoId} onPlazoChange={handlePlazoChange}
-              plazosDisponibles={plazosDisponibles}
-              plazoActual={plazoActual}
-              fechaLimitePago={fechaLimitePago} setFechaLimitePago={setFechaLimitePago}
-              today={today}
-            />
+              <SectionCard number={1} title="Datos del cliente" icon={User}>
+                <ClienteSection
+                  clienteSeleccionado={clienteSeleccionado}
+                  buscarClientes={buscarClientes}
+                  onSelectCliente={seleccionarCliente}
+                  onClearCliente={limpiarCliente}
+                  onOpenNuevoCliente={() => setShowNuevoCliente(true)}
+                  regla={regla}
+                  rncManual={rncManual} rncManualNombre={rncManualNombre}
+                  setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
+                  emailManual={emailManual} setEmailManual={setEmailManual}
+                  telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
+                  tipoEcf={tipoEcf} totalDocumento={totales.total}
+                />
+              </SectionCard>
 
-            <ItemsTable
-              items={items}
-              regla={regla}
-              buscarProductos={buscarProductos}
-              onSelectProducto={seleccionarProducto}
-              onAddItem={addItem}
-              onRemoveItem={removeItem}
-              onUpdateItem={updateItem}
-              onOpenNuevoProducto={(idx) => setShowNuevoProductoIdx(idx)}
-            />
+              <SectionCard number={2} title="Detalles de la factura" icon={Calendar}>
+                <DetallesSection
+                  regla={regla} tipoEcf={tipoEcf}
+                  fechaEmision={fechaEmision} setFechaEmision={setFechaEmision}
+                  plazoId={plazoId} onPlazoChange={handlePlazoChange}
+                  plazosDisponibles={plazosDisponibles} plazoActual={plazoActual}
+                  fechaLimitePago={fechaLimitePago} setFechaLimitePago={setFechaLimitePago}
+                  ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
+                  codigoModificacion={codigoModificacion} setCodigoModificacion={setCodigoModificacion}
+                  fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
+                  tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
+                  today={today}
+                />
+              </SectionCard>
 
-            <RetencionesSection
-              retenciones={retenciones} setRetenciones={setRetenciones}
-              totalesItbis={totales.itbis} totalesSubtotal={totales.subtotal}
-            />
+              <SectionCard number={3} title="Productos y servicios" icon={Package}>
+                <ItemsTable
+                  items={items}
+                  regla={regla}
+                  buscarProductos={buscarProductos}
+                  onSelectProducto={seleccionarProducto}
+                  onAddItem={addItem}
+                  onRemoveItem={removeItem}
+                  onUpdateItem={updateItem}
+                  onOpenNuevoProducto={(idx) => setShowNuevoProductoIdx(idx)}
+                />
+                <RetencionesSection
+                  retenciones={retenciones} setRetenciones={setRetenciones}
+                  totalesItbis={totales.itbis} totalesSubtotal={totales.subtotal}
+                />
+              </SectionCard>
 
-            <TotalsBar
+              <AccordionSection
+                number={4} title="Términos y condiciones" icon={ScrollText}
+                defaultOpen={terminosCondiciones.trim().length > 0}
+              >
+                <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
+              </AccordionSection>
+
+              <AccordionSection
+                number={5} title="Notas" icon={StickyNote}
+                defaultOpen={notas.trim().length > 0}
+              >
+                <Notas notas={notas} setNotas={setNotas} />
+              </AccordionSection>
+
+              <AccordionSection
+                number={6} title="Pie de factura" icon={FileText}
+                defaultOpen={pieFactura.trim().length > 0}
+              >
+                <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
+              </AccordionSection>
+
+              <AccordionSection
+                number={7} title="Comentario" icon={MessageSquare}
+                defaultOpen={comentario.trim().length > 0}
+              >
+                <Comentarios comentario={comentario} setComentario={setComentario} />
+              </AccordionSection>
+
+              <AccordionSection
+                number={8} title="Registrar pago / Pago recibido" icon={CreditCard}
+                defaultOpen={pagoRecibido}
+                hint={pagoRecibido ? <span className="text-teal-700 font-medium">Activo</span> : undefined}
+              >
+                <PagoRecibido
+                  pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
+                  pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
+                  pagoCuenta={pagoCuenta} setPagoCuenta={setPagoCuenta}
+                  pagoMetodo={pagoMetodo} setPagoMetodo={setPagoMetodo}
+                  pagoValor={pagoValor} setPagoValor={setPagoValor}
+                />
+              </AccordionSection>
+            </div>
+
+            {/* RIGHT column — sticky sidebar */}
+            <ResumenSidebar
               empresa={empresa}
               totales={totales}
               retenciones={retenciones}
               totalNeto={totalNeto}
+              pagoRecibido={pagoRecibido}
+              pagoMetodo={pagoMetodo} setPagoMetodo={setPagoMetodo}
+              pagoValor={pagoValor} setPagoValor={setPagoValor}
             />
-
-            <TerminosNotas
-              terminosCondiciones={terminosCondiciones} setTerminos={setTerminos}
-              notas={notas} setNotas={setNotas}
-            />
-
-            <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
           </div>
-
-          <PagoRecibido
-            pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
-            pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
-            pagoCuenta={pagoCuenta} setPagoCuenta={setPagoCuenta}
-            pagoMetodo={pagoMetodo} setPagoMetodo={setPagoMetodo}
-            pagoValor={pagoValor} setPagoValor={setPagoValor}
-          />
-
-          <Comentarios comentario={comentario} setComentario={setComentario} />
 
           <BottomActionBar
             items={items}

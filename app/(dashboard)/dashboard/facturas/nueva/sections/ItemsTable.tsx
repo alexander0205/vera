@@ -68,9 +68,9 @@ export function ItemsTable({
   function toggleDescripcion(v: boolean) { setShowDescripcion(v); writeColsPref({ referencia: showReferencia, descripcion: v }); }
 
   return (
-    <div className="border-b border-gray-100">
+    <div>
       {/* ───────── MOBILE: card list (< md) ───────── */}
-      <div className="md:hidden divide-y divide-gray-100">
+      <div className="md:hidden divide-y divide-gray-100 -mx-4 md:-mx-5">
         {items.map((item, idx) => (
           <div key={item.id} className="p-4 space-y-3 bg-white">
             <div className="flex items-center justify-between">
@@ -218,8 +218,8 @@ export function ItemsTable({
       </div>
 
       {/* ───────── DESKTOP: table (≥ md) ───────── */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full min-w-[900px]">
+      <div className="hidden md:block overflow-x-auto -mx-5">
+        <table className="w-full min-w-[800px]">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/60">
               <th className="text-left text-xs font-medium text-gray-500 px-4 py-3 w-[22%]">
@@ -368,7 +368,7 @@ export function ItemsTable({
         </table>
       </div>
 
-      <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50">
+      <div className="pt-3 mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50">
         <button
           type="button"
           onClick={onAddItem}

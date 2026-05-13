@@ -29,7 +29,7 @@ export function RetencionesSection({
 
   if (retenciones.length === 0) {
     return (
-      <div className="px-4 py-3 md:px-8 border-b border-gray-100 flex justify-end">
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={() => {
@@ -48,7 +48,7 @@ export function RetencionesSection({
   }
 
   return (
-    <div className="px-4 py-4 md:px-8 border-b border-gray-100 bg-gray-50/40">
+    <div className="bg-gray-50/40 rounded-lg p-3 mt-3">
       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Retenciones</p>
       <div className="space-y-3 md:space-y-2">
         {retenciones.map((ret, idx) => (
