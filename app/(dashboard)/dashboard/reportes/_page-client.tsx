@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight } from 'lucide-react';
 
 type ReporteId = '606' | '607' | '608' | '609';
 
@@ -84,6 +85,30 @@ export default function ReportesPage() {
         <p className="text-sm text-gray-500 mt-1">
           Genera los archivos TXT para enviar al portal OFV de la DGII — Norma General 07-18
         </p>
+      </div>
+
+      {/* Reportes gerenciales (no DGII) */}
+      <div>
+        <p className="text-sm font-semibold text-gray-700 mb-3">Análisis comercial</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <Link
+            href="/dashboard/reportes/ventas-generales"
+            className="bg-white border border-gray-200 hover:border-teal-300 hover:shadow-sm rounded-xl p-4 flex items-start gap-3 group transition-all"
+          >
+            <div className="h-10 w-10 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+              <LineChart className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-semibold text-gray-900">Ventas generales</p>
+                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-teal-600 transition-colors" />
+              </div>
+              <p className="text-xs text-gray-500">
+                Visión detallada de ventas y devoluciones. Filtros por fecha, gráfica y exportable a CSV.
+              </p>
+            </div>
+          </Link>
+        </div>
       </div>
 
       {/* Period selector */}

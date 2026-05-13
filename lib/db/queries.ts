@@ -312,6 +312,109 @@ export async function getEcfDocuments(teamId: number, limit = 50) {
     .limit(limit);
 }
 
+/**
+ * Reporte "Ventas generales" estilo Alegra.
+ * Devuelve agregados + lista de documentos del rango.
+ *
+ * - Ventas brutas: SUM(montoTotal) de documentos venta (tipo 31/32) ACEPTADOS
+ * - Notas crédito: SUM(montoTotal) de tipo 34 (resta)
+ * - Total ITBIS:   SUM(totalItbis)
+ * - Subtotal:      Ventas brutas - ITBIS
+ * - Antes impuestos: Ventas brutas - Notas crédito
+ * - Después impuestos: Antes impuestos + Impuestos
+ *
+ * Montos en CENTAVOS. La UI los divide por 100 para mostrar en DOP.
+ */
+export async function getVentasGenerales(
+  teamId: number,
+  desde: Date,
+  hasta: Date,
+) {
+  const TIPOS_VENTA = ['31', '32', '33', '44', '45'] as const; // facturas/notas débito/regímenes esp/gubernamental
+  const TIPO_NOTA_CREDITO = '34';
+
+  const [ventaRows, notaRows, docs] = await Promise.all([
+    // Agregados ventas (excluyendo notas crédito y borradores/rechazos)
+    db
+      .select({
+        brutas: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        itbis:  sql<number>`coalesce(sum(${ecfDocuments.totalItbis}), 0)`,
+        count:  count(),
+      })
+      .from(ecfDocuments)
+      .where(and(
+        eq(ecfDocuments.teamId, teamId),
+        gte(ecfDocuments.fechaEmision, desde),
+        sql`${ecfDocuments.fechaEmision} <= ${hasta}`,
+        sql`${ecfDocuments.tipoEcf} IN (${sql.join(TIPOS_VENTA.map(t => sql`${t}`), sql`, `)})`,
+        sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
+      )),
+
+    // Notas crédito (resta)
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        count: count(),
+      })
+      .from(ecfDocuments)
+      .where(and(
+        eq(ecfDocuments.teamId, teamId),
+        gte(ecfDocuments.fechaEmision, desde),
+        sql`${ecfDocuments.fechaEmision} <= ${hasta}`,
+        eq(ecfDocuments.tipoEcf, TIPO_NOTA_CREDITO),
+        sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
+      )),
+
+    // Lista de documentos en el rango (limitada a 100 para la tabla)
+    db
+      .select({
+        id:                  ecfDocuments.id,
+        encf:                ecfDocuments.encf,
+        tipoEcf:             ecfDocuments.tipoEcf,
+        estado:              ecfDocuments.estado,
+        fechaEmision:        ecfDocuments.fechaEmision,
+        rncComprador:        ecfDocuments.rncComprador,
+        razonSocialComprador: ecfDocuments.razonSocialComprador,
+        montoTotal:          ecfDocuments.montoTotal,
+        totalItbis:          ecfDocuments.totalItbis,
+      })
+      .from(ecfDocuments)
+      .where(and(
+        eq(ecfDocuments.teamId, teamId),
+        gte(ecfDocuments.fechaEmision, desde),
+        sql`${ecfDocuments.fechaEmision} <= ${hasta}`,
+        sql`${ecfDocuments.estado} != 'BORRADOR'`,
+      ))
+      .orderBy(desc(ecfDocuments.fechaEmision))
+      .limit(100),
+  ]);
+
+  const brutas    = Number(ventaRows[0]?.brutas ?? 0);
+  const itbis     = Number(ventaRows[0]?.itbis ?? 0);
+  const notas     = Number(notaRows[0]?.total ?? 0);
+  const antes     = brutas - notas;
+  const despues   = antes; // Brutas ya incluyen ITBIS; "después de impuestos" = total final
+  const subtotal  = brutas - itbis;
+
+  return {
+    desde:        desde.toISOString(),
+    hasta:        hasta.toISOString(),
+    montos: {
+      ventasBrutas:     brutas,
+      notasCredito:     notas,
+      antesImpuestos:   antes,
+      impuestos:        itbis,
+      despuesImpuestos: despues,
+      subtotal,
+    },
+    counts: {
+      ventas:        Number(ventaRows[0]?.count ?? 0),
+      notasCredito:  Number(notaRows[0]?.count ?? 0),
+    },
+    documentos: docs,
+  };
+}
+
 export async function getClients(teamId: number) {
   return db
     .select()

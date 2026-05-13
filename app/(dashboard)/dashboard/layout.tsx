@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
+import { roleHasPermission, type Permission } from '@/lib/config/roles';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,44 @@ const TOP_ITEMS: NavItem[] = [
   { href: '/dashboard/clientes', icon: Users,           label: 'Contactos' },
   { href: '/dashboard/reportes', icon: BarChart3,       label: 'Reportes'  },
 ];
+
+// ─── Permission gating ──────────────────────────────────────────────────────
+// Mapeo href → permiso requerido. Si el usuario no tiene el permiso, el item
+// se omite del sidebar. Items sin entrada aquí son visibles para todos.
+
+const HREF_PERMISSION: Record<string, Permission> = {
+  // Top items
+  '/dashboard/clientes':              'clientes:ver',
+  '/dashboard/reportes':              'reportes:ver',
+
+  // Ingresos
+  '/dashboard/facturas':              'facturas:ver',
+  '/dashboard/notas-credito':         'facturas:ver',
+  '/dashboard/cotizaciones':          'cotizaciones:ver',
+  '/dashboard/facturas-recurrentes':  'facturas:ver',
+
+  // Inventario
+  '/dashboard/productos':             'productos:ver',
+  '/dashboard/categorias':            'productos:ver',
+  '/dashboard/almacenes':             'productos:ver',
+  '/dashboard/listas-precios':        'productos:ver',
+  '/dashboard/vendedores':            'productos:ver',
+
+  // Configuración — solo roles con configuracion:ver
+  '/dashboard/configuracion':         'configuracion:ver',
+  '/dashboard/secuencias':            'configuracion:ver',
+  '/dashboard/certificado':           'configuracion:gestionar',
+  '/dashboard/equipo':                'equipo:ver',
+  '/dashboard/api-keys':              'configuracion:gestionar',
+  '/dashboard/webhooks':              'configuracion:gestionar',
+  '/dashboard/impresoras':            'configuracion:ver',
+};
+
+function canAccess(role: string | null | undefined, href: string): boolean {
+  const perm = HREF_PERMISSION[href];
+  if (!perm) return true; // sin gate explícito → visible para todos
+  return roleHasPermission(role, perm);
+}
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -423,12 +462,22 @@ function Sidebar({
   // Nav siempre visible para todos los usuarios — sin gating por plan
   const hasPlan    = true;
 
+  // Rol del usuario en el team activo — controla qué items se ven.
+  const role = activeTeam?.role;
+
   // Todos los items siempre habilitados
   function isEnabled(_href: string): boolean {
     return true;
   }
 
-  const defaultOpen = GROUPS.reduce((acc, g) => {
+  // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
+  // Grupos sin hijos accesibles se omiten completamente.
+  const topItemsVisibles  = TOP_ITEMS.filter(item => canAccess(role, item.href));
+  const groupsVisibles    = GROUPS
+    .map(g => ({ ...g, children: g.children.filter(c => canAccess(role, c.href)) }))
+    .filter(g => g.children.length > 0);
+
+  const defaultOpen = groupsVisibles.reduce((acc, g) => {
     acc[g.id] = g.children.some(c => pathname.startsWith(c.href));
     return acc;
   }, {} as Record<string, boolean>);
@@ -502,8 +551,8 @@ function Sidebar({
 
         {/* Activación e-CF oculta — flujo manejado desde panel admin */}
 
-        {/* Top items — todos visibles, disabled según plan */}
-        {TOP_ITEMS.map(item => {
+        {/* Top items — filtrados por rol */}
+        {topItemsVisibles.map(item => {
           const enabled = isEnabled(item.href);
           const active  = enabled && isActive(item.href, item.exact);
           return (
@@ -527,8 +576,8 @@ function Sidebar({
 
         <div className="my-1 border-t border-teal-600/40" />
 
-        {/* Grupos — todos visibles, cada child disabled según plan */}
-        {GROUPS.map(group => {
+        {/* Grupos — filtrados por rol (grupos sin hijos accesibles se omiten) */}
+        {groupsVisibles.map(group => {
           const groupActive = group.children.some(c => pathname.startsWith(c.href));
           const isOpen      = openGroups[group.id] ?? false;
           return (
