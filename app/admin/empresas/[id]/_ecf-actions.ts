@@ -69,6 +69,8 @@ export async function actualizarContribuyente(formData: FormData) {
 
   try {
     await contribuyentes.update(cp, { ambiente });
+    // Sincronizar también local team.dgiiEnvironment — el header X-Dgii-Ambiente lo usa
+    await db.update(teams).set({ dgiiEnvironment: ambiente }).where(eq(teams.id, teamId));
     revalidatePath(`/admin/empresas/${teamId}`);
     redirect(`/admin/empresas/${teamId}?ok=ambiente_actualizado`);
   } catch (e) {
