@@ -20,24 +20,38 @@ export async function POST(req: NextRequest) {
   const { email } = await req.json();
   if (!email) return NextResponse.json({ error: 'Email requerido' }, { status: 400 });
 
+  // Measure work done in the "user exists" path so we can pad the
+  // "user does not exist" path to a similar duration. This makes
+  // timing-based account enumeration significantly harder.
+  const startedAt = Date.now();
+
   const user = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
-  // Always return success to avoid user enumeration
-  if (!user[0]) return NextResponse.json({ success: true });
 
-  const token = randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  if (user[0]) {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-  await db.insert(passwordResetTokens).values({
-    userId: user[0].id,
-    token,
-    expiresAt,
-  });
+    await db.insert(passwordResetTokens).values({
+      userId: user[0].id,
+      token,
+      expiresAt,
+    });
 
-  try {
-    await sendPasswordResetEmail(email, token, user[0].name);
-  } catch (e) {
-    console.error('Error sending reset email:', e);
+    try {
+      await sendPasswordResetEmail(email, token, user[0].name);
+    } catch (e) {
+      console.error('Error sending reset email:', e);
+    }
+  } else {
+    // Pad the response so timing matches the existing-user path closely.
+    // Target ~1.0-1.5s minimum total handler time.
+    const elapsed = Date.now() - startedAt;
+    const target = 1000 + Math.floor(Math.random() * 500);
+    if (elapsed < target) {
+      await new Promise((r) => setTimeout(r, target - elapsed));
+    }
   }
 
+  // Always return success to avoid user enumeration via response body / status.
   return NextResponse.json({ success: true });
 }

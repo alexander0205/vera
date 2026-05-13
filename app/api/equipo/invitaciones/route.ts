@@ -121,8 +121,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, inviteToken: inv.token, inviteUrl });
   } catch (err: unknown) {
+    // Log the full error (including stack) server-side, but return only a
+    // generic message to the client to avoid leaking internals.
     console.error('[POST /api/equipo/invitaciones]', err);
-    const message = err instanceof Error ? err.message : 'Error interno';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
 }
