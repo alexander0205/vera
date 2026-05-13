@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, Plus, X } from 'lucide-react';
 
 interface Props {
   pagoRecibido: boolean;
@@ -26,33 +26,39 @@ export function PagoRecibido({
   pagoMetodo, setPagoMetodo,
   pagoValor, setPagoValor,
 }: Props) {
+  // Compact mode: no card at all, just a small "+ Registrar pago recibido" button
+  if (!pagoRecibido) {
+    return (
+      <div className="mt-3 px-1">
+        <button
+          type="button"
+          onClick={() => setPagoRecibido(true)}
+          className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-teal-50 transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" /> Registrar pago recibido
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-4 md:px-6 md:py-5">
-        <div className="min-w-0">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 md:px-6 md:py-4">
+        <div className="min-w-0 flex items-center gap-2">
+          <DollarSign className="h-4 w-4 text-teal-600 shrink-0" />
           <h3 className="text-sm font-semibold text-gray-800">Pago recibido</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Si te hicieron un pago asociado a esta venta puedes hacer aquí su registro.</p>
         </div>
-        {!pagoRecibido ? (
-          <button
-            type="button"
-            onClick={() => setPagoRecibido(true)}
-            className="self-start sm:self-auto flex items-center gap-1.5 text-sm font-medium text-teal-600 hover:text-teal-700 border border-teal-200 rounded-lg px-3 py-2 hover:bg-teal-50 transition-colors shrink-0">
-            <DollarSign className="h-4 w-4" />
-            Agregar pago
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setPagoRecibido(false)}
-            className="self-start sm:self-auto text-sm font-medium text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors shrink-0">
-            Quitar pago
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setPagoRecibido(false)}
+          aria-label="Quitar pago"
+          className="self-start sm:self-auto text-sm font-medium text-gray-500 hover:text-red-500 flex items-center gap-1 transition-colors shrink-0"
+        >
+          <X className="h-3.5 w-3.5" /> Quitar
+        </button>
       </div>
 
-      {pagoRecibido && (
-        <div className="px-4 pb-5 md:px-6 md:pb-6 border-t border-gray-100">
+      <div className="px-4 pb-4 md:px-6 md:pb-5 border-t border-gray-100">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
             <div className="space-y-1">
               <p className="text-xs font-medium text-gray-500">Numeración</p>
@@ -113,8 +119,7 @@ export function PagoRecibido({
               </div>
             </div>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

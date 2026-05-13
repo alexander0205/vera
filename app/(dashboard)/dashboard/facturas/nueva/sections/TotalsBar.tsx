@@ -11,8 +11,8 @@ interface Props {
 
 export function TotalsBar({ empresa, totales, retenciones, totalNeto }: Props) {
   return (
-    <div className="px-4 py-5 md:px-8 md:py-6 flex flex-col md:flex-row md:items-start md:justify-between gap-5 md:gap-6 border-b border-gray-100">
-      {/* Firma */}
+    <div className="px-4 py-4 md:px-8 md:py-5 flex flex-col md:flex-row md:items-start md:justify-between gap-4 md:gap-6 border-b border-gray-100">
+      {/* Firma — solo se muestra cuando existe; si no, un enlace discreto */}
       {empresa?.firma ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -23,12 +23,10 @@ export function TotalsBar({ empresa, totales, retenciones, totalNeto }: Props) {
       ) : (
         <a
           href="/dashboard/configuracion"
-          className="w-[178px] h-[51px] border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:border-teal-400 transition-colors shrink-0 group"
+          className="text-xs text-gray-500 hover:text-teal-600 underline-offset-2 hover:underline self-start transition-colors"
           title="Agregar firma en Configuración"
         >
-          <span className="text-[10px] text-gray-600 group-hover:text-teal-500 text-center leading-tight px-2 transition-colors">
-            Agregar firma<br />en Configuración
-          </span>
+          + Agregar firma
         </a>
       )}
 

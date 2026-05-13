@@ -1,11 +1,12 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Info, X } from 'lucide-react';
+import { Info, X, Settings2 } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Autocomplete } from '../components/Autocomplete';
@@ -24,10 +25,48 @@ interface Props {
   onOpenNuevoProducto: (idx: number) => void;
 }
 
+function readColsPref(): { referencia: boolean; descripcion: boolean } {
+  if (typeof window === 'undefined') return { referencia: false, descripcion: false };
+  try {
+    const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
+    const cols = prefs.itemsCols ?? {};
+    return {
+      referencia:  Boolean(cols.referencia),
+      descripcion: Boolean(cols.descripcion),
+    };
+  } catch { return { referencia: false, descripcion: false }; }
+}
+
+function writeColsPref(cols: { referencia: boolean; descripcion: boolean }) {
+  try {
+    const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
+    prefs.itemsCols = cols;
+    localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
+  } catch {}
+}
+
 export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto,
   onAddItem, onRemoveItem, onUpdateItem, onOpenNuevoProducto,
 }: Props) {
+  // Hide Referencia + Descripción by default; persist user choice
+  const [showReferencia, setShowReferencia]   = useState(false);
+  const [showDescripcion, setShowDescripcion] = useState(false);
+  const [showColsMenu, setShowColsMenu]       = useState(false);
+
+  // Load prefs on mount; auto-show columns if any item has content (borrador edit)
+  useEffect(() => {
+    const prefs = readColsPref();
+    const hasRef = items.some(i => (i.referencia ?? '').trim().length > 0);
+    const hasDesc = items.some(i => (i.descripcionItem ?? '').trim().length > 0);
+    setShowReferencia(prefs.referencia || hasRef);
+    setShowDescripcion(prefs.descripcion || hasDesc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function toggleReferencia(v: boolean) { setShowReferencia(v); writeColsPref({ referencia: v, descripcion: showDescripcion }); }
+  function toggleDescripcion(v: boolean) { setShowDescripcion(v); writeColsPref({ referencia: showReferencia, descripcion: v }); }
+
   return (
     <div className="border-b border-gray-100">
       {/* ───────── MOBILE: card list (< md) ───────── */}
@@ -73,17 +112,19 @@ export function ItemsTable({
               />
             </div>
 
-            <div>
-              <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                Referencia
-              </Label>
-              <Input
-                className="h-11 text-sm"
-                placeholder="Ref."
-                value={item.referencia}
-                onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
-              />
-            </div>
+            {showReferencia && (
+              <div>
+                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                  Referencia
+                </Label>
+                <Input
+                  className="h-11 text-sm"
+                  placeholder="Ref."
+                  value={item.referencia}
+                  onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -152,17 +193,19 @@ export function ItemsTable({
               </div>
             </div>
 
-            <div>
-              <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                Descripción
-              </Label>
-              <textarea
-                className="w-full min-h-[60px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
-                placeholder="Descripción..."
-                value={item.descripcionItem}
-                onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
-              />
-            </div>
+            {showDescripcion && (
+              <div>
+                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                  Descripción
+                </Label>
+                <textarea
+                  className="w-full min-h-[60px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                  placeholder="Descripción..."
+                  value={item.descripcionItem}
+                  onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
+                />
+              </div>
+            )}
 
             <div className="flex items-center justify-between pt-2 border-t border-gray-100">
               <span className="text-xs text-gray-500 uppercase tracking-wide">Total</span>
@@ -187,7 +230,7 @@ export function ItemsTable({
                   </Tooltip>
                 </span>
               </th>
-              <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">Referencia</th>
+              {showReferencia && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">Referencia</th>}
               <th className="text-right text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">
                 <span className="inline-flex items-center gap-1">
                   Precio
@@ -198,7 +241,7 @@ export function ItemsTable({
               </th>
               <th className="text-center text-xs font-medium text-gray-500 px-2 py-3 w-[7%]">Desc %</th>
               <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[10%]">Impuesto</th>
-              <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[18%]">Descripción</th>
+              {showDescripcion && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[18%]">Descripción</th>}
               <th className="text-center text-xs font-medium text-gray-500 px-2 py-3 w-[8%]">
                 <span className="inline-flex items-center gap-1">
                   Cantidad
@@ -233,14 +276,16 @@ export function ItemsTable({
                     )}
                   />
                 </td>
-                <td className="px-2 py-2">
-                  <Input
-                    className="h-9 text-sm"
-                    placeholder="Ref."
-                    value={item.referencia}
-                    onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
-                  />
-                </td>
+                {showReferencia && (
+                  <td className="px-2 py-2">
+                    <Input
+                      className="h-9 text-sm"
+                      placeholder="Ref."
+                      value={item.referencia}
+                      onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
+                    />
+                  </td>
+                )}
                 <td className="px-2 py-2">
                   <Input
                     type="number" min={0} step={0.01}
@@ -279,14 +324,16 @@ export function ItemsTable({
                     </SelectContent>
                   </Select>
                 </td>
-                <td className="px-2 py-2">
-                  <textarea
-                    className="w-full h-[68px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
-                    placeholder="Descripción..."
-                    value={item.descripcionItem}
-                    onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
-                  />
-                </td>
+                {showDescripcion && (
+                  <td className="px-2 py-2">
+                    <textarea
+                      className="w-full h-[68px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                      placeholder="Descripción..."
+                      value={item.descripcionItem}
+                      onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
+                    />
+                  </td>
+                )}
                 <td className="px-2 py-2">
                   <Input
                     type="number" min={0.01} step="any"
@@ -328,8 +375,43 @@ export function ItemsTable({
           className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
           + Agregar línea
         </button>
-        <div className="flex items-center gap-6">
-          <button type="button" className="text-gray-600 text-sm font-medium flex items-center gap-1 cursor-not-allowed py-2 -my-2" title="Próximamente">
+        <div className="flex items-center gap-4 relative">
+          <button
+            type="button"
+            onClick={() => setShowColsMenu(v => !v)}
+            aria-label="Más columnas"
+            className="text-gray-500 hover:text-gray-700 text-sm font-medium flex items-center gap-1.5 py-2 -my-2 transition-colors"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Columnas</span>
+          </button>
+          {showColsMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowColsMenu(false)} aria-hidden="true" />
+              <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-52">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mostrar columnas</p>
+                <label className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-gray-50 rounded px-2 -mx-1">
+                  <span className="text-sm text-gray-700">Referencia</span>
+                  <input
+                    type="checkbox"
+                    checked={showReferencia}
+                    onChange={(e) => toggleReferencia(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                  />
+                </label>
+                <label className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-gray-50 rounded px-2 -mx-1">
+                  <span className="text-sm text-gray-700">Descripción</span>
+                  <input
+                    type="checkbox"
+                    checked={showDescripcion}
+                    onChange={(e) => toggleDescripcion(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                  />
+                </label>
+              </div>
+            </>
+          )}
+          <button type="button" className="text-gray-600 text-sm font-medium hidden md:flex items-center gap-1 cursor-not-allowed py-2 -my-2" title="Próximamente">
             + Agregar Conduce
           </button>
         </div>

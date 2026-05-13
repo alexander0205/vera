@@ -65,7 +65,7 @@ export function ClienteSection({
 }: Props) {
   const muestraTipoIngresos = ['31', '32', '44', '45', '46'].includes(tipoEcf);
   return (
-    <div className="px-4 pb-5 md:px-8 md:pb-6 grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8 border-b border-gray-100">
+    <div className="px-4 pb-4 md:px-8 md:pb-5 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 border-b border-gray-100">
       {/* LEFT: client */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
