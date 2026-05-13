@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import useSWR from 'swr';
 import {
   LayoutDashboard, Users, Package,
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
@@ -623,47 +624,40 @@ function Sidebar({
 
 // ─── Root layout ──────────────────────────────────────────────────────────────
 
+const layoutFetcher = (url: string) => fetch(url).then(r => r.json()).catch(() => null);
+
+type EmpresaListResponse = {
+  teams?: Team[];
+  activeTeamId?: number | null;
+} | null;
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen]           = useState(false);
+  const [activeTeamOverride, setActiveTeamOverride] = useState<number | null>(null);
 
-  const [sidebarOpen, setSidebarOpen]   = useState(false);
-  const [teams, setTeams]               = useState<Team[]>([]);
-  const [activeTeamId, setActiveTeamId] = useState<number | null>(null);
-  const [user, setUser]                 = useState<UserInfo | null>(null);
+  // SWR for user + empresa list — no auto refetch on focus/reconnect.
+  // We revalidate explicitly via mutate() on switch.
+  const { data: user } = useSWR<UserInfo | null>('/api/user', layoutFetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  });
+  const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>(
+    '/api/empresa/list',
+    layoutFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
 
-  async function fetchData() {
-    const [userData, empresaData] = await Promise.all([
-      fetch('/api/user').then(r => r.json()).catch(() => null),
-      fetch('/api/empresa/list').then(r => r.json()).catch(() => null),
-    ]);
-    if (userData) setUser(userData);
-    if (empresaData?.teams) {
-      setTeams(empresaData.teams);
-      setActiveTeamId(empresaData.activeTeamId ?? empresaData.teams[0]?.id ?? null);
-    }
-  }
-
-  // Carga inicial
-  useEffect(() => { fetchData(); }, []);
-
-  // Re-fetch al cambiar de ruta — cubre el retorno desde Stripe/portal
-  // y cualquier cambio de plan que haya ocurrido mientras el usuario estaba fuera.
-  useEffect(() => { fetchData(); }, [pathname]);
-
-  // Re-fetch cuando el usuario vuelve a la pestaña (tab visible de nuevo)
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState === 'visible') fetchData();
-    }
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
+  const teams: Team[] = empresaData?.teams ?? [];
+  const activeTeamId = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
 
   // Cuando el usuario cambia de empresa: actualizar activeTeamId optimistamente
-  // y re-fetch para traer el plan/logo del team nuevo de inmediato.
+  // y revalidar la lista de empresas (trae plan/logo nuevos).
   function handleSwitch(teamId: number) {
-    setActiveTeamId(teamId);
-    fetchData();
+    setActiveTeamOverride(teamId);
+    mutateEmpresa();
   }
 
   const plan = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.planName ?? null;
@@ -692,7 +686,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <DashboardTopBar
           teams={teams}
           activeTeamId={activeTeamId}
-          user={user}
+          user={user ?? null}
           plan={plan}
           onMenuClick={() => setSidebarOpen(true)}
           onSwitch={handleSwitch}
