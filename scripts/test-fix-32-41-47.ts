@@ -130,6 +130,7 @@ function datos47(rnc: string, razonSocial: string): EcfData {
       montoItem: 269.12,
       tasaItbis: 0,
     }],
+    montoGravadoTotal: 0,
     montoExento: 269.12,
     totalItbis: 0,
     montoTotal: 269.12,

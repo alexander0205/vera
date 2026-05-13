@@ -13,6 +13,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
 import { FacturaTirillaPDF } from '@/lib/pdf/FacturaTirillaPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
+import { emision, EcfApiError } from '@/lib/ecf-api/client';
 
 /**
  * Extrae la fecha/hora de firma del XML firmado.
@@ -119,7 +120,45 @@ export async function GET(
 
     // QR URL DGII — viene tal cual desde ecf-api (doc.urlVerificacion).
     // No reconstruimos client-side: ecf-api ya devuelve la URL canónica firmada.
-    const qrText = doc.urlVerificacion ?? '';
+    // Fallback legacy: facturas emitidas antes de persistir urlVerificacion → re-fetch
+    // desde ecf-api usando ecfApiEmisionId y backfill en BD.
+    let urlVerificacion = doc.urlVerificacion;
+    let codigoSeguridad = doc.codigoSeguridad;
+    let fechaFirma      = doc.fechaFirma;
+
+    if (!urlVerificacion && doc.ecfApiEmisionId) {
+      try {
+        const remoto = await emision.get(doc.ecfApiEmisionId);
+        const urlRemota = remoto.urlVerificacion ?? remoto.qrCodeData ?? null;
+        const codRemoto = remoto.codigoSeguridad ?? null;
+        const firmaRemota = remoto.fechaHoraFirma ?? null;
+
+        if (urlRemota || codRemoto || firmaRemota) {
+          urlVerificacion = urlRemota ?? urlVerificacion;
+          codigoSeguridad = codRemoto ?? codigoSeguridad;
+          fechaFirma      = firmaRemota ?? fechaFirma;
+
+          // Backfill BD (best-effort, no bloquea respuesta)
+          await db
+            .update(ecfDocuments)
+            .set({
+              urlVerificacion: urlVerificacion ?? null,
+              codigoSeguridad: codigoSeguridad ?? null,
+              fechaFirma:      fechaFirma ?? null,
+              updatedAt:       new Date(),
+            })
+            .where(eq(ecfDocuments.id, docId));
+        }
+      } catch (err) {
+        if (err instanceof EcfApiError) {
+          console.warn('[PDF] ecf-api fetch fallback fallo:', err.status, err.message);
+        } else {
+          console.warn('[PDF] fallback ecf-api err:', err);
+        }
+      }
+    }
+
+    const qrText = urlVerificacion ?? '';
     const qrDataUrl = qrText
       ? await QRCode.toDataURL(qrText, {
           width: 128,
@@ -156,10 +195,10 @@ export async function GET(
       tipoPagoNombre: TIPO_PAGO_NOMBRE[1] ?? 'Contado',
       estado:        doc.estado,
       esBorrador:    doc.estado === 'BORRADOR',
-      codigoSeguridad: doc.codigoSeguridad ?? undefined,
+      codigoSeguridad: codigoSeguridad ?? undefined,
       trackId:       doc.trackId ?? undefined,
       // Prefer columna persistida (rápido). Fallback: parsear XML firmado.
-      fechaFirma:    doc.fechaFirma ?? extraerFechaFirma(doc.xmlFirmado) ?? undefined,
+      fechaFirma:    fechaFirma ?? extraerFechaFirma(doc.xmlFirmado) ?? undefined,
       moneda:        'DOP',
 
       emisor: {

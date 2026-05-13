@@ -15,7 +15,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -85,6 +85,45 @@ const emitirSchema = z.object({
   // Default 0.27 (general). 0.10 países con tratado, 0.15 servicios técnicos, etc.
   tasaIsrRetencion: z.number().min(0).max(1).optional(),
 });
+
+// ─── Adquirir próximo eNCF de secuencia local ────────────────────────────────
+// Pre-emit: emitedo es la fuente de verdad del NCF.
+// Toma la mejor secuencia activa (preferida, luego más disponibles), incrementa
+// `secuencia_actual` atómicamente con `FOR UPDATE SKIP LOCKED` y retorna el
+// número consumido formateado como eNCF (`E{tipo}{10 dígitos}`).
+//
+// Diseño:
+// - SKIP LOCKED → emisiones concurrentes no bloquean entre sí (cada una toma
+//   la siguiente fila libre).
+// - El número asignado es `secuencia_actual - 1` después del UPDATE.
+// - Si el rango está agotado o vencido, retorna null (caller decide error).
+async function acquireNextEncf(
+  teamId: number,
+  tipoEcf: string,
+): Promise<{ encf: string; sequenceId: number; numero: string } | null> {
+  const rows = await db.execute<{ id: number; numero: string }>(sql`
+    UPDATE sequences
+    SET secuencia_actual = secuencia_actual + 1,
+        updated_at       = NOW()
+    WHERE id = (
+      SELECT id FROM sequences
+      WHERE team_id = ${teamId}
+        AND tipo_ecf = ${tipoEcf}
+        AND secuencia_actual <= secuencia_hasta
+        AND (fecha_vencimiento IS NULL OR fecha_vencimiento > NOW())
+      ORDER BY preferida DESC, (secuencia_hasta - secuencia_actual) DESC, id ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, (secuencia_actual - 1)::text AS numero
+  `);
+
+  const row = rows[0] as { id: number; numero: string } | undefined;
+  if (!row) return null;
+
+  const encf = `E${tipoEcf}${row.numero.padStart(10, '0')}`;
+  return { encf, sequenceId: row.id, numero: row.numero };
+}
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -224,6 +263,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Adquirir próximo eNCF de la secuencia local SALVO que venga override
+    // explícito (habilitación o tests). Emitedo es fuente de verdad del NCF;
+    // ecf-api recibe el eNCF ya asignado y solo firma + envía a DGII.
+    let encfAsignado: string | undefined = data.encfOverride;
+    let sequenceConsumedId: number | null = null;
+    if (!encfAsignado) {
+      const acquired = await acquireNextEncf(teamId, data.tipoEcf);
+      if (!acquired) {
+        return NextResponse.json(
+          {
+            error: `No hay secuencias disponibles para tipo ${data.tipoEcf}. ` +
+                   `Verifica que tengas un rango activo y no vencido en /dashboard/secuencias.`,
+          },
+          { status: 422 },
+        );
+      }
+      encfAsignado       = acquired.encf;
+      sequenceConsumedId = acquired.sequenceId;
+      console.log(`[ecf/emitir] eNCF asignado localmente: ${encfAsignado} (seq.id=${sequenceConsumedId})`);
+    }
+
     // Mapear payload al DTO de ecf-api
     const { tipo, esRfce, dto: ecfApiDto } = mapToEcfApiDto({
       tipoEcf:              data.tipoEcf,
@@ -239,7 +299,7 @@ export async function POST(request: NextRequest) {
       fechaNcfModificado:   data.fechaNcfModificado,
       tipoIngresos:         data.tipoIngresos,
       retenciones:          data.retenciones, // tipos 31/32/33/34
-      encfOverride:         data.encfOverride,
+      encfOverride:         encfAsignado,
       tasaIsrRetencion:     data.tasaIsrRetencion, // tipo 47
       skipRangeValidation,
     });
@@ -279,20 +339,75 @@ export async function POST(request: NextRequest) {
       };
       resultado = await emision.emitirUnified(codigoPublico, wrappedBody, habilitacionHeaders);
     } catch (err) {
-      if (err instanceof EcfApiError) {
-        const esErrorNegocio = err.status >= 400 && err.status < 500;
-        if (esErrorNegocio) {
-          // Parsear mensaje de ecf-api (viene como JSON de NestJS)
-          let mensaje = 'Error al emitir el comprobante';
-          try {
-            const parsed = JSON.parse(err.message);
-            mensaje = Array.isArray(parsed.message) ? parsed.message.join('. ') : (parsed.message ?? mensaje);
-          } catch { mensaje = err.message; }
-          return NextResponse.json({ error: mensaje }, { status: 422 });
-        }
-      }
       console.error('[/api/ecf/emitir ecf-api]', err);
-      return NextResponse.json({ error: 'Error al enviar el comprobante' }, { status: 500 });
+
+      // Helper: extraer mensaje legible desde payload NestJS-like ({message, error, statusCode})
+      const parseEcfApiMessage = (raw: string): { mensaje: string; detalles?: unknown } => {
+        try {
+          const parsed = JSON.parse(raw);
+          const msg = Array.isArray(parsed.message)
+            ? parsed.message.join('. ')
+            : (parsed.message ?? parsed.error ?? raw);
+          return { mensaje: String(msg), detalles: parsed };
+        } catch {
+          return { mensaje: raw };
+        }
+      };
+
+      // Traducir errores técnicos crudos (ORM, infra) a mensajes amigables para el usuario.
+      // No exponer detalles de stack/Prisma/SQL en producción.
+      const sanitizarMensaje = (raw: string): string => {
+        const m = raw.toLowerCase();
+
+        // Prisma unique constraint sobre (rnc, eNcf, formato) → NCF duplicado
+        if (m.includes('unique constraint') && m.includes('encf')) {
+          return 'Este e-NCF ya fue emitido anteriormente. Verifica la secuencia o ajusta el siguiente número.';
+        }
+        // Prisma generic unique constraint
+        if (m.includes('unique constraint')) {
+          return 'Ya existe un registro con los mismos datos. Verifica la información.';
+        }
+        // Prisma not found / foreign key
+        if (m.includes('foreign key constraint') || m.includes('record to update not found')) {
+          return 'Referencia inválida. Verifica los datos del comprobante.';
+        }
+        if (m.includes('prisma') || m.includes('invocation') || m.includes('database')) {
+          return 'Ocurrió un error procesando el comprobante. Intenta de nuevo en unos minutos.';
+        }
+        // Timeouts / red
+        if (m.includes('timeout') || m.includes('econnreset') || m.includes('etimedout')) {
+          return 'Tiempo de espera agotado al comunicarse con el servicio de firma. Reintenta.';
+        }
+        // Errores de validación DGII / negocio (los mostramos tal cual, son útiles)
+        return raw;
+      };
+
+      if (err instanceof EcfApiError) {
+        const { mensaje, detalles } = parseEcfApiMessage(err.message);
+        const sanitizado = sanitizarMensaje(mensaje);
+        const status = err.status >= 400 && err.status < 500 ? 422 : 502;
+        return NextResponse.json(
+          {
+            error:        sanitizado,
+            statusEcfApi: err.status,
+            // En desarrollo incluir detalles crudos para debugging; en prod ocultar.
+            ...(process.env.NODE_ENV !== 'production' ? { detalles, mensajeOriginal: mensaje } : {}),
+          },
+          { status },
+        );
+      }
+
+      // Otros errores (timeout, network, parseo, etc.)
+      const raw = err instanceof Error ? err.message : 'Error desconocido';
+      return NextResponse.json(
+        {
+          error: sanitizarMensaje(raw) === raw
+            ? 'No se pudo enviar el comprobante. Intenta de nuevo.'
+            : sanitizarMensaje(raw),
+          ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: raw } : {}),
+        },
+        { status: 500 },
+      );
     }
 
     // Map ecf-api estado → emitedo estado (alineado con MAPA_ESTADOS de /api/ecf/estado)
@@ -308,6 +423,16 @@ export async function POST(request: NextRequest) {
     const estadoInicial = mapeoEstado[estadoUpper] ?? (resultado.trackId ? 'EN_PROCESO' : 'ACEPTADO');
     const encf          = resultado.eNcf;
     const trackId       = resultado.trackId ?? '';
+
+    // Validar que ecf-api respetó el eNCF que asignamos localmente.
+    // Si difiere, la secuencia local quedará desincronizada y el XML firmado
+    // contendrá un NCF distinto al que consumimos. Loguear para investigación.
+    if (encfAsignado && encf && encf !== encfAsignado) {
+      console.warn(
+        `[ecf/emitir] eNCF DIVERGENTE: local=${encfAsignado} ecf-api=${encf}. ` +
+        `Secuencia local pudo quedar desfasada (seq.id=${sequenceConsumedId}).`,
+      );
+    }
 
     // Guardar en BD local (auditoría + PDFs + webhooks)
     const lineasJsonParaGuardar = data.lineasJson
