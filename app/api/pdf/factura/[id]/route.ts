@@ -11,6 +11,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, clients } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
+import { FacturaTirillaPDF } from '@/lib/pdf/FacturaTirillaPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
 
 /**
@@ -72,6 +73,13 @@ export async function GET(
     if (isNaN(docId)) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
     }
+
+    // Formato de impresión: 'grande' (A4, default) | 'tirilla' (80mm térmica)
+    const formatoParam = req.nextUrl.searchParams.get('formato')?.toLowerCase();
+    const formato: 'grande' | 'tirilla' =
+      formatoParam === 'tirilla' || formatoParam === 'pequena' || formatoParam === 'pequeña' || formatoParam === '80mm'
+        ? 'tirilla'
+        : 'grande';
 
     // Obtener teamId activo del usuario
     const teamId = await getTeamIdForUser();
@@ -179,15 +187,20 @@ export async function GET(
     };
 
     // Renderizar PDF — cast necesario por incompatibilidad de tipos con react-pdf
+    const Component = formato === 'tirilla' ? FacturaTirillaPDF : FacturaPDF;
     const pdfBuffer = await renderToBuffer(
-      createElement(FacturaPDF, { data: pdfData }) as any
+      createElement(Component, { data: pdfData }) as any
     );
+
+    const filename = formato === 'tirilla'
+      ? `factura-${doc.encf}-tirilla.pdf`
+      : `factura-${doc.encf}.pdf`;
 
     return new NextResponse(pdfBuffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="factura-${doc.encf}.pdf"`,
+        'Content-Disposition': `inline; filename="${filename}"`,
         'Cache-Control': 'private, no-cache',
       },
     });

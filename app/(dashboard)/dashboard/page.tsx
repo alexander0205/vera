@@ -37,15 +37,15 @@ export default async function DashboardPage() {
   ]);
 
   return (
-    <section className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <section className="p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Panel Principal</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Panel Principal</h1>
           {stats.rnc && (
             <p className="text-sm text-gray-500 mt-1">RNC: {stats.rnc}</p>
           )}
         </div>
-        <Button asChild className="bg-teal-600 hover:bg-teal-700 rounded-lg">
+        <Button asChild className="bg-teal-600 hover:bg-teal-700 rounded-lg w-full sm:w-auto">
           <Link href="/dashboard/facturas/nueva">
             <Plus className="h-4 w-4 mr-2" />
             Nueva Factura

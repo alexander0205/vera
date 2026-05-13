@@ -203,13 +203,13 @@ export default function SecuenciasPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-[#eef0f7] min-h-full p-6">
+    <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
       <div className="space-y-6">
 
         {/* HEADER */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Numeraciones de comprobantes</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Numeraciones de comprobantes</h1>
             <p className="text-sm text-gray-500 mt-1">
               Registra aquí los rangos de e-NCF autorizados por la DGII para tu empresa.{' '}
               <a
@@ -302,7 +302,8 @@ export default function SecuenciasPage() {
               </div>
             </div>
           ) : (
-            <>
+            <div className="overflow-x-auto">
+            <div className="min-w-[820px]">
               {/* Header tabla */}
               <div className="grid grid-cols-[2.5fr_1.5fr_1fr_1fr_1fr_auto] gap-4 px-6 py-3 border-b border-gray-100 text-xs font-medium text-gray-500 bg-gray-50/60 uppercase tracking-wide">
                 <div>Tipo / Nombre</div>
@@ -448,7 +449,8 @@ export default function SecuenciasPage() {
                   </div>
                 );
               })}
-            </>
+            </div>
+            </div>
           )}
         </div>
       </div>
