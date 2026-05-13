@@ -283,6 +283,10 @@ export interface EmisionResponseDto {
   codigoSeguridad: string | null;
   /** Fecha + hora de la firma digital aplicada por ecf-api. Formato "dd-MM-yyyy HH:mm:ss" */
   fechaHoraFirma?: string | null;
+  /** URL completa DGII portal de verificación (consultatimbre) — devuelta por ecf-api */
+  urlVerificacion?: string | null;
+  /** URL para el QR code (igual a urlVerificacion) */
+  qrCodeData?: string | null;
   fechaEmision:    string;
   montoTotal:      number;
   mensajesDgii:    Record<string, unknown> | null;

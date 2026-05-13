@@ -79,6 +79,8 @@ export async function GET(
     estado: doc.estado,
     trackId: doc.trackId,
     codigoSeguridad: doc.codigoSeguridad,
+    urlVerificacion: doc.urlVerificacion,
+    fechaFirma: doc.fechaFirma,
     mensajesDgii: doc.mensajesDgii ? JSON.parse(doc.mensajesDgii) : null,
     ncfModificado: doc.ncfModificado,
     fechaEmision: doc.fechaEmision.toISOString(),

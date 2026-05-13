@@ -320,6 +320,7 @@ export async function POST(request: NextRequest) {
       trackId,
       codigoSeguridad:      resultado.codigoSeguridad ?? null,
       fechaFirma:           resultado.fechaHoraFirma ?? null,
+      urlVerificacion:      resultado.urlVerificacion ?? resultado.qrCodeData ?? null,
       ecfApiEmisionId:      resultado.id,
       rncComprador:         data.rncComprador,
       razonSocialComprador: data.razonSocialComprador,

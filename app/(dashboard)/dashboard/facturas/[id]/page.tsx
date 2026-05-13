@@ -47,6 +47,8 @@ interface FacturaDetalle {
   estado: string;
   trackId: string | null;
   codigoSeguridad: string | null;
+  urlVerificacion: string | null;
+  fechaFirma: string | null;
   mensajesDgii: Record<string, unknown> | null;
   ncfModificado: string | null;
   fechaEmision: string;
@@ -117,21 +119,8 @@ function EstadoDgiiCard({
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   }) : '—';
 
-  // URL portal DGII verificación
-  const verUrl = (() => {
-    if (!factura.emisor.rnc || !factura.codigoSeguridad) return null;
-    const ambiente = factura.estado === 'ACEPTADO' || factura.estado === 'ACEPTADO_CONDICIONAL' ? 'ecf' : 'certecf';
-    const fecha = (factura.fechaEmision ?? '').slice(0, 10).split('-').reverse().join('-');
-    const params = new URLSearchParams({
-      RncEmisor: factura.emisor.rnc,
-      RncComprador: factura.comprador.rnc ?? '',
-      Encf: factura.encf,
-      FechaEmision: fecha,
-      MontoTotal: factura.montos.montoTotalDOP,
-      CodigoSeguridad: factura.codigoSeguridad,
-    });
-    return `https://ecf.dgii.gov.do/${ambiente}/consultatimbre?${params.toString()}`;
-  })();
+  // URL portal DGII — usa la URL canónica devuelta por ecf-api (sin reconstruir client-side)
+  const verUrl = factura.urlVerificacion;
 
   return (
     <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
