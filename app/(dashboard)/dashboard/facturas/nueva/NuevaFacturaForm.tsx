@@ -23,7 +23,6 @@ import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
 import { Terminos, Notas } from './sections/TerminosNotas';
 import { PieFactura } from './sections/PieFactura';
-import { PagoRecibido } from './sections/PagoRecibido';
 import { Comentarios } from './sections/Comentarios';
 import { BottomActionBar } from './sections/BottomActionBar';
 
@@ -800,30 +799,21 @@ export default function NuevaFacturaForm({
                 <Comentarios comentario={comentario} setComentario={setComentario} />
               </AccordionSection>
 
-              <AccordionSection
-                number={8} title="Registrar pago / Pago recibido" icon={CreditCard}
-                defaultOpen={pagoRecibido}
-                hint={pagoRecibido ? <span className="text-teal-700 font-medium">Activo</span> : undefined}
-              >
-                <PagoRecibido
-                  pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
-                  pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
-                  pagoCuenta={pagoCuenta} setPagoCuenta={setPagoCuenta}
-                  pagoMetodo={pagoMetodo} setPagoMetodo={setPagoMetodo}
-                  pagoValor={pagoValor} setPagoValor={setPagoValor}
-                />
-              </AccordionSection>
+              {/* Sección 8 Pago movida al sidebar derecho (ResumenSidebar) */}
             </div>
 
-            {/* RIGHT column — sticky sidebar */}
+            {/* RIGHT column — sticky sidebar: Resumen + Pago */}
             <ResumenSidebar
               empresa={empresa}
               totales={totales}
               retenciones={retenciones}
               totalNeto={totalNeto}
-              pagoRecibido={pagoRecibido}
+              items={items}
+              pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoMetodo={pagoMetodo} setPagoMetodo={setPagoMetodo}
+              pagoCuenta={pagoCuenta} setPagoCuenta={setPagoCuenta}
               pagoValor={pagoValor} setPagoValor={setPagoValor}
+              pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
             />
           </div>
 
