@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -23,6 +24,14 @@ export function HeaderDocumento({
 }: Props) {
   const categoriaActual = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
   const tiposCategoria  = categoriaActual.tipos;
+
+  // Si tipoEcf actual no pertenece a la categoría activa, auto-seleccionar el primer tipo.
+  // Esto cubre el edge case donde Radix Select no refleja el cambio sincronizado.
+  useEffect(() => {
+    if (!tiposCategoria.some(t => t.codigo === tipoEcf)) {
+      onChangeTipo(tiposCategoria[0].codigo);
+    }
+  }, [categoriaId, tipoEcf, tiposCategoria, onChangeTipo]);
 
   return (
     <div className="px-8 pt-8 pb-6 flex items-start justify-between gap-6">
