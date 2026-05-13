@@ -1,6 +1,5 @@
-'use server';
-
 import { notFound, redirect } from 'next/navigation';
+import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users, invitations, activityLogs, ActivityType } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -8,13 +7,15 @@ import { getUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
 import Link from 'next/link';
 import { Building2, Mail, Users, Clock, AlertTriangle } from 'lucide-react';
+import { ConfirmButton } from './confirm-button';
+import EcfApiSection from './_ecf-section';
 
 // ─── Server Action: invitar usuario ──────────────────────────────────────────
 
 async function invitarUsuario(formData: FormData) {
   'use server';
   const admin = await getUser();
-  if (!admin || admin.role !== 'owner') redirect('/lite');
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
 
   const teamId   = parseInt(formData.get('teamId') as string);
   const email    = (formData.get('email') as string).trim().toLowerCase();
@@ -37,12 +38,14 @@ async function invitarUsuario(formData: FormData) {
     .limit(1);
 
   if (!existingInv.length) {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const [inv] = await db.insert(invitations).values({
-      teamId, email, role: 'owner', invitedBy: admin.id, status: 'pending',
+      teamId, email, role: 'owner', invitedBy: admin.id, status: 'pending', token, expiresAt,
     }).returning();
 
     try {
-      await sendInvitationEmail(email, admin.name, teamName, inv.id.toString());
+      await sendInvitationEmail(email, admin.name, teamName, inv.token);
     } catch (e) {
       console.error('[invitarUsuario]', e);
     }
@@ -56,7 +59,7 @@ async function invitarUsuario(formData: FormData) {
 async function eliminarMiembro(formData: FormData) {
   'use server';
   const admin = await getUser();
-  if (!admin || admin.role !== 'owner') redirect('/lite');
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
 
   const teamId = parseInt(formData.get('teamId') as string);
   const userId = parseInt(formData.get('userId') as string);
@@ -78,7 +81,7 @@ async function eliminarMiembro(formData: FormData) {
 async function cancelarInvitacion(formData: FormData) {
   'use server';
   const admin = await getUser();
-  if (!admin || admin.role !== 'owner') redirect('/lite');
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
 
   const invId  = parseInt(formData.get('invId') as string);
   const teamId = parseInt(formData.get('teamId') as string);
@@ -116,7 +119,7 @@ export default async function EmpresaDetailPage({
     .where(and(eq(invitations.teamId, teamId), eq(invitations.status, 'pending')));
 
   const resendConfigured = !!(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_YOUR_KEY_HERE');
-  const inviteUrl = (invId: number) => `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${invId}`;
+  const inviteUrl = (tok: string) => `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${tok}`;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -151,7 +154,18 @@ export default async function EmpresaDetailPage({
       {ok === 'invitado'    && <Alert color="green" msg="✓ Invitación enviada." />}
       {ok === 'eliminado'   && <Alert color="green" msg="✓ Usuario eliminado de la empresa." />}
       {ok === 'actualizado' && <Alert color="green" msg="✓ Datos actualizados correctamente." />}
+      {ok === 'vinculado_ecf'      && <Alert color="green" msg="✓ Empresa vinculada a ecf-api." />}
+      {ok === 'ambiente_actualizado' && <Alert color="green" msg="✓ Ambiente DGII actualizado." />}
+      {ok === 'cert_subido'        && <Alert color="green" msg="✓ Certificado subido y activado." />}
+      {ok === 'cert_revocado'      && <Alert color="green" msg="✓ Certificado revocado." />}
+      {ok === 'rango_registrado'   && <Alert color="green" msg="✓ Rango NCF registrado en ecf-api." />}
+      {ok === 'rango_eliminado'    && <Alert color="green" msg="✓ Rango desactivado." />}
+      {ok === 'token_refrescado'   && <Alert color="green" msg="✓ Token DGII refrescado." />}
       {error === 'ya_miembro' && <Alert color="amber" msg="⚠ Ese usuario ya es miembro." />}
+      {error?.startsWith('ecf_')   && <Alert color="amber" msg={`⚠ ecf-api: ${decodeURIComponent(error.slice(4))}`} />}
+      {error?.startsWith('cert_')  && <Alert color="amber" msg={`⚠ Certificado: ${decodeURIComponent(error.slice(5))}`} />}
+      {error?.startsWith('rango_') && <Alert color="amber" msg={`⚠ Rango: ${decodeURIComponent(error.slice(6))}`} />}
+      {error?.startsWith('token_') && <Alert color="amber" msg={`⚠ Token DGII: ${decodeURIComponent(error.slice(6))}`} />}
 
       {/* Datos fiscales */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -171,6 +185,9 @@ export default async function EmpresaDetailPage({
             badge badgeColor={team.dgiiEnvironment === 'Produccion' ? 'green' : 'amber'} />
         </div>
       </div>
+
+      {/* Integración ecf-api */}
+      <EcfApiSection teamId={teamId} rnc={team.rnc} />
 
       {/* Miembros */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -207,17 +224,14 @@ export default async function EmpresaDetailPage({
                     {new Date(m.joinedAt).toLocaleDateString('es-DO')}
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <form action={eliminarMiembro}>
-                      <input type="hidden" name="teamId" value={teamId} />
-                      <input type="hidden" name="userId" value={m.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-red-500 hover:text-red-700 font-medium"
-                        onClick={e => { if (!confirm(`¿Eliminar a ${m.email} de esta empresa?`)) e.preventDefault(); }}
-                      >
-                        Eliminar
-                      </button>
-                    </form>
+                    <ConfirmButton
+                      action={eliminarMiembro}
+                      message={`¿Eliminar a ${m.email} de esta empresa?`}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium"
+                      fields={{ teamId, userId: m.id }}
+                    >
+                      Eliminar
+                    </ConfirmButton>
                   </td>
                 </tr>
               ))}
@@ -238,23 +252,20 @@ export default async function EmpresaDetailPage({
               <li key={inv.id} className="px-5 py-3 flex items-center gap-4">
                 <span className="text-sm text-gray-700 flex-shrink-0">{inv.email}</span>
                 <a
-                  href={inviteUrl(inv.id)}
+                  href={inviteUrl(inv.token)}
                   target="_blank"
                   className="text-xs text-teal-600 hover:underline font-mono truncate flex-1 min-w-0"
                 >
-                  {inviteUrl(inv.id)}
+                  {inviteUrl(inv.token)}
                 </a>
-                <form action={cancelarInvitacion} className="flex-shrink-0">
-                  <input type="hidden" name="invId"  value={inv.id} />
-                  <input type="hidden" name="teamId" value={teamId} />
-                  <button
-                    type="submit"
-                    className="text-xs text-gray-400 hover:text-red-500"
-                    onClick={e => { if (!confirm('¿Cancelar esta invitación?')) e.preventDefault(); }}
-                  >
-                    Cancelar
-                  </button>
-                </form>
+                <ConfirmButton
+                  action={cancelarInvitacion}
+                  message="¿Cancelar esta invitación?"
+                  className="text-xs text-gray-400 hover:text-red-500 flex-shrink-0"
+                  fields={{ invId: inv.id, teamId }}
+                >
+                  Cancelar
+                </ConfirmButton>
               </li>
             ))}
           </ul>

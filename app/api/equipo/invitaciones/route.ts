@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers, users, invitations, teams } from '@/lib/db/schema';
@@ -98,23 +99,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ya existe una invitación pendiente para este correo' }, { status: 400 });
     }
 
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const [inv] = await db.insert(invitations).values({
       teamId,
       email,
       role,
       invitedBy: user.id,
       status:    'pending',
+      token,
+      expiresAt,
     }).returning();
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/sign-up?inviteId=${inv.id}`;
+    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/invitations/accept?token=${inv.token}`;
 
     try {
-      await sendInvitationEmail(email, user.name, teamData?.name ?? 'EmiteDO', inv.id.toString());
+      await sendInvitationEmail(email, user.name, teamData?.name ?? 'EmiteDO', inv.token);
     } catch (e) {
       console.error('[POST /api/equipo/invitaciones] Error sending invitation email:', e);
     }
 
-    return NextResponse.json({ ok: true, inviteId: inv.id, inviteUrl });
+    return NextResponse.json({ ok: true, inviteToken: inv.token, inviteUrl });
   } catch (err: unknown) {
     console.error('[POST /api/equipo/invitaciones]', err);
     const message = err instanceof Error ? err.message : 'Error interno';

@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { randomBytes } from 'crypto';
 import { db } from '@/lib/db/drizzle';
 import { teams, sequences, invitations, users, teamMembers } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
@@ -9,7 +10,7 @@ import { eq, and } from 'drizzle-orm';
 
 export async function crearEmpresa(formData: FormData) {
   const admin = await getUser();
-  if (!admin || admin.role !== 'owner') redirect('/lite');
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
 
   const razonSocial     = (formData.get('razonSocial') as string).trim();
   const rnc             = (formData.get('rnc') as string).trim();
@@ -68,16 +69,20 @@ export async function crearEmpresa(formData: FormData) {
       .limit(1);
 
     if (!existing.length) {
+      const token = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const [inv] = await db.insert(invitations).values({
         teamId:    team.id,
         email:     inviteEmail,
         role:      'owner',
         invitedBy: admin.id,
         status:    'pending',
+        token,
+        expiresAt,
       }).returning();
 
       try {
-        await sendInvitationEmail(inviteEmail, admin.name, razonSocial, inv.id.toString());
+        await sendInvitationEmail(inviteEmail, admin.name, razonSocial, inv.token);
       } catch (e) {
         console.error('[crearEmpresa] Error sending invite email:', e);
       }

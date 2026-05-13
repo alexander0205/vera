@@ -275,6 +275,8 @@ export interface EmisionResponseDto {
   /** Tipo de comprobante (2 dígitos). Ej: "32" */
   tipoComprobante: string;
   formato:         FormatoEmision;
+  /** Ambiente DGII bajo el que se emitió (TesteCF/CerteCF/Produccion) */
+  ambiente?:       AmbienteEcf;
   estado:          EstadoEmision;
   trackId:         string | null;
   /** Código de seguridad de 6 chars alfanumérico */
@@ -286,12 +288,21 @@ export interface EmisionResponseDto {
 }
 
 export const emision = {
-  list: (codigoPublico: string) =>
-    request<EmisionResponseDto[]>('GET', `/contribuyentes/${codigoPublico}/emision`),
+  list: (codigoPublico: string, limit?: number) =>
+    request<EmisionResponseDto[]>(
+      'GET',
+      `/contribuyentes/${codigoPublico}/emisiones${limit ? `?limit=${limit}` : ''}`,
+    ),
 
+  /** Endpoint unificado nuevo: POST /contribuyentes/:cp/emisiones/emitir */
+  emitirUnified: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>
+    request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emisiones/emitir`, dto, extraHeaders),
+
+  /** @deprecated Legacy path. Migrar a emitirUnified. Route emitir/route.ts pendiente de refactor. */
   emitir: (codigoPublico: string, tipo: string, dto: unknown, extraHeaders?: Record<string, string>) =>
     request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/ecf${tipo}`, dto, extraHeaders),
 
+  /** @deprecated Legacy path. Route emitir/route.ts pendiente de refactor. */
   emitirRfce32: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>
     request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/rfce32`, dto, extraHeaders),
 
@@ -333,6 +344,160 @@ export const catalogos = {
 
   formasPago: () =>
     request<CatalogItemDto[]>('GET', '/catalogos/formas-pago'),
+};
+
+// ─── Me (identidad de la API key) ─────────────────────────────────────────────
+
+export interface MeResponseDto {
+  software: { nombre: string; version: string; ambienteDefault: string };
+  empresa: {
+    id: string;
+    nombre: string;
+    emailContacto: string | null;
+    activo: boolean;
+    createdAt: string;
+  };
+  apiKey: {
+    id: string;
+    nombre: string;
+    esAdmin: boolean;
+    ultimoUso: string | null;
+    expiraEn: string | null;
+  };
+}
+
+export const me = () => request<MeResponseDto>('GET', '/me');
+
+// ─── DGII Status ──────────────────────────────────────────────────────────────
+
+export interface DgiiStatusDto {
+  rnc: string;
+  codigoPublico: string;
+  ambiente: string;
+  certificado: {
+    vigente: boolean;
+    subject: string | null;
+    issuer: string | null;
+    validFrom: string | null;
+    validTo: string | null;
+    diasRestantes: number | null;
+    revocado: boolean;
+  };
+  dgiiToken: {
+    cached: boolean;
+    vigenteHasta: string | null;
+    tiempoRestanteSegundos: number | null;
+    ambiente: string;
+  };
+  ultimaEmisionExitosa: string | null;
+}
+
+export const dgiiStatus = {
+  get: (codigoPublico: string) =>
+    request<DgiiStatusDto>('GET', `/contribuyentes/${codigoPublico}/dgii-status`),
+
+  refreshToken: (codigoPublico: string) =>
+    request<{ ok: boolean; expiraEn: string }>('POST', `/contribuyentes/${codigoPublico}/dgii-token/refresh`),
+};
+
+// ─── Extender contribuyentes con delete ───────────────────────────────────────
+
+export const contribuyentesExtras = {
+  delete: (codigoPublico: string) =>
+    request<{ ok: boolean }>('DELETE', `/contribuyentes/${codigoPublico}`),
+};
+
+// ─── Extender ncfRangos con delete ────────────────────────────────────────────
+
+export const ncfRangosExtras = {
+  delete: (codigoPublico: string, rangoId: string) =>
+    request<{ ok: boolean }>('DELETE', `/contribuyentes/${codigoPublico}/ncf-rangos/${rangoId}`),
+};
+
+// ─── Emisión extras: descargas y estado DGII ─────────────────────────────────
+
+export const emisionExtras = {
+  estadoDgiiByCp: (codigoPublico: string, emisionId: string) =>
+    request<EmisionResponseDto>('GET', `/contribuyentes/${codigoPublico}/emisiones/${emisionId}/estado-dgii`),
+
+  /** Descarga XML firmado (base64) */
+  downloadXml: async (codigoPublico: string, emisionId: string): Promise<string> => {
+    const res = await fetch(`${BASE_URL}/contribuyentes/${codigoPublico}/emisiones/${emisionId}/xml`, {
+      headers: { 'X-Api-Key': API_KEY },
+    });
+    if (!res.ok) throw new EcfApiError(res.status, await res.text());
+    return res.text();
+  },
+
+  /** Descarga PDF representación */
+  downloadPdf: async (codigoPublico: string, emisionId: string): Promise<Buffer> => {
+    const res = await fetch(`${BASE_URL}/contribuyentes/${codigoPublico}/emisiones/${emisionId}/pdf`, {
+      headers: { 'X-Api-Key': API_KEY },
+    });
+    if (!res.ok) throw new EcfApiError(res.status, await res.text());
+    return Buffer.from(await res.arrayBuffer());
+  },
+};
+
+// ─── Recepción (ACECF) ────────────────────────────────────────────────────────
+
+export interface RecepcionDto {
+  id: string;
+  rnc: string;
+  tipoComprobante: string;
+  ncf: string;
+  fecha: string;
+  estado: 'aprobado' | 'rechazado';
+  detalleMotivoRechazo?: string;
+  createdAt: string;
+}
+
+export const recepcion = {
+  list: (codigoPublico: string) =>
+    request<RecepcionDto[]>('GET', `/contribuyentes/${codigoPublico}/recepcion`),
+
+  aprobar: (codigoPublico: string, dto: { rnc: string; tipoComprobante: string; ncf: string; fecha: string }) =>
+    request<RecepcionDto>('POST', `/contribuyentes/${codigoPublico}/recepcion/aprobar-comercial`, dto),
+
+  rechazar: (codigoPublico: string, dto: { rnc: string; tipoComprobante: string; ncf: string; detalleMotivoRechazo: string }) =>
+    request<RecepcionDto>('POST', `/contribuyentes/${codigoPublico}/recepcion/rechazar-comercial`, dto),
+};
+
+// ─── Anulaciones (ANECF) ──────────────────────────────────────────────────────
+
+export interface AnecfDto {
+  id: string;
+  tipoComprobante: string;
+  rangos: Array<{ desde: number; hasta: number }>;
+  estado: string;
+  createdAt: string;
+}
+
+export const anecf = {
+  list: (codigoPublico: string) =>
+    request<AnecfDto[]>('GET', `/contribuyentes/${codigoPublico}/anecf`),
+
+  create: (codigoPublico: string, dto: { tipoComprobante: string; rangos: Array<{ desde: number; hasta: number }> }) =>
+    request<AnecfDto>('POST', `/contribuyentes/${codigoPublico}/anecf`, dto),
+};
+
+// ─── Soporte ──────────────────────────────────────────────────────────────────
+
+export interface SupportTicketDto {
+  numero: string;
+  email: string;
+  asunto: string;
+  descripcion: string;
+  estado: string;
+  createdAt: string;
+}
+
+export const support = {
+  create: (dto: { email: string; asunto: string; descripcion: string }) =>
+    request<SupportTicketDto>('POST', '/support/tickets', dto),
+
+  get: (numero: string, email: string) =>
+    request<SupportTicketDto>('GET', `/support/tickets/${numero}?email=${encodeURIComponent(email)}`),
 };
 
 // ─── Backward-compatible type aliases ────────────────────────────────────────

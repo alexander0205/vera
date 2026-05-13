@@ -8,7 +8,7 @@ export default async function AdminUsuariosPage() {
       id: users.id,
       name: users.name,
       email: users.email,
-      role: users.role,
+      role: users.platformRole,
       emailVerified: users.emailVerified,
       twoFactorEnabled: users.twoFactorEnabled,
       createdAt: users.createdAt,

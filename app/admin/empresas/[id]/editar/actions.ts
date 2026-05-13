@@ -9,7 +9,7 @@ import { PLANS } from '@/lib/config/plans';
 
 export async function actualizarEmpresa(formData: FormData) {
   const admin = await getUser();
-  if (!admin || admin.role !== 'owner') redirect('/lite');
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
 
   const teamId        = parseInt(formData.get('teamId') as string);
   if (isNaN(teamId)) return;

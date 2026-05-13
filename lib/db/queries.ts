@@ -151,22 +151,47 @@ export async function getTeamIdForUser(): Promise<number | null> {
   const sessionData = await verifyToken(sessionCookie.value);
   if (!sessionData?.user?.id) return null;
 
-  // Si hay activeTeamId en la sesión, úsalo (verificando que el usuario pertenezca)
+  // Platform admin → puede activar cualquier team sin membership check
+  const [u] = await db
+    .select({ platformRole: users.platformRole })
+    .from(users)
+    .where(eq(users.id, sessionData.user.id))
+    .limit(1);
+  const isPlatformAdmin = u?.platformRole === 'admin';
+
   if (sessionData.activeTeamId) {
-    const belongs = await db
-      .select({ teamId: teamMembers.teamId })
-      .from(teamMembers)
-      .where(
-        and(
-          eq(teamMembers.userId, sessionData.user.id),
-          eq(teamMembers.teamId, sessionData.activeTeamId)
+    if (isPlatformAdmin) {
+      // Verificar que el team existe
+      const [t] = await db
+        .select({ id: teams.id })
+        .from(teams)
+        .where(eq(teams.id, sessionData.activeTeamId))
+        .limit(1);
+      if (t) return t.id;
+    } else {
+      const belongs = await db
+        .select({ teamId: teamMembers.teamId })
+        .from(teamMembers)
+        .where(
+          and(
+            eq(teamMembers.userId, sessionData.user.id),
+            eq(teamMembers.teamId, sessionData.activeTeamId)
+          )
         )
-      )
-      .limit(1);
-    if (belongs[0]) return belongs[0].teamId;
+        .limit(1);
+      if (belongs[0]) return belongs[0].teamId;
+    }
   }
 
-  // Fallback: primer team del usuario
+  // Fallback: para admin → primer team en DB; para member → primer team suyo
+  if (isPlatformAdmin) {
+    const result = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .orderBy(teams.createdAt)
+      .limit(1);
+    return result[0]?.id ?? null;
+  }
   const result = await db
     .select({ teamId: teamMembers.teamId })
     .from(teamMembers)
@@ -175,10 +200,30 @@ export async function getTeamIdForUser(): Promise<number | null> {
   return result[0]?.teamId ?? null;
 }
 
-/** Retorna todos los teams del usuario */
+/** Retorna todos los teams del usuario (admin → todos los teams) */
 export async function getUserTeams() {
   const user = await getUser();
   if (!user) return [];
+
+  // Platform admin → ver todas las empresas
+  if (user.platformRole === 'admin') {
+    return db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        rnc: teams.rnc,
+        razonSocial: teams.razonSocial,
+        nombreComercial: teams.nombreComercial,
+        planName: teams.planName,
+        subscriptionStatus: teams.subscriptionStatus,
+        createdAt: teams.createdAt,
+        role: sql<string>`'admin'`.as('role'),
+        logo: teams.logo,
+      })
+      .from(teams)
+      .orderBy(teams.createdAt);
+  }
+
   return db
     .select({
       id: teams.id,

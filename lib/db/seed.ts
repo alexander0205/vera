@@ -24,7 +24,7 @@ async function seed() {
       name: 'Admin EmiteDO',
       email,
       passwordHash,
-      role: 'owner',
+      platformRole: 'admin',
     })
     .returning();
 

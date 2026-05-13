@@ -1,5 +1,3 @@
-'use server';
-
 /**
  * /invitations/accept?token={inviteId}
  *
@@ -9,12 +7,14 @@
  */
 
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { db } from '@/lib/db/drizzle';
 import {
   invitations, teams, users, teamMembers, activityLogs, ActivityType,
 } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gt } from 'drizzle-orm';
 import { hashPassword, setSession, comparePasswords } from '@/lib/auth/session';
+import { rateLimit } from '@/lib/rate-limit';
 import { Receipt } from 'lucide-react';
 
 // ─── Server Action: crear / vincular cuenta ───────────────────────────────────
@@ -22,19 +22,31 @@ import { Receipt } from 'lucide-react';
 async function aceptarInvitacion(formData: FormData) {
   'use server';
 
-  const invId    = parseInt(formData.get('invId') as string);
+  const invToken = (formData.get('invToken') as string).trim();
   const nombre   = (formData.get('nombre') as string).trim();
   const password = (formData.get('password') as string);
 
-  if (!nombre || !password || password.length < 8 || isNaN(invId)) {
-    redirect(`/invitations/accept?token=${invId}&error=datos`);
+  if (!nombre || !password || password.length < 8 || !invToken) {
+    redirect(`/invitations/accept?token=${invToken}&error=datos`);
   }
 
-  // Re-verificar invitación
+  // Rate-limit por IP — 5 intentos/min
+  const reqHeaders = await headers();
+  const ip = reqHeaders.get('x-forwarded-for') ?? 'unknown';
+  const rl = rateLimit(`invite-accept:${ip}`, 5, 60_000);
+  if (!rl.allowed) {
+    redirect(`/invitations/accept?token=${invToken}&error=rate_limit`);
+  }
+
+  // Re-verificar invitación (pending + no expirada)
   const [inv] = await db
     .select()
     .from(invitations)
-    .where(and(eq(invitations.id, invId), eq(invitations.status, 'pending')))
+    .where(and(
+      eq(invitations.token, invToken),
+      eq(invitations.status, 'pending'),
+      gt(invitations.expiresAt, new Date()),
+    ))
     .limit(1);
 
   if (!inv) redirect('/sign-in?error=invitacion_invalida');
@@ -54,7 +66,7 @@ async function aceptarInvitacion(formData: FormData) {
       name:          nombre,
       email:         inv.email,
       passwordHash:  await hashPassword(password),
-      role:          'member',
+      platformRole:  'member',
       emailVerified: true, // invitado = email verificado
     }).returning();
     user = created;
@@ -62,7 +74,7 @@ async function aceptarInvitacion(formData: FormData) {
     // Verificar contraseña antes de vincular
     const match = await comparePasswords(password, user.passwordHash);
     if (!match) {
-      redirect(`/invitations/accept?token=${invId}&error=password`);
+      redirect(`/invitations/accept?token=${invToken}&error=password`);
     }
   }
 
@@ -91,12 +103,12 @@ async function aceptarInvitacion(formData: FormData) {
   // Marcar invitación como aceptada
   await db.update(invitations)
     .set({ status: 'accepted' })
-    .where(eq(invitations.id, invId));
+    .where(eq(invitations.token, invToken));
 
   // Iniciar sesión
   await setSession(user);
 
-  redirect('/lite');
+  redirect('/dashboard');
 }
 
 // ─── Página ───────────────────────────────────────────────────────────────────
@@ -107,23 +119,25 @@ export default async function AcceptInvitationPage({
   searchParams: Promise<{ token?: string; error?: string }>;
 }) {
   const { token, error } = await searchParams;
-  const invId = token ? parseInt(token) : NaN;
 
-  if (isNaN(invId)) {
+  if (!token || token.length !== 64) {
     return <InvalidInvite msg="Enlace de invitación inválido." />;
   }
 
   const [inv] = await db
     .select()
     .from(invitations)
-    .where(eq(invitations.id, invId))
+    .where(eq(invitations.token, token))
     .limit(1);
 
   if (!inv) {
     return <InvalidInvite msg="Esta invitación no existe." />;
   }
   if (inv.status !== 'pending') {
-    return <InvalidInvite msg="Esta invitación ya fue utilizada o expiró." />;
+    return <InvalidInvite msg="Esta invitación ya fue utilizada o cancelada." />;
+  }
+  if (inv.expiresAt < new Date()) {
+    return <InvalidInvite msg="Esta invitación expiró. Pide una nueva al administrador." />;
   }
 
   const [team] = await db
@@ -160,6 +174,10 @@ export default async function AcceptInvitationPage({
               ? `Ingresa tu contraseña de ${inv.email} para aceptar.`
               : `Crea tu cuenta para ${inv.email} y empieza a facturar.`}
           </p>
+          <p className="text-xs text-gray-400 mt-2">
+            Esta invitación expira el{' '}
+            <strong>{inv.expiresAt.toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' })}</strong>.
+          </p>
         </div>
 
         {/* Errores */}
@@ -173,10 +191,15 @@ export default async function AcceptInvitationPage({
             Contraseña incorrecta. Inténtalo de nuevo.
           </div>
         )}
+        {error === 'rate_limit' && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
+            Demasiados intentos. Espera 1 minuto e inténtalo de nuevo.
+          </div>
+        )}
 
         {/* Formulario */}
         <form action={aceptarInvitacion} className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <input type="hidden" name="invId" value={invId} />
+          <input type="hidden" name="invToken" value={token} />
 
           {/* Email (solo lectura) */}
           <div>

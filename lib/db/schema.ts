@@ -20,7 +20,7 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 100 }),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
-  role: varchar('role', { length: 20 }).notNull().default('member'),
+  platformRole: varchar('platform_role', { length: 20 }).notNull().default('member'),
   // Email verification
   emailVerified: boolean('email_verified').notNull().default(false),
   // 2FA
@@ -135,7 +135,9 @@ export const invitations = pgTable('invitations', {
     .notNull()
     .references(() => users.id),
   invitedAt: timestamp('invited_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at').notNull(),
   status: varchar('status', { length: 20 }).notNull().default('pending'),
+  token: varchar('token', { length: 64 }).unique().notNull(),
 });
 
 // ─── EmiteDO — Clientes ───────────────────────────────────────────────────────

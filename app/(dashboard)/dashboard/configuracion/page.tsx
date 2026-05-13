@@ -7,127 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, Database, RefreshCw,
+  CheckCircle, Loader2, Upload, X, Eye,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
-
-// ─── Padrón DGII Card ─────────────────────────────────────────────────────────
-
-type SyncEvent = {
-  step:     'download' | 'extract' | 'prepare' | 'insert' | 'done' | 'error';
-  message:  string;
-  count?:   number;
-  total?:   number;
-  duration?: string;
-};
-
-function DgiiPadronCard() {
-  const [syncing, setSyncing]   = useState(false);
-  const [progress, setProgress] = useState<SyncEvent | null>(null);
-
-  async function handleSync() {
-    setSyncing(true);
-    setProgress(null);
-
-    try {
-      const res = await fetch('/api/rnc/sync', { method: 'POST' });
-      if (!res.body) throw new Error('Sin respuesta del servidor');
-
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let   buffer  = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() ?? '';
-
-        for (const part of parts) {
-          const dataLine = part.trim().replace(/^data:\s*/, '');
-          if (!dataLine) continue;
-          try {
-            const event: SyncEvent = JSON.parse(dataLine);
-            setProgress(event);
-            if (event.step === 'done' || event.step === 'error') break;
-          } catch { /* ignore parse errors */ }
-        }
-      }
-    } catch (err) {
-      setProgress({ step: 'error', message: err instanceof Error ? err.message : 'Error de conexión' });
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  const pct = progress?.count && progress?.total
-    ? Math.round((progress.count / progress.total) * 100)
-    : null;
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Database className="h-4 w-4 text-teal-600" />
-          Padrón de Contribuyentes DGII
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-gray-600">
-          Descarga el registro oficial de contribuyentes de la DGII (~770K empresas y personas).
-          Una vez sincronizado, podrás buscar cualquier RNC o razón social al crear facturas.
-          Recomendamos sincronizar una vez al mes.
-        </p>
-
-        {/* Estado / progreso */}
-        {progress && (
-          progress.step === 'error' ? (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-              {progress.message}
-            </div>
-          ) : progress.step === 'done' ? (
-            <div className="bg-teal-50 border border-teal-200 text-teal-700 text-sm rounded-lg p-3 flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 shrink-0" />
-              {progress.message}
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <p className="text-sm text-gray-600">{progress.message}</p>
-              {pct !== null && (
-                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-teal-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              )}
-              {pct !== null && (
-                <p className="text-xs text-gray-400 text-right">{pct}%</p>
-              )}
-            </div>
-          )
-        )}
-
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleSync}
-          disabled={syncing}
-          className="border-teal-200 text-teal-700 hover:bg-teal-50"
-        >
-          {syncing
-            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sincronizando…</>
-            : <><RefreshCw className="h-4 w-4 mr-2" />Sincronizar padrón DGII</>}
-        </Button>
-        <p className="text-xs text-gray-400">
-          Fuente: <span className="font-mono">dgii.gov.do</span> — DGII_RNC.zip (~20 MB, ~2 min)
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -519,8 +401,7 @@ export default function ConfiguracionPage() {
         </CardContent>
       </Card>
 
-      {/* ── Padrón DGII ──────────────────────────────────────────────────────── */}
-      <DgiiPadronCard />
+      {/* Padrón DGII se sincroniza automáticamente vía cron diario — no UI expuesta */}
 
       {/* Botón guardar final */}
       <div className="flex justify-end pb-6">

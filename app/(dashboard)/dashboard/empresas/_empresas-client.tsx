@@ -39,6 +39,9 @@ interface Props {
 
 function planBadge(planName: string | null, status: string | null) {
   const s = status?.toLowerCase();
+  if (status === 'admin') {
+    return { label: 'Admin', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  }
   if (!planName || planName.toLowerCase() === 'gratis') {
     return { label: 'Sin plan', color: 'bg-gray-100 text-gray-600 border-gray-200' };
   }
@@ -59,6 +62,7 @@ function planBadge(planName: string | null, status: string | null) {
 }
 
 function hasActivePlan(planName: string | null, status: string | null) {
+  if (status === 'admin') return true;
   if (!planName || planName.toLowerCase() === 'gratis') return false;
   const s = status?.toLowerCase();
   return s === 'active' || s === 'trialing';

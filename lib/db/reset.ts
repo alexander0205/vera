@@ -82,7 +82,7 @@ async function reset() {
       name:  ADMIN_NAME,
       email: ADMIN_EMAIL,
       passwordHash,
-      role:  'owner',
+      platformRole: 'admin',
       emailVerified: true,
     })
     .returning();

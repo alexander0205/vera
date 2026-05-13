@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/facturas-recurrentes",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/rnc-sync",
+      "schedule": "0 4 * * *"
     }
   ]
 }

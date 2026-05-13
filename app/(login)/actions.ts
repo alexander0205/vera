@@ -106,19 +106,20 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
   }
 
   // Owner (plataforma) → panel de admin
-  if (foundUser.role === 'owner') redirect('/admin');
+  if (foundUser.platformRole === 'admin') redirect('/admin');
 
-  redirect('/lite');
+  redirect('/dashboard');
 });
 
 const signUpSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  inviteId: z.string().optional()
+  inviteId: z.string().optional(), // legacy (integer id) — kept for compat
+  inviteToken: z.string().optional(), // new secure token
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { email, password, inviteId } = data;
+  const { email, password, inviteId, inviteToken } = data;
 
   const existingUser = await db
     .select()
@@ -139,7 +140,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const newUser: NewUser = {
     email,
     passwordHash,
-    role: 'owner' // Default role, will be overridden if there's an invitation
+    platformRole: 'member', // Solo el seed crea platform admins
   };
 
   const [createdUser] = await db.insert(users).values(newUser).returning();
@@ -156,14 +157,16 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   let userRole: string;
   let createdTeam: typeof teams.$inferSelect | null = null;
 
-  if (inviteId) {
-    // Check if there's a valid invitation
+  if (inviteToken || inviteId) {
+    // Check if there's a valid invitation — prefer token, fall back to legacy id
     const [invitation] = await db
       .select()
       .from(invitations)
       .where(
         and(
-          eq(invitations.id, parseInt(inviteId)),
+          inviteToken
+            ? eq(invitations.token, inviteToken)
+            : eq(invitations.id, parseInt(inviteId!)),
           eq(invitations.email, email),
           eq(invitations.status, 'pending')
         )
@@ -449,12 +452,17 @@ export const inviteTeamMember = validatedActionWithUser(
     }
 
     // Create a new invitation
+    const { randomBytes } = await import('crypto');
+    const invToken = randomBytes(32).toString('hex');
+    const invExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await db.insert(invitations).values({
       teamId: userWithTeam.teamId,
       email,
       role,
       invitedBy: user.id,
-      status: 'pending'
+      status: 'pending',
+      token: invToken,
+      expiresAt: invExpiresAt,
     });
 
     await logActivity(

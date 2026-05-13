@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries';
 import { setActiveTeam } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
-import { teamMembers } from '@/lib/db/schema';
+import { teamMembers, teams } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
@@ -14,7 +14,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'teamId requerido' }, { status: 400 });
   }
 
-  // Verificar que el usuario pertenece a ese team
+  // Platform admin → puede activar cualquier team que exista
+  if (user.platformRole === 'admin') {
+    const [t] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!t) return NextResponse.json({ error: 'Empresa no existe' }, { status: 404 });
+    await setActiveTeam(teamId);
+    return NextResponse.json({ success: true });
+  }
+
+  // Usuario regular → debe ser miembro
   const membership = await db
     .select()
     .from(teamMembers)

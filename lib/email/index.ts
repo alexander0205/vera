@@ -5,7 +5,7 @@ export const resend = new Resend(process.env.RESEND_API_KEY);
 export async function sendPasswordResetEmail(email: string, token: string, name: string | null) {
   const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`;
   await resend.emails.send({
-    from: 'EmiteDO <noreply@emitedo.com>',
+    from: 'EmiteDO <noreply@yisraeltech.com>',
     to: email,
     subject: 'Restablecer contraseña — EmiteDO',
     html: `
@@ -27,7 +27,7 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {
   const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${token}`;
   await resend.emails.send({
-    from: 'EmiteDO <noreply@emitedo.com>',
+    from: 'EmiteDO <noreply@yisraeltech.com>',
     to: email,
     subject: 'Verificar tu email — EmiteDO',
     html: `
@@ -54,7 +54,7 @@ export async function sendInvitationEmail(
 ) {
   const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${token}`;
   await resend.emails.send({
-    from: 'EmiteDO <noreply@emitedo.com>',
+    from: 'EmiteDO <noreply@yisraeltech.com>',
     to: email,
     subject: `Invitación a ${teamName} en EmiteDO`,
     html: `
@@ -80,7 +80,7 @@ export async function sendInvoiceEmail(
   pdfBuffer: Buffer,
 ) {
   await resend.emails.send({
-    from: 'EmiteDO <noreply@emitedo.com>',
+    from: 'EmiteDO <noreply@yisraeltech.com>',
     to: email,
     subject: `Factura ${encf}`,
     html: `

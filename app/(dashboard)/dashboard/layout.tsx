@@ -79,7 +79,7 @@ const TOP_ITEMS: NavItem[] = [
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; }
-interface UserInfo { name: string | null; email: string; }
+interface UserInfo { name: string | null; email: string; platformRole?: string | null; }
 
 function getInitials(name: string | null, email: string) {
   if (name) return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -134,6 +134,8 @@ function planBadgeStyle(planName: string | null) {
 // ─── Plan helpers ─────────────────────────────────────────────────────────────
 
 function teamHasPlan(t: Team) {
+  // Empresa creada manualmente por admin → acceso sin Stripe
+  if (t.subscriptionStatus === 'admin') return true;
   const name = t.planName?.toLowerCase();
   if (!name || name === 'gratis') return false;
   const s = t.subscriptionStatus?.toLowerCase();
@@ -300,6 +302,7 @@ function ProfileDropdown({
   }
 
   const menuItems = [
+    ...(user?.platformRole === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Panel admin' }] : []),
     { href: '/dashboard/perfil',      icon: UserCircle, label: 'Mi perfil' },
     { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
     ...(canSeeActivity ? [{ href: '/dashboard/activity', icon: Activity, label: 'Actividad' }] : []),
@@ -377,7 +380,7 @@ function DashboardTopBar({
   onMenuClick: () => void;
   onSwitch: (teamId: number) => void;
 }) {
-  const canSeeActivity = planHasFeature(plan, 'actividad');
+  const canSeeActivity = true;
 
   return (
     <header className="h-12 bg-white border-b border-gray-200 flex items-center gap-3 px-4 shrink-0 z-30">
@@ -434,22 +437,11 @@ function Sidebar({
 
   const activeTeam = teams.find(t => t.id === activeTeamId) ?? teams[0];
   const plan       = activeTeam?.planName;
-  const hasPlan    = activeTeam ? teamHasPlan(activeTeam) : false;
+  // Nav siempre visible para todos los usuarios — sin gating por plan
+  const hasPlan    = true;
 
-  // Determina si un item concreto está habilitado según el plan
-  function isEnabled(href: string): boolean {
-    if (!hasPlan) return false;
-    if (href.includes('cotizaciones'))         return planHasFeature(plan, 'cotizaciones');
-    if (href.includes('facturas-recurrentes')) return planHasFeature(plan, 'facturas-recurrentes');
-    if (href.includes('productos'))            return planHasFeature(plan, 'productos');
-    if (href.includes('categorias') || href.includes('almacenes') ||
-        href.includes('listas-precios') || href.includes('vendedores'))
-                                               return planHasFeature(plan, 'inventario-avanzado');
-    if (href.includes('reportes'))             return planHasFeature(plan, 'reportes');
-    if (href.includes('clientes'))             return planHasFeature(plan, 'clientes');
-    if (href.includes('api-keys'))             return planHasFeature(plan, 'api-keys');
-    if (href.includes('webhooks'))             return planHasFeature(plan, 'webhooks');
-    if (href.includes('impresoras'))           return planHasFeature(plan, 'impresoras');
+  // Todos los items siempre habilitados
+  function isEnabled(_href: string): boolean {
     return true;
   }
 

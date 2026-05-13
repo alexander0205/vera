@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   // Solo superadmins (role = 'admin' en users)
-  if (user.role !== 'admin') {
+  if (user.platformRole !== 'admin') {
     return NextResponse.json({ error: 'Acceso restringido a administradores' }, { status: 403 });
   }
 

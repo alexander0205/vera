@@ -1,13 +1,10 @@
-import { redirect } from 'next/navigation';
-import { getTeamIdForUser, getTeamProfile } from '@/lib/db/queries';
-import { planHasFeature, type PlanFeature } from '@/lib/plans';
+import { type PlanFeature } from '@/lib/plans';
 
-export async function PlanGate({ feature }: { feature: PlanFeature }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return null;
-  const team = await getTeamProfile(teamId);
-  if (!planHasFeature(team?.planName, feature)) {
-    redirect('/dashboard');
-  }
+/**
+ * PlanGate — sin gating activo.
+ * Todos los usuarios acceden a todas las features.
+ * Para reactivar gating, restaurar el check de planHasFeature.
+ */
+export async function PlanGate({ feature: _feature }: { feature: PlanFeature }) {
   return null;
 }
