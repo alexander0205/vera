@@ -244,12 +244,17 @@ export async function POST(request: NextRequest) {
       skipRangeValidation,
     });
 
-    // Para pruebas de habilitación: inyectar X-Dgii-Ambiente.
-    // dev → TesteCF, prod → CerteCF (según ECF_HABILITACION_AMBIENTE o NODE_ENV).
-    const habilitacionHeaders: Record<string, string> | undefined = skipRangeValidation
-      ? { 'X-Dgii-Ambiente': process.env.ECF_HABILITACION_AMBIENTE
-            ?? (process.env.NODE_ENV === 'production' ? 'CerteCF' : 'TesteCF') }
-      : undefined;
+    // Ambiente DGII: siempre enviado explícito en header.
+    // - Habilitación (skipRangeValidation): usa ECF_HABILITACION_AMBIENTE override (dev=TesteCF, prod=CerteCF)
+    // - Emisión normal: usa team.dgiiEnvironment ('TesteCF' | 'CerteCF' | 'Produccion')
+    const habilitacionAmbiente = process.env.ECF_HABILITACION_AMBIENTE
+      ?? (process.env.NODE_ENV === 'production' ? 'CerteCF' : 'TesteCF');
+    const ambiente = skipRangeValidation
+      ? habilitacionAmbiente
+      : (team.dgiiEnvironment ?? 'TesteCF');
+    const habilitacionHeaders: Record<string, string> = {
+      'X-Dgii-Ambiente': ambiente,
+    };
 
     // ── Log server-side del body exacto que se envía a ecf-api ──────────────────
     console.log(
