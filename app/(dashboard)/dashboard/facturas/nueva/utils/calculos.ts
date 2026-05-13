@@ -1,5 +1,10 @@
 import type { ItemLinea } from './types';
 
+/** Round to 2 decimals (DGII canonical precision for monetary values). */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export function tasaToFloat(t: string): number | undefined {
   if (t === 'exento') return undefined;
   const n = parseFloat(t);
@@ -11,7 +16,7 @@ export function calcularMontoItem(item: ItemLinea): number {
   const desc = base * (item.descuentoPct / 100);
   const neto = Math.max(0, base - desc);
   const tasa = item.tasaItbis === 'exento' ? 0 : parseFloat(item.tasaItbis);
-  return neto + neto * tasa;
+  return round2(neto + neto * tasa);
 }
 
 export function calcularTotales(items: ItemLinea[]) {
@@ -25,8 +30,15 @@ export function calcularTotales(items: ItemLinea[]) {
     descuento += desc;
     itbis    += neto * tasa;
   }
-  const subtotal = bruto - descuento;
-  return { bruto, subtotal, descuento, itbis, total: subtotal + itbis };
+  const subtotalR = round2(bruto - descuento);
+  const itbisR = round2(itbis);
+  return {
+    bruto: round2(bruto),
+    subtotal: subtotalR,
+    descuento: round2(descuento),
+    itbis: itbisR,
+    total: round2(subtotalR + itbisR),
+  };
 }
 
 let nextId = 1;

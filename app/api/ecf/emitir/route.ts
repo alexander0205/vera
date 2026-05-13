@@ -47,7 +47,7 @@ const retencionSchema = z.object({
 const emitirSchema = z.object({
   modo:                 z.enum(['emitir', 'borrador']).default('emitir'),
   tipoEcf:              z.enum(['31', '32', '33', '34', '41', '43', '44', '45', '46', '47']),
-  rncComprador:         z.string().optional(),
+  rncComprador:         z.string().regex(/^\d{9,11}$/, 'RNC debe tener 9-11 dígitos').optional(),
   razonSocialComprador: z.string().optional(),
   emailComprador:       z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
   tipoPago:             z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).default(1),
@@ -80,6 +80,10 @@ const emitirSchema = z.object({
 
   // Override de e-NCF para habilitación (no consume la secuencia del rango)
   encfOverride: z.string().regex(/^E\d{12}$/).optional(),
+
+  // Tipo 47 — tasa de retención ISR pagos al exterior.
+  // Default 0.27 (general). 0.10 países con tratado, 0.15 servicios técnicos, etc.
+  tasaIsrRetencion: z.number().min(0).max(1).optional(),
 });
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -236,6 +240,7 @@ export async function POST(request: NextRequest) {
       tipoIngresos:         data.tipoIngresos,
       retenciones:          data.retenciones, // tipos 31/32/33/34
       encfOverride:         data.encfOverride,
+      tasaIsrRetencion:     data.tasaIsrRetencion, // tipo 47
       skipRangeValidation,
     });
 

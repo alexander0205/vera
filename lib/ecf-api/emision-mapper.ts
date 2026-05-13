@@ -83,6 +83,14 @@ export interface EmitedoEmisionData {
    * Permite usar cualquier e-NCF sin tener un rango registrado activo.
    */
   skipRangeValidation?: boolean;
+  /**
+   * Tipo 47 (Pagos al Exterior): tasa de retención ISR.
+   * Default 0.27 (caso general).
+   * Para países con tratados de doble tributación: típicamente 0.10.
+   * Otros casos: 0.15 (servicios técnicos), etc.
+   * Si se omite, se usa 0.27.
+   */
+  tasaIsrRetencion?: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -126,10 +134,30 @@ function mapTipoPago(tp: number): 1 | 2 | 3 {
   return 3; // 3=gratuito, 4=uso propio → gratuito
 }
 
-// YYYY-MM-DD → dd-MM-yyyy (formato ecf-api)
-function toddMMyyyy(iso: string): string {
-  const [y, m, day] = iso.split('-');
-  return `${day}-${m}-${y}`;
+// Normaliza fecha a dd-MM-yyyy (formato ecf-api).
+// Acepta:
+//   - dd-MM-yyyy (pass-through)
+//   - YYYY-MM-DD
+//   - ISO 8601 timestamp completo
+//   - Date
+function toddMMyyyy(d: string | Date): string {
+  if (typeof d === 'string') {
+    // Ya está en dd-MM-yyyy
+    if (/^\d{2}-\d{2}-\d{4}$/.test(d)) return d;
+    // ISO YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      const [y, m, dd] = d.split('-');
+      return `${dd}-${m}-${y}`;
+    }
+    // Full ISO timestamp u otro formato parseable
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) throw new Error(`Invalid date: ${d}`);
+    return toddMMyyyy(dt);
+  }
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 /** Fecha de hoy en dd-MM-yyyy */
@@ -277,9 +305,14 @@ function mapItems43(items: EmitedoItem[]) {
  * Requieren indicadorAgenteRetencionoPercepcion y montoISRRetenido (top-level en el item).
  * montoISRRetenido puede ser 0 si no hay retención adicional.
  */
-function mapItems47(items: EmitedoItem[]) {
+function mapItems47(items: EmitedoItem[], tasaIsr = 0.27) {
   return items.map(item => {
     const montoItem = item.cantidadItem * item.precioUnitarioItem - (item.descuentoMonto ?? 0);
+    // Si el item trae montoISRRetenido explícito, úsalo (override fino por item).
+    // De lo contrario, aplicar la tasa (default 0.27, o override del payload para tratados).
+    const isrRet = item.montoISRRetenido !== undefined
+      ? item.montoISRRetenido
+      : Math.round(montoItem * tasaIsr * 100) / 100;
     return {
       indicadorFacturacion:                4, // Exento en pagos al exterior
       nombreItem:                          item.nombreItem,
@@ -289,8 +322,8 @@ function mapItems47(items: EmitedoItem[]) {
       montoItem,
       descripcionItem:                     item.descripcionItem,
       indicadorAgenteRetencionoPercepcion: 1, // 1=Retención
-      // DGII: montoISRRetenido = 27% del monto (tasa de retención ISR pagos al exterior)
-      montoISRRetenido:                    Math.round(montoItem * 0.27 * 100) / 100,
+      // DGII: montoISRRetenido = tasaIsr × montoItem (0.27 default; 0.10 tratados, 0.15 otros)
+      montoISRRetenido:                    isrRet,
     };
   });
 }
@@ -475,17 +508,22 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
   // Items requieren indicadorAgenteRetencionoPercepcion y montoISRRetenido.
   if (tipo === '47') {
     const fp = buildFormasPago(tipoPago, d.totales.montoTotal);
+    const tasaIsr = d.tasaIsrRetencion ?? 0.27;
+    const items47 = mapItems47(d.items, tasaIsr);
+    // Sumar exactamente lo que se aplicó por item (respeta overrides per-item).
+    const totalISRRet = items47.reduce((s, it) => s + (it.montoISRRetenido ?? 0), 0);
     return {
       tipo,
       esRfce: false,
       dto: {
         tipoComprobante:      tipo,
-        items:                mapItems47(d.items),
+        items:                items47,
         montoTotal:           d.totales.montoTotal,
         // DGII cod=1960: todos los items en tipo 47 son exentos → montoExento = montoTotal
         montoExento:          d.totales.montoTotal,
-        // DGII cod=11170: totalISRRetencion obligatorio = 27% del montoTotal (tasa ISR pagos al exterior)
-        totalISRRetencion:    Math.round(d.totales.montoTotal * 0.27 * 100) / 100,
+        // DGII cod=11170: totalISRRetencion = suma exacta del ISR retenido por item.
+        // Tasa default 0.27, override vía tasaIsrRetencion (0.10 tratados, 0.15 otros).
+        totalISRRetencion:    Math.round(totalISRRet * 100) / 100,
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
         razonSocialProveedor: d.razonSocialComprador,
