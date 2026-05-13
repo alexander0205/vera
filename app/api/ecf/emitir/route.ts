@@ -254,11 +254,20 @@ export async function POST(request: NextRequest) {
     );
 
     // Llamar a ecf-api — usar endpoint unificado (/emisiones/emitir)
-    // El mapper ya añade `tipoComprobante` y `formato` (para tipo 32) al DTO.
+    // ecf-api espera body wrapped: { tipoComprobante, formato?, payload: {...campos del comprobante} }
+    // El mapper devuelve un DTO plano — extraemos tipoComprobante + formato y movemos el resto a `payload`.
     let resultado;
-    console.log({ codigoPublico, tipo, esRfce, ecfApiDto, habilitacionHeaders });
     try {
-      resultado = await emision.emitirUnified(codigoPublico, ecfApiDto, habilitacionHeaders);
+      const { tipoComprobante: tipoCmp, formato: fmt, ...payloadFields } = ecfApiDto as Record<string, unknown> & {
+        tipoComprobante?: string;
+        formato?: string;
+      };
+      const wrappedBody = {
+        tipoComprobante: tipoCmp ?? tipo,
+        ...(fmt ? { formato: fmt } : {}),
+        payload: payloadFields,
+      };
+      resultado = await emision.emitirUnified(codigoPublico, wrappedBody, habilitacionHeaders);
     } catch (err) {
       if (err instanceof EcfApiError) {
         const esErrorNegocio = err.status >= 400 && err.status < 500;
