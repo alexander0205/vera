@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, gt } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   User,
@@ -47,7 +47,8 @@ async function logActivity(
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
-  password: z.string().min(8).max(100)
+  password: z.string().min(8).max(100),
+  twoFactorCode: z.string().regex(/^\d{6}$/).optional(),
 });
 
 export const signIn = validatedAction(signInSchema, async (data, formData) => {
@@ -92,6 +93,37 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
       email,
       password
     };
+  }
+
+  // 2FA gate — si está habilitado, exigir código TOTP válido antes de setear sesión
+  if (foundUser.twoFactorEnabled && foundUser.twoFactorSecret) {
+    const code = data.twoFactorCode;
+    if (!code) {
+      return {
+        error: '2FA_REQUIRED',
+        twoFactorRequired: true,
+        email,
+        password,
+      };
+    }
+    const OTPAuth = await import('otpauth');
+    const totp = new OTPAuth.TOTP({
+      issuer: 'EmiteDO',
+      label: foundUser.email,
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret: foundUser.twoFactorSecret,
+    });
+    const delta = totp.validate({ token: code, window: 1 });
+    if (delta === null) {
+      return {
+        error: 'Código 2FA inválido o expirado.',
+        twoFactorRequired: true,
+        email,
+        password,
+      };
+    }
   }
 
   await Promise.all([
@@ -159,6 +191,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   if (inviteToken || inviteId) {
     // Check if there's a valid invitation — prefer token, fall back to legacy id
+    // Also enforce expiresAt > now (no aceptar invitaciones expiradas)
     const [invitation] = await db
       .select()
       .from(invitations)
@@ -168,7 +201,8 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
             ? eq(invitations.token, inviteToken)
             : eq(invitations.id, parseInt(inviteId!)),
           eq(invitations.email, email),
-          eq(invitations.status, 'pending')
+          eq(invitations.status, 'pending'),
+          gt(invitations.expiresAt, new Date()),
         )
       )
       .limit(1);

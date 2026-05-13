@@ -5,7 +5,10 @@ import { eq } from 'drizzle-orm';
 
 export async function GET() {
   const user = await getUser();
-  return Response.json(user);
+  if (!user) return Response.json(null);
+  // Safe projection — nunca enviar passwordHash, twoFactorSecret, etc. al cliente
+  const { passwordHash, twoFactorSecret, deletedAt, ...safe } = user;
+  return Response.json(safe);
 }
 
 export async function PATCH(req: Request) {
