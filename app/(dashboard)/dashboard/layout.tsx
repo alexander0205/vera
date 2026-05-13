@@ -255,25 +255,7 @@ function CompanySwitcher({
             })}
           </div>
 
-          {/* Footer */}
-          <div className="border-t border-gray-100 p-1.5 flex gap-1">
-            <Link
-              href="/dashboard/empresas"
-              onClick={() => { setOpen(false); setSearch(''); }}
-              className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-50 text-xs text-gray-600 font-medium transition-colors"
-            >
-              <Building2 className="h-3.5 w-3.5" />
-              Gestionar empresas
-            </Link>
-            <Link
-              href="/dashboard/empresas"
-              onClick={() => { setOpen(false); setSearch(''); }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-teal-50 text-xs text-teal-700 font-medium transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Nueva
-            </Link>
-          </div>
+          {/* Footer — gestión de empresas movida al panel admin (no visible aquí) */}
         </div>
       )}
     </div>
@@ -308,7 +290,7 @@ function ProfileDropdown({
     { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
     ...(canSeeActivity ? [{ href: '/dashboard/activity', icon: Activity, label: 'Actividad' }] : []),
     { href: '/dashboard/security',    icon: Shield,     label: 'Seguridad' },
-    { href: '/dashboard/empresas',    icon: Building2,  label: 'Mis empresas' },
+    // /dashboard/empresas oculto — gestión solo desde panel admin
   ];
 
   return (
@@ -492,13 +474,7 @@ function Sidebar({
               <CreditCard className="h-3.5 w-3.5" />
               Activar plan
             </Link>
-            <Link
-              href="/dashboard/empresas"
-              onClick={onClose}
-              className="text-center text-xs text-teal-300 hover:text-white transition-colors"
-            >
-              Cambiar empresa
-            </Link>
+            {/* "Cambiar empresa" oculto — gestión solo desde admin */}
           </div>
         )}
 
@@ -524,15 +500,7 @@ function Sidebar({
           <kbd className="text-xs bg-white/10 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
         </button>
 
-        {/* Activar facturación electrónica */}
-        <Link
-          href="/dashboard/habilitacion"
-          onClick={onClose}
-          className="flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-amber-400/15 border border-amber-400/30 text-amber-200 hover:bg-amber-400/25 hover:text-amber-100 text-sm transition-colors"
-        >
-          <Zap className="h-4 w-4 shrink-0 text-amber-300" />
-          <span className="flex-1 text-left text-xs font-semibold">Activar facturación e-CF</span>
-        </Link>
+        {/* Activación e-CF oculta — flujo manejado desde panel admin */}
 
         {/* Top items — todos visibles, disabled según plan */}
         {TOP_ITEMS.map(item => {
