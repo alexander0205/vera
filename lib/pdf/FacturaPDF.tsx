@@ -464,6 +464,12 @@ const S = StyleSheet.create({
     alignSelf: 'flex-end',
     paddingBottom: 2,
   },
+  dgiiSecondaryRow: {
+    marginTop: 6,
+    paddingTop: 4,
+    borderTopWidth: 0.3,
+    borderTopColor: '#e5e5e5',
+  },
 });
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -650,7 +656,9 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           <Text style={S.pieFactura}>{data.pieFactura}</Text>
         )}
 
-        {/* ── Footer estilo DGII: QR izquierda + bloque verificación + texto validez derecha ── */}
+        {/* ── Footer estilo DGII ──
+           Row 1: [QR] [Verifique en DGII] [validez right]
+           Row 2 (debajo, alineado bajo QR): Código de Seguridad + Fecha de Firma Digital */}
         <View style={S.footer} fixed>
           <View style={S.dgiiFooter}>
             {/* Izquierda: QR */}
@@ -660,10 +668,21 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
               <View style={S.dgiiQr} />
             )}
 
-            {/* Centro-izquierda: bloque DGII */}
+            {/* Centro: bloque verificación URL */}
             <View style={S.dgiiInfoBlock}>
               <Text style={S.dgiiLabel}>Verifique este comprobante en el portal de la DGII:</Text>
               <Text style={S.dgiiUrl}>ecf.dgii.gov.do</Text>
+            </View>
+
+            {/* Derecha: texto validez */}
+            <Text style={S.dgiiRightText}>
+              Este comprobante fiscal electrónico (e-CF) tiene plena validez
+            </Text>
+          </View>
+
+          {/* Row 2: Código Seguridad + Fecha Firma debajo del QR */}
+          {(data.codigoSeguridad || data.fechaFirma || data.trackId) && (
+            <View style={S.dgiiSecondaryRow}>
               {data.codigoSeguridad && (
                 <Text style={S.dgiiCodigoSeguridad}>Código de Seguridad: {data.codigoSeguridad}</Text>
               )}
@@ -674,12 +693,7 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
                 <Text style={S.dgiiFechaFirma}>Track ID: {data.trackId}</Text>
               )}
             </View>
-
-            {/* Derecha: texto validez */}
-            <Text style={S.dgiiRightText}>
-              Este comprobante fiscal electrónico (e-CF) tiene plena validez
-            </Text>
-          </View>
+          )}
         </View>
 
       </Page>
