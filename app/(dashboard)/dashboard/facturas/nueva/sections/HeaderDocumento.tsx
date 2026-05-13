@@ -34,7 +34,7 @@ export function HeaderDocumento({
   }, [categoriaId, tipoEcf, tiposCategoria, onChangeTipo]);
 
   return (
-    <div className="px-8 pt-8 pb-6 flex items-start justify-between gap-6">
+    <div className="px-4 pt-6 pb-5 md:px-8 md:pt-8 md:pb-6 flex flex-col md:flex-row md:items-start md:justify-between gap-5 md:gap-6">
       {/* Logo + company name */}
       <div className="flex items-center gap-4">
         {empresa?.logo ? (
@@ -55,8 +55,8 @@ export function HeaderDocumento({
             </span>
           </a>
         )}
-        <div>
-          <p className="text-xl font-semibold text-gray-800">
+        <div className="min-w-0">
+          <p className="text-lg md:text-xl font-semibold text-gray-800 truncate">
             {empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Tu empresa'}
           </p>
           {empresa?.rnc && (
@@ -66,7 +66,7 @@ export function HeaderDocumento({
       </div>
 
       {/* Tipo eCF dropdown + NCF */}
-      <div className="text-right shrink-0">
+      <div className="md:text-right md:shrink-0">
         <Select
           value={categoriaId}
           onValueChange={(catId) => {
@@ -75,7 +75,7 @@ export function HeaderDocumento({
             onChangeTipo(cat.tipos[0].codigo);
           }}
         >
-          <SelectTrigger className="w-auto ml-auto border-0 bg-transparent text-gray-600 hover:text-gray-600 text-xs h-6 pr-1 shadow-none focus:ring-0 justify-end gap-1">
+          <SelectTrigger className="w-auto md:ml-auto border-0 bg-transparent text-gray-600 hover:text-gray-600 text-xs h-7 pr-1 shadow-none focus:ring-0 md:justify-end gap-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
@@ -86,7 +86,7 @@ export function HeaderDocumento({
         </Select>
 
         <Select value={tipoEcf} onValueChange={onChangeTipo}>
-          <SelectTrigger className="w-auto ml-auto border-0 bg-transparent text-teal-700 font-medium text-sm h-7 pr-1 shadow-none focus:ring-0 justify-end gap-1">
+          <SelectTrigger className="w-auto md:ml-auto border-0 bg-transparent text-teal-700 font-medium text-sm h-8 pr-1 shadow-none focus:ring-0 md:justify-end gap-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
@@ -95,16 +95,16 @@ export function HeaderDocumento({
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-2 justify-end mt-1">
+        <div className="flex flex-wrap items-center gap-2 md:justify-end mt-1">
           {!secuencia?.sinNcf && (
-            <span className="text-2xl font-bold text-gray-800 tracking-tight">NCF</span>
+            <span className="text-xl md:text-2xl font-bold text-gray-800 tracking-tight">NCF</span>
           )}
           {secuencia === null ? (
-            <span className="font-mono text-xl text-gray-300 animate-pulse">Cargando…</span>
+            <span className="font-mono text-lg md:text-xl text-gray-300 animate-pulse">Cargando…</span>
           ) : secuencia.sinNcf ? (
             <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded px-2 py-0.5 font-medium">Numeración automática · Sin comprobante fiscal</span>
           ) : secuencia.encf ? (
-            <span className="font-mono text-xl text-gray-800 font-bold">{secuencia.encf}</span>
+            <span className="font-mono text-lg md:text-xl text-gray-800 font-bold break-all">{secuencia.encf}</span>
           ) : secuencia.sinSecuencia ? (
             <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Sin secuencias — configura en Secuencias NCF</span>
           ) : secuencia.agotada ? (
@@ -115,13 +115,18 @@ export function HeaderDocumento({
             <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Sin secuencias disponibles</span>
           )}
           {!secuencia?.sinNcf && (
-            <button type="button" onClick={onEditarNcf} className="text-gray-600 hover:text-gray-600 ml-0.5">
+            <button
+              type="button"
+              onClick={onEditarNcf}
+              aria-label="Configurar secuencia NCF"
+              className="text-gray-600 hover:text-gray-800 p-2 -m-2"
+            >
               <Settings className="h-4 w-4" />
             </button>
           )}
         </div>
         {secuencia?.disponibles !== undefined && secuencia.disponibles < 50 && secuencia.disponibles > 0 && (
-          <p className="text-xs text-amber-500 mt-0.5 text-right">{secuencia.disponibles} NCF restantes</p>
+          <p className="text-xs text-amber-500 mt-0.5 md:text-right">{secuencia.disponibles} NCF restantes</p>
         )}
       </div>
     </div>

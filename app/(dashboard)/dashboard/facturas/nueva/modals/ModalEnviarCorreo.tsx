@@ -23,7 +23,7 @@ export function ModalEnviarCorreo({
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5 text-teal-600" />Enviar comprobante

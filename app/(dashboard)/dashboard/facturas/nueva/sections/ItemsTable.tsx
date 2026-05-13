@@ -1,6 +1,7 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -29,7 +30,152 @@ export function ItemsTable({
 }: Props) {
   return (
     <div className="border-b border-gray-100">
-      <div className="overflow-x-auto">
+      {/* ───────── MOBILE: card list (< md) ───────── */}
+      <div className="md:hidden divide-y divide-gray-100">
+        {items.map((item, idx) => (
+          <div key={item.id} className="p-4 space-y-3 bg-white">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Línea {idx + 1}
+              </span>
+              {items.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveItem(item.id)}
+                  aria-label={`Eliminar línea ${idx + 1}`}
+                  className="text-gray-400 hover:text-red-500 p-2 -m-2 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
+            <div>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                Producto / servicio
+              </Label>
+              <Autocomplete<Producto>
+                placeholder="Buscar producto o servicio..."
+                value={item.nombreItem}
+                onSearch={buscarProductos}
+                onSelect={(p) => onSelectProducto(idx, p)}
+                onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
+                onCreate={() => onOpenNuevoProducto(idx)}
+                createLabel="Nuevo producto"
+                renderOption={(p) => (
+                  <div>
+                    <p className="font-medium">{p.nombre}</p>
+                    <p className="text-xs text-gray-600">
+                      DOP {p.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })} · {p.tasaItbis === 'exento' ? 'Exento' : `ITBIS ${parseFloat(p.tasaItbis) * 100}%`}
+                    </p>
+                  </div>
+                )}
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                Referencia
+              </Label>
+              <Input
+                className="h-11 text-sm"
+                placeholder="Ref."
+                value={item.referencia}
+                onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                  Precio
+                </Label>
+                <Input
+                  type="number" inputMode="decimal" min={0} step={0.01}
+                  value={item.precioUnitarioItem || ''}
+                  placeholder="0.00"
+                  onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
+                  className="h-11 text-sm text-right"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                  Cantidad
+                </Label>
+                <Input
+                  type="number" inputMode="decimal" min={0.01} step="any"
+                  value={item.cantidadItem}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
+                  }}
+                  className="h-11 text-sm text-center"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                  Descuento %
+                </Label>
+                <div className="relative">
+                  <Input
+                    type="number" inputMode="decimal" min={0} max={100} step={0.1}
+                    value={item.descuentoPct || ''}
+                    placeholder="0"
+                    onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
+                    className="h-11 text-sm text-center pr-6"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-600">%</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                  Impuesto
+                </Label>
+                <Select
+                  value={item.tasaItbis}
+                  onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
+                  disabled={!regla?.permiteItbis}
+                >
+                  <SelectTrigger className="h-11 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regla?.permiteItbis
+                      ? TASA_ITBIS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
+                      : <SelectItem value="exento">Exento</SelectItem>
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                Descripción
+              </Label>
+              <textarea
+                className="w-full min-h-[60px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                placeholder="Descripción..."
+                value={item.descripcionItem}
+                onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Total</span>
+              <span className="text-base font-semibold text-gray-900">
+                RD$ {calcularMontoItem(item).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ───────── DESKTOP: table (≥ md) ───────── */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[900px]">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/60">
@@ -163,6 +309,7 @@ export function ItemsTable({
                     <button
                       type="button"
                       onClick={() => onRemoveItem(item.id)}
+                      aria-label={`Eliminar línea ${idx + 1}`}
                       className="text-gray-300 hover:text-red-400 p-1 mt-1 transition-colors opacity-0 group-hover:opacity-100">
                       <X className="h-4 w-4" />
                     </button>
@@ -174,15 +321,15 @@ export function ItemsTable({
         </table>
       </div>
 
-      <div className="px-4 py-3 flex items-center justify-between border-t border-gray-50">
+      <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50">
         <button
           type="button"
           onClick={onAddItem}
-          className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1 transition-colors">
+          className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
           + Agregar línea
         </button>
         <div className="flex items-center gap-6">
-          <button type="button" className="text-gray-600 text-sm font-medium flex items-center gap-1 cursor-not-allowed" title="Próximamente">
+          <button type="button" className="text-gray-600 text-sm font-medium flex items-center gap-1 cursor-not-allowed py-2 -my-2" title="Próximamente">
             + Agregar Conduce
           </button>
         </div>

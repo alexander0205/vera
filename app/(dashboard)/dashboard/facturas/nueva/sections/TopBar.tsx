@@ -57,24 +57,25 @@ export function NavBar({
   }, []);
 
   return (
-    <div className="flex items-center gap-3 mb-4">
-      <Button variant="ghost" size="sm" asChild className="text-gray-600 hover:text-gray-900">
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">
+      <Button variant="ghost" size="sm" asChild className="text-gray-600 hover:text-gray-900 px-2 sm:px-3">
         <Link href="/dashboard/facturas">
-          <ArrowLeft className="h-4 w-4 mr-1" />Volver
+          <ArrowLeft className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Volver</span>
         </Link>
       </Button>
-      <h1 className="text-lg font-semibold text-gray-700">Nueva factura</h1>
+      <h1 className="text-base sm:text-lg font-semibold text-gray-700 flex-1 sm:flex-none truncate">Nueva factura</h1>
 
       <div className="relative ml-auto" ref={personalizarRef}>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          aria-label="Personalizar opciones"
           className="flex items-center gap-2 text-sm"
           onClick={() => setShowPersonalizar(v => !v)}
         >
           <Settings className="h-4 w-4" />
-          Personalizar opciones
+          <span className="hidden sm:inline">Personalizar opciones</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </Button>
         {showPersonalizar && (
@@ -116,10 +117,10 @@ export function TopBar({
   if (!showAlmacen && !showListaPrecios && !showVendedor) return null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-6 py-4 mb-4">
-      <div className="flex items-center gap-8">
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-4 md:px-6 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center lg:gap-8 gap-3">
         {showAlmacen && (
-          <div className="space-y-1 min-w-[160px]">
+          <div className="space-y-1 lg:min-w-[160px]">
             <Label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Almacén</Label>
             <Select
               value={almacenId?.toString() ?? ''}
@@ -130,7 +131,7 @@ export function TopBar({
                 setAlmacenNombre(alm?.nombre ?? '');
               }}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-10 md:h-9 text-sm">
                 <SelectValue placeholder="Seleccionar..." />
               </SelectTrigger>
               <SelectContent>
@@ -142,7 +143,7 @@ export function TopBar({
         )}
 
         {showListaPrecios && (
-          <div className="space-y-1 min-w-[160px]">
+          <div className="space-y-1 lg:min-w-[160px]">
             <Label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Lista de precios</Label>
             <Select
               value={listaPreciosId?.toString() ?? '__none'}
@@ -154,7 +155,7 @@ export function TopBar({
                 setListaPreciosNombre(lista?.nombre ?? '');
               }}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-10 md:h-9 text-sm">
                 <SelectValue placeholder="General" />
               </SelectTrigger>
               <SelectContent>
@@ -171,7 +172,7 @@ export function TopBar({
         )}
 
         {showVendedor && (
-          <div className="space-y-1 min-w-[160px]">
+          <div className="space-y-1 lg:min-w-[160px]">
             <Label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Vendedor</Label>
             <Select
               value={vendedorId?.toString() ?? ''}
@@ -182,7 +183,7 @@ export function TopBar({
                 setVendedorNombre(ven?.nombre ?? '');
               }}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-10 md:h-9 text-sm">
                 <SelectValue placeholder="Buscar..." />
               </SelectTrigger>
               <SelectContent>

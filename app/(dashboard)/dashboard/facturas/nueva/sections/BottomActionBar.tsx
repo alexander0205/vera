@@ -32,16 +32,21 @@ export function BottomActionBar({
   }, []);
 
   return (
-    <div className="flex items-center justify-between mt-6 pb-8">
-      <Button type="button" variant="outline" asChild className="text-gray-600">
+    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-6 pb-8">
+      <Button
+        type="button"
+        variant="outline"
+        asChild
+        className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
+      >
         <Link href="/dashboard/facturas">Cancelar</Link>
       </Button>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
         <Button
           type="button"
           variant="outline"
           disabled={loading || loadingPreview}
-          className="text-gray-600"
+          className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
           onClick={onVistaPrevia}>
           {loadingPreview ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Guardando…</> : 'Vista previa'}
         </Button>
@@ -50,16 +55,16 @@ export function BottomActionBar({
           type="button"
           variant="outline"
           disabled={loading || disableEmitir}
-          className="text-gray-700 border-gray-300 hover:bg-gray-50"
+          className="text-gray-700 border-gray-300 hover:bg-gray-50 h-11 sm:h-9 w-full sm:w-auto"
           onClick={() => onEmitir('emitir', { andThen: 'nueva' })}>
           Guardar y crear nueva
         </Button>
 
-        <div ref={guardarMenuRef} className="relative flex">
+        <div ref={guardarMenuRef} className="relative flex w-full sm:w-auto">
           <Button
             type="submit"
             disabled={loading || disableEmitir}
-            className="bg-teal-600 hover:bg-teal-700 text-white rounded-r-none min-w-[140px] border-r border-teal-700"
+            className="bg-teal-600 hover:bg-teal-700 text-white rounded-r-none flex-1 sm:flex-none sm:min-w-[140px] border-r border-teal-700 h-11 sm:h-9"
           >
             {loading
               ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Emitiendo…</>
@@ -69,30 +74,31 @@ export function BottomActionBar({
             type="button"
             disabled={loading}
             onClick={() => setShowGuardarMenu(v => !v)}
-            className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-l-none px-2.5 flex items-center border-l border-teal-700 transition-colors"
+            aria-label="Más opciones para guardar"
+            className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-md rounded-l-none px-3 sm:px-2.5 flex items-center justify-center border-l border-teal-700 transition-colors h-11 sm:h-9"
           >
             <ChevronDown className="h-4 w-4" />
           </button>
 
           {showGuardarMenu && (
-            <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-52 z-50">
+            <div className="absolute bottom-full right-0 left-auto mb-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-full sm:w-52 z-50 min-w-[12rem]">
               <button
                 type="button"
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 onClick={() => { setShowGuardarMenu(false); onEmitir('borrador'); }}>
                 <FileText className="h-4 w-4 text-gray-600" />
                 Guardar como borrador
               </button>
               <button
                 type="button"
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'imprimir' }); }}>
                 <Printer className="h-4 w-4 text-gray-600" />
                 Guardar e imprimir
               </button>
               <button
                 type="button"
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'correo' }); }}>
                 <Mail className="h-4 w-4 text-gray-600" />
                 Guardar y enviar por correo

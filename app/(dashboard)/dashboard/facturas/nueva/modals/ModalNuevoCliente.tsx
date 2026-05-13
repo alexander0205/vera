@@ -68,7 +68,7 @@ export function ModalNuevoCliente({ open, onClose, onCreated }: {
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <UserPlus className="h-5 w-5 text-teal-600" />Nuevo contacto

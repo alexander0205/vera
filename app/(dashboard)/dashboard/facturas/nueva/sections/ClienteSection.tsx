@@ -65,11 +65,11 @@ export function ClienteSection({
 }: Props) {
   const muestraTipoIngresos = ['31', '32', '44', '45', '46'].includes(tipoEcf);
   return (
-    <div className="px-8 pb-6 grid grid-cols-2 gap-8 border-b border-gray-100">
+    <div className="px-4 pb-5 md:px-8 md:pb-6 grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8 border-b border-gray-100">
       {/* LEFT: client */}
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex-1 min-w-[200px]">
             <Autocomplete<Cliente>
               placeholder="Buscar..."
               value={clienteSeleccionado?.razonSocial ?? ''}
@@ -89,7 +89,7 @@ export function ClienteSection({
           <button
             type="button"
             onClick={onOpenNuevoCliente}
-            className="text-teal-600 hover:text-teal-800 text-sm font-medium whitespace-nowrap flex items-center gap-1 transition-colors">
+            className="text-teal-600 hover:text-teal-800 text-sm font-medium whitespace-nowrap flex items-center gap-1 transition-colors py-2 -my-1">
             <Plus className="h-3.5 w-3.5" />Nuevo contacto
           </button>
         </div>
@@ -124,7 +124,7 @@ export function ClienteSection({
           <div>
             <Label className="text-xs text-gray-600 uppercase tracking-wide">Teléfono</Label>
             <Input
-              className="mt-1 h-9"
+              className="mt-1 h-10"
               placeholder="___-___-____"
               value={telefonoManual}
               onChange={(e) => setTelefonoManual(e.target.value)}
@@ -135,7 +135,7 @@ export function ClienteSection({
         {!clienteSeleccionado && (
           <div>
             <Label className="text-xs text-gray-600 uppercase tracking-wide">Email (para envío)</Label>
-            <Input className="mt-1 h-9" type="email" placeholder="facturacion@empresa.com" value={emailManual} onChange={(e) => setEmailManual(e.target.value)} />
+            <Input className="mt-1 h-10" type="email" placeholder="facturacion@empresa.com" value={emailManual} onChange={(e) => setEmailManual(e.target.value)} />
           </div>
         )}
 
@@ -150,12 +150,12 @@ export function ClienteSection({
           <>
             <div>
               <Label className="text-xs text-gray-600 uppercase tracking-wide">e-NCF que se modifica <span className="text-red-500">*</span></Label>
-              <Input className="mt-1 h-9" placeholder="E310000000001" value={ncfModificado} onChange={(e) => setNcfModificado(e.target.value.toUpperCase())} maxLength={13} />
+              <Input className="mt-1 h-10" placeholder="E310000000001" value={ncfModificado} onChange={(e) => setNcfModificado(e.target.value.toUpperCase())} maxLength={13} />
             </div>
             <div>
               <Label className="text-xs text-gray-600 uppercase tracking-wide">Código de modificación <span className="text-red-500">*</span></Label>
               <Select value={codigoModificacion || undefined} onValueChange={setCodigoModificacion}>
-                <SelectTrigger className="mt-1 h-9">
+                <SelectTrigger className="mt-1 h-10">
                   <SelectValue placeholder="Selecciona el motivo…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -170,7 +170,7 @@ export function ClienteSection({
             <div>
               <Label className="text-xs text-gray-600 uppercase tracking-wide">Fecha del e-NCF original <span className="text-red-500">*</span></Label>
               <Input
-                className="mt-1 h-9"
+                className="mt-1 h-10"
                 type="date"
                 value={fechaNcfModificado}
                 onChange={(e) => setFechaNcfModificado(e.target.value)}
@@ -186,7 +186,7 @@ export function ClienteSection({
         <div>
           <Label className="text-xs text-gray-600 uppercase tracking-wide">Fecha <span className="text-red-500">*</span></Label>
           <Input
-            className="mt-1 h-9"
+            className="mt-1 h-10"
             type="date"
             value={fechaEmision}
             onChange={(e) => setFechaEmision(e.target.value)}
@@ -195,7 +195,7 @@ export function ClienteSection({
         <div>
           <Label className="text-xs text-gray-600 uppercase tracking-wide">Plazo de pago</Label>
           <Select value={plazoId} onValueChange={onPlazoChange}>
-            <SelectTrigger className="mt-1 h-9">
+            <SelectTrigger className="mt-1 h-10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -218,7 +218,7 @@ export function ClienteSection({
               value={fechaLimitePago}
               onChange={(e) => setFechaLimitePago(e.target.value)}
               min={today}
-              className="mt-1 h-9"
+              className="mt-1 h-10"
             />
           </div>
         )}
@@ -232,7 +232,7 @@ export function ClienteSection({
               </Tooltip>
             </Label>
             <Select value={tipoIngresos || '1'} onValueChange={setTipoIngresos}>
-              <SelectTrigger className="mt-1 h-9">
+              <SelectTrigger className="mt-1 h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

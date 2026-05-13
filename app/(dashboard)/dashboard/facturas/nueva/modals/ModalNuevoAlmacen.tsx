@@ -40,7 +40,7 @@ export function ModalNuevoAlmacen({ open, onClose, onCreated }: {
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) { onClose(); setError(null); } }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold">Nuevo almacén</DialogTitle>
         </DialogHeader>

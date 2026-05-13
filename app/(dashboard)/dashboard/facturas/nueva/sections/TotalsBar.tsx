@@ -11,7 +11,7 @@ interface Props {
 
 export function TotalsBar({ empresa, totales, retenciones, totalNeto }: Props) {
   return (
-    <div className="px-8 py-6 flex items-start justify-between border-b border-gray-100">
+    <div className="px-4 py-5 md:px-8 md:py-6 flex flex-col md:flex-row md:items-start md:justify-between gap-5 md:gap-6 border-b border-gray-100">
       {/* Firma */}
       {empresa?.firma ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -32,7 +32,7 @@ export function TotalsBar({ empresa, totales, retenciones, totalNeto }: Props) {
         </a>
       )}
 
-      <div className="w-72 space-y-2">
+      <div className="w-full md:w-72 space-y-2">
         <div className="flex justify-between text-sm text-gray-600">
           <span>Subtotal</span>
           <span>RD$ {totales.bruto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>

@@ -566,9 +566,9 @@ export default function NuevaFacturaForm({
   // ─── Pantalla de éxito ────────────────────────────────────────────────────
   if (resultado) {
     return (
-      <div className="bg-[#eef0f7] min-h-full p-6">
+      <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-md p-8 text-center">
+          <div className="bg-white rounded-2xl shadow-md p-5 sm:p-8 text-center">
             <CheckCircle className="h-16 w-16 text-teal-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Comprobante emitido!</h2>
             <p className="text-gray-500 mb-6">Tu e-CF fue enviado a la DGII exitosamente.</p>
@@ -595,7 +595,7 @@ export default function NuevaFacturaForm({
   return (
     <div className="bg-[#eef0f7] min-h-full">
       <a href="#main-content" className="skip-link">Saltar al contenido</a>
-      <div className="p-6">
+      <div className="p-3 sm:p-4 md:p-6">
         <NavBar
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
           showListaPrecios={showListaPrecios}   setShowListaPrecios={setShowListaPrecios}

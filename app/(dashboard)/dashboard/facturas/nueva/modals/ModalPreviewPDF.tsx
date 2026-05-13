@@ -19,11 +19,11 @@ export function ModalPreviewPDF({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[95vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-6 pt-4 pb-3 border-b shrink-0">
-          <DialogTitle className="text-base font-semibold">
-            Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}
-            <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+      <DialogContent className="max-w-4xl w-[calc(100%-1rem)] sm:w-full h-[95dvh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-4 pt-4 pb-3 md:px-6 border-b shrink-0">
+          <DialogTitle className="text-sm md:text-base font-semibold flex flex-wrap items-center gap-2">
+            <span className="truncate">Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}</span>
+            <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
               BORRADOR
             </span>
           </DialogTitle>
@@ -44,11 +44,11 @@ export function ModalPreviewPDF({
           )}
         </div>
 
-        <div className="px-6 py-4 border-t shrink-0 flex items-center justify-between bg-white">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-gray-500">
+        <div className="px-4 py-3 md:px-6 md:py-4 border-t shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 bg-white">
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-gray-500 w-full sm:w-auto">
             ← Volver a editar
           </Button>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 justify-end">
             {previewDocId && (
               <>
                 <Button

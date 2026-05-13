@@ -21,7 +21,7 @@ export function ModalNuevoPlazo({
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-teal-600">Agregar nuevo término de pago</DialogTitle>
         </DialogHeader>

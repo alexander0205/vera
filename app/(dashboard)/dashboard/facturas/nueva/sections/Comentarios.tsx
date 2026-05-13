@@ -11,13 +11,13 @@ interface Props {
 export function Comentarios({ comentario, setComentario }: Props) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-4">
-      <div className="flex items-center justify-between px-6 pt-5 pb-3">
+      <div className="flex items-center justify-between px-4 pt-4 pb-3 md:px-6 md:pt-5">
         <div className="flex items-center gap-2">
           <MessageCircle className="h-4 w-4 text-teal-600" />
           <h3 className="text-sm font-semibold text-gray-800">Comentarios</h3>
         </div>
       </div>
-      <div className="px-6 pb-5">
+      <div className="px-4 pb-4 md:px-6 md:pb-5">
         <textarea
           className="w-full min-h-[80px] text-sm border border-gray-200 rounded-lg p-3 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-600"
           placeholder="Escribe un comentario"
