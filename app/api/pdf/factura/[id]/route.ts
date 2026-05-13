@@ -197,7 +197,8 @@ export async function GET(
       esBorrador:    doc.estado === 'BORRADOR',
       codigoSeguridad: doc.codigoSeguridad ?? undefined,
       trackId:       doc.trackId ?? undefined,
-      fechaFirma:    extraerFechaFirma(doc.xmlFirmado) ?? undefined,
+      // Prefer columna persistida (rápido). Fallback: parsear XML firmado.
+      fechaFirma:    doc.fechaFirma ?? extraerFechaFirma(doc.xmlFirmado) ?? undefined,
       moneda:        'DOP',
 
       emisor: {

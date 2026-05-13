@@ -222,6 +222,7 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // Respuesta DGII
   trackId: varchar('track_id', { length: 100 }),
   codigoSeguridad: varchar('codigo_seguridad', { length: 6 }),
+  fechaFirma: varchar('fecha_firma', { length: 30 }), // dd-MM-yyyy HH:mm:ss (firmado por ecf-api)
   mensajesDgii: text('mensajes_dgii'), // JSON string
 
   // XMLs (guardar texto; para producción usar R2/S3)

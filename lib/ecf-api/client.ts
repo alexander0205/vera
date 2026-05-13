@@ -281,6 +281,8 @@ export interface EmisionResponseDto {
   trackId:         string | null;
   /** Código de seguridad de 6 chars alfanumérico */
   codigoSeguridad: string | null;
+  /** Fecha + hora de la firma digital aplicada por ecf-api. Formato "dd-MM-yyyy HH:mm:ss" */
+  fechaHoraFirma?: string | null;
   fechaEmision:    string;
   montoTotal:      number;
   mensajesDgii:    Record<string, unknown> | null;
