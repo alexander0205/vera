@@ -99,6 +99,101 @@ const ESTADO_CONFIG: Record<
   ANULADO:              { label: 'Anulado',     variant: 'secondary',   icon: XCircle },
 };
 
+// ─── Estado DGII card (sidebar) ───────────────────────────────────────────────
+
+function EstadoDgiiCard({
+  factura, onConsultar, consultarStatus,
+}: {
+  factura: FacturaDetalle;
+  onConsultar: () => void;
+  consultarStatus: 'idle' | 'loading' | 'done' | 'error';
+}) {
+  const cfg = ESTADO_CONFIG[factura.estado] ?? { label: factura.estado, variant: 'outline' as const, icon: Clock };
+  const Icon = cfg.icon;
+  const isAceptado = factura.estado === 'ACEPTADO' || factura.estado === 'ACEPTADO_CONDICIONAL';
+  const isRechazado = factura.estado === 'RECHAZADO';
+  const badgeColor = isAceptado ? 'bg-emerald-100 text-emerald-700' : isRechazado ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700';
+  const respuestaDate = factura.updatedAt ? new Date(factura.updatedAt).toLocaleString('es-DO', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  }) : '—';
+
+  // URL portal DGII verificación
+  const verUrl = (() => {
+    if (!factura.emisor.rnc || !factura.codigoSeguridad) return null;
+    const ambiente = factura.estado === 'ACEPTADO' || factura.estado === 'ACEPTADO_CONDICIONAL' ? 'ecf' : 'certecf';
+    const fecha = (factura.fechaEmision ?? '').slice(0, 10).split('-').reverse().join('-');
+    const params = new URLSearchParams({
+      RncEmisor: factura.emisor.rnc,
+      RncComprador: factura.comprador.rnc ?? '',
+      Encf: factura.encf,
+      FechaEmision: fecha,
+      MontoTotal: factura.montos.montoTotalDOP,
+      CodigoSeguridad: factura.codigoSeguridad,
+    });
+    return `https://ecf.dgii.gov.do/${ambiente}/consultatimbre?${params.toString()}`;
+  })();
+
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
+        <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
+        <h2 className="text-sm font-semibold text-gray-900 flex-1">Estado DGII</h2>
+        {factura.trackId && (
+          <button
+            type="button"
+            onClick={onConsultar}
+            disabled={consultarStatus === 'loading'}
+            className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${consultarStatus === 'loading' ? 'animate-spin' : ''}`} />
+            Consultar
+          </button>
+        )}
+      </header>
+      <div className="px-4 pb-4 md:px-5 flex items-start gap-4">
+        {/* Badge circular */}
+        <div className={`flex flex-col items-center justify-center rounded-lg ${badgeColor} px-3 py-3 shrink-0 min-w-[88px]`}>
+          <Icon className="h-7 w-7" />
+          <span className="text-xs font-semibold mt-1 text-center leading-tight">{cfg.label}</span>
+        </div>
+        {/* Detalle fields */}
+        <div className="flex-1 space-y-1.5 text-xs min-w-0">
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500">Estado:</span>
+            <span className="text-gray-900 font-medium">{cfg.label}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500">e-NCF:</span>
+            <span className="text-gray-900 font-mono truncate">{factura.encf}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500">Respuesta DGII:</span>
+            <span className="text-gray-900">{respuestaDate}</span>
+          </div>
+          {factura.trackId && (
+            <div className="flex justify-between gap-2">
+              <span className="text-gray-500">Track ID:</span>
+              <span className="text-gray-900 font-mono truncate text-[11px]" title={factura.trackId}>{factura.trackId}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      {verUrl && (
+        <div className="px-4 pb-4 md:px-5">
+          <a
+            href={verUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
+          >
+            Ver en DGII <ArrowLeft className="h-3.5 w-3.5 rotate-[135deg]" />
+          </a>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function EstadoBadge({ estado }: { estado: string }) {
   const cfg = ESTADO_CONFIG[estado] ?? { label: estado, variant: 'outline' as const, icon: Clock };
   const Icon = cfg.icon;
@@ -760,6 +855,9 @@ export default function FacturaDetallePage() {
               </div>
             )}
           </section>
+
+          {/* Estado DGII card */}
+          <EstadoDgiiCard factura={factura} onConsultar={consultarEstado} consultarStatus={pollingStatus} />
 
           {/* Pago — state A/B */}
           <PagoCard
