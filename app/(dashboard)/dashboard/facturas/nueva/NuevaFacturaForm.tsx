@@ -220,7 +220,7 @@ export default function NuevaFacturaForm({
         if (data.terminosCondiciones) setTerminos(data.terminosCondiciones);
         if (data.comentario)          setComentario(data.comentario);
         if (data.tipoIngresos)        setTipoIngresos(data.tipoIngresos);
-        if (Array.isArray(data.retenciones)) setRetenciones(data.retenciones);
+        // Retenciones NO se restauran desde autosave (alto impacto en total — usuario debe re-elegir)
       }
     } catch {}
     setDraftHydrated(true);

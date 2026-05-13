@@ -68,8 +68,8 @@ export function ClienteSection({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="sm:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+        <div className="min-w-0">
           <Label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1">
             {regla?.rncLabel ?? 'RNC o Cédula'}
             {regla?.requiereRncComprador && <span className="text-red-500 ml-0.5" aria-label="campo obligatorio">*</span>}
