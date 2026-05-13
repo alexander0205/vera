@@ -2,6 +2,7 @@ import { db } from './db/drizzle';
 import { outboundWebhooks } from './db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createHmac } from 'crypto';
+import { validateOutboundUrl } from './security/ssrf';
 
 export async function dispatchWebhook(teamId: number, evento: string, payload: Record<string, unknown>) {
   const hooks = await db
@@ -16,6 +17,17 @@ export async function dispatchWebhook(teamId: number, evento: string, payload: R
       const body = JSON.stringify({ evento, timestamp: new Date().toISOString(), data: payload });
       const signature = createHmac('sha256', hook.secret).update(body).digest('hex');
       try {
+        // Re-validate URL at dispatch time to defend against DNS rebinding /
+        // post-creation hostname changes.
+        const ssrfCheck = await validateOutboundUrl(hook.url);
+        if (!ssrfCheck.ok) {
+          await db.update(outboundWebhooks).set({
+            ultimoDisparo: new Date(),
+            ultimoEstatus: 0,
+            updatedAt: new Date(),
+          }).where(eq(outboundWebhooks.id, hook.id));
+          return;
+        }
         const res = await fetch(hook.url, {
           method: 'POST',
           headers: {

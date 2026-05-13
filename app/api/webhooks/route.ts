@@ -4,6 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { outboundWebhooks } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
+import { validateOutboundUrl } from '@/lib/security/ssrf';
 
 export async function GET() {
   const teamId = await getTeamIdForUser();
@@ -18,6 +19,11 @@ export async function POST(req: NextRequest) {
 
   const { nombre, url, eventos } = await req.json();
   if (!nombre || !url) return NextResponse.json({ error: 'Nombre y URL requeridos' }, { status: 400 });
+
+  const ssrfCheck = await validateOutboundUrl(url);
+  if (!ssrfCheck.ok) {
+    return NextResponse.json({ error: `URL no permitida: ${ssrfCheck.reason}` }, { status: 400 });
+  }
 
   const secret = randomBytes(24).toString('hex');
   const [hook] = await db.insert(outboundWebhooks).values({
