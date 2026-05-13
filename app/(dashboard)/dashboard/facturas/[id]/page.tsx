@@ -115,9 +115,6 @@ function EstadoDgiiCard({
   const isAceptado = factura.estado === 'ACEPTADO' || factura.estado === 'ACEPTADO_CONDICIONAL';
   const isRechazado = factura.estado === 'RECHAZADO';
   const badgeColor = isAceptado ? 'bg-emerald-100 text-emerald-700' : isRechazado ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700';
-  const respuestaDate = factura.updatedAt ? new Date(factura.updatedAt).toLocaleString('es-DO', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  }) : '—';
 
   // URL portal DGII — usa la URL canónica devuelta por ecf-api (sin reconstruir client-side)
   const verUrl = factura.urlVerificacion;
@@ -154,10 +151,6 @@ function EstadoDgiiCard({
           <div className="flex justify-between gap-2">
             <span className="text-gray-500">e-NCF:</span>
             <span className="text-gray-900 font-mono truncate">{factura.encf}</span>
-          </div>
-          <div className="flex justify-between gap-2">
-            <span className="text-gray-500">Respuesta DGII:</span>
-            <span className="text-gray-900">{respuestaDate}</span>
           </div>
           {factura.trackId && (
             <div className="flex justify-between gap-2">
@@ -845,9 +838,6 @@ export default function FacturaDetallePage() {
             )}
           </section>
 
-          {/* Estado DGII card */}
-          <EstadoDgiiCard factura={factura} onConsultar={consultarEstado} consultarStatus={pollingStatus} />
-
           {/* Pago — state A/B */}
           <PagoCard
             docId={factura.id}
@@ -858,6 +848,9 @@ export default function FacturaDetallePage() {
               setFactura((prev) => prev ? { ...prev, pago: next } : prev);
             }}
           />
+
+          {/* Estado DGII card — debajo de Pago */}
+          <EstadoDgiiCard factura={factura} onConsultar={consultarEstado} consultarStatus={pollingStatus} />
 
           {/* Info del comprobante */}
           <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
