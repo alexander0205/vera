@@ -193,10 +193,10 @@ export default function FacturaDetallePage() {
   const puedePolling = !!factura.trackId && factura.estado === 'EN_PROCESO';
 
   return (
-    <section className="p-6 space-y-6">
+    <section className="p-4 sm:p-6 space-y-6">
 
       {/* Breadcrumb + acciones */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" asChild>
             <Link href="/dashboard/facturas">
@@ -233,7 +233,7 @@ export default function FacturaDetallePage() {
                 <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-60" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuItem asChild>
                 <a
                   href={`/api/pdf/factura/${factura.id}`}
@@ -243,8 +243,22 @@ export default function FacturaDetallePage() {
                 >
                   <FileText className="h-4 w-4 text-gray-500" />
                   <div>
-                    <p className="text-sm font-medium">Formato normal</p>
-                    <p className="text-xs text-gray-400">PDF carta / A4</p>
+                    <p className="text-sm font-medium">Factura grande (A4)</p>
+                    <p className="text-xs text-gray-400">PDF tamaño carta / A4</p>
+                  </div>
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/factura/${factura.id}?formato=tirilla`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Ticket className="h-4 w-4 text-teal-600" />
+                  <div>
+                    <p className="text-sm font-medium">Factura pequeña (80mm)</p>
+                    <p className="text-xs text-gray-400">PDF tirilla térmica</p>
                   </div>
                 </a>
               </DropdownMenuItem>
@@ -255,10 +269,10 @@ export default function FacturaDetallePage() {
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
                 >
-                  <Ticket className="h-4 w-4 text-teal-600" />
+                  <Printer className="h-4 w-4 text-gray-500" />
                   <div>
-                    <p className="text-sm font-medium">Ticket térmico</p>
-                    <p className="text-xs text-gray-400">Papel 80mm, punto de venta</p>
+                    <p className="text-sm font-medium">Ticket HTML (web)</p>
+                    <p className="text-xs text-gray-400">Vista web para imprimir</p>
                   </div>
                 </a>
               </DropdownMenuItem>

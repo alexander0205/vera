@@ -273,3 +273,42 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Print styles ────────────────────────────────────────────────────────────
+   .print-area marca el bloque que debe quedar visible al imprimir.
+   .no-print oculta cualquier elemento durante la impresión.
+   El media query ancho 80mm fuerza papel térmico cuando se aplica .print-tirilla
+   sobre el <body> (por ejemplo desde la vista del ticket HTML).
+*/
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+}
+
+@media print {
+  body.print-tirilla {
+    background: white;
+  }
+  body.print-tirilla .print-area {
+    width: 80mm;
+  }
+}
+
+@page {
+  margin: 12mm;
+}

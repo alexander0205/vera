@@ -184,11 +184,11 @@ export default function ConfiguracionPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configuración del negocio</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Configuración del negocio</h1>
           <p className="text-sm text-gray-500 mt-1">
             Estos datos aparecen en todas tus facturas PDF
           </p>
@@ -196,7 +196,7 @@ export default function ConfiguracionPage() {
         <Button
           onClick={handleSave}
           disabled={saving}
-          className="bg-teal-600 hover:bg-teal-700 min-w-[130px]"
+          className="bg-teal-600 hover:bg-teal-700 sm:min-w-[130px] w-full sm:w-auto"
         >
           {saving ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>

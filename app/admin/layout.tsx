@@ -22,23 +22,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-gray-900 text-white px-6 py-4 flex items-center gap-4">
-        <div className="h-7 w-7 bg-teal-500 rounded-lg flex items-center justify-center">
-          <span className="font-black text-xs text-white">e</span>
+      <header className="bg-gray-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="h-7 w-7 bg-teal-500 rounded-lg flex items-center justify-center">
+            <span className="font-black text-xs text-white">e</span>
+          </div>
+          <span className="font-bold text-sm sm:text-base">EmiteDO Admin</span>
         </div>
-        <span className="font-bold">EmiteDO Admin</span>
-        <nav className="flex items-center gap-4 ml-6 text-sm">
-          <a href="/admin" className="text-gray-300 hover:text-white">Dashboard</a>
-          <a href="/admin/usuarios" className="text-gray-300 hover:text-white">Usuarios</a>
-          <a href="/admin/empresas" className="text-gray-300 hover:text-white">Empresas</a>
-          <a href="/admin/logs" className="text-gray-300 hover:text-white">Logs</a>
+        <nav className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm overflow-x-auto -mx-1 px-1 sm:ml-2 order-3 sm:order-2 w-full sm:w-auto">
+          <a href="/admin" className="text-gray-300 hover:text-white whitespace-nowrap">Dashboard</a>
+          <a href="/admin/usuarios" className="text-gray-300 hover:text-white whitespace-nowrap">Usuarios</a>
+          <a href="/admin/empresas" className="text-gray-300 hover:text-white whitespace-nowrap">Empresas</a>
+          <a href="/admin/logs" className="text-gray-300 hover:text-white whitespace-nowrap">Logs</a>
         </nav>
-        <a href="/dashboard" className="ml-auto text-sm text-gray-400 hover:text-white">← App</a>
+        <a href="/dashboard" className="ml-auto text-xs sm:text-sm text-gray-400 hover:text-white whitespace-nowrap order-2 sm:order-3">← App</a>
       </header>
 
       {/* Banner conexión ecf-api */}
       {ecfMe ? (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-2 text-xs text-emerald-800 flex items-center gap-3">
+        <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-2 text-xs text-emerald-800 flex items-center gap-3 flex-wrap">
           <Wifi className="w-3.5 h-3.5" />
           <span>
             <strong>ecf-api</strong> · {ecfMe.empresa.nombre}
@@ -63,7 +65,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       )}
 
-      <main className="p-6">{children}</main>
+      <main className="p-4 sm:p-6">{children}</main>
     </div>
   );
 }
