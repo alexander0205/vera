@@ -5,27 +5,40 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function tasaToFloat(t: string): number | undefined {
-  if (t === 'exento') return undefined;
+export function tasaToFloat(t: string | undefined | null): number | undefined {
+  if (!t || t === 'exento') return undefined;
   const n = parseFloat(t);
   return isNaN(n) ? undefined : n;
 }
 
+/** Convierte a número seguro — NaN/undefined/null/string vacío → 0 */
+function toNum(v: unknown): number {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = typeof v === 'number' ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function calcularMontoItem(item: ItemLinea): number {
-  const base = item.cantidadItem * item.precioUnitarioItem;
-  const desc = base * (item.descuentoPct / 100);
+  const cant = toNum(item.cantidadItem);
+  const prec = toNum(item.precioUnitarioItem);
+  const descPct = toNum(item.descuentoPct);
+  const base = cant * prec;
+  const desc = base * (descPct / 100);
   const neto = Math.max(0, base - desc);
-  const tasa = item.tasaItbis === 'exento' ? 0 : parseFloat(item.tasaItbis);
+  const tasa = (!item.tasaItbis || item.tasaItbis === 'exento') ? 0 : toNum(item.tasaItbis);
   return round2(neto + neto * tasa);
 }
 
 export function calcularTotales(items: ItemLinea[]) {
   let bruto = 0; let descuento = 0; let itbis = 0;
   for (const item of items) {
-    const base = item.cantidadItem * item.precioUnitarioItem;
-    const desc = base * (item.descuentoPct / 100);
+    const cant = toNum(item.cantidadItem);
+    const prec = toNum(item.precioUnitarioItem);
+    const descPct = toNum(item.descuentoPct);
+    const base = cant * prec;
+    const desc = base * (descPct / 100);
     const neto = Math.max(0, base - desc);
-    const tasa = item.tasaItbis === 'exento' ? 0 : parseFloat(item.tasaItbis);
+    const tasa = (!item.tasaItbis || item.tasaItbis === 'exento') ? 0 : toNum(item.tasaItbis);
     bruto    += base;
     descuento += desc;
     itbis    += neto * tasa;

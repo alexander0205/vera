@@ -32,7 +32,7 @@ export function BottomActionBar({
   }, []);
 
   return (
-    <div className="sticky bottom-0 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 bg-white/90 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.05)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 py-3">
+    <div className="fixed bottom-0 left-0 right-0 lg:left-56 z-30 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] px-4 sm:px-6 lg:px-8 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 py-3">
       <Button
         type="button"
         variant="outline"
