@@ -3,10 +3,7 @@ import { getUser } from '@/lib/db/queries';
 import { SiteHeaderClient } from './site-header-client';
 
 const NAV_LINKS = [
-  { href: '/#caracteristicas', label: 'Características' },
-  { href: '/pricing',          label: 'Precios' },
-  { href: '/#como-funciona',   label: 'Cómo funciona' },
-  { href: '/#contacto',        label: 'Contacto' },
+  { href: '/#contacto', label: 'Contacto' },
 ];
 
 export async function SiteHeader() {
