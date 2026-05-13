@@ -418,6 +418,52 @@ const S = StyleSheet.create({
     color:        '#555555',
     marginBottom: 2,
   },
+
+  // ─── Footer estilo DGII (QR + bloque verificación a la izquierda) ─────────
+  dgiiFooter: {
+    flexDirection: 'row',
+    alignItems:    'flex-start',
+    gap:           10,
+    paddingTop:    4,
+  },
+  dgiiQr: {
+    width:  68,
+    height: 68,
+  },
+  dgiiInfoBlock: {
+    flex:         1,
+    paddingLeft:  2,
+  },
+  dgiiLabel: {
+    fontSize: 7.5,
+    color:    '#444444',
+    marginBottom: 2,
+  },
+  dgiiUrl: {
+    fontSize:    8.5,
+    fontFamily:  'Helvetica-Bold',
+    color:       '#0f766e',
+    marginBottom: 4,
+  },
+  dgiiCodigoSeguridad: {
+    fontSize:    8,
+    fontFamily:  'Helvetica-Bold',
+    color:       '#1a1a1a',
+    marginTop:   3,
+  },
+  dgiiFechaFirma: {
+    fontSize:  7.5,
+    color:     '#666666',
+    marginTop: 1,
+  },
+  dgiiRightText: {
+    flex:      1,
+    fontSize:  7,
+    color:     '#888888',
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    paddingBottom: 2,
+  },
 });
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -604,47 +650,35 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           <Text style={S.pieFactura}>{data.pieFactura}</Text>
         )}
 
-        {/* ── Footer ── */}
+        {/* ── Footer estilo DGII: QR izquierda + bloque verificación + texto validez derecha ── */}
         <View style={S.footer} fixed>
-          <View style={S.footerRow}>
-            {/* Izquierda: Original */}
-            <Text style={S.footerOriginal}>Original: Cliente</Text>
+          <View style={S.dgiiFooter}>
+            {/* Izquierda: QR */}
+            {data.qrDataUrl ? (
+              <Image style={S.dgiiQr} src={data.qrDataUrl} />
+            ) : (
+              <View style={S.dgiiQr} />
+            )}
 
-            {/* Centro: branding */}
-            <View style={S.footerCenter}>
-              <Text style={S.footerCenterText}>
-                Generado en www.emitedo.com — Facturación electrónica DGII República Dominicana
-              </Text>
+            {/* Centro-izquierda: bloque DGII */}
+            <View style={S.dgiiInfoBlock}>
+              <Text style={S.dgiiLabel}>Verifique este comprobante en el portal de la DGII:</Text>
+              <Text style={S.dgiiUrl}>ecf.dgii.gov.do</Text>
               {data.codigoSeguridad && (
-                <Text style={S.codigoSeguridad}>
-                  Código de seguridad: {data.codigoSeguridad}
-                </Text>
+                <Text style={S.dgiiCodigoSeguridad}>Código de Seguridad: {data.codigoSeguridad}</Text>
               )}
               {data.fechaFirma && (
-                <Text style={[S.footerCenterText, { marginTop: 1 }]}>
-                  Fecha Firma: {data.fechaFirma}
-                </Text>
+                <Text style={S.dgiiFechaFirma}>Fecha de Firma Digital: {data.fechaFirma}</Text>
               )}
               {data.trackId && (
-                <Text style={[S.footerCenterText, { marginTop: 1 }]}>
-                  Track ID: {data.trackId}
-                </Text>
+                <Text style={S.dgiiFechaFirma}>Track ID: {data.trackId}</Text>
               )}
             </View>
 
-            {/* Derecha: QR */}
-            {data.qrDataUrl ? (
-              <View style={S.footerQr}>
-                <Image style={S.qrImage} src={data.qrDataUrl} />
-                <Text style={S.qrLabel}>Validar en DGII</Text>
-              </View>
-            ) : (
-              data.emisor.firma ? (
-                <View style={S.footerQr}>
-                  <Image style={{ width: 56, height: 28, objectFit: 'contain' }} src={data.emisor.firma} />
-                </View>
-              ) : <View style={{ width: 56 }} />
-            )}
+            {/* Derecha: texto validez */}
+            <Text style={S.dgiiRightText}>
+              Este comprobante fiscal electrónico (e-CF) tiene plena validez
+            </Text>
           </View>
         </View>
 
