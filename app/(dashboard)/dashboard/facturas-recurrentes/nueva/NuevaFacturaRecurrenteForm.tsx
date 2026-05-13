@@ -230,6 +230,7 @@ export default function NuevaFacturaRecurrenteForm() {
   // Cabecera
   const [tipoEcf, setTipoEcf]     = useState('31');
   const [tipoPago, setTipoPago]   = useState('1');
+  const [diasParaPago, setDiasParaPago] = useState('5'); // solo aplica si tipoPago=2
   const [frecuencia, setFrecuencia] = useState('mensual');
   const [nombre, setNombre]       = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
@@ -308,6 +309,7 @@ export default function NuevaFacturaRecurrenteForm() {
           nombre:         nombre.trim(),
           tipoEcf,
           tipoPago:       parseInt(tipoPago),
+          diasParaPago:   parseInt(tipoPago) === 2 ? parseInt(diasParaPago || '0') : null,
           frecuencia,
           fechaInicio,
           fechaFin:       fechaFin || null,
@@ -487,6 +489,24 @@ export default function NuevaFacturaRecurrenteForm() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Días para pagar — solo crédito */}
+                {tipoPago === '2' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-gray-400 uppercase tracking-wide">Días para pagar</Label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={diasParaPago}
+                      onChange={e => setDiasParaPago(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 h-9 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                    <p className="text-[10px] text-gray-400">
+                      Días desde la emisión hasta el vencimiento. Después se marca vencida en Cuentas por cobrar.
+                    </p>
+                  </div>
+                )}
 
                 {/* Frecuencia */}
                 <div className="space-y-1.5">

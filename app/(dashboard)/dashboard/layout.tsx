@@ -39,6 +39,7 @@ const GROUPS: NavGroup[] = [
     icon: TrendingDown,
     children: [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
+      { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
       { href: '/dashboard/notas-credito',        label: 'Notas de crédito' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
       { href: '/dashboard/facturas-recurrentes', label: 'Facturas recurrentes' },
@@ -89,6 +90,7 @@ const HREF_PERMISSION: Record<string, Permission> = {
 
   // Ingresos
   '/dashboard/facturas':              'facturas:ver',
+  '/dashboard/cuentas-por-cobrar':    'facturas:ver',
   '/dashboard/notas-credito':         'facturas:ver',
   '/dashboard/cotizaciones':          'cotizaciones:ver',
   '/dashboard/facturas-recurrentes':  'facturas:ver',

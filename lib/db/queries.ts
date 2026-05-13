@@ -8,6 +8,7 @@ import {
   clients,
   sequences,
   ecfDocuments,
+  pagosRecibidos,
 } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
@@ -470,4 +471,166 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
   // 'admin' = acceso manual sin Stripe → sin límite
   if (status === 'admin') return -1;
   return getPlanDocLimit(planName, status === 'trialing');
+}
+
+
+// ─── EmiteDO — Cuentas por cobrar (AR) ────────────────────────────────────────
+
+/**
+ * Lista cuentas por cobrar: facturas crédito con saldo pendiente > 0.
+ *
+ * Reglas:
+ * - Solo tipo de pago = 2 (crédito) con estado emitido (no BORRADOR/RECHAZADO).
+ * - saldo = montoTotal - SUM(pagosRecibidos.montoCentavos)
+ * - Filtros opcionales: clientId, soloVencidas (fechaLimitePago < hoy y saldo > 0).
+ */
+export async function getCuentasPorCobrar(
+  teamId: number,
+  opts: { clientId?: number; soloVencidas?: boolean } = {},
+) {
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  const rows = await db
+    .select({
+      id:                   ecfDocuments.id,
+      encf:                 ecfDocuments.encf,
+      tipoEcf:              ecfDocuments.tipoEcf,
+      fechaEmision:         ecfDocuments.fechaEmision,
+      fechaLimitePago:      ecfDocuments.fechaLimitePago,
+      rncComprador:         ecfDocuments.rncComprador,
+      razonSocialComprador: ecfDocuments.razonSocialComprador,
+      emailComprador:       ecfDocuments.emailComprador,
+      clientId:             ecfDocuments.clientId,
+      estado:               ecfDocuments.estado,
+      montoTotal:           ecfDocuments.montoTotal,
+      totalItbis:           ecfDocuments.totalItbis,
+      pagado: sql<number>`coalesce((
+        SELECT SUM(monto_centavos) FROM pagos_recibidos
+        WHERE ecf_document_id = ${ecfDocuments.id}
+      ), 0)`,
+    })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.teamId, teamId),
+      eq(ecfDocuments.tipoPago, 2),
+      sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
+      opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
+    ))
+    .orderBy(desc(ecfDocuments.fechaEmision));
+
+  const enriquecidas = rows
+    .map(r => {
+      const pagado = Number(r.pagado);
+      const saldo = r.montoTotal - pagado;
+      const vencida = !!r.fechaLimitePago && r.fechaLimitePago < hoy && saldo > 0;
+      const diasVencido = vencida && r.fechaLimitePago
+        ? Math.floor((new Date(hoy).getTime() - new Date(r.fechaLimitePago).getTime()) / 86400000)
+        : 0;
+      return { ...r, pagado, saldo, vencida, diasVencido };
+    })
+    .filter(r => r.saldo > 0)
+    .filter(r => !opts.soloVencidas || r.vencida);
+
+  // Totales agregados
+  const totalPendiente = enriquecidas.reduce((s, r) => s + r.saldo, 0);
+  const totalVencido   = enriquecidas.filter(r => r.vencida).reduce((s, r) => s + r.saldo, 0);
+
+  return {
+    cuentas: enriquecidas,
+    totales: {
+      pendiente: totalPendiente,
+      vencido:   totalVencido,
+      count:     enriquecidas.length,
+      countVencidas: enriquecidas.filter(r => r.vencida).length,
+    },
+  };
+}
+
+/** Lista pagos de un documento específico. */
+export async function getPagosDocumento(teamId: number, ecfDocumentId: number) {
+  return db
+    .select()
+    .from(pagosRecibidos)
+    .where(and(
+      eq(pagosRecibidos.teamId, teamId),
+      eq(pagosRecibidos.ecfDocumentId, ecfDocumentId),
+    ))
+    .orderBy(desc(pagosRecibidos.fechaPago));
+}
+
+/**
+ * Registra un pago contra una factura. Valida que:
+ * - El doc pertenece al team
+ * - El monto no supera el saldo pendiente
+ * Retorna el pago insertado + nuevo saldo.
+ */
+export async function registrarPago(input: {
+  teamId:        number;
+  ecfDocumentId: number;
+  montoCentavos: number;
+  metodo:        string;
+  referencia?:   string | null;
+  cuenta?:       string | null;
+  fechaPago:     string; // YYYY-MM-DD
+  notas?:        string | null;
+  createdBy?:    number;
+}) {
+  // Validar doc pertenece al team
+  const [doc] = await db
+    .select({ id: ecfDocuments.id, montoTotal: ecfDocuments.montoTotal })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.id, input.ecfDocumentId),
+      eq(ecfDocuments.teamId, input.teamId),
+    ))
+    .limit(1);
+
+  if (!doc) throw new Error('Documento no encontrado');
+
+  // Calcular saldo actual
+  const [agg] = await db
+    .select({
+      pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
+    })
+    .from(pagosRecibidos)
+    .where(eq(pagosRecibidos.ecfDocumentId, input.ecfDocumentId));
+
+  const yaPagado = Number(agg?.pagado ?? 0);
+  const saldo    = doc.montoTotal - yaPagado;
+
+  if (input.montoCentavos <= 0) throw new Error('Monto debe ser positivo');
+  if (input.montoCentavos > saldo) {
+    throw new Error(`Monto excede saldo pendiente (RD$${(saldo / 100).toFixed(2)})`);
+  }
+
+  const [pago] = await db.insert(pagosRecibidos).values({
+    teamId:        input.teamId,
+    ecfDocumentId: input.ecfDocumentId,
+    montoCentavos: input.montoCentavos,
+    metodo:        input.metodo,
+    referencia:    input.referencia ?? null,
+    cuenta:        input.cuenta ?? null,
+    fechaPago:     input.fechaPago,
+    notas:         input.notas ?? null,
+    createdBy:     input.createdBy ?? null,
+  }).returning();
+
+  return {
+    pago,
+    saldoAnterior: saldo,
+    saldoNuevo:    saldo - input.montoCentavos,
+    montoTotal:    doc.montoTotal,
+  };
+}
+
+/** Elimina un pago (rollback). Solo permitido al team owner. */
+export async function eliminarPago(teamId: number, pagoId: number) {
+  const [pago] = await db
+    .select()
+    .from(pagosRecibidos)
+    .where(and(eq(pagosRecibidos.id, pagoId), eq(pagosRecibidos.teamId, teamId)))
+    .limit(1);
+  if (!pago) throw new Error('Pago no encontrado');
+  await db.delete(pagosRecibidos).where(eq(pagosRecibidos.id, pagoId));
+  return pago;
 }

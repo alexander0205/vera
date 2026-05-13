@@ -59,12 +59,24 @@ export async function GET(req: NextRequest) {
       // Create the document as BORRADOR (requires manual review before emission)
       const encf = `E${fr.tipoEcf}${String(seq[0].secuenciaActual).padStart(10, '0')}`;
 
+      // Si la recurrente es crédito (tipoPago=2) y tiene diasParaPago configurado,
+      // calculamos fechaLimitePago = hoy + diasParaPago. Caso colegio: factura el
+      // día 1, vence el día 5 → AR la detecta vencida el día 6 automáticamente.
+      let fechaLimitePago: string | null = null;
+      if (fr.tipoPago === 2 && fr.diasParaPago && fr.diasParaPago > 0) {
+        const limite = new Date();
+        limite.setDate(limite.getDate() + fr.diasParaPago);
+        fechaLimitePago = limite.toISOString().slice(0, 10);
+      }
+
       await db.insert(ecfDocuments).values({
         teamId: fr.teamId,
         clientId: fr.clientId,
         encf,
         tipoEcf: fr.tipoEcf,
         estado: 'BORRADOR',
+        tipoPago: fr.tipoPago,
+        fechaLimitePago,
         montoTotal,
         totalItbis: 0,
         notas: fr.notas ?? `Factura recurrente: ${fr.nombre}`,

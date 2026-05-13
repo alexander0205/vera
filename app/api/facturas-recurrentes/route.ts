@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       nombre:         body.nombre.trim(),
       tipoEcf:        body.tipoEcf ?? '31',
       tipoPago:       body.tipoPago ?? 1,
+      diasParaPago:   body.tipoPago === 2 && body.diasParaPago ? parseInt(body.diasParaPago) : null,
       frecuencia:     body.frecuencia ?? 'mensual',
       fechaInicio:    body.fechaInicio,
       fechaFin:       body.fechaFin ?? null,

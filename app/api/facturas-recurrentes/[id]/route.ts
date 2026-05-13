@@ -45,6 +45,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(body.nombre        != null && { nombre: body.nombre }),
       ...(body.tipoEcf       != null && { tipoEcf: body.tipoEcf }),
       ...(body.tipoPago      != null && { tipoPago: body.tipoPago }),
+      ...(body.diasParaPago  !== undefined && { diasParaPago: body.diasParaPago ? parseInt(body.diasParaPago) : null }),
       ...(body.frecuencia    != null && { frecuencia: body.frecuencia }),
       ...(body.fechaInicio   != null && { fechaInicio: body.fechaInicio }),
       ...(body.fechaFin      !== undefined && { fechaFin: body.fechaFin ?? null }),

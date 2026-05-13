@@ -31,7 +31,9 @@ export type AuditAction =
   | 'ECF_VOID'
   | 'DGII_AUTH'
   | 'DGII_AUTH_FAIL'
-  | 'HABILITACION_SIGN';
+  | 'HABILITACION_SIGN'
+  | 'PAGO_REGISTRADO'
+  | 'PAGO_ELIMINADO';
 
 export interface AuditParams {
   teamId:    number;

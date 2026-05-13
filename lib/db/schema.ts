@@ -410,6 +410,9 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   nombre:           varchar('nombre', { length: 100 }).notNull(),
   tipoEcf:          varchar('tipo_ecf', { length: 2 }).notNull().default('31'),
   tipoPago:         integer('tipo_pago').notNull().default(1),
+  /** Días desde fechaEmision hasta fechaLimitePago cuando tipoPago=2 (crédito).
+   *  null = inmediato. Caso colegio: 5 días → vence el día 5, AR detecta vencida día 6. */
+  diasParaPago:     integer('dias_para_pago'),
   frecuencia:       varchar('frecuencia', { length: 20 }).notNull().default('mensual'),
   fechaInicio:      date('fecha_inicio').notNull(),
   fechaFin:         date('fecha_fin'),
@@ -422,6 +425,34 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ─── EmiteDO — Pagos recibidos (cuentas por cobrar) ──────────────────────────
+// Múltiples pagos por factura. El saldo pendiente = ecfDocuments.montoTotal -
+// SUM(pagosRecibidos.montoCentavos WHERE ecfDocumentId = doc.id).
+// Si saldo > 0 y fechaLimitePago < hoy → cuenta vencida.
+
+export const pagosRecibidos = pgTable('pagos_recibidos', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  ecfDocumentId:   integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
+  /** Monto en centavos (DOP). */
+  montoCentavos:   integer('monto_centavos').notNull(),
+  /** Método: efectivo, transferencia, tarjeta, cheque, otro. */
+  metodo:          varchar('metodo', { length: 30 }).notNull(),
+  /** Identificador opcional: número de cheque, últimos 4 de tarjeta, etc. */
+  referencia:      varchar('referencia', { length: 100 }),
+  /** Cuenta bancaria/caja a la que entró (free-text). */
+  cuenta:          varchar('cuenta', { length: 100 }),
+  /** Fecha del pago (YYYY-MM-DD), separada de createdAt para registros backdated. */
+  fechaPago:       date('fecha_pago').notNull(),
+  notas:           text('notas'),
+  /** Usuario que registró el pago. */
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('pagos_team_doc_idx').on(t.teamId, t.ecfDocumentId),
+  index('pagos_team_fecha_idx').on(t.teamId, t.fechaPago),
+]);
 
 // ─── Relaciones ───────────────────────────────────────────────────────────────
 
@@ -521,6 +552,12 @@ export const categoriasRelations = relations(categorias, ({ one }) => ({
 export const facturasRecurrentesRelations = relations(facturasRecurrentes, ({ one }) => ({
   team: one(teams, { fields: [facturasRecurrentes.teamId], references: [teams.id] }),
   client: one(clients, { fields: [facturasRecurrentes.clientId], references: [clients.id] }),
+}));
+
+export const pagosRecibidosRelations = relations(pagosRecibidos, ({ one }) => ({
+  team:        one(teams,        { fields: [pagosRecibidos.teamId],        references: [teams.id] }),
+  ecfDocument: one(ecfDocuments, { fields: [pagosRecibidos.ecfDocumentId], references: [ecfDocuments.id] }),
+  createdByUser: one(users,      { fields: [pagosRecibidos.createdBy],     references: [users.id] }),
 }));
 
 // ─── EmiteDO — System Logs ───────────────────────────────────────────────────
@@ -715,6 +752,8 @@ export type NewDgiiCatalogo = typeof dgiiCatalogos.$inferInsert;
 export type Cotizacion = typeof cotizaciones.$inferSelect;
 export type NewCotizacion = typeof cotizaciones.$inferInsert;
 export type Categoria = typeof categorias.$inferSelect;
+export type PagoRecibido    = typeof pagosRecibidos.$inferSelect;
+export type NewPagoRecibido = typeof pagosRecibidos.$inferInsert;
 export type FacturaRecurrente = typeof facturasRecurrentes.$inferSelect;
 export type NewFacturaRecurrente = typeof facturasRecurrentes.$inferInsert;
 export type Almacen = typeof almacenes.$inferSelect;
