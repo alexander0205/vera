@@ -745,6 +745,15 @@ export default function NuevaFacturaForm({
                   pagoValor={pagoValor} setPagoValor={setPagoValor}
                 />
               </AccordionSection>
+
+              {/* Action bar dentro del left column — sigue al contenido */}
+              <BottomActionBar
+                items={items}
+                loading={loading}
+                loadingPreview={loadingPreview}
+                onVistaPrevia={handleVistaPrevia}
+                onEmitir={emitir}
+              />
             </div>
 
             {/* RIGHT column — sticky sidebar */}
@@ -758,14 +767,6 @@ export default function NuevaFacturaForm({
               pagoValor={pagoValor} setPagoValor={setPagoValor}
             />
           </div>
-
-          <BottomActionBar
-            items={items}
-            loading={loading}
-            loadingPreview={loadingPreview}
-            onVistaPrevia={handleVistaPrevia}
-            onEmitir={emitir}
-          />
         </form>
 
         {/* Modals */}

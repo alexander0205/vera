@@ -32,7 +32,7 @@ export function BottomActionBar({
   }, []);
 
   return (
-    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-6 pb-8">
+    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 pb-2 border-t border-gray-100">
       <Button
         type="button"
         variant="outline"
