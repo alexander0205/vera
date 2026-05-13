@@ -650,7 +650,7 @@ export default function NuevaFacturaForm({
   return (
     <div className="bg-[#eef0f7] min-h-full">
       <a href="#main-content" className="skip-link">Saltar al contenido</a>
-      <div className="p-3 sm:p-4 md:p-5 pb-24 sm:pb-20">
+      <div className="p-3 sm:p-4 md:p-5">
         <NavBar
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
           showListaPrecios={showListaPrecios}   setShowListaPrecios={setShowListaPrecios}
