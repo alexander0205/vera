@@ -47,10 +47,65 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * Detalle DGII upstream cuando ecf-api propaga rechazo de la DGII.
+ * Aparece bajo `err.dgii` cuando el error vino del servicio DGII.
+ */
+export interface EcfApiDgiiDetail {
+  estado?:  'Aceptado' | 'Rechazado' | 'AceptadoCondicional' | string;
+  codigo?:  number;
+  mensajes?: Array<{ codigo?: string; valor?: string }>;
+  dgiiRaw?:  { status?: number; url?: string; data?: unknown };
+}
+
+/**
+ * Body estandarizado de error de ecf-api (>= v3 release).
+ *
+ * El `code` es machine-readable y estable (ej `ECFA_NCF_DUPLICADO`,
+ * `ECFA_CERT_EXPIRED`). El `message` es human-readable y puede cambiar
+ * de versión a versión — NO matchear por string.
+ */
+export interface EcfApiErrorBody {
+  statusCode?: number;
+  code?:       string;
+  message?:    string | string[];
+  error?:      string;
+  // Contexto adicional según código:
+  rnc?:        string;
+  eNcf?:       string;
+  formato?:    string;
+  dgii?:       EcfApiDgiiDetail;
+  [k: string]: unknown;
+}
+
 export class EcfApiError extends Error {
+  /** Código machine-readable del error (ej `ECFA_NCF_DUPLICADO`). null si el body no es JSON parseable. */
+  public readonly code: string | null;
+  /** Body parseado del error si era JSON; null si era texto plano. */
+  public readonly body: EcfApiErrorBody | null;
+  /** Detalle DGII upstream cuando aplica. */
+  public readonly dgii: EcfApiDgiiDetail | null;
+
   constructor(public status: number, message: string) {
     super(message);
     this.name = 'EcfApiError';
+
+    // Intentar parsear el body como JSON estándar de ecf-api
+    let parsed: EcfApiErrorBody | null = null;
+    try {
+      parsed = JSON.parse(message);
+    } catch { /* texto plano, deja null */ }
+    this.body = parsed;
+    this.code = parsed?.code ?? null;
+    this.dgii = parsed?.dgii ?? null;
+  }
+
+  /** Mensaje human-readable (sin stack/JSON). Útil para logs. */
+  get humanMessage(): string {
+    if (!this.body) return this.message;
+    const m = this.body.message;
+    if (Array.isArray(m)) return m.join('. ');
+    return m ?? this.body.error ?? this.message;
   }
 }
 
@@ -290,6 +345,14 @@ export interface EmisionResponseDto {
   fechaEmision:    string;
   montoTotal:      number;
   mensajesDgii:    Record<string, unknown> | null;
+  /** URL al PDF de representación impresa generado por ecf-api (3rd party PDF). */
+  urlPdf?:         string | null;
+  /** URL al XML firmado descargable. */
+  urlXml?:         string | null;
+  /** XML firmado raw embebido (útil para auditoría). */
+  xmlFirmado?:     string | null;
+  /** URL del endpoint que consulta el estado en DGII. */
+  urlEstadoDgii?:  string | null;
   createdAt:       string;
 }
 
@@ -333,6 +396,86 @@ export const emision = {
 
   get: (emisionId: string) =>
     request<EmisionResponseDto>('GET', `/emisiones/${emisionId}`),
+};
+
+// ─── Recepciones e-CF (documentos entrantes de otros contribuyentes) ─────────
+
+export interface RecepcionEcfDto {
+  id:           string;
+  rnc:          string;
+  rncEmisor?:   string;
+  eNcf:         string;
+  tipoComprobante: string;
+  estado?:      string;
+  fechaRecepcion?: string;
+  xmlOriginal?: string;
+  arecfXml?:    string;
+  createdAt:    string;
+  [k: string]: unknown;
+}
+
+export interface AprobacionRecibidaDto {
+  id:           string;
+  rnc:          string;
+  eNcf:         string;
+  tipoComprobante: string;
+  estado?:      string;
+  fechaRecepcion?: string;
+  xmlOriginal?: string;
+  createdAt:    string;
+  [k: string]: unknown;
+}
+
+export const recepciones = {
+  /** Lista e-CFs entrantes (alguien nos emitió). */
+  listEcf: (codigoPublico: string) =>
+    request<RecepcionEcfDto[]>('GET', `/contribuyentes/${codigoPublico}/recepciones-ecf`),
+
+  /** Detalle (incluye XML emisor + ARECF nuestro). */
+  getEcf: (codigoPublico: string, id: string) =>
+    request<RecepcionEcfDto>('GET', `/contribuyentes/${codigoPublico}/recepciones-ecf/${id}`),
+
+  /** Lista ACECFs entrantes (aprobaciones comerciales recibidas). */
+  listAprobaciones: (codigoPublico: string) =>
+    request<AprobacionRecibidaDto[]>('GET', `/contribuyentes/${codigoPublico}/aprobaciones-recibidas`),
+
+  /** Detalle de aprobación recibida. */
+  getAprobacion: (codigoPublico: string, id: string) =>
+    request<AprobacionRecibidaDto>('GET', `/contribuyentes/${codigoPublico}/aprobaciones-recibidas/${id}`),
+};
+
+// ─── Schemas e-CF (campos requeridos por tipo, fuente DGII) ──────────────────
+
+export interface EcfSchemaTipoSummary {
+  tipo:        string;
+  nombre?:     string;
+  requiredCount?: number;
+  optionalCount?: number;
+}
+
+export interface EcfSchemaField {
+  dgiiNo?:          string;
+  xmlTag?:          string;
+  payloadKey?:      string;
+  maxLength?:       number;
+  valoresValidos?:  string[];
+  obligatoriedad?: 'OBLIGATORIO' | 'OPCIONAL' | 'CONDICIONAL' | string;
+  [k: string]: unknown;
+}
+
+export interface EcfSchemaDetalle {
+  tipo:    string;
+  nombre?: string;
+  fields:  EcfSchemaField[];
+}
+
+export const schemas = {
+  /** Lista todos los tipos de comprobante con counts. */
+  list: () => request<EcfSchemaTipoSummary[]>('GET', '/schemas/ecf'),
+
+  /** Detalle de campos por tipo. */
+  detalle: (tipo: string) =>
+    request<EcfSchemaDetalle>('GET', `/schemas/ecf/${tipo}`),
 };
 
 // ─── Catálogos DGII ───────────────────────────────────────────────────────────

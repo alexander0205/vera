@@ -11,6 +11,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { logAudit, getIp } from '@/lib/audit';
 import { rateLimitDb } from '@/lib/rate-limit';
 import { certificados, EcfApiError } from '@/lib/ecf-api/client';
+import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ecf-api/contribuyente';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,15 +132,15 @@ export async function POST(request: NextRequest) {
       cert = await certificados.upload(codigoPublico, p12Buffer, certPassword);
     } catch (err) {
       if (err instanceof EcfApiError) {
-        const esErrorNegocio = err.status >= 400 && err.status < 500;
-        if (esErrorNegocio) {
-          let mensaje = 'No se pudo subir el certificado. Verifica el archivo y la contraseña.';
-          try {
-            const parsed = JSON.parse(err.message);
-            mensaje = Array.isArray(parsed.message) ? parsed.message.join('. ') : (parsed.message ?? mensaje);
-          } catch { mensaje = err.message || mensaje; }
-          return NextResponse.json({ error: mensaje }, { status: 422 });
-        }
+        const resolved = resolveEcfApiError(err);
+        return NextResponse.json(
+          {
+            error:  resolved.mensaje,
+            code:   resolved.code,
+            action: resolved.action,
+          },
+          { status: resolved.proxyStatus },
+        );
       }
       console.error('[POST /api/equipo/certificado] certificados.upload', err);
       return NextResponse.json({ error: 'Error interno al subir el certificado' }, { status: 500 });

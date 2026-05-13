@@ -20,6 +20,7 @@ import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
+import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 
@@ -341,72 +342,35 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       console.error('[/api/ecf/emitir ecf-api]', err);
 
-      // Helper: extraer mensaje legible desde payload NestJS-like ({message, error, statusCode})
-      const parseEcfApiMessage = (raw: string): { mensaje: string; detalles?: unknown } => {
-        try {
-          const parsed = JSON.parse(raw);
-          const msg = Array.isArray(parsed.message)
-            ? parsed.message.join('. ')
-            : (parsed.message ?? parsed.error ?? raw);
-          return { mensaje: String(msg), detalles: parsed };
-        } catch {
-          return { mensaje: raw };
-        }
-      };
-
-      // Traducir errores técnicos crudos (ORM, infra) a mensajes amigables para el usuario.
-      // No exponer detalles de stack/Prisma/SQL en producción.
-      const sanitizarMensaje = (raw: string): string => {
-        const m = raw.toLowerCase();
-
-        // Prisma unique constraint sobre (rnc, eNcf, formato) → NCF duplicado
-        if (m.includes('unique constraint') && m.includes('encf')) {
-          return 'Este e-NCF ya fue emitido anteriormente. Verifica la secuencia o ajusta el siguiente número.';
-        }
-        // Prisma generic unique constraint
-        if (m.includes('unique constraint')) {
-          return 'Ya existe un registro con los mismos datos. Verifica la información.';
-        }
-        // Prisma not found / foreign key
-        if (m.includes('foreign key constraint') || m.includes('record to update not found')) {
-          return 'Referencia inválida. Verifica los datos del comprobante.';
-        }
-        if (m.includes('prisma') || m.includes('invocation') || m.includes('database')) {
-          return 'Ocurrió un error procesando el comprobante. Intenta de nuevo en unos minutos.';
-        }
-        // Timeouts / red
-        if (m.includes('timeout') || m.includes('econnreset') || m.includes('etimedout')) {
-          return 'Tiempo de espera agotado al comunicarse con el servicio de firma. Reintenta.';
-        }
-        // Errores de validación DGII / negocio (los mostramos tal cual, son útiles)
-        return raw;
-      };
-
       if (err instanceof EcfApiError) {
-        const { mensaje, detalles } = parseEcfApiMessage(err.message);
-        const sanitizado = sanitizarMensaje(mensaje);
-        const status = err.status >= 400 && err.status < 500 ? 422 : 502;
+        const resolved = resolveEcfApiError(err);
         return NextResponse.json(
           {
-            error:        sanitizado,
+            error:       resolved.mensaje,
+            code:        resolved.code,
+            action:      resolved.action,
             statusEcfApi: err.status,
-            // En desarrollo incluir detalles crudos para debugging; en prod ocultar.
-            ...(process.env.NODE_ENV !== 'production' ? { detalles, mensajeOriginal: mensaje } : {}),
+            // DGII upstream útil para el usuario (códigos 75, 156, 181, etc.)
+            ...(resolved.dgiiDetalle ? { dgii: resolved.dgiiDetalle } : {}),
+            // En desarrollo incluir body crudo para debugging; en prod ocultar.
+            ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: err.humanMessage } : {}),
           },
-          { status },
+          { status: resolved.proxyStatus },
         );
       }
 
-      // Otros errores (timeout, network, parseo, etc.)
+      // Otros errores (timeout, network, parseo, etc.) — no son EcfApiError.
       const raw = err instanceof Error ? err.message : 'Error desconocido';
+      const esTimeout = /timeout|econnreset|etimedout|aborted/i.test(raw);
       return NextResponse.json(
         {
-          error: sanitizarMensaje(raw) === raw
-            ? 'No se pudo enviar el comprobante. Intenta de nuevo.'
-            : sanitizarMensaje(raw),
+          error: esTimeout
+            ? 'Tiempo de espera agotado al comunicarse con el servicio de firma. Reintenta.'
+            : 'No se pudo enviar el comprobante. Intenta de nuevo.',
+          action: 'retry-later',
           ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: raw } : {}),
         },
-        { status: 500 },
+        { status: 502 },
       );
     }
 
