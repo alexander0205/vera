@@ -1,19 +1,19 @@
 /**
  * GET /api/catalogos/provincias
  *
- * Devuelve las 32 provincias de RD con sus códigos DGII.
- * Proxea a ecf-api para que el cliente nunca llame directamente a la API interna.
- * Respuesta cacheada 1 hora — los catálogos DGII cambian muy raramente.
+ * Devuelve las 32 provincias de RD con sus códigos DGII desde la BD local
+ * (sincronizada vía /api/cron/dgii-catalogos-sync). Fallback a ecf-api si la
+ * tabla está vacía. Misma forma de respuesta que antes: { codigo, nombre, ... }[].
  */
 
 import { NextResponse } from 'next/server';
-import { catalogos } from '@/lib/ecf-api/client';
+import { getProvincias } from '@/lib/dgii/catalogos';
 
 export const revalidate = 3600; // ISR: 1 hora
 
 export async function GET() {
   try {
-    const provincias = await catalogos.provincias();
+    const provincias = await getProvincias();
     return NextResponse.json(provincias, {
       headers: { 'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400' },
     });

@@ -318,11 +318,14 @@ export const emision = {
 export interface CatalogItemDto {
   codigo: string;
   nombre: string;
+  /** Campos extra varían por catálogo: descripcion, tasa, sigla, simbolo,
+   * codigoIso2, formato, provinciaCodigo, municipioCodigo, etc. */
+  [key: string]: unknown;
 }
 
 export const catalogos = {
   /**
-   * 32 provincias de RD. Códigos en formato "01" (Distrito Nacional), "02", etc.
+   * 32 provincias de RD. Códigos en formato "010000" (Distrito Nacional), "020000", etc.
    * Usar el código en CreateContribuyenteDto.provincia.
    */
   provincias: () =>
@@ -330,7 +333,7 @@ export const catalogos = {
 
   /**
    * 156 municipios de RD.
-   * @param provincia Opcional. Código de provincia para filtrar (ej: "01").
+   * @param provincia Opcional. Código de provincia para filtrar (ej: "010000").
    * Usar el código en CreateContribuyenteDto.municipio.
    */
   municipios: (provincia?: string) =>
@@ -344,6 +347,40 @@ export const catalogos = {
 
   formasPago: () =>
     request<CatalogItemDto[]>('GET', '/catalogos/formas-pago'),
+
+  // ── Adicionales (sincronizados a Postgres local vía cron) ──
+  ambientes: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/ambientes'),
+
+  tiposDocumento: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/tipos-documento'),
+
+  monedas: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/monedas'),
+
+  unidadesMedida: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/unidades-medida'),
+
+  indicadoresItbis: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/indicadores-itbis'),
+
+  paises: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/paises'),
+
+  tiposIngreso: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/tipos-ingreso'),
+
+  tiposPago: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/tipos-pago'),
+
+  distritosMunicipales: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/distritos-municipales'),
+
+  impuestosAdicionales: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/impuestos-adicionales'),
+
+  codigosModificacion: () =>
+    request<CatalogItemDto[]>('GET', '/catalogos/codigos-modificacion'),
 };
 
 // ─── Me (identidad de la API key) ─────────────────────────────────────────────

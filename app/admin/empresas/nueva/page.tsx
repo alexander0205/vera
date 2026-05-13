@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { NuevaEmpresaForm } from './form';
-import { catalogos } from '@/lib/ecf-api/client';
+import { getProvincias } from '@/lib/dgii/catalogos';
 
 export default async function NuevaEmpresaPage() {
-  // Cargar provincias server-side — fallback a [] si ecf-api no responde
+  // Cargar provincias server-side desde la BD local — fallback a [] si falla
   let provincias: { codigo: string; nombre: string }[] = [];
   try {
-    provincias = await catalogos.provincias();
+    provincias = await getProvincias();
   } catch {
-    // ecf-api offline — el select queda vacío, usuario puede escribir manualmente
+    // BD/ecf-api offline — el select queda vacío, usuario puede escribir manualmente
   }
 
   return (

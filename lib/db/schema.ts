@@ -10,6 +10,8 @@ import {
   boolean,
   index,
   uuid,
+  jsonb,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -320,6 +322,37 @@ export const ecfDocumentsRecibidos = pgTable('ecf_documents_recibidos', {
   index('ecf_recibidos_team_idx').on(t.teamId),
   index('ecf_recibidos_encf_idx').on(t.teamId, t.rncEmisor, t.encf),
 ]);
+
+// ─── DGII — Catálogos de referencia (estáticos) ──────────────────────────────
+// Espejo local de los catálogos públicos de ecf-api (/v1/catalogos/*).
+// Tabla genérica con `metadata jsonb` para los campos extra que varían por
+// catálogo (descripcion, tasa, sigla, simbolo, codigoIso2, formato, etc.).
+// Sincronizada por /api/cron/dgii-catalogos-sync (semanal).
+
+export const dgiiCatalogos = pgTable(
+  'dgii_catalogos',
+  {
+    tipo:         varchar('tipo', { length: 40 }).notNull(),
+    codigo:       varchar('codigo', { length: 20 }).notNull(),
+    nombre:       varchar('nombre', { length: 255 }).notNull(),
+    parentCodigo: varchar('parent_codigo', { length: 20 }),
+    metadata:     jsonb('metadata').notNull().default({}),
+    updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tipo, t.codigo] }),
+    index('dgii_catalogos_parent_idx').on(t.tipo, t.parentCodigo),
+  ],
+);
+
+// Log de ejecuciones del cron de sincronización.
+export const dgiiCatalogosSyncLog = pgTable('dgii_catalogos_sync_log', {
+  id:           serial('id').primaryKey(),
+  ejecutadoAt:  timestamp('ejecutado_at', { withTimezone: true }).notNull().defaultNow(),
+  ok:           boolean('ok').notNull(),
+  detalle:      jsonb('detalle').notNull().default({}),
+  duracionMs:   integer('duracion_ms'),
+});
 
 // ─── DGII — Padrón de contribuyentes (RNC) ───────────────────────────────────
 // Descargado del ZIP público de la DGII (~600K registros)
@@ -675,6 +708,8 @@ export type NewEcfDocument = typeof ecfDocuments.$inferInsert;
 export type EcfDocumentRecibido = typeof ecfDocumentsRecibidos.$inferSelect;
 export type NewEcfDocumentRecibido = typeof ecfDocumentsRecibidos.$inferInsert;
 export type RncPadron = typeof rncPadron.$inferSelect;
+export type DgiiCatalogo = typeof dgiiCatalogos.$inferSelect;
+export type NewDgiiCatalogo = typeof dgiiCatalogos.$inferInsert;
 export type Cotizacion = typeof cotizaciones.$inferSelect;
 export type NewCotizacion = typeof cotizaciones.$inferInsert;
 export type Categoria = typeof categorias.$inferSelect;

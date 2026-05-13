@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { catalogos } from '@/lib/ecf-api/client';
+import { getProvincias } from '@/lib/dgii/catalogos';
 import { PLANS } from '@/lib/config/plans';
 import Link from 'next/link';
 import { EditarEmpresaForm } from './form';
@@ -19,7 +19,7 @@ export default async function EditarEmpresaPage({
   if (!team) notFound();
 
   let provincias: { codigo: string; nombre: string }[] = [];
-  try { provincias = await catalogos.provincias(); } catch {}
+  try { provincias = await getProvincias(); } catch {}
 
   // Convertir planName (display) → key lowercase para el selector
   const planKey = PLANS.find(
