@@ -40,3 +40,5 @@ next-env.d.ts
 postgres_data/
 .env*.local
 output/
+.claude/worktrees/
+.claude/scheduled_tasks.lock
