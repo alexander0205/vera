@@ -57,7 +57,11 @@ const emitirSchema = z.object({
   codigoModificacion:   z.coerce.number().int().min(1).max(5).optional(),
   fechaNcfModificado:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   razonModificacion:    z.string().optional(),
-  tipoIngresos:         z.coerce.number().int().min(1).max(6).optional(),
+  // Acepta number (1..6) o string ("01".."06" o "1".."6"). Mapper normaliza a XSD "0X".
+  tipoIngresos: z.union([
+    z.coerce.number().int().min(1).max(6),
+    z.string().regex(/^(0?[1-6])$/),
+  ]).optional(),
 
   notas:               z.string().optional(),
   terminosCondiciones: z.string().optional(),
@@ -230,6 +234,7 @@ export async function POST(request: NextRequest) {
       codigoModificacion:   data.codigoModificacion,
       fechaNcfModificado:   data.fechaNcfModificado,
       tipoIngresos:         data.tipoIngresos,
+      retenciones:          data.retenciones, // tipos 31/32/33/34
       encfOverride:         data.encfOverride,
       skipRangeValidation,
     });
@@ -248,13 +253,12 @@ export async function POST(request: NextRequest) {
       habilitacionHeaders ? `\nHeaders: ${JSON.stringify(habilitacionHeaders)}` : '',
     );
 
-    // Llamar a ecf-api
+    // Llamar a ecf-api — usar endpoint unificado (/emisiones/emitir)
+    // El mapper ya añade `tipoComprobante` y `formato` (para tipo 32) al DTO.
     let resultado;
-    console.log({codigoPublico, tipo, ecfApiDto, habilitacionHeaders})
+    console.log({ codigoPublico, tipo, esRfce, ecfApiDto, habilitacionHeaders });
     try {
-      resultado = esRfce
-        ? await emision.emitirRfce32(codigoPublico, ecfApiDto, habilitacionHeaders)
-        : await emision.emitir(codigoPublico, tipo, ecfApiDto, habilitacionHeaders);
+      resultado = await emision.emitirUnified(codigoPublico, ecfApiDto, habilitacionHeaders);
     } catch (err) {
       if (err instanceof EcfApiError) {
         const esErrorNegocio = err.status >= 400 && err.status < 500;

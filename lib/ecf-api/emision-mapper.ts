@@ -19,6 +19,22 @@ export interface EmitedoItem {
   descuentoMonto?: number;
   tasaItbis?: 0.18 | 0.16 | 0;
   indicadorBienoServicio?: 1 | 2;
+  /** Tipo 41: monto explícito de ITBIS retenido para este item (overrides 100%) */
+  montoITBISRetenido?: number;
+  /** Tipo 41/47: monto explícito de ISR retenido para este item */
+  montoISRRetenido?: number;
+}
+
+/**
+ * Retención agregada a nivel de comprobante (tipos 31/32/33/34).
+ * Estructura: { id, nombre, porcentaje, tipo: 'itbis'|'isr'|'otro', monto }.
+ */
+export interface EmitedoRetencion {
+  id?: string;
+  nombre?: string;
+  porcentaje?: number;
+  tipo: 'itbis' | 'isr' | 'otro';
+  monto: number;
 }
 
 export interface EmitedoEmisionData {
@@ -35,16 +51,19 @@ export interface EmitedoEmisionData {
   ncfModificado?: string;
   codigoModificacion?: number;
   /**
-   * Tipo de ingresos (DGII catálogo codigos_ingreso):
-   *   1=Operaciones (Habituales) — default
-   *   2=Financieros
-   *   3=Extraordinarios
-   *   4=Arrendamientos
-   *   5=Venta Activos depreciables
-   *   6=Otros Ingresos
+   * Tipo de ingresos (DGII catálogo codigos_ingreso) — siempre string de 2 dígitos:
+   *   "01"=Operaciones (Habituales) — default
+   *   "02"=Financieros
+   *   "03"=Extraordinarios
+   *   "04"=Arrendamientos
+   *   "05"=Venta Activos depreciables
+   *   "06"=Otros Ingresos
    * Aplica a tipos 31, 32, 44, 45, 46. Oculto en 33, 34, 41, 43, 47.
+   * Acepta number o string en input — el mapper lo normaliza al formato XSD ("01"…"06").
    */
-  tipoIngresos?: number;
+  tipoIngresos?: number | string;
+  /** Retenciones a nivel de comprobante (tipos 31/32/33/34). */
+  retenciones?: EmitedoRetencion[];
   /**
    * Fecha de emisión del NCF que se modifica (tipos 33 y 34). Formato YYYY-MM-DD o dd-MM-yyyy.
    * OBLIGATORIO en InformacionReferencia según XSD DGII.
@@ -67,6 +86,32 @@ export interface EmitedoEmisionData {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Normaliza tipoIngresos al formato XSD DGII: string de 2 dígitos zero-padded ("01"…"06").
+ * Acepta number (1..6) o string ("1", "01", etc.). Default "01".
+ */
+function formatTipoIngresos(v?: number | string): string {
+  if (v === undefined || v === null) return '01';
+  const n = typeof v === 'string' ? parseInt(v, 10) : v;
+  if (!Number.isFinite(n) || n < 1 || n > 6) return '01';
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * Suma retenciones por tipo y devuelve `{ itbis, isr, otro }` totales en DOP.
+ * Vacío si no hay retenciones.
+ */
+function sumRetenciones(retenciones?: EmitedoRetencion[]): { itbis: number; isr: number; otro: number } {
+  const acc = { itbis: 0, isr: 0, otro: 0 };
+  if (!retenciones) return acc;
+  for (const r of retenciones) {
+    if (r.tipo === 'itbis') acc.itbis += r.monto;
+    else if (r.tipo === 'isr') acc.isr += r.monto;
+    else acc.otro += r.monto;
+  }
+  return acc;
+}
 
 function tasaToIndicador(tasa?: number): number {
   if (tasa === 0.18) return 1;
@@ -184,7 +229,13 @@ function mapItemsGeneric(items: EmitedoItem[]) {
 function mapItems41(items: EmitedoItem[]) {
   return items.map(item => {
     const montoItem = item.cantidadItem * item.precioUnitarioItem - (item.descuentoMonto ?? 0);
-    const tasa      = item.tasaItbis ?? 0.18; // tipo 41 siempre es 18% en pruebas
+    const tasa      = item.tasaItbis ?? 0.18; // tipo 41 default 18%
+    // Si el caller pasa montoITBISRetenido explícito (% personalizado), úsalo.
+    // Si no, fallback al 100% del ITBIS calculado del item (comportamiento legacy).
+    const itbisRet  = item.montoITBISRetenido !== undefined
+      ? item.montoITBISRetenido
+      : Math.round(montoItem * tasa * 100) / 100;
+    const isrRet    = item.montoISRRetenido ?? 0;
     return {
       indicadorFacturacion:   tasaToIndicador(item.tasaItbis),
       nombreItem:             item.nombreItem,
@@ -197,8 +248,8 @@ function mapItems41(items: EmitedoItem[]) {
       retencion: {
         indicadorAgenteRetencionoPercepcion: 1, // 1=Retención
         // DGII cod=260/272: ambos campos obligatorios en tipo 41
-        montoITBISRetenido: Math.round(montoItem * tasa * 100) / 100,
-        montoISRRetenido:   0,
+        montoITBISRetenido: itbisRet,
+        montoISRRetenido:   isrRet,
       },
     };
   });
@@ -283,10 +334,14 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
 
   if (esRfce) {
     const fp = buildFormasPago(tipoPago, d.totales.montoTotal);
+    const ret = sumRetenciones(d.retenciones);
     return {
       tipo,
       esRfce: true,
       dto: {
+        // Endpoint unificado: requiere tipoComprobante + formato.
+        tipoComprobante: tipo,
+        formato:         'RFCE',
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
         montoTotal:      d.totales.montoTotal,
@@ -295,10 +350,12 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         // RFCE32 usa montoGravadoI1/I2/I3 — montoGravadoTotal no existe en este DTO
         montoGravadoI1:  d.totales.montoGravadoTotal || undefined,
         montoExento:     d.totales.montoExento || undefined,
-        tipoIngresos:    d.tipoIngresos ?? 1,
+        tipoIngresos:    formatTipoIngresos(d.tipoIngresos),
         correoComprador: d.emailComprador,
         rncComprador:    d.rncComprador,
         eNcf:            d.encfOverride,
+        ...(ret.itbis > 0 ? { totalITBISRetenido: Math.round(ret.itbis * 100) / 100 } : {}),
+        ...(ret.isr   > 0 ? { totalISRRetencion:  Math.round(ret.isr   * 100) / 100 } : {}),
         ...skipRange,
       },
     };
@@ -309,11 +366,16 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
   // Requiere fechaVencimientoSecuencia y retencion en cada item.
   if (tipo === '41') {
     const fp = buildFormasPago(tipoPago, d.totales.montoTotal);
+    const items41 = mapItems41(d.items);
+    // DGII cod=11160/11170: totalITBISRetenido y totalISRRetencion deben ser la suma exacta de los items
+    const totalITBISRet = items41.reduce((s, it) => s + (it.retencion?.montoITBISRetenido ?? 0), 0);
+    const totalISRRet   = items41.reduce((s, it) => s + (it.retencion?.montoISRRetenido ?? 0), 0);
     return {
       tipo,
       esRfce: false,
       dto: {
-        items:                     mapItems41(d.items),
+        tipoComprobante:           tipo,
+        items:                     items41,
         rncProveedor:              d.rncComprador,
         razonSocialProveedor:      d.razonSocialComprador,
         fechaVencimientoSecuencia: normalizeFechaVenc(d.fechaVencimientoSecuencia),
@@ -323,10 +385,8 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         montoTotal:                d.totales.montoTotal,
         totalITBIS1:               d.totales.itbis1  || undefined,
         totalITBIS2:               d.totales.itbis2  || undefined,
-        // DGII cod=11160: totalITBISRetenido = suma de montoITBISRetenido de todos los items
-        totalITBISRetenido:        d.totales.itbis1 + (d.totales.itbis2 || 0),
-        // totalISRRetencion = suma de montoISRRetenido de items (0 cuando no hay retención ISR)
-        totalISRRetencion:         0,
+        totalITBISRetenido:        Math.round(totalITBISRet * 100) / 100,
+        totalISRRetencion:         Math.round(totalISRRet   * 100) / 100,
         montoExento:               d.totales.montoExento || undefined,
         correoProveedor:           d.emailComprador,
         eNcf:                      d.encfOverride,
@@ -344,6 +404,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       tipo,
       esRfce: false,
       dto: {
+        tipoComprobante:           tipo,
         items:                     mapItems43(d.items),
         montoTotal:                d.totales.montoTotal,
         fechaVencimientoSecuencia: normalizeFechaVenc(d.fechaVencimientoSecuencia),
@@ -364,13 +425,14 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       tipo,
       esRfce: false,
       dto: {
+        tipoComprobante:      tipo,
         items:                mapItems43(d.items), // misma estructura que 43
         razonSocialComprador: d.razonSocialComprador,
         rncComprador:         d.rncComprador,
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
         montoTotal:           d.totales.montoTotal,
-        tipoIngresos:         d.tipoIngresos ?? 1, // 1=Operaciones (default)
+        tipoIngresos:         formatTipoIngresos(d.tipoIngresos), // "01" zero-padded
         // Todos los items de tipo 44 son exentos → montoExento = montoTotal
         montoExento:          d.totales.montoTotal,
         correoComprador:      d.emailComprador,
@@ -391,6 +453,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       tipo,
       esRfce: false,
       dto: {
+        tipoComprobante:      tipo,
         items:                mapItemsGeneric(d.items),
         // ECF46Dto NO tiene rncComprador — usa identificadorExtranjero para el comprador
         // DGII cod=1381: el identificador es obligatorio incluso en pruebas de habilitación
@@ -399,7 +462,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
         montoTotal:           d.totales.montoTotal,
-        tipoIngresos:         d.tipoIngresos ?? 1,
+        tipoIngresos:         formatTipoIngresos(d.tipoIngresos),
         correoComprador:      d.emailComprador,
         eNcf:                 d.encfOverride,
         ...(fechaLimitePago ? { fechaLimitePago } : {}),
@@ -416,6 +479,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       tipo,
       esRfce: false,
       dto: {
+        tipoComprobante:      tipo,
         items:                mapItems47(d.items),
         montoTotal:           d.totales.montoTotal,
         // DGII cod=1960: todos los items en tipo 47 son exentos → montoExento = montoTotal
@@ -436,10 +500,12 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
   // Requiere indicadorNotaCredito (0=dentro 30 días, 1=después 30 días).
   // Sin formasPago (no está en el DTO según spec).
   if (tipo === '34') {
+    const ret = sumRetenciones(d.retenciones);
     return {
       tipo,
       esRfce: false,
       dto: {
+        tipoComprobante:       tipo,
         informacionReferencia: buildInformacionReferencia(d),
         items:                 mapItemsGeneric(d.items),
         tipoPago,
@@ -455,6 +521,8 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         montoExento:           d.totales.montoExento || undefined,
         correoComprador:       d.emailComprador,
         eNcf:                  d.encfOverride,
+        ...(ret.itbis > 0 ? { totalITBISRetenido: Math.round(ret.itbis * 100) / 100 } : {}),
+        ...(ret.isr   > 0 ? { totalISRRetencion:  Math.round(ret.isr   * 100) / 100 } : {}),
         ...(fechaLimitePago ? { fechaLimitePago } : {}),
         ...skipRange,
       },
@@ -478,10 +546,16 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
   // tipoIngresos aplica a 31, 32 (≥250K), 45 (no en 33 que es Nota de Débito).
   const needsTipoIngresos          = ['31', '32', '45'].includes(tipo);
 
+  const ret = sumRetenciones(d.retenciones);
+  // En este path tipo 32 SIEMPRE es ≥250K (RFCE maneja <250K arriba) → formato ECF.
+  const formato = tipo === '32' ? 'ECF' : undefined;
+
   return {
     tipo,
     esRfce: false,
     dto: {
+      tipoComprobante: tipo,
+      ...(formato ? { formato } : {}),
       ...(tipo === '33' ? { informacionReferencia: buildInformacionReferencia(d) } : {}),
       items:         mapItemsGeneric(d.items),
       ...(needsComprador
@@ -493,9 +567,11 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       ...(fp ? { formasPago: fp } : {}),
       montoTotal:           d.totales.montoTotal,
       ...totalesItbis(d.totales),
-      ...(needsTipoIngresos ? { tipoIngresos: d.tipoIngresos ?? 1 } : {}),
+      ...(needsTipoIngresos ? { tipoIngresos: formatTipoIngresos(d.tipoIngresos) } : {}),
       correoComprador:      d.emailComprador,
       eNcf:                 d.encfOverride,
+      ...(ret.itbis > 0 ? { totalITBISRetenido: Math.round(ret.itbis * 100) / 100 } : {}),
+      ...(ret.isr   > 0 ? { totalISRRetencion:  Math.round(ret.isr   * 100) / 100 } : {}),
       ...(fechaLimitePago ? { fechaLimitePago } : {}),
       ...skipRange,
     },

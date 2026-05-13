@@ -117,8 +117,50 @@ export async function GET(
       telefonoComprador = cl?.telefono ?? undefined;
     }
 
-    // Generar QR con la URL de validación DGII
-    const qrText = `https://dgii.gov.do/e-CF?encf=${doc.encf}&rnc=${team.rnc ?? ''}`;
+    // Generar QR con la URL oficial de validación DGII
+    // Formato: https://ecf.dgii.gov.do/{ambiente}/consultatimbre?RncEmisor=...&RncComprador=...
+    //   &Encf=...&FechaEmision=DD-MM-YYYY&MontoTotal=N&FechaFirma=DD-MM-YYYY%20HH:MM:SS&CodigoSeguridad=...
+    // ambiente: testecf | certecf | ecf (producción)
+    const ambienteRaw = (process.env.ECF_HABILITACION_AMBIENTE
+      ?? (process.env.NODE_ENV === 'production' ? 'CerteCF' : 'TesteCF')).toLowerCase();
+    const ambientePath = ambienteRaw.includes('test') ? 'testecf'
+      : ambienteRaw.includes('cert') ? 'certecf'
+      : 'ecf';
+
+    const fechaEmDate = new Date(doc.fechaEmision);
+    const ddEm = String(fechaEmDate.getDate()).padStart(2, '0');
+    const mmEm = String(fechaEmDate.getMonth() + 1).padStart(2, '0');
+    const yyyyEm = fechaEmDate.getFullYear();
+    const fechaEmisionStr = `${ddEm}-${mmEm}-${yyyyEm}`;
+
+    // FechaFirma: dd-MM-yyyy HH:mm:ss (extraída del XML firmado si disponible)
+    let fechaFirmaStr = '';
+    if (doc.xmlFirmado) {
+      const m = doc.xmlFirmado.match(/<SigningTime[^>]*>([^<]+)<\/SigningTime>/i)
+        ?? doc.xmlFirmado.match(/<FechaFirma[^>]*>([^<]+)<\/FechaFirma>/i);
+      if (m?.[1]) {
+        const d = new Date(m[1]);
+        if (!Number.isNaN(d.getTime())) {
+          const dd = String(d.getDate()).padStart(2, '0');
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mi = String(d.getMinutes()).padStart(2, '0');
+          const ss = String(d.getSeconds()).padStart(2, '0');
+          fechaFirmaStr = `${dd}-${mm}-${d.getFullYear()} ${hh}:${mi}:${ss}`;
+        }
+      }
+    }
+
+    const qrParams = new URLSearchParams();
+    qrParams.set('RncEmisor', team.rnc ?? '');
+    if (doc.rncComprador) qrParams.set('RncComprador', doc.rncComprador);
+    qrParams.set('Encf', doc.encf);
+    qrParams.set('FechaEmision', fechaEmisionStr);
+    qrParams.set('MontoTotal', (doc.montoTotal / 100).toFixed(2));
+    if (fechaFirmaStr) qrParams.set('FechaFirma', fechaFirmaStr);
+    if (doc.codigoSeguridad) qrParams.set('CodigoSeguridad', doc.codigoSeguridad);
+
+    const qrText = `https://ecf.dgii.gov.do/${ambientePath}/consultatimbre?${qrParams.toString()}`;
     const qrDataUrl = await QRCode.toDataURL(qrText, {
       width: 128,
       margin: 1,

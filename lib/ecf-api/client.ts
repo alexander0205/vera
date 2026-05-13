@@ -298,13 +298,29 @@ export const emision = {
   emitirUnified: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>
     request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emisiones/emitir`, dto, extraHeaders),
 
-  /** @deprecated Legacy path. Migrar a emitirUnified. Route emitir/route.ts pendiente de refactor. */
-  emitir: (codigoPublico: string, tipo: string, dto: unknown, extraHeaders?: Record<string, string>) =>
-    request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/ecf${tipo}`, dto, extraHeaders),
+  /**
+   * @deprecated Legacy path `/contribuyentes/:cp/emision/ecf{tipo}` — returns 404 in production ecf-api.
+   * Use `emitirUnified()` instead. Kept only for backward compatibility; emits a runtime warning.
+   */
+  emitir: (codigoPublico: string, tipo: string, dto: unknown, extraHeaders?: Record<string, string>) => {
+    console.warn(
+      `[ecf-api] DEPRECATED: emision.emitir() uses legacy path /emision/ecf${tipo}. ` +
+      `Switch to emision.emitirUnified() (POST /emisiones/emitir).`,
+    );
+    return request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/ecf${tipo}`, dto, extraHeaders);
+  },
 
-  /** @deprecated Legacy path. Route emitir/route.ts pendiente de refactor. */
-  emitirRfce32: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>
-    request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/rfce32`, dto, extraHeaders),
+  /**
+   * @deprecated Legacy path `/contribuyentes/:cp/emision/rfce32` — returns 404 in production ecf-api.
+   * Use `emitirUnified()` instead. Kept only for backward compatibility.
+   */
+  emitirRfce32: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) => {
+    console.warn(
+      `[ecf-api] DEPRECATED: emision.emitirRfce32() uses legacy path /emision/rfce32. ` +
+      `Switch to emision.emitirUnified() (POST /emisiones/emitir).`,
+    );
+    return request<EmisionResponseDto>('POST', `/contribuyentes/${codigoPublico}/emision/rfce32`, dto, extraHeaders);
+  },
 
   consultarEstado: (emisionId: string) =>
     request<EmisionResponseDto>('GET', `/emisiones/${emisionId}/estado-dgii`),
