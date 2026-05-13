@@ -2,7 +2,6 @@
 
 import { Button } from '@/components/ui/button';
 import { ChevronDown, FileText, Loader2, Mail, Printer } from 'lucide-react';
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import type { ItemLinea } from '../utils/types';
 
@@ -12,10 +11,11 @@ interface Props {
   loadingPreview: boolean;
   onVistaPrevia: () => void;
   onEmitir: (modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) => void;
+  onCancelar?: () => void;
 }
 
 export function BottomActionBar({
-  items, loading, loadingPreview, onVistaPrevia, onEmitir,
+  items, loading, loadingPreview, onVistaPrevia, onEmitir, onCancelar,
 }: Props) {
   const [showGuardarMenu, setShowGuardarMenu] = useState(false);
   const guardarMenuRef = useRef<HTMLDivElement>(null);
@@ -36,10 +36,10 @@ export function BottomActionBar({
       <Button
         type="button"
         variant="outline"
-        asChild
         className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
+        onClick={onCancelar}
       >
-        <Link href="/dashboard/facturas">Cancelar</Link>
+        Cancelar
       </Button>
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
         <Button

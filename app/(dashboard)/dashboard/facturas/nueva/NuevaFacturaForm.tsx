@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -186,6 +187,8 @@ export default function NuevaFacturaForm({
 
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  // Mirror error → toast (más visible, no requiere scroll para verlo)
+  useEffect(() => { if (error) toast.error(error, { duration: 6500 }); }, [error]);
   const [resultado, setResultado]       = useState<ResultadoEmision | null>(null);
   const [draftKey] = useState(() => `emitedo:draft:${initialData?.id ?? 'new'}`);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -830,6 +833,10 @@ export default function NuevaFacturaForm({
             loadingPreview={loadingPreview}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}
+            onCancelar={() => {
+              try { localStorage.removeItem(draftKey); } catch {}
+              router.push('/dashboard/facturas');
+            }}
           />
         </form>
 
