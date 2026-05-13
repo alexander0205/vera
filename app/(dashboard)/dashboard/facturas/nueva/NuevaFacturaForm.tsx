@@ -509,14 +509,20 @@ export default function NuevaFacturaForm({
           return 4; // exento o fallback
         };
         const tiposExentos = ['43', '44']; // forzar indicador=4
+        const itemsAugmented = (payload.items ?? []).map(i => ({
+          ...i,
+          indicadorFacturacion: tiposExentos.includes(tipoEcf) ? 4 : tasaToIndicador(i.tasaItbis ?? 'exento'),
+          montoItem: (i.cantidadItem ?? 0) * (i.precioUnitarioItem ?? 0) - (i.descuentoMonto ?? 0),
+        }));
+        // indicadorMontoGravado REQUIRED si algún ítem está gravado (indicador 1, 2 o 3)
+        // 0 = precios NO incluyen ITBIS (default — nuestro form calcula ITBIS encima)
+        // 1 = precios SÍ incluyen ITBIS
+        const hayItemsGravados = itemsAugmented.some(i => [1, 2, 3].includes(i.indicadorFacturacion));
         const validationPayload = {
           ...payload,
           montoTotal: totales.total,
-          items: (payload.items ?? []).map(i => ({
-            ...i,
-            indicadorFacturacion: tiposExentos.includes(tipoEcf) ? 4 : tasaToIndicador(i.tasaItbis ?? 'exento'),
-            montoItem: (i.cantidadItem ?? 0) * (i.precioUnitarioItem ?? 0) - (i.descuentoMonto ?? 0),
-          })),
+          items: itemsAugmented,
+          ...(hayItemsGravados ? { indicadorMontoGravado: 0 } : {}),
           // Renombrar campos para tipo 41 (Compras) — usa rncProveedor en lugar de rncComprador
           ...(tipoEcf === '41' ? {
             rncProveedor:         payload.rncComprador,
