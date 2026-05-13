@@ -123,7 +123,11 @@ export function ItemsTable({
                   <Input
                     type="number" min={0.01} step="any"
                     value={item.cantidadItem}
-                    onChange={(e) => onUpdateItem(item.id, 'cantidadItem', parseFloat(e.target.value) || 1)}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      // permitir 0 explícito, NaN/blank → 0; submit valida > 0
+                      onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
+                    }}
                     className="h-9 text-sm text-center"
                   />
                 </td>

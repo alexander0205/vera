@@ -547,7 +547,18 @@ export default function NuevaFacturaForm({
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            // Prevent accidental Enter submit (only TEXTAREA + explicit submit button allowed)
+            const t = e.target as HTMLElement;
+            const isInput = t.tagName === 'INPUT' || t.tagName === 'SELECT';
+            const isSubmitBtn = t.tagName === 'BUTTON' && (t as HTMLButtonElement).type === 'submit';
+            if (e.key === 'Enter' && isInput && !isSubmitBtn) {
+              e.preventDefault();
+            }
+          }}
+        >
           <TopBar
             showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
             showListaPrecios={showListaPrecios} setShowListaPrecios={setShowListaPrecios}

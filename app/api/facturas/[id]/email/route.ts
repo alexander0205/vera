@@ -4,10 +4,17 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { sendInvoiceEmail } from '@/lib/email';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  // Rate limit por user — 20/min — evita uso como SMTP relay
+  const rl = rateLimit(`fact-email:${user.id}`, 20, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Demasiados envíos. Espera 1 minuto.' }, { status: 429 });
+  }
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin empresa activa' }, { status: 400 });

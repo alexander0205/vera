@@ -4,10 +4,17 @@ import { emailVerificationTokens } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { sendEmailVerificationEmail } from '@/lib/email';
 import { randomBytes } from 'crypto';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST() {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  // Rate limit por user — 5/min — evita abuso del email-bombing
+  const rl = rateLimit(`send-verif:${user.id}`, 5, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Demasiados intentos. Espera 1 minuto.' }, { status: 429 });
+  }
 
   const token = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
