@@ -295,7 +295,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Error al enviar el comprobante' }, { status: 500 });
     }
 
-    const estadoInicial = resultado.trackId ? 'EN_PROCESO' : 'ACEPTADO';
+    // Map ecf-api estado → emitedo estado (alineado con MAPA_ESTADOS de /api/ecf/estado)
+    const mapeoEstado: Record<string, string> = {
+      ACEPTADO:             'ACEPTADO',
+      ACEPTADO_CONDICIONAL: 'ACEPTADO_CONDICIONAL',
+      ENVIADO:              'EN_PROCESO',
+      PENDIENTE:            'EN_PROCESO',
+      RECHAZADO:            'RECHAZADO',
+      ERROR:                'RECHAZADO',
+    };
+    const estadoUpper = String(resultado.estado ?? '').toUpperCase();
+    const estadoInicial = mapeoEstado[estadoUpper] ?? (resultado.trackId ? 'EN_PROCESO' : 'ACEPTADO');
     const encf          = resultado.eNcf;
     const trackId       = resultado.trackId ?? '';
 

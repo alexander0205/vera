@@ -124,7 +124,7 @@ function EstadoDgiiCard({
       <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
         <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-gray-900 flex-1">Estado DGII</h2>
-        {factura.trackId && (
+        {factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO' && (
           <button
             type="button"
             onClick={onConsultar}
@@ -267,7 +267,7 @@ export default function FacturaDetallePage() {
     setPollingStatus('loading');
     setPollMsg(null);
     try {
-      const res = await fetch(`/api/ecf/estado?trackId=${factura.trackId}&docId=${factura.id}`);
+      const res = await fetch(`/api/ecf/estado?docId=${factura.id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error consultando DGII');
       setPollingStatus('done');
@@ -370,7 +370,9 @@ export default function FacturaDetallePage() {
   const esBorrador  = factura.estado === 'BORRADOR';
   const esAnulable  = !['ANULADO'].includes(factura.estado);
   const esFinal     = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO', 'ANULADO'].includes(factura.estado);
-  const puedePolling = !!factura.trackId && factura.estado === 'EN_PROCESO';
+  // Consultar disponible siempre que la factura esté emitida (no borrador) y no en estado final ACEPTADO definitivo.
+  // Permite refrescar también en ACEPTADO_CONDICIONAL/EN_PROCESO/etc.
+  const puedePolling = factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO';
 
   return (
     <section className="p-4 sm:p-6">

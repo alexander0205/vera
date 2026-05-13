@@ -1,6 +1,11 @@
 /**
- * GET /api/ecf/estado?trackId=xxx&docId=yyy
- * Consulta el estado de un e-CF en la DGII y actualiza el documento en BD.
+ * GET /api/ecf/estado?docId=yyy
+ *
+ * Consulta el estado actual de un e-CF directamente en ecf-api
+ * (que a su vez consulta la DGII). Actualiza el documento en BD si cambió.
+ *
+ * Reemplaza la auth local DGII (cert P12 + token) por delegación a ecf-api,
+ * que es donde vive el certificado del contribuyente.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,35 +13,30 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
-import { getDgiiAuth as getDgiiToken } from '@/lib/dgii/auth';
+import { emision, EcfApiError } from '@/lib/ecf-api/client';
 
+// ecf-api estado → emitedo estado
 const MAPA_ESTADOS: Record<string, string> = {
-  Aceptado:            'ACEPTADO',
-  AceptadoCondicional: 'ACEPTADO_CONDICIONAL',
-  Rechazado:           'RECHAZADO',
-  EnProceso:           'EN_PROCESO',
-  'En Proceso':        'EN_PROCESO',
+  ACEPTADO:             'ACEPTADO',
+  ACEPTADO_CONDICIONAL: 'ACEPTADO_CONDICIONAL',
+  ENVIADO:              'EN_PROCESO',
+  PENDIENTE:            'EN_PROCESO',
+  RECHAZADO:            'RECHAZADO',
+  ERROR:                'RECHAZADO',
 };
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const url      = new URL(req.url);
-  const trackId  = url.searchParams.get('trackId');
-  const docIdStr = url.searchParams.get('docId');
-
-  if (!trackId || !docIdStr) {
-    return NextResponse.json({ error: 'trackId y docId son requeridos' }, { status: 400 });
-  }
-
-  const docId = parseInt(docIdStr);
+  const docIdStr = new URL(req.url).searchParams.get('docId');
+  const docId = docIdStr ? parseInt(docIdStr) : NaN;
   if (isNaN(docId)) return NextResponse.json({ error: 'docId inválido' }, { status: 400 });
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  // Cargar documento y equipo juntos
+  // Cargar documento y verificar membership
   const [row] = await db
     .select({ doc: ecfDocuments, team: teams })
     .from(ecfDocuments)
@@ -47,51 +47,39 @@ export async function GET(req: NextRequest) {
   if (!row) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
 
   const { doc } = row;
-
-  if (!doc.trackId) {
+  if (!doc.ecfApiEmisionId) {
     return NextResponse.json(
-      { error: 'Este documento no tiene trackId de seguimiento' },
+      { error: 'Documento sin ID de ecf-api (probable borrador)' },
       { status: 422 },
     );
   }
 
-  // Obtener cliente DGII autenticado — reutiliza token de DB o re-autentica y lo guarda
-  let client: Awaited<ReturnType<typeof getDgiiToken>>['client'];
+  // Consultar estado via ecf-api (delega a DGII)
+  let resultado;
   try {
-    ({ client } = await getDgiiToken(teamId));
-  } catch (authErr) {
-    console.error('[ecf/estado] Error autenticando con DGII:', authErr);
-    return NextResponse.json(
-      { error: 'No se pudo autenticar contra la DGII para consultar el estado.' },
-      { status: 502 },
-    );
-  }
-
-  // Consultar estado del trackId en la DGII
-  let estadoDgii: string;
-  let mensajes: unknown;
-
-  try {
-    const respuesta = await client.consultarEstado(doc.trackId);
-    estadoDgii = respuesta.estado ?? 'EN_PROCESO';
-    mensajes   = respuesta.mensajes ?? null;
+    resultado = await emision.consultarEstado(doc.ecfApiEmisionId);
   } catch (err) {
-    console.error('[ecf/estado] Error consultando DGII:', err);
-    return NextResponse.json(
-      { error: 'No se pudo consultar la DGII. Intenta más tarde.' },
-      { status: 502 },
-    );
+    if (err instanceof EcfApiError) {
+      console.error('[ecf/estado] ecf-api error:', err.status, err.message);
+      return NextResponse.json(
+        { error: `ecf-api: ${err.message.slice(0, 200)}` },
+        { status: 502 },
+      );
+    }
+    console.error('[ecf/estado] error:', err);
+    return NextResponse.json({ error: 'No se pudo consultar el estado.' }, { status: 502 });
   }
 
-  const estadoNuevo = MAPA_ESTADOS[estadoDgii] ?? doc.estado;
+  const estadoUpper = String(resultado.estado ?? '').toUpperCase();
+  const estadoNuevo = MAPA_ESTADOS[estadoUpper] ?? doc.estado;
 
   // Actualizar BD si el estado cambió
-  if (estadoNuevo !== doc.estado) {
+  if (estadoNuevo !== doc.estado || resultado.mensajesDgii) {
     await db
       .update(ecfDocuments)
       .set({
         estado:       estadoNuevo,
-        mensajesDgii: mensajes ? JSON.stringify(mensajes) : null,
+        mensajesDgii: resultado.mensajesDgii ? JSON.stringify(resultado.mensajesDgii) : null,
         updatedAt:    new Date(),
       })
       .where(eq(ecfDocuments.id, docId));
@@ -104,6 +92,6 @@ export async function GET(req: NextRequest) {
     estadoAnterior: doc.estado,
     estadoActual:   estadoNuevo,
     actualizado:    estadoNuevo !== doc.estado,
-    mensajes,
+    mensajes:       resultado.mensajesDgii ?? null,
   });
 }
