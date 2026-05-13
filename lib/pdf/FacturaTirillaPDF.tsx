@@ -267,22 +267,30 @@ export function FacturaTirillaPDF({ data }: { data: FacturaPDFData }) {
 
         <View style={S.divider} />
 
-        {/* ── QR de validación ── */}
+        {/* ── QR de validación DGII ── */}
         {data.qrDataUrl && (
-          <View style={S.qrWrap}>
-            <Image src={data.qrDataUrl} style={S.qrImage} />
-          </View>
+          <>
+            <Text style={[S.textSmall, S.center, { marginBottom: 2 }]}>
+              Verifique este comprobante en la DGII:
+            </Text>
+            <View style={S.qrWrap}>
+              <Image src={data.qrDataUrl} style={S.qrImage} />
+            </View>
+            <Text style={[S.textSmall, S.center, { fontWeight: 'bold', marginTop: 2 }]}>
+              ecf.dgii.gov.do
+            </Text>
+          </>
         )}
 
-        {/* ── Código de seguridad / track ── */}
+        {/* ── Código de seguridad + Fecha de firma digital ── */}
         {data.codigoSeguridad && (
-          <Text style={[S.textSmall, S.center]}>
-            Código de seguridad: {data.codigoSeguridad}
+          <Text style={[S.textSmall, S.center, { marginTop: 4 }]}>
+            Código de Seguridad: {data.codigoSeguridad}
           </Text>
         )}
         {data.fechaFirma && (
           <Text style={[S.textSmall, S.center]}>
-            Firmado: {data.fechaFirma}
+            Fecha de Firma Digital: {data.fechaFirma}
           </Text>
         )}
         {/* ── Estado ── */}
