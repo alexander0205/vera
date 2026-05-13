@@ -48,6 +48,28 @@ export async function GET(
   const tipoNombre = TIPOS_ECF[doc.tipoEcf as keyof typeof TIPOS_ECF] ?? `Tipo ${doc.tipoEcf}`;
   const regla = TIPO_ECF_REGLAS[doc.tipoEcf];
 
+  // Lineas / items
+  let lineas: unknown[] = [];
+  if (doc.lineasJson) {
+    try {
+      const parsed = JSON.parse(doc.lineasJson);
+      if (Array.isArray(parsed)) lineas = parsed;
+    } catch {
+      // ignore — borrador antiguo sin items
+    }
+  }
+
+  // Retenciones
+  let retencionesArr: unknown[] = [];
+  if (doc.retenciones) {
+    try {
+      const parsed = JSON.parse(doc.retenciones);
+      if (Array.isArray(parsed)) retencionesArr = parsed;
+    } catch {
+      // ignore
+    }
+  }
+
   return NextResponse.json({
     id: doc.id,
     encf: doc.encf,
@@ -60,8 +82,26 @@ export async function GET(
     mensajesDgii: doc.mensajesDgii ? JSON.parse(doc.mensajesDgii) : null,
     ncfModificado: doc.ncfModificado,
     fechaEmision: doc.fechaEmision.toISOString(),
+    fechaLimitePago: doc.fechaLimitePago,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+
+    // Form payload (terminos / notas / pie / comentario)
+    terminosCondiciones: doc.terminosCondiciones,
+    notas:               doc.notas,
+    pieFactura:          doc.pieFactura,
+    comentario:          doc.comentario,
+    lineas,
+    retencionesList:     retencionesArr,
+
+    pago: {
+      recibido: doc.pagoRecibido === 'true',
+      metodo:   doc.pagoMetodo,
+      cuenta:   doc.pagoCuenta,
+      valorCts: doc.pagoValorCts ?? 0,
+      valorDOP: ((doc.pagoValorCts ?? 0) / 100).toFixed(2),
+      fecha:    doc.pagoFecha,
+    },
 
     emisor: {
       razonSocial:     team.razonSocial ?? team.name,
