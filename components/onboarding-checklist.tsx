@@ -45,13 +45,7 @@ export function OnboardingChecklist() {
       href: '/dashboard/configuracion',
       done: data.perfilCompleto,
     },
-    {
-      id: 'certificado',
-      label: 'Sube tu certificado P12',
-      description: 'Necesario para firmar comprobantes digitales',
-      href: '/dashboard/certificado',
-      done: data.tieneCertificado,
-    },
+    // Certificado oculto del onboarding — gestión manual desde panel admin
     {
       id: 'secuencias',
       label: 'Registra tus secuencias de e-NCF',

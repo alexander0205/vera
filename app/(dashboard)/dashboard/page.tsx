@@ -55,23 +55,7 @@ export default async function DashboardPage() {
 
       <OnboardingChecklist />
 
-      {/* Alertas */}
-      {!stats.tieneCertificado && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">
-              Certificado digital no configurado
-            </p>
-            <p className="text-xs text-amber-600 mt-0.5">
-              Para emitir comprobantes necesitas subir tu certificado P12 del INDOTEL.{' '}
-              <Link href="/dashboard/certificado" className="underline font-medium">
-                Configurar ahora →
-              </Link>
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Alertas — banner certificado oculto: gestión manual desde panel admin */}
 
       {stats.secuenciasDisponibles === 0 && (
         <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
@@ -133,30 +117,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
-              <KeyRound className="h-4 w-4" />
-              Certificado
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 mt-1">
-              {stats.tieneCertificado ? (
-                <>
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <span className="text-sm font-medium text-green-700">Activo</span>
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="h-5 w-5 text-amber-500" />
-                  <span className="text-sm font-medium text-amber-700">Pendiente</span>
-                </>
-              )}
-            </div>
-            <p className="text-xs text-gray-400 mt-1">firma digital INDOTEL</p>
-          </CardContent>
-        </Card>
+        {/* Card "Certificado" oculta — gestión manual desde panel admin */}
       </div>
 
       {/* Últimas facturas */}

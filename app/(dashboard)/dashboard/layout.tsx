@@ -62,7 +62,7 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/configuracion', label: 'Mi empresa' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
-      { href: '/dashboard/certificado',   label: 'Certificado P12' },
+      // Certificado P12 oculto — gestión manual desde panel admin
       { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
       { href: '/dashboard/api-keys',      label: 'API Keys' },
       { href: '/dashboard/webhooks',      label: 'Webhooks' },
