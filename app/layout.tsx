@@ -4,6 +4,7 @@ import { Manrope } from 'next/font/google';
 import { getUser, getTeamForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
 import { Toaster } from 'sonner';
+import { WebVitals } from './(dashboard)/dashboard/_web-vitals';
 
 export const metadata: Metadata = {
   title: 'EmiteDO — Facturación Electrónica República Dominicana',
@@ -29,6 +30,7 @@ export default function RootLayout({
       className={`bg-white dark:bg-gray-950 text-black dark:text-white ${manrope.className}`}
     >
       <body className="min-h-[100dvh] bg-gray-50">
+        <WebVitals />
         <SWRConfig
           value={{
             fallback: {
