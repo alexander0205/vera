@@ -285,12 +285,6 @@ export function FacturaTirillaPDF({ data }: { data: FacturaPDFData }) {
             Firmado: {data.fechaFirma}
           </Text>
         )}
-        {data.trackId && (
-          <Text style={[S.textSmall, S.center]}>
-            TrackID: {truncate(data.trackId, 30)}
-          </Text>
-        )}
-
         {/* ── Estado ── */}
         <Text style={S.estado}>* {data.estado.toUpperCase()} *</Text>
 

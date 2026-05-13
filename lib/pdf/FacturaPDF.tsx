@@ -681,16 +681,13 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           </View>
 
           {/* Row 2: Código Seguridad + Fecha Firma debajo del QR */}
-          {(data.codigoSeguridad || data.fechaFirma || data.trackId) && (
+          {(data.codigoSeguridad || data.fechaFirma) && (
             <View style={S.dgiiSecondaryRow}>
               {data.codigoSeguridad && (
                 <Text style={S.dgiiCodigoSeguridad}>Código de Seguridad: {data.codigoSeguridad}</Text>
               )}
               {data.fechaFirma && (
                 <Text style={S.dgiiFechaFirma}>Fecha de Firma Digital: {data.fechaFirma}</Text>
-              )}
-              {data.trackId && (
-                <Text style={S.dgiiFechaFirma}>Track ID: {data.trackId}</Text>
               )}
             </View>
           )}
