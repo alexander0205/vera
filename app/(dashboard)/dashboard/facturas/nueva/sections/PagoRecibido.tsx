@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { useProximamenteDialog } from '@/components/proximamente-dialog';
 
 interface Props {
   pagoRecibido: boolean;
@@ -31,6 +32,7 @@ export function PagoRecibido({
   pagoMetodo, setPagoMetodo,
   pagoValor, setPagoValor,
 }: Props) {
+  const { openProximamente, dialog } = useProximamenteDialog();
   return (
     <div className="space-y-4">
       <label className="flex items-center gap-3 cursor-pointer">
@@ -105,6 +107,18 @@ export function PagoRecibido({
           </div>
         </div>
       )}
+      {pagoRecibido && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => openProximamente('Pagos múltiples (tarjeta + efectivo)')}
+            className="text-teal-600 hover:text-teal-800 text-xs font-medium flex items-center gap-1"
+          >
+            + Agregar otro método de pago (split payment)
+          </button>
+        </div>
+      )}
+      {dialog}
     </div>
   );
 }

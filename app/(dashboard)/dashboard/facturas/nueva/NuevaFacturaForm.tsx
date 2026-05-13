@@ -500,7 +500,31 @@ export default function NuevaFacturaForm({
     if (modo === 'emitir') {
       try {
         const payload = buildPayload('emitir');
-        const result = validateEcf(tipoEcf, payload, {
+        // Augmentar payload con campos derivados que el mapper computará server-side
+        // pero que el validator client-side necesita ver para no marcar REQUIRED missing.
+        const tasaToIndicador = (t: string | number): 1 | 2 | 3 | 4 => {
+          const s = String(t);
+          if (s === '0.18') return 1;
+          if (s === '0.16') return 2;
+          if (s === '0')    return 3;
+          return 4; // exento o fallback
+        };
+        const tiposExentos = ['43', '44']; // forzar indicador=4
+        const validationPayload = {
+          ...payload,
+          montoTotal: totales.total,
+          items: (payload.items ?? []).map(i => ({
+            ...i,
+            indicadorFacturacion: tiposExentos.includes(tipoEcf) ? 4 : tasaToIndicador(i.tasaItbis ?? 'exento'),
+            montoItem: (i.cantidadItem ?? 0) * (i.precioUnitarioItem ?? 0) - (i.descuentoMonto ?? 0),
+          })),
+          // Renombrar campos para tipo 41 (Compras) — usa rncProveedor en lugar de rncComprador
+          ...(tipoEcf === '41' ? {
+            rncProveedor:         payload.rncComprador,
+            razonSocialProveedor: payload.razonSocialComprador,
+          } : {}),
+        };
+        const result = validateEcf(tipoEcf, validationPayload, {
           context: {
             tipoPago: plazoActual?.dgiiTipo,
             ncfModificado: ncfModificado || undefined,

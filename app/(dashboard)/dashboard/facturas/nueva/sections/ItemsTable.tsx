@@ -6,6 +6,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Info, X } from 'lucide-react';
+import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Autocomplete } from '../components/Autocomplete';
@@ -52,6 +53,7 @@ export function ItemsTable({
   onAddItem, onRemoveItem, onUpdateItem, onOpenNuevoProducto,
   showReferencia, showDescripcion,
 }: Props) {
+  const { openProximamente, dialog } = useProximamenteDialog();
   return (
     <div>
       {/* ───────── MOBILE: card list (< md) ───────── */}
@@ -353,14 +355,21 @@ export function ItemsTable({
         </table>
       </div>
 
-      <div className="pt-3 mt-1 border-t border-gray-50">
+      <div className="pt-3 mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50">
         <button
           type="button"
           onClick={onAddItem}
           className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
           + Agregar línea
         </button>
+        <button
+          type="button"
+          onClick={() => openProximamente('Agregar Conduce')}
+          className="text-gray-500 hover:text-teal-700 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
+          + Agregar Conduce
+        </button>
       </div>
+      {dialog}
     </div>
   );
 }

@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useProximamenteDialog } from '@/components/proximamente-dialog';
+import { Copy } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -103,6 +105,8 @@ export default function FacturaDetallePage() {
   const [anulando, setAnulando]           = useState(false);
   const [anularError, setAnularError]     = useState<string | null>(null);
   const [anularNota, setAnularNota]       = useState<string | null>(null);
+
+  const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
 
   // ─── Carga inicial ──────────────────────────────────────────────────────────
 
@@ -284,6 +288,15 @@ export default function FacturaDetallePage() {
               <Download className="h-4 w-4 mr-1" />
               PDF
             </a>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openProximamente('Duplicar factura')}
+          >
+            <Copy className="h-4 w-4 mr-1" />
+            Duplicar
           </Button>
 
           {factura.archivos.xmlUrl && (
@@ -517,6 +530,7 @@ export default function FacturaDetallePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {proximamenteDialog}
     </section>
   );
 }
