@@ -49,12 +49,20 @@ export async function POST(req: NextRequest) {
   }
 
   // Ejecutar el SQL completo. Drizzle/neon-http no soporta multi-statement
-  // en una sola `execute` con sql template — tenemos que partir por ';' final
-  // (ignorando los que están dentro de strings/comments — simplificación).
-  const statements = content
-    .split(/;\s*$/m)
+  // en una sola `execute` con sql template — partir por `;\n` (separator real
+  // de statements), strippear comentarios -- de cada línea antes.
+  const sinComentarios = content
+    .split('\n')
+    .map(line => {
+      const idx = line.indexOf('--');
+      return idx >= 0 ? line.slice(0, idx) : line;
+    })
+    .join('\n');
+
+  const statements = sinComentarios
+    .split(/;[\r\n]+/)
     .map(s => s.trim())
-    .filter(s => s && !s.startsWith('--'));
+    .filter(s => s.length > 0);
 
   const results: Array<{ idx: number; ok: boolean; error?: string }> = [];
   for (let i = 0; i < statements.length; i++) {
