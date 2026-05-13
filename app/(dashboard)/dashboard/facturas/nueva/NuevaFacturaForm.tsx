@@ -37,6 +37,7 @@ import { useItemsState } from './hooks/useFacturaState';
 import { calcularTotales } from './utils/calculos';
 import { buildPayload as buildPayloadFn } from './utils/buildPayload';
 import { PLAZOS_BASE } from './utils/types';
+import { validate as validateEcf } from '@/lib/factura/validator';
 import type {
   BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Plazo, Producto,
   ResultadoEmision, Retencion,
@@ -106,6 +107,11 @@ export default function NuevaFacturaForm({
   const [fechaEmision, setFechaEmision]       = useState(() => new Date().toISOString().slice(0, 10));
   const [fechaLimitePago, setFechaLimitePago] = useState(initialData?.fechaLimitePago ?? '');
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
+  // Tipos 33, 34 — referencia al NCF que se modifica
+  const [codigoModificacion, setCodigoModificacion] = useState<string>('');
+  const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
+  // Tipos 31, 32, 44, 45, 46 — clasificación del ingreso
+  const [tipoIngresos, setTipoIngresos]       = useState<string>('1');
 
   // ── Items (useReducer) ─────────────────────────────────────────────────────
   const [items, dispatchItems] = useItemsState(itemsIniciales);
@@ -286,6 +292,7 @@ export default function NuevaFacturaForm({
   function resetForm() {
     limpiarCliente();
     setPlazoId('contado'); setFechaEmision(new Date().toISOString().slice(0, 10)); setFechaLimitePago(''); setNcfModificado('');
+    setCodigoModificacion(''); setFechaNcfModificado(''); setTipoIngresos('1');
     dispatchItems({ type: 'RESET' });
     setRetenciones([]);
     setNotas(''); setTerminos(''); setPieFactura('');
@@ -304,6 +311,7 @@ export default function NuevaFacturaForm({
     return buildPayloadFn({
       modo, tipoEcf, fechaEmision, clienteSeleccionado, rncManual, rncManualNombre, emailManual,
       customPlazos, plazoId, fechaLimitePago, ncfModificado, items,
+      codigoModificacion, fechaNcfModificado, tipoIngresos,
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
@@ -369,8 +377,14 @@ export default function NuevaFacturaForm({
       return `La razón social del ${regla.compradorLabel} es obligatoria`;
     if (regla?.requiereNcfModificado && !ncfModificado.trim())
       return 'Debes indicar el e-NCF original que se modifica';
+    if (regla?.requiereNcfModificado && !codigoModificacion)
+      return 'Debes seleccionar el código de modificación (Anula, Corrige texto, Corrige monto, etc.)';
+    if (regla?.requiereNcfModificado && !fechaNcfModificado)
+      return 'Debes indicar la fecha del e-NCF original que se modifica';
     if (tipoEcf === '32' && totales.total >= 250000 && !rncFinal.trim())
       return 'Factura de Consumo ≥ DOP 250,000 requiere RNC o cédula del comprador';
+    if (plazoActual?.dgiiTipo === 2 && !fechaLimitePago)
+      return 'Para tipo de pago Crédito, debes definir fecha límite de pago.';
     if (items.every((i) => !i.nombreItem.trim()))
       return 'Agrega al menos un ítem con nombre';
     if (items.filter(i => i.nombreItem.trim()).every(i => i.precioUnitarioItem <= 0))
@@ -405,6 +419,29 @@ export default function NuevaFacturaForm({
   async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
     const err = modo === 'borrador' ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null) : validar();
     if (err) { setError(err); return; }
+
+    // Validación schema-driven (solo en modo emisión, no para borradores)
+    if (modo === 'emitir') {
+      try {
+        const payload = buildPayload('emitir');
+        const result = validateEcf(tipoEcf, payload, {
+          context: {
+            tipoPago: plazoActual?.dgiiTipo,
+            ncfModificado: ncfModificado || undefined,
+            montoTotal: totales.total,
+            rncComprador: payload.rncComprador,
+          },
+        });
+        if (!result.ok && result.errors.length > 0) {
+          setError(result.errors.slice(0, 3).map(e => `${e.nombre}: ${e.message}`).join('; '));
+          return;
+        }
+      } catch (e) {
+        // Si el validator falla por tipoEcf desconocido o similar, seguimos sin bloquear
+        console.warn('[validator] fallo silencioso:', e);
+      }
+    }
+
     setLoading(true); setError(null);
     try {
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modo)) });
@@ -554,6 +591,9 @@ export default function NuevaFacturaForm({
               telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
               tipoEcf={tipoEcf} totalDocumento={totales.total}
               ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
+              codigoModificacion={codigoModificacion} setCodigoModificacion={setCodigoModificacion}
+              fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
+              tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
               fechaEmision={fechaEmision} setFechaEmision={setFechaEmision}
               plazoId={plazoId} onPlazoChange={handlePlazoChange}
               plazosDisponibles={plazosDisponibles}

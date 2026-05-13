@@ -33,7 +33,18 @@ export interface EmitedoEmisionData {
   tipoPago: number;
   fechaLimitePago?: string;
   ncfModificado?: string;
-  codigoModificacion?: string;
+  codigoModificacion?: number;
+  /**
+   * Tipo de ingresos (DGII catálogo codigos_ingreso):
+   *   1=Operaciones (Habituales) — default
+   *   2=Financieros
+   *   3=Extraordinarios
+   *   4=Arrendamientos
+   *   5=Venta Activos depreciables
+   *   6=Otros Ingresos
+   * Aplica a tipos 31, 32, 44, 45, 46. Oculto en 33, 34, 41, 43, 47.
+   */
+  tipoIngresos?: number;
   /**
    * Fecha de emisión del NCF que se modifica (tipos 33 y 34). Formato YYYY-MM-DD o dd-MM-yyyy.
    * OBLIGATORIO en InformacionReferencia según XSD DGII.
@@ -100,6 +111,26 @@ function normalizeDate(f?: string): string {
  * Acepta YYYY-MM-DD o dd-MM-yyyy.
  * Si no se provee, usa 31-12-(año actual + 2) para pruebas.
  */
+/**
+ * Calcula indicadorNotaCredito para tipo 34:
+ *   0 = nota emitida dentro de los 30 días calendario de la factura original.
+ *   1 = nota emitida después de los 30 días.
+ * Acepta YYYY-MM-DD o dd-MM-yyyy. Si no se provee la fecha original, retorna 0 (default seguro).
+ */
+function computeIndicadorNotaCredito(fechaNcfModificado?: string): 0 | 1 {
+  if (!fechaNcfModificado) return 0;
+  let iso = fechaNcfModificado;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(fechaNcfModificado)) {
+    const [dd, mm, yyyy] = fechaNcfModificado.split('-');
+    iso = `${yyyy}-${mm}-${dd}`;
+  }
+  const original = new Date(iso);
+  if (Number.isNaN(original.getTime())) return 0;
+  const now = new Date();
+  const days = Math.floor((now.getTime() - original.getTime()) / (1000 * 60 * 60 * 24));
+  return days > 30 ? 1 : 0;
+}
+
 function normalizeFechaVenc(f?: string): string {
   if (!f) {
     const year = new Date().getFullYear() + 2;
@@ -215,10 +246,21 @@ function mapItems47(items: EmitedoItem[]) {
 
 function buildInformacionReferencia(d: EmitedoEmisionData) {
   if (!d.ncfModificado) return undefined;
+  if (d.codigoModificacion === undefined || d.codigoModificacion === null) {
+    throw new Error(
+      'codigoModificacion es obligatorio cuando ncfModificado está presente (tipos 33, 34). '
+      + 'Valores: 1=Anula NCF, 2=Corrige texto, 3=Corrige monto, 4=Reemplazo en contingencia, 5=Referencia a Factura de Consumo.',
+    );
+  }
+  if (!d.fechaNcfModificado) {
+    throw new Error(
+      'fechaNcfModificado es obligatorio cuando ncfModificado está presente (tipos 33, 34).',
+    );
+  }
   return {
     ncfModificado:       d.ncfModificado,
-    codigoModificacion:  d.codigoModificacion ? Number(d.codigoModificacion) : 1,
-    // OBLIGATORIO según XSD DGII — defecto: fecha del día (misma emisión)
+    codigoModificacion:  Number(d.codigoModificacion),
+    // OBLIGATORIO según XSD DGII — fecha original del NCF que se modifica
     fechaNCFModificado:  normalizeDate(d.fechaNcfModificado),
   };
 }
@@ -253,6 +295,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         // RFCE32 usa montoGravadoI1/I2/I3 — montoGravadoTotal no existe en este DTO
         montoGravadoI1:  d.totales.montoGravadoTotal || undefined,
         montoExento:     d.totales.montoExento || undefined,
+        tipoIngresos:    d.tipoIngresos ?? 1,
         correoComprador: d.emailComprador,
         rncComprador:    d.rncComprador,
         eNcf:            d.encfOverride,
@@ -327,7 +370,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
         montoTotal:           d.totales.montoTotal,
-        tipoIngresos:         '01', // 01=Operaciones no financieras (default)
+        tipoIngresos:         d.tipoIngresos ?? 1, // 1=Operaciones (default)
         // Todos los items de tipo 44 son exentos → montoExento = montoTotal
         montoExento:          d.totales.montoTotal,
         correoComprador:      d.emailComprador,
@@ -356,6 +399,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
         montoTotal:           d.totales.montoTotal,
+        tipoIngresos:         d.tipoIngresos ?? 1,
         correoComprador:      d.emailComprador,
         eNcf:                 d.encfOverride,
         ...(fechaLimitePago ? { fechaLimitePago } : {}),
@@ -401,7 +445,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         tipoPago,
         // ECF34Dto NO tiene formasPago — campo prohibido
         montoTotal:            d.totales.montoTotal,
-        indicadorNotaCredito:  0, // 0=emitida dentro de los 30 días calendario
+        indicadorNotaCredito:  computeIndicadorNotaCredito(d.fechaNcfModificado),
         rncComprador:          d.rncComprador,
         razonSocialComprador:  d.razonSocialComprador,
         indicadorMontoGravado: 0,
@@ -431,6 +475,8 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
   // En el path genérico tipo 32 SIEMPRE es ≥250K (RFCE maneja <250K arriba).
   // RNC + razón social son obligatorios en 31, 32≥250K, 33, 45.
   const needsComprador             = ['31', '32', '33', '45'].includes(tipo);
+  // tipoIngresos aplica a 31, 32 (≥250K), 45 (no en 33 que es Nota de Débito).
+  const needsTipoIngresos          = ['31', '32', '45'].includes(tipo);
 
   return {
     tipo,
@@ -447,6 +493,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       ...(fp ? { formasPago: fp } : {}),
       montoTotal:           d.totales.montoTotal,
       ...totalesItbis(d.totales),
+      ...(needsTipoIngresos ? { tipoIngresos: d.tipoIngresos ?? 1 } : {}),
       correoComprador:      d.emailComprador,
       eNcf:                 d.encfOverride,
       ...(fechaLimitePago ? { fechaLimitePago } : {}),

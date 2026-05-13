@@ -14,6 +14,12 @@ export interface BuildPayloadInput {
   plazoId: string;
   fechaLimitePago: string;
   ncfModificado: string;
+  /** Código de modificación (1..5) — solo tipos 33, 34. Vacío cuando no aplica. */
+  codigoModificacion?: string;
+  /** Fecha del NCF original que se modifica (YYYY-MM-DD) — solo tipos 33, 34. */
+  fechaNcfModificado?: string;
+  /** Tipo de ingresos (1..6) — tipos 31, 32, 44, 45, 46. Default '1'. */
+  tipoIngresos?: string;
   items: ItemLinea[];
   retenciones: Retencion[];
   notas: string;
@@ -34,6 +40,7 @@ export function buildPayload(input: BuildPayloadInput) {
   const {
     modo, tipoEcf, fechaEmision, clienteSeleccionado, rncManual, rncManualNombre,
     emailManual, customPlazos, plazoId, fechaLimitePago, ncfModificado, items,
+    codigoModificacion, fechaNcfModificado, tipoIngresos,
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
     pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
     almacenId, listaPreciosId, vendedorId,
@@ -52,6 +59,9 @@ export function buildPayload(input: BuildPayloadInput) {
     tipoPago:             ([...PLAZOS_BASE, ...customPlazos].find(p => p.id === plazoId) ?? PLAZOS_BASE[0]).dgiiTipo,
     fechaLimitePago:      fechaLimitePago || undefined,
     ncfModificado:        ncfModificado || undefined,
+    codigoModificacion:   (ncfModificado && codigoModificacion) ? Number(codigoModificacion) : undefined,
+    fechaNcfModificado:   (ncfModificado && fechaNcfModificado) ? fechaNcfModificado : undefined,
+    tipoIngresos:         tipoIngresos ? Number(tipoIngresos) : undefined,
     items: items
       .filter(i => i.nombreItem.trim() && i.cantidadItem > 0 && i.precioUnitarioItem > 0)
       .map((item) => {

@@ -54,8 +54,10 @@ const emitirSchema = z.object({
   fechaLimitePago:      z.string().optional(),
   items:                z.array(itemSchema).min(1),
   ncfModificado:        z.string().optional(),
-  codigoModificacion:   z.string().optional(),
+  codigoModificacion:   z.coerce.number().int().min(1).max(5).optional(),
+  fechaNcfModificado:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   razonModificacion:    z.string().optional(),
+  tipoIngresos:         z.coerce.number().int().min(1).max(6).optional(),
 
   notas:               z.string().optional(),
   terminosCondiciones: z.string().optional(),
@@ -130,6 +132,31 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data;
 
+    // Cross-field: cuando se referencia un NCF que se modifica (tipos 33, 34),
+    // codigoModificacion y fechaNcfModificado son obligatorios.
+    if (data.ncfModificado && data.modo !== 'borrador') {
+      if (data.codigoModificacion === undefined) {
+        return NextResponse.json(
+          { error: 'codigoModificacion es obligatorio cuando se referencia un NCF modificado (tipos 33, 34).' },
+          { status: 400 },
+        );
+      }
+      if (!data.fechaNcfModificado) {
+        return NextResponse.json(
+          { error: 'fechaNcfModificado es obligatoria cuando se referencia un NCF modificado (tipos 33, 34).' },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Cross-field: tipoPago=2 (crédito) requiere fechaLimitePago.
+    if (data.tipoPago === 2 && !data.fechaLimitePago && data.modo !== 'borrador') {
+      return NextResponse.json(
+        { error: 'fechaLimitePago es obligatoria para tipo de pago Crédito (tipoPago=2).' },
+        { status: 400 },
+      );
+    }
+
     const extraFields = {
       notas:               data.notas          || null,
       terminosCondiciones: data.terminosCondiciones || null,
@@ -201,6 +228,8 @@ export async function POST(request: NextRequest) {
       fechaLimitePago:      data.fechaLimitePago,
       ncfModificado:        data.ncfModificado,
       codigoModificacion:   data.codigoModificacion,
+      fechaNcfModificado:   data.fechaNcfModificado,
+      tipoIngresos:         data.tipoIngresos,
       encfOverride:         data.encfOverride,
       skipRangeValidation,
     });

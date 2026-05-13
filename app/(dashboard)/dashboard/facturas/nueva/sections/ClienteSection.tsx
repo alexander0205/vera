@@ -30,6 +30,15 @@ interface Props {
   totalDocumento: number;
   ncfModificado: string;
   setNcfModificado: (v: string) => void;
+  /** Tipos 33, 34 — código de modificación (1..5). */
+  codigoModificacion: string;
+  setCodigoModificacion: (v: string) => void;
+  /** Tipos 33, 34 — fecha del NCF original (YYYY-MM-DD). */
+  fechaNcfModificado: string;
+  setFechaNcfModificado: (v: string) => void;
+  /** Tipos 31, 32, 44, 45, 46 — clasificación del ingreso (1..6). Oculto en 33, 34, 41, 43, 47. */
+  tipoIngresos: string;
+  setTipoIngresos: (v: string) => void;
   fechaEmision: string;
   setFechaEmision: (v: string) => void;
   plazoId: string;
@@ -46,9 +55,13 @@ export function ClienteSection({
   regla, rncManual, rncManualNombre, setRncManual, setRncManualNombre,
   emailManual, setEmailManual, telefonoManual, setTelefonoManual,
   tipoEcf, totalDocumento, ncfModificado, setNcfModificado,
+  codigoModificacion, setCodigoModificacion,
+  fechaNcfModificado, setFechaNcfModificado,
+  tipoIngresos, setTipoIngresos,
   fechaEmision, setFechaEmision, plazoId, onPlazoChange,
   plazosDisponibles, plazoActual, fechaLimitePago, setFechaLimitePago, today,
 }: Props) {
+  const muestraTipoIngresos = ['31', '32', '44', '45', '46'].includes(tipoEcf);
   return (
     <div className="px-8 pb-6 grid grid-cols-2 gap-8 border-b border-gray-100">
       {/* LEFT: client */}
@@ -129,10 +142,37 @@ export function ClienteSection({
         )}
 
         {regla?.requiereNcfModificado && (
-          <div>
-            <Label className="text-xs text-gray-400 uppercase tracking-wide">e-NCF que se modifica <span className="text-red-500">*</span></Label>
-            <Input className="mt-1 h-9" placeholder="E310000000001" value={ncfModificado} onChange={(e) => setNcfModificado(e.target.value.toUpperCase())} maxLength={13} />
-          </div>
+          <>
+            <div>
+              <Label className="text-xs text-gray-400 uppercase tracking-wide">e-NCF que se modifica <span className="text-red-500">*</span></Label>
+              <Input className="mt-1 h-9" placeholder="E310000000001" value={ncfModificado} onChange={(e) => setNcfModificado(e.target.value.toUpperCase())} maxLength={13} />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-400 uppercase tracking-wide">Código de modificación <span className="text-red-500">*</span></Label>
+              <Select value={codigoModificacion || undefined} onValueChange={setCodigoModificacion}>
+                <SelectTrigger className="mt-1 h-9">
+                  <SelectValue placeholder="Selecciona el motivo…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 — Anula NCF</SelectItem>
+                  <SelectItem value="2">2 — Corrige texto</SelectItem>
+                  <SelectItem value="3">3 — Corrige monto</SelectItem>
+                  <SelectItem value="4">4 — Reemplazo en contingencia</SelectItem>
+                  <SelectItem value="5">5 — Referencia a Factura de Consumo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-gray-400 uppercase tracking-wide">Fecha del e-NCF original <span className="text-red-500">*</span></Label>
+              <Input
+                className="mt-1 h-9"
+                type="date"
+                value={fechaNcfModificado}
+                onChange={(e) => setFechaNcfModificado(e.target.value)}
+                max={today}
+              />
+            </div>
+          </>
         )}
       </div>
 
@@ -175,6 +215,24 @@ export function ClienteSection({
               min={today}
               className="mt-1 h-9"
             />
+          </div>
+        )}
+        {muestraTipoIngresos && (
+          <div>
+            <Label className="text-xs text-gray-400 uppercase tracking-wide">Tipo de ingresos</Label>
+            <Select value={tipoIngresos || '1'} onValueChange={setTipoIngresos}>
+              <SelectTrigger className="mt-1 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 — Operaciones (Habituales)</SelectItem>
+                <SelectItem value="2">2 — Financieros</SelectItem>
+                <SelectItem value="3">3 — Extraordinarios</SelectItem>
+                <SelectItem value="4">4 — Arrendamientos</SelectItem>
+                <SelectItem value="5">5 — Venta Activos depreciables</SelectItem>
+                <SelectItem value="6">6 — Otros Ingresos</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )}
       </div>
