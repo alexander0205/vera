@@ -4,8 +4,19 @@ import { users, passwordResetTokens } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { sendPasswordResetEmail } from '@/lib/email';
 import { randomBytes } from 'crypto';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 3/min/IP — defensa contra enumeración y spam de emails.
+  const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+  const rl = rateLimit(`forgot:${ip}`, 3, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta en 1 minuto.' },
+      { status: 429 },
+    );
+  }
+
   const { email } = await req.json();
   if (!email) return NextResponse.json({ error: 'Email requerido' }, { status: 400 });
 

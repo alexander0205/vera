@@ -3,10 +3,10 @@
  * Guarda logo, firma, colores y datos de contacto del equipo.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { teams } from '@/lib/db/schema';
+import { teams, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 
 const MAX_IMG_SIZE = 1_000_000; // 1 MB en base64
@@ -38,6 +38,30 @@ export async function POST(req: NextRequest) {
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+
+  // RBAC: solo el owner del team (o platform admin) puede modificar el perfil de empresa.
+  // Editar RNC / razón social / dirección afecta el e-CF — debe quedar restringido.
+  const [u] = await db
+    .select({ platformRole: users.platformRole })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+  const isPlatformAdmin = u?.platformRole === 'admin';
+
+  if (!isPlatformAdmin) {
+    const [member] = await db
+      .select({ role: teamMembers.role })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+      .limit(1);
+
+    if (!member || member.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Solo el owner del equipo puede modificar el perfil de la empresa.' },
+        { status: 403 },
+      );
+    }
+  }
 
   const data = parsed.data;
   await db.update(teams).set({

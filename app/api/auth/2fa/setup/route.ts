@@ -9,6 +9,16 @@ export async function GET() {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
+  // Defensa contra rotación silenciosa: si 2FA ya está habilitado, no permitir
+  // generar un nuevo secret (eso invalidaría el authenticator del usuario y
+  // podría abrir la puerta a un takeover). Hay que deshabilitar primero.
+  if (user.twoFactorEnabled) {
+    return NextResponse.json(
+      { error: '2FA ya habilitado. Deshabilita primero para regenerar.' },
+      { status: 400 },
+    );
+  }
+
   const totp = new OTPAuth.TOTP({
     issuer: 'EmiteDO',
     label: user.email,

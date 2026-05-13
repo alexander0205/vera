@@ -153,6 +153,14 @@ const signUpSchema = z.object({
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId, inviteToken } = data;
 
+  // Rate limit signup by IP — 5/min — defensa contra creación masiva de cuentas
+  const reqHeadersSignup = await headers();
+  const ipSignup = reqHeadersSignup.get('x-forwarded-for') ?? 'unknown';
+  const rlSignup = rateLimit(`signup:${ipSignup}`, 5, 60_000);
+  if (!rlSignup.allowed) {
+    return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', email, password };
+  }
+
   const existingUser = await db
     .select()
     .from(users)
