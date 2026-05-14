@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { getTeamIdForUser, getDashboardStats, getEcfDocuments } from '@/lib/db/queries';
+import { getTeamIdForUser, getDashboardStats, getEcfDocuments, getCuentasPorCobrar } from '@/lib/db/queries';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 import { OnboardingChecklist } from '@/components/onboarding-checklist';
 
@@ -31,9 +31,10 @@ export default async function DashboardPage() {
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 
-  const [stats, recentDocs] = await Promise.all([
+  const [stats, recentDocs, ar] = await Promise.all([
     getDashboardStats(teamId),
     getEcfDocuments(teamId, 5),
+    getCuentasPorCobrar(teamId),
   ]);
 
   return (
@@ -70,6 +71,25 @@ export default async function DashboardPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Alerta cuentas por cobrar vencidas */}
+      {ar.totales.countVencidas > 0 && (
+        <Link
+          href="/dashboard/cuentas-por-cobrar"
+          className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 hover:bg-amber-100/60 transition-colors"
+        >
+          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-900">
+              {ar.totales.countVencidas} factura{ar.totales.countVencidas !== 1 ? 's' : ''} vencida{ar.totales.countVencidas !== 1 ? 's' : ''}
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              RD${(ar.totales.vencido / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })} pendiente de cobro vencido ·{' '}
+              <span className="underline font-medium">Ver cuentas por cobrar →</span>
+            </p>
+          </div>
+        </Link>
       )}
 
       {/* Stats cards */}
