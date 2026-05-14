@@ -24,8 +24,37 @@ const TIPO_LABELS: Record<string, string> = {
 
 interface Doc {
   id: number; encf: string; tipoEcf: string; estado: string;
+  rncComprador: string | null;
   razonSocialComprador: string | null; emailComprador: string | null;
-  montoTotal: number; totalItbis: number; createdAt: string;
+  montoTotal: number; totalItbis: number;
+  tipoPago: number | null;
+  fechaEmision: string;
+  fechaLimitePago: string | null;
+  pagado: number;
+  createdAt: string;
+}
+
+const TIPO_PAGO_LABEL: Record<number, string> = {
+  1: 'Contado',
+  2: 'Crédito',
+  3: 'Gratuito',
+  4: 'Uso o consumo',
+};
+
+function fmtDOP(centavos: number): string {
+  return (centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtFecha(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function diasVencido(fechaLimite: string | null): number {
+  if (!fechaLimite) return 0;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const limite = new Date(fechaLimite); limite.setHours(0, 0, 0, 0);
+  return Math.floor((hoy.getTime() - limite.getTime()) / 86400000);
 }
 
 export default function FacturasPage() {
@@ -203,56 +232,112 @@ export default function FacturasPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="w-10 px-4 py-3">
+                  <th className="w-10 px-3 py-3">
                     <input type="checkbox" checked={selected.size === docs.length && docs.length > 0}
                       onChange={toggleAll}
                       className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">e-NCF</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Tipo</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Monto</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Estado</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Fecha</th>
-                  <th className="px-4 py-3" />
+                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">e-NCF / Tipo</th>
+                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Cliente / RNC</th>
+                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Emisión</th>
+                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Pago / Vence</th>
+                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">Subtotal</th>
+                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">ITBIS</th>
+                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</th>
+                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Saldo</th>
+                  <th className="text-center px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Estado</th>
+                  <th className="px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {docs.map(doc => (
+                {docs.map(doc => {
+                  const subtotal = doc.montoTotal - doc.totalItbis;
+                  const saldo    = doc.montoTotal - (doc.pagado ?? 0);
+                  const esCredito = doc.tipoPago === 2;
+                  const dias = diasVencido(doc.fechaLimitePago);
+                  const vencida = esCredito && saldo > 0 && dias > 0
+                    && (doc.estado === 'ACEPTADO' || doc.estado === 'ACEPTADO_CONDICIONAL' || doc.estado === 'EN_PROCESO' || doc.estado === 'HISTORICA');
+
+                  return (
                   <tr key={doc.id} className={`hover:bg-gray-50 transition-colors ${selected.has(doc.id) ? 'bg-teal-50/50' : ''}`}>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <input type="checkbox" checked={selected.has(doc.id)} onChange={() => toggleSelect(doc.id)}
                         className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
                     </td>
-                    <td className="px-4 py-3">
+                    {/* e-NCF + tipo */}
+                    <td className="px-3 py-3">
                       <Link href={`/dashboard/facturas/${doc.id}`}
-                        className="font-mono text-xs font-medium text-teal-700 hover:underline">
+                        className="font-mono text-xs font-medium text-teal-700 hover:underline block truncate max-w-[140px]">
                         {doc.encf}
                       </Link>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{TIPO_LABELS[doc.tipoEcf] ?? doc.tipoEcf}</p>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 hidden md:table-cell">
-                      {TIPO_LABELS[doc.tipoEcf] ?? doc.tipoEcf}
-                    </td>
-                    <td className="px-4 py-3">
+                    {/* Cliente + RNC */}
+                    <td className="px-3 py-3">
                       <p className="text-sm text-gray-900 truncate max-w-[200px]">
-                        {doc.razonSocialComprador ?? '—'}
+                        {doc.razonSocialComprador ?? 'Consumidor Final'}
                       </p>
+                      {doc.rncComprador && (
+                        <p className="text-[11px] text-gray-400 font-mono">{doc.rncComprador}</p>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900 text-sm">
-                      {(doc.montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    {/* Fecha emisión */}
+                    <td className="px-3 py-3 text-xs text-gray-600 hidden md:table-cell whitespace-nowrap">
+                      {fmtFecha(doc.fechaEmision)}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {/* Pago / Vence */}
+                    <td className="px-3 py-3 hidden lg:table-cell">
+                      <p className={`text-xs font-medium ${esCredito ? 'text-amber-700' : 'text-gray-600'}`}>
+                        {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
+                      </p>
+                      {esCredito && doc.fechaLimitePago && (
+                        <p className={`text-[11px] mt-0.5 ${vencida ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                          {fmtFecha(doc.fechaLimitePago)}
+                          {vencida && ` · ${dias}d vencida`}
+                        </p>
+                      )}
+                    </td>
+                    {/* Subtotal */}
+                    <td className="px-3 py-3 text-right text-xs text-gray-600 hidden xl:table-cell whitespace-nowrap">
+                      {fmtDOP(subtotal)}
+                    </td>
+                    {/* ITBIS */}
+                    <td className="px-3 py-3 text-right text-xs text-gray-600 hidden xl:table-cell whitespace-nowrap">
+                      {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : '—'}
+                    </td>
+                    {/* Total */}
+                    <td className="px-3 py-3 text-right font-semibold text-gray-900 text-sm whitespace-nowrap">
+                      {fmtDOP(doc.montoTotal)}
+                    </td>
+                    {/* Saldo */}
+                    <td className="px-3 py-3 text-right hidden lg:table-cell whitespace-nowrap">
+                      {esCredito ? (
+                        saldo === 0 ? (
+                          <span className="text-xs text-emerald-600 font-medium">Pagada</span>
+                        ) : (
+                          <div>
+                            <p className={`text-sm font-medium ${vencida ? 'text-red-600' : 'text-gray-900'}`}>
+                              {fmtDOP(saldo)}
+                            </p>
+                            {doc.pagado > 0 && (
+                              <p className="text-[10px] text-emerald-600">+{fmtDOP(doc.pagado)} pagado</p>
+                            )}
+                          </div>
+                        )
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
+                    </td>
+                    {/* Estado */}
+                    <td className="px-3 py-3 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600'}`}>
                         {doc.estado}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-xs text-gray-400 hidden lg:table-cell">
-                      {new Date(doc.createdAt).toLocaleDateString('es-DO')}
-                    </td>
-                    <td className="px-4 py-3">
+                    {/* Acciones */}
+                    <td className="px-3 py-3">
                       <div className="flex items-center gap-1 justify-end">
                         {doc.estado === 'BORRADOR' ? (
-                          /* Borradores: botón Editar en vez de PDF */
                           <Link
                             href={`/dashboard/facturas/${doc.id}/editar`}
                             className="px-2 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
@@ -274,7 +359,8 @@ export default function FacturasPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

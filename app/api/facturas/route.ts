@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
-import { and, eq, gte, lte, desc, like, count, or } from 'drizzle-orm';
+import { and, eq, gte, lte, desc, like, count, or, sql } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -47,15 +47,24 @@ export async function GET(req: NextRequest) {
   const [docs, totalRows] = await Promise.all([
     db
       .select({
-        id: ecfDocuments.id,
-        encf: ecfDocuments.encf,
-        tipoEcf: ecfDocuments.tipoEcf,
-        estado: ecfDocuments.estado,
+        id:                   ecfDocuments.id,
+        encf:                 ecfDocuments.encf,
+        tipoEcf:              ecfDocuments.tipoEcf,
+        estado:               ecfDocuments.estado,
+        rncComprador:         ecfDocuments.rncComprador,
         razonSocialComprador: ecfDocuments.razonSocialComprador,
-        emailComprador: ecfDocuments.emailComprador,
-        montoTotal: ecfDocuments.montoTotal,
-        totalItbis: ecfDocuments.totalItbis,
-        createdAt: ecfDocuments.createdAt,
+        emailComprador:       ecfDocuments.emailComprador,
+        montoTotal:           ecfDocuments.montoTotal,
+        totalItbis:           ecfDocuments.totalItbis,
+        tipoPago:             ecfDocuments.tipoPago,
+        fechaEmision:         ecfDocuments.fechaEmision,
+        fechaLimitePago:      ecfDocuments.fechaLimitePago,
+        createdAt:            ecfDocuments.createdAt,
+        // Subquery: total pagado (SUM pagos_recibidos) — derivar saldo en frontend
+        pagado: sql<number>`coalesce((
+          SELECT SUM(monto_centavos) FROM pagos_recibidos
+          WHERE ecf_document_id = ${ecfDocuments.id}
+        ), 0)`,
       })
       .from(ecfDocuments)
       .where(where)
