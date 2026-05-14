@@ -26,6 +26,33 @@ interface Cliente {
 }
 
 const EMPTY_FORM = { razonSocial: '', rnc: '', email: '', telefono: '', direccion: '' };
+type ClienteForm = typeof EMPTY_FORM;
+
+/**
+ * Campo de formulario. Definido FUERA del componente página — si se define
+ * adentro, cada render crea una función nueva y React remonta el <Input>,
+ * lo que tumba el foco/teclado en cada tecla.
+ */
+function Field({ label, field, type = 'text', placeholder, form, setForm }: {
+  label: string;
+  field: keyof ClienteForm;
+  type?: string;
+  placeholder?: string;
+  form: ClienteForm;
+  setForm: React.Dispatch<React.SetStateAction<ClienteForm>>;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Input
+        type={type}
+        placeholder={placeholder}
+        value={form[field]}
+        onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
+      />
+    </div>
+  );
+}
 
 export default function ClientesPage() {
   const [clientes, setClientes]         = useState<Cliente[]>([]);
@@ -120,22 +147,6 @@ export default function ClientesPage() {
     } finally {
       setDeleting(false);
     }
-  }
-
-  function Field({ label, field, type = 'text', placeholder }: {
-    label: string; field: keyof typeof EMPTY_FORM; type?: string; placeholder?: string;
-  }) {
-    return (
-      <div className="space-y-1.5">
-        <Label>{label}</Label>
-        <Input
-          type={type}
-          placeholder={placeholder}
-          value={form[field]}
-          onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-        />
-      </div>
-    );
   }
 
   return (
@@ -266,12 +277,12 @@ export default function ClientesPage() {
               />
             </div>
 
-            <Field label="Nombre / Razón Social *" field="razonSocial" placeholder="Empresa XYZ SRL" />
+            <Field label="Nombre / Razón Social *" field="razonSocial" placeholder="Empresa XYZ SRL" form={form} setForm={setForm} />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Teléfono" field="telefono" placeholder="(809) 000-0000" />
-              <Field label="Email" field="email" type="email" placeholder="facturacion@empresa.com" />
+              <Field label="Teléfono" field="telefono" placeholder="(809) 000-0000" form={form} setForm={setForm} />
+              <Field label="Email" field="email" type="email" placeholder="facturacion@empresa.com" form={form} setForm={setForm} />
             </div>
-            <Field label="Dirección" field="direccion" placeholder="Calle, No., Ciudad" />
+            <Field label="Dirección" field="direccion" placeholder="Calle, No., Ciudad" form={form} setForm={setForm} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</Button>
