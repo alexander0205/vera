@@ -513,7 +513,7 @@ export async function getCuentasPorCobrar(
     .where(and(
       eq(ecfDocuments.teamId, teamId),
       eq(ecfDocuments.tipoPago, 2),
-      sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
+      sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO', 'HISTORICA')`,
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
     ))
     .orderBy(desc(ecfDocuments.fechaEmision));

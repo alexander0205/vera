@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Loader2, AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Calendar,
+  X, Wallet, Calendar, Plus, Archive,
 } from 'lucide-react';
 
 interface Cuenta {
@@ -24,6 +24,8 @@ interface Cuenta {
   vencida:              boolean;
   diasVencido:          number;
 }
+
+const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
 interface Totales {
   pendiente:     number;
@@ -57,6 +59,7 @@ export default function CuentasPorCobrarPage() {
   const [error, setError]       = useState<string | null>(null);
   const [filtro, setFiltro]     = useState<'todas' | 'vencidas'>('todas');
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
+  const [historicaModal, setHistoricaModal] = useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -81,11 +84,21 @@ export default function CuentasPorCobrarPage() {
   return (
     <section className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Cuentas por cobrar</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Facturas a crédito pendientes de pago. Registra abonos y monitorea vencimientos.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Cuentas por cobrar</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Facturas a crédito pendientes de pago. Registra abonos y monitorea vencimientos.
+          </p>
+        </div>
+        <button
+          onClick={() => setHistoricaModal(true)}
+          className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
+          title="Importar factura previa al uso de emitedo (no va a DGII)"
+        >
+          <Archive className="h-4 w-4" />
+          Agregar cuenta histórica
+        </button>
       </div>
 
       {/* Stats */}
@@ -161,9 +174,16 @@ export default function CuentasPorCobrarPage() {
                 {data.cuentas.map(c => (
                   <tr key={c.id} className={c.vencida ? 'bg-red-50/50 hover:bg-red-50' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-3">
-                      <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-medium">
-                        {c.encf}
-                      </Link>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-medium">
+                          {c.encf}
+                        </Link>
+                        {isHistorica(c) && (
+                          <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                            histórica
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-gray-900">{c.razonSocialComprador ?? 'Consumidor Final'}</p>
@@ -207,6 +227,14 @@ export default function CuentasPorCobrarPage() {
           cuenta={pagoModal}
           onClose={() => setPagoModal(null)}
           onSuccess={() => { setPagoModal(null); cargar(); }}
+        />
+      )}
+
+      {/* Modal agregar cuenta histórica */}
+      {historicaModal && (
+        <HistoricaModal
+          onClose={() => setHistoricaModal(false)}
+          onSuccess={() => { setHistoricaModal(false); cargar(); }}
         />
       )}
     </section>
@@ -415,6 +443,213 @@ function PagoModal({
             >
               {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
               Registrar pago
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal: agregar cuenta histórica (factura previa, no DGII) ──────────────
+
+function HistoricaModal({
+  onClose, onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const vencDefault = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const [encf, setEncf]               = useState('');
+  const [razonSocial, setRazonSocial] = useState('');
+  const [rnc, setRnc]                 = useState('');
+  const [fechaEmision, setFechaEmision] = useState(today);
+  const [fechaLimite, setFechaLimite] = useState(vencDefault);
+  const [montoDOP, setMontoDOP]       = useState('');
+  const [yaPagadoDOP, setYaPagadoDOP] = useState('0');
+  const [notas, setNotas]             = useState('');
+  const [guardando, setGuardando]     = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/cuentas-por-cobrar/historica', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          encf:                 encf.trim() || undefined,
+          rncComprador:         rnc.trim() || undefined,
+          razonSocialComprador: razonSocial.trim() || undefined,
+          fechaEmision,
+          fechaLimitePago:      fechaLimite,
+          montoTotalDOP:        parseFloat(montoDOP),
+          montoYaPagadoDOP:     parseFloat(yaPagadoDOP || '0'),
+          notas:                notas.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Error agregando cuenta histórica');
+      onSuccess();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error desconocido');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Agregar cuenta histórica</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Factura previa al uso de EmiteDO — solo tracking de cobranza. No se envía a DGII.
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* NCF + Razón social */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">NCF / Referencia</label>
+              <input
+                type="text"
+                value={encf}
+                onChange={e => setEncf(e.target.value.toUpperCase())}
+                placeholder="B01000000001 (opcional)"
+                maxLength={40}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Si lo dejas vacío se genera automáticamente.</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">RNC / Cédula</label>
+              <input
+                type="text"
+                value={rnc}
+                onChange={e => setRnc(e.target.value)}
+                placeholder="131988032"
+                maxLength={20}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Cliente *</label>
+            <input
+              type="text"
+              value={razonSocial}
+              onChange={e => setRazonSocial(e.target.value)}
+              required
+              placeholder="Razón social del cliente"
+              maxLength={255}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          {/* Fechas */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha emisión *</label>
+              <input
+                type="date"
+                value={fechaEmision}
+                onChange={e => setFechaEmision(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Vencimiento *</label>
+              <input
+                type="date"
+                value={fechaLimite}
+                onChange={e => setFechaLimite(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+          </div>
+
+          {/* Montos */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Monto total RD$ *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={montoDOP}
+                onChange={e => setMontoDOP(e.target.value)}
+                required
+                placeholder="0.00"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Ya pagado RD$</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={yaPagadoDOP}
+                onChange={e => setYaPagadoDOP(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Abonos previos al sistema.</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Notas (opcional)</label>
+            <textarea
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              rows={2}
+              maxLength={1000}
+              placeholder="Factura preimpresa serie B01 julio 2025, etc."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-700">{error}</p>
+            </div>
+          )}
+
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+            >
+              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
+              Agregar cuenta
             </button>
           </div>
         </form>
