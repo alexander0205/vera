@@ -282,6 +282,25 @@ export default function NuevaFacturaRecurrenteForm() {
           }}
           className="space-y-4 max-w-4xl"
         >
+          {/* ── HEADER: Numeración (decisión raíz — afecta cliente, ítems) ──── */}
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+            <Label className="text-xs text-gray-600 uppercase tracking-wide shrink-0 flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" />
+              Numeración
+            </Label>
+            <Select value={tipoEcf} onValueChange={handleChangeTipo}>
+              <SelectTrigger className="h-10 sm:max-w-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TIPOS_ECF.map(t => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-gray-400 sm:ml-auto">
+              Define el tipo de comprobante. Cambiarlo reinicia los datos del cliente.
+            </p>
+          </div>
+
           {/* ── SECCIÓN 1: Cliente ──────────────────────────────────────────── */}
           <SectionCard number={1} title="Datos del cliente" icon={User}>
             <ClienteSection
@@ -303,19 +322,6 @@ export default function NuevaFacturaRecurrenteForm() {
           <SectionCard number={2} title="Configuración de la recurrencia" icon={Calendar}>
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Tipo ECF */}
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">Numeración</Label>
-                  <Select value={tipoEcf} onValueChange={handleChangeTipo}>
-                    <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_ECF.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* Frecuencia */}
                 <div>
                   <Label className="text-xs text-gray-600 uppercase tracking-wide">Frecuencia</Label>
