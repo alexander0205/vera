@@ -329,6 +329,9 @@ function ItemLine({ item }: { item: ItemPDF }) {
   return (
     <View style={{ marginBottom: 2 }}>
       <Text style={S.itemDesc}>{nombre}</Text>
+      {item.referencia ? (
+        <Text style={S.itemMath}>{`  Ref: ${truncate(item.referencia, 28)}`}</Text>
+      ) : null}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <Text style={S.itemMath}>
           {`  ${cant.toLocaleString('es-DO', { maximumFractionDigits: 2 })} x ${fmt(precio)}`}

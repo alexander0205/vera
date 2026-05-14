@@ -10,6 +10,8 @@ import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/render
 export interface ItemPDF {
   nombreItem:          string;
   descripcionItem?:    string;
+  /** Referencia/beneficiario interno: nombre del niño (colegio), socio (gym), etc. */
+  referencia?:         string;
   cantidadItem:        number;
   precioUnitarioItem:  number;   // en DOP
   descuentoMonto?:     number;
@@ -612,6 +614,7 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
               <Text style={[S.tdCell, S.colCant]}>{item.cantidadItem}</Text>
               <View style={S.colDesc}>
                 <Text style={S.tdBold}>{item.nombreItem}</Text>
+                {item.referencia ? <Text style={S.tdGray}>Ref: {item.referencia}</Text> : null}
                 {item.descripcionItem ? <Text style={S.tdGray}>{item.descripcionItem}</Text> : null}
               </View>
               <Text style={[S.tdCell, S.colUnidad]}>{item.unidadMedida ?? ''}</Text>

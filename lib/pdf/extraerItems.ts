@@ -31,6 +31,7 @@ export function extraerItems(
         const items: ItemPDF[] = parsed.map(l => ({
           nombreItem:         String(l.nombreItem  ?? l.nombre   ?? 'Ítem'),
           descripcionItem:    l.descripcionItem    ?? l.descripcion ?? undefined,
+          referencia:         (l.referencia ?? '').trim() || undefined,
           cantidadItem:       Number(l.cantidadItem ?? l.cantidad ?? 1),
           precioUnitarioItem: Number(l.precioUnitarioItem ?? l.precio ?? 0),
           descuentoMonto:     Number(l.descuentoMonto ?? l.descuento ?? 0) || undefined,
