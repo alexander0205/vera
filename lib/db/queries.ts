@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, count, gte, sql, lt } from 'drizzle-orm';
+import { desc, and, eq, isNull, count, gte, lte, sql, lt } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
   activityLogs,
@@ -346,7 +346,7 @@ export async function getVentasGenerales(
       .where(and(
         eq(ecfDocuments.teamId, teamId),
         gte(ecfDocuments.fechaEmision, desde),
-        sql`${ecfDocuments.fechaEmision} <= ${hasta}`,
+        lte(ecfDocuments.fechaEmision, hasta),
         sql`${ecfDocuments.tipoEcf} IN (${sql.join(TIPOS_VENTA.map(t => sql`${t}`), sql`, `)})`,
         sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
       )),
@@ -361,7 +361,7 @@ export async function getVentasGenerales(
       .where(and(
         eq(ecfDocuments.teamId, teamId),
         gte(ecfDocuments.fechaEmision, desde),
-        sql`${ecfDocuments.fechaEmision} <= ${hasta}`,
+        lte(ecfDocuments.fechaEmision, hasta),
         eq(ecfDocuments.tipoEcf, TIPO_NOTA_CREDITO),
         sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
       )),
@@ -383,7 +383,7 @@ export async function getVentasGenerales(
       .where(and(
         eq(ecfDocuments.teamId, teamId),
         gte(ecfDocuments.fechaEmision, desde),
-        sql`${ecfDocuments.fechaEmision} <= ${hasta}`,
+        lte(ecfDocuments.fechaEmision, hasta),
         sql`${ecfDocuments.estado} != 'BORRADOR'`,
       ))
       .orderBy(desc(ecfDocuments.fechaEmision))
