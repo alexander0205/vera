@@ -16,17 +16,20 @@ interface Props {
   retenciones: Retencion[];
   totalNeto: number;
   items: ItemLinea[];
+  /** Si false, oculta el card "Pago" entero. Útil para facturas recurrentes
+   *  (plantillas que no registran pago directo). Default true. */
+  showPago?: boolean;
   /** Optional pago recibido block — rendered inline when enabled. */
-  pagoRecibido: boolean;
-  setPagoRecibido: (v: boolean) => void;
-  pagoMetodo: string;
-  setPagoMetodo: (v: string) => void;
-  pagoCuenta: string;
-  setPagoCuenta: (v: string) => void;
-  pagoValor: string;
-  setPagoValor: (v: string) => void;
-  pagoFecha: string;
-  setPagoFecha: (v: string) => void;
+  pagoRecibido?: boolean;
+  setPagoRecibido?: (v: boolean) => void;
+  pagoMetodo?: string;
+  setPagoMetodo?: (v: string) => void;
+  pagoCuenta?: string;
+  setPagoCuenta?: (v: string) => void;
+  pagoValor?: string;
+  setPagoValor?: (v: string) => void;
+  pagoFecha?: string;
+  setPagoFecha?: (v: string) => void;
 }
 
 const fmt = (n: number) =>
@@ -39,11 +42,12 @@ const fmt = (n: number) =>
  */
 export function ResumenSidebar({
   empresa, totales, retenciones, totalNeto, items,
-  pagoRecibido, setPagoRecibido,
-  pagoMetodo, setPagoMetodo,
-  pagoCuenta, setPagoCuenta,
-  pagoValor, setPagoValor,
-  pagoFecha, setPagoFecha,
+  showPago = true,
+  pagoRecibido = false, setPagoRecibido,
+  pagoMetodo = '', setPagoMetodo,
+  pagoCuenta = '', setPagoCuenta,
+  pagoValor = '', setPagoValor,
+  pagoFecha = '', setPagoFecha,
 }: Props) {
   const [resumenOpen, setResumenOpen] = useState(true);
   const [pagoOpen, setPagoOpen]       = useState(true);
@@ -154,6 +158,7 @@ export function ResumenSidebar({
       </section>
 
       {/* ─── Pago card (sticky aparte) ─── */}
+      {showPago && (
       <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <button
           type="button"
@@ -173,7 +178,7 @@ export function ResumenSidebar({
               <input
                 type="checkbox"
                 checked={pagoRecibido}
-                onChange={e => setPagoRecibido(e.target.checked)}
+                onChange={e => setPagoRecibido?.(e.target.checked)}
                 className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
               />
               <span className="text-sm text-gray-700">Registrar pago recibido</span>
@@ -184,7 +189,7 @@ export function ResumenSidebar({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Método de pago</Label>
-                    <Select value={pagoMetodo || 'efectivo'} onValueChange={setPagoMetodo}>
+                    <Select value={pagoMetodo || 'efectivo'} onValueChange={(v) => setPagoMetodo?.(v)}>
                       <SelectTrigger className="mt-1 h-9 text-sm">
                         <SelectValue />
                       </SelectTrigger>
@@ -203,14 +208,14 @@ export function ResumenSidebar({
                       type="date"
                       className="mt-1 h-9 text-sm"
                       value={pagoFecha}
-                      onChange={(e) => setPagoFecha(e.target.value)}
+                      onChange={(e) => setPagoFecha?.(e.target.value)}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Cuenta bancaria</Label>
-                    <Select value={pagoCuenta || ''} onValueChange={setPagoCuenta}>
+                    <Select value={pagoCuenta || ''} onValueChange={(v) => setPagoCuenta?.(v)}>
                       <SelectTrigger className="mt-1 h-9 text-sm">
                         <SelectValue placeholder="Seleccionar" />
                       </SelectTrigger>
@@ -232,7 +237,7 @@ export function ResumenSidebar({
                         className="h-9 text-sm pl-10"
                         placeholder="0.00"
                         value={pagoValor}
-                        onChange={(e) => setPagoValor(e.target.value)}
+                        onChange={(e) => setPagoValor?.(e.target.value)}
                       />
                     </div>
                   </div>
@@ -246,6 +251,7 @@ export function ResumenSidebar({
           </div>
         )}
       </section>
+      )}
     </aside>
   );
 }

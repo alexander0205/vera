@@ -26,7 +26,8 @@ import { PieFactura } from '../../facturas/nueva/sections/PieFactura';
 
 import { useItemsState } from '../../facturas/nueva/hooks/useFacturaState';
 import { calcularTotales } from '../../facturas/nueva/utils/calculos';
-import type { Cliente, ItemLinea, Producto } from '../../facturas/nueva/utils/types';
+import { ResumenSidebar } from '../../facturas/nueva/sections/ResumenSidebar';
+import type { Cliente, ItemLinea, Producto, EmpresaPerfil } from '../../facturas/nueva/utils/types';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -74,8 +75,13 @@ function calcularProximaEmision(fechaInicio: string, frecuencia: string): string
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function NuevaFacturaRecurrenteForm() {
+interface Props {
+  initialPerfil: EmpresaPerfil | null;
+}
+
+export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
   const router = useRouter();
+  const empresa = initialPerfil;
 
   // ── Cabecera ───────────────────────────────────────────────────────────────
   const [tipoEcf, setTipoEcf]           = useState('31');
@@ -287,26 +293,71 @@ export default function NuevaFacturaRecurrenteForm() {
           }}
           className="space-y-4 max-w-4xl"
         >
-          {/* ── HEADER: Numeración (decisión raíz — afecta cliente, ítems) ──── */}
-          <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
-            <Label className="text-xs text-gray-600 uppercase tracking-wide shrink-0 flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5" />
-              Numeración
-            </Label>
-            <Select value={tipoEcf} onValueChange={handleChangeTipo}>
-              <SelectTrigger className="h-10 sm:max-w-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {TIPOS_ECF.map(t => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-gray-400 sm:ml-auto">
-              Define el tipo de comprobante. Cambiarlo reinicia los datos del cliente.
-            </p>
-          </div>
+          {/* ── SPLIT LAYOUT: form left, sticky resumen right ────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 lg:gap-5">
+            {/* LEFT column */}
+            <div className="space-y-4 min-w-0">
 
-          {/* ── SECCIÓN 1: Cliente ──────────────────────────────────────────── */}
+              {/* CompactHeader-style: empresa + tipo + frecuencia + status */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 md:px-5 md:py-4">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                  {/* Logo + empresa */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    {empresa?.logo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={empresa.logo} alt="Logo" className="h-10 max-w-[100px] object-contain shrink-0" />
+                    ) : (
+                      <Link href="/dashboard/configuracion" className="w-[80px] h-10 border-2 border-dashed border-gray-300 rounded-md flex items-center justify-center hover:border-teal-400 transition-colors shrink-0" title="Subir logo en Configuración">
+                        <span className="text-[9px] text-gray-500 text-center leading-tight px-1">Logo</span>
+                      </Link>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 leading-tight truncate">
+                        {empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Tu empresa'}
+                      </p>
+                      {empresa?.rnc && (
+                        <p className="text-[11px] text-gray-500 leading-tight mt-0.5">RNC: {empresa.rnc}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Plan recurrente badge */}
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-gray-500">Plan recurrente</span>
+                  </div>
+
+                  {/* Tipo */}
+                  <div className="flex items-center gap-1 min-w-0">
+                    <Select value={tipoEcf} onValueChange={handleChangeTipo}>
+                      <SelectTrigger className="border-0 bg-transparent text-teal-700 font-medium text-xs h-7 px-2 shadow-none focus:ring-0 gap-1 w-auto">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TIPOS_ECF.map(t => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Frecuencia badge */}
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-gray-500">Frecuencia:</span>
+                    <span className="font-medium text-gray-900 capitalize">{frecuencia}</span>
+                  </div>
+
+                  {/* Estado */}
+                  <div className="ml-auto flex items-center gap-1.5 text-xs">
+                    <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
+                    <span className="font-medium text-gray-700">Borrador</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Cambiar el tipo reinicia los datos del cliente.
+                </p>
+              </div>
+
+              {/* ── SECCIÓN 1: Cliente ──────────────────────────────────────────── */}
           <SectionCard number={1} title="Datos del cliente" icon={User}>
             <ClienteSection
               clienteSeleccionado={clienteSeleccionado}
@@ -546,68 +597,55 @@ export default function NuevaFacturaRecurrenteForm() {
             <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
           </AccordionSection>
 
-          {/* ── SECCIÓN 7: Resumen y cobro ──────────────────────────────────── */}
-          <SectionCard number={7} title="Resumen y cobro" icon={Wallet}>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Resumen */}
-              <div className="space-y-2">
-                <p className="text-xs text-gray-400 uppercase tracking-wide">Resumen por emisión</p>
-                <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Subtotal</span>
-                    <span>{formatDOP(totales.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>ITBIS</span>
-                    <span>{formatDOP(totales.itbis)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-base text-gray-900 border-t border-gray-200 pt-1.5 mt-1.5">
-                    <span>Total por emisión</span>
-                    <span>{formatDOP(totales.total)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-400 pt-1">
-                    <span>Frecuencia</span>
-                    <span className="capitalize">{frecuencia}</span>
-                  </div>
+              {/* Cobro automático con tarjeta — feature no implementada, va al final del flow */}
+              <button
+                type="button"
+                onClick={() => openProximamente('Cobro automático con tarjeta')}
+                className="w-full flex items-center gap-3 bg-white border border-dashed border-gray-300 hover:border-teal-400 hover:bg-teal-50/40 rounded-xl p-3 text-left transition-colors group"
+              >
+                <div className="h-9 w-9 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
+                  <CreditCard className="h-[18px] w-[18px] text-teal-700" />
                 </div>
-              </div>
-
-              {/* Cobro automático con tarjeta — feature no implementada */}
-              <div className="space-y-2">
-                <p className="text-xs text-gray-400 uppercase tracking-wide">Forma de cobro</p>
-                <button
-                  type="button"
-                  onClick={() => openProximamente('Cobro automático con tarjeta')}
-                  className="w-full flex items-center gap-3 border border-dashed border-gray-300 hover:border-teal-400 hover:bg-teal-50/40 rounded-lg p-3 text-left transition-colors group"
-                >
-                  <div className="h-9 w-9 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
-                    <CreditCard className="h-4.5 w-4.5 text-teal-700" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">Cobro automático con tarjeta</p>
-                    <p className="text-xs text-gray-500">
-                      Descuenta el monto de una tarjeta cada período. Sin registrar pagos a mano.
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-teal-500 shrink-0" />
-                </button>
-                <p className="text-[11px] text-gray-400">
-                  Por ahora la recurrente genera un borrador y el cobro se registra manualmente
-                  en Cuentas por cobrar.
-                </p>
-              </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Cobro automático con tarjeta</p>
+                  <p className="text-xs text-gray-500">
+                    Descuenta el monto de una tarjeta cada período. Sin registrar pagos a mano. <span className="text-amber-700">(próximamente)</span>
+                  </p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-teal-500 shrink-0" />
+              </button>
             </div>
-          </SectionCard>
 
-          {/* ── FOOTER BOTONES ──────────────────────────────────────────────── */}
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" asChild disabled={loading}>
+            {/* RIGHT column — sticky sidebar: Resumen (sin Pago para recurrente) */}
+            <ResumenSidebar
+              empresa={empresa}
+              totales={totales}
+              retenciones={[]}
+              totalNeto={totales.total}
+              items={items}
+              showPago={false}
+            />
+          </div>
+
+          {/* ── BOTTOM ACTION BAR — sticky, full width ──────────────────────── */}
+          <div className="sticky bottom-0 z-30 -mx-3 sm:-mx-4 md:-mx-5 px-3 sm:px-4 md:px-5 mt-4 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 py-3">
+            <Button
+              type="button"
+              variant="outline"
+              asChild
+              disabled={loading}
+              className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
+            >
               <Link href="/dashboard/facturas-recurrentes">Cancelar</Link>
             </Button>
-            <Button type="submit" className="bg-teal-600 hover:bg-teal-700 text-white" disabled={loading}>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto sm:min-w-[140px]"
+            >
               {loading
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
-                : 'Guardar'}
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
+                : 'Guardar plan'}
             </Button>
           </div>
         </form>
