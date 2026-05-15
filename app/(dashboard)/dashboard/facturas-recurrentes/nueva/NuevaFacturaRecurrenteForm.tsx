@@ -327,19 +327,19 @@ export default function NuevaFacturaRecurrenteForm() {
           <SectionCard number={2} title="Configuración de la recurrencia" icon={Calendar}>
             <div className="space-y-5">
 
-              {/* Nombre identificador — primero, es el título de la recurrencia */}
+              {/* Nombre del plan — primero, es el título de la plantilla */}
               <div>
                 <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                  Nombre identificador <span className="text-red-500">*</span>
+                  Nombre del plan <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  placeholder="Ej: Servicio mensual - Empresa ABC"
+                  placeholder="Ej: Mensualidad colegio - Juan Pérez"
                   value={nombre}
                   onChange={e => setNombre(e.target.value)}
                   className="mt-1 h-10"
                   required
                 />
-                <p className="text-xs text-gray-400 mt-1">Nombre interno para identificar esta recurrencia</p>
+                <p className="text-xs text-gray-400 mt-1">Nombre interno de este plan</p>
               </div>
 
               {/* ── Grupo: CUÁNDO ── */}
@@ -372,6 +372,24 @@ export default function NuevaFacturaRecurrenteForm() {
                       className="mt-1 h-10"
                       required
                     />
+                    {fechaInicio && (
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        {(() => {
+                          const [y, m, d] = fechaInicio.split('-').map(Number);
+                          const dt = new Date(y, m - 1, d);
+                          const dia = dt.getDate();
+                          const diaSemana = dt.toLocaleDateString('es-DO', { weekday: 'long' });
+                          switch (frecuencia) {
+                            case 'semanal':    return `Se emitirá cada ${diaSemana}`;
+                            case 'quincenal':  return `Cada 15 días desde esta fecha`;
+                            case 'mensual':    return `Se emitirá el día ${dia} de cada mes`;
+                            case 'trimestral': return `Cada 3 meses en esta fecha`;
+                            case 'anual':      return `Cada año en esta fecha`;
+                            default: return '';
+                          }
+                        })()}
+                      </p>
+                    )}
                   </div>
 
                   {/* Vigencia hasta */}
