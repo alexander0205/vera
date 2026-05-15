@@ -10,8 +10,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Loader2, ArrowLeft, X, User, Package, Calendar, ScrollText, StickyNote, FileText,
-  CreditCard, Wallet, ChevronRight,
+  ArrowLeft, X, User, Package, Calendar, ScrollText, StickyNote, FileText,
+  CreditCard, ChevronRight, Info, Receipt, RefreshCw,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
@@ -26,7 +26,8 @@ import { PieFactura } from '../../facturas/nueva/sections/PieFactura';
 
 import { useItemsState } from '../../facturas/nueva/hooks/useFacturaState';
 import { calcularTotales } from '../../facturas/nueva/utils/calculos';
-import { ResumenSidebar } from '../../facturas/nueva/sections/ResumenSidebar';
+import { BottomActionBar } from '../../facturas/nueva/sections/BottomActionBar';
+import { EmpresaBlock } from '../../facturas/nueva/sections/EmpresaBlock';
 import type { Cliente, ItemLinea, Producto, EmpresaPerfil } from '../../facturas/nueva/utils/types';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -73,36 +74,109 @@ function calcularProximaEmision(fechaInicio: string, frecuencia: string): string
   return dt.toISOString().slice(0, 10);
 }
 
+/** Calcula las próximas N emisiones después de fechaInicio */
+function calcularProximasEmisiones(fechaInicio: string, frecuencia: string, count: number): string[] {
+  if (!fechaInicio) return [];
+  const result: string[] = [];
+  let current = fechaInicio;
+  for (let i = 0; i < count; i++) {
+    current = calcularProximaEmision(current, frecuencia);
+    if (!current) break;
+    result.push(current);
+  }
+  return result;
+}
+
+/** Formatea YYYY-MM-DD → DD/MM/YYYY */
+function formatFechaCorta(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+const FRECUENCIA_LABEL: Record<string, string> = {
+  semanal: 'Semanal',
+  quincenal: 'Quincenal',
+  mensual: 'Mensual',
+  trimestral: 'Trimestral',
+  anual: 'Anual',
+};
+
 // ─── Componente principal ─────────────────────────────────────────────────────
+
+/**
+ * Plan recurrente serializado desde la DB para pre-rellenar el form en modo edición.
+ * Las fechas vienen como strings 'YYYY-MM-DD' (drizzle `date()` mode 'string').
+ * `items` es JSON crudo (text column).
+ */
+export interface InitialPlan {
+  id:           number;
+  nombre:       string;
+  descripcion:  string | null;
+  tipoEcf:      string;
+  tipoPago:     number;
+  diasParaPago: number | null;
+  frecuencia:   string;
+  diaCobro:     number | null;
+  fechaInicio:  string;
+  fechaFin:     string | null;
+  estado:       string;
+  clientId:     number | null;
+  items:        string; // JSON: ItemLinea[]
+  notas:        string | null;
+}
 
 interface Props {
   initialPerfil: EmpresaPerfil | null;
+  /** Si se pasa, el form opera en modo edición (PUT en lugar de POST). */
+  initialPlan?: InitialPlan;
 }
 
-export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
+export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan }: Props) {
   const router = useRouter();
   const empresa = initialPerfil;
+  const isEdit = Boolean(initialPlan);
 
   // ── Cabecera ───────────────────────────────────────────────────────────────
-  const [tipoEcf, setTipoEcf]           = useState('31');
-  const [tipoPago, setTipoPago]         = useState('1');
-  const [diasParaPago, setDiasParaPago] = useState('5'); // solo aplica si tipoPago=2 (crédito)
-  const [frecuencia, setFrecuencia]     = useState('mensual');
-  const [nombre, setNombre]             = useState('');
-  const [fechaInicio, setFechaInicio]   = useState('');
-  const [fechaFin, setFechaFin]         = useState('');
+  const [tipoEcf, setTipoEcf]           = useState(initialPlan?.tipoEcf ?? '31');
+  const [tipoPago, setTipoPago]         = useState(initialPlan ? String(initialPlan.tipoPago) : '1');
+  const [diasParaPago, setDiasParaPago] = useState(
+    initialPlan?.diasParaPago != null ? String(initialPlan.diasParaPago) : '5',
+  ); // solo aplica si tipoPago=2 (crédito)
+  const [frecuencia, setFrecuencia]     = useState(initialPlan?.frecuencia ?? 'mensual');
+  const [nombre, setNombre]             = useState(initialPlan?.nombre ?? '');
+  const [descripcion, setDescripcion]   = useState(initialPlan?.descripcion ?? '');
+  const [fechaInicio, setFechaInicio]   = useState(initialPlan?.fechaInicio ?? '');
+  const [fechaFin, setFechaFin]         = useState(initialPlan?.fechaFin ?? '');
 
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
-  const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
+  // En modo edición: pre-llenar con shape mínimo desde initialPlan.clientId.
+  // Esto garantiza que un Guardar antes de que termine la hidratación no borre el
+  // clientId del plan (la hidratación luego enriquece con razonSocial/email/etc.).
+  const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(
+    initialPlan?.clientId
+      ? { id: initialPlan.clientId, razonSocial: 'Cargando…', rnc: null, email: null, telefono: null }
+      : null
+  );
   const [rncManual, setRncManual]             = useState('');
   const [rncManualNombre, setRncManualNombre] = useState('');
   const [emailManual, setEmailManual]         = useState('');
   const [telefonoManual, setTelefonoManual]   = useState('');
 
   // ── Items (useReducer compartido) ──────────────────────────────────────────
-  const [items, dispatchItems] = useItemsState();
+  const initialItems = useMemo<ItemLinea[] | undefined>(() => {
+    if (!initialPlan?.items) return undefined;
+    try {
+      const parsed = JSON.parse(initialPlan.items) as ItemLinea[];
+      return Array.isArray(parsed) && parsed.length ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [items, dispatchItems] = useItemsState(initialItems);
 
   // ── Columnas Referencia/Descripción ────────────────────────────────────────
   const [showItemRef, setShowItemRef]   = useState(false);
@@ -115,6 +189,39 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
       setShowItemDesc(Boolean(cols.descripcion));
     } catch {}
   }, []);
+  // Hydrate cliente cuando estamos en modo edición. Hace fetch una vez al montar.
+  // Nota: no usamos un useRef-as-guard porque Strict Mode double-mount lo deja
+  // bloqueado (primer mount cancela su fetch, segundo lo skipea por el guard).
+  // El cancelled flag local + el id en deps son suficientes para evitar setState
+  // tras unmount o tras cambio de id.
+  useEffect(() => {
+    const clientId = initialPlan?.clientId;
+    if (!clientId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/clientes/${clientId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data.cliente) return;
+        const c: Cliente = {
+          id:          data.cliente.id,
+          razonSocial: data.cliente.razonSocial,
+          rnc:         data.cliente.rnc ?? null,
+          email:       data.cliente.email ?? null,
+          telefono:    data.cliente.telefono ?? null,
+        };
+        setClienteSeleccionado(c);
+        setRncManual(c.rnc ?? '');
+        setEmailManual(c.email ?? '');
+        setTelefonoManual(c.telefono ?? '');
+      } catch {
+        // silencio: el resto del form sigue editable sin cliente hidratado
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [initialPlan?.clientId]);
+
   function persistCols(ref: boolean, desc: boolean) {
     try {
       const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
@@ -126,8 +233,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
   function handleToggleDesc(v: boolean) { setShowItemDesc(v); persistCols(showItemRef, v); }
 
   // ── Términos / Notas / Pie ─────────────────────────────────────────────────
+  // En modo edición no podemos separar términos/notas/pie porque se guardan
+  // concatenados en `notas`. Dump completo al campo de notas y se mantienen
+  // los otros dos campos vacíos hasta que el usuario los edite explícitamente.
   const [terminosCondiciones, setTerminos] = useState('');
-  const [notas, setNotas]                  = useState('');
+  const [notas, setNotas]                  = useState(initialPlan?.notas ?? '');
   const [pieFactura, setPieFactura]        = useState('');
 
   // ── UI state ───────────────────────────────────────────────────────────────
@@ -210,6 +320,13 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
     [fechaInicio, frecuencia],
   );
 
+  const proximas3Emisiones = useMemo(
+    () => calcularProximasEmisiones(fechaInicio, frecuencia, 3),
+    [fechaInicio, frecuencia],
+  );
+
+  const diaCobro = fechaInicio ? parseInt(fechaInicio.split('-')[2], 10) : null;
+
   // ─── Submit ─────────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -220,22 +337,28 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
     if (items.every(i => !i.nombreItem.trim())) { setError('Agrega al menos un ítem con nombre'); return; }
 
     const proximaEmision = fechaInicio; // Primera emisión = fecha de inicio
-    const notasFinal = [terminosCondiciones, notas, pieFactura].filter(s => s.trim()).join('\n\n') || null;
+    const notasFinal = [terminosCondiciones, notas, pieFactura]
+      .filter(s => s.trim()).join('\n\n') || null;
 
     setLoading(true);
     try {
-      const res = await fetch('/api/facturas-recurrentes', {
-        method: 'POST',
+      const url    = isEdit ? `/api/facturas-recurrentes/${initialPlan!.id}` : '/api/facturas-recurrentes';
+      const method = isEdit ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nombre:         nombre.trim(),
+          descripcion:    descripcion.trim() || null,
           tipoEcf,
           tipoPago:       parseInt(tipoPago),
           diasParaPago:   parseInt(tipoPago) === 2 ? parseInt(diasParaPago || '0') : null,
           frecuencia,
+          diaCobro:       ['mensual','trimestral','anual'].includes(frecuencia) ? diaCobro : null,
           fechaInicio,
           fechaFin:       fechaFin || null,
           proximaEmision,
+          estado:         'activa',
           clientId:       clienteSeleccionado?.id ?? null,
           notas:          notasFinal,
           totalEstimado:  totales.total,
@@ -263,7 +386,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="bg-[#eef0f7] min-h-full">
-      <div className="p-3 sm:p-4 md:p-6">
+      <div className="p-3 sm:p-4 md:p-5">
 
         {/* Back nav */}
         <div className="flex items-center gap-3 mb-4">
@@ -272,7 +395,9 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
               <ArrowLeft className="h-4 w-4 mr-1" />Volver
             </Link>
           </Button>
-          <h1 className="text-lg font-semibold text-gray-700">Nueva factura recurrente</h1>
+          <h1 className="text-lg font-semibold text-gray-700">
+            {isEdit ? 'Editar factura recurrente' : 'Nueva factura recurrente'}
+          </h1>
         </div>
 
         {/* Error */}
@@ -291,74 +416,63 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
             const isSubmitBtn = t.tagName === 'BUTTON' && (t as HTMLButtonElement).type === 'submit';
             if (e.key === 'Enter' && isInput && !isSubmitBtn) e.preventDefault();
           }}
-          className="space-y-4 max-w-4xl"
+          className="space-y-4"
         >
+          <div className="space-y-4">
           {/* ── SPLIT LAYOUT: form left, sticky resumen right (solo xl+) ──── */}
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 xl:gap-5">
             {/* LEFT column */}
             <div className="space-y-4 min-w-0">
 
-              {/* CompactHeader-style: empresa + tipo + frecuencia + status */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 md:px-5 md:py-4">
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-                  {/* Logo + empresa */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    {empresa?.logo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={empresa.logo} alt="Logo" className="h-10 max-w-[100px] object-contain shrink-0" />
-                    ) : (
-                      <Link href="/dashboard/configuracion" className="w-[80px] h-10 border-2 border-dashed border-gray-300 rounded-md flex items-center justify-center hover:border-teal-400 transition-colors shrink-0" title="Subir logo en Configuración">
-                        <span className="text-[9px] text-gray-500 text-center leading-tight px-1">Logo</span>
-                      </Link>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 leading-tight truncate">
-                        {empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Tu empresa'}
-                      </p>
-                      {empresa?.rnc && (
-                        <p className="text-[11px] text-gray-500 leading-tight mt-0.5">RNC: {empresa.rnc}</p>
-                      )}
+              {/* Empresa card — logo + nombre + RNC + Estado + Moneda */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <EmpresaBlock empresa={empresa} showCambiarEmpresa logoSize="md" />
+
+                  <div className="flex items-start gap-8">
+                    <div className="text-right">
+                      <p className="text-[11px] text-gray-500 uppercase tracking-wide">Estado</p>
+                      <div className="flex items-center gap-1.5 mt-1 justify-end">
+                        <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
+                        <span className="text-sm font-medium text-gray-700">Borrador</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[11px] text-gray-500 uppercase tracking-wide">Moneda</p>
+                      <p className="text-sm font-medium text-gray-700 mt-1">DOP</p>
                     </div>
                   </div>
-
-                  {/* Plan recurrente badge */}
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-gray-500">Plan recurrente</span>
-                  </div>
-
-                  {/* Tipo */}
-                  <div className="flex items-center gap-1 min-w-0">
-                    <Select value={tipoEcf} onValueChange={handleChangeTipo}>
-                      <SelectTrigger className="border-0 bg-transparent text-teal-700 font-medium text-xs h-7 px-2 shadow-none focus:ring-0 gap-1 w-auto">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIPOS_ECF.map(t => (
-                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Frecuencia badge */}
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-gray-500">Frecuencia:</span>
-                    <span className="font-medium text-gray-900 capitalize">{frecuencia}</span>
-                  </div>
-
-                  {/* Estado */}
-                  <div className="ml-auto flex items-center gap-1.5 text-xs">
-                    <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
-                    <span className="font-medium text-gray-700">Borrador</span>
-                  </div>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-2">
-                  Cambiar el tipo reinicia los datos del cliente.
-                </p>
               </div>
 
-              {/* ── SECCIÓN 1: Cliente ──────────────────────────────────────────── */}
-          <SectionCard number={1} title="Datos del cliente" icon={User}>
+              {/* ── SECCIÓN 1: Tipo de comprobante fiscal ──────────────────────── */}
+          <SectionCard number={1} title="Tipo de comprobante fiscal" icon={Receipt}>
+            <p className="text-xs text-gray-500 mb-4">
+              Este tipo de comprobante se usará para todas las facturas generadas por esta suscripción.
+            </p>
+            <div>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                Tipo de factura <span className="text-red-500">*</span>
+              </Label>
+              <Select value={tipoEcf} onValueChange={handleChangeTipo}>
+                <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS_ECF.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="mt-4 bg-teal-50 border border-teal-100 rounded-lg p-3 flex items-start gap-2.5">
+              <Info className="h-4 w-4 text-teal-700 mt-0.5 shrink-0" />
+              <p className="text-xs text-teal-900 leading-relaxed">
+                <span className="font-semibold">Importante:</span> Cambiar el tipo de comprobante afectará las próximas facturas de esta suscripción. Las facturas ya emitidas no se modificarán.
+              </p>
+            </div>
+          </SectionCard>
+
+              {/* ── SECCIÓN 2: Cliente ──────────────────────────────────────────── */}
+          <SectionCard number={2} title="Cliente" icon={User}>
             <ClienteSection
               clienteSeleccionado={clienteSeleccionado}
               buscarClientes={buscarClientes}
@@ -374,163 +488,194 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
             />
           </SectionCard>
 
-          {/* ── SECCIÓN 2: Recurrencia (campos propios) ─────────────────────── */}
-          <SectionCard number={2} title="Configuración de la recurrencia" icon={Calendar}>
+          {/* ── SECCIÓN 3: Configuración de la suscripción ──────────────────── */}
+          <SectionCard number={3} title="Configuración de la suscripción" icon={Calendar}>
             <div className="space-y-5">
 
-              {/* Nombre del plan — primero, es el título de la plantilla */}
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                  Nombre del plan <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  placeholder="Ej: Mensualidad colegio - Juan Pérez"
-                  value={nombre}
-                  onChange={e => setNombre(e.target.value)}
-                  className="mt-1 h-10"
-                  required
-                />
-                <p className="text-xs text-gray-400 mt-1">Nombre interno de este plan</p>
+              {/* Row 1: Nombre del plan + Descripción */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                    Nombre del plan <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    placeholder="Ej: Mensualidad colegio - Juan Pérez"
+                    value={nombre}
+                    onChange={e => setNombre(e.target.value)}
+                    className="mt-1 h-10"
+                    required
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Nombre interno para identificar este plan</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                    Descripción <span className="text-gray-400 text-[11px] font-normal normal-case">(opcional)</span>
+                  </Label>
+                  <Input
+                    placeholder="Ej: Mensualidad por servicios educativos"
+                    value={descripcion}
+                    onChange={e => setDescripcion(e.target.value.slice(0, 200))}
+                    maxLength={200}
+                    className="mt-1 h-10"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1 text-right">{descripcion.length}/200</p>
+                </div>
               </div>
 
-              {/* ── Grupo: CUÁNDO ── */}
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cuándo se emite</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Frecuencia */}
-                  <div>
-                    <Label className="text-xs text-gray-600 uppercase tracking-wide">Frecuencia</Label>
-                    <Select value={frecuencia} onValueChange={setFrecuencia}>
-                      <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {FRECUENCIAS.map(f => (
-                          <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              {/* ── Subheader RECURRENCIA ── */}
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Recurrencia
+                </span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
 
-                  {/* Fecha de inicio */}
-                  <div>
-                    <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                      Fecha de inicio <span className="text-red-500">*</span>
-                    </Label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                    Frecuencia <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={frecuencia} onValueChange={setFrecuencia}>
+                    <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {FRECUENCIAS.map(f => (
+                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                    Fecha de inicio <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="date"
+                    value={fechaInicio}
+                    onChange={e => setFechaInicio(e.target.value)}
+                    /* En edición, permitimos fechas pasadas (el plan ya existe). */
+                    min={isEdit ? undefined : today}
+                    className="mt-1 h-10"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                    Fecha de fin <span className="text-gray-400 text-[11px] font-normal normal-case">(opcional)</span>
+                  </Label>
+                  <div className="relative mt-1">
                     <Input
                       type="date"
-                      value={fechaInicio}
-                      onChange={e => setFechaInicio(e.target.value)}
-                      min={today}
-                      className="mt-1 h-10"
-                      required
+                      value={fechaFin}
+                      onChange={e => setFechaFin(e.target.value)}
+                      min={fechaInicio || today}
+                      className="h-10 pr-8"
                     />
-                    {fechaInicio && (
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        {(() => {
-                          const [y, m, d] = fechaInicio.split('-').map(Number);
-                          const dt = new Date(y, m - 1, d);
-                          const dia = dt.getDate();
-                          const diaSemana = dt.toLocaleDateString('es-DO', { weekday: 'long' });
-                          switch (frecuencia) {
-                            case 'semanal':    return `Se emitirá cada ${diaSemana}`;
-                            case 'quincenal':  return `Cada 15 días desde esta fecha`;
-                            case 'mensual':    return `Se emitirá el día ${dia} de cada mes`;
-                            case 'trimestral': return `Cada 3 meses en esta fecha`;
-                            case 'anual':      return `Cada año en esta fecha`;
-                            default: return '';
-                          }
-                        })()}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Vigencia hasta */}
-                  <div>
-                    <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                      Vigencia hasta{' '}
-                      <span className="text-gray-400 text-[11px] font-normal normal-case">
-                        {fechaFin ? '' : '(opcional)'}
-                      </span>
-                    </Label>
-                    <div className="relative mt-1">
-                      <Input
-                        type="date"
-                        value={fechaFin}
-                        onChange={e => setFechaFin(e.target.value)}
-                        min={fechaInicio || today}
-                        className="h-10 pr-8"
-                      />
-                      {fechaFin && (
-                        <button
-                          type="button"
-                          onClick={() => setFechaFin('')}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          title="Quitar fecha de fin"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    {!fechaFin && (
-                      <p className="text-[10px] text-gray-400 mt-1">Sin fecha = se repite indefinidamente.</p>
+                    {fechaFin && (
+                      <button
+                        type="button"
+                        onClick={() => setFechaFin('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        title="Quitar fecha de fin"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
-              </div>
-
-              {/* ── Grupo: CÓMO SE PAGA ── */}
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cómo se paga</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Plazo de pago */}
-                  <div>
-                    <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
-                    <Select value={tipoPago} onValueChange={setTipoPago}>
-                      <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {TIPOS_PAGO.map(t => (
-                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Días para pagar — siempre presente, disabled si contado (sin reflow) */}
-                  <div>
-                    <Label className={`text-xs uppercase tracking-wide ${tipoPago === '2' ? 'text-gray-600' : 'text-gray-300'}`}>
-                      Días para pagar
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={diasParaPago}
-                      onChange={e => setDiasParaPago(e.target.value)}
-                      disabled={tipoPago !== '2'}
-                      className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-300"
-                    />
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      {tipoPago === '2'
-                        ? 'Días desde la emisión hasta el vencimiento.'
-                        : 'Solo aplica con condición de pago a crédito.'}
-                    </p>
-                  </div>
+                <div>
+                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                    Día de cobro <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={diaCobro ? String(diaCobro) : ''}
+                    onValueChange={(v) => {
+                      if (!fechaInicio) return;
+                      const [y, m] = fechaInicio.split('-');
+                      const nuevoDia = String(v).padStart(2, '0');
+                      setFechaInicio(`${y}-${m}-${nuevoDia}`);
+                    }}
+                    disabled={!fechaInicio}
+                  >
+                    <SelectTrigger className="mt-1 h-10"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map(n => (
+                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {/* Próxima emisión */}
-              {fechaInicio && (
-                <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2 text-sm text-teal-800">
-                  Próxima emisión:{' '}
-                  <span className="font-semibold">{proximaEmisionPreview}</span>
+              {/* Info pill: día de cobro */}
+              {diaCobro && (
+                <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+                  <Info className="h-4 w-4 text-teal-700 shrink-0" />
+                  <p className="text-sm text-teal-900">
+                    {frecuencia === 'semanal'    && <>Se cobrará cada <span className="font-semibold">{new Date(fechaInicio + 'T00:00').toLocaleDateString('es-DO', { weekday: 'long' })}</span>.</>}
+                    {frecuencia === 'quincenal'  && <>Se cobrará cada <span className="font-semibold">15 días</span> desde {formatFechaCorta(fechaInicio)}.</>}
+                    {frecuencia === 'mensual'    && <>Se cobrará el día <span className="font-semibold">{diaCobro}</span> de cada mes.</>}
+                    {frecuencia === 'trimestral' && <>Se cobrará cada <span className="font-semibold">3 meses</span> el día {diaCobro}.</>}
+                    {frecuencia === 'anual'      && <>Se cobrará cada <span className="font-semibold">año</span> el día {diaCobro}.</>}
+                  </p>
                 </div>
               )}
+
+              {/* ── Subheader PAGO ── */}
+              <div className="flex items-center gap-3 pt-2">
+                <span className="inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Pago
+                </span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                    Condición de pago <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={tipoPago} onValueChange={setTipoPago}>
+                    <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIPOS_PAGO.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={`text-xs uppercase tracking-wide ${tipoPago === '2' ? 'text-gray-600' : 'text-gray-300'}`}>
+                    Plazo de vencimiento {tipoPago === '2' && <span className="text-red-500">*</span>}
+                  </Label>
+                  <Select value={diasParaPago} onValueChange={setDiasParaPago} disabled={tipoPago !== '2'}>
+                    <SelectTrigger className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-300"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['5','15','30','45','60','90'].map(d => (
+                        <SelectItem key={d} value={d}>{d} días</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Info pill: vencimiento */}
+              {tipoPago === '2' && diasParaPago && (
+                <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+                  <Info className="h-4 w-4 text-teal-700 shrink-0" />
+                  <p className="text-sm text-teal-900">
+                    Vence <span className="font-semibold">{diasParaPago} días</span> después de cada emisión.
+                  </p>
+                </div>
+              )}
+
             </div>
           </SectionCard>
 
-          {/* ── SECCIÓN 3: Productos y servicios ────────────────────────────── */}
+          {/* ── SECCIÓN 4: Productos o servicios ────────────────────────────── */}
           <SectionCard
-            number={3}
-            title="Productos y servicios"
+            number={4}
+            title="Productos o servicios"
             icon={Package}
             actions={
               <ColumnasToggle
@@ -573,25 +718,25 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
             </div>
           </SectionCard>
 
-          {/* ── SECCIÓN 4: Términos y condiciones ───────────────────────────── */}
+          {/* ── SECCIÓN 5: Términos y condiciones ───────────────────────────── */}
           <AccordionSection
-            number={4} title="Términos y condiciones" icon={ScrollText}
+            number={5} title="Términos y condiciones" icon={ScrollText}
             defaultOpen={terminosCondiciones.trim().length > 0}
           >
             <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
           </AccordionSection>
 
-          {/* ── SECCIÓN 5: Notas ────────────────────────────────────────────── */}
+          {/* ── SECCIÓN 6: Notas ────────────────────────────────────────────── */}
           <AccordionSection
-            number={5} title="Notas" icon={StickyNote}
+            number={6} title="Notas" icon={StickyNote}
             defaultOpen={notas.trim().length > 0}
           >
             <Notas notas={notas} setNotas={setNotas} />
           </AccordionSection>
 
-          {/* ── SECCIÓN 6: Pie de factura ───────────────────────────────────── */}
+          {/* ── SECCIÓN 7: Pie de factura ───────────────────────────────────── */}
           <AccordionSection
-            number={6} title="Pie de factura" icon={FileText}
+            number={7} title="Pie de factura" icon={FileText}
             defaultOpen={pieFactura.trim().length > 0}
           >
             <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
@@ -616,38 +761,109 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
               </button>
             </div>
 
-            {/* RIGHT column — sticky sidebar: Resumen (sin Pago para recurrente) */}
-            <ResumenSidebar
-              empresa={empresa}
-              totales={totales}
-              retenciones={[]}
-              totalNeto={totales.total}
-              items={items}
-              showPago={false}
-            />
+            {/* RIGHT column — sticky sidebar */}
+            <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+              {/* Resumen del plan */}
+              <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                <header className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+                  <FileText className="h-4 w-4 text-gray-600" />
+                  <h3 className="text-sm font-semibold text-gray-900">Resumen del plan</h3>
+                </header>
+                <div className="px-4 py-3 space-y-2.5 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Tipo de comprobante</span>
+                    <span className="bg-teal-50 text-teal-700 text-xs font-medium px-2 py-0.5 rounded">
+                      {tipoEcf === '31' ? `Crédito fiscal (${tipoEcf})` :
+                       tipoEcf === '32' ? `Consumo (${tipoEcf})` :
+                       `e-CF (${tipoEcf})`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Frecuencia</span>
+                    <span className="text-gray-900">{FRECUENCIA_LABEL[frecuencia] ?? frecuencia}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Día de cobro</span>
+                    <span className="text-gray-900">{diaCobro ?? '—'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Fecha de inicio</span>
+                    <span className="text-gray-900">{fechaInicio ? formatFechaCorta(fechaInicio) : '—'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Próxima factura</span>
+                    <span className="text-teal-700 font-medium">{proximaEmisionPreview ? formatFechaCorta(proximaEmisionPreview) : '—'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Clientes</span>
+                    <span className="text-gray-900">{clienteSeleccionado ? 1 : 0}</span>
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 px-4 py-3 space-y-2 text-sm">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Subtotal</span>
+                    <span>{formatDOP(totales.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Impuestos</span>
+                    <span>{formatDOP(totales.itbis)}</span>
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 px-4 py-3">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm font-semibold text-gray-900">Total estimado</span>
+                    <span className="text-lg font-bold text-teal-700">{formatDOP(totales.total)}</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Este es un cálculo estimado por emisión.</p>
+                </div>
+              </section>
+
+              {/* Próximas facturas (3) */}
+              {proximas3Emisiones.length > 0 && (
+                <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                  <header className="px-4 py-3 border-b border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900">Próximas facturas ({proximas3Emisiones.length})</h3>
+                  </header>
+                  <ul className="px-4 py-2 divide-y divide-gray-100">
+                    {proximas3Emisiones.map((fecha, i) => (
+                      <li key={i} className="flex items-center justify-between gap-2 py-2 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Calendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span className="text-gray-700">{formatFechaCorta(fecha)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="bg-teal-50 text-teal-700 text-[10px] font-medium px-1.5 py-0.5 rounded">
+                            {FRECUENCIA_LABEL[frecuencia] ?? frecuencia}
+                          </span>
+                          <span className="text-gray-900 text-xs font-medium">{formatDOP(totales.total)}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* Notas info */}
+              <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <StickyNote className="h-4 w-4 text-gray-600" />
+                  <h3 className="text-sm font-semibold text-gray-900">Notas</h3>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Las facturas se generarán automáticamente según la frecuencia y configuración definidas.
+                </p>
+              </section>
+            </aside>
           </div>
 
-          {/* ── BOTTOM ACTION BAR — sticky, full width ──────────────────────── */}
-          <div className="sticky bottom-0 z-30 -mx-3 sm:-mx-4 md:-mx-5 px-3 sm:px-4 md:px-5 mt-4 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 py-3">
-            <Button
-              type="button"
-              variant="outline"
-              asChild
-              disabled={loading}
-              className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-            >
-              <Link href="/dashboard/facturas-recurrentes">Cancelar</Link>
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto sm:min-w-[140px]"
-            >
-              {loading
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
-                : 'Guardar plan'}
-            </Button>
           </div>
+          <BottomActionBar
+            items={items}
+            loading={loading}
+            primaryLabel={isEdit ? 'Guardar cambios' : 'Guardar y activar suscripción'}
+            loadingPrimaryLabel="Guardando…"
+            onCancelar={() => router.push('/dashboard/facturas-recurrentes')}
+          />
         </form>
       </div>
 

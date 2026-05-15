@@ -7,6 +7,7 @@ import {
 import { Settings } from 'lucide-react';
 import { CATEGORIAS_ECF } from '@/lib/ecf/categorias';
 import type { EmpresaPerfil, SecuenciaInfo } from '../utils/types';
+import { EmpresaBlock } from './EmpresaBlock';
 
 interface Props {
   empresa: EmpresaPerfil | null;
@@ -48,32 +49,7 @@ export function CompactHeader({
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 md:px-5 md:py-4">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         {/* Logo + company */}
-        <div className="flex items-center gap-3 min-w-0">
-          {empresa?.logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={empresa.logo}
-              alt="Logo"
-              className="h-10 max-w-[100px] object-contain shrink-0"
-            />
-          ) : (
-            <a
-              href="/dashboard/configuracion"
-              className="w-[80px] h-10 border-2 border-dashed border-gray-300 rounded-md flex items-center justify-center hover:border-teal-400 transition-colors shrink-0"
-              title="Subir logo en Configuración"
-            >
-              <span className="text-[9px] text-gray-500 text-center leading-tight px-1">Logo</span>
-            </a>
-          )}
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 leading-tight truncate">
-              {empresa?.nombreComercial ?? empresa?.razonSocial ?? 'Tu empresa'}
-            </p>
-            {empresa?.rnc && (
-              <p className="text-[11px] text-gray-500 leading-tight mt-0.5">RNC: {empresa.rnc}</p>
-            )}
-          </div>
-        </div>
+        <EmpresaBlock empresa={empresa} />
 
         {/* Tipos selector — compact, two stacked dropdowns */}
         <div className="flex items-center gap-1 min-w-0">

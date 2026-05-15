@@ -206,10 +206,56 @@ export function ItemsTable({
 
       {/* ───────── DESKTOP: table (≥ md) ───────── */}
       <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-[800px] border-collapse">
+        {/* min-w dinámico — solo expandir cuando hay opcionales visibles */}
+        <table className={`w-full border-collapse table-fixed ${
+          showReferencia && showDescripcion ? 'min-w-[820px]' :
+          (showReferencia || showDescripcion) ? 'min-w-[720px]' :
+          'min-w-[600px]'
+        }`}>
+          <colgroup>
+            {/* Producto */}
+            <col className={
+              showReferencia && showDescripcion ? 'w-[22%]' :
+              showReferencia ? 'w-[28%]' :
+              showDescripcion ? 'w-[22%]' :
+              'w-[32%]'
+            } />
+            {/* Referencia */}
+            {showReferencia && <col className="w-[10%]" />}
+            {/* Precio */}
+            <col className={
+              showReferencia && showDescripcion ? 'w-[10%]' :
+              (showReferencia || showDescripcion) ? 'w-[12%]' :
+              'w-[14%]'
+            } />
+            {/* Desc % */}
+            <col className="w-[8%]" />
+            {/* Impuesto */}
+            <col className={
+              showReferencia && showDescripcion ? 'w-[10%]' :
+              (showReferencia || showDescripcion) ? 'w-[12%]' :
+              'w-[14%]'
+            } />
+            {/* Descripción */}
+            {showDescripcion && <col className="w-[18%]" />}
+            {/* Cantidad */}
+            <col className={
+              showReferencia && showDescripcion ? 'w-[10%]' :
+              (showReferencia || showDescripcion) ? 'w-[12%]' :
+              'w-[14%]'
+            } />
+            {/* Total */}
+            <col className={
+              showReferencia && showDescripcion ? 'w-[12%]' :
+              (showReferencia || showDescripcion) ? 'w-[14%]' :
+              'w-[16%]'
+            } />
+            {/* Action */}
+            <col className="w-10" />
+          </colgroup>
           <thead>
             <tr className="border-b-2 border-gray-200 bg-gray-50">
-              <th className="text-left text-xs font-medium text-gray-500 px-4 py-3 w-[22%]">
+              <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">
                 <span className="inline-flex items-center gap-1">
                   Producto
                   <Tooltip text="DGII #84 · nombreItem · máx 80 caracteres">
@@ -217,8 +263,8 @@ export function ItemsTable({
                   </Tooltip>
                 </span>
               </th>
-              {showReferencia && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">Referencia</th>}
-              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3 w-[9%]">
+              {showReferencia && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Referencia</th>}
+              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3">
                 <span className="inline-flex items-center gap-1">
                   Precio
                   <Tooltip text="DGII #94 · precioUnitarioItem">
@@ -226,10 +272,10 @@ export function ItemsTable({
                   </Tooltip>
                 </span>
               </th>
-              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3 w-[7%]">Desc %</th>
-              <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[10%]">Impuesto</th>
-              {showDescripcion && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3 w-[18%]">Descripción</th>}
-              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3 w-[8%]">
+              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3">Desc %</th>
+              <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Impuesto</th>
+              {showDescripcion && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Descripción</th>}
+              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3">
                 <span className="inline-flex items-center gap-1">
                   Cantidad
                   <Tooltip text="DGII #91 · cantidadItem">
@@ -237,8 +283,8 @@ export function ItemsTable({
                   </Tooltip>
                 </span>
               </th>
-              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3 w-[10%]">Total</th>
-              <th className="w-8"></th>
+              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3">Total</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>

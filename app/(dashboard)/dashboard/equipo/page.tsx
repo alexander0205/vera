@@ -307,29 +307,6 @@ export default function EquipoPage() {
         )}
       </div>
 
-      {/* Roles explicados */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold text-gray-600">Roles disponibles</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(ROLES).map(([key, cfg]) => {
-              const Icon = cfg.icon;
-              return (
-                <div key={key} className={`flex items-start gap-2 p-3 rounded-lg border ${cfg.color}`}>
-                  <Icon className="h-4 w-4 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold">{cfg.label}</p>
-                    <p className="text-xs opacity-75">{cfg.descripcion}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Miembros activos */}
       <Card>
         <CardHeader className="pb-3">

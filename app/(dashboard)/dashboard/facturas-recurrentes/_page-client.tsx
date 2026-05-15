@@ -20,7 +20,9 @@ import {
 interface FacturaRecurrente {
   id: number;
   nombre: string;
+  descripcion: string | null;
   frecuencia: string;
+  diaCobro: number | null;
   proximaEmision: string;
   estado: string;
   facturasEmitidas: number;
@@ -192,7 +194,12 @@ export default function FacturasRecurrentesPage() {
               <TableBody>
                 {facturas.map((f) => (
                   <TableRow key={f.id} className="hover:bg-gray-50">
-                    <TableCell className="font-medium text-sm text-gray-900">{f.nombre}</TableCell>
+                    <TableCell className="font-medium text-sm text-gray-900 max-w-[260px]">
+                      <div className="truncate">{f.nombre}</div>
+                      {f.descripcion && (
+                        <div className="text-xs text-gray-500 truncate font-normal">{f.descripcion}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-gray-700 text-sm">
                       {f.clienteRazonSocial ?? <span className="text-gray-400 italic">Sin contacto</span>}
                     </TableCell>

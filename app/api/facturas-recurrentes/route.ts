@@ -22,9 +22,12 @@ export async function GET(req: NextRequest) {
     .select({
       id:               facturasRecurrentes.id,
       nombre:           facturasRecurrentes.nombre,
+      descripcion:      facturasRecurrentes.descripcion,
       tipoEcf:          facturasRecurrentes.tipoEcf,
       tipoPago:         facturasRecurrentes.tipoPago,
+      diasParaPago:     facturasRecurrentes.diasParaPago,
       frecuencia:       facturasRecurrentes.frecuencia,
+      diaCobro:         facturasRecurrentes.diaCobro,
       fechaInicio:      facturasRecurrentes.fechaInicio,
       fechaFin:         facturasRecurrentes.fechaFin,
       proximaEmision:   facturasRecurrentes.proximaEmision,
@@ -58,20 +61,33 @@ export async function POST(req: NextRequest) {
   if (!body.fechaInicio)           return NextResponse.json({ error: 'La fecha de inicio es obligatoria' }, { status: 422 });
   if (!body.proximaEmision)        return NextResponse.json({ error: 'La próxima emisión es obligatoria' }, { status: 422 });
 
+  const ESTADOS_VALIDOS = ['activa', 'pausada', 'finalizada'] as const;
+  if (body.estado != null && !ESTADOS_VALIDOS.includes(body.estado)) {
+    return NextResponse.json({ error: 'Estado inválido' }, { status: 422 });
+  }
+
+  const frecuencia = body.frecuencia ?? 'mensual';
+  // diaCobro solo aplica para frecuencias mensual/trimestral/anual
+  const diaCobro = ['mensual', 'trimestral', 'anual'].includes(frecuencia)
+    ? (body.diaCobro != null ? Math.min(31, Math.max(1, parseInt(body.diaCobro))) : null)
+    : null;
+
   const [row] = await db
     .insert(facturasRecurrentes)
     .values({
       teamId,
       clientId:       body.clientId ?? null,
       nombre:         body.nombre.trim(),
+      descripcion:    body.descripcion?.trim() ? body.descripcion.trim().slice(0, 200) : null,
       tipoEcf:        body.tipoEcf ?? '31',
       tipoPago:       body.tipoPago ?? 1,
       diasParaPago:   body.tipoPago === 2 && body.diasParaPago ? parseInt(body.diasParaPago) : null,
-      frecuencia:     body.frecuencia ?? 'mensual',
+      frecuencia,
+      diaCobro,
       fechaInicio:    body.fechaInicio,
       fechaFin:       body.fechaFin ?? null,
       proximaEmision: body.proximaEmision,
-      estado:         'activa',
+      estado:         body.estado ?? 'activa',
       items:          body.items ? JSON.stringify(body.items) : '[]',
       notas:          body.notas ?? null,
       totalEstimado:  Math.round((body.totalEstimado ?? 0) * 100),

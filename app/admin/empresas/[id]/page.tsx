@@ -9,6 +9,9 @@ import Link from 'next/link';
 import { Building2, Mail, Users, Clock, AlertTriangle } from 'lucide-react';
 import { ConfirmButton } from './confirm-button';
 import EcfApiSection from './_ecf-section';
+import { RoleSelect } from './_role-select';
+import { ROLE_KEYS } from '@/lib/config/roles';
+import { revalidatePath } from 'next/cache';
 
 // ─── Server Action: invitar usuario ──────────────────────────────────────────
 
@@ -74,6 +77,53 @@ async function eliminarMiembro(formData: FormData) {
   });
 
   redirect(`/admin/empresas/${teamId}?ok=eliminado`);
+}
+
+// ─── Server Action: cambiar rol de miembro ──────────────────────────────────
+
+async function cambiarRolMiembro(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId  = parseInt(formData.get('teamId') as string);
+  const userId  = parseInt(formData.get('userId') as string);
+  const newRole = (formData.get('newRole') as string)?.trim();
+  if (isNaN(teamId) || isNaN(userId) || !newRole) return;
+
+  // Validar contra whitelist de roles del catálogo
+  if (!(ROLE_KEYS as readonly string[]).includes(newRole)) {
+    throw new Error('Rol inválido');
+  }
+
+  // Si downgrading owner → otro rol, asegurar que quede ≥1 owner en el team
+  const [target] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+    .limit(1);
+  if (!target) throw new Error('Miembro no encontrado');
+
+  if (target.role === 'owner' && newRole !== 'owner') {
+    const owners = await db
+      .select({ id: teamMembers.id })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, 'owner')));
+    if (owners.length <= 1) {
+      throw new Error('No puedes quitar el rol de owner al último propietario.');
+    }
+  }
+
+  await db
+    .update(teamMembers)
+    .set({ role: newRole })
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+
+  await db.insert(activityLogs).values({
+    teamId, userId: admin.id, action: ActivityType.UPDATE_ACCOUNT, ipAddress: '',
+  });
+
+  revalidatePath(`/admin/empresas/${teamId}`);
 }
 
 // ─── Server Action: cancelar invitación ──────────────────────────────────────
@@ -209,16 +259,22 @@ export default async function EmpresaDetailPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {members.map(m => (
+              {(() => {
+                const ownerCount = members.filter(x => x.role === 'owner').length;
+                return members.map(m => (
                 <tr key={m.id} className="hover:bg-gray-50">
                   <td className="px-5 py-3">
                     <p className="font-medium text-gray-900">{m.name ?? '—'}</p>
                     <p className="text-xs text-gray-400">{m.email}</p>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">
-                      {m.role}
-                    </span>
+                    <RoleSelect
+                      teamId={teamId}
+                      userId={m.id}
+                      currentRole={m.role}
+                      isLastOwner={m.role === 'owner' && ownerCount <= 1}
+                      action={cambiarRolMiembro}
+                    />
                   </td>
                   <td className="px-5 py-3 text-xs text-gray-400">
                     {new Date(m.joinedAt).toLocaleDateString('es-DO')}
@@ -234,7 +290,8 @@ export default async function EmpresaDetailPage({
                     </ConfirmButton>
                   </td>
                 </tr>
-              ))}
+                ));
+              })()}
             </tbody>
           </table>
         )}

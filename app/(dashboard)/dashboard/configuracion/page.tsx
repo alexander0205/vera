@@ -10,6 +10,7 @@ import {
   CheckCircle, Loader2, Upload, X, Eye,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
+import { EquipoCard } from './EquipoCard';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -402,6 +403,9 @@ export default function ConfiguracionPage() {
       </Card>
 
       {/* Padrón DGII se sincroniza automáticamente vía cron diario — no UI expuesta */}
+
+      {/* Equipo y permisos — solo el owner ve esta pantalla (gate en layout.tsx) */}
+      <EquipoCard />
 
       {/* Botón guardar final */}
       <div className="flex justify-end pb-6">

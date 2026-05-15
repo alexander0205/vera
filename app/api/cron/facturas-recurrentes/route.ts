@@ -87,24 +87,44 @@ export async function GET(req: NextRequest) {
         .set({ secuenciaActual: seq[0].secuenciaActual + BigInt(1), updatedAt: new Date() })
         .where(eq(sequences.id, seq[0].id));
 
-      // Calculate next emission date
-      const nextDate = new Date(fr.proximaEmision);
-      if (fr.frecuencia === 'semanal') nextDate.setDate(nextDate.getDate() + 7);
-      else if (fr.frecuencia === 'quincenal') nextDate.setDate(nextDate.getDate() + 15);
-      else if (fr.frecuencia === 'mensual') nextDate.setMonth(nextDate.getMonth() + 1);
-      else if (fr.frecuencia === 'trimestral') nextDate.setMonth(nextDate.getMonth() + 3);
-      else if (fr.frecuencia === 'anual') nextDate.setFullYear(nextDate.getFullYear() + 1);
+      // Calculate next emission date. Para mensual/trimestral/anual usamos diaCobro
+      // (si está definido) para evitar drift cuando el día > 28 (ej: Ene 31 + 1mes
+      // no se convierte en Mar 3, sino que se clampa al último día del mes siguiente).
+      const [py, pm, pd] = fr.proximaEmision.split('-').map(Number);
+      const nextDate = new Date(py, pm - 1, pd);
 
-      const nextStr = nextDate.toISOString().slice(0, 10);
+      if (fr.frecuencia === 'semanal') {
+        nextDate.setDate(nextDate.getDate() + 7);
+      } else if (fr.frecuencia === 'quincenal') {
+        nextDate.setDate(nextDate.getDate() + 15);
+      } else {
+        const monthOffset =
+          fr.frecuencia === 'mensual'    ? 1  :
+          fr.frecuencia === 'trimestral' ? 3  :
+          fr.frecuencia === 'anual'      ? 12 : 1;
 
-      // Check if past end date
+        // Sumar meses preservando diaCobro (clamp al último día del mes destino)
+        const targetMonth = nextDate.getMonth() + monthOffset;
+        const targetYear  = nextDate.getFullYear() + Math.floor(targetMonth / 12);
+        const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+        // Último día del mes destino
+        const lastDayTarget = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+        const desiredDay    = fr.diaCobro ?? nextDate.getDate();
+        const clampedDay    = Math.min(desiredDay, lastDayTarget);
+        nextDate.setFullYear(targetYear, normalizedMonth, clampedDay);
+      }
+
+      const nextStr =
+        `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+
+      // Check if past end date → finalizada (no más emisiones)
       const pastEnd = fr.fechaFin && nextStr > fr.fechaFin;
 
       await db.update(facturasRecurrentes)
         .set({
           proximaEmision: nextStr,
           facturasEmitidas: fr.facturasEmitidas + 1,
-          estado: pastEnd ? 'pausada' : 'activa',
+          estado: pastEnd ? 'finalizada' : 'activa',
           updatedAt: new Date(),
         })
         .where(eq(facturasRecurrentes.id, fr.id));

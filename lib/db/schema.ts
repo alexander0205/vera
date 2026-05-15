@@ -408,12 +408,17 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   teamId:           integer('team_id').notNull().references(() => teams.id),
   clientId:         integer('client_id').references(() => clients.id),
   nombre:           varchar('nombre', { length: 100 }).notNull(),
+  /** Descripción corta opcional del plan (visible en UI/PDF). Distinto de notas. */
+  descripcion:      varchar('descripcion', { length: 200 }),
   tipoEcf:          varchar('tipo_ecf', { length: 2 }).notNull().default('31'),
   tipoPago:         integer('tipo_pago').notNull().default(1),
   /** Días desde fechaEmision hasta fechaLimitePago cuando tipoPago=2 (crédito).
    *  null = inmediato. Caso colegio: 5 días → vence el día 5, AR detecta vencida día 6. */
   diasParaPago:     integer('dias_para_pago'),
   frecuencia:       varchar('frecuencia', { length: 20 }).notNull().default('mensual'),
+  /** Día del mes (1-31) en que se cobra para frecuencias mensual/trimestral/anual.
+   *  null para semanal/quincenal. Cron lo usa para evitar drift al sumar meses. */
+  diaCobro:         integer('dia_cobro'),
   fechaInicio:      date('fecha_inicio').notNull(),
   fechaFin:         date('fecha_fin'),
   proximaEmision:   date('proxima_emision').notNull(),

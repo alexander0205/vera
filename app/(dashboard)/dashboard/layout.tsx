@@ -9,6 +9,7 @@ import {
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -395,6 +396,8 @@ function DashboardTopBar({
   user,
   plan,
   onMenuClick,
+  onToggleSidebar,
+  sidebarCollapsed,
   onSwitch,
 }: {
   teams: Team[];
@@ -402,6 +405,8 @@ function DashboardTopBar({
   user: UserInfo | null;
   plan: string | null;
   onMenuClick: () => void;
+  onToggleSidebar: () => void;
+  sidebarCollapsed: boolean;
   onSwitch: (teamId: number) => void;
 }) {
   const canSeeActivity = true;
@@ -416,8 +421,20 @@ function DashboardTopBar({
         <Menu className="h-5 w-5" />
       </button>
 
-      {/* Logo — mobile only (sidebar has logo on desktop) */}
-      <div className="lg:hidden flex items-center gap-2 mr-1">
+      {/* Toggle sidebar — desktop only */}
+      <button
+        onClick={onToggleSidebar}
+        className="hidden lg:flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md p-1 -ml-1 transition-colors"
+        aria-label={sidebarCollapsed ? 'Mostrar menú' : 'Ocultar menú'}
+        title={sidebarCollapsed ? 'Mostrar menú' : 'Ocultar menú'}
+      >
+        {sidebarCollapsed
+          ? <PanelLeftOpen className="h-5 w-5" />
+          : <PanelLeftClose className="h-5 w-5" />}
+      </button>
+
+      {/* Logo — visible en mobile siempre, y en desktop cuando sidebar oculto */}
+      <div className={`flex items-center gap-2 mr-1 ${sidebarCollapsed ? '' : 'lg:hidden'}`}>
         <div className="h-6 w-6 bg-teal-600 rounded-md flex items-center justify-center shrink-0">
           <span className="text-white font-black text-xs">e</span>
         </div>
@@ -652,7 +669,24 @@ type EmpresaListResponse = {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen]           = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeTeamOverride, setActiveTeamOverride] = useState<number | null>(null);
+
+  // Hidratar collapsed desde localStorage (después de mount para evitar hydration mismatch)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('emitedo:sidebarCollapsed');
+      if (stored === '1') setSidebarCollapsed(true);
+    } catch {}
+  }, []);
+
+  function toggleSidebar() {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('emitedo:sidebarCollapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  }
 
   // SWR for user + empresa list — no auto refetch on focus/reconnect.
   // We revalidate explicitly via mutate() on switch.
@@ -685,10 +719,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <GlobalSearch />
 
-      {/* Sidebar — desktop */}
-      <aside className="hidden lg:flex w-56 flex-col shrink-0">
-        <Sidebar teams={teams} activeTeamId={activeTeamId} />
-      </aside>
+      {/* Sidebar — desktop (oculto cuando collapsed) */}
+      {!sidebarCollapsed && (
+        <aside className="hidden lg:flex w-56 flex-col shrink-0">
+          <Sidebar teams={teams} activeTeamId={activeTeamId} />
+        </aside>
+      )}
 
       {/* Sidebar — mobile overlay */}
       {sidebarOpen && (
@@ -708,6 +744,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           user={user ?? null}
           plan={plan}
           onMenuClick={() => setSidebarOpen(true)}
+          onToggleSidebar={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed}
           onSwitch={handleSwitch}
         />
 
