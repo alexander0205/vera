@@ -11,8 +11,10 @@ import {
 } from '@/components/ui/select';
 import {
   Loader2, ArrowLeft, X, User, Package, Calendar, ScrollText, StickyNote, FileText,
+  CreditCard, Wallet, ChevronRight,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { useProximamenteDialog } from '@/components/proximamente-dialog';
 
 import { SectionCard } from '../../facturas/nueva/sections/SectionCard';
 import { AccordionSection } from '../../facturas/nueva/sections/AccordionSection';
@@ -125,6 +127,9 @@ export default function NuevaFacturaRecurrenteForm() {
   // ── UI state ───────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
+
+  // ── Cobro automático (feature no implementada — dialog Próximamente) ────────
+  const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -505,6 +510,59 @@ export default function NuevaFacturaRecurrenteForm() {
             <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
           </AccordionSection>
 
+          {/* ── SECCIÓN 7: Resumen y cobro ──────────────────────────────────── */}
+          <SectionCard number={7} title="Resumen y cobro" icon={Wallet}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Resumen */}
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Resumen por emisión</p>
+                <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Subtotal</span>
+                    <span>{formatDOP(totales.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>ITBIS</span>
+                    <span>{formatDOP(totales.itbis)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base text-gray-900 border-t border-gray-200 pt-1.5 mt-1.5">
+                    <span>Total por emisión</span>
+                    <span>{formatDOP(totales.total)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400 pt-1">
+                    <span>Frecuencia</span>
+                    <span className="capitalize">{frecuencia}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cobro automático con tarjeta — feature no implementada */}
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Forma de cobro</p>
+                <button
+                  type="button"
+                  onClick={() => openProximamente('Cobro automático con tarjeta')}
+                  className="w-full flex items-center gap-3 border border-dashed border-gray-300 hover:border-teal-400 hover:bg-teal-50/40 rounded-lg p-3 text-left transition-colors group"
+                >
+                  <div className="h-9 w-9 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
+                    <CreditCard className="h-4.5 w-4.5 text-teal-700" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Cobro automático con tarjeta</p>
+                    <p className="text-xs text-gray-500">
+                      Descuenta el monto de una tarjeta cada período. Sin registrar pagos a mano.
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-teal-500 shrink-0" />
+                </button>
+                <p className="text-[11px] text-gray-400">
+                  Por ahora la recurrente genera un borrador y el cobro se registra manualmente
+                  en Cuentas por cobrar.
+                </p>
+              </div>
+            </div>
+          </SectionCard>
+
           {/* ── FOOTER BOTONES ──────────────────────────────────────────────── */}
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" asChild disabled={loading}>
@@ -518,6 +576,8 @@ export default function NuevaFacturaRecurrenteForm() {
           </div>
         </form>
       </div>
+
+      {proximamenteDialog}
     </div>
   );
 }
