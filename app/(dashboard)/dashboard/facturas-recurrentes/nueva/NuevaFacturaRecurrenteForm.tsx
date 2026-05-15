@@ -325,97 +325,9 @@ export default function NuevaFacturaRecurrenteForm() {
 
           {/* ── SECCIÓN 2: Recurrencia (campos propios) ─────────────────────── */}
           <SectionCard number={2} title="Configuración de la recurrencia" icon={Calendar}>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {/* Frecuencia */}
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">Frecuencia</Label>
-                  <Select value={frecuencia} onValueChange={setFrecuencia}>
-                    <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {FRECUENCIAS.map(f => (
-                        <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="space-y-5">
 
-                {/* Plazo de pago */}
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">Plazo de pago</Label>
-                  <Select value={tipoPago} onValueChange={setTipoPago}>
-                    <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_PAGO.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Fecha de inicio */}
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Fecha de inicio <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="date"
-                    value={fechaInicio}
-                    onChange={e => setFechaInicio(e.target.value)}
-                    min={today}
-                    className="mt-1 h-10"
-                    required
-                  />
-                </div>
-
-                {/* Vigencia hasta */}
-                <div>
-                  <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                    Vigencia hasta{' '}
-                    <span className="text-red-400 text-[11px] font-normal normal-case">
-                      {fechaFin ? '' : '(Indefinida)'}
-                    </span>
-                  </Label>
-                  <div className="relative mt-1">
-                    <Input
-                      type="date"
-                      value={fechaFin}
-                      onChange={e => setFechaFin(e.target.value)}
-                      min={fechaInicio || today}
-                      className={`h-10 pr-8 ${fechaFin ? 'border-red-300 text-red-700' : ''}`}
-                    />
-                    {fechaFin && (
-                      <button
-                        type="button"
-                        onClick={() => setFechaFin('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Días para pagar — solo crédito */}
-                {tipoPago === '2' && (
-                  <div>
-                    <Label className="text-xs text-gray-600 uppercase tracking-wide">Días para pagar</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={diasParaPago}
-                      onChange={e => setDiasParaPago(e.target.value)}
-                      className="mt-1 h-10"
-                    />
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Días desde la emisión hasta el vencimiento.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Nombre identificador */}
+              {/* Nombre identificador — primero, es el título de la recurrencia */}
               <div>
                 <Label className="text-xs text-gray-600 uppercase tracking-wide">
                   Nombre identificador <span className="text-red-500">*</span>
@@ -428,6 +340,112 @@ export default function NuevaFacturaRecurrenteForm() {
                   required
                 />
                 <p className="text-xs text-gray-400 mt-1">Nombre interno para identificar esta recurrencia</p>
+              </div>
+
+              {/* ── Grupo: CUÁNDO ── */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cuándo se emite</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Frecuencia */}
+                  <div>
+                    <Label className="text-xs text-gray-600 uppercase tracking-wide">Frecuencia</Label>
+                    <Select value={frecuencia} onValueChange={setFrecuencia}>
+                      <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {FRECUENCIAS.map(f => (
+                          <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Fecha de inicio */}
+                  <div>
+                    <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                      Fecha de inicio <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="date"
+                      value={fechaInicio}
+                      onChange={e => setFechaInicio(e.target.value)}
+                      min={today}
+                      className="mt-1 h-10"
+                      required
+                    />
+                  </div>
+
+                  {/* Vigencia hasta */}
+                  <div>
+                    <Label className="text-xs text-gray-600 uppercase tracking-wide">
+                      Vigencia hasta{' '}
+                      <span className="text-gray-400 text-[11px] font-normal normal-case">
+                        {fechaFin ? '' : '(opcional)'}
+                      </span>
+                    </Label>
+                    <div className="relative mt-1">
+                      <Input
+                        type="date"
+                        value={fechaFin}
+                        onChange={e => setFechaFin(e.target.value)}
+                        min={fechaInicio || today}
+                        className="h-10 pr-8"
+                      />
+                      {fechaFin && (
+                        <button
+                          type="button"
+                          onClick={() => setFechaFin('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          title="Quitar fecha de fin"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {!fechaFin && (
+                      <p className="text-[10px] text-gray-400 mt-1">Sin fecha = se repite indefinidamente.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Grupo: CÓMO SE PAGA ── */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cómo se paga</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Plazo de pago */}
+                  <div>
+                    <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
+                    <Select value={tipoPago} onValueChange={setTipoPago}>
+                      <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TIPOS_PAGO.map(t => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Días para pagar — siempre presente, disabled si contado (sin reflow) */}
+                  <div>
+                    <Label className={`text-xs uppercase tracking-wide ${tipoPago === '2' ? 'text-gray-600' : 'text-gray-300'}`}>
+                      Días para pagar
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={diasParaPago}
+                      onChange={e => setDiasParaPago(e.target.value)}
+                      disabled={tipoPago !== '2'}
+                      className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-300"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      {tipoPago === '2'
+                        ? 'Días desde la emisión hasta el vencimiento.'
+                        : 'Solo aplica con condición de pago a crédito.'}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Próxima emisión */}
