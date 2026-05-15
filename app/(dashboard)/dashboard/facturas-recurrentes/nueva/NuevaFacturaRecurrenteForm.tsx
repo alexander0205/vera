@@ -293,8 +293,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil }: Props) {
           }}
           className="space-y-4 max-w-4xl"
         >
-          {/* ── SPLIT LAYOUT: form left, sticky resumen right ────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 lg:gap-5">
+          {/* ── SPLIT LAYOUT: form left, sticky resumen right (solo xl+) ──── */}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 xl:gap-5">
             {/* LEFT column */}
             <div className="space-y-4 min-w-0">
 
