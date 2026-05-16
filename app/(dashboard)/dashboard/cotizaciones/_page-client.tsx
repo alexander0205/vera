@@ -1,20 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-  FileText, Plus, Trash2, Search, Loader2, AlertTriangle, X, Pencil,
+  FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil,
 } from 'lucide-react';
+import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 interface Cotizacion {
   id: number;
@@ -43,30 +40,15 @@ function estadoBadge(estado: string) {
   }
 }
 
-function formatMonto(centavos: number) {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency: 'DOP',
-    minimumFractionDigits: 2,
-  }).format(centavos / 100);
-}
-
-function formatFecha(iso: string) {
-  return new Date(iso).toLocaleDateString('es-DO', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 export default function CotizacionesPage() {
   const [cotizaciones, setCotizaciones]   = useState<Cotizacion[]>([]);
   const [loading, setLoading]             = useState(true);
-  const [search, setSearch]               = useState('');
+  const [filterValues, setFilterValues]   = useState<Record<string, string>>({});
   const [deleteTarget, setDeleteTarget]   = useState<Cotizacion | null>(null);
   const [deleting, setDeleting]           = useState(false);
   const [opError, setOpError]             = useState<string | null>(null);
-  const searchTimer                       = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const search = filterValues.q ?? '';
 
   const cargar = useCallback(async (q = '') => {
     setLoading(true);
@@ -79,13 +61,11 @@ export default function CotizacionesPage() {
     }
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
-
-  function handleSearch(v: string) {
-    setSearch(v);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => cargar(v), 300);
-  }
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => cargar(search), 300);
+    return () => clearTimeout(t);
+  }, [search, cargar]);
 
   async function handleEliminar() {
     if (!deleteTarget) return;
@@ -104,121 +84,84 @@ export default function CotizacionesPage() {
     }
   }
 
+  const columns: DataTableColumn<Cotizacion>[] = useMemo(() => [
+    {
+      id: 'numero',
+      header: 'Número',
+      sortable: true,
+      render: c => <span className="font-mono font-medium text-sm">{c.numero}</span>,
+    },
+    {
+      id: 'cliente',
+      header: 'Cliente',
+      render: c => c.razonSocialComprador
+        ? <span className="text-gray-700">{c.razonSocialComprador}</span>
+        : <span className="text-gray-400 italic">Sin cliente</span>,
+    },
+    {
+      id: 'montoTotal',
+      header: 'Monto Total',
+      align: 'right',
+      sortable: true,
+      sortAccessor: c => c.montoTotal,
+      render: c => <span className="font-medium whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
+    },
+    {
+      id: 'estado',
+      header: 'Estado',
+      visibleAt: 'md',
+      render: c => estadoBadge(c.estado),
+    },
+    {
+      id: 'fechaEmision',
+      header: 'Fecha',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: c => c.fechaEmision,
+      render: c => <span className="text-sm text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
+    },
+  ], []);
+
+  const rowActions = (c: Cotizacion): RowAction[] => [
+    { icon: Pencil, title: 'Editar',   href: `/dashboard/cotizaciones/${c.id}/editar` },
+    { icon: Trash2, title: 'Eliminar', variant: 'danger', onClick: () => { setDeleteTarget(c); setOpError(null); } },
+  ];
+
   return (
     <section className="bg-[#eef0f7] min-h-full p-6 space-y-6">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Cotizaciones</h1>
-          <p className="text-sm text-gray-500 mt-1">Presupuestos y propuestas para tus clientes</p>
-        </div>
-        <Link href="/dashboard/cotizaciones/nueva">
-          <Button className="bg-teal-600 hover:bg-teal-700">
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva cotización
-          </Button>
-        </Link>
-      </div>
-
-      {/* Búsqueda */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          className="pl-9 bg-white"
-          placeholder="Buscar por número o cliente…"
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-        />
-        {search && (
-          <button
-            onClick={() => { setSearch(''); cargar(); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Tabla */}
-      <Card className="bg-white">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            {loading
-              ? 'Cargando…'
-              : `${cotizaciones.length} cotización${cotizaciones.length !== 1 ? 'es' : ''}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
-          ) : cotizaciones.length === 0 ? (
-            <div className="text-center py-16">
-              <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">
-                {search ? 'Sin resultados para esa búsqueda' : 'Sin cotizaciones registradas'}
-              </p>
-              {!search && (
-                <>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Crea tu primera cotización para enviarla a un cliente
-                  </p>
-                  <Link href="/dashboard/cotizaciones/nueva">
-                    <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm">
-                      <Plus className="h-4 w-4 mr-1" /> Nueva cotización
-                    </Button>
-                  </Link>
-                </>
-              )}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Número</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Monto Total</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cotizaciones.map((c) => (
-                  <TableRow key={c.id} className="hover:bg-gray-50">
-                    <TableCell className="font-mono font-medium text-sm">{c.numero}</TableCell>
-                    <TableCell className="text-gray-700">
-                      {c.razonSocialComprador ?? <span className="text-gray-400 italic">Sin cliente</span>}
-                    </TableCell>
-                    <TableCell className="font-medium">{formatMonto(c.montoTotal)}</TableCell>
-                    <TableCell>{estadoBadge(c.estado)}</TableCell>
-                    <TableCell className="text-sm text-gray-600">{formatFecha(c.fechaEmision)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Link href={`/dashboard/cotizaciones/${c.id}/editar`}>
-                          <Button variant="ghost" size="sm">
-                            <Pencil className="h-4 w-4 text-gray-500" />
-                          </Button>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => { setDeleteTarget(c); setOpError(null); }}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable<Cotizacion>
+        data={cotizaciones}
+        loading={loading}
+        columns={columns}
+        title="Cotizaciones"
+        description="Presupuestos y propuestas para tus clientes"
+        filters={[
+          { type: 'search', id: 'q', placeholder: 'Buscar por número o cliente…' },
+        ]}
+        filterValues={filterValues}
+        onFilterChange={setFilterValues}
+        rowActions={rowActions}
+        emptyState={{
+          icon: FileText,
+          title: search ? 'Sin resultados para esa búsqueda' : 'Sin cotizaciones registradas',
+          hint: search ? undefined : 'Crea tu primera cotización para enviarla a un cliente',
+          cta: search ? undefined : (
+            <Link href="/dashboard/cotizaciones/nueva">
+              <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Nueva cotización
+              </Button>
+            </Link>
+          ),
+        }}
+        headerActions={
+          <Link href="/dashboard/cotizaciones/nueva">
+            <Button className="bg-teal-600 hover:bg-teal-700">
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva cotización
+            </Button>
+          </Link>
+        }
+      />
 
       {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
       <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>

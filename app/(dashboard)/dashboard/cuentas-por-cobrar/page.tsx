@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  Loader2, AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Calendar, Plus, Archive,
+  AlertTriangle, CheckCircle, Clock, DollarSign,
+  X, Wallet, Loader2, Archive, Wallet2,
 } from 'lucide-react';
+import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 interface Cuenta {
   id:                   number;
@@ -43,23 +45,17 @@ const METODOS = [
   { value: 'otro',           label: 'Otro' },
 ];
 
-function fmtDOP(centavos: number): string {
-  return `RD$${(centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function fmtFecha(iso: string): string {
-  return new Date(iso).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
 // ─── Componente principal ──────────────────────────────────────────────────────
 
 export default function CuentasPorCobrarPage() {
   const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  const [filtro, setFiltro]     = useState<'todas' | 'vencidas'>('todas');
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({ tipo: 'todas' });
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
+
+  const filtro = (filterValues.tipo as 'todas' | 'vencidas') || 'todas';
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -80,6 +76,80 @@ export default function CuentasPorCobrarPage() {
   }, [filtro]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
+    {
+      id: 'encf',
+      header: 'e-NCF',
+      render: c => (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
+            {c.encf}
+          </Link>
+          {isHistorica(c) && (
+            <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+              histórica
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'cliente',
+      header: 'Cliente',
+      render: c => (
+        <div className="max-w-[220px]">
+          <p className="text-sm text-gray-900 truncate">{c.razonSocialComprador ?? 'Consumidor Final'}</p>
+          {c.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{c.rncComprador}</p>}
+        </div>
+      ),
+    },
+    {
+      id: 'fechaEmision',
+      header: 'Emisión',
+      visibleAt: 'md',
+      render: c => <span className="text-xs text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
+    },
+    {
+      id: 'vence',
+      header: 'Vence',
+      visibleAt: 'lg',
+      render: c => c.fechaLimitePago ? (
+        <div>
+          <p className={`text-xs ${c.vencida ? 'text-red-700 font-medium' : 'text-gray-700'}`}>
+            {fmtFechaCorta(c.fechaLimitePago)}
+          </p>
+          {c.vencida && (
+            <p className="text-[11px] text-red-600">{c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida</p>
+          )}
+        </div>
+      ) : <span className="text-gray-400 text-xs">—</span>,
+    },
+    {
+      id: 'total',
+      header: 'Total',
+      align: 'right',
+      visibleAt: 'md',
+      render: c => <span className="text-xs text-gray-600 whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
+    },
+    {
+      id: 'pagado',
+      header: 'Pagado',
+      align: 'right',
+      visibleAt: 'lg',
+      render: c => <span className="text-xs text-emerald-700 whitespace-nowrap">{fmtDOP(c.pagado)}</span>,
+    },
+    {
+      id: 'saldo',
+      header: 'Saldo',
+      align: 'right',
+      render: c => <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>,
+    },
+  ], []);
+
+  const rowActions = (c: Cuenta): RowAction[] => [
+    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c) },
+  ];
 
   return (
     <section className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
@@ -131,95 +201,35 @@ export default function CuentasPorCobrarPage() {
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="flex gap-2">
-        <FilterPill active={filtro === 'todas'}    onClick={() => setFiltro('todas')}>Todas</FilterPill>
-        <FilterPill active={filtro === 'vencidas'} onClick={() => setFiltro('vencidas')}>Vencidas</FilterPill>
-      </div>
-
-      {/* Tabla */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
-          </div>
-        ) : error ? (
-          <div className="p-6 text-center text-red-600 text-sm">{error}</div>
-        ) : !data || data.cuentas.length === 0 ? (
-          <div className="p-12 text-center text-gray-400">
-            <CheckCircle className="h-12 w-12 mx-auto mb-3 text-emerald-200" />
-            <p className="text-sm font-medium text-gray-700">Sin cuentas por cobrar</p>
-            <p className="text-xs mt-1">
-              {filtro === 'vencidas'
-                ? 'Ninguna factura está vencida actualmente.'
-                : 'Todas las facturas a crédito están saldadas.'}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                <tr>
-                  <th className="px-4 py-2.5 text-left">e-NCF</th>
-                  <th className="px-4 py-2.5 text-left">Cliente</th>
-                  <th className="px-4 py-2.5 text-left">Emisión</th>
-                  <th className="px-4 py-2.5 text-left">Vence</th>
-                  <th className="px-4 py-2.5 text-right">Total</th>
-                  <th className="px-4 py-2.5 text-right">Pagado</th>
-                  <th className="px-4 py-2.5 text-right">Saldo</th>
-                  <th className="px-4 py-2.5 text-center">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {data.cuentas.map(c => (
-                  <tr key={c.id} className={c.vencida ? 'bg-red-50/50 hover:bg-red-50' : 'hover:bg-gray-50'}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-medium">
-                          {c.encf}
-                        </Link>
-                        {isHistorica(c) && (
-                          <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
-                            histórica
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-gray-900">{c.razonSocialComprador ?? 'Consumidor Final'}</p>
-                      {c.rncComprador && <p className="text-xs text-gray-400">{c.rncComprador}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{fmtFecha(c.fechaEmision)}</td>
-                    <td className="px-4 py-3">
-                      {c.fechaLimitePago ? (
-                        <div>
-                          <p className={c.vencida ? 'text-red-700 font-medium' : 'text-gray-700'}>
-                            {fmtFecha(c.fechaLimitePago)}
-                          </p>
-                          {c.vencida && (
-                            <p className="text-xs text-red-600">{c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida</p>
-                          )}
-                        </div>
-                      ) : <span className="text-gray-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-700">{fmtDOP(c.montoTotal)}</td>
-                    <td className="px-4 py-3 text-right text-emerald-700">{fmtDOP(c.pagado)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-gray-900">{fmtDOP(c.saldo)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => setPagoModal(c)}
-                        className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium rounded transition-colors"
-                      >
-                        Registrar pago
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Tabla con filtro tipo */}
+      <DataTable<Cuenta>
+        data={data?.cuentas ?? []}
+        loading={loading}
+        error={error}
+        columns={columns}
+        filters={[
+          {
+            type: 'select',
+            id: 'tipo',
+            label: 'Filtro',
+            options: [
+              { value: 'todas',    label: 'Todas' },
+              { value: 'vencidas', label: 'Vencidas' },
+            ],
+            placeholder: 'Todas',
+          },
+        ]}
+        filterValues={filterValues}
+        onFilterChange={setFilterValues}
+        rowActions={rowActions}
+        emptyState={{
+          icon: CheckCircle,
+          title: 'Sin cuentas por cobrar',
+          hint: filtro === 'vencidas'
+            ? 'Ninguna factura está vencida actualmente.'
+            : 'Todas las facturas a crédito están saldadas.',
+        }}
+      />
 
       {/* Modal registrar pago */}
       {pagoModal && (
@@ -254,23 +264,6 @@ function StatCard({ icon, label, value, color }: {
       </div>
       <p className={`text-xl font-bold ${color}`}>{value}</p>
     </div>
-  );
-}
-
-function FilterPill({ active, onClick, children }: {
-  active: boolean; onClick: () => void; children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
-        active
-          ? 'bg-teal-600 text-white'
-          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

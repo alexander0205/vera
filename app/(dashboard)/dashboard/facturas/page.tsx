@@ -2,24 +2,37 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Search, Filter, Mail, Ban, FileText,
-  ChevronLeft, ChevronRight,
+  Plus, Download, Mail, Ban, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { fmtDOP, fmtFechaCorta, diasVencido } from '@/lib/utils/format';
 
-const ESTADOS = ['todos', 'BORRADOR', 'EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO', 'ANULADO'];
+// ─── Constantes ───────────────────────────────────────────────────────────────
+
+const ESTADOS = [
+  { value: 'BORRADOR',             label: 'Borrador' },
+  { value: 'EN_PROCESO',           label: 'En proceso' },
+  { value: 'ACEPTADO',             label: 'Aceptado' },
+  { value: 'ACEPTADO_CONDICIONAL', label: 'Aceptado condicional' },
+  { value: 'RECHAZADO',            label: 'Rechazado' },
+  { value: 'ANULADO',              label: 'Anulado' },
+];
 const ESTADO_BADGE: Record<string, string> = {
-  ACEPTADO: 'bg-green-100 text-green-700',
+  ACEPTADO:             'bg-green-100 text-green-700',
   ACEPTADO_CONDICIONAL: 'bg-yellow-100 text-yellow-700',
-  EN_PROCESO: 'bg-blue-100 text-blue-700',
-  RECHAZADO: 'bg-red-100 text-red-700',
-  BORRADOR: 'bg-gray-100 text-gray-600',
-  ANULADO: 'bg-gray-100 text-gray-400 line-through',
+  EN_PROCESO:           'bg-blue-100 text-blue-700',
+  RECHAZADO:            'bg-red-100 text-red-700',
+  BORRADOR:             'bg-gray-100 text-gray-600',
+  ANULADO:              'bg-gray-100 text-gray-400 line-through',
 };
 const TIPO_LABELS: Record<string, string> = {
   '31': 'Créd. Fiscal', '32': 'Consumo', '33': 'Nota Débito',
   '34': 'Nota Crédito', '41': 'Compras', '43': 'Gastos Men.',
   '44': 'Reg. Único', '45': 'Gub.', '46': 'Export.', '47': 'Otros',
+};
+const TIPO_PAGO_LABEL: Record<number, string> = {
+  1: 'Contado', 2: 'Crédito', 3: 'Gratuito', 4: 'Uso o consumo',
 };
 
 interface Doc {
@@ -34,53 +47,30 @@ interface Doc {
   createdAt: string;
 }
 
-const TIPO_PAGO_LABEL: Record<number, string> = {
-  1: 'Contado',
-  2: 'Crédito',
-  3: 'Gratuito',
-  4: 'Uso o consumo',
-};
-
-function fmtDOP(centavos: number): string {
-  return (centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function fmtFecha(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-function diasVencido(fechaLimite: string | null): number {
-  if (!fechaLimite) return 0;
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const limite = new Date(fechaLimite); limite.setHours(0, 0, 0, 0);
-  return Math.floor((hoy.getTime() - limite.getTime()) / 86400000);
-}
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function FacturasPage() {
-  const [docs, setDocs] = useState<Doc[]>([]);
-  const [total, setTotal] = useState(0);
+  const [docs, setDocs]       = useState<Doc[]>([]);
+  const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [estado, setEstado] = useState('todos');
-  const [desde, setDesde] = useState('');
-  const [hasta, setHasta] = useState('');
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage]       = useState(1);
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [emailModal, setEmailModal] = useState<{ id: number; email: string } | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const limit = 50;
+
+  // Reset page on filter change
+  useEffect(() => { setPage(1); }, [filterValues]);
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
     const sp = new URLSearchParams({
       limit: String(limit),
       offset: String((page - 1) * limit),
-      ...(search && { search }),
-      ...(estado !== 'todos' && { estado }),
-      ...(desde && { desde }),
-      ...(hasta && { hasta }),
+      ...(filterValues.q     && { search: filterValues.q }),
+      ...(filterValues.estado && { estado: filterValues.estado }),
+      ...(filterValues.fecha_desde && { desde: filterValues.fecha_desde }),
+      ...(filterValues.fecha_hasta && { hasta: filterValues.fecha_hasta }),
     });
     const res = await fetch(`/api/facturas?${sp}`).catch(() => null);
     if (res?.ok) {
@@ -89,27 +79,19 @@ export default function FacturasPage() {
       setTotal(data.total ?? data.length);
     }
     setLoading(false);
-  }, [search, estado, desde, hasta, page]);
+  }, [filterValues, page]);
 
   useEffect(() => { fetchDocs(); }, [fetchDocs]);
 
-  function toggleSelect(id: number) {
-    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
-  function toggleAll() {
-    setSelected(s => s.size === docs.length ? new Set() : new Set(docs.map(d => d.id)));
-  }
-
-  async function bulkAnular() {
-    if (!confirm(`¿Anular ${selected.size} comprobante(s)?`)) return;
+  async function bulkAnular(ids: (string | number)[]) {
+    if (!confirm(`¿Anular ${ids.length} comprobante(s)?`)) return;
     const res = await fetch('/api/facturas/bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'anular', ids: [...selected] }),
+      body: JSON.stringify({ action: 'anular', ids }),
     });
     if (res.ok) {
-      toast.success(`${selected.size} comprobante(s) anulados`);
-      setSelected(new Set());
+      toast.success(`${ids.length} comprobante(s) anulados`);
       fetchDocs();
     } else {
       toast.error('Error al anular');
@@ -118,9 +100,9 @@ export default function FacturasPage() {
 
   function exportCsv() {
     const sp = new URLSearchParams({
-      ...(estado !== 'todos' && { estado }),
-      ...(desde && { desde }),
-      ...(hasta && { hasta }),
+      ...(filterValues.estado && { estado: filterValues.estado }),
+      ...(filterValues.fecha_desde && { desde: filterValues.fecha_desde }),
+      ...(filterValues.fecha_hasta && { hasta: filterValues.fecha_hasta }),
     });
     window.location.href = `/api/facturas/export?${sp}`;
   }
@@ -143,247 +125,181 @@ export default function FacturasPage() {
     setEmailLoading(false);
   }
 
-  const totalPages = Math.ceil(total / limit);
+  // ─── Columns ────────────────────────────────────────────────────────────────
+
+  const columns: DataTableColumn<Doc>[] = [
+    {
+      id: 'encf',
+      header: 'e-NCF / Tipo',
+      sortable: true,
+      render: doc => (
+        <div>
+          <Link href={`/dashboard/facturas/${doc.id}`} className="font-mono text-xs font-medium text-teal-700 hover:underline">
+            {doc.encf}
+          </Link>
+          <p className="text-[11px] text-gray-400 mt-0.5">{TIPO_LABELS[doc.tipoEcf] ?? doc.tipoEcf}</p>
+        </div>
+      ),
+    },
+    {
+      id: 'cliente',
+      header: 'Cliente / RNC',
+      sortable: true,
+      sortAccessor: doc => doc.razonSocialComprador ?? '',
+      render: doc => (
+        <div className="max-w-[200px]">
+          <p className="text-sm text-gray-900 truncate">{doc.razonSocialComprador ?? 'Consumidor Final'}</p>
+          {doc.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{doc.rncComprador}</p>}
+        </div>
+      ),
+    },
+    {
+      id: 'fechaEmision',
+      header: 'Emisión',
+      visibleAt: 'md',
+      sortable: true,
+      sortAccessor: doc => doc.fechaEmision,
+      render: doc => <span className="text-xs text-gray-600">{fmtFechaCorta(doc.fechaEmision)}</span>,
+    },
+    {
+      id: 'pagoVence',
+      header: 'Pago / Vence',
+      visibleAt: 'lg',
+      render: doc => {
+        const esCredito = doc.tipoPago === 2;
+        const dias = diasVencido(doc.fechaLimitePago);
+        const saldo = doc.montoTotal - (doc.pagado ?? 0);
+        const vencida = esCredito && saldo > 0 && dias > 0 && ['ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'].includes(doc.estado);
+        return (
+          <div>
+            <p className={`text-xs font-medium ${esCredito ? 'text-amber-700' : 'text-gray-600'}`}>
+              {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
+            </p>
+            {esCredito && doc.fechaLimitePago && (
+              <p className={`text-[11px] mt-0.5 ${vencida ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                {fmtFechaCorta(doc.fechaLimitePago)}
+                {vencida && ` · ${dias}d vencida`}
+              </p>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'subtotal',
+      header: 'Subtotal',
+      visibleAt: 'xl',
+      align: 'right',
+      sortable: true,
+      sortAccessor: doc => doc.montoTotal - doc.totalItbis,
+      render: doc => <span className="text-xs text-gray-600 whitespace-nowrap">{fmtDOP(doc.montoTotal - doc.totalItbis)}</span>,
+    },
+    {
+      id: 'itbis',
+      header: 'ITBIS',
+      visibleAt: 'xl',
+      align: 'right',
+      render: doc => <span className="text-xs text-gray-600 whitespace-nowrap">{doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : '—'}</span>,
+    },
+    {
+      id: 'total',
+      header: 'Total',
+      align: 'right',
+      sortable: true,
+      sortAccessor: doc => doc.montoTotal,
+      render: doc => <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{fmtDOP(doc.montoTotal)}</span>,
+    },
+    {
+      id: 'saldo',
+      header: 'Saldo',
+      visibleAt: 'lg',
+      align: 'right',
+      render: doc => {
+        const esCredito = doc.tipoPago === 2;
+        const saldo = doc.montoTotal - (doc.pagado ?? 0);
+        const dias = diasVencido(doc.fechaLimitePago);
+        const vencida = esCredito && saldo > 0 && dias > 0;
+        if (!esCredito) return <span className="text-xs text-gray-300">—</span>;
+        if (saldo === 0) return <span className="text-xs text-emerald-600 font-medium">Pagada</span>;
+        return (
+          <div className="text-right">
+            <p className={`text-sm font-medium ${vencida ? 'text-red-600' : 'text-gray-900'}`}>{fmtDOP(saldo)}</p>
+            {doc.pagado > 0 && <p className="text-[10px] text-emerald-600">+{fmtDOP(doc.pagado)} pagado</p>}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'estado',
+      header: 'Estado',
+      align: 'center',
+      render: doc => (
+        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600'}`}>
+          {doc.estado}
+        </span>
+      ),
+    },
+  ];
+
+  const rowActions = (doc: Doc): RowAction[] => {
+    if (doc.estado === 'BORRADOR') {
+      // Para borradores no es ícono — usamos un link "Editar" inline. Lo emulamos via row action.
+      return [
+        { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
+      ];
+    }
+    return [
+      { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.id}` },
+      { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
+    ];
+  };
 
   return (
-    <div className="p-4 sm:p-6 space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl font-bold text-gray-900">Facturas</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={exportCsv}
-            className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700">
-            <Download className="h-4 w-4" /> CSV
-          </button>
-          <Link href="/dashboard/facturas/nueva"
-            className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium">
-            <Plus className="h-4 w-4" /> Nueva Factura
-          </Link>
-        </div>
-      </div>
-
-      {/* Search + Filters */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Buscar por e-NCF o cliente..."
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
-        </div>
-        <select value={estado} onChange={e => { setEstado(e.target.value); setPage(1); }}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
-          {ESTADOS.map(e => <option key={e} value={e}>{e === 'todos' ? 'Todos los estados' : e}</option>)}
-        </select>
-        <button onClick={() => setShowFilters(f => !f)}
-          className={`flex items-center gap-1.5 text-sm border px-3 py-2 rounded-lg ${showFilters ? 'bg-teal-50 border-teal-300 text-teal-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-          <Filter className="h-4 w-4" /> Fechas
-        </button>
-      </div>
-
-      {showFilters && (
-        <div className="flex gap-3 items-center flex-wrap">
-          <label className="text-sm text-gray-600">Desde:</label>
-          <input type="date" value={desde} onChange={e => { setDesde(e.target.value); setPage(1); }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-          <label className="text-sm text-gray-600">Hasta:</label>
-          <input type="date" value={hasta} onChange={e => { setHasta(e.target.value); setPage(1); }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-          {(desde || hasta) && (
-            <button onClick={() => { setDesde(''); setHasta(''); }}
-              className="text-sm text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100">
-              Limpiar
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Bulk actions bar */}
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2">
-          <span className="text-sm font-medium text-teal-800">{selected.size} seleccionado(s)</span>
-          <button onClick={bulkAnular}
-            className="flex items-center gap-1 text-sm text-red-600 hover:text-red-700 border border-red-200 px-3 py-1 rounded-lg hover:bg-red-50">
-            <Ban className="h-3.5 w-3.5" /> Anular seleccionados
-          </button>
-          <button onClick={() => setSelected(new Set())}
-            className="text-sm text-gray-500 hover:text-gray-700 ml-auto">
-            Cancelar
-          </button>
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {loading ? (
-          <div className="py-16 text-center text-sm text-gray-400">Cargando...</div>
-        ) : docs.length === 0 ? (
-          <div className="py-16 text-center">
-            <FileText className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No se encontraron comprobantes</p>
-            <Link href="/dashboard/facturas/nueva"
-              className="inline-flex items-center gap-1 mt-4 text-sm text-teal-600 hover:underline">
+    <section className="p-4 sm:p-6 space-y-4">
+      <DataTable<Doc>
+        data={docs}
+        loading={loading}
+        columns={columns}
+        title="Facturas"
+        filters={[
+          { type: 'search',    id: 'q',      placeholder: 'Buscar por e-NCF o cliente…' },
+          { type: 'select',    id: 'estado', label: 'Todos los estados', options: ESTADOS },
+          { type: 'daterange', id: 'fecha',  label: 'Fechas' },
+        ]}
+        filterValues={filterValues}
+        onFilterChange={setFilterValues}
+        bulkActions={[
+          { label: 'Anular seleccionados', icon: Ban, variant: 'danger', onClick: ids => bulkAnular(ids) },
+        ]}
+        rowActions={rowActions}
+        pagination={{
+          page,
+          pageSize: limit,
+          total,
+          onPageChange: setPage,
+        }}
+        emptyState={{
+          icon: FileText,
+          title: 'No se encontraron comprobantes',
+          cta: (
+            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-teal-600 hover:underline">
               <Plus className="h-4 w-4" /> Emitir primer comprobante
             </Link>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="w-10 px-3 py-3">
-                    <input type="checkbox" checked={selected.size === docs.length && docs.length > 0}
-                      onChange={toggleAll}
-                      className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
-                  </th>
-                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">e-NCF / Tipo</th>
-                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Cliente / RNC</th>
-                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Emisión</th>
-                  <th className="text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Pago / Vence</th>
-                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">Subtotal</th>
-                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell">ITBIS</th>
-                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</th>
-                  <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide hidden lg:table-cell">Saldo</th>
-                  <th className="text-center px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Estado</th>
-                  <th className="px-3 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {docs.map(doc => {
-                  const subtotal = doc.montoTotal - doc.totalItbis;
-                  const saldo    = doc.montoTotal - (doc.pagado ?? 0);
-                  const esCredito = doc.tipoPago === 2;
-                  const dias = diasVencido(doc.fechaLimitePago);
-                  const vencida = esCredito && saldo > 0 && dias > 0
-                    && (doc.estado === 'ACEPTADO' || doc.estado === 'ACEPTADO_CONDICIONAL' || doc.estado === 'EN_PROCESO' || doc.estado === 'HISTORICA');
-
-                  return (
-                  <tr key={doc.id} className={`hover:bg-gray-50 transition-colors ${selected.has(doc.id) ? 'bg-teal-50/50' : ''}`}>
-                    <td className="px-3 py-3">
-                      <input type="checkbox" checked={selected.has(doc.id)} onChange={() => toggleSelect(doc.id)}
-                        className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
-                    </td>
-                    {/* e-NCF + tipo */}
-                    <td className="px-3 py-3">
-                      <Link href={`/dashboard/facturas/${doc.id}`}
-                        className="font-mono text-xs font-medium text-teal-700 hover:underline block truncate max-w-[140px]">
-                        {doc.encf}
-                      </Link>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{TIPO_LABELS[doc.tipoEcf] ?? doc.tipoEcf}</p>
-                    </td>
-                    {/* Cliente + RNC */}
-                    <td className="px-3 py-3">
-                      <p className="text-sm text-gray-900 truncate max-w-[200px]">
-                        {doc.razonSocialComprador ?? 'Consumidor Final'}
-                      </p>
-                      {doc.rncComprador && (
-                        <p className="text-[11px] text-gray-400 font-mono">{doc.rncComprador}</p>
-                      )}
-                    </td>
-                    {/* Fecha emisión */}
-                    <td className="px-3 py-3 text-xs text-gray-600 hidden md:table-cell whitespace-nowrap">
-                      {fmtFecha(doc.fechaEmision)}
-                    </td>
-                    {/* Pago / Vence */}
-                    <td className="px-3 py-3 hidden lg:table-cell">
-                      <p className={`text-xs font-medium ${esCredito ? 'text-amber-700' : 'text-gray-600'}`}>
-                        {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
-                      </p>
-                      {esCredito && doc.fechaLimitePago && (
-                        <p className={`text-[11px] mt-0.5 ${vencida ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
-                          {fmtFecha(doc.fechaLimitePago)}
-                          {vencida && ` · ${dias}d vencida`}
-                        </p>
-                      )}
-                    </td>
-                    {/* Subtotal */}
-                    <td className="px-3 py-3 text-right text-xs text-gray-600 hidden xl:table-cell whitespace-nowrap">
-                      {fmtDOP(subtotal)}
-                    </td>
-                    {/* ITBIS */}
-                    <td className="px-3 py-3 text-right text-xs text-gray-600 hidden xl:table-cell whitespace-nowrap">
-                      {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : '—'}
-                    </td>
-                    {/* Total */}
-                    <td className="px-3 py-3 text-right font-semibold text-gray-900 text-sm whitespace-nowrap">
-                      {fmtDOP(doc.montoTotal)}
-                    </td>
-                    {/* Saldo */}
-                    <td className="px-3 py-3 text-right hidden lg:table-cell whitespace-nowrap">
-                      {esCredito ? (
-                        saldo === 0 ? (
-                          <span className="text-xs text-emerald-600 font-medium">Pagada</span>
-                        ) : (
-                          <div>
-                            <p className={`text-sm font-medium ${vencida ? 'text-red-600' : 'text-gray-900'}`}>
-                              {fmtDOP(saldo)}
-                            </p>
-                            {doc.pagado > 0 && (
-                              <p className="text-[10px] text-emerald-600">+{fmtDOP(doc.pagado)} pagado</p>
-                            )}
-                          </div>
-                        )
-                      ) : (
-                        <span className="text-xs text-gray-300">—</span>
-                      )}
-                    </td>
-                    {/* Estado */}
-                    <td className="px-3 py-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600'}`}>
-                        {doc.estado}
-                      </span>
-                    </td>
-                    {/* Acciones */}
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        {doc.estado === 'BORRADOR' ? (
-                          <Link
-                            href={`/dashboard/facturas/${doc.id}/editar`}
-                            className="px-2 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
-                            title="Continuar editando borrador"
-                          >
-                            Editar
-                          </Link>
-                        ) : (
-                          <Link href={`/api/pdf/factura/${doc.id}`} target="_blank"
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Ver PDF">
-                            <FileText className="h-3.5 w-3.5" />
-                          </Link>
-                        )}
-                        <button
-                          onClick={() => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' })}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Enviar por email">
-                          <Mail className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">{total} comprobantes en total</p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40">
-              <ChevronLeft className="h-4 w-4" />
+          ),
+        }}
+        headerActions={
+          <>
+            <button onClick={exportCsv}
+              className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700">
+              <Download className="h-4 w-4" /> CSV
             </button>
-            <span className="text-sm text-gray-700">Página {page} de {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-              className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40">
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+            <Link href="/dashboard/facturas/nueva"
+              className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium">
+              <Plus className="h-4 w-4" /> Nueva Factura
+            </Link>
+          </>
+        }
+      />
 
       {/* Email modal */}
       {emailModal && (
@@ -413,6 +329,6 @@ export default function FacturasPage() {
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

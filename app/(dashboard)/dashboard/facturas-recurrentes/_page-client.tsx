@@ -1,19 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
   RefreshCw, Plus, Trash2, Loader2, AlertTriangle, Pencil, PauseCircle, PlayCircle,
 } from 'lucide-react';
+import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -55,23 +53,6 @@ function estadoBadge(estado: string) {
     default:
       return <Badge variant="outline">{estado}</Badge>;
   }
-}
-
-function formatMonto(centavos: number) {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency: 'DOP',
-    minimumFractionDigits: 2,
-  }).format(centavos / 100);
-}
-
-function formatFecha(dateStr: string) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('es-DO', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -132,129 +113,113 @@ export default function FacturasRecurrentesPage() {
     }
   }
 
+  const columns: DataTableColumn<FacturaRecurrente>[] = useMemo(() => [
+    {
+      id: 'nombre',
+      header: 'Nombre',
+      sortable: true,
+      render: f => (
+        <div className="max-w-[280px]">
+          <p className="font-medium text-sm text-gray-900 truncate">{f.nombre}</p>
+          {f.descripcion && (
+            <p className="text-xs text-gray-500 truncate">{f.descripcion}</p>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'contacto',
+      header: 'Contacto',
+      visibleAt: 'md',
+      render: f => f.clienteRazonSocial
+        ? <span className="text-sm text-gray-700">{f.clienteRazonSocial}</span>
+        : <span className="text-sm text-gray-400 italic">Sin contacto</span>,
+    },
+    {
+      id: 'frecuencia',
+      header: 'Frecuencia',
+      visibleAt: 'lg',
+      render: f => <span className="text-sm">{FRECUENCIA_LABEL[f.frecuencia] ?? f.frecuencia}</span>,
+    },
+    {
+      id: 'proximaEmision',
+      header: 'Próxima emisión',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: f => f.proximaEmision,
+      render: f => <span className="text-sm text-gray-600">{fmtFechaCorta(f.proximaEmision)}</span>,
+    },
+    {
+      id: 'estado',
+      header: 'Estado',
+      render: f => estadoBadge(f.estado),
+    },
+    {
+      id: 'emitidas',
+      header: 'Emitidas',
+      align: 'center',
+      visibleAt: 'md',
+      render: f => <span className="text-sm text-gray-600">{f.facturasEmitidas}</span>,
+    },
+    {
+      id: 'total',
+      header: 'Total estimado',
+      align: 'right',
+      sortable: true,
+      sortAccessor: f => f.totalEstimado,
+      render: f => <span className="font-medium text-sm whitespace-nowrap">{fmtDOP(f.totalEstimado)}</span>,
+    },
+  ], []);
+
+  const rowActions = (f: FacturaRecurrente): RowAction[] => {
+    const actions: RowAction[] = [
+      { icon: Pencil, title: 'Editar', href: `/dashboard/facturas-recurrentes/${f.id}/editar` },
+    ];
+    if (f.estado !== 'finalizada') {
+      const isToggling = toggling === f.id;
+      actions.push({
+        icon:  isToggling ? Loader2 : (f.estado === 'activa' ? PauseCircle : PlayCircle),
+        title: f.estado === 'activa' ? 'Pausar' : 'Reanudar',
+        onClick: () => handleToggleEstado(f),
+      });
+    }
+    actions.push({
+      icon: Trash2, title: 'Eliminar', variant: 'danger',
+      onClick: () => { setDeleteTarget(f); setOpError(null); },
+    });
+    return actions;
+  };
+
   return (
     <section className="bg-[#eef0f7] min-h-full p-6 space-y-6">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Facturas recurrentes</h1>
-          <p className="text-sm text-gray-500 mt-1">Automatiza el ciclo de facturación de tus clientes</p>
-        </div>
-        <Link href="/dashboard/facturas-recurrentes/nueva">
-          <Button className="bg-teal-600 hover:bg-teal-700">
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva factura recurrente
-          </Button>
-        </Link>
-      </div>
-
-      {/* Tabla */}
-      <Card className="bg-white">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
-            {loading
-              ? 'Cargando…'
-              : `${facturas.length} factura${facturas.length !== 1 ? 's' : ''} recurrente${facturas.length !== 1 ? 's' : ''}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
-          ) : facturas.length === 0 ? (
-            <div className="text-center py-16">
-              <RefreshCw className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">Sin facturas recurrentes</p>
-              <p className="text-sm text-gray-400 mt-1">
-                Configura una factura recurrente para automatizar tu facturación
-              </p>
-              <Link href="/dashboard/facturas-recurrentes/nueva">
-                <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm">
-                  <Plus className="h-4 w-4 mr-1" /> Nueva factura recurrente
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Contacto</TableHead>
-                  <TableHead>Frecuencia</TableHead>
-                  <TableHead>Próxima emisión</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-center">Emitidas</TableHead>
-                  <TableHead className="text-right">Total estimado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {facturas.map((f) => (
-                  <TableRow key={f.id} className="hover:bg-gray-50">
-                    <TableCell className="font-medium text-sm text-gray-900 max-w-[260px]">
-                      <div className="truncate">{f.nombre}</div>
-                      {f.descripcion && (
-                        <div className="text-xs text-gray-500 truncate font-normal">{f.descripcion}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-gray-700 text-sm">
-                      {f.clienteRazonSocial ?? <span className="text-gray-400 italic">Sin contacto</span>}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {FRECUENCIA_LABEL[f.frecuencia] ?? f.frecuencia}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      {formatFecha(f.proximaEmision)}
-                    </TableCell>
-                    <TableCell>{estadoBadge(f.estado)}</TableCell>
-                    <TableCell className="text-center text-sm text-gray-600">
-                      {f.facturasEmitidas}
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-sm">
-                      {formatMonto(f.totalEstimado)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Link href={`/dashboard/facturas-recurrentes/${f.id}/editar`}>
-                          <Button variant="ghost" size="sm" title="Editar">
-                            <Pencil className="h-4 w-4 text-gray-500" />
-                          </Button>
-                        </Link>
-                        {f.estado !== 'finalizada' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={toggling === f.id}
-                            onClick={() => handleToggleEstado(f)}
-                            title={f.estado === 'activa' ? 'Pausar' : 'Reanudar'}
-                          >
-                            {toggling === f.id
-                              ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                              : f.estado === 'activa'
-                                ? <PauseCircle className="h-4 w-4 text-amber-500" />
-                                : <PlayCircle className="h-4 w-4 text-teal-600" />}
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => { setDeleteTarget(f); setOpError(null); }}
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable<FacturaRecurrente>
+        data={facturas}
+        loading={loading}
+        columns={columns}
+        title="Facturas recurrentes"
+        description="Automatiza el ciclo de facturación de tus clientes"
+        rowActions={rowActions}
+        emptyState={{
+          icon: RefreshCw,
+          title: 'Sin facturas recurrentes',
+          hint: 'Configura una factura recurrente para automatizar tu facturación',
+          cta: (
+            <Link href="/dashboard/facturas-recurrentes/nueva">
+              <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Nueva factura recurrente
+              </Button>
+            </Link>
+          ),
+        }}
+        headerActions={
+          <Link href="/dashboard/facturas-recurrentes/nueva">
+            <Button className="bg-teal-600 hover:bg-teal-700">
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva factura recurrente
+            </Button>
+          </Link>
+        }
+      />
 
       {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
       <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>

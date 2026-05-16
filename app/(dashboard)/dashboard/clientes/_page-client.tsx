@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,13 +8,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-  Users, Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X,
+  Users, Plus, Pencil, Trash2, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import { formatTelefonoDO } from '@/lib/utils/format';
+import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 
 interface Cliente {
   id: number;
@@ -64,7 +61,7 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
 export default function ClientesPage() {
   const [clientes, setClientes]         = useState<Cliente[]>([]);
   const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState('');
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [showForm, setShowForm]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Cliente | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null);
@@ -72,7 +69,8 @@ export default function ClientesPage() {
   const [saving, setSaving]             = useState(false);
   const [deleting, setDeleting]         = useState(false);
   const [opError, setOpError]           = useState<string | null>(null);
-  const searchTimer                     = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const search = filterValues.q ?? '';
 
   const cargar = useCallback(async (q = '') => {
     setLoading(true);
@@ -85,13 +83,11 @@ export default function ClientesPage() {
     }
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
-
-  function handleSearch(v: string) {
-    setSearch(v);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => cargar(v), 300);
-  }
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => cargar(search), 300);
+    return () => clearTimeout(t);
+  }, [search, cargar]);
 
   function abrirNuevo() {
     setEditTarget(null);
@@ -156,102 +152,69 @@ export default function ClientesPage() {
     }
   }
 
+  const columns: DataTableColumn<Cliente>[] = useMemo(() => [
+    {
+      id: 'razonSocial',
+      header: 'Nombre / Razón Social',
+      sortable: true,
+      render: c => <span className="font-medium text-gray-900">{c.razonSocial}</span>,
+    },
+    {
+      id: 'rnc',
+      header: 'RNC / Cédula',
+      visibleAt: 'md',
+      render: c => <span className="font-mono text-sm text-gray-600">{c.rnc ?? '—'}</span>,
+    },
+    {
+      id: 'email',
+      header: 'Email',
+      visibleAt: 'lg',
+      render: c => <span className="text-sm text-gray-600">{c.email ?? '—'}</span>,
+    },
+    {
+      id: 'telefono',
+      header: 'Teléfono',
+      visibleAt: 'lg',
+      render: c => <span className="text-sm text-gray-600">{c.telefono ?? '—'}</span>,
+    },
+  ], []);
+
+  const rowActions = (c: Cliente): RowAction[] => [
+    { icon: Pencil, title: 'Editar',   onClick: () => abrirEdicion(c) },
+    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(c); setOpError(null); }, variant: 'danger' },
+  ];
+
   return (
     <section className="p-6 space-y-6">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-          <p className="text-sm text-gray-500 mt-1">Directorio de compradores y contactos</p>
-        </div>
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo cliente
-        </Button>
-      </div>
-
-      {/* Búsqueda */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          className="pl-9"
-          placeholder="Buscar por nombre, RNC o email…"
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-        />
-        {search && (
-          <button onClick={() => { setSearch(''); cargar(); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Tabla */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            {loading ? 'Cargando…' : `${clientes.length} cliente${clientes.length !== 1 ? 's' : ''}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
-          ) : clientes.length === 0 ? (
-            <div className="text-center py-16">
-              <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">
-                {search ? 'Sin resultados para esa búsqueda' : 'Sin clientes registrados'}
-              </p>
-              {!search && (
-                <p className="text-sm text-gray-400 mt-1">
-                  Crea tu primer cliente o aparecerán automáticamente al emitir facturas
-                </p>
-              )}
-              {!search && (
-                <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
-                  <Plus className="h-4 w-4 mr-1" />Nuevo cliente
-                </Button>
-              )}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre / Razón Social</TableHead>
-                  <TableHead>RNC / Cédula</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Teléfono</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {clientes.map((c) => (
-                  <TableRow key={c.id} className="cursor-pointer hover:bg-gray-50">
-                    <TableCell className="font-medium">{c.razonSocial}</TableCell>
-                    <TableCell className="font-mono text-sm text-gray-600">{c.rnc ?? '—'}</TableCell>
-                    <TableCell className="text-sm text-gray-600">{c.email ?? '—'}</TableCell>
-                    <TableCell className="text-sm text-gray-600">{c.telefono ?? '—'}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => abrirEdicion(c)}>
-                          <Pencil className="h-4 w-4 text-gray-500" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setDeleteTarget(c); setOpError(null); }}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable<Cliente>
+        data={clientes}
+        loading={loading}
+        columns={columns}
+        title="Clientes"
+        description="Directorio de compradores y contactos"
+        filters={[
+          { type: 'search', id: 'q', placeholder: 'Buscar por nombre, RNC o email…' },
+        ]}
+        filterValues={filterValues}
+        onFilterChange={setFilterValues}
+        rowActions={rowActions}
+        emptyState={{
+          icon: Users,
+          title: search ? 'Sin resultados para esa búsqueda' : 'Sin clientes registrados',
+          hint: search ? undefined : 'Crea tu primer cliente o aparecerán automáticamente al emitir facturas',
+          cta: search ? undefined : (
+            <Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
+              <Plus className="h-4 w-4 mr-1" />Nuevo cliente
+            </Button>
+          ),
+        }}
+        headerActions={
+          <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo cliente
+          </Button>
+        }
+      />
 
       {/* ── Modal: Crear / Editar ─────────────────────────────────────────────── */}
       <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>

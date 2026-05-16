@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,13 +10,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
-  Package, Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X, Check, ChevronDown, ChevronUp,
+  Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 
 interface Producto {
   id: number;
@@ -63,8 +60,7 @@ const EMPTY_FORM = {
 export default function ProductosPage() {
   const [productos, setProductos]       = useState<Producto[]>([]);
   const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState('');
-  const [filterTipo, setFilterTipo]     = useState('');
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [showForm, setShowForm]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Producto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Producto | null>(null);
@@ -73,9 +69,11 @@ export default function ProductosPage() {
   const [deleting, setDeleting]         = useState(false);
   const [opError, setOpError]           = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
-  const searchTimer                     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const cargar = useCallback(async (q = '', tipo = '') => {
+  const search = filterValues.q     ?? '';
+  const tipoFilter = filterValues.tipo ?? '';
+
+  const cargar = useCallback(async (q: string, tipo: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -89,19 +87,11 @@ export default function ProductosPage() {
     }
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
-
-  function handleSearch(v: string) {
-    setSearch(v);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => cargar(v, filterTipo), 300);
-  }
-
-  function handleFilterTipo(v: string) {
-    const t = v === 'todos' ? '' : v;
-    setFilterTipo(t);
-    cargar(search, t);
-  }
+  // Debounce on filter change
+  useEffect(() => {
+    const t = setTimeout(() => cargar(search, tipoFilter), 300);
+    return () => clearTimeout(t);
+  }, [search, tipoFilter, cargar]);
 
   function abrirNuevo() {
     setEditTarget(null);
@@ -144,7 +134,7 @@ export default function ProductosPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando');
       setShowForm(false);
-      cargar(search, filterTipo);
+      cargar(search, tipoFilter);
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error guardando');
     } finally {
@@ -161,7 +151,7 @@ export default function ProductosPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error eliminando');
       setDeleteTarget(null);
-      cargar(search, filterTipo);
+      cargar(search, tipoFilter);
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error eliminando');
     } finally {
@@ -169,132 +159,102 @@ export default function ProductosPage() {
     }
   }
 
+  const columns: DataTableColumn<Producto>[] = useMemo(() => [
+    {
+      id: 'nombre',
+      header: 'Nombre',
+      sortable: true,
+      render: p => (
+        <div>
+          <p className="font-medium text-gray-900">{p.nombre}</p>
+          {p.descripcion && (
+            <p className="text-xs text-gray-400 truncate max-w-[260px]">{p.descripcion}</p>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'referencia',
+      header: 'Referencia',
+      visibleAt: 'lg',
+      render: p => <span className="font-mono text-sm text-gray-500">{p.referencia ?? '—'}</span>,
+    },
+    {
+      id: 'tipo',
+      header: 'Tipo',
+      visibleAt: 'md',
+      render: p => (
+        <Badge variant={p.tipo === 'bien' ? 'secondary' : 'outline'}>
+          {p.tipo === 'bien' ? 'Bien' : 'Servicio'}
+        </Badge>
+      ),
+    },
+    {
+      id: 'precio',
+      header: 'Precio (DOP)',
+      align: 'right',
+      sortable: true,
+      sortAccessor: p => p.precioDOP,
+      render: p => (
+        <span className="font-medium whitespace-nowrap">
+          {p.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+        </span>
+      ),
+    },
+    {
+      id: 'itbis',
+      header: 'ITBIS',
+      visibleAt: 'md',
+      render: p => <span className="text-sm text-gray-600">{TASA_LABELS[p.tasaItbis] ?? p.tasaItbis}</span>,
+    },
+  ], []);
+
+  const rowActions = (p: Producto): RowAction[] => [
+    { icon: Pencil, title: 'Editar',   onClick: () => abrirEdicion(p) },
+    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(p); setOpError(null); }, variant: 'danger' },
+  ];
+
   return (
     <section className="p-6 space-y-6">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Productos y Servicios</h1>
-          <p className="text-sm text-gray-500 mt-1">Catálogo de ítems para tus facturas</p>
-        </div>
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo ítem
-        </Button>
-      </div>
-
-      {/* Búsqueda + filtro */}
-      <div className="flex gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            className="pl-9"
-            placeholder="Buscar por nombre o referencia…"
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-          {search && (
-            <button onClick={() => { setSearch(''); cargar('', filterTipo); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        <Select value={filterTipo || 'todos'} onValueChange={handleFilterTipo}>
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder="Todos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="bien">Bienes</SelectItem>
-            <SelectItem value="servicio">Servicios</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Tabla */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Package className="h-4 w-4" />
-            {loading ? 'Cargando…' : `${productos.length} ítem${productos.length !== 1 ? 's' : ''}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
-          ) : productos.length === 0 ? (
-            <div className="text-center py-16">
-              <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">
-                {search ? 'Sin resultados para esa búsqueda' : 'Sin productos o servicios registrados'}
-              </p>
-              {!search && (
-                <>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Crea tu catálogo para agilizar la emisión de facturas
-                  </p>
-                  <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
-                    <Plus className="h-4 w-4 mr-1" />Nuevo ítem
-                  </Button>
-                </>
-              )}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Referencia</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Precio (DOP)</TableHead>
-                  <TableHead>ITBIS</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productos.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-gray-900">{p.nombre}</p>
-                        {p.descripcion && (
-                          <p className="text-xs text-gray-400 truncate max-w-[200px]">{p.descripcion}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm text-gray-500">{p.referencia ?? '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={p.tipo === 'bien' ? 'secondary' : 'outline'}>
-                        {p.tipo === 'bien' ? 'Bien' : 'Servicio'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {p.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-gray-600">{TASA_LABELS[p.tasaItbis] ?? p.tasaItbis}</span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => abrirEdicion(p)}>
-                          <Pencil className="h-4 w-4 text-gray-500" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setDeleteTarget(p); setOpError(null); }}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable<Producto>
+        data={productos}
+        loading={loading}
+        columns={columns}
+        title="Productos y Servicios"
+        description="Catálogo de ítems para tus facturas"
+        filters={[
+          { type: 'search', id: 'q', placeholder: 'Buscar por nombre o referencia…' },
+          {
+            type: 'select',
+            id: 'tipo',
+            label: 'Todos',
+            options: [
+              { value: 'bien',     label: 'Bienes' },
+              { value: 'servicio', label: 'Servicios' },
+            ],
+            placeholder: 'Todos los tipos',
+          },
+        ]}
+        filterValues={filterValues}
+        onFilterChange={setFilterValues}
+        rowActions={rowActions}
+        emptyState={{
+          icon: Package,
+          title: search ? 'Sin resultados para esa búsqueda' : 'Sin productos o servicios registrados',
+          hint: search ? undefined : 'Crea tu catálogo para agilizar la emisión de facturas',
+          cta: search ? undefined : (
+            <Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
+              <Plus className="h-4 w-4 mr-1" />Nuevo ítem
+            </Button>
+          ),
+        }}
+        headerActions={
+          <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo ítem
+          </Button>
+        }
+      />
 
       {/* ── Modal: Crear / Editar ─────────────────────────────────────────────── */}
       <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) { setShowForm(false); setShowAvanzado(false); } }}>
