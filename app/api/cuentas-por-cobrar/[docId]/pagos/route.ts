@@ -14,7 +14,7 @@ import { getUser, getTeamIdForUser, getPagosDocumento, registrarPago } from '@/l
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { roleHasPermission } from '@/lib/config/roles';
+import { userCan } from '@/lib/config/roles';
 import { logAudit, getIp } from '@/lib/audit';
 
 const METODOS_VALIDOS = ['efectivo', 'transferencia', 'tarjeta', 'cheque', 'deposito', 'otro'] as const;
@@ -67,7 +67,7 @@ export async function POST(
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1);
 
-    if (!roleHasPermission(member?.role, 'facturas:crear')) {
+    if (!userCan(user.platformRole, member?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso para registrar pagos' }, { status: 403 });
     }
 

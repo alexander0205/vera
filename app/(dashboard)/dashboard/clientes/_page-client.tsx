@@ -15,6 +15,7 @@ import {
   Users, Plus, Pencil, Trash2, Search, Loader2, AlertTriangle, X,
 } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
+import { formatTelefonoDO } from '@/lib/utils/format';
 
 interface Cliente {
   id: number;
@@ -41,14 +42,20 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
   form: ClienteForm;
   setForm: React.Dispatch<React.SetStateAction<ClienteForm>>;
 }) {
+  const isTelefono = field === 'telefono';
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
       <Input
         type={type}
         placeholder={placeholder}
+        inputMode={isTelefono ? 'tel' : undefined}
         value={form[field]}
-        onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
+        onChange={(e) => {
+          const raw = e.target.value;
+          const next = isTelefono ? formatTelefonoDO(raw) : raw;
+          setForm((f) => ({ ...f, [field]: next }));
+        }}
       />
     </div>
   );
@@ -99,7 +106,7 @@ export default function ClientesPage() {
       razonSocial: c.razonSocial,
       rnc:       c.rnc       ?? '',
       email:     c.email     ?? '',
-      telefono:  c.telefono  ?? '',
+      telefono:  formatTelefonoDO(c.telefono ?? ''),
       direccion: c.direccion ?? '',
     });
     setOpError(null);

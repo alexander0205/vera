@@ -39,10 +39,12 @@ const TASA_LABELS: Record<string, string> = {
 };
 
 const TASA_ITBIS_OPCIONES = [
-  { value: 'exento', label: 'Ninguno (0%)' },
-  { value: '0.18',   label: 'ITBIS - (18.00%)' },
-  { value: '0.16',   label: 'ITBIS 16% - (16.00%)' },
-  { value: '0',      label: 'ITBIS 0% - (0.00%)' },
+  // 'exento' y '0%' son fiscalmente distintos: exento = fuera del régimen ITBIS;
+  // 0% = grava al 0% (mantiene derecho a crédito). Label refleja la diferencia.
+  { value: 'exento', label: 'Exento (fuera de ITBIS)' },
+  { value: '0',      label: 'ITBIS 0% (gravado al 0%)' },
+  { value: '0.16',   label: 'ITBIS 16%' },
+  { value: '0.18',   label: 'ITBIS 18%' },
 ];
 
 const UNIDADES = ['Unidad', 'Servicio', 'Hora', 'Día', 'Mes', 'Kg', 'Lb', 'Metro', 'Litro', 'Caja', 'Docena'];

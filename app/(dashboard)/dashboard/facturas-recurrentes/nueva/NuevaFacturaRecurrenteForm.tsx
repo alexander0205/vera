@@ -59,10 +59,10 @@ function formatDOP(val: number) {
   return new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', minimumFractionDigits: 2 }).format(val);
 }
 
-/** Calcula la próxima fecha de emisión a partir de la fecha de inicio y la frecuencia */
-function calcularProximaEmision(fechaInicio: string, frecuencia: string): string {
-  if (!fechaInicio) return '';
-  const [y, m, d] = fechaInicio.split('-').map(Number);
+/** Suma un período (según frecuencia) a una fecha YYYY-MM-DD. */
+function sumarPeriodo(fecha: string, frecuencia: string): string {
+  if (!fecha) return '';
+  const [y, m, d] = fecha.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   switch (frecuencia) {
     case 'semanal':    dt.setDate(dt.getDate() + 7); break;
@@ -74,15 +74,36 @@ function calcularProximaEmision(fechaInicio: string, frecuencia: string): string
   return dt.toISOString().slice(0, 10);
 }
 
-/** Calcula las próximas N emisiones después de fechaInicio */
+/**
+ * Próxima emisión real: si fechaInicio es futuro, es exactamente fechaInicio.
+ * Si ya pasó, suma períodos hasta superar hoy. Esto refleja lo que el cron
+ * realmente emitirá en su próxima corrida.
+ */
+function calcularProximaEmision(fechaInicio: string, frecuencia: string): string {
+  if (!fechaInicio) return '';
+  const hoy = new Date().toISOString().slice(0, 10);
+  if (fechaInicio >= hoy) return fechaInicio;
+  let current = fechaInicio;
+  // safety cap 10000 iteraciones (cubre semanal × 200 años)
+  for (let i = 0; i < 10000 && current < hoy; i++) {
+    current = sumarPeriodo(current, frecuencia);
+    if (!current) break;
+  }
+  return current;
+}
+
+/**
+ * Calcula las próximas N emisiones empezando por la próxima REAL (que puede
+ * ser la propia fechaInicio si aún no ha pasado).
+ */
 function calcularProximasEmisiones(fechaInicio: string, frecuencia: string, count: number): string[] {
   if (!fechaInicio) return [];
   const result: string[] = [];
-  let current = fechaInicio;
+  let current = calcularProximaEmision(fechaInicio, frecuencia);
   for (let i = 0; i < count; i++) {
-    current = calcularProximaEmision(current, frecuencia);
     if (!current) break;
     result.push(current);
+    current = sumarPeriodo(current, frecuencia);
   }
   return result;
 }

@@ -104,18 +104,17 @@ export function ClienteSection({
             onChange={(e) => setTelefonoManual(e.target.value)}
           />
         </div>
-        {!clienteSeleccionado && (
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Email (para envío)</Label>
-            <Input
-              className="mt-1 h-10"
-              type="email"
-              placeholder="facturacion@empresa.com"
-              value={emailManual}
-              onChange={(e) => setEmailManual(e.target.value)}
-            />
-          </div>
-        )}
+        {/* Email siempre visible — si cliente seleccionado sin email, queda editable */}
+        <div>
+          <Label className="text-xs text-gray-600 uppercase tracking-wide">Email (para envío)</Label>
+          <Input
+            className="mt-1 h-10"
+            type="email"
+            placeholder="facturacion@empresa.com"
+            value={emailManual}
+            onChange={(e) => setEmailManual(e.target.value)}
+          />
+        </div>
       </div>
 
       {tipoEcf === '32' && totalDocumento >= 200000 && (

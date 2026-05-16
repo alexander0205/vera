@@ -60,10 +60,12 @@ export async function GET(req: NextRequest) {
         fechaEmision:         ecfDocuments.fechaEmision,
         fechaLimitePago:      ecfDocuments.fechaLimitePago,
         createdAt:            ecfDocuments.createdAt,
-        // Subquery: total pagado (SUM pagos_recibidos) — derivar saldo en frontend
+        // Subquery correlacionada — usar nombre literal de tabla. Drizzle
+        // interpola ${ecfDocuments.id} como parámetro, no como column ref,
+        // causando que todas las filas devolvieran el mismo SUM.
         pagado: sql<number>`coalesce((
           SELECT SUM(monto_centavos) FROM pagos_recibidos
-          WHERE ecf_document_id = ${ecfDocuments.id}
+          WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
         ), 0)`,
       })
       .from(ecfDocuments)

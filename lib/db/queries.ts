@@ -393,9 +393,12 @@ export async function getVentasGenerales(
   const brutas    = Number(ventaRows[0]?.brutas ?? 0);
   const itbis     = Number(ventaRows[0]?.itbis ?? 0);
   const notas     = Number(notaRows[0]?.total ?? 0);
-  const antes     = brutas - notas;
-  const despues   = antes; // Brutas ya incluyen ITBIS; "después de impuestos" = total final
-  const subtotal  = brutas - itbis;
+  // brutas = SUM(monto_total) que YA incluye ITBIS. Re-derivar para que el
+  // display siga la cadena lineal: brutas − NC − itbis = antes_imp; antes_imp + itbis = despues_imp.
+  const netoConItbis = brutas - notas;        // ventas netas (con ITBIS)
+  const antes        = netoConItbis - itbis;  // base imponible (sin ITBIS)
+  const despues      = netoConItbis;          // total final = antes + ITBIS
+  const subtotal     = brutas - itbis;
 
   return {
     desde:        desde.toISOString(),
@@ -504,9 +507,12 @@ export async function getCuentasPorCobrar(
       estado:               ecfDocuments.estado,
       montoTotal:           ecfDocuments.montoTotal,
       totalItbis:           ecfDocuments.totalItbis,
+      // Subquery correlacionada: usar nombre literal de tabla en lugar de
+      // ${ecfDocuments.id} para evitar que Drizzle lo trate como parámetro
+      // (caso real: todos los rows devolvían el mismo SUM del primer id).
       pagado: sql<number>`coalesce((
         SELECT SUM(monto_centavos) FROM pagos_recibidos
-        WHERE ecf_document_id = ${ecfDocuments.id}
+        WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
       ), 0)`,
     })
     .from(ecfDocuments)

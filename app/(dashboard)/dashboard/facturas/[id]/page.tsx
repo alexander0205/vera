@@ -882,6 +882,8 @@ export default function FacturaDetallePage() {
       </div>
 
       {/* ─── Bottom action bar ────────────────────────────────────────────── */}
+      {/* Vista detalle = read-only. Solo borrador habilita acciones de edición.
+          Para facturas emitidas: Volver + Ver PDF + Acciones (imprimir/email). */}
       <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-6 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           type="button"
@@ -889,7 +891,7 @@ export default function FacturaDetallePage() {
           className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
           onClick={() => router.push('/dashboard/facturas')}
         >
-          Cancelar
+          {esBorrador ? 'Cancelar' : 'Volver'}
         </Button>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
@@ -905,7 +907,7 @@ export default function FacturaDetallePage() {
               rel="noreferrer"
             >
               <FileText className="h-4 w-4 mr-1.5" />
-              Vista previa
+              Ver PDF
             </a>
           </Button>
 
@@ -927,7 +929,7 @@ export default function FacturaDetallePage() {
                   className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   disabled={esFinal && factura.estado === 'ANULADO'}
                 >
-                  Guardar
+                  Acciones
                   <ChevronDown className="h-3.5 w-3.5 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
@@ -940,7 +942,7 @@ export default function FacturaDetallePage() {
                     className="flex items-center gap-2 cursor-pointer"
                   >
                     <Printer className="h-4 w-4 text-gray-500" />
-                    Guardar e imprimir
+                    Imprimir
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -948,7 +950,7 @@ export default function FacturaDetallePage() {
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <Mail className="h-4 w-4 text-gray-500" />
-                  Guardar y enviar por correo
+                  Enviar por correo
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

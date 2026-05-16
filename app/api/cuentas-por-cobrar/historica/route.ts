@@ -33,7 +33,7 @@ import { getUser, getTeamIdForUser, registrarPago } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { roleHasPermission } from '@/lib/config/roles';
+import { userCan } from '@/lib/config/roles';
 import { logAudit, getIp } from '@/lib/audit';
 
 const schema = z.object({
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1);
 
-    if (!roleHasPermission(member?.role, 'facturas:crear')) {
+    if (!userCan(user.platformRole, member?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
     }
 
@@ -96,7 +96,10 @@ export async function POST(req: NextRequest) {
       montoTotal:           totalCts,
       totalItbis:           0,              // legacy: no separamos ITBIS
       tipoPago:             2,              // crédito → aparece en AR
-      fechaEmision:         new Date(d.fechaEmision),
+      // Parsear YYYY-MM-DD como fecha local (mediodía evita drift TZ negativo).
+      // `new Date('2026-04-01')` se interpreta como UTC midnight → en TZ -4
+      // termina mostrando 31/03. Usar mediodía mantiene la fecha en cualquier TZ.
+      fechaEmision:         new Date(d.fechaEmision + 'T12:00:00'),
       fechaLimitePago:      d.fechaLimitePago,
       notas:                d.notas ?? `Cuenta por cobrar histórica importada por ${user.email}`,
     }).returning();

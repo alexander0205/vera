@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
-import { roleHasPermission, type Permission } from '@/lib/config/roles';
+import { userCan, type Permission } from '@/lib/config/roles';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,10 +113,10 @@ const HREF_PERMISSION: Record<string, Permission> = {
   '/dashboard/impresoras':            'configuracion:ver',
 };
 
-function canAccess(role: string | null | undefined, href: string): boolean {
+function canAccess(role: string | null | undefined, href: string, platformRole?: string | null): boolean {
   const perm = HREF_PERMISSION[href];
   if (!perm) return true; // sin gate explícito → visible para todos
-  return roleHasPermission(role, perm);
+  return userCan(platformRole, role, perm);
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -491,6 +491,8 @@ function Sidebar({
 
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
+  // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
+  // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
   const topItemsVisibles  = TOP_ITEMS.filter(item => canAccess(role, item.href));
   const groupsVisibles    = GROUPS
     .map(g => ({ ...g, children: g.children.filter(c => canAccess(role, c.href)) }))

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
+import { formatTelefonoDO } from '@/lib/utils/format';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,7 +140,7 @@ export default function ConfiguracionPage() {
         setNombreComercial(d.nombreComercial ?? '');
         setRnc(d.rnc ?? '');
         setDireccion(d.direccion ?? '');
-        setTelefono(d.telefono ?? '');
+        setTelefono(formatTelefonoDO(d.telefono ?? ''));
         setSitioWeb(d.sitioWeb ?? '');
         setEmailFacturacion(d.emailFacturacion ?? '');
         setColorPrimario(d.colorPrimario ?? '#1e40af');
@@ -241,7 +242,8 @@ export default function ConfiguracionPage() {
           </div>
           <div className="space-y-1.5">
             <Label>Teléfono</Label>
-            <Input value={telefono} onChange={e => setTelefono(e.target.value)}
+            <Input value={telefono} onChange={e => setTelefono(formatTelefonoDO(e.target.value))}
+              inputMode="tel"
               placeholder="(809) 000-0000" />
           </div>
           <div className="space-y-1.5 md:col-span-2">

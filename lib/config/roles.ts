@@ -163,6 +163,25 @@ export function roleHasPermission(
   return getRole(roleKey)?.permissions.includes(permission) ?? false;
 }
 
+/**
+ * ¿El user puede ejecutar esta acción en el team activo?
+ *
+ * Regla: platform admin (users.platformRole='admin') siempre tiene acceso
+ * a cualquier team y cualquier permiso — no requiere membership. Para el
+ * resto, se chequea el rol del team_member contra el catálogo de permisos.
+ *
+ * Esto evita el bug "Sin permiso" cuando un platform admin accede a un
+ * team donde no tiene fila en team_members.
+ */
+export function userCan(
+  platformRole: string | null | undefined,
+  teamMemberRole: string | null | undefined,
+  permission: Permission,
+): boolean {
+  if (platformRole === 'admin') return true;
+  return roleHasPermission(teamMemberRole, permission);
+}
+
 /** Roles que pueden ser asignados al invitar (excluye 'owner'). */
 export const INVITABLE_ROLES: RoleDef[] = ROLES.filter(r => r.invitable);
 

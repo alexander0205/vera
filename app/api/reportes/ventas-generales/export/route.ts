@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, getVentasGenerales } from '@/lib/db/queries';
-import { roleHasPermission } from '@/lib/config/roles';
+import { userCan } from '@/lib/config/roles';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  if (!roleHasPermission(member?.role, 'reportes:ver')) {
+  if (!userCan(user.platformRole, member?.role, 'reportes:ver')) {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
   }
 
