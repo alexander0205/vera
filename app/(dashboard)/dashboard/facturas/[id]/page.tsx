@@ -14,7 +14,7 @@ import {
   ArrowLeft, Download, FileText, RefreshCw, XCircle,
   Loader2, AlertTriangle, CheckCircle, Clock,
   Printer, Ticket, ChevronDown, Mail, Copy,
-  Package, ChevronUp, Plus, MoreVertical,
+  Package, ChevronUp, Plus, MoreVertical, Send,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ import {
 import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
+import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,16 @@ interface Linea {
   precioUnitarioItem?: number;
   descuentoPct?: number;
   tasaItbis?: string;
+}
+
+interface NcAsociada {
+  id: number;
+  encf: string | null;
+  tipoEcf: string;
+  estado: string;
+  fechaEmision: string;
+  montoTotal: number;
+  montoTotalDOP: string;
 }
 
 interface FacturaDetalle {
@@ -59,6 +70,7 @@ interface FacturaDetalle {
   pieFactura: string | null;
   comentario: string | null;
   lineas: Linea[];
+  ncsAsociadas?: NcAsociada[];
   emisor: {
     razonSocial: string;
     nombreComercial?: string;
@@ -235,6 +247,9 @@ export default function FacturaDetallePage() {
   const [anulando, setAnulando]       = useState(false);
   const [anularError, setAnularError] = useState<string | null>(null);
   const [anularNota, setAnularNota]   = useState<string | null>(null);
+  const [anularTipo, setAnularTipo]   = useState<'01' | '02' | '03' | '04' | '05'>('04');
+  const [anularForce, setAnularForce] = useState(false);
+  const [anularMotivo, setAnularMotivo] = useState('');
 
   const [resumenOpen, setResumenOpen] = useState(true);
 
@@ -242,7 +257,16 @@ export default function FacturaDetallePage() {
   const [emailTo, setEmailTo]         = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
 
+  // ─── Enviar a DGII (para borradores sin eCF) ────────────────────────────────
+  const [showEnviarDgii, setShowEnviarDgii]   = useState(false);
+  const [dgiiTipoEcf, setDgiiTipoEcf]         = useState('32');
+  const [enviandoDgii, setEnviandoDgii]       = useState(false);
+  const [enviandoDgiiError, setEnviandoDgiiError] = useState<string | null>(null);
+
   const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
+
+  // ─── Impresora predeterminada ────────────────────────────────────────────────
+  const { printUrl, printerLabel } = useDefaultPrinter();
 
   // ─── Carga inicial ──────────────────────────────────────────────────────────
 
@@ -293,9 +317,23 @@ export default function FacturaDetallePage() {
     setAnulando(true);
     setAnularError(null);
     try {
-      const res = await fetch(`/api/facturas/${docId}/anular`, { method: 'POST' });
+      const res = await fetch(`/api/facturas/${docId}/anular`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          tipoAnulacion: anularTipo,
+          motivo:        anularMotivo.trim() || undefined,
+          force:         anularForce,
+        }),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error anulando');
+      if (!res.ok) {
+        // Mensaje útil para NCA-03 (pagos)
+        if (data.pagos && !anularForce) {
+          throw new Error(data.mensaje ?? data.error ?? 'Error anulando');
+        }
+        throw new Error(data.error ?? 'Error anulando');
+      }
       setAnularNota(data.nota ?? null);
       setShowAnular(false);
       toast.success('Comprobante anulado');
@@ -329,6 +367,32 @@ export default function FacturaDetallePage() {
       toast.error(e instanceof Error ? e.message : 'Error enviando email');
     } finally {
       setSendingEmail(false);
+    }
+  }
+
+  // ─── Enviar a DGII ──────────────────────────────────────────────────────────
+
+  async function handleEnviarDgii() {
+    setEnviandoDgii(true);
+    setEnviandoDgiiError(null);
+    try {
+      const res = await fetch(`/api/facturas/${docId}/emitir-ecf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipoEcf: dgiiTipoEcf }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEnviandoDgiiError(data.error ?? 'Error enviando a DGII');
+        return;
+      }
+      toast.success(`Comprobante emitido: ${data.encf}`);
+      setShowEnviarDgii(false);
+      await cargar();
+    } catch (e: unknown) {
+      setEnviandoDgiiError(e instanceof Error ? e.message : 'Error de conexión');
+    } finally {
+      setEnviandoDgii(false);
     }
   }
 
@@ -393,7 +457,7 @@ export default function FacturaDetallePage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-mono">
-                {factura.encf}
+                {factura.encf.startsWith('BOR-') ? `Factura #${factura.id}` : factura.encf}
               </h1>
               <EstadoBadge estado={factura.estado} />
             </div>
@@ -431,7 +495,21 @@ export default function FacturaDetallePage() {
                 <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-60" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuContent align="end" className="w-64">
+              {/* Imprimir con impresora predeterminada */}
+              <DropdownMenuItem
+                onSelect={() => {
+                  window.open(printUrl(factura.id), '_blank', 'noreferrer');
+                  toast.info(`Abriendo con: ${printerLabel}`);
+                }}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Printer className="h-4 w-4 text-teal-600" />
+                <div>
+                  <p className="text-sm font-medium">Imprimir (predeterminada)</p>
+                  <p className="text-xs text-gray-400 truncate max-w-[180px]">{printerLabel}</p>
+                </div>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a
                   href={`/api/pdf/factura/${factura.id}`}
@@ -841,43 +919,75 @@ export default function FacturaDetallePage() {
             }}
           />
 
-          {/* Estado DGII card — debajo de Pago */}
-          <EstadoDgiiCard factura={factura} onConsultar={consultarEstado} consultarStatus={pollingStatus} />
+          {/* Estado DGII card — solo cuando hay e-NCF real (no sin-ncf / BOR-) */}
+          {factura.tipoEcf !== 'sin-ncf' && !factura.encf.startsWith('BOR-') && (
+            <EstadoDgiiCard factura={factura} onConsultar={consultarEstado} consultarStatus={pollingStatus} />
+          )}
 
-          {/* Info del comprobante */}
-          <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
-            <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
-              Información del comprobante
-            </h3>
-            <dl className="space-y-2 text-xs">
-              <div className="flex justify-between gap-3">
-                <dt className="text-gray-500">e-NCF</dt>
-                <dd className="font-mono font-semibold text-gray-900 text-right break-all">{factura.encf}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-gray-500">Tipo</dt>
-                <dd className="text-gray-800 text-right">e-{factura.tipoEcf}</dd>
-              </div>
-              {factura.codigoSeguridad && (
+          {/* NCA-20: NCs/débitos asociados — solo si hay alguno */}
+          {factura.ncsAsociadas && factura.ncsAsociadas.length > 0 && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+                NCs / Débitos asociados ({factura.ncsAsociadas.length})
+              </h3>
+              <ul className="space-y-2 text-xs">
+                {factura.ncsAsociadas.map(nc => (
+                  <li key={nc.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 pb-2 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-teal-700 hover:underline truncate block">
+                        {nc.encf ?? `Borrador #${nc.id}`}
+                      </Link>
+                      <div className="text-[10px] text-gray-500 mt-0.5 flex gap-2">
+                        <span>e-{nc.tipoEcf}</span>
+                        <span>·</span>
+                        <span>{nc.estado}</span>
+                        <span>·</span>
+                        <span>{fmtDate(nc.fechaEmision)}</span>
+                      </div>
+                    </div>
+                    <span className="font-mono text-gray-800 shrink-0">RD$ {nc.montoTotalDOP}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Info del comprobante — solo cuando hay e-NCF real */}
+          {!factura.encf.startsWith('BOR-') && factura.tipoEcf !== 'sin-ncf' && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+                Información del comprobante
+              </h3>
+              <dl className="space-y-2 text-xs">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">Código seg.</dt>
-                  <dd className="font-mono font-bold text-teal-700 text-right">{factura.codigoSeguridad}</dd>
+                  <dt className="text-gray-500">e-NCF</dt>
+                  <dd className="font-mono font-semibold text-gray-900 text-right break-all">{factura.encf}</dd>
                 </div>
-              )}
-              {factura.trackId && (
                 <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">Track ID</dt>
-                  <dd className="font-mono text-gray-700 text-[10px] text-right break-all">{factura.trackId}</dd>
+                  <dt className="text-gray-500">Tipo</dt>
+                  <dd className="text-gray-800 text-right">e-{factura.tipoEcf}</dd>
                 </div>
-              )}
-              {factura.ncfModificado && (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">NCF modificado</dt>
-                  <dd className="font-mono text-gray-800 text-right">{factura.ncfModificado}</dd>
-                </div>
-              )}
-            </dl>
-          </section>
+                {factura.codigoSeguridad && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Código seg.</dt>
+                    <dd className="font-mono font-bold text-teal-700 text-right">{factura.codigoSeguridad}</dd>
+                  </div>
+                )}
+                {factura.trackId && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Track ID</dt>
+                    <dd className="font-mono text-gray-700 text-[10px] text-right break-all">{factura.trackId}</dd>
+                  </div>
+                )}
+                {factura.ncfModificado && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">NCF modificado</dt>
+                    <dd className="font-mono text-gray-800 text-right">{factura.ncfModificado}</dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
         </aside>
       </div>
 
@@ -912,15 +1022,26 @@ export default function FacturaDetallePage() {
           </Button>
 
           {esBorrador ? (
-            <Button
-              type="button"
-              className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
-              asChild
-            >
-              <Link href={`/dashboard/facturas/${factura.id}/editar`}>
-                Continuar edición
-              </Link>
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                className="text-teal-700 border-teal-300 hover:bg-teal-50 h-11 sm:h-9 w-full sm:w-auto"
+                asChild
+              >
+                <Link href={`/dashboard/facturas/${factura.id}/editar`}>
+                  Editar borrador
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                onClick={() => { setEnviandoDgiiError(null); setShowEnviarDgii(true); }}
+              >
+                <Send className="h-4 w-4 mr-1.5" />
+                Enviar a DGII
+              </Button>
+            </div>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -976,6 +1097,48 @@ export default function FacturaDetallePage() {
               Vas a anular el comprobante{' '}
               <strong className="font-mono">{factura.encf}</strong>.
             </p>
+
+            {/* NCA-05/06: tipo de anulación (motivo DGII) */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-600">Tipo de anulación</label>
+              <select
+                value={anularTipo}
+                onChange={e => setAnularTipo(e.target.value as typeof anularTipo)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+              >
+                <option value="01">01 — Deterioro de Factura Pre-impresa</option>
+                <option value="02">02 — Errores de Impresión</option>
+                <option value="03">03 — Impresión Defectuosa</option>
+                <option value="04">04 — Cesación de Operaciones</option>
+                <option value="05">05 — Pérdida o Hurto de Talonarios</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-600">Motivo interno (opcional)</label>
+              <textarea
+                value={anularMotivo}
+                onChange={e => setAnularMotivo(e.target.value)}
+                rows={2}
+                maxLength={500}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                placeholder="Notas internas sobre la anulación"
+              />
+            </div>
+
+            {/* NCA-03: si hay pagos, requiere force */}
+            <label className="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={anularForce}
+                onChange={e => setAnularForce(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Forzar anulación aunque haya pagos registrados (revertirá los pagos asociados).
+              </span>
+            </label>
+
             {(factura.estado === 'ACEPTADO' || factura.estado === 'ACEPTADO_CONDICIONAL') && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -1029,6 +1192,67 @@ export default function FacturaDetallePage() {
               {sendingEmail
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
                 : <><Mail className="h-4 w-4 mr-1" />Enviar</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Enviar a DGII */}
+      <Dialog open={showEnviarDgii} onOpenChange={setShowEnviarDgii}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enviar a la DGII</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            {enviandoDgiiError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 flex gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                {enviandoDgiiError}
+              </div>
+            )}
+            <p className="text-sm text-gray-700">
+              Selecciona el tipo de comprobante fiscal para emitir esta factura a la DGII.
+              Se asignará un e-NCF de tu secuencia activa.
+            </p>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-600">Tipo de comprobante (e-CF)</label>
+              <select
+                value={dgiiTipoEcf}
+                onChange={e => setDgiiTipoEcf(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+              >
+                <option value="32">e32 — Factura de Consumo</option>
+                <option value="31">e31 — Crédito Fiscal (empresas con RNC)</option>
+                <option value="44">e44 — Régimen Especial</option>
+                <option value="45">e45 — Gubernamental</option>
+                <option value="46">e46 — Exportaciones</option>
+                <option value="33">e33 — Nota de Débito</option>
+                <option value="34">e34 — Nota de Crédito</option>
+                <option value="41">e41 — Compras</option>
+                <option value="43">e43 — Gastos Menores</option>
+                <option value="47">e47 — Pagos al Exterior</option>
+              </select>
+            </div>
+            <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                Esta acción consume un número de la secuencia activa para el tipo seleccionado
+                y envía el comprobante a la DGII. No se puede deshacer.
+              </span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEnviarDgii(false)} disabled={enviandoDgii}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleEnviarDgii}
+              disabled={enviandoDgii}
+              className="bg-teal-600 hover:bg-teal-700"
+            >
+              {enviandoDgii
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
+                : <><Send className="h-4 w-4 mr-1" />Emitir a DGII</>}
             </Button>
           </DialogFooter>
         </DialogContent>

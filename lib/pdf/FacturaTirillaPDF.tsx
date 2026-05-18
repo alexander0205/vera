@@ -170,6 +170,7 @@ const TIPO_BANNER: Record<string, string> = {
   '45': 'GUBERNAMENTAL',
   '46': 'EXPORTACIONES',
   '47': 'PAGOS AL EXTERIOR',
+  'sin-ncf': 'FACTURA',
 };
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -178,6 +179,7 @@ export function FacturaTirillaPDF({ data }: { data: FacturaPDFData }) {
   const items = data.items ?? [];
   const tipoBanner = TIPO_BANNER[data.tipoEcf] ?? `e-CF TIPO ${data.tipoEcf}`;
   const totalItems = items.reduce((s, i) => s + (i.cantidadItem || 0), 0);
+  const tieneEncf = Boolean(data.encf) && !data.encf.startsWith('BOR-');
 
   // Width 80mm en puntos: 80mm = 226.77pt. height: 'auto' permite tirilla larga.
   return (
@@ -214,7 +216,9 @@ export function FacturaTirillaPDF({ data }: { data: FacturaPDFData }) {
 
         {/* ── Banner del tipo de comprobante ── */}
         <Text style={S.banner}>{tipoBanner}</Text>
-        <Text style={S.companyMeta}>e-NCF: {data.encf}</Text>
+        {tieneEncf && (
+          <Text style={S.companyMeta}>e-NCF: {data.encf}</Text>
+        )}
         <Text style={S.companyMeta}>{data.fechaEmision}</Text>
 
         <View style={S.divider} />
@@ -305,8 +309,9 @@ export function FacturaTirillaPDF({ data }: { data: FacturaPDFData }) {
         )}
 
         <View style={S.divider} />
-        <Text style={[S.textSmall, S.center]}>** Documento electronico **</Text>
-        <Text style={[S.textSmall, S.center]}>Verifique en dgii.gov.do</Text>
+        {tieneEncf && (
+          <Text style={[S.textSmall, S.center]}>Verifique en dgii.gov.do</Text>
+        )}
         <Text style={[S.textSmall, S.center, { marginTop: 4 }]}>
           Generado en www.emitedo.com
         </Text>

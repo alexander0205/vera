@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
   const estado = sp.get('estado') ?? '';
   const desde = sp.get('desde') ?? '';
   const hasta = sp.get('hasta') ?? '';
+  // NCA-22: filtro "conNcs" — facturas con NCs/débitos asociados
+  const conNcs = sp.get('conNcs') === '1' || sp.get('conNcs') === 'true';
   const limit = Math.min(parseInt(sp.get('limit') ?? '50', 10), 200);
   const offset = parseInt(sp.get('offset') ?? '0', 10);
 
@@ -46,6 +48,15 @@ export async function GET(req: NextRequest) {
 
   if (hasta) {
     conditions.push(lte(ecfDocuments.createdAt, new Date(hasta + 'T23:59:59')));
+  }
+
+  // NCA-22: solo facturas con NCs/débitos referenciándolas
+  if (conNcs) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM ecf_documents AS nc
+      WHERE nc.team_id = ${teamId}
+        AND nc.ncf_modificado = ecf_documents.encf
+    )`);
   }
 
   const where = and(...conditions);

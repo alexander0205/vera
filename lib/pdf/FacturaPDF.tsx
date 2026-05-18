@@ -477,9 +477,11 @@ const S = StyleSheet.create({
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function FacturaPDF({ data }: { data: FacturaPDFData }) {
-  const moneda   = data.moneda ?? 'DOP';
-  const itemsFmt = data.items;
-  const totalItems = itemsFmt.reduce((s, i) => s + i.cantidadItem, 0);
+  const moneda      = data.moneda ?? 'DOP';
+  const itemsFmt    = data.items;
+  const totalItems  = itemsFmt.reduce((s, i) => s + i.cantidadItem, 0);
+  // Mostrar NCF solo cuando hay un e-NCF real (no BOR-… ni sin-ncf)
+  const tieneEncf   = Boolean(data.encf) && !data.encf.startsWith('BOR-');
 
   return (
     <Document
@@ -542,13 +544,17 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             )}
           </View>
 
-          {/* Derecha: tipo + NCF */}
+          {/* Derecha: tipo + NCF (solo cuando hay e-NCF real) */}
           <View style={S.headerRight}>
             <Text style={S.tipoNombre}>{data.tipoEcfNombre}</Text>
-            <Text style={S.ncfLabel}>NCF</Text>
-            <Text style={S.ncfValue}>{data.encf}</Text>
-            {data.fechaVencimientoNcf && (
-              <Text style={S.ncfVenc}>Vencimiento NCF: {data.fechaVencimientoNcf}</Text>
+            {tieneEncf && (
+              <>
+                <Text style={S.ncfLabel}>NCF</Text>
+                <Text style={S.ncfValue}>{data.encf}</Text>
+                {data.fechaVencimientoNcf && (
+                  <Text style={S.ncfVenc}>Vencimiento NCF: {data.fechaVencimientoNcf}</Text>
+                )}
+              </>
             )}
           </View>
         </View>
@@ -659,40 +665,45 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           <Text style={S.pieFactura}>{data.pieFactura}</Text>
         )}
 
-        {/* ── Footer estilo DGII ──
-           Row 1: [QR] [Verifique en DGII] [validez right]
-           Row 2 (debajo, alineado bajo QR): Código de Seguridad + Fecha de Firma Digital */}
+        {/* ── Footer ──
+           Solo se muestra el bloque DGII (QR + verificación) cuando el e-CF fue
+           emitido y tiene codigoSeguridad o urlVerificacion.
+           Si la factura no tiene eCF, el footer queda en blanco. */}
         <View style={S.footer} fixed>
-          <View style={S.dgiiFooter}>
-            {/* Izquierda: QR */}
-            {data.qrDataUrl ? (
-              <Image style={S.dgiiQr} src={data.qrDataUrl} />
-            ) : (
-              <View style={S.dgiiQr} />
-            )}
+          {(data.codigoSeguridad || data.qrDataUrl) && (
+            <>
+              <View style={S.dgiiFooter}>
+                {/* Izquierda: QR */}
+                {data.qrDataUrl ? (
+                  <Image style={S.dgiiQr} src={data.qrDataUrl} />
+                ) : (
+                  <View style={S.dgiiQr} />
+                )}
 
-            {/* Centro: bloque verificación URL */}
-            <View style={S.dgiiInfoBlock}>
-              <Text style={S.dgiiLabel}>Verifique este comprobante en el portal de la DGII:</Text>
-              <Text style={S.dgiiUrl}>ecf.dgii.gov.do</Text>
-            </View>
+                {/* Centro: bloque verificación URL */}
+                <View style={S.dgiiInfoBlock}>
+                  <Text style={S.dgiiLabel}>Verifique este comprobante en el portal de la DGII:</Text>
+                  <Text style={S.dgiiUrl}>ecf.dgii.gov.do</Text>
+                </View>
 
-            {/* Derecha: texto validez */}
-            <Text style={S.dgiiRightText}>
-              Este comprobante fiscal electrónico (e-CF) tiene plena validez
-            </Text>
-          </View>
+                {/* Derecha: texto validez */}
+                <Text style={S.dgiiRightText}>
+                  Este comprobante fiscal electrónico (e-CF) tiene plena validez
+                </Text>
+              </View>
 
-          {/* Row 2: Código Seguridad + Fecha Firma debajo del QR */}
-          {(data.codigoSeguridad || data.fechaFirma) && (
-            <View style={S.dgiiSecondaryRow}>
-              {data.codigoSeguridad && (
-                <Text style={S.dgiiCodigoSeguridad}>Código de Seguridad: {data.codigoSeguridad}</Text>
+              {/* Row 2: Código Seguridad + Fecha Firma debajo del QR */}
+              {(data.codigoSeguridad || data.fechaFirma) && (
+                <View style={S.dgiiSecondaryRow}>
+                  {data.codigoSeguridad && (
+                    <Text style={S.dgiiCodigoSeguridad}>Código de Seguridad: {data.codigoSeguridad}</Text>
+                  )}
+                  {data.fechaFirma && (
+                    <Text style={S.dgiiFechaFirma}>Fecha de Firma Digital: {data.fechaFirma}</Text>
+                  )}
+                </View>
               )}
-              {data.fechaFirma && (
-                <Text style={S.dgiiFechaFirma}>Fecha de Firma Digital: {data.fechaFirma}</Text>
-              )}
-            </View>
+            </>
           )}
         </View>
 

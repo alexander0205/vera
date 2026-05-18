@@ -7,6 +7,7 @@ import { Loader2, Plus, Search, X } from 'lucide-react';
 
 export function Autocomplete<T extends { id: number }>({
   placeholder, onSearch, renderOption, onSelect, value, onClear, onCreate, createLabel,
+  onFreeText, freeTextLabel,
 }: {
   placeholder: string;
   onSearch: (q: string) => Promise<T[]>;
@@ -16,6 +17,10 @@ export function Autocomplete<T extends { id: number }>({
   onClear: () => void;
   onCreate?: () => void;
   createLabel?: string;
+  /** Si está definido, permite usar texto libre (sin seleccionar producto). */
+  onFreeText?: (text: string) => void;
+  /** Etiqueta del botón "usar texto libre" cuando no hay match. */
+  freeTextLabel?: string;
 }) {
   const [query, setQuery]       = useState('');
   const [results, setResults]   = useState<T[]>([]);
@@ -80,9 +85,24 @@ export function Autocomplete<T extends { id: number }>({
     setResults([]);
   }
 
+  function commitFreeText() {
+    const q = query.trim();
+    if (q && onFreeText) {
+      onFreeText(q);
+      setQuery('');
+      setOpen(false);
+      setResults([]);
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!open || results.length === 0) {
       if (e.key === 'Escape') setOpen(false);
+      // Enter con texto libre → promover query a nombreItem
+      if (e.key === 'Enter' && query.trim() && onFreeText) {
+        e.preventDefault();
+        commitFreeText();
+      }
       return;
     }
     if (e.key === 'ArrowDown') {
@@ -128,7 +148,18 @@ export function Autocomplete<T extends { id: number }>({
       className="bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-auto"
     >
       {results.length === 0 ? (
-        <div className="px-4 py-3 text-sm text-gray-500">No se han encontrado resultados</div>
+        <>
+          <div className="px-4 py-3 text-sm text-gray-500">No se han encontrado resultados</div>
+          {onFreeText && query.trim() && (
+            <button type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={commitFreeText}
+              className="w-full text-left px-4 py-2.5 text-sm text-teal-700 font-medium hover:bg-teal-50 flex items-center gap-2 border-t border-gray-200">
+              <Plus className="h-4 w-4" />
+              {freeTextLabel ?? `Usar "${query.trim()}" como descripción`}
+            </button>
+          )}
+        </>
       ) : (
         results.map((item, idx) => (
           <button key={item.id} type="button"
@@ -163,6 +194,13 @@ export function Autocomplete<T extends { id: number }>({
           value={query}
           onChange={(e) => handleInput(e.target.value)}
           onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
+          onBlur={() => {
+            // Si onFreeText permitido y user dejó query sin seleccionar, promover.
+            // Delay para que click en option/create se procese primero.
+            if (onFreeText && query.trim()) {
+              setTimeout(commitFreeText, 200);
+            }
+          }}
           onKeyDown={handleKeyDown}
           role="combobox"
           aria-autocomplete="list"

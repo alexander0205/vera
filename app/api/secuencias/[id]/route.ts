@@ -9,15 +9,18 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { sequences } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 
 const updateSchema = z.object({
   hasta:            z.number().int().positive().optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD requerido').optional(),
   nombre:           z.string().min(1).max(200).optional(),
-  pieDeFactura:     z.string().max(2000).optional(),
+  // pieDeFactura y sucursal: cliente envía null al limpiar el input. Aceptar
+  // null para permitir borrar el valor.
+  pieDeFactura:     z.string().max(2000).nullable().optional(),
   preferida:        z.boolean().optional(),
-  sucursal:         z.string().max(100).optional(),
+  sucursal:         z.string().max(100).nullable().optional(),
+  numeracionAutomatica: z.boolean().optional(),
 });
 
 const patchSchema = z.object({
@@ -57,6 +60,18 @@ export async function PATCH(
     .limit(1);
 
   if (!seq) return NextResponse.json({ error: 'Secuencia no encontrada' }, { status: 404 });
+
+  // Si marcamos como preferida en PATCH, dedup otras del mismo tipo
+  if (parsed.data.preferida === true) {
+    await db
+      .update(sequences)
+      .set({ preferida: false, updatedAt: new Date() })
+      .where(and(
+        eq(sequences.teamId, teamId),
+        eq(sequences.tipoEcf, seq.tipoEcf),
+        ne(sequences.id, seqId),
+      ));
+  }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -118,7 +133,7 @@ export async function PUT(
 
   // Verificar propiedad (solo el team propietario puede modificar)
   const [seq] = await db
-    .select({ id: sequences.id, secuenciaActual: sequences.secuenciaActual })
+    .select({ id: sequences.id, secuenciaActual: sequences.secuenciaActual, tipoEcf: sequences.tipoEcf })
     .from(sequences)
     .where(and(eq(sequences.id, seqId), eq(sequences.teamId, teamId)))
     .limit(1);
@@ -155,6 +170,23 @@ export async function PUT(
 
   if (parsed.data.sucursal !== undefined) {
     updates.sucursal = parsed.data.sucursal;
+  }
+
+  if (parsed.data.numeracionAutomatica !== undefined) {
+    updates.numeracionAutomatica = parsed.data.numeracionAutomatica;
+  }
+
+  // Si marcamos esta secuencia como preferida, quitar el flag de las otras
+  // del mismo tipoEcf en el mismo team (solo una preferida por tipo).
+  if (parsed.data.preferida === true) {
+    await db
+      .update(sequences)
+      .set({ preferida: false, updatedAt: new Date() })
+      .where(and(
+        eq(sequences.teamId, teamId),
+        eq(sequences.tipoEcf, seq.tipoEcf),
+        ne(sequences.id, seqId),
+      ));
   }
 
   await db.update(sequences).set(updates).where(eq(sequences.id, seqId));

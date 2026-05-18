@@ -45,7 +45,8 @@ export async function GET(
     cliente = cl ?? null;
   }
 
-  const tipoNombre = TIPOS_ECF[doc.tipoEcf as keyof typeof TIPOS_ECF] ?? `Tipo ${doc.tipoEcf}`;
+  const TIPO_NOMBRE_EXTRA: Record<string, string> = { 'sin-ncf': 'Factura' };
+  const tipoNombre = TIPOS_ECF[doc.tipoEcf as keyof typeof TIPOS_ECF] ?? TIPO_NOMBRE_EXTRA[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`;
   const regla = TIPO_ECF_REGLAS[doc.tipoEcf];
 
   // Lineas / items
@@ -69,6 +70,24 @@ export async function GET(
       // ignore
     }
   }
+
+  // NCA-20: NCs/débitos que referencian este e-NCF (NC tipo 33, débito tipo 34)
+  const ncsAsociadas = doc.encf
+    ? await db
+        .select({
+          id:           ecfDocuments.id,
+          encf:         ecfDocuments.encf,
+          tipoEcf:      ecfDocuments.tipoEcf,
+          estado:       ecfDocuments.estado,
+          fechaEmision: ecfDocuments.fechaEmision,
+          montoTotal:   ecfDocuments.montoTotal,
+        })
+        .from(ecfDocuments)
+        .where(and(
+          eq(ecfDocuments.teamId, teamId),
+          eq(ecfDocuments.ncfModificado, doc.encf),
+        ))
+    : [];
 
   return NextResponse.json({
     id: doc.id,
@@ -140,5 +159,16 @@ export async function GET(
       tieneXmlOriginal: !!doc.xmlOriginal,
       tieneXmlFirmado:  !!doc.xmlFirmado,
     },
+
+    // NCA-20: NCs (tipo 33) y débitos (tipo 34) que referencian este e-NCF
+    ncsAsociadas: ncsAsociadas.map(n => ({
+      id:           n.id,
+      encf:         n.encf,
+      tipoEcf:      n.tipoEcf,
+      estado:       n.estado,
+      fechaEmision: n.fechaEmision?.toISOString?.() ?? n.fechaEmision,
+      montoTotal:   n.montoTotal,
+      montoTotalDOP: ((n.montoTotal ?? 0) / 100).toFixed(2),
+    })),
   });
 }

@@ -15,9 +15,21 @@ const optStr = (max = 500) =>
   z.string().max(max).optional().nullable()
     .transform(v => (typeof v === 'string' && v.trim() === '' ? null : v ?? null));
 
+// RNC dominicano: cédula (11 dígitos) o RNC (9 dígitos)
+const rncSchema = z.preprocess(
+  v => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string()
+    .nullable()
+    .optional()
+    .refine(v => v == null || /^\d{9}$|^\d{11}$/.test(v.trim()), {
+      message: 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)',
+    })
+    .transform(v => (v == null ? null : v.trim())),
+);
+
 const clienteSchema = z.object({
   razonSocial: z.string().min(1, 'El nombre es obligatorio').max(255).transform(v => v.trim()),
-  rnc:         optStr(20),
+  rnc:         rncSchema,
   // email: vacío o null → null; con valor debe ser email válido
   email: z.preprocess(
     v => (typeof v === 'string' && v.trim() === '' ? null : v),
@@ -64,6 +76,27 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
   const { razonSocial, rnc, email, telefono, direccion } = parsed.data;
+
+  // CLI-12: avisar al cliente si ya existe un cliente con el mismo RNC en el team.
+  // Si el caller envía `?force=1` (o `force:true` en body) se permite duplicado.
+  const force = new URL(req.url).searchParams.get('force') === '1'
+    || (body && body.force === true);
+  if (rnc && !force) {
+    const [dup] = await db.select({ id: clients.id, razonSocial: clients.razonSocial })
+      .from(clients)
+      .where(and(eq(clients.teamId, teamId), eq(clients.rnc, rnc)))
+      .limit(1);
+    if (dup) {
+      return NextResponse.json(
+        {
+          error: 'RNC duplicado',
+          duplicado: dup,
+          mensaje: `Ya existe el cliente "${dup.razonSocial}" con el mismo RNC. Reenvía con force=true para crear de todos modos.`,
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   const [created] = await db.insert(clients).values({
     teamId,

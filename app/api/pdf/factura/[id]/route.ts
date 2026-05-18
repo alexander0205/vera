@@ -49,6 +49,7 @@ const TIPO_NOMBRE: Record<string, string> = {
   '45': 'Gubernamental',
   '46': 'Exportaciones',
   '47': 'Pagos al Exterior',
+  'sin-ncf': 'Factura',
 };
 
 const TIPO_PAGO_NOMBRE: Record<number, string> = {

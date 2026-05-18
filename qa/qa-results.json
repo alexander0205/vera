@@ -1,0 +1,1584 @@
+[
+  {
+    "id": "AUTH-01",
+    "status": "pass",
+    "notes": "Login con credenciales correctas - redirect a /dashboard exitoso, dashboard cargado con datos",
+    "screenshot": null,
+    "ts": "2026-05-16T20:02:18Z"
+  },
+  {
+    "id": "AUTH-02",
+    "status": "pass",
+    "notes": "Password incorrecto muestra 'Invalid email or password. Please try again.' en rojo - mensaje generico no leakea info",
+    "screenshot": null,
+    "ts": "2026-05-16T20:03:19Z"
+  },
+  {
+    "id": "AUTH-03",
+    "status": "pass",
+    "notes": "Email inexistente muestra mismo error generico 'Invalid email or password. Please try again.' - no leak info",
+    "screenshot": null,
+    "ts": "2026-05-16T20:03:38Z"
+  },
+  {
+    "id": "AUTH-04",
+    "status": "pass",
+    "notes": "Logout via menu perfil - redirect a /sign-in exitoso, sesion limpiada",
+    "screenshot": null,
+    "ts": "2026-05-16T20:04:33Z"
+  },
+  {
+    "id": "AUTH-05",
+    "status": "pass",
+    "notes": "Acceso /dashboard sin sesion redirige a /sign-in correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T20:04:45Z"
+  },
+  {
+    "id": "AUTH-06",
+    "status": "pass",
+    "notes": "Forgot password acepta email y muestra confirmacion 'Si existe una cuenta con ese email, recibirás un enlace en breve'",
+    "screenshot": null,
+    "ts": "2026-05-16T20:05:17Z"
+  },
+  {
+    "id": "AUTH-07",
+    "status": "pass",
+    "notes": "Sign-up exitoso - crea cuenta y redirige a /pricing?welcome=1 con mensaje de bienvenida. Login automatico OK.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:05:52Z"
+  },
+  {
+    "id": "AUTH-08",
+    "status": "pass",
+    "notes": "Team switcher funciona - cambio a YISRAEL KIDS SCHOOL SRL muestra RNC 131988032 y datos distintos del team",
+    "screenshot": null,
+    "ts": "2026-05-16T20:07:00Z"
+  },
+  {
+    "id": "CLI-01",
+    "status": "pass",
+    "notes": "Crear cliente con RNC 131988032 - autocompleta razon social desde padron DGII: 'YISRAEL KIDS SCHOOL SRL'",
+    "screenshot": null,
+    "ts": "2026-05-16T20:08:40Z"
+  },
+  {
+    "id": "CLI-02",
+    "status": "pass",
+    "notes": "Crear cliente sin RNC (consumidor final) - guardado OK, aparece en listado sin RNC/cedula",
+    "screenshot": null,
+    "ts": "2026-05-16T20:09:20Z"
+  },
+  {
+    "id": "CLI-03",
+    "status": "pass",
+    "notes": "Crear cliente con tel '8095551234' - formato auto aplicado en blur: '(809) 555-1234'. Email guardado OK.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:09:56Z"
+  },
+  {
+    "id": "CLI-04",
+    "status": "pass",
+    "notes": "Sin nombre muestra error 'El nombre / razon social es obligatorio' en rojo",
+    "screenshot": null,
+    "ts": "2026-05-16T20:10:20Z"
+  },
+  {
+    "id": "CLI-05",
+    "status": "pass",
+    "notes": "Editar cliente - cambio email guardado OK y persiste en listado",
+    "screenshot": null,
+    "ts": "2026-05-16T20:11:03Z"
+  },
+  {
+    "id": "CLI-06",
+    "status": "pass",
+    "notes": "Editar tel raw '8094567890' -> formato '(809) 456-7890' aplicado en blur y guardado OK",
+    "screenshot": null,
+    "ts": "2026-05-16T20:11:29Z"
+  },
+  {
+    "id": "CLI-07",
+    "status": "pass",
+    "notes": "Eliminar cliente - confirm modal con 'Si, eliminar', cliente removido del listado OK",
+    "screenshot": null,
+    "ts": "2026-05-16T20:12:09Z"
+  },
+  {
+    "id": "CLI-08",
+    "status": "pass",
+    "notes": "Busqueda por nombre 'QA-CLI03' filtra tabla correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T20:12:21Z"
+  },
+  {
+    "id": "CLI-09",
+    "status": "pass",
+    "notes": "Busqueda por RNC '131988032' filtra tabla a solo YISRAEL KIDS SCHOOL SRL",
+    "screenshot": null,
+    "ts": "2026-05-16T20:12:34Z"
+  },
+  {
+    "id": "CLI-10",
+    "status": "pass",
+    "notes": "Busqueda por email 'test@e2e.local' filtra a 'Cliente Test E2E'",
+    "screenshot": null,
+    "ts": "2026-05-16T20:12:44Z"
+  },
+  {
+    "id": "CLI-11",
+    "status": "pass",
+    "notes": "Cliente con caracteres especiales 'Ñoño & Cía, S.A. / Ü-Test' guardado OK",
+    "screenshot": null,
+    "ts": "2026-05-16T20:13:16Z"
+  },
+  {
+    "id": "CLI-12",
+    "status": "fail",
+    "notes": "RNC duplicado 131988032 PERMITIDO - sistema crea segundo cliente con mismo RNC sin warning/error. Comportamiento: permite duplicados silenciosamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:13:53Z"
+  },
+  {
+    "id": "PROD-01",
+    "status": "pass",
+    "notes": "Crear servicio con ITBIS 18% - guardado OK, aparece en listado con 'ITBIS 18%'",
+    "screenshot": null,
+    "ts": "2026-05-16T20:15:58Z"
+  },
+  {
+    "id": "PROD-02",
+    "status": "pass",
+    "notes": "Crear bien con ITBIS 16% - guardado OK, tipo 'Bien', ITBIS '16%' en listado",
+    "screenshot": null,
+    "ts": "2026-05-16T20:16:53Z"
+  },
+  {
+    "id": "PROD-03",
+    "status": "pass",
+    "notes": "Crear servicio Exento - label 'Exento (fuera de ITBIS)' mostrado correctamente en dropdown (fix #6 OK)",
+    "screenshot": null,
+    "ts": "2026-05-16T20:17:29Z"
+  },
+  {
+    "id": "PROD-04",
+    "status": "pass",
+    "notes": "Tab 'Combo' renderizado como StaticText (no button) - no es clickeable, completamente bloqueado",
+    "screenshot": null,
+    "ts": "2026-05-16T20:17:50Z"
+  },
+  {
+    "id": "PROD-05",
+    "status": "pass",
+    "notes": "Sin nombre muestra error 'El nombre es obligatorio'",
+    "screenshot": null,
+    "ts": "2026-05-16T20:18:15Z"
+  },
+  {
+    "id": "PROD-06",
+    "status": "pass",
+    "notes": "Precio negativo -100 muestra error 'El precio debe ser un numero positivo'",
+    "screenshot": null,
+    "ts": "2026-05-16T20:18:50Z"
+  },
+  {
+    "id": "PROD-07",
+    "status": "pass",
+    "notes": "Crear con referencia 'QA-REF-007' - guardado OK, aparece en columna REFERENCIA",
+    "screenshot": null,
+    "ts": "2026-05-16T20:19:42Z"
+  },
+  {
+    "id": "PROD-12",
+    "status": "pass",
+    "notes": "Toggle 'Mostrar formulario avanzado' expande campos Referencia/SKU y Descripcion",
+    "screenshot": null,
+    "ts": "2026-05-16T20:19:42Z"
+  },
+  {
+    "id": "PROD-08",
+    "status": "pass",
+    "notes": "Editar producto - precio cambiado de 500 a 550, guardado OK y persiste",
+    "screenshot": null,
+    "ts": "2026-05-16T20:20:14Z"
+  },
+  {
+    "id": "PROD-09",
+    "status": "pass",
+    "notes": "Eliminar producto - confirm modal 'Si, eliminar', producto removido correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T20:20:39Z"
+  },
+  {
+    "id": "PROD-10",
+    "status": "pass",
+    "notes": "Busqueda por nombre 'QA-PROD01' filtra tabla correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T20:20:57Z"
+  },
+  {
+    "id": "PROD-11",
+    "status": "pass",
+    "notes": "Filtro por tipo Bienes/Servicios funciona correctamente - Bienes muestra solo bienes, Servicios solo servicios",
+    "screenshot": null,
+    "ts": "2026-05-16T20:21:21Z"
+  },
+  {
+    "id": "EMIT-01",
+    "status": "pass",
+    "notes": "Tipo 31 Credito Fiscal Contado - emitido OK. NCF E310000000035, Estado EN_PROCESO, Track ID asignado, monto 118.00",
+    "screenshot": null,
+    "ts": "2026-05-16T20:24:31Z"
+  },
+  {
+    "id": "EMIT-02",
+    "status": "pass",
+    "notes": "Tipo 31 Credito 30 dias - vencimiento calculado +30d (16/05->15/06), emitido OK, NCF asignado, EN_PROCESO",
+    "screenshot": null,
+    "ts": "2026-05-16T20:25:42Z"
+  },
+  {
+    "id": "EMIT-03",
+    "status": "pass",
+    "notes": "Tipo 32 Consumo <250k - emitido OK sin cliente requerido. NCF E320000000007, Estado ACEPTADO. NOTA: toast error de intento previo aparece simultaneamente (UI bug)",
+    "screenshot": null,
+    "ts": "2026-05-16T20:27:52Z"
+  },
+  {
+    "id": "EMIT-04",
+    "status": "pass",
+    "notes": "Tipo 32 con monto 260000 (>=250k): mensaje 'DOP 250,000+: datos del comprador OBLIGATORIOS' aparece dinamicamente y boton Guardar queda disabled hasta completar datos comprador",
+    "screenshot": null,
+    "ts": "2026-05-16T20:37:28Z"
+  },
+  {
+    "id": "EMIT-05",
+    "status": "fail",
+    "notes": "Tipo 33 Nota Debito: client-side validator bloquea emision con error 'Fecha NCF Modificado: campo requerido'. BUG: schema espera payloadKey 'fechaNCFModificado' pero buildPayload envia 'fechaNcfModificado' (mismatch de case). NCF ref, codigo modificacion y fecha correctamente ingresados en UI.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:46:09Z"
+  },
+  {
+    "id": "EMIT-06",
+    "status": "fail",
+    "notes": "Tipo 34 Nota Credito: mismo BUG que EMIT-05 (payloadKey 'fechaNCFModificado' vs 'fechaNcfModificado'). Ademas: 'Indicador Nota de Credito mayor a 30 dias: campo requerido' - campo FORBIDDEN en schema 34 pero validator lo pide. Ambos errores bloquean emision.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:46:51Z"
+  },
+  {
+    "id": "EMIT-07",
+    "status": "fail",
+    "notes": "Tipo 41 Compras: validator bloquea con 2 errores: (1) 'Tipo de Ingresos no debe estar presente en tipo 41' - form siempre envia tipoIngresos aunque tipo 41 lo prohíbe; (2) 'Indicador Agente de Retencion: requerido en item 1' - campo sin UI en el formulario. Emision bloqueada.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:47:35Z"
+  },
+  {
+    "id": "EMIT-08",
+    "status": "fail",
+    "notes": "Tipo 43 Gastos Menores: validator bloquea con 2 errores: (1) 'Tipo de Ingresos no debe estar presente en tipo 43' - form siempre envia tipoIngresos; (2) 'Monto Descuento del Item: no debe estar presente en tipo 43' - form envia descuentoMonto aunque sea 0. Emision bloqueada.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:48:14Z"
+  },
+  {
+    "id": "EMIT-09",
+    "status": "partial",
+    "notes": "Tipo 44 Regimen Especial: form pasa validacion cliente OK, submit llega al servidor, pero retorna 'Solicitud invalida.' - posiblemente secuencia e44 vencida/invalida o DGII rechaza en CerteCF. NCF E440000001000 mostrado.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:49:01Z"
+  },
+  {
+    "id": "EMIT-10",
+    "status": "partial",
+    "notes": "Tipo 45 Gubernamental: form pasa validacion cliente OK, submit al servidor, retorna 'Solicitud invalida.' - misma causa probable que EMIT-09 (secuencia vencida o DGII rechaza). Form UI se comporta correctamente (requiere RNC comprador).",
+    "screenshot": null,
+    "ts": "2026-05-16T20:49:34Z"
+  },
+  {
+    "id": "EMIT-11",
+    "status": "partial",
+    "notes": "Tipo 46 Exportaciones: form pasa validacion cliente OK (con cliente seleccionado), submit al servidor, retorna 'Solicitud invalida.' - secuencia e46 vencida probablemente. Sin cliente: error 'razon social obligatoria' correcto. Form UI OK.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:50:27Z"
+  },
+  {
+    "id": "EMIT-12",
+    "status": "fail",
+    "notes": "Tipo 47 Pagos Exterior: validator bloquea con multiples errores: (1) 'Tipo de Ingresos no debe estar presente en tipo 47'; (2) 'RNC Comprador no debe estar presente en tipo 47' - form envia rncComprador aunque no aplica; (3) 'Monto Descuento no debe estar presente en tipo 47'. Campos FORBIDDEN enviados por el form. Sin cliente: error 'razon social Beneficiario obligatoria' correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:51:24Z"
+  },
+  {
+    "id": "EMIT-13",
+    "status": "pass",
+    "notes": "Sin items: boton Guardar disabled, mensaje 'Agrega al menos un item con nombre' aparece inline y como toast al intentar submit via form.submit()",
+    "screenshot": null,
+    "ts": "2026-05-16T20:51:56Z"
+  },
+  {
+    "id": "EMIT-14",
+    "status": "pass",
+    "notes": "Item con precio pero sin nombre: boton Guardar disabled, mensaje 'Agrega al menos un item con nombre' - validacion bloquea correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T20:52:15Z"
+  },
+  {
+    "id": "EMIT-15",
+    "status": "pass",
+    "notes": "Tipo 31 sin cliente: error 'La razon social del Empresa compradora es obligatoria' - validacion bloquea correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T20:52:40Z"
+  },
+  {
+    "id": "EMIT-16",
+    "status": "pass",
+    "notes": "RNC comprador formato invalido: al ingresar '12345ABC' (letras), validator emite 'RNC Comprador: tipo invalido (esperado NUM)'. Validacion funciona correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:55:03Z"
+  },
+  {
+    "id": "EMIT-17",
+    "status": "pass",
+    "notes": "ITBIS 18% calculado correctamente: producto 'Diseno logo' precio 100, Subtotal=100.00, ITBIS(18%)=18.00, Total=118.00. Formula correcta: subtotal x 1.18",
+    "screenshot": null,
+    "ts": "2026-05-16T20:55:25Z"
+  },
+  {
+    "id": "EMIT-18",
+    "status": "pass",
+    "notes": "Descuento 10% por linea: precio 100 → descuento -10 → subtotal 90 → ITBIS18%=16.20 → Total=106.20. Calculo correcto, descuento reduce subtotal antes de ITBIS.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:55:37Z"
+  },
+  {
+    "id": "EMIT-19",
+    "status": "pass",
+    "notes": "Retencion ITBIS 30% agregada: subtotal 90 - descuento 10 + ITBIS 16.20 - Retencion 4.86 = Total 101.34. Retencion descuenta correctamente del total.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:55:52Z"
+  },
+  {
+    "id": "EMIT-20",
+    "status": "fail",
+    "notes": "Cambiar tipo despues de llenar: cliente se resetea silenciosamente SIN dialogo de confirmacion. Cambio de e31 a e32 llama limpiarCliente() directamente. El checklist esperaba 'confirma reset' con modal de confirmacion.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:56:43Z"
+  },
+  {
+    "id": "EMIT-21",
+    "status": "pass",
+    "notes": "Vista previa: boton 'Vista previa' abre dialog con iframe PDF. Titulo 'Vista previa — Factura de Consumo Electronica', badge BORRADOR, botones: Volver a editar/Imprimir/Descargar/Emitir/Cerrar.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:57:08Z"
+  },
+  {
+    "id": "EMIT-22",
+    "status": "pass",
+    "notes": "Guardar como borrador: boton en split-dropdown funciona. Factura ID=30 guardada con estado BORRADOR. Success screen muestra 'Comprobante emitido!' (texto engañoso para borradores pero estado correcto). Ver detalle confirma 'Borrador'.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:58:34Z"
+  },
+  {
+    "id": "EMIT-23",
+    "status": "pass",
+    "notes": "Guardar e imprimir: emite factura E320000000008 (ID=31) exitosamente y navega a PDF en misma pestaña (/api/pdf/factura/31). Estado 'Emitida'. PDF se abre correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T20:59:55Z"
+  },
+  {
+    "id": "EMIT-24",
+    "status": "fail",
+    "notes": "Guardar y enviar correo: BUG - factura emite correctamente (E320000000009, ACEPTADO) pero el modal de email NUNCA aparece. Causa: setResultado(data) cambia render a success-screen que no incluye <ModalEnviarCorreo>. El modal se renderiza solo en la vista del form, no en la de exito.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:01:37Z"
+  },
+  {
+    "id": "EMIT-25",
+    "status": "pass",
+    "notes": "Guardar y crear nueva: emite factura exitosamente (nuevo NCF E320000000011 asignado) y resetea el form. Path permanece /facturas/nueva, cliente y productos limpios. Listo para nueva factura.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:02:18Z"
+  },
+  {
+    "id": "LIST-01",
+    "status": "pass",
+    "notes": "50/página configurado (limit=50 en page.tsx). Solo 15 registros en DB — no se muestran controles prev/next porque total<pageSize, comportamiento correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:06:09Z"
+  },
+  {
+    "id": "LIST-02",
+    "status": "pass",
+    "notes": "Buscar 'E310000000032' filtra a 1 fila correctamente. Campo placeholder 'Buscar por e-NCF o cliente…' funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:06:30Z"
+  },
+  {
+    "id": "LIST-03",
+    "status": "pass",
+    "notes": "Buscar 'DARIO' filtra a 1 fila (E310000000032, DARIO CASTRO SANCHEZ). Búsqueda por nombre de cliente funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:06:40Z"
+  },
+  {
+    "id": "LIST-04",
+    "status": "pass",
+    "notes": "Filtro 'ACEPTADO' muestra 10 filas, todas con estado ACEPTADO. Sin filas de otro estado.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:07:04Z"
+  },
+  {
+    "id": "LIST-05",
+    "status": "pass",
+    "notes": "Filtro fechas desde/hasta 2026-05-13→2026-05-13 muestra 5 filas, todas con emisión 13/05/2026. Filtro funciona correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:07:25Z"
+  },
+  {
+    "id": "LIST-06",
+    "status": "pass",
+    "notes": "Click en cabecera 'Emisión' ordena filas ASC (13/05 primero). Columnas con cursor:pointer son ordenables: e-NCF, Cliente, Emisión, Subtotal, Total.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:07:47Z"
+  },
+  {
+    "id": "LIST-07",
+    "status": "partial",
+    "notes": "Bulk anular funciona: seleccionar 2 filas → 'Anular seleccionados' → ambas cambian a ANULADO. BUG: no hay diálogo de confirmación antes de anular — acción destructiva ejecuta inmediatamente sin confirmar. E310000000032 y E320000000001 ahora en estado ANULADO.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:08:23Z"
+  },
+  {
+    "id": "LIST-08",
+    "status": "pass",
+    "notes": "CSV export: GET /api/facturas/export → 200, content-type: text/csv, content-disposition: attachment; filename='facturas_2026-05-16.csv'. Botón usa window.location.href que en browser real dispara descarga. Funciona correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:09:21Z"
+  },
+  {
+    "id": "LIST-09",
+    "status": "pass",
+    "notes": "Click en NCF 'E310000000032' navega a /dashboard/facturas/5. Link está en celda NCF/TIPO del listado. Navegación funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:09:41Z"
+  },
+  {
+    "id": "LIST-10",
+    "status": "pass",
+    "notes": "API /api/facturas excluye estado='HISTORICA' en query (route.ts línea 27). 0 históricas encontradas en 15 documentos. Fix Fase 1.1 funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:10:20Z"
+  },
+  {
+    "id": "DET-01",
+    "status": "pass",
+    "notes": "Factura ACEPTADO (ID 33, E320000000010) abre /dashboard/facturas/33. Bottom bar muestra: Volver, Ver PDF, Acciones. Nota: Estado DGII muestra 'Emitida' en panel lateral aunque estado interno es ACEPTADO.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:10:46Z"
+  },
+  {
+    "id": "DET-02",
+    "status": "pass",
+    "notes": "Factura BORRADOR (ID 30, BOR-31-MP8TVHUB) muestra bottom bar: Cancelar, Ver PDF, Continuar edición. Correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:11:03Z"
+  },
+  {
+    "id": "DET-03",
+    "status": "pass",
+    "notes": "Ver PDF es <a target='_blank' href='/api/pdf/factura/33'>. GET /api/pdf/factura/33 → 200 application/pdf, content-disposition: inline; filename='factura-E320000000010.pdf'. Link abre PDF en nueva pestaña.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:11:20Z"
+  },
+  {
+    "id": "DET-04",
+    "status": "pass",
+    "notes": "Acciones dropdown (bottom bar) contiene 'Imprimir' → <a href='/api/pdf/factura/33' target='_blank'>. Endpoint retorna application/pdf. Dropdown también incluye 'Enviar por correo'. Funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:12:36Z"
+  },
+  {
+    "id": "DET-05",
+    "status": "pass",
+    "notes": "Click 'Enviar por correo' en dropdown Acciones abre modal dialog con título 'Enviar factura por correo', input email y botones Cancelar/Enviar.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:13:01Z"
+  },
+  {
+    "id": "DET-06",
+    "status": "fail",
+    "notes": "POST /api/facturas/33/email → 500, cuerpo vacío. BUG: NEXT_PUBLIC_APP_URL='http://localhost:3002' pero app corre en puerto 3000. Email route llama fetch('http://localhost:3002/api/pdf/factura/33') — falla con conexión rechazada, causa 500 sin body. Fix: corregir NEXT_PUBLIC_APP_URL a 3000 o usar URL relativa.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:13:39Z"
+  },
+  {
+    "id": "DET-07",
+    "status": "blocked",
+    "notes": "Botón 'Consultar DGII' existe en UI. Handler en consultarEstado() (page.tsx línea 269-287) hace GET /api/ecf/estado?docId=N. BLOQUEADO: todas las facturas tienen trackId vacío — guard 'if (!factura?.trackId) return' previene ejecución. No hay facturas con trackId en DB de prueba para verificar la consulta real.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:14:31Z"
+  },
+  {
+    "id": "DET-08",
+    "status": "pass",
+    "notes": "Anular comprobante: modal confirm '¿Anular comprobante?' con advertencia sobre Nota de Crédito. Click 'Sí, anular' → estado cambia a ANULADO, toast 'Comprobante anulado'. E320000000010 (ID 33) ahora ANULADO.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:16:00Z"
+  },
+  {
+    "id": "DET-09",
+    "status": "blocked",
+    "notes": "Track ID mostrado condicionalmente (page.tsx línea 867: {factura.trackId && ...}). BLOQUEADO: todas las facturas EN_PROCESO en DB tienen trackId vacío. No se puede verificar la UI de trackId sin una factura con trackId real del DGII.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:16:18Z"
+  },
+  {
+    "id": "DET-10",
+    "status": "blocked",
+    "notes": "BLOQUEADO: 0 facturas RECHAZADAS en DB. Además, campo 'mensajesDgii' existe en tipo Factura (page.tsx línea 52) pero NO está renderizado en la UI del detalle — no hay panel de mensajes DGII. Si la funcionalidad existe, falta implementar el panel.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:16:52Z"
+  },
+  {
+    "id": "NCA-01",
+    "status": "pass",
+    "notes": "Anular BORRADOR BOR-32-MP8TU911: dropdown → Anular comprobante → confirm dialog → Si anular → toast 'Comprobante anulado', banner, badge ANULADO. Confirm dialog muestra NCF. PASS.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:20:32Z"
+  },
+  {
+    "id": "NCA-02",
+    "status": "pass",
+    "notes": "Anular ACEPTADA E320000000007 sin pagos: confirm dialog con warning amber 'requiere NC e-34 para anulacion formal DGII'. Si anular → toast Comprobante anulado, badge ANULADO, banner informativo. PASS.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:21:40Z"
+  },
+  {
+    "id": "NCA-03",
+    "status": "fail",
+    "notes": "BUG: Anular ACEPTADA con pagos registrados (E310000000034, pagado=20000) NO bloquea ni advierte sobre pagos existentes. Sistema anula directamente sin revertir ni mencionar los pagos. Los pagos quedan huerfanos en DB. Se esperaba: bloquear o mostrar warning sobre reversion de pagos.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:22:11Z"
+  },
+  {
+    "id": "NCA-04",
+    "status": "partial",
+    "notes": "UX diferente BORRADOR vs ACEPTADO en el dialog: BORRADOR = dialogo simple 'Vas a anular BOR-...' sin advertencia. ACEPTADO = dialogo con amber warning 'requiere NC e-34'. PERO: la API hace lo mismo para ambos (estado→ANULADO), no hay DELETE real para borradores. El BORRADOR deberia eliminarse (DELETE), no solo marcarse ANULADO. Comportamiento documentado como parcial.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:22:28Z"
+  },
+  {
+    "id": "NCA-05",
+    "status": "fail",
+    "notes": "BUG: Modal de anulacion NO tiene dropdown para tipoAnulacion (01-10). La UI solo muestra texto confirmatorio y boton Si anular. El tipo de anulacion siempre queda en default='04' (ver schema.ts). Se esperaba: select con opciones 01-10 segun DGII 608.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:22:41Z"
+  },
+  {
+    "id": "NCA-06",
+    "status": "fail",
+    "notes": "BUG: tipoAnulacion SIEMPRE queda en default='04' porque no hay UI para seleccionarlo (ver NCA-05). API /anular no acepta tipoAnulacion en body — la ruta no lo lee ni lo persiste. El reporte 608 lo lee como d.tipoAnulacion ?? '04'. Todos los anulados tendran tipo 04.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:22:47Z"
+  },
+  {
+    "id": "NCA-07",
+    "status": "fail",
+    "notes": "BUG heredado de EMIT-06: NC tipo 34 codigoModificacion=01 (anulacion) falla con validador: 'Indicador Nota de Credito mayor a 30 dias: campo requerido' y 'Fecha NCF Modificado: campo requerido'. Form llenado correctamente (cliente, E-NCF E310000000003, codigo 1-Anula NCF, fecha 13/05/2026) pero validator bloquea emision. La factura ref E310000000003 NO cambia a ANULADO_POR_NC.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:26:16Z"
+  },
+  {
+    "id": "NCA-08",
+    "status": "fail",
+    "notes": "BUG heredado EMIT-06: NC parcial codigoModificacion=03 (devolucion) bloqueado por mismo validator que NCA-07. Campos 'Indicador NC mayor 30 dias' y 'Fecha NCF Modificado' requeridos por schema pero sin UI para ingresarlos correctamente. No se puede verificar si saldo AR descuenta.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:26:21Z"
+  },
+  {
+    "id": "NCA-09",
+    "status": "fail",
+    "notes": "BUG heredado EMIT-06: NC descuento codigoModificacion=04 bloqueado por mismo validator. No se puede emitir ni verificar impacto en AR.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:26:25Z"
+  },
+  {
+    "id": "NCA-10",
+    "status": "fail",
+    "notes": "BUG heredado EMIT-06: NC correccion codigoModificacion=02 bloqueado por mismo validator. No verificable.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:26:29Z"
+  },
+  {
+    "id": "NCA-11",
+    "status": "blocked",
+    "notes": "BLOQUEADO: No se puede crear ninguna NC (tipo 34) por bug EMIT-06/NCA-07. Sin NCs emitidas, no se puede probar multiples NCs ni suma de descuentos.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:26:33Z"
+  },
+  {
+    "id": "NCA-12",
+    "status": "blocked",
+    "notes": "BLOQUEADO por bug EMIT-06: NC sobre BORRADOR imposible de probar porque el validator impide emitir CUALQUIER NC tipo 34. El campo E-NCF acepta BOR-... sin validacion frontend - backend tampoco valida estado del NCF referenciado.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:27:03Z"
+  },
+  {
+    "id": "NCA-13",
+    "status": "blocked",
+    "notes": "BLOQUEADO por bug EMIT-06: NC sobre factura RECHAZADO no testeable. Sin facturas RECHAZADAS en DB y sin poder emitir NCs.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:27:07Z"
+  },
+  {
+    "id": "NCA-14",
+    "status": "blocked",
+    "notes": "BLOQUEADO por bug EMIT-06: NC sobre factura ANULADO no testeable.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:27:10Z"
+  },
+  {
+    "id": "NCA-15",
+    "status": "blocked",
+    "notes": "BLOQUEADO por bug EMIT-06: NC sobre cuenta HISTORICA no testeable. Ademas no hay facturas HISTORICA en DB.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:27:14Z"
+  },
+  {
+    "id": "NCA-16",
+    "status": "blocked",
+    "notes": "BLOQUEADO por bug EMIT-06: NC monto > factura original no testeable porque ningun NC puede emitirse.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:27:18Z"
+  },
+  {
+    "id": "NCA-17",
+    "status": "pass",
+    "notes": "NC tipo 34 sin ncfModificado: error 'Debes indicar el e-NCF original que se modifica' en toast y banner inline. UI bloquea correctamente la emision sin NCF ref. PASS.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:28:21Z"
+  },
+  {
+    "id": "NCA-18",
+    "status": "blocked",
+    "notes": "BLOQUEADO: No hay facturas con NC asociadas (NCs no pueden emitirse por bug EMIT-06). Ademas el API /anular no tiene ninguna validacion sobre NCs asociadas segun el codigo de route.ts - no bloquea si hay NCs.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:28:33Z"
+  },
+  {
+    "id": "NCA-19",
+    "status": "blocked",
+    "notes": "BLOQUEADO: No se puede anular NC tipo 34 si no se puede crear ninguna. Bug EMIT-06 bloquea toda la cadena.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:28:38Z"
+  },
+  {
+    "id": "NCA-20",
+    "status": "fail",
+    "notes": "BUG: Pagina de detalle de factura (E310000000003) NO muestra panel de NCs asociadas. El codigo fuente no tiene ninguna seccion de NCs. Sin NCs en DB y sin UI panel - funcionalidad no implementada.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:29:03Z"
+  },
+  {
+    "id": "NCA-21",
+    "status": "blocked",
+    "notes": "BLOQUEADO: Sin NCs emitidas (bug EMIT-06) no se puede verificar si AR muestra saldo neto post-NCs. La columna SALDO en AR muestra total - pagos = saldo. No hay indicador de NCs en la tabla.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:29:16Z"
+  },
+  {
+    "id": "NCA-22",
+    "status": "fail",
+    "notes": "BUG: Filtro 'Con NCs asociadas' NO existe en el listado de facturas. Solo hay filtros por estado (BORRADOR, EN_PROCESO, ACEPTADO, ACEPTADO_CONDICIONAL, RECHAZADO, ANULADO). Funcionalidad no implementada.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:29:28Z"
+  },
+  {
+    "id": "NCA-23",
+    "status": "blocked",
+    "notes": "BLOQUEADO por bug EMIT-06. NC sobre nota debito (33): UI no tiene validacion que restrinja el E-NCF referenciado a algun tipo especifico. Se puede poner E33... en el campo. Si aplica o no segun DGII no se puede verificar sin poder emitir NCs.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:29:59Z"
+  },
+  {
+    "id": "NCA-24",
+    "status": "blocked",
+    "notes": "BLOQUEADO por bug EMIT-06. NC sobre NC (cadena): no testeable sin poder emitir NCs.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:30:03Z"
+  },
+  {
+    "id": "NCA-25",
+    "status": "partial",
+    "notes": "Bulk anular: UI muestra boton 'Anular seleccionados' cuando 2+ checkboxes seleccionados (observado con E320000000009 + E320000000008). Preview se cuelgo tras click (posible bug en la pagina/navegacion). Basado en LIST-07 previo: bulk anular funciona pero sin dialogo de confirmacion. Preview window stuck - no se pudo verificar resultado final.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:38:28Z"
+  },
+  {
+    "id": "NCA-26",
+    "status": "blocked",
+    "notes": "BLOQUEADO: Preview window colgada tras NCA-25. NCA-26 (NC fecha mes diferente) requiere NC emitible - bloqueado tambien por bug EMIT-06.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:39:53Z"
+  },
+  {
+    "id": "NCA-27",
+    "status": "blocked",
+    "notes": "BLOQUEADO: Preview window colgada. Ademas tipo 47 necesitaria forma diferente de anular - ya visto en EMIT-12 que tipo 47 tiene BUGs propios.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:39:57Z"
+  },
+  {
+    "id": "AR-01",
+    "status": "pass",
+    "notes": "Listado AR muestra 3 facturas crédito con saldo>0 (E310000000037, E310000000036, HIST-2-MP8HYZP0). Facturas con saldo=0 no aparecen.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:50:18Z"
+  },
+  {
+    "id": "AR-02",
+    "status": "pass",
+    "notes": "Stat cards correctos: Pendiente=RD,718.00 (100+118+1500), Vencido=RD,500.00 (solo HIST histórica vencida), Activas=3, Vencidas=1.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:50:21Z"
+  },
+  {
+    "id": "AR-03",
+    "status": "pass",
+    "notes": "Filtro Vencidas muestra solo HIST-2-MP8HYZP0 (histórica, 15 días vencida). Stat cards actualizan: Pendiente=RD, Activas=1, Vencidas=1.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:50:38Z"
+  },
+  {
+    "id": "AR-04",
+    "status": "pass",
+    "notes": "Filtro Todas muestra 3 facturas. Stats restaurados: Pendiente=RD, Activas=3, Vencidas=1.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:50:49Z"
+  },
+  {
+    "id": "AR-05",
+    "status": "pass",
+    "notes": "Pago total RD en E310000000037: modal muestra Total/YaPagado/Saldo correctos, pago registrado exitosamente. Factura desaparece del listado AR (saldo=0). Pendiente total actualiza de RD a RD, Activas de 3 a 2.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:51:20Z"
+  },
+  {
+    "id": "AR-06",
+    "status": "pass",
+    "notes": "Pago parcial RD en E310000000036 (total RD). Saldo reducido a RD (118-50). Pagado=RD en listado. Pendiente total actualiza de RD a RD.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:51:46Z"
+  },
+  {
+    "id": "AR-07",
+    "status": "pass",
+    "notes": "Múltiples pagos acumulan correctamente. Pago 1: RD, Pago 2: RD. Modal mostró YaPagado=RD antes del 2do pago. Resultado: Pagado=RD, Saldo=RD (118-70=48). NOTA: _pago-card.tsx en factura detalle usa endpoint legacy /api/facturas/[id]/pago que no está integrado con AR ledger.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:52:07Z"
+  },
+  {
+    "id": "AR-08",
+    "status": "pass",
+    "notes": "Pago transferencia RD con referencia='TRF-2026-001' en E310000000036. API confirma referencia persistida (pago id=8, metodo=transferencia, referencia=TRF-2026-001). Listado muestra Pagado=RD, Saldo=RD.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:52:41Z"
+  },
+  {
+    "id": "AR-09",
+    "status": "pass",
+    "notes": "Pago monto>saldo bloqueado correctamente. UI: input max=saldo (38.00), HTML5 rangeOverflow=true, nativo browser validation previene submit. API: 422 Monto excede saldo pendiente (RD.00). Doble validación cliente+servidor.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:55:42Z"
+  },
+  {
+    "id": "AR-10",
+    "status": "pass",
+    "notes": "Fecha futura permitida. Pago RD con fecha 2026-12-31 aceptado por UI y API. Input[type=date] no tiene atributo max/min. API acepta cualquier fecha válida YYYY-MM-DD. Saldo actualiza correctamente a RD.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:56:17Z"
+  },
+  {
+    "id": "AR-11",
+    "status": "pass",
+    "notes": "Cuenta histórica HIST-2-MP8VZ21S creada con badge 'histórica' visible en listado. Histórica original HIST-2-MP8HYZP0 también muestra badge. Badge identificatorio funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:57:02Z"
+  },
+  {
+    "id": "AR-12",
+    "status": "pass",
+    "notes": "Cuenta histórica con yaPagado=RD crea automáticamente pago inicial en ledger (pago id=10, montoCentavos=20000, metodo=otro, notas='Pago previo (importado con cuenta histórica)'). Saldo=RD, Pagado=RD mostrado correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:57:06Z"
+  },
+  {
+    "id": "AR-13",
+    "status": "fail",
+    "notes": "Eliminar pago no implementado. No existe botón eliminar en listado AR ni en modal de pagos. No existe endpoint DELETE /api/cuentas-por-cobrar/[docId]/pagos ni /api/pagos/[id]. Solo 'Registrar pago' disponible.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:57:53Z"
+  },
+  {
+    "id": "AR-14",
+    "status": "pass",
+    "notes": "Días vencida calculado correcto. HIST-2-MP8HYZP0 vence 01/05/2026, hoy 16/05/2026 = 15 días. UI muestra '15 días vencida'. Cálculo sin off-by-1.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:57:59Z"
+  },
+  {
+    "id": "AR-15",
+    "status": "pass",
+    "notes": "Banner amber en dashboard muestra '1 factura vencida — RD,500.00 pendiente de cobro vencido · Ver cuentas por cobrar →'. countVencidas=1 activa el banner. Link lleva a /cuentas-por-cobrar.",
+    "screenshot": null,
+    "ts": "2026-05-16T21:58:11Z"
+  },
+  {
+    "id": "REC-01",
+    "status": "pass",
+    "notes": "Plan mensual contado guardado OK. Nombre: QA-REC-01 Plan Mensual Contado, cliente QA-CLI03, frecuencia Mensual, dia cobro 16, estado Activa, total estimado RD$649.00. Sidebar mostraba proximas emisiones 16/05 y 16/06.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:02:53Z"
+  },
+  {
+    "id": "REC-02",
+    "status": "pass",
+    "notes": "Plan mensual credito 5 dias guardado OK. Estado Activa, total RD$649.00. Tipo pago='Credito' con 5 dias seleccionado. Guardado en listado correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:04:28Z"
+  },
+  {
+    "id": "REC-03",
+    "status": "pass",
+    "notes": "Plan semanal creado OK. Frecuencia=semanal, estado Activa, redirige al listado tras guardar.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:05:06Z"
+  },
+  {
+    "id": "REC-04",
+    "status": "pass",
+    "notes": "Plan quincenal creado OK. Frecuencia=quincenal, estado Activa, guardado exitosamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:05:35Z"
+  },
+  {
+    "id": "REC-05",
+    "status": "pass",
+    "notes": "Plan trimestral creado OK. Frecuencia=trimestral, estado Activa, listado muestra QA-REC-05 Plan Trimestral.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:06:05Z"
+  },
+  {
+    "id": "REC-06",
+    "status": "pass",
+    "notes": "Plan anual creado OK. Frecuencia=anual, estado Activa, guardado exitosamente en listado.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:06:32Z"
+  },
+  {
+    "id": "REC-07",
+    "status": "pass",
+    "notes": "Dia cobro 1-31 funciona. Radix Select dia=15 guardado correctamente. diaCobro=15 en DB. Select tiene 31 opciones (1-31). Nota: form submit requiere onSubmit handler call directo (no button.click()) - submit button regular click no funciona via preview_eval.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:17:13Z"
+  },
+  {
+    "id": "REC-08",
+    "status": "partial",
+    "notes": "Dia cobro 31 en meses sin dia 31: UI sidebar muestra proximas facturas como 03/06/2026, 03/07/2026, 03/08/2026 (no 31/02). Comportamiento: meses sin dia 31 (Feb, Abr, Jun, Sep, Nov) se SALTAN - proxima emision va al siguiente mes con 31 dias. PERO: la fecha 03/06 deberia ser 31/05 (proxima con dia 31 desde hoy 16/05). Posible bug en calculo de proxima emision - muestra Jun en vez de May 31. DB: diaCobro=31, proximaEmision=2026-01-31 (pasada). Plan guardado OK.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:19:34Z"
+  },
+  {
+    "id": "REC-09",
+    "status": "pass",
+    "notes": "Editar plan existente: nombre cambiado de 'QA-REC-07 Dia Cobro 15' a 'QA-REC-07 Dia Cobro 15 EDITADO'. PUT /api/facturas-recurrentes/10 → 200. Cambio persiste en DB. Redirect al listado tras guardar.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:21:09Z"
+  },
+  {
+    "id": "REC-10",
+    "status": "pass",
+    "notes": "Pausar plan: boton Pausar en listado cambia estado a 'Pausada'. Badge PAUSADA visible. Acciones cambian a 'Editar Reanudar Eliminar'. PUT /api/facturas-recurrentes/10 → 200, estado='pausada'.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:22:00Z"
+  },
+  {
+    "id": "REC-11",
+    "status": "pass",
+    "notes": "Reanudar plan pausado: boton Reanudar cambia estado a 'Activa'. PUT /api/facturas-recurrentes/10 → 200. Acciones vuelven a 'Pausar Eliminar'.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:23:57Z"
+  },
+  {
+    "id": "REC-12",
+    "status": "pass",
+    "notes": "Eliminar plan: modal de confirmacion muestra nombre 'QA-REC-08 Dia 31 Febrero'. Clic 'Si eliminar' → DELETE /api/facturas-recurrentes/11 → 200. Fila desaparece del listado.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:24:38Z"
+  },
+  {
+    "id": "REC-13",
+    "status": "pass",
+    "notes": "Sin cliente: boton 'Guardar y activar suscripcion' esta disabled. No se puede enviar formulario sin seleccionar cliente.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:25:24Z"
+  },
+  {
+    "id": "REC-14",
+    "status": "pass",
+    "notes": "Sin items: con cliente seleccionado pero sin lineas de producto, boton 'Guardar y activar suscripcion' sigue disabled. No se puede enviar.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:25:40Z"
+  },
+  {
+    "id": "REC-15",
+    "status": "pass",
+    "notes": "Proxima factura = fechaInicio cuando es futura: al setear fecha inicio 15/06/2026, sidebar 'Proxima factura' muestra '15/06/2026' correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:26:07Z"
+  },
+  {
+    "id": "REP-01",
+    "status": "pass",
+    "notes": "Stats cards Ventas generales: Ventas brutas RD1336, NC RD0, Antes impuestos RD1300, Impuestos RD36, Despues impuestos RD1336. Formula: subtotal+ITBIS=total. 16 documentos listados.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:27:01Z"
+  },
+  {
+    "id": "REP-02",
+    "status": "pass",
+    "notes": "Exportar CSV: GET /api/reportes/ventas-generales/export → 200 text/csv. Headers: Documento,Tipo,Cliente,RNC,Estado,Fecha,Subtotal,ITBIS,Total. Boton Descargar es link <a> con href correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:27:28Z"
+  },
+  {
+    "id": "REP-03",
+    "status": "pass",
+    "notes": "Filtro fechas: setear 01/01/2026-01/02/2026, clic Aplicar → todas stats RD0.00, Documentos(0), 'Sin datos en este rango'. Filtro funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:27:54Z"
+  },
+  {
+    "id": "REP-04",
+    "status": "partial",
+    "notes": "Toggle Diario/Mensual: visible en UI, 'Diario' activo por defecto, pero NO tiene onClick handler - es decorativo (spans estaticos sin handler). Switch no funcional. Grafico muestra datos diarios con fechas en eje X.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:29:30Z"
+  },
+  {
+    "id": "REP-05",
+    "status": "pass",
+    "notes": "606 Compras TXT: GET /api/reportes/606?periodo=2026-05 → 200 text/plain. Contenido: '606|133307391|202605|0' (formato DGII correcto, 0 compras en mayo 2026).",
+    "screenshot": null,
+    "ts": "2026-05-16T22:30:04Z"
+  },
+  {
+    "id": "REP-06",
+    "status": "pass",
+    "notes": "607 Ventas TXT: GET /api/reportes/607?periodo=2026-05 → 200 text/plain. Header: 607|133307391|202605|6. 6 registros con RNC, NCF, fechas, subtotal, ITBIS. Formato DGII correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:30:13Z"
+  },
+  {
+    "id": "REP-07",
+    "status": "pass",
+    "notes": "608 Anulados TXT: GET /api/reportes/608?periodo=2026-05 → 200 text/plain. Header: 608|133307391|202605|6. 6 registros con NCF, fecha, tipoAnulacion='04'. Formato DGII correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:30:22Z"
+  },
+  {
+    "id": "REP-08",
+    "status": "pass",
+    "notes": "609 Exterior TXT: GET /api/reportes/609?periodo=2026-05 → 200 text/plain. Contenido: '609|133307391|202605|0' (0 facturas exterior en mayo 2026). Formato DGII correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:30:31Z"
+  },
+  {
+    "id": "REP-09",
+    "status": "pass",
+    "notes": "Declaracion en cero: GET /api/reportes/607?anio=2026&mes=01 → 200 text/plain. Contenido: '607|133307391|202601|0' (sin documentos). Archivo valido DGII con 0 registros.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:31:42Z"
+  },
+  {
+    "id": "REP-10",
+    "status": "pass",
+    "notes": "Cambiar periodo: cambiar select mes a 'Enero' → cards actualizan a 'Enero 2026', URL archivo muestra '01/2026'. Cambio reflejado inmediatamente en UI.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:31:46Z"
+  },
+  {
+    "id": "REP-11",
+    "status": "pass",
+    "notes": "Listado documentos del periodo: tabla 'Documentos (16)' con columnas Documento/Tipo/Cliente/RNC/Estado/Fecha/Subtotal/ITBIS/Total. 16 filas para mayo 2026. Datos correctos.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:32:03Z"
+  },
+  {
+    "id": "REP-12",
+    "status": "pass",
+    "notes": "Estado badges: 'Cobrada', 'En Proceso', 'Anulada' renderizados como pills (inline-flex rounded-full). Badges correctos para cada estado en tabla documentos.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:32:17Z"
+  },
+  {
+    "id": "CFG-01",
+    "status": "pass",
+    "notes": "Cargar datos empresa: pagina poblada con Razon Social='YISRAEL TECHNOLOGY SRL', RNC='133307391', Tel='(829) 359-6602', Nombre Comercial='YISRAEL TECHNOLOGY', Direccion, Email facturacion. Provincia/Municipio mostrando 'Cargando...' al cargar.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:32:36Z"
+  },
+  {
+    "id": "CFG-02",
+    "status": "pass",
+    "notes": "Editar razon social: cambiar a 'YISRAEL TECHNOLOGY SRL QA-EDIT', click Guardar → POST /api/equipo/perfil → 200 {ok:true}. Persiste. Restaurado a original.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:34:42Z"
+  },
+  {
+    "id": "CFG-03",
+    "status": "pass",
+    "notes": "Editar nombre comercial: cambiar a 'YISRAEL TECH QA', Guardar → POST /api/equipo/perfil → 200 {ok:true}. Persiste. Restaurado.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:35:00Z"
+  },
+  {
+    "id": "CFG-04",
+    "status": "fail",
+    "notes": "RNC validacion: NO hay validacion de formato. RNC '12345' (5 digitos) se guarda sin error. API POST /api/equipo/perfil acepta cualquier valor de RNC. Falta validacion 9/11 digitos en frontend y backend.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:35:33Z"
+  },
+  {
+    "id": "CFG-05",
+    "status": "pass",
+    "notes": "Cambiar provincia reset municipio: limpiar input provincia → municipio muestra 'Selecciona provincia primero' (vacio). Dropdown autocomplete muestra opciones filtradas. Dependencia provincia→municipio funcional.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:37:04Z"
+  },
+  {
+    "id": "CFG-06",
+    "status": "partial",
+    "notes": "Cambiar municipio: dropdown busqueda funciona (buscar 'Boca' muestra 'MUNICIPIO BOCA CHICA'). Click opcion no actualiza React state correctamente via eval. Municipio se envia como '' al guardar. Comportamiento visual correcto pero persistencia no verificable via eval.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:37:48Z"
+  },
+  {
+    "id": "CFG-07",
+    "status": "pass",
+    "notes": "Telefono formato auto: typing '8295551234' → onChange aplica formatTelefonoDO → muestra '(829) 555-1234'. Formato (XXX) XXX-XXXX aplicado correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:38:18Z"
+  },
+  {
+    "id": "CFG-08",
+    "status": "partial",
+    "notes": "Logo upload: preview del logo actual visible (img alt='Logo', 180px, base64). Input file accept='image/*' presente. Click upload no testeable via eval (restriccion browser). Preview funciona, carga de nuevo logo no verificada.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:38:47Z"
+  },
+  {
+    "id": "CFG-09",
+    "status": "pass",
+    "notes": "Color primario: cambiar text input a '#ff5500' → color picker input se sincroniza a #ff5500. Ambos inputs actualizados. Refleja en UI. Restaurado a #1e3a5f.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:39:12Z"
+  },
+  {
+    "id": "CFG-10",
+    "status": "blocked",
+    "notes": "Ambiente DGII: no existe selector en /dashboard/configuracion. Solo accesible en /admin/empresas/[id]/editar (solo platform admin). No testeable en flujo usuario normal.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:39:47Z"
+  },
+  {
+    "id": "SEQ-01",
+    "status": "pass",
+    "notes": "Listado secuencias: 10 numeraciones mostradas (e31 Credito Fiscal, e32 Consumo, e33 Debito, e34 NC, e41 Compras, e43 Gastos Menores + mas). Columnas: Tipo/Nombre, Proximo E-NCF, Rango, Disponibles, Vencimiento, Acciones.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:40:19Z"
+  },
+  {
+    "id": "SEQ-02",
+    "status": "blocked",
+    "notes": "POST /api/secuencias returns 500 empty body — sequences_team_tipo_unique constraint still active in DB; migration add_sequences_fields.sql DROP CONSTRAINT never applied; cannot create second range per tipo_ecf",
+    "screenshot": null,
+    "ts": "2026-05-16T22:45:15Z"
+  },
+  {
+    "id": "SEQ-03",
+    "status": "fail",
+    "notes": "Edit dialog siempre falla: handleEditar envía sucursal:null y pieDeFactura:null pero zod schema espera string|undefined; API PUT retorna 400 'Expected string, received null'; núcleo API funciona correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T22:46:59Z"
+  },
+  {
+    "id": "SEQ-04",
+    "status": "pass",
+    "notes": "API PUT /api/secuencias/11 con hasta=10 (< secuenciaActual=38) retorna 400 con mensaje claro; validación backend correcta; no testeable vía UI por bug SEQ-03",
+    "screenshot": null,
+    "ts": "2026-05-16T22:46:59Z"
+  },
+  {
+    "id": "SEQ-05",
+    "status": "pass",
+    "notes": "PUT /api/secuencias/11 con fechaVencimiento:'2029-12-31' → ok:true; GET confirma fechaVencimiento='2030-01-01T03:59:59.000Z' (2029-12-31 DR local); persiste correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T22:47:09Z"
+  },
+  {
+    "id": "SEQ-06",
+    "status": "fail",
+    "notes": "Marcar preferida no uncheck otras: PUT preferida:true en e31 y e32 → ambas quedan preferida:true simultáneamente; API no limpia preferida:false en otras secuencias del team",
+    "screenshot": null,
+    "ts": "2026-05-16T22:47:28Z"
+  },
+  {
+    "id": "SEQ-07",
+    "status": "fail",
+    "notes": "No hay toggle para numeracionAutomatica en modal de edición; campo siempre true al crear; PUT /api/secuencias/[id] no incluye numeracionAutomatica en updateSchema; campo no editable",
+    "screenshot": null,
+    "ts": "2026-05-16T22:47:39Z"
+  },
+  {
+    "id": "SEQ-08",
+    "status": "fail",
+    "notes": "Semáforo incompleto: disponibles>=50 usa text-gray-700 (no verde), <50 amber-600 correcto, 0 también amber (no rojo); no hay distinción verde/rojo como especifica el checklist",
+    "screenshot": null,
+    "ts": "2026-05-16T22:48:33Z"
+  },
+  {
+    "id": "SEQ-09",
+    "status": "pass",
+    "notes": "Rango con fecha pasada → estado='vencida' en API + badge 'Vencida' en UI con clase text-red-600 bg-red-50; funciona correctamente",
+    "screenshot": null,
+    "ts": "2026-05-16T22:48:33Z"
+  },
+  {
+    "id": "SEQ-10",
+    "status": "pass",
+    "notes": "NCF preview E{tipo}{padStart(10,secuenciaActual)}: todos 9 tipos activos verificados, todos coinciden; e33 vencida correctamente muestra '—'",
+    "screenshot": null,
+    "ts": "2026-05-16T22:48:50Z"
+  },
+  {
+    "id": "CERT-01",
+    "status": "partial",
+    "notes": "Certificado activo muestra titular='ALEXANDER MIGUEL FERRERAS CONCEPCION', vencimiento='10/04/2027', número de serie, 3 verificaciones; NO muestra días restantes como especifica el checklist",
+    "screenshot": null,
+    "ts": "2026-05-16T22:49:17Z"
+  },
+  {
+    "id": "CERT-02",
+    "status": "blocked",
+    "notes": "Sin archivos QA-*.p12 en el proyecto; requiere certificado P12 real de INDOTEL para test",
+    "screenshot": null,
+    "ts": "2026-05-16T22:49:30Z"
+  },
+  {
+    "id": "CERT-03",
+    "status": "blocked",
+    "notes": "Sin archivos QA-*.p12; no se puede probar password incorrecto sin fixture",
+    "screenshot": null,
+    "ts": "2026-05-16T22:49:30Z"
+  },
+  {
+    "id": "CERT-04",
+    "status": "blocked",
+    "notes": "Sin P12 expirado de prueba en fixtures",
+    "screenshot": null,
+    "ts": "2026-05-16T22:49:30Z"
+  },
+  {
+    "id": "CERT-05",
+    "status": "blocked",
+    "notes": "Sin P12 con RNC distinto en fixtures",
+    "screenshot": null,
+    "ts": "2026-05-16T22:49:30Z"
+  },
+  {
+    "id": "CERT-06",
+    "status": "blocked",
+    "notes": "Eliminar botón presente en UI pero acción es destructiva en datos live; no se ejecuta para preservar certificado activo de YISRAEL TECHNOLOGY SRL",
+    "screenshot": null,
+    "ts": "2026-05-16T22:49:30Z"
+  },
+  {
+    "id": "EQ-01",
+    "status": "pass",
+    "notes": "Listar miembros activos - tabla muestra 1 miembro activo: ferrerasalexander@gmail.com (Propietario). Columnas: avatar, email, nombre, badge rol, fecha unión. Layout correcto.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:52:59Z"
+  },
+  {
+    "id": "EQ-02",
+    "status": "pass",
+    "notes": "Invitar nuevo miembro qa-miembro-test@example.com - invitacion creada OK. Modal muestra link de aceptacion. NOTA: link usa localhost:3002 en vez de 3000 (misma config bug que DET-06 NEXT_PUBLIC_APP_URL). Invitacion aparece en lista 'Invitaciones pendientes'.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:53:26Z"
+  },
+  {
+    "id": "EQ-03",
+    "status": "pass",
+    "notes": "Invitacion con rol Contador creada. Dropdown Rol muestra: Administrador, Contador, Vendedor, Miembro. Seleccionado Contador y enviado a qa-contador-test@example.com. Aparece en lista con badge 'Contador'. Rol persiste correctamente.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:54:12Z"
+  },
+  {
+    "id": "EQ-04",
+    "status": "pass",
+    "notes": "Invitar email ya miembro bloquea con error: 'Este usuario ya es miembro del equipo' en banner rojo. Validacion correcta en API y UI.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:54:34Z"
+  },
+  {
+    "id": "EQ-05",
+    "status": "pass",
+    "notes": "Listar invitaciones pendientes - seccion 'Invitaciones pendientes 3' muestra: alexander.ferreras@yisraeltech.com (Miembro, 15 may), qa-miembro-test@example.com (Miembro, 16 may), qa-contador-test@example.com (Contador, 16 may). Tabla con badge rol y fecha.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:55:04Z"
+  },
+  {
+    "id": "EQ-06",
+    "status": "fail",
+    "notes": "Reenviar invitacion NO implementado. Solo hay boton 'Cancelar invitacion' (trash icon) para cada invitacion. No hay boton Reenviar ni endpoint POST /api/equipo/invitaciones/[id]/reenviar. Funcionalidad ausente en UI.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:55:09Z"
+  },
+  {
+    "id": "EQ-07",
+    "status": "pass",
+    "notes": "Cancelar invitacion pendiente - confirm dialog '¿Cancelar invitacion?' con email destacado y advertencia. Click 'Si, cancelar' elimina la invitacion de alexander.ferreras@yisraeltech.com. Lista actualiza a 2 pendientes.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:55:33Z"
+  },
+  {
+    "id": "EQ-08",
+    "status": "pass",
+    "notes": "Aceptar invitacion via link - URL /invitations/accept?token=... muestra pagina correcta: 'Te invitaron a YISRAEL TECHNOLOGY SRL', email pre-llenado qa-miembro-test@example.com, formulario nombre+contraseña, boton 'Crear cuenta y entrar'. NOTA: link generado usa puerto 3002 (bug DET-06 misma causa). Corrigiendo a 3000 en test, pagina funciona.",
+    "screenshot": null,
+    "ts": "2026-05-16T22:55:50Z"
+  },
+  {
+    "id": "EQ-10",
+    "status": "pass",
+    "notes": "Cambiar rol miembro: rol cambia de Miembro a Administrador via dropdown en equipo page. Badge actualiza inmediatamente a 'Administrador' (purple badge). PUT /api/equipo/miembros/[id] funciona correctamente. NOTA: sidebar del usuario no refresca automaticamente hasta nuevo login (PERM-10 punto a verificar).",
+    "screenshot": null,
+    "ts": "2026-05-16T22:59:37Z"
+  },
+  {
+    "id": "EQ-09",
+    "status": "pass",
+    "notes": "Remover miembro: trash icon abre confirm dialog '¿Eliminar miembro?' con nombre y advertencia 'perdera acceso'. Click 'Si, eliminar' remueve correctamente. Miembros activos vuelve a 1.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:00:13Z"
+  },
+  {
+    "id": "PERM-01",
+    "status": "pass",
+    "notes": "Owner sidebar completo: Nueva Factura, Inicio, Contactos, Reportes, Ingresos (facturas, recurrentes, AR, notas credito), Inventario, Configuracion (empresa, secuencias, certificado, equipo, API Keys, Webhooks). Full access confirmed.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:00:28Z"
+  },
+  {
+    "id": "PERM-02",
+    "status": "pass",
+    "notes": "Admin role sidebar: identico a owner (Nueva Factura, Inicio, Contactos, Reportes, Ingresos, Inventario, Configuracion con todas las subopciones). BUG POTENCIAL: no se ve 'Suscripcion' en menu Configuracion para admin (esperado segun checklist). Verificar si owner tiene Suscripcion que admin no tiene.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:01:23Z"
+  },
+  {
+    "id": "PERM-03",
+    "status": "fail",
+    "notes": "BUG: Contador ve sidebar completo incluyendo 'Nueva Factura' y Configuracion. Spec: 'Contador ve facturas + reportes, no equipo/config'. Sidebar mostrado: Nueva Factura, Inicio, Contactos, Reportes, Ingresos, Inventario, Configuracion (con Mi empresa, Secuencias NCF, Usuarios y equipo, Impresoras). Certificado digital, API Keys, Webhooks ocultos pero resto visible - permisos insuficientemente restringidos.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:03:02Z"
+  },
+  {
+    "id": "PERM-06",
+    "status": "fail",
+    "notes": "BUG: Contador puede acceder a /dashboard/facturas/nueva - form se abre y es funcional. No hay gate que bloquee al contador de crear facturas. La UI no muestra ninguna restriccion.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:03:06Z"
+  },
+  {
+    "id": "PERM-04",
+    "status": "pass",
+    "notes": "Vendedor sidebar correcto: Nueva Factura, Inicio, Contactos, Ingresos, Inventario, Configuracion. 'Reportes' NO aparece en sidebar. PERO: puede acceder directamente a /dashboard/reportes (ver PERM-07).",
+    "screenshot": null,
+    "ts": "2026-05-16T23:04:13Z"
+  },
+  {
+    "id": "PERM-07",
+    "status": "fail",
+    "notes": "BUG: Vendedor puede acceder a /dashboard/reportes directamente aunque no esta en sidebar. Pagina carga completamente con todos los reportes DGII (606, 607, 608, 609). No hay redirect a /dashboard. Solo el sidebar item esta oculto pero la ruta no esta protegida.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:04:18Z"
+  },
+  {
+    "id": "PERM-05",
+    "status": "fail",
+    "notes": "BUG: Member sidebar muestra: Nueva Factura, Inicio, Contactos, Ingresos, Inventario, Configuracion (solo 'Usuarios y equipo' sub-item). Spec: 'sin permisos administrativos'. BUGS: (1) Nueva Factura visible aunque solo tiene facturas:ver no facturas:crear; (2) puede acceder a /dashboard/facturas/nueva y crear facturas; (3) Configuracion visible aunque no tiene configuracion:ver. Solo equipo:ver se respeta mostrando solo 'Usuarios y equipo'.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:06:38Z"
+  },
+  {
+    "id": "PERM-08",
+    "status": "pass",
+    "notes": "Platform admin (alexander.ferreras@yisraeltech.com / Admin1234!) accede a /admin correctamente. Dashboard Admin muestra: 5 usuarios, 5 empresas, 21 e-CFs, 21 este mes. Tabs: Dashboard, Usuarios, Empresas, Logs. Full panel accesible.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:07:42Z"
+  },
+  {
+    "id": "PERM-09",
+    "status": "fail",
+    "notes": "BUG (fix #1 no aplicado): Platform admin ve 'No eres miembro de este equipo' al acceder a /dashboard/equipo del team YISRAEL TECHNOLOGY SRL. El getTeamIdForUser() retorna el teamId correcto via fallback (API de clientes funciona), pero el API /api/equipo/miembros tiene su propio check de membership que no tiene excepcion para platform admin. La ruta /api/equipo/miembros retorna 403 para platform admin sin membership.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:07:47Z"
+  },
+  {
+    "id": "PERM-10",
+    "status": "fail",
+    "notes": "BUG: Cambiar rol miembro NO refresca sidebar automaticamente. Al cambiar QT de 'member' a 'admin' via equipo page, su propio sidebar no actualiza hasta nuevo login. La sesion JWT guarda el role y no se invalida al cambiar el role desde otro usuario. Requiere logout+login para ver cambio.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:07:54Z"
+  },
+  {
+    "id": "PERM-11",
+    "status": "fail",
+    "notes": "BUG: API /api/cuentas-por-cobrar retorna 200 para usuario con rol 'member' (solo tiene facturas:ver, no cuentas-por-cobrar:ver). La API no valida el permiso 'facturas:ver' vs acceso a AR. Todos los usuarios con session valida y team membership pueden acceder al API de AR.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:08:32Z"
+  },
+  {
+    "id": "PERM-12",
+    "status": "pass",
+    "notes": "API registrar pago (POST /api/cuentas-por-cobrar/[id]/pagos) retorna 403 para usuario 'member' que no tiene facturas:crear. Gate correcto para registro de pagos. NOTA: GET /api/cuentas-por-cobrar (ver AR) NO tiene gate (retorna 200 para member), solo el POST de pago esta protegido.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:08:46Z"
+  },
+  {
+    "id": "WH-01",
+    "status": "pass",
+    "notes": "Webhook creado correctamente: nombre QA-Webhook-Test, URL webhook.site, evento ecf.emitido. Toast 'Webhook creado' visible.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:11:38Z"
+  },
+  {
+    "id": "WH-02",
+    "status": "fail",
+    "notes": "No existe botón 'probar/test delivery' en la tarjeta del webhook. Solo hay toggle (activar/desactivar) y botón eliminar. Funcionalidad no implementada.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:11:41Z"
+  },
+  {
+    "id": "WH-03",
+    "status": "pass",
+    "notes": "Webhook QA-Webhook-Test listado correctamente con nombre, URL, eventos y botón 'Copiar secret'.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:11:44Z"
+  },
+  {
+    "id": "WH-04",
+    "status": "fail",
+    "notes": "No existe botón de editar webhook. La tarjeta muestra solo toggle on/off y botón eliminar. No hay edición inline ni modal de edición. Funcionalidad no implementada.",
+    "screenshot": null,
+    "ts": "2026-05-16T23:11:54Z"
+  },
+  {
+    "id": "APIK-01",
+    "status": "pass",
+    "notes": "API key generada correctamente. Muestra el valor completo (emdo_c1f3f8f3c8d74cf16fa8d0ae59904e7c4a3a327623f164bb) una sola vez con banner 'Copia esta clave ahora — no se volverá a mostrar'. Tabla aparece con NOMBRE, PREFIJO, PERMISOS, ÚLTIMO USO.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:07:44Z"
+  },
+  {
+    "id": "APIK-02",
+    "status": "pass",
+    "notes": "Listado muestra solo metadatos: nombre, prefijo truncado (emdo_c1f3f8f...), permisos como icono, último uso. El valor completo de la key NO aparece en tabla.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:07:56Z"
+  },
+  {
+    "id": "APIK-05",
+    "status": "fail",
+    "notes": "Dropdown de permisos muestra 3 opciones en form (Solo lectura/read, Lectura+escritura/write, Acceso completo/full). PERO la columna PERMISOS en la tabla de listado aparece completamente vacía para ambas keys — el span existe con clases teal pero sin texto ni label. No es posible verificar que el scope guardado se refleja en UI.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:09:02Z"
+  },
+  {
+    "id": "APIK-03",
+    "status": "partial",
+    "notes": "Key revocada correctamente — desaparece de la lista y muestra toast 'API key revocada'. PERO: no hay confirm dialog antes de revocar, la key se elimina instantáneamente con un solo click. No hay estado 'inactiva' visible — la key simplemente se borra. Checklist esperaba verla 'inactiva' pero en cambio se elimina.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:13:30Z"
+  },
+  {
+    "id": "APIK-04",
+    "status": "blocked",
+    "notes": "No testeable via UI. La key revocada se elimina de la BD (no queda como 'inactiva'), por lo que no hay referencia de key revocada en la UI para probar. Además el scope prohíbe fetch() directo. Para testear 401 se necesitaría acceso API externo.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:13:37Z"
+  },
+  {
+    "id": "NC-01",
+    "status": "pass",
+    "notes": "Página Notas de Crédito carga correctamente con empty state y botón Nueva Nota de Crédito. Muestra subtítulo 'Comprobantes tipo 34 — e-CF Nota de Crédito'.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:51:49Z"
+  },
+  {
+    "id": "NC-02",
+    "status": "pass",
+    "notes": "Crear nota crédito desde lista: botón 'Nueva Nota de Crédito' navega a /facturas/nueva?tipo=34. Al seleccionar 'Nota de crédito' en doc type, el form cambia a e34 y muestra campos adicionales: E-NCF que se modifica, Código de modificación, Fecha del e-NCF original.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:52:57Z"
+  },
+  {
+    "id": "NC-03",
+    "status": "pass",
+    "notes": "Cotizaciones — listar: página carga con empty state 'Sin cotizaciones registradas', campo búsqueda, y botón 'Nueva cotización'.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:53:10Z"
+  },
+  {
+    "id": "NC-04",
+    "status": "pass",
+    "notes": "Cotizaciones — crear: formulario carga correctamente. Se creó cotización COT-0001 para 'QA-AG-A-Cliente Test' por RD,000.00 en estado Borrador. Redirige al listado tras guardar.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:53:50Z"
+  },
+  {
+    "id": "NC-05",
+    "status": "fail",
+    "notes": "Cotizaciones — convertir a factura: NO implementado. No existe ruta /dashboard/cotizaciones/[id]/editar (404). El botón editar en lista apunta a esa ruta inexistente. No hay opción 'Convertir a factura' en ningún lugar de la UI.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:54:36Z"
+  },
+  {
+    "id": "NC-06",
+    "status": "fail",
+    "notes": "Cotizaciones — enviar por email: NO implementado. No existe opción de envío por email en la lista de cotizaciones. Las row actions solo tienen Editar (404) y Eliminar. No hay modal de email.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:54:45Z"
+  },
+  {
+    "id": "NC-07",
+    "status": "partial",
+    "notes": "Cotizaciones — estado badges: el badge 'Borrador' se muestra correctamente en el listado. El código incluye badges para borrador/enviada/aceptada/rechazada/vencida. Sin embargo, no hay forma de cambiar el estado desde la UI (no hay edit page, ni send email). Solo se puede verificar el estado 'Borrador'.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:54:55Z"
+  },
+  {
+    "id": "NC-08",
+    "status": "partial",
+    "notes": "Cotizaciones — vencimiento configurable: el campo 'Fecha de vencimiento' existe en el form y acepta una fecha (2026-06-30). La cotización se guardó (COT-0002). Sin embargo, la fecha de vencimiento no es visible en la lista ni hay página de detalle para confirmar persistencia en DB.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:55:22Z"
+  },
+  {
+    "id": "NC-09",
+    "status": "pass",
+    "notes": "Cotizaciones — agregar productos: se pueden agregar múltiples line items con 'Agregar línea'. Totales calculan correctamente (200×3=600 + 150×2=300 = Total RD.00). Botón eliminar por línea presente.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:55:52Z"
+  },
+  {
+    "id": "NC-10",
+    "status": "fail",
+    "notes": "Cotizaciones — exportar PDF: NO implementado. No existe opción de exportar PDF en el formulario de cotización ni en la lista. La API de cotizaciones no tiene endpoint PDF. Solo hay botón 'Guardar como borrador'.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:56:14Z"
+  },
+  {
+    "id": "WH-05",
+    "status": "pass",
+    "notes": "Eliminar webhook: click en icono de papelera eliminó el webhook 'QA-A-Test Webhook Delete' sin modal de confirmación. Toast verde 'Webhook eliminado' apareció y el listado cambió a 'No hay webhooks configurados'. NOTA: no hay confirmación previa al borrar.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:56:43Z"
+  },
+  {
+    "id": "SYS-01",
+    "status": "pass",
+    "notes": "Team switcher dropdown opens correctly showing all 4 companies. Switching to YISRAEL KIDS SCHOOL SRL updates the header label. Dashboard reflects new team context.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:58:39Z"
+  },
+  {
+    "id": "SYS-02",
+    "status": "pass",
+    "notes": "After logout and navigating to /dashboard, middleware correctly redirects to /sign-in. Session properly invalidated on logout.",
+    "screenshot": null,
+    "ts": "2026-05-17T18:59:35Z"
+  },
+  {
+    "id": "SYS-03",
+    "status": "pass",
+    "notes": "Mobile 375x812: sidebar hidden, hamburger menu visible, content cards stack vertically, team switcher visible in header. Dashboard is functional and readable.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:00:02Z"
+  },
+  {
+    "id": "SYS-04",
+    "status": "pass",
+    "notes": "Tablet 768x1024: sidebar hidden with hamburger, 2-column card layout, all content visible and functional. Buscar and profile buttons visible in header.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:00:11Z"
+  },
+  {
+    "id": "SYS-05",
+    "status": "pass",
+    "notes": "Desktop 1440x900: sidebar visible with all nav links (Inicio, Contactos, Reportes, Ingresos, Inventario, Configuración). Proper 2-panel layout. 3-column cards layout.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:00:21Z"
+  },
+  {
+    "id": "SYS-06",
+    "status": "pass",
+    "notes": "2FA wizard opens at /dashboard/security: QR code displayed, manual secret code shown, 6-digit input field present, Activar 2FA and Cancelar buttons work. Did not complete activation to avoid side effects.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:00:45Z"
+  },
+  {
+    "id": "SYS-07",
+    "status": "partial",
+    "notes": "Forgot password form at /forgot-password works: accepts email, shows success message 'Si existe una cuenta con ese email, recibirás un enlace en breve.' Cannot test second step (new password form) without access to email inbox.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:01:14Z"
+  },
+  {
+    "id": "SYS-08",
+    "status": "partial",
+    "notes": "New account (qa-ag-b-test-onboard@yopmail.com) created. Post-signup: redirected to pricing page with 'Cuenta creada! Elige tu plan para empezar'. Dashboard shows empty state with 'Sin secuencias disponibles' warning and 'Emitir primer comprobante' CTA. No multi-step onboarding wizard found — onboarding is implicit via empty state prompts.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:02:10Z"
+  },
+  {
+    "id": "SYS-09",
+    "status": "blocked",
+    "notes": "Cannot simulate network error/500 from UI only without source code changes. Attempted fetch override but it breaks Next.js navigation. Cannot verify toast error message for network failures without a controlled error scenario.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:04:23Z"
+  },
+  {
+    "id": "SYS-10",
+    "status": "blocked",
+    "notes": "Cannot simulate 2 concurrent users in a single browser preview session. Race condition for NCF duplicate requires two simultaneous sessions with different auth contexts.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:04:29Z"
+  },
+  {
+    "id": "SYS-11",
+    "status": "pass",
+    "notes": "Cmd+K / Buscar button opens global search modal with placeholder 'Buscar facturas, clientes, productos...'. Searching 'E310' returns matching invoice NCFs categorized as 'Factura'. Empty state 'Sin resultados' shown for non-matching queries. Keyboard shortcuts displayed (↑↓ navegar, ↵ abrir, ESC cerrar). Header search button also works.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:05:09Z"
+  },
+  {
+    "id": "SYS-12",
+    "status": "partial",
+    "notes": "Teal color theme is consistent: sidebar bg-teal-700 (lab(44.4134 -33.1436 -4.22149)), primary buttons bg-teal-600. Font: HTML element has Inter set via next/font (inter_31011fd class), but body/components actually render Manrope (body font-family: 'Manrope, Arial, Helvetica, sans-serif'). Font is Manrope not Inter as expected. Colors pass, font FAIL.",
+    "screenshot": null,
+    "ts": "2026-05-17T19:06:00Z"
+  }
+]

@@ -318,6 +318,38 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
     });
   }
 
+  async function crearProductoLibre(idx: number, texto: string) {
+    const nombre = texto.trim();
+    if (!nombre) return;
+    try {
+      const item = items[idx];
+      const tasaItem = String(item?.tasaItbis ?? '0.18');
+      const tasa: '0.18' | '0.16' | '0' | 'exento' =
+        tasaItem === '0.16' ? '0.16' :
+        tasaItem === '0'    ? '0'    :
+        tasaItem === 'exento' ? 'exento' :
+        '0.18';
+      const res = await fetch('/api/productos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre,
+          precio:    item?.precioUnitarioItem ?? 0,
+          tasaItbis: tasa,
+          tipo:      'servicio',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.producto) {
+        seleccionarProducto(idx, data.producto);
+      } else {
+        dispatchItems({ type: 'UPDATE', id: items[idx].id, field: 'nombreItem', value: nombre });
+      }
+    } catch {
+      dispatchItems({ type: 'UPDATE', id: items[idx].id, field: 'nombreItem', value: nombre });
+    }
+  }
+
   // ─── Items CRUD ─────────────────────────────────────────────────────────────
   const addItem    = () => dispatchItems({ type: 'ADD' });
   const removeItem = (id: number) => dispatchItems({ type: 'REMOVE', id });
@@ -712,6 +744,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
               regla={regla}
               buscarProductos={buscarProductos}
               onSelectProducto={seleccionarProducto}
+              onCrearProductoLibre={crearProductoLibre}
               onAddItem={addItem}
               onRemoveItem={removeItem}
               onUpdateItem={updateItem}

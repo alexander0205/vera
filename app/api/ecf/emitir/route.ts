@@ -15,7 +15,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -47,7 +47,8 @@ const retencionSchema = z.object({
 
 const emitirSchema = z.object({
   modo:                 z.enum(['emitir', 'borrador']).default('emitir'),
-  tipoEcf:              z.enum(['31', '32', '33', '34', '41', '43', '44', '45', '46', '47']),
+  // 'sin-ncf' only allowed in borrador mode (validated below)
+  tipoEcf:              z.enum(['31', '32', '33', '34', '41', '43', '44', '45', '46', '47', 'sin-ncf']),
   rncComprador:         z.string().regex(/^\d{9,11}$/, 'RNC debe tener 9-11 dígitos').optional(),
   razonSocialComprador: z.string().optional(),
   emailComprador:       z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
@@ -180,6 +181,14 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data;
 
+    // Cross-field: sin-ncf solo permitido en modo borrador
+    if (data.tipoEcf === 'sin-ncf' && data.modo !== 'borrador') {
+      return NextResponse.json(
+        { error: 'tipoEcf sin-ncf solo puede usarse en modo borrador. Selecciona un tipo de e-CF para emitir a la DGII.' },
+        { status: 400 },
+      );
+    }
+
     // Cross-field: cuando se referencia un NCF que se modifica (tipos 33, 34),
     // codigoModificacion y fechaNcfModificado son obligatorios.
     if (data.ncfModificado && data.modo !== 'borrador') {
@@ -194,6 +203,34 @@ export async function POST(request: NextRequest) {
           { error: 'fechaNcfModificado es obligatoria cuando se referencia un NCF modificado (tipos 33, 34).' },
           { status: 400 },
         );
+      }
+    }
+
+    // Cross-doc: si se referencia un padre (ncfModificado), validar que ese padre
+    // tenga eCF real (no sin-ncf, no borrador). NC con eCF sobre factura sin-eCF
+    // es incoherente — la factura padre debe promoverse primero a eCF via
+    // "Enviar a DGII" antes de poder emitir la NC con eCF.
+    if (data.ncfModificado && data.modo !== 'borrador' && data.tipoEcf !== 'sin-ncf') {
+      const [parent] = await db
+        .select({ tipoEcf: ecfDocuments.tipoEcf, estado: ecfDocuments.estado, encf: ecfDocuments.encf })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, data.ncfModificado)))
+        .limit(1);
+
+      if (parent) {
+        const parentSinEcf = parent.tipoEcf === 'sin-ncf'
+          || (parent.encf?.startsWith('BOR-') ?? false);
+        if (parentSinEcf) {
+          return NextResponse.json(
+            {
+              error: 'La factura referenciada no tiene e-CF',
+              mensaje: 'No puedes emitir una NC con e-CF sobre una factura sin e-CF. Primero envía la factura padre a la DGII ("Enviar a DGII" en el detalle), o crea esta NC también sin e-CF (tipoEcf="sin-ncf").',
+              parentEncf: data.ncfModificado,
+              parentTipoEcf: parent.tipoEcf,
+            },
+            { status: 409 },
+          );
+        }
       }
     }
 

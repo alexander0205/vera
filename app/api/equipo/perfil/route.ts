@@ -14,7 +14,9 @@ const MAX_IMG_SIZE = 1_000_000; // 1 MB en base64
 const schema = z.object({
   razonSocial:       z.string().min(1).max(255).optional(),
   nombreComercial:   z.string().max(255).optional(),
-  rnc:               z.string().max(11).optional(),
+  rnc:               z.string()
+                       .regex(/^\d{9}$|^\d{11}$/, 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)')
+                       .optional(),
   direccion:         z.string().max(500).optional(),
   provincia:         z.string().max(100).optional().or(z.literal('')),
   municipio:         z.string().max(100).optional().or(z.literal('')),

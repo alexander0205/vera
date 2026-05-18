@@ -46,7 +46,9 @@ export type Permission =
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
-export type RoleKey = 'owner' | 'admin' | 'contador' | 'vendedor' | 'member';
+export type RoleKey = 'owner' | 'admin' | 'user' | 'contador' | 'vendedor' | 'member';
+// Nota: contador/vendedor/member quedan como compat con datos legacy.
+// Roles activos para nuevas invitaciones: owner | admin | user.
 
 export interface RoleDef {
   key: RoleKey;
@@ -104,44 +106,62 @@ export const ROLES: RoleDef[] = [
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
   {
-    key:         'contador',
-    label:       'Contador',
-    description: 'Ve y descarga reportes y facturas',
+    key:         'user',
+    label:       'Usuario',
+    description: 'Acceso operativo: facturas, clientes, productos, reportes. Sin configuración ni equipo.',
     invitable:   true,
     permissions: [
-      'facturas:ver', 'facturas:exportar',
-      'clientes:ver',
-      'productos:ver',
-      'cotizaciones:ver',
+      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'clientes:ver', 'clientes:gestionar',
+      'productos:ver', 'productos:gestionar',
+      'cotizaciones:ver', 'cotizaciones:gestionar',
       'reportes:ver',
       'equipo:ver',
-      'configuracion:ver',
     ],
-    ui: { color: 'text-blue-600 bg-blue-50 border-blue-200',       icon: 'BookOpen'   },
+    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
+  },
+  // ── Roles legacy (DB rows existentes) — mismos permisos que 'user' por compat
+  {
+    key:         'contador',
+    label:       'Contador (legacy)',
+    description: 'Rol legacy — mapea a Usuario',
+    invitable:   false,
+    permissions: [
+      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'clientes:ver', 'clientes:gestionar',
+      'productos:ver', 'productos:gestionar',
+      'cotizaciones:ver', 'cotizaciones:gestionar',
+      'reportes:ver',
+      'equipo:ver',
+    ],
+    ui: { color: 'text-gray-600 bg-gray-50 border-gray-200',       icon: 'User'       },
   },
   {
     key:         'vendedor',
-    label:       'Vendedor',
-    description: 'Crea y consulta facturas y cotizaciones',
-    invitable:   true,
+    label:       'Vendedor (legacy)',
+    description: 'Rol legacy — mapea a Usuario',
+    invitable:   false,
     permissions: [
-      'facturas:ver', 'facturas:crear',
+      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
       'clientes:ver', 'clientes:gestionar',
-      'productos:ver',
+      'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
+      'reportes:ver',
       'equipo:ver',
     ],
-    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'ShoppingBag' },
+    ui: { color: 'text-gray-600 bg-gray-50 border-gray-200',       icon: 'User'       },
   },
   {
     key:         'member',
-    label:       'Miembro',
-    description: 'Acceso básico de lectura',
-    invitable:   true,
+    label:       'Miembro (legacy)',
+    description: 'Rol legacy — mapea a Usuario',
+    invitable:   false,
     permissions: [
-      'facturas:ver',
-      'clientes:ver',
-      'productos:ver',
+      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'clientes:ver', 'clientes:gestionar',
+      'productos:ver', 'productos:gestionar',
+      'cotizaciones:ver', 'cotizaciones:gestionar',
+      'reportes:ver',
       'equipo:ver',
     ],
     ui: { color: 'text-gray-600 bg-gray-50 border-gray-200',       icon: 'User'       },

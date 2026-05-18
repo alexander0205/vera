@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const schema = z.object({
   razonSocial: z.string().min(2).max(255),
-  rnc: z.string().regex(/^\d{9,11}$/, 'RNC debe tener 9-11 dígitos'),
+  rnc: z.string().regex(/^\d{9}$|^\d{11}$/, 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)'),
   nombreComercial: z.string().max(255).optional(),
 });
 

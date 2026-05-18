@@ -212,8 +212,8 @@ export const ecfDocuments = pgTable('ecf_documents', {
   clientId: integer('client_id').references(() => clients.id),
 
   // Identificación
-  encf: varchar('encf', { length: 40 }).notNull(),        // E310000000001 (real) o BOR-XXXXXXXX (borrador)
-  tipoEcf: varchar('tipo_ecf', { length: 2 }).notNull(),  // "31", "32", etc.
+  encf: varchar('encf', { length: 40 }).notNull(),          // E310000000001 (real) o BOR-XXXXXXXX (borrador)
+  tipoEcf: varchar('tipo_ecf', { length: 10 }).notNull(),   // "31", "32", ..., "sin-ncf"
 
   // Estado del ciclo de vida
   estado: varchar('estado', { length: 30 }).notNull().default('BORRADOR'),
@@ -472,6 +472,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
   cotizaciones: many(cotizaciones),
   categorias: many(categorias),
   facturasRecurrentes: many(facturasRecurrentes),
+  impresoras: many(impresoras),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -729,7 +730,29 @@ export const systemSettings = pgTable('system_settings', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ─── EmiteDO — Impresoras ─────────────────────────────────────────────────────
+// Configuración de impresoras por team. La impresora marcada esDefault
+// determina qué PDF se abre al hacer clic en "Imprimir" desde una factura.
+// No incluye drivers nativos — la impresión real la realiza el navegador.
+
+export const impresoras = pgTable('impresoras', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  nombre:    varchar('nombre', { length: 100 }).notNull(),
+  // termica_80mm | termica_58mm | a4
+  tipo:      varchar('tipo', { length: 20 }).notNull().default('a4'),
+  esDefault: boolean('es_default').notNull().default(false),
+  // IP opcional para impresoras de red (referencia visual, sin integración driver)
+  ip:        varchar('ip', { length: 100 }),
+  // backend intencional: cups | browser | escpos (solo informativo en esta versión)
+  backend:   varchar('backend', { length: 20 }).notNull().default('browser'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('impresoras_team_idx').on(t.teamId)]);
+
 // ─── TypeScript types ─────────────────────────────────────────────────────────
+
+export type Impresora    = typeof impresoras.$inferSelect;
+export type NewImpresora = typeof impresoras.$inferInsert;
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

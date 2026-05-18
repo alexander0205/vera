@@ -101,7 +101,7 @@ export default function ApiKeysPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
               <option value="read">Solo lectura</option>
               <option value="write">Lectura + escritura</option>
-              <option value="full">Acceso completo</option>
+              <option value="admin">Acceso completo</option>
             </select>
           </div>
           <div className="flex gap-3">

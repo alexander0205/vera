@@ -85,7 +85,7 @@ export default function NuevaFacturaForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [tipoEcf, setTipoEcf]         = useState(initialData?.tipoEcf ?? '31');
+  const [tipoEcf, setTipoEcf]         = useState(initialData?.tipoEcf ?? 'sin-ncf');
   const [categoriaId, setCategoriaId] = useState('factura-venta');
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
@@ -344,6 +344,47 @@ export default function NuevaFacturaForm({
     });
   }
 
+  /**
+   * Cuando el user escribe texto libre que no hace match con productos,
+   * crear el producto en DB (precio 0 inicial, tasa default 18%) y
+   * seleccionarlo. Así el item queda con productoId — próxima vez aparece
+   * en el dropdown sin tener que retipearlo.
+   */
+  async function crearProductoLibre(idx: number, texto: string) {
+    const nombre = texto.trim();
+    if (!nombre) return;
+    try {
+      const item = items[idx];
+      const tasaItem = String(item?.tasaItbis ?? '0.18');
+      const tasa: '0.18' | '0.16' | '0' | 'exento' =
+        tasaItem === '0.16' ? '0.16' :
+        tasaItem === '0'    ? '0'    :
+        tasaItem === 'exento' ? 'exento' :
+        '0.18';
+      const res = await fetch('/api/productos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre,
+          precio:    item?.precioUnitarioItem ?? 0,
+          tasaItbis: tasa,
+          tipo:      'servicio',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.producto) {
+        seleccionarProducto(idx, data.producto);
+      } else {
+        // Fallback: setear solo el nombre — no se guarda producto pero la línea queda usable
+        dispatchItems({ type: 'UPDATE', id: items[idx].id, field: 'nombreItem', value: nombre });
+        toast.error(data.error ?? 'No se pudo crear el producto. Usando texto libre.');
+      }
+    } catch (e) {
+      dispatchItems({ type: 'UPDATE', id: items[idx].id, field: 'nombreItem', value: nombre });
+      toast.error(e instanceof Error ? e.message : 'Error de red creando producto');
+    }
+  }
+
   // ─── Cambio de tipo ───────────────────────────────────────────────────────
   function handleChangeTipo(t: string) {
     setTipoEcf(t);
@@ -496,10 +537,13 @@ export default function NuevaFacturaForm({
   }
 
   async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
-    const err = modo === 'borrador' ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null) : validar();
+    // Sin eCF seleccionado → siempre guardar como borrador (no se emite a DGII)
+    const modoEfectivo: 'emitir' | 'borrador' = tipoEcf === 'sin-ncf' ? 'borrador' : modo;
+
+    const err = modoEfectivo === 'borrador' ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null) : validar();
     if (err) { setError(err); return; }
 
-    if (modo === 'emitir') {
+    if (modoEfectivo === 'emitir') {
       try {
         const payload = buildPayload('emitir');
         // Augmentar payload con campos derivados que el mapper computará server-side
@@ -521,17 +565,31 @@ export default function NuevaFacturaForm({
         // 0 = precios NO incluyen ITBIS (default — nuestro form calcula ITBIS encima)
         // 1 = precios SÍ incluyen ITBIS
         const hayItemsGravados = itemsAugmented.some(i => [1, 2, 3].includes(i.indicadorFacturacion));
-        const validationPayload = {
+        // Bug: validator usa payloadKey 'fechaNCFModificado' (NCF mayúsculas)
+        // pero buildPayload emite 'fechaNcfModificado' (Ncf). Renombrar para
+        // que el validator no marque required-missing en NC tipo 33/34.
+        const fechaNcfMod = (payload as { fechaNcfModificado?: string }).fechaNcfModificado;
+        const validationPayload: Record<string, unknown> = {
           ...payload,
           montoTotal: totales.total,
           items: itemsAugmented,
           ...(hayItemsGravados ? { indicadorMontoGravado: 0 } : {}),
+          ...(fechaNcfMod ? { fechaNCFModificado: fechaNcfMod } : {}),
           // Renombrar campos para tipo 41 (Compras) — usa rncProveedor en lugar de rncComprador
           ...(tipoEcf === '41' ? {
             rncProveedor:         payload.rncComprador,
             razonSocialProveedor: payload.razonSocialComprador,
           } : {}),
+          // Tipos 41/43/47: tipoIngresos NO aplica (campo prohibido). Eliminarlo del payload
+          // para que el validator no marque "no debe estar presente".
+          ...(tipoEcf === '41' || tipoEcf === '43' || tipoEcf === '47'
+            ? { tipoIngresos: undefined }
+            : {}),
         };
+        // Eliminar undefined explícitos para que el validator no los vea
+        if ((validationPayload as { tipoIngresos?: unknown }).tipoIngresos === undefined) {
+          delete (validationPayload as { tipoIngresos?: unknown }).tipoIngresos;
+        }
         const result = validateEcf(tipoEcf, validationPayload, {
           context: {
             tipoPago: plazoActual?.dgiiTipo,
@@ -551,10 +609,10 @@ export default function NuevaFacturaForm({
 
     setLoading(true); setError(null);
     try {
-      const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modo)) });
+      const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modoEfectivo)) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
-      if (modo === 'emitir') {
+      if (modoEfectivo === 'emitir') {
         try { localStorage.removeItem(draftKey); } catch {}
       }
       if (opts?.andThen === 'nueva') {
@@ -628,25 +686,41 @@ export default function NuevaFacturaForm({
 
   // ─── Pantalla de éxito ────────────────────────────────────────────────────
   if (resultado) {
+    const esSinEcf = resultado.modo === 'borrador';
     return (
       <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-2xl shadow-md p-5 sm:p-8 text-center">
             <CheckCircle className="h-16 w-16 text-teal-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Comprobante emitido!</h2>
-            <p className="text-gray-500 mb-6">Tu e-CF fue enviado a la DGII exitosamente.</p>
+            {esSinEcf ? (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Factura guardada!</h2>
+                <p className="text-gray-500 mb-6">Tu factura fue guardada correctamente.</p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Comprobante emitido!</h2>
+                <p className="text-gray-500 mb-6">Tu e-CF fue enviado a la DGII exitosamente.</p>
+              </>
+            )}
             <div className="bg-gray-50 rounded-xl p-6 text-left space-y-3 border border-gray-100 mb-6">
-              <div className="flex justify-between"><span className="text-sm text-gray-500">e-NCF</span><span className="font-mono font-bold">{resultado.encf}</span></div>
-              <div className="flex justify-between"><span className="text-sm text-gray-500">Track ID</span><span className="font-mono text-sm">{resultado.trackId}</span></div>
-              <div className="flex justify-between"><span className="text-sm text-gray-500">Código de seguridad</span><span className="font-mono font-bold text-teal-700 text-lg">{resultado.codigoSeguridad}</span></div>
+              {!esSinEcf && resultado.encf && (
+                <div className="flex justify-between"><span className="text-sm text-gray-500">e-NCF</span><span className="font-mono font-bold">{resultado.encf}</span></div>
+              )}
+              {!esSinEcf && resultado.trackId && (
+                <div className="flex justify-between"><span className="text-sm text-gray-500">Track ID</span><span className="font-mono text-sm">{resultado.trackId}</span></div>
+              )}
+              {!esSinEcf && resultado.codigoSeguridad && (
+                <div className="flex justify-between"><span className="text-sm text-gray-500">Código de seguridad</span><span className="font-mono font-bold text-teal-700 text-lg">{resultado.codigoSeguridad}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-sm text-gray-500">Monto total</span><span className="font-bold">DOP {(resultado.montoTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
               <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge variant="outline">{resultado.estado}</Badge></div>
             </div>
             <div className="flex gap-3 justify-center flex-wrap">
               <Button variant="outline" asChild><a href={`/api/pdf/factura/${resultado.documentoId}`} target="_blank" rel="noreferrer">Descargar PDF</a></Button>
               <Button variant="outline" asChild><Link href={`/dashboard/facturas/${resultado.documentoId}`}>Ver detalle</Link></Button>
-              <Button variant="outline" onClick={() => { setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Emitir otro</Button>
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => router.push('/dashboard/facturas')}>Ver todos</Button>
+              <Button variant="outline" onClick={() => { setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Nueva factura</Button>
+              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => router.push('/dashboard/facturas')}>Ver todas</Button>
             </div>
           </div>
         </div>
@@ -767,6 +841,7 @@ export default function NuevaFacturaForm({
                   regla={regla}
                   buscarProductos={buscarProductos}
                   onSelectProducto={seleccionarProducto}
+                  onCrearProductoLibre={crearProductoLibre}
                   onAddItem={addItem}
                   onRemoveItem={removeItem}
                   onUpdateItem={updateItem}
@@ -831,6 +906,8 @@ export default function NuevaFacturaForm({
             items={items}
             loading={loading}
             loadingPreview={loadingPreview}
+            primaryLabel={tipoEcf === 'sin-ncf' ? 'Guardar factura' : 'Emitir e-CF'}
+            loadingPrimaryLabel={tipoEcf === 'sin-ncf' ? 'Guardando…' : 'Emitiendo…'}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}
             onCancelar={() => {

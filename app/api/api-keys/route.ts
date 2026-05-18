@@ -5,6 +5,13 @@ import { apiKeys } from '@/lib/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+
+// APIK-05: alinear permisos válidos con dropdown UI
+const createSchema = z.object({
+  nombre:   z.string().min(1, 'Nombre requerido').max(120),
+  permisos: z.enum(['read', 'write', 'admin']).default('read'),
+});
 
 export async function GET() {
   const teamId = await getTeamIdForUser();
@@ -33,8 +40,15 @@ export async function POST(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 400 });
 
-  const { nombre, permisos } = await req.json();
-  if (!nombre) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
+  const body = await req.json();
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Datos inválidos', detalles: parsed.error.flatten() },
+      { status: 400 },
+    );
+  }
+  const { nombre, permisos } = parsed.data;
 
   const rawKey = `emdo_${randomBytes(24).toString('hex')}`;
   const keyPrefix = rawKey.slice(0, 12);
@@ -45,7 +59,7 @@ export async function POST(req: NextRequest) {
     nombre,
     keyHash,
     keyPrefix,
-    permisos: permisos ?? 'read',
+    permisos,
   }).returning({ id: apiKeys.id, nombre: apiKeys.nombre, keyPrefix: apiKeys.keyPrefix });
 
   // Return the raw key only once

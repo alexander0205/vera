@@ -71,6 +71,7 @@ export default function FacturasPage() {
       ...(filterValues.estado && { estado: filterValues.estado }),
       ...(filterValues.fecha_desde && { desde: filterValues.fecha_desde }),
       ...(filterValues.fecha_hasta && { hasta: filterValues.fecha_hasta }),
+      ...(filterValues.conNcs === '1' && { conNcs: '1' }),
     });
     const res = await fetch(`/api/facturas?${sp}`).catch(() => null);
     if (res?.ok) {
@@ -265,6 +266,16 @@ export default function FacturasPage() {
           { type: 'search',    id: 'q',      placeholder: 'Buscar por e-NCF o cliente…' },
           { type: 'select',    id: 'estado', label: 'Todos los estados', options: ESTADOS },
           { type: 'daterange', id: 'fecha',  label: 'Fechas' },
+          // NCA-22: filtro "Con NCs / débitos"
+          {
+            type: 'select',
+            id: 'conNcs',
+            label: 'Con NCs',
+            options: [
+              { value: '',  label: 'Todas' },
+              { value: '1', label: 'Con NCs asociadas' },
+            ],
+          },
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}

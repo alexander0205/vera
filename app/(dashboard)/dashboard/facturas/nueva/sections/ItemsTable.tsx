@@ -19,6 +19,8 @@ interface Props {
   regla: TipoEcfRegla | undefined;
   buscarProductos: (q: string) => Promise<Producto[]>;
   onSelectProducto: (idx: number, p: Producto) => void;
+  /** Texto libre sin match → crear producto en DB y seleccionarlo. */
+  onCrearProductoLibre: (idx: number, texto: string) => void;
   onAddItem: () => void;
   onRemoveItem: (id: number) => void;
   onUpdateItem: (id: number, field: keyof ItemLinea, value: string | number) => void;
@@ -49,7 +51,7 @@ function writeColsPref(cols: { referencia: boolean; descripcion: boolean }) {
 }
 
 export function ItemsTable({
-  items, regla, buscarProductos, onSelectProducto,
+  items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onOpenNuevoProducto,
   showReferencia, showDescripcion,
 }: Props) {
@@ -88,6 +90,8 @@ export function ItemsTable({
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                 onCreate={() => onOpenNuevoProducto(idx)}
                 createLabel="Nuevo producto"
+                onFreeText={(text) => onCrearProductoLibre(idx, text)}
+                freeTextLabel="Crear y usar como producto"
                 renderOption={(p) => (
                   <div>
                     <p className="font-medium">{p.nombre}</p>
@@ -299,6 +303,8 @@ export function ItemsTable({
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                     onCreate={() => onOpenNuevoProducto(idx)}
                     createLabel="Nuevo producto"
+                    onFreeText={(text) => onCrearProductoLibre(idx, text)}
+                    freeTextLabel="Crear y usar como producto"
                     renderOption={(p) => (
                       <div>
                         <p className="font-medium">{p.nombre}</p>

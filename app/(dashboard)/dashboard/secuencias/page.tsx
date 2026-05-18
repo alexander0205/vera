@@ -111,6 +111,7 @@ export default function SecuenciasPage() {
   const [editHasta, setEditHasta]         = useState('');
   const [editVenc, setEditVenc]           = useState('');
   const [editPreferida, setEditPreferida] = useState(false);
+  const [editAutomatica, setEditAutomatica] = useState(false);
   const [editSucursal, setEditSucursal]   = useState('');
   const [editPie, setEditPie]             = useState('');
 
@@ -140,6 +141,7 @@ export default function SecuenciasPage() {
     setEditHasta(s.secuenciaHasta);
     setEditVenc(s.fechaVencimiento ? s.fechaVencimiento.slice(0, 10) : '');
     setEditPreferida(s.preferida);
+    setEditAutomatica(s.numeracionAutomatica);
     setEditSucursal(s.sucursal ?? '');
     setEditPie(s.pieDeFactura ?? '');
     setOpError(null);
@@ -157,6 +159,7 @@ export default function SecuenciasPage() {
       const payload: Record<string, unknown> = {
         nombre:   editNombre.trim(),
         preferida: editPreferida,
+        numeracionAutomatica: editAutomatica,
         sucursal:  editSucursal.trim() || null,
         pieDeFactura: editPie.trim() || null,
       };
@@ -400,13 +403,17 @@ export default function SecuenciasPage() {
                       )}
                     </div>
 
-                    {/* Disponibles */}
+                    {/* Disponibles — semáforo verde/amber/rojo */}
                     <div className="text-center">
                       {esSinNcf ? (
                         <Infinity className="h-4 w-4 text-teal-500 mx-auto" />
                       ) : (
                         <span className={`text-sm font-semibold ${
-                          s.disponibles < 50 ? 'text-amber-600' : 'text-gray-700'
+                          s.disponibles < 10
+                            ? 'text-red-600'
+                            : s.disponibles < 50
+                              ? 'text-amber-600'
+                              : 'text-emerald-600'
                         }`}>
                           {s.disponibles.toLocaleString('es-DO')}
                         </span>
@@ -502,6 +509,27 @@ export default function SecuenciasPage() {
                   >
                     <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
                       editPreferida ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Numeración automática */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Numeración automática</Label>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Si está activa, el sistema asigna el siguiente número al emitir.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditAutomatica(p => !p)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                      editAutomatica ? 'bg-teal-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                      editAutomatica ? 'translate-x-6' : 'translate-x-1'
                     }`} />
                   </button>
                 </div>
