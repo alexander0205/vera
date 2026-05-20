@@ -38,13 +38,21 @@ interface PersistedStep3 {
   lastRunAt?:   string;  // ISO
 }
 
+interface PersistedStep4 {
+  runId?:       string;
+  status?:      string;
+  ncfStart?:    number;
+  lastChecked?: string;
+}
+
 interface PersistedState {
   currentStep:  number;
   completed:    number[];  // step ids marcados completos
   step1?:       PersistedStep1;
   step2?:       PersistedStep2;
   step3?:       PersistedStep3;
-  // futuro: step4?, ...
+  step4?:       PersistedStep4;
+  // futuro: step5?, ...
 }
 
 const EMPTY_STATE: PersistedState = { currentStep: 1, completed: [] };
@@ -450,6 +458,8 @@ function StepRow({
             <Step2Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : step.id === 3 ? (
             <Step3Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
+          ) : step.id === 4 ? (
+            <Step4Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : (
             <StepPlaceholderBody step={step} />
           )}
@@ -1211,9 +1221,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
           <div className="space-y-2">
             <a
               href={`${apiBase}/runs/${runId}/manual-upload/zip`}
-              className={`w-full text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5 ${
-                isComplete ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-gray-200 text-gray-400 pointer-events-none'
-              }`}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" /> ZIP Facturas &lt; RD$250K
             </a>
@@ -1222,9 +1230,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
             </p>
             <a
               href={`${apiBase}/runs/${runId}/package`}
-              className={`w-full text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5 border ${
-                isComplete ? 'border-gray-300 text-gray-700 hover:bg-gray-50' : 'border-gray-200 text-gray-300 pointer-events-none'
-              }`}
+              className="w-full text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               <Download className="w-3.5 h-3.5" /> Paquete completo (XML + PDF)
             </a>
@@ -1460,6 +1466,312 @@ function Step3Body({ ctx, persisted, persistUpdate }: {
       )}
 
       {/* Error global */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+          <p className="text-[11px] text-red-700 flex-1">{error}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 4: Pruebas de Simulación e-CF ───────────────────────────────────────
+// Genera 29 e-CF sintéticos (sin Excel) y los envía a DGII. cp-scoped.
+// Requeridos por tipo (portal DGII): 31×4, 32≥250×2, 33×1, 34×2, 41×2, 43×2,
+// 44×2, 45×2, 46×2, 47×2, 32-RFCE×4.
+
+const SIMUL_REQUERIDOS: Array<{ key: string; label: string; tipo: string; formato?: string; req: number }> = [
+  { key: '31',   label: 'Tipo 31',            tipo: '31', formato: 'ECF',  req: 4 },
+  { key: '32g',  label: 'Tipo 32 ≥250Mil',    tipo: '32', formato: 'ECF',  req: 2 },
+  { key: '33',   label: 'Tipo 33',            tipo: '33', formato: 'ECF',  req: 1 },
+  { key: '34',   label: 'Tipo 34',            tipo: '34', formato: 'ECF',  req: 2 },
+  { key: '41',   label: 'Tipo 41',            tipo: '41', formato: 'ECF',  req: 2 },
+  { key: '43',   label: 'Tipo 43',            tipo: '43', formato: 'ECF',  req: 2 },
+  { key: '44',   label: 'Tipo 44',            tipo: '44', formato: 'ECF',  req: 2 },
+  { key: '45',   label: 'Tipo 45',            tipo: '45', formato: 'ECF',  req: 2 },
+  { key: '46',   label: 'Tipo 46',            tipo: '46', formato: 'ECF',  req: 2 },
+  { key: '47',   label: 'Tipo 47',            tipo: '47', formato: 'ECF',  req: 2 },
+  { key: '32r',  label: 'Tipo 32 RFCE',       tipo: '32', formato: 'RFCE', req: 4 },
+];
+
+function Step4Body({ ctx, persisted, persistUpdate }: {
+  ctx: StepCtx;
+  persisted: PersistedState;
+  persistUpdate: (mut: (s: PersistedState) => PersistedState) => void;
+}) {
+  const env = ctx.ambiente === 'Produccion' ? 'eCF'
+    : ctx.ambiente === 'CerteCF' ? 'CerteCF'
+    : 'TesteCF';
+
+  const runId = persisted.step4?.runId ?? null;
+
+  const [ncfStart, setNcfStart] = useState(persisted.step4?.ncfStart ?? 500);
+  const [starting, setStarting] = useState(false);
+  const [run, setRun]           = useState<RunStatus | null>(null);
+  const [polling, setPolling]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+
+  const apiBase    = `/api/admin/empresas/${ctx.teamId}/simulacion`;
+  const zipBase    = `/api/admin/empresas/${ctx.teamId}/set-pruebas`; // ZIP <250K reusa runId
+
+  const fetchRun = useCallback(async (rid: string) => {
+    try {
+      const res = await fetch(`${apiBase}/runs/${rid}`);
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error ?? 'Error consultando estado');
+      }
+      const data = await res.json() as RunStatus;
+      setRun(data);
+      persistUpdate(s => ({
+        ...s,
+        step4: { ...s.step4, runId: rid, status: data.status, lastChecked: new Date().toISOString() },
+      }));
+      return data.status;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error consultando estado');
+      return null;
+    }
+  }, [apiBase, persistUpdate]);
+
+  useEffect(() => {
+    if (!runId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function loop() {
+      const status = await fetchRun(runId!);
+      if (cancelled) return;
+      if (status === 'PROCESANDO' || status === 'PENDIENTE') {
+        setPolling(true);
+        timer = setTimeout(loop, 5000);
+      } else setPolling(false);
+    }
+    loop();
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
+
+  async function handleStart() {
+    setStarting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ncfStart }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al iniciar la simulación');
+      setRun(data);
+      persistUpdate(s => ({
+        ...s,
+        step4: { runId: data.importId, status: data.status, ncfStart, lastChecked: new Date().toISOString() },
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al iniciar la simulación');
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function handleRestart() {
+    if (!confirm('¿Re-iniciar con NCFs frescos (+100)? Re-emite los 29 casos.')) return;
+    setStarting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ncfBump: 100 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al reiniciar');
+      setRun(data);
+      persistUpdate(s => ({
+        ...s,
+        step4: { runId: data.importId, status: data.status, ncfStart, lastChecked: new Date().toISOString() },
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al reiniciar');
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  function handleForget() {
+    if (!confirm('¿Olvidar este run solo aquí? (no se borra en ecf-api)')) return;
+    setRun(null);
+    setError(null);
+    persistUpdate(s => ({ ...s, step4: undefined }));
+  }
+
+  // Conteo aceptados por tipo
+  const rows = run?.rows ?? [];
+  const acceptedOf = (tipo: string, formato?: string) =>
+    rows.filter(r =>
+      r.tipoECF === tipo &&
+      (!formato || r.formato === formato) &&
+      (r.estadoDgii === 'ACEPTADO' || r.estadoDgii === 'ACEPTADO_CONDICIONAL'),
+    ).length;
+
+  const isComplete = run?.status === 'COMPLETO';
+  const failedCases = rows.filter(r =>
+    r.status === 'FAILED' || r.estadoDgii === 'RECHAZADO' || r.estadoDgii === 'ERROR',
+  );
+
+  return (
+    <div className="space-y-5">
+      {/* Banner */}
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
+          <p>
+            Pruebas de Simulación: el sistema genera <strong>29 e-CF sintéticos</strong> y
+            los envía a DGII con el cert del contribuyente. No requiere Excel.
+          </p>
+          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+            <li>Cada tipo usa un rango de NCF 1–10,000,000; los NCF rechazados no se reutilizan.</li>
+            <li>Las FC <strong>&lt; RD$250,000</strong> se descargan en ZIP y se suben manual al portal DGII.</li>
+            <li>Si DGII rechaza, usa <strong>Re-iniciar</strong> para correr con NCFs frescos (+100).</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Card: Iniciar */}
+      <CardSection title="1. Iniciar simulación" icon={FlaskConical} color="teal">
+        {!runId ? (
+          <div className="space-y-2">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-600 mb-1">NCF inicial</label>
+              <input
+                type="number"
+                value={ncfStart}
+                onChange={e => setNcfStart(parseInt(e.target.value, 10) || 500)}
+                min={1}
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">Usa un valor alto/fresco (500+) para no chocar con eNCF ya quemados.</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={starting}
+              className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+            >
+              {starting
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Iniciando…</>
+                : <><FlaskConical className="w-3.5 h-3.5" /> Iniciar simulación (29 casos)</>}
+            </button>
+            <p className="text-[10px] text-gray-400 text-center">Ambiente: <strong>{env}</strong></p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-semibold text-emerald-800">Simulación iniciada</p>
+                <p className="text-[10px] text-emerald-700 font-mono truncate">run: {runId}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleRestart}
+                disabled={starting}
+                className="flex-1 text-[11px] text-teal-700 hover:text-teal-800 flex items-center justify-center gap-1 py-1.5 border border-teal-200 rounded-md hover:bg-teal-50 disabled:opacity-50"
+              >
+                {starting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />} Re-iniciar (+100)
+              </button>
+              <button
+                type="button"
+                onClick={handleForget}
+                className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 flex items-center justify-center gap-1 py-1.5 border border-gray-200 rounded-md hover:bg-gray-50"
+              >
+                <X className="w-3 h-3" /> Olvidar
+              </button>
+            </div>
+          </div>
+        )}
+      </CardSection>
+
+      {/* Card: Estado por tipo */}
+      {runId && (
+        <CardSection title="2. Estado de las pruebas de simulación" icon={ShieldCheck} color="teal">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <RunStatusBadge status={run?.status ?? persisted.step4?.status ?? 'PROCESANDO'} polling={polling} />
+              <button
+                type="button"
+                onClick={() => runId && fetchRun(runId)}
+                className="ml-auto text-[11px] text-teal-600 hover:text-teal-700 flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" /> Refrescar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {SIMUL_REQUERIDOS.map(t => {
+                const acc = acceptedOf(t.tipo, t.formato);
+                const done = acc >= t.req;
+                return (
+                  <div key={t.key} className={`flex items-baseline gap-1.5 px-2 py-1.5 rounded border ${
+                    done ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
+                  }`}>
+                    <span className={`text-sm font-bold tabular-nums ${done ? 'text-emerald-700' : 'text-gray-900'}`}>
+                      {acc}/{t.req}
+                    </span>
+                    <span className="text-[10px] text-gray-600">{t.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 text-center border-t border-gray-100 pt-2">
+              <MiniStat label="Total"    value={run?.total ?? 0} />
+              <MiniStat label="OK"       value={run?.ok ?? 0}      tone="emerald" />
+              <MiniStat label="Fallidos" value={run?.failed ?? 0}  tone="red" />
+              <MiniStat label="Saltados" value={run?.skipped ?? 0} tone="gray" />
+            </div>
+
+            {failedCases.length > 0 && (
+              <div className="border-t border-gray-100 pt-2">
+                <p className="text-[11px] font-semibold text-red-700 mb-1.5">{failedCases.length} fallidos</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {failedCases.map((c, i) => (
+                    <div key={i} className="text-[10px] bg-red-50 border border-red-100 rounded px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-red-800">{c.eNcf || '(sin e-NCF)'}</span>
+                        <span className="text-gray-400">tipo {c.tipoECF}</span>
+                        <span className="ml-auto px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">{c.estadoDgii ?? c.status}</span>
+                      </div>
+                      {(c.error || (c.mensajesDgii && c.mensajesDgii.length > 0)) && (
+                        <p className="text-red-600 mt-0.5 leading-snug">{c.error ?? c.mensajesDgii?.join(' · ')}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardSection>
+      )}
+
+      {/* Card: Descargas */}
+      {runId && (
+        <CardSection title="3. Facturas < RD$250K" icon={Download} color="teal">
+          <a
+            href={`${zipBase}/runs/${runId}/manual-upload/zip`}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+          >
+            <Download className="w-3.5 h-3.5" /> ZIP Facturas &lt; RD$250K
+          </a>
+          <p className="text-[10px] text-gray-500 text-center mt-2">
+            Descomprime y sube cada XML al portal DGII en <strong>"Facturas de consumo &lt; 250Mil"</strong>.
+          </p>
+        </CardSection>
+      )}
+
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
           <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />

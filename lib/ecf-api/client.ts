@@ -875,6 +875,35 @@ export const setPruebas = {
     ),
 };
 
+// ─── Pruebas de Simulación e-CF (Paso 4) ──────────────────────────────────────
+// Genera 29 casos sintéticos (sin Excel) y los envía a DGII. cp-scoped.
+// Reutiliza el shape de SetPruebasStatusDto para el estado del run.
+
+export interface StartSimulacionDto {
+  ncfStart?: number;   // default 500
+  runTag?:   string;   // idempotencia
+  dryRun?:   boolean;  // firma+persiste, NO envía a DGII
+  // ambiente omitido a propósito: ecf-api usa el del contribuyente
+}
+
+export interface RestartSimulacionDto {
+  ncfBump?: number;    // default 100
+}
+
+export const simulacion = {
+  /** Inicia un run de simulación (29 casos sintéticos). */
+  start: (codigoPublico: string, dto: StartSimulacionDto) =>
+    request<SetPruebasStatusDto>('POST', `/contribuyentes/${codigoPublico}/pruebas-simulacion/start`, dto),
+
+  /** Estado del run con auto-refresh DGII por trackId. */
+  getRun: (codigoPublico: string, runId: string) =>
+    request<SetPruebasStatusDto>('GET', `/contribuyentes/${codigoPublico}/pruebas-simulacion/runs/${runId}`),
+
+  /** Re-inicia el set con NCFs auto-bumpeados (re-corre si DGII rechazó). */
+  restart: (codigoPublico: string, dto: RestartSimulacionDto) =>
+    request<SetPruebasStatusDto>('POST', `/contribuyentes/${codigoPublico}/pruebas-simulacion/restart`, dto),
+};
+
 // ─── Backward-compatible type aliases ────────────────────────────────────────
 // Evita romper imports existentes mientras migramos.
 

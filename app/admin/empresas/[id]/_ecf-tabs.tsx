@@ -144,7 +144,7 @@ function ResumenTab({ teamId, contrib, status, certActivo }: {
         lines={[
           ['Cached', status?.dgiiToken.cached ? 'Sí' : 'No'],
           ['Ambiente', status?.dgiiToken.ambiente ?? '—'],
-          ['Vigente hasta', status?.dgiiToken.vigenteHasta ? new Date(status.dgiiToken.vigenteHasta).toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' }) : '—'],
+          ['Vigente hasta', status?.dgiiToken.vigenteHasta ? new Date(status.dgiiToken.vigenteHasta).toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false }) : '—'],
         ]}
         action={
           <form action={refrescarTokenDgii}>
@@ -166,7 +166,7 @@ function ResumenTab({ teamId, contrib, status, certActivo }: {
             ? new Date(status.ultimaEmisionExitosa).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })
             : 'Sin emisiones'],
           ['Hora', status?.ultimaEmisionExitosa
-            ? new Date(status.ultimaEmisionExitosa).toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo' })
+            ? new Date(status.ultimaEmisionExitosa).toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false })
             : '—'],
         ]}
       />
@@ -570,9 +570,9 @@ function EmisionDetailModal({ emision, onClose }: { emision: EmisionResponseDto;
               <DetailItem label="Track ID DGII" value={e.trackId ?? '—'} mono />
               <DetailItem label="Código seguridad" value={e.codigoSeguridad ?? '—'} mono />
               <DetailItem label="Monto total" value={`$${(e.montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`} />
-              <DetailItem label="Fecha emisión" value={new Date(e.fechaEmision).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' })} />
+              <DetailItem label="Fecha emisión" value={new Date(e.fechaEmision).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false })} />
               <DetailItem label="Firmado en" value={e.fechaHoraFirma ?? '—'} />
-              <DetailItem label="Creado en sistema" value={new Date(e.createdAt).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' })} />
+              <DetailItem label="Creado en sistema" value={new Date(e.createdAt).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false })} />
             </div>
           </div>
 
@@ -681,7 +681,7 @@ function StatusCard({ icon, title, ok, lines, action }: {
         {lines.map(([k, v], i) => (
           <div key={i} className="flex justify-between gap-2">
             <span className="text-gray-500">{k}</span>
-            <span className="text-gray-900 font-medium truncate">{v}</span>
+            <span className="text-gray-900 font-medium truncate" suppressHydrationWarning>{v}</span>
           </div>
         ))}
       </div>
