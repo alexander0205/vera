@@ -162,13 +162,11 @@ async function main() {
     cert_titular:      string | null;
     cert_serial:       string | null;
     cert_vencimiento:  Date   | null;
-    dgii_environment:  string | null;
   }[]>`
     SELECT id, name,
            cert_p12, cert_p12_ciphered, cert_p12_iv, cert_p12_auth_tag,
            cert_pin_ciphered, cert_pin_iv, cert_pin_auth_tag,
-           cert_titular, cert_serial, cert_vencimiento,
-           dgii_environment
+           cert_titular, cert_serial, cert_vencimiento
     FROM teams
     WHERE cert_p12_ciphered IS NOT NULL
     LIMIT 1
@@ -187,7 +185,6 @@ async function main() {
   console.log(`${INFO} cert_titular: ${team.cert_titular}`);
   console.log(`${INFO} cert_serial:  ${team.cert_serial}`);
   console.log(`${INFO} cert_vence:   ${team.cert_vencimiento?.toISOString().slice(0,10)}`);
-  console.log(`${INFO} ambiente:     ${team.dgii_environment}`);
 
   ok('cert_p12 (plain) es NULL (ya migrado)', team.cert_p12 === null);
   ok('cert_p12_ciphered tiene datos',  !!team.cert_p12_ciphered);
@@ -240,7 +237,7 @@ async function main() {
     signer = new DgiiSigner({
       p12Buffer,
       password:    certPin,
-      environment: (team.dgii_environment as 'TesteCF' | 'CerteCF' | 'eCF') ?? 'TesteCF',
+      environment: 'TesteCF',
     });
     ok('DgiiSigner instanciado sin errores', true);
   } catch (e) {

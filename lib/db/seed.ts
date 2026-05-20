@@ -39,7 +39,6 @@ async function seed() {
       razonSocial: TEST_CONTRIBUYENTE.razonSocial,
       nombreComercial: 'Yisrael Technology',
       direccion: TEST_CONTRIBUYENTE.direccion,
-      dgiiEnvironment: 'TesteCF',
     })
     .returning();
 

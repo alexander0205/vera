@@ -22,11 +22,18 @@ interface PersistedStep1 {
   signedAt?:         string;  // ISO
 }
 
+interface PersistedStep2 {
+  runId?:       string;
+  status?:      string;  // PENDIENTE | PROCESANDO | COMPLETO | FALLIDO
+  lastChecked?: string;  // ISO
+}
+
 interface PersistedState {
   currentStep:  number;
   completed:    number[];  // step ids marcados completos
   step1?:       PersistedStep1;
-  // futuro: step2?, step3?, ...
+  step2?:       PersistedStep2;
+  // futuro: step3?, ...
 }
 
 const EMPTY_STATE: PersistedState = { currentStep: 1, completed: [] };
@@ -340,7 +347,7 @@ export function HabilitacionStepper({
             isCurrent={step.id === state.currentStep}
             persisted={state}
             persistUpdate={update}
-            ctx={{ software, webhookBaseUrl, codigoPublico, rnc, ambiente }}
+            ctx={{ teamId, software, webhookBaseUrl, codigoPublico, rnc, ambiente }}
           />
         ))}
       </ul>
@@ -349,6 +356,7 @@ export function HabilitacionStepper({
 }
 
 interface StepCtx {
+  teamId:          number;
   software:        { nombre: string; version: string; ambienteDefault: string } | null;
   webhookBaseUrl:  string | null;
   codigoPublico?:  string;
@@ -427,6 +435,8 @@ function StepRow({
         <div className="px-6 pb-5 pt-1 pl-[5.25rem] bg-gray-50/40 border-t border-gray-100">
           {step.id === 1 ? (
             <Step1Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
+          ) : step.id === 2 ? (
+            <Step2Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : (
             <StepPlaceholderBody step={step} />
           )}
@@ -820,7 +830,471 @@ function DgiiCopyField({ label, value, isUrl = false, required = true, className
   );
 }
 
-// ─── Placeholder body para pasos 2-15 ─────────────────────────────────────────
+// ─── Step 2: Pruebas de Datos e-CF ────────────────────────────────────────────
+// Mirror del portal DGII paso 2:
+//   - Descargar Set de comprobantes (datos de prueba DGII)
+//   - Estado actual de pruebas (counters comprobantes/resúmenes aceptados)
+//   - Subir Facturas Consumo <RD$250K → enviar a RecepcionFC
+//   - Lista de servicios DGII (read-only)
+
+interface RunStatus {
+  importId:     string;
+  status:       string;   // PENDIENTE | PROCESANDO | COMPLETO | FALLIDO
+  errorMessage?: string;
+  total?:       number;
+  ok?:          number;
+  failed?:      number;
+  skipped?:     number;
+  rows?: Array<{
+    casoPrueba: string;
+    tipoECF:    string;
+    eNcf:       string;
+    formato:    string;       // RFCE | ECF
+    status:     string;       // OK | FAILED | SKIPPED
+    estadoDgii?: string;      // ACEPTADO | RECHAZADO | ...
+    trackId?:   string;
+    error?:     string;
+    mensajesDgii?: string[];
+  }>;
+}
+
+function Step2Body({ ctx, persisted, persistUpdate }: {
+  ctx: StepCtx;
+  persisted: PersistedState;
+  persistUpdate: (mut: (s: PersistedState) => PersistedState) => void;
+}) {
+  const env = ctx.ambiente === 'Produccion' ? 'eCF'
+    : ctx.ambiente === 'CerteCF' ? 'CerteCF'
+    : 'TesteCF';
+
+  const runId = persisted.step2?.runId ?? null;
+
+  const [file, setFile]       = useState<File | null>(null);
+  const [uploading, setUp]    = useState(false);
+  const [run, setRun]         = useState<RunStatus | null>(null);
+  const [polling, setPolling] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const [skipEncfs, setSkipEncfs] = useState('');
+
+  const apiBase = `/api/admin/empresas/${ctx.teamId}/set-pruebas`;
+
+  // Fetch estado del run
+  const fetchRun = useCallback(async (rid: string) => {
+    try {
+      const res = await fetch(`${apiBase}/runs/${rid}`);
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error ?? 'Error consultando estado');
+      }
+      const data = await res.json() as RunStatus;
+      setRun(data);
+      persistUpdate(s => ({
+        ...s,
+        step2: { ...s.step2, runId: rid, status: data.status, lastChecked: new Date().toISOString() },
+      }));
+      return data.status;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error consultando estado');
+      return null;
+    }
+  }, [apiBase, persistUpdate]);
+
+  // Auto-poll mientras PROCESANDO
+  useEffect(() => {
+    if (!runId) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    async function loop() {
+      const status = await fetchRun(runId!);
+      if (cancelled) return;
+      if (status === 'PROCESANDO' || status === 'PENDIENTE') {
+        setPolling(true);
+        timer = setTimeout(loop, 5000);
+      } else {
+        setPolling(false);
+      }
+    }
+    loop();
+
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
+
+  const [dupRunId, setDupRunId] = useState<string | null>(null);
+
+  async function handleUpload() {
+    if (!file) return;
+    setUp(true);
+    setError(null);
+    setDupRunId(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      if (skipEncfs.trim()) fd.append('skipEncfs', skipEncfs.trim());
+      const res = await fetch(`${apiBase}/runs`, { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Excel duplicado → buscar la corrida previa por RNC para ofrecer borrarla
+        if ((data.error ?? '').toLowerCase().includes('import')) {
+          await findDuplicateRun();
+        }
+        throw new Error(data.error ?? 'Error al subir el Excel');
+      }
+      persistUpdate(s => ({
+        ...s,
+        step2: { runId: data.importId, status: data.status, lastChecked: new Date().toISOString() },
+      }));
+      setFile(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al subir el Excel');
+    } finally {
+      setUp(false);
+    }
+  }
+
+  async function findDuplicateRun() {
+    try {
+      const res = await fetch(`${apiBase}/runs`);
+      const data = await res.json().catch(() => ({}));
+      const runs: Array<{ importId: string; sourceFilename?: string }> = data.runs ?? [];
+      // Match por nombre de archivo, si no, la corrida más reciente del RNC
+      const match = runs.find(r => r.sourceFilename === file?.name) ?? runs[0];
+      if (match) setDupRunId(match.importId);
+    } catch {
+      // silencioso — el botón de borrar simplemente no aparecerá
+    }
+  }
+
+  async function handleDeleteDuplicate() {
+    if (!dupRunId) return;
+    if (!confirm('¿Borrar la corrida previa (con purga de emisiones) para re-subir el Excel?')) return;
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/runs/${dupRunId}?purgeEmisiones=true`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al borrar la corrida previa');
+      setDupRunId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al borrar la corrida previa');
+    }
+  }
+
+  function handleForgetRun() {
+    if (!confirm('¿Olvidar esta corrida solo aquí? (no se borra en ecf-api)')) return;
+    setRun(null);
+    setError(null);
+    persistUpdate(s => ({ ...s, step2: undefined }));
+  }
+
+  async function handleDeleteRun() {
+    if (!runId) return;
+    if (!confirm('¿BORRAR la corrida en ecf-api? Elimina casos, comparaciones y purga emisiones (re-correr limpio). Irreversible.')) return;
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/runs/${runId}?purgeEmisiones=true`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al borrar la corrida');
+      setRun(null);
+      persistUpdate(s => ({ ...s, step2: undefined }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al borrar la corrida');
+    }
+  }
+
+  // Derivados
+  const aceptados = run?.rows?.filter(r => r.estadoDgii === 'ACEPTADO' || r.estadoDgii === 'ACEPTADO_CONDICIONAL').length ?? 0;
+  const rechazados = run?.rows?.filter(r => r.estadoDgii === 'RECHAZADO' || r.estadoDgii === 'ERROR').length ?? 0;
+  const enProceso = run?.rows?.filter(r => !r.estadoDgii || r.estadoDgii === 'PENDIENTE' || r.estadoDgii === 'ENVIADO').length ?? 0;
+  const rfceRows = run?.rows?.filter(r => r.formato === 'RFCE') ?? [];
+  const rfceAceptados = rfceRows.filter(r => r.estadoDgii === 'ACEPTADO' || r.estadoDgii === 'ACEPTADO_CONDICIONAL').length;
+  const isComplete = run?.status === 'COMPLETO';
+
+  // Casos fallidos: emisión FAILED o DGII RECHAZADO/ERROR
+  const failedCases = run?.rows?.filter(r =>
+    r.status === 'FAILED' || r.estadoDgii === 'RECHAZADO' || r.estadoDgii === 'ERROR',
+  ) ?? [];
+  const failedEncfs = failedCases.map(c => c.eNcf).filter(Boolean);
+
+  return (
+    <div className="space-y-5">
+      {/* Info banner azul */}
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
+          <p>
+            Etapa en la que se comprueba la capacidad de su sistema para generar
+            Comprobantes Fiscales Electrónicos (e-CF), con datos suministrados por DGII.
+          </p>
+          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+            <li>Descarga el <strong>Excel (Set de pruebas)</strong> del portal DGII, súbelo aquí y el sistema emite los casos automáticamente con el cert del contribuyente (resuelto por <code>RNCEmisor</code> del Excel).</li>
+            <li>Las FC <strong>&lt; RD$250,000</strong> NO se envían por API: se descargan en ZIP y se suben manual al portal DGII.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Card: Subir Excel + arrancar */}
+      <CardSection title="1. Subir Excel del Set de Pruebas" icon={Upload} color="teal">
+        {!runId ? (
+          <div className="space-y-2">
+            {!file ? (
+              <label className="block">
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); setError(null); } }}
+                  className="block w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:bg-gray-100 file:text-gray-700 file:font-medium hover:file:bg-gray-200 file:cursor-pointer cursor-pointer text-gray-500"
+                />
+              </label>
+            ) : (
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5">
+                <Upload className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <span className="text-[11px] text-gray-700 font-mono truncate flex-1">{file.name}</span>
+                <button type="button" onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {/* e-NCFs a excluir (re-correr solo los que fallaron) */}
+            <div>
+              <label className="block text-[11px] font-medium text-gray-600 mb-1">
+                Excluir e-NCFs (opcional)
+              </label>
+              <input
+                type="text"
+                value={skipEncfs}
+                onChange={e => setSkipEncfs(e.target.value)}
+                placeholder="E320000000012,E320000000015"
+                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+              />
+              <p className="text-[10px] text-gray-400 mt-1">
+                CSV de e-NCF a saltar. Útil para re-subir el Excel omitiendo los que ya fallaron.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={!file || uploading}
+              className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+            >
+              {uploading
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Subiendo…</>
+                : <><ArrowRight className="w-3.5 h-3.5" /> Procesar Set de Pruebas</>}
+            </button>
+            <p className="text-[10px] text-gray-400 text-center">
+              Ambiente: <strong>{env}</strong> · Excel .xlsx, máx 20 MB
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-semibold text-emerald-800">Corrida iniciada</p>
+                <p className="text-[10px] text-emerald-700 font-mono truncate">run: {runId}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleForgetRun}
+                className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 flex items-center justify-center gap-1 py-1.5 border border-gray-200 rounded-md hover:bg-gray-50"
+              >
+                <RotateCcw className="w-3 h-3" /> Olvidar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteRun}
+                className="flex-1 text-[11px] text-red-600 hover:text-red-700 flex items-center justify-center gap-1 py-1.5 border border-red-200 rounded-md hover:bg-red-50"
+              >
+                <X className="w-3 h-3" /> Borrar en ecf-api
+              </button>
+            </div>
+          </div>
+        )}
+      </CardSection>
+
+      {/* Card: Estado emisión */}
+      {runId && (
+        <CardSection title="2. Estado de la emisión" icon={ShieldCheck} color="teal">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <RunStatusBadge status={run?.status ?? persisted.step2?.status ?? 'PROCESANDO'} polling={polling} />
+              <button
+                type="button"
+                onClick={() => runId && fetchRun(runId)}
+                className="ml-auto text-[11px] text-teal-600 hover:text-teal-700 flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" /> Refrescar
+              </button>
+            </div>
+
+            {/* Counters de emisión */}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <MiniStat label="Total"    value={run?.total ?? 0} />
+              <MiniStat label="OK"       value={run?.ok ?? 0}      tone="emerald" />
+              <MiniStat label="Fallidos" value={run?.failed ?? 0}  tone="red" />
+              <MiniStat label="Saltados" value={run?.skipped ?? 0} tone="gray" />
+            </div>
+
+            {/* Counters DGII */}
+            <div className="border-t border-gray-100 pt-2 space-y-1">
+              <CounterRow label="Aceptados por DGII"  accepted={aceptados}     total={run?.total ?? 0} />
+              <CounterRow label="Resúmenes (RFCE) Aceptados" accepted={rfceAceptados} total={rfceRows.length} />
+              {rechazados > 0 && <p className="text-[11px] text-red-600">{rechazados} rechazados por DGII</p>}
+              {enProceso > 0 && <p className="text-[11px] text-amber-600">{enProceso} en proceso/pendientes</p>}
+            </div>
+
+            {run?.errorMessage && (
+              <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-2">{run.errorMessage}</p>
+            )}
+
+            {/* Casos fallidos con su e-NCF + error específico */}
+            {failedCases.length > 0 && (
+              <div className="border-t border-gray-100 pt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold text-red-700">
+                    {failedCases.length} caso{failedCases.length === 1 ? '' : 's'} fallido{failedCases.length === 1 ? '' : 's'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSkipEncfs(failedEncfs.join(','));
+                      handleForgetRun();
+                    }}
+                    className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-2 py-1 rounded flex items-center gap-1"
+                    title="Copia los e-NCF fallidos al campo Excluir y limpia la corrida para re-subir"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" /> Excluir fallidos y re-subir
+                  </button>
+                </div>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {failedCases.map((c, i) => (
+                    <div key={i} className="text-[10px] bg-red-50 border border-red-100 rounded px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-red-800">{c.eNcf || '(sin e-NCF)'}</span>
+                        <span className="text-gray-400">tipo {c.tipoECF}</span>
+                        <span className="ml-auto px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">
+                          {c.estadoDgii ?? c.status}
+                        </span>
+                      </div>
+                      {(c.error || (c.mensajesDgii && c.mensajesDgii.length > 0)) && (
+                        <p className="text-red-600 mt-0.5 leading-snug">
+                          {c.error ?? c.mensajesDgii?.join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardSection>
+      )}
+
+      {/* Card: Descargas (FC<250K + paquete) */}
+      {runId && (
+        <CardSection title="3. Descargas" icon={Download} color="teal">
+          <div className="space-y-2">
+            <a
+              href={`${apiBase}/runs/${runId}/manual-upload/zip`}
+              className={`w-full text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5 ${
+                isComplete ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-gray-200 text-gray-400 pointer-events-none'
+              }`}
+            >
+              <Download className="w-3.5 h-3.5" /> ZIP Facturas &lt; RD$250K
+            </a>
+            <p className="text-[10px] text-gray-500 text-center">
+              Descomprime y sube cada XML al portal DGII en <strong>"Facturas de consumo &lt; 250Mil"</strong>.
+            </p>
+            <a
+              href={`${apiBase}/runs/${runId}/package`}
+              className={`w-full text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5 border ${
+                isComplete ? 'border-gray-300 text-gray-700 hover:bg-gray-50' : 'border-gray-200 text-gray-300 pointer-events-none'
+              }`}
+            >
+              <Download className="w-3.5 h-3.5" /> Paquete completo (XML + PDF)
+            </a>
+          </div>
+        </CardSection>
+      )}
+
+      {/* Error global */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-[11px] text-red-700">{error}</p>
+            {dupRunId && (
+              <button
+                type="button"
+                onClick={handleDeleteDuplicate}
+                className="mt-2 text-[11px] bg-red-600 hover:bg-red-700 text-white font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
+              >
+                <X className="w-3 h-3" /> Borrar corrida previa y reintentar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RunStatusBadge({ status, polling }: { status: string; polling: boolean }) {
+  const map: Record<string, { cls: string; label: string }> = {
+    PENDIENTE:  { cls: 'bg-gray-100 text-gray-600 border-gray-200',     label: 'Pendiente' },
+    PROCESANDO: { cls: 'bg-amber-50 text-amber-700 border-amber-200',   label: 'Procesando' },
+    COMPLETO:   { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Completo' },
+    FALLIDO:    { cls: 'bg-red-50 text-red-700 border-red-200',         label: 'Fallido' },
+  };
+  const c = map[status] ?? map.PROCESANDO;
+  return (
+    <span className={`text-[11px] uppercase tracking-wide border px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${c.cls}`}>
+      {polling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Circle className="w-2.5 h-2.5" />}
+      {c.label}
+    </span>
+  );
+}
+
+function MiniStat({ label, value, tone = 'gray' }: { label: string; value: number; tone?: 'emerald'|'red'|'gray' }) {
+  const toneCls = tone === 'emerald' ? 'text-emerald-700' : tone === 'red' ? 'text-red-600' : 'text-gray-900';
+  return (
+    <div className="bg-gray-50 rounded-md py-2">
+      <p className={`text-lg font-bold tabular-nums ${toneCls}`}>{value}</p>
+      <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
+    </div>
+  );
+}
+
+function CardSection({ title, icon: Icon, children, color = 'teal' }: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+  color?: 'teal' | 'amber';
+}) {
+  const headerCls = color === 'teal' ? 'bg-teal-600 text-white' : 'bg-amber-600 text-white';
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className={`flex items-center gap-2 px-3 py-2 ${headerCls}`}>
+        <Icon className="w-4 h-4" />
+        <p className="text-xs font-semibold">{title}</p>
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+function CounterRow({ label, accepted, total }: { label: string; accepted: number; total: number }) {
+  return (
+    <div className="flex items-baseline gap-2 py-1">
+      <span className="text-xl font-bold text-gray-900 tabular-nums">{accepted}/{total}</span>
+      <span className="text-xs text-gray-600">{label}</span>
+    </div>
+  );
+}
+
+// ─── Placeholder body para pasos 3-15 ─────────────────────────────────────────
 
 function StepPlaceholderBody({ step }: { step: Step }) {
   return (

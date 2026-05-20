@@ -231,8 +231,7 @@ export default async function EmpresaDetailPage({
           <Item label="Teléfono"     value={team.telefono} />
           <Item label="Email fact."  value={team.emailFacturacion} />
           <Item label="Plan"         value={team.planName ?? 'Sin plan'} />
-          <Item label="Ambiente"     value={team.dgiiEnvironment ?? 'TesteCF'}
-            badge badgeColor={team.dgiiEnvironment === 'Produccion' ? 'green' : 'amber'} />
+          {/* Ambiente DGII se muestra en la sección ecf-api (fuente de verdad). */}
         </div>
       </div>
 
@@ -277,7 +276,7 @@ export default async function EmpresaDetailPage({
                     />
                   </td>
                   <td className="px-5 py-3 text-xs text-gray-400">
-                    {new Date(m.joinedAt).toLocaleDateString('es-DO')}
+                    {new Date(m.joinedAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <ConfirmButton

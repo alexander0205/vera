@@ -48,6 +48,36 @@ async function request<T>(
 }
 
 /**
+ * Request que devuelve el Response crudo (para descargas binarias: ZIP, PDF).
+ * El caller lee `.arrayBuffer()` / `.blob()` y propaga headers.
+ */
+async function requestRaw(method: string, path: string): Promise<Response> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: { 'X-Api-Key': API_KEY },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new EcfApiError(res.status, text);
+  }
+  return res;
+}
+
+/** POST multipart que devuelve Response crudo. */
+async function requestFormRaw(path: string, formData: FormData): Promise<Response> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'X-Api-Key': API_KEY },
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new EcfApiError(res.status, text);
+  }
+  return res;
+}
+
+/**
  * Detalle DGII upstream cuando ecf-api propaga rechazo de la DGII.
  * Aparece bajo `err.dgii` cuando el error vino del servicio DGII.
  */
@@ -700,6 +730,114 @@ export const support = {
 
   get: (numero: string, email: string) =>
     request<SupportTicketDto>('GET', `/support/tickets/${numero}?email=${encodeURIComponent(email)}`),
+};
+
+// ─── Set de Pruebas (Habilitación / Certificación) ───────────────────────────
+
+export type SetPruebasAmbiente = 'testecf' | 'certecf';
+export type SetPruebasStatus   = 'PENDIENTE' | 'PROCESANDO' | 'COMPLETO' | 'FALLIDO';
+export type SetPruebasCaseStatus = 'OK' | 'FAILED' | 'SKIPPED';
+
+export interface SetPruebasStartResponseDto {
+  importId: string;
+  status:   SetPruebasStatus;
+}
+
+export interface SetPruebasCaseDto {
+  casoPrueba:  string;
+  tipoECF:     string;
+  eNcf:        string;
+  formato:     FormatoEmision;       // 'RFCE' | 'ECF'
+  paso:        number;
+  status:      SetPruebasCaseStatus; // OK | FAILED | SKIPPED
+  emisionId?:  string;
+  xmlUrl?:     string;
+  pdfUrl?:     string;
+  error?:      string;
+  errorDetail?: unknown;
+  estadoDgii?: EstadoEmision;        // PENDIENTE | ENVIADO | ACEPTADO | ACEPTADO_CONDICIONAL | RECHAZADO | ERROR
+  trackId?:    string;
+  mensajesDgii?: string[];
+  urlVerificacion?: string;
+}
+
+export interface SetPruebasStatusDto {
+  importId:     string;
+  status:       SetPruebasStatus;
+  errorMessage?: string;
+  total?:       number;
+  ok?:          number;
+  failed?:      number;
+  skipped?:     number;
+  elapsedMs?:   number;
+  zipUrl?:      string;
+  rows?:        SetPruebasCaseDto[];
+}
+
+export interface SetPruebasRunListItemDto {
+  importId:       string;
+  rncEmisor:      string;
+  sourceFilename: string;
+  fileHash:       string;
+  totalCasos:     number;
+  uploadedAt:     string;
+  byTipo?:        Record<string, number>;
+}
+
+/**
+ * Set de Pruebas DGII (paso 2 habilitación).
+ *
+ * El contribuyente se resuelve por la columna `RNCEmisor` DENTRO del Excel
+ * — no se pasa codigoPublico. La API key master (esAdmin) autoriza la corrida.
+ */
+export const setPruebas = {
+  /**
+   * Sube Excel y arranca emisión async de todos los casos.
+   * `modo=direct` es requerido en el paso 2 para emisión directa de e-CF.
+   * `skipEncfs` (CSV de e-NCF) excluye comprobantes que ya fallaron, para
+   * re-correr solo los que faltan. Ej: "E320000000012,E320000000015".
+   */
+  startRun: (ambiente: SetPruebasAmbiente, file: FormData, skipEncfs?: string) => {
+    const qs = new URLSearchParams({ modo: 'direct' });
+    if (skipEncfs && skipEncfs.trim()) qs.set('skipEncfs', skipEncfs.trim());
+    return requestForm<SetPruebasStartResponseDto>(`/set-pruebas/${ambiente}/runs?${qs.toString()}`, file);
+  },
+
+  /** Estado + counters + casos de una corrida. */
+  getRun: (runId: string) =>
+    request<SetPruebasStatusDto>('GET', `/set-pruebas/runs/${runId}`),
+
+  /** Casos parseados (detalle completo). */
+  getCasos: (runId: string) =>
+    request<SetPruebasCaseDto[]>('GET', `/set-pruebas/runs/${runId}/casos`),
+
+  /** Re-emite todos los casos (sincrónico). */
+  emitirTodos: (runId: string) =>
+    request<SetPruebasStatusDto>('POST', `/set-pruebas/runs/${runId}/emitir-todos`),
+
+  /** ZIP con SOLO los XMLs <RD$250K para subida manual al portal DGII. */
+  manualUploadZip: (runId: string) =>
+    requestRaw('GET', `/set-pruebas/runs/${runId}/manual-upload/zip`),
+
+  /** ZIP completo (xml/ + pdf/ + manifest.json) de todos los casos. */
+  package: (runId: string) =>
+    requestRaw('GET', `/set-pruebas/runs/${runId}/package`),
+
+  /** Lista todas las corridas (metadata, sin casos). */
+  listRuns: () =>
+    request<SetPruebasRunListItemDto[]>('GET', '/set-pruebas/runs'),
+
+  /**
+   * Borra una corrida (cascade a casos + comparaciones).
+   * `purgeEmisiones=true` además purga las emisiones (solo TesteCF/CerteCF,
+   * nunca Produccion) para permitir re-correr limpio. Requiere que el endpoint
+   * con purge esté deployado; si no, ecf-api ignora el query y deja huérfanas.
+   */
+  deleteRun: (runId: string, purgeEmisiones = false) =>
+    request<{ deleted: boolean; id: string; emisionesBorradas?: number }>(
+      'DELETE',
+      `/set-pruebas/runs/${runId}${purgeEmisiones ? '?purgeEmisiones=true' : ''}`,
+    ),
 };
 
 // ─── Backward-compatible type aliases ────────────────────────────────────────

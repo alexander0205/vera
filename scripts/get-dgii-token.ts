@@ -42,10 +42,10 @@ async function main() {
   }
 
   const ambienteEfectivo: DgiiEnvironment =
-    ambienteOverride ?? (team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF';
+    ambienteOverride ?? 'TesteCF';
 
   console.log(`\n🏢 Team    : ${team.name} (id=${team.id})`);
-  console.log(`🌐 Ambiente: ${ambienteEfectivo}${ambienteOverride ? ' (override via AMBIENTE)' : ' (desde BD)'}`);
+  console.log(`🌐 Ambiente: ${ambienteEfectivo}${ambienteOverride ? ' (override via AMBIENTE)' : ' (default TesteCF)'}`);
 
   if (!isEncrypted(team.certP12Ciphered, team.certP12Iv, team.certP12AuthTag)) {
     console.error('\n❌ Este team no tiene certificado P12 configurado.');
@@ -59,7 +59,7 @@ async function main() {
   let token: string;
   let expiresAt: Date;
 
-  if (ambienteOverride && ambienteOverride !== team.dgiiEnvironment) {
+  if (ambienteOverride && ambienteOverride !== 'TesteCF') {
     // Override de ambiente — autenticar directamente con el signer
     // sin pasar por getDgiiAuth (que usaría el ambiente de la BD)
     const p12Base64 = decryptField({

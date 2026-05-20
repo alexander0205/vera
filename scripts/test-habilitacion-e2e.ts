@@ -30,7 +30,7 @@ async function main() {
   if (!team) throw new Error('Team id=1 no encontrado');
 
   console.log(`✔ Team #${team.id} — ${team.name}`);
-  console.log(`  RNC: ${team.rnc} · ambiente: ${team.dgiiEnvironment}`);
+  console.log(`  RNC: ${team.rnc} · ambiente: TesteCF (default)`);
 
   if (!isEncrypted(team.certP12Ciphered, team.certP12Iv, team.certP12AuthTag)) {
     console.error('✖ Certificado no configurado en este team');
@@ -51,7 +51,7 @@ async function main() {
   console.log(`✔ Certificado descifrado (titular: ${team.certTitular ?? 'desconocido'})`);
 
   // ── 3) Autenticación contra TesteCF ────────────────────────────────────
-  const env = (team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF';
+  const env = 'TesteCF' as DgiiEnvironment;
   const signer = new DgiiSigner({
     p12Buffer: Buffer.from(p12b64, 'base64'),
     password:  pin,

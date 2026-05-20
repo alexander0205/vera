@@ -100,7 +100,6 @@ async function reset() {
       direccion:       TEST_CONTRIBUYENTE.direccion,
       telefono:        TEST_CONTRIBUYENTE.telefono,
       emailFacturacion: TEST_CONTRIBUYENTE.email,
-      dgiiEnvironment: 'TesteCF',
     })
     .returning();
 

@@ -29,7 +29,6 @@ export function NuevaEmpresaForm({ provincias }: Props) {
   const [direccion,       setDireccion]       = useState('');
   const [telefono,        setTelefono]        = useState('');
   const [emailFact,       setEmailFact]       = useState('');
-  const [ambiente,        setAmbiente]        = useState('TesteCF');
   const [provincia,       setProvincia]       = useState('');
   const [municipio,       setMunicipio]       = useState('');
   const [municipios,      setMunicipios]      = useState<CatalogItem[]>([]);
@@ -294,18 +293,6 @@ export function NuevaEmpresaForm({ provincias }: Props) {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Ambiente DGII</label>
-            <select
-              name="dgiiEnvironment"
-              value={ambiente}
-              onChange={e => setAmbiente(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-            >
-              <option value="TesteCF">TesteCF (pruebas)</option>
-              <option value="Produccion">Producción</option>
-            </select>
-          </div>
         </div>
       </div>
 

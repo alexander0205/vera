@@ -18,7 +18,6 @@ export async function crearEmpresa(formData: FormData) {
   const direccion       = (formData.get('direccion') as string | null)?.trim() || null;
   const telefono        = (formData.get('telefono') as string | null)?.trim() || null;
   const emailFact       = (formData.get('emailFacturacion') as string | null)?.trim() || null;
-  const ambiente        = (formData.get('dgiiEnvironment') as string) || 'TesteCF';
   const provincia       = (formData.get('provincia') as string | null)?.trim() || null;
   const municipio       = (formData.get('municipio') as string | null)?.trim() || null;
   const planKey         = (formData.get('planName') as string | null)?.trim() || null;
@@ -35,7 +34,6 @@ export async function crearEmpresa(formData: FormData) {
     direccion:        direccion ?? undefined,
     telefono:         telefono ?? undefined,
     emailFacturacion: emailFact ?? undefined,
-    dgiiEnvironment:    ambiente,
     provincia:          provincia ?? undefined,
     municipio:          municipio ?? undefined,
     // Plan asignado manualmente por el admin (sin Stripe)

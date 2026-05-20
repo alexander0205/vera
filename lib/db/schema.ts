@@ -74,7 +74,7 @@ export const teams = pgTable('teams', {
   certVencimiento:  timestamp('cert_vencimiento'),
 
   // ── DGII ─────────────────────────────────────────────────────────────────
-  dgiiEnvironment: varchar('dgii_environment', { length: 20 }).default('TesteCF'),
+  // Ambiente DGII vive en ecf-api (contrib.ambiente) — NO se duplica aquí.
   // Token de enrutamiento público — va en la URL que el cliente copia al portal DGII
   // Ej: api.emitedo.com/dgii/v1/{dgiiRoutingToken}/fe/recepcion/api/ecf
   // Generado una sola vez al crear el team, nunca cambia.
