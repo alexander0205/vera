@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ConfirmButton } from './confirm-button';
+import { HabilitacionStepper } from './_habilitacion-stepper';
 import {
   vincularContribuyente,
   actualizarContribuyente,
@@ -21,6 +22,7 @@ import type {
   NcfRangoResponseDto,
   EmisionResponseDto,
   DgiiStatusDto,
+  MeResponseDto,
 } from '@/lib/ecf-api/client';
 
 interface Props {
@@ -31,11 +33,12 @@ interface Props {
   rangos: NcfRangoResponseDto[] | null;
   status: DgiiStatusDto | null;
   emisiones: EmisionResponseDto[] | null;
+  meData: MeResponseDto | null;
 }
 
-type Tab = 'resumen' | 'certificados' | 'rangos' | 'emisiones';
+type Tab = 'resumen' | 'habilitacion' | 'certificados' | 'rangos' | 'emisiones';
 
-export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status, emisiones }: Props) {
+export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status, emisiones, meData }: Props) {
   const [tab, setTab] = useState<Tab>('resumen');
 
   const certActivo = certs?.find(c => c.activo) ?? null;
@@ -76,6 +79,7 @@ export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status,
         {/* Tabs */}
         <div className="flex gap-1 -mb-px overflow-x-auto">
           <TabBtn active={tab === 'resumen'} onClick={() => setTab('resumen')}>Resumen</TabBtn>
+          <TabBtn active={tab === 'habilitacion'} onClick={() => setTab('habilitacion')} count={15}>Habilitación</TabBtn>
           <TabBtn active={tab === 'certificados'} onClick={() => setTab('certificados')} count={stats.certificados}>Certificados</TabBtn>
           <TabBtn active={tab === 'rangos'} onClick={() => setTab('rangos')} count={stats.rangosActivos}>Rangos NCF</TabBtn>
           <TabBtn active={tab === 'emisiones'} onClick={() => setTab('emisiones')} count={stats.emisiones}>Emisiones</TabBtn>
@@ -86,6 +90,17 @@ export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status,
       <div className="p-5">
         {tab === 'resumen' && (
           <ResumenTab teamId={teamId} contrib={contrib} status={status} certActivo={certActivo} />
+        )}
+        {tab === 'habilitacion' && (
+          <HabilitacionStepper
+            teamId={teamId}
+            embedded
+            software={meData?.software ?? null}
+            webhookBaseUrl={contrib.urlsDgii?.webhookBaseUrl ?? null}
+            codigoPublico={contrib.codigoPublico}
+            rnc={contrib.rnc}
+            ambiente={contrib.ambiente}
+          />
         )}
         {tab === 'certificados' && <CertificadosTab teamId={teamId} certs={certs} />}
         {tab === 'rangos' && <RangosTab teamId={teamId} rangos={rangos} />}
