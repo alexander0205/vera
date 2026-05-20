@@ -28,12 +28,23 @@ interface PersistedStep2 {
   lastChecked?: string;  // ISO
 }
 
+interface PersistedStep3 {
+  lastResult?:  {
+    total: number;
+    ok: number;
+    failed: number;
+    rows?: Array<{ eNcf?: string; estadoEnvio?: string; estadoDgii?: string; trackId?: string; error?: string }>;
+  };
+  lastRunAt?:   string;  // ISO
+}
+
 interface PersistedState {
   currentStep:  number;
   completed:    number[];  // step ids marcados completos
   step1?:       PersistedStep1;
   step2?:       PersistedStep2;
-  // futuro: step3?, ...
+  step3?:       PersistedStep3;
+  // futuro: step4?, ...
 }
 
 const EMPTY_STATE: PersistedState = { currentStep: 1, completed: [] };
@@ -437,6 +448,8 @@ function StepRow({
             <Step1Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : step.id === 2 ? (
             <Step2Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
+          ) : step.id === 3 ? (
+            <Step3Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : (
             <StepPlaceholderBody step={step} />
           )}
@@ -1235,6 +1248,222 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
               </button>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 3: Pruebas de Datos Aprobación Comercial (ACECF) ────────────────────
+// Síncrono: POST devuelve rows al instante. Sin polling, sin runId, sin ZIP.
+
+interface AprobRow { eNcf?: string; estadoEnvio?: string; estadoDgii?: string; trackId?: string; error?: string }
+interface AprobResult { total: number; ok: number; failed: number; rows?: AprobRow[] }
+
+function Step3Body({ ctx, persisted, persistUpdate }: {
+  ctx: StepCtx;
+  persisted: PersistedState;
+  persistUpdate: (mut: (s: PersistedState) => PersistedState) => void;
+}) {
+  const env = ctx.ambiente === 'Produccion' ? 'eCF'
+    : ctx.ambiente === 'CerteCF' ? 'CerteCF'
+    : 'TesteCF';
+
+  const [file, setFile]           = useState<File | null>(null);
+  const [uploading, setUp]        = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [secShiftEncfs, setShift] = useState('');
+
+  const result: AprobResult | null = persisted.step3?.lastResult ?? null;
+  const apiBase = `/api/admin/empresas/${ctx.teamId}/set-pruebas`;
+
+  async function handleUpload() {
+    if (!file) return;
+    setUp(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      if (secShiftEncfs.trim()) fd.append('secShiftEncfs', secShiftEncfs.trim());
+      const res = await fetch(`${apiBase}/aprobaciones`, { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al procesar las aprobaciones');
+      persistUpdate(s => ({
+        ...s,
+        step3: { lastResult: data, lastRunAt: new Date().toISOString() },
+      }));
+      setFile(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al procesar las aprobaciones');
+    } finally {
+      setUp(false);
+    }
+  }
+
+  function handleClear() {
+    if (!confirm('¿Limpiar el resultado guardado de aprobaciones?')) return;
+    setError(null);
+    persistUpdate(s => ({ ...s, step3: undefined }));
+  }
+
+  const rows = result?.rows ?? [];
+  const failedRows = rows.filter(r =>
+    !!r.error || r.estadoDgii === 'RECHAZADO' || r.estadoDgii === 'ERROR' ||
+    (r.estadoEnvio && !/acept/i.test(r.estadoEnvio)),
+  );
+  const failedEncfs = failedRows.map(r => r.eNcf).filter(Boolean) as string[];
+
+  return (
+    <div className="space-y-5">
+      {/* Info banner */}
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
+          <p>
+            Etapa en la que se comprueba la capacidad de su sistema para generar
+            Aprobaciones Comerciales (ACECF), con datos suministrados por DGII.
+          </p>
+          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+            <li>Descarga <strong>"Aprobaciones Comerciales"</strong> del portal DGII (archivo distinto al del paso 2), súbelo aquí.</li>
+            <li>Cada ACECF se firma con el cert del <strong>RNCComprador</strong> (derivado del Excel) y se envía a DGII. Proceso síncrono.</li>
+            <li>Para certificar deben enviarse satisfactoriamente <strong>todas</strong> las aprobaciones generadas.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Card: Subir Excel */}
+      <CardSection title="1. Subir Excel de Aprobaciones Comerciales" icon={Upload} color="teal">
+        <div className="space-y-2">
+          {!file ? (
+            <label className="block">
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); setError(null); } }}
+                className="block w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:bg-gray-100 file:text-gray-700 file:font-medium hover:file:bg-gray-200 file:cursor-pointer cursor-pointer text-gray-500"
+              />
+            </label>
+          ) : (
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5">
+              <Upload className="w-3 h-3 text-gray-400 flex-shrink-0" />
+              <span className="text-[11px] text-gray-700 font-mono truncate flex-1">{file.name}</span>
+              <button type="button" onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          <div>
+            <label className="block text-[11px] font-medium text-gray-600 mb-1">Shift selectivo de fecha (opcional)</label>
+            <input
+              type="text"
+              value={secShiftEncfs}
+              onChange={e => setShift(e.target.value)}
+              placeholder="E450000000010,E330000000001"
+              className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+            />
+            <p className="text-[10px] text-gray-400 mt-1">
+              CSV de e-NCF — ajusta FechaHoraAprobacionComercial si DGII lo pide al re-enviar.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleUpload}
+            disabled={!file || uploading}
+            className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+          >
+            {uploading
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando…</>
+              : <><ArrowRight className="w-3.5 h-3.5" /> Procesar Aprobaciones</>}
+          </button>
+          <p className="text-[10px] text-gray-400 text-center">
+            Ambiente: <strong>{env}</strong> · Excel .xlsx (hoja ACEECF_Generadas), máx 20 MB
+          </p>
+        </div>
+      </CardSection>
+
+      {/* Card: Resultado */}
+      {result && (
+        <CardSection title="2. Resultado del envío" icon={ShieldCheck} color="teal">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-gray-500">
+                {persisted.step3?.lastRunAt && `Último envío: ${new Date(persisted.step3.lastRunAt).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' })}`}
+              </span>
+              <button
+                type="button"
+                onClick={handleClear}
+                className="ml-auto text-[11px] text-gray-400 hover:text-red-600 flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" /> Limpiar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <MiniStat label="Total"    value={result.total} />
+              <MiniStat label="OK"       value={result.ok}     tone="emerald" />
+              <MiniStat label="Fallidas" value={result.failed} tone="red" />
+            </div>
+
+            <CounterRow label="Aprobaciones comerciales aceptadas" accepted={result.ok} total={result.total} />
+
+            {/* Filas fallidas con e-NCF + error */}
+            {failedRows.length > 0 && (
+              <div className="border-t border-gray-100 pt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold text-red-700">
+                    {failedRows.length} fallida{failedRows.length === 1 ? '' : 's'}
+                  </p>
+                  {failedEncfs.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShift(failedEncfs.join(','))}
+                      className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-2 py-1 rounded flex items-center gap-1"
+                      title="Copia los e-NCF fallidos al campo de shift selectivo"
+                    >
+                      <RotateCcw className="w-2.5 h-2.5" /> Copiar fallidos a shift
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {failedRows.map((r, i) => (
+                    <div key={i} className="text-[10px] bg-red-50 border border-red-100 rounded px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-red-800">{r.eNcf || '(sin e-NCF)'}</span>
+                        <span className="ml-auto px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">
+                          {r.estadoDgii ?? r.estadoEnvio ?? 'ERROR'}
+                        </span>
+                      </div>
+                      {r.error && <p className="text-red-600 mt-0.5 leading-snug">{r.error}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Filas OK (resumen compacto) */}
+            {rows.length > 0 && (
+              <details className="border-t border-gray-100 pt-2">
+                <summary className="text-[11px] text-gray-500 cursor-pointer">Ver todas las filas ({rows.length})</summary>
+                <div className="space-y-1 max-h-48 overflow-y-auto mt-1.5">
+                  {rows.map((r, i) => (
+                    <div key={i} className="text-[10px] flex items-center gap-2 px-2 py-1 bg-gray-50 rounded">
+                      <span className="font-mono text-gray-700">{r.eNcf || '—'}</span>
+                      <span className="text-gray-400">{r.trackId ?? ''}</span>
+                      <span className="ml-auto text-gray-600">{r.estadoDgii ?? r.estadoEnvio ?? ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        </CardSection>
+      )}
+
+      {/* Error global */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+          <p className="text-[11px] text-red-700 flex-1">{error}</p>
         </div>
       )}
     </div>

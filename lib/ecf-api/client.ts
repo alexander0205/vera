@@ -784,6 +784,23 @@ export interface SetPruebasRunListItemDto {
   byTipo?:        Record<string, number>;
 }
 
+export interface SetPruebasAprobacionCaseDto {
+  eNCF?:         string;
+  eNcf?:         string;       // tolera ambas grafías del backend
+  estadoEnvio?:  string;       // estado de envío a DGII
+  estadoDgii?:   string;
+  trackId?:      string;
+  error?:        string;
+  mensajesDgii?: string[];
+}
+
+export interface SetPruebasAprobacionesResultDto {
+  total:  number;
+  ok:     number;
+  failed: number;
+  rows?:  SetPruebasAprobacionCaseDto[];
+}
+
 /**
  * Set de Pruebas DGII (paso 2 habilitación).
  *
@@ -822,6 +839,24 @@ export const setPruebas = {
   /** ZIP completo (xml/ + pdf/ + manifest.json) de todos los casos. */
   package: (runId: string) =>
     requestRaw('GET', `/set-pruebas/runs/${runId}/package`),
+
+  /**
+   * Paso 3 (ACECF) — sube Excel de Aprobaciones Comerciales (hoja
+   * ACEECF_Generadas) y procesa el batch SÍNCRONO. Firma cada ACECF con el
+   * cert del RNCComprador (derivado del Excel) y envía a DGII.
+   * `secShift` / `secShiftEncfs` ajustan FechaHoraAprobacionComercial.
+   */
+  startAprobaciones: (
+    ambiente: SetPruebasAmbiente,
+    file: FormData,
+    opts?: { secShift?: number; secShiftEncfs?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.secShift != null) qs.set('secShift', String(opts.secShift));
+    if (opts?.secShiftEncfs?.trim()) qs.set('secShiftEncfs', opts.secShiftEncfs.trim());
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return requestForm<SetPruebasAprobacionesResultDto>(`/set-pruebas/${ambiente}/aprobaciones${suffix}`, file);
+  },
 
   /** Lista todas las corridas (metadata, sin casos). */
   listRuns: () =>
