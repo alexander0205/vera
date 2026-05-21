@@ -21,7 +21,6 @@ export async function actualizarEmpresa(formData: FormData) {
   const telefono        = (formData.get('telefono') as string | null)?.trim() || null;
   const emailFact       = (formData.get('emailFacturacion') as string | null)?.trim() || null;
   const sitioWeb        = (formData.get('sitioWeb') as string | null)?.trim() || null;
-  const ambiente        = (formData.get('dgiiEnvironment') as string) || 'TesteCF';
   const provincia       = (formData.get('provincia') as string | null)?.trim() || null;
   const municipio       = (formData.get('municipio') as string | null)?.trim() || null;
   const planKey         = (formData.get('planName') as string | null)?.trim() || null;
@@ -39,7 +38,6 @@ export async function actualizarEmpresa(formData: FormData) {
     telefono:         telefono ?? undefined,
     emailFacturacion: emailFact ?? undefined,
     sitioWeb:         sitioWeb ?? undefined,
-    dgiiEnvironment:  ambiente,
     provincia:        provincia ?? undefined,
     municipio:        municipio ?? undefined,
     planName:         planDef?.name ?? null,

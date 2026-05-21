@@ -3,6 +3,7 @@ import {
   ncfRangos,
   dgiiStatus,
   emision,
+  me,
   EcfApiError,
 } from '@/lib/ecf-api/client';
 import { ensureContribuyenteLink } from '@/lib/ecf-api/sync';
@@ -37,11 +38,12 @@ export default async function EcfApiSection({ teamId, rnc }: Props) {
   const contrib = link.contribuyente!;
 
   // Cargar data en paralelo, tolerando errores parciales
-  const [certs, rangos, status, emisiones] = await Promise.all([
+  const [certs, rangos, status, emisiones, meData] = await Promise.all([
     safeCall(() => certificados.list(cp)),
     safeCall(() => ncfRangos.list(cp)),
     safeCall(() => dgiiStatus.get(cp)),
     safeCall(() => emision.list(cp, 50)),
+    safeCall(() => me()),
   ]);
 
   return (
@@ -53,6 +55,7 @@ export default async function EcfApiSection({ teamId, rnc }: Props) {
       rangos={rangos}
       status={status}
       emisiones={emisiones}
+      meData={meData}
     />
   );
 }

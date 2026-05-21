@@ -31,7 +31,6 @@ export interface TeamCertInfo {
   certPinCiphered:  string | null;
   certPinIv:        string | null;
   certPinAuthTag:   string | null;
-  dgiiEnvironment:  string | null;
   rnc:              string | null;
 }
 
@@ -120,7 +119,8 @@ export function crearSignerDesdeTeam(team: TeamCertInfo): DgiiSigner {
   return new DgiiSigner({
     p12Buffer:   Buffer.from(p12Base64, 'base64'),
     password:    pin,
-    environment: (team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF',
+    // Firma offline del ARECF — el environment no altera la firma XMLDSig.
+    environment: 'TesteCF' as DgiiEnvironment,
   });
 }
 

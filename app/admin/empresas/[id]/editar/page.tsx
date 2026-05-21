@@ -47,7 +47,6 @@ export default async function EditarEmpresaPage({
           telefono:         team.telefono         ?? '',
           emailFacturacion: team.emailFacturacion ?? '',
           sitioWeb:         team.sitioWeb         ?? '',
-          dgiiEnvironment:  team.dgiiEnvironment  ?? 'TesteCF',
           provincia:        team.provincia        ?? '',
           municipio:        team.municipio        ?? '',
           planName:         planKey,

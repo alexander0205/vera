@@ -26,8 +26,13 @@ import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ec
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
 const bodySchema = z.object({
-  xmlBase64: z.string().min(10),
-  proposito: z.enum(['postulacion', 'declaracion-jurada', 'otro']).default('otro'),
+  xmlBase64:     z.string().min(10),
+  proposito:     z.enum(['postulacion', 'declaracion-jurada', 'otro']).default('otro'),
+  /**
+   * Si se pasa, fuerza firma con cert de ese contribuyente.
+   * Requiere `user.platformRole === 'admin'`. Sin esto se usa el team del user.
+   */
+  codigoPublico: z.string().min(1).optional(),
 });
 
 // ─── Mapeo proposito → tipoDocumento (según swagger ecf-api) ─────────────────
@@ -49,22 +54,13 @@ export async function POST(request: NextRequest) {
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
 
-    // Rate limit: 30 firmas por hora
-    const rl = await rateLimitDb(`habilitacion_sign:${teamId}`, 30, 60 * 60_000);
-    if (!rl.allowed) {
-      return NextResponse.json(
-        { error: 'Demasiados intentos de firma. Espera un momento antes de reintentar.' },
-        { status: 429 },
-      );
-    }
-
     const body   = await request.json().catch(() => ({}));
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { xmlBase64, proposito } = parsed.data;
+    const { xmlBase64, proposito, codigoPublico: cpOverride } = parsed.data;
 
     // Validación básica: que el base64 decodifique a algo que parezca XML
     try {
@@ -76,19 +72,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'xmlBase64 inválido' }, { status: 400 });
     }
 
-    // Obtener codigoPublico del contribuyente en ecf-api
+    // Resolver codigoPublico:
+    //   - Si admin pasa `codigoPublico` → firma con ese contribuyente (admin-on-behalf)
+    //   - Si no → usa el contribuyente del team del user
     let codigoPublico: string;
-    try {
-      codigoPublico = await ensureContribuyente(teamId);
-    } catch (err) {
-      if (err instanceof ContribuyenteCamposFaltantesError) {
+    let firmandoComoAdmin = false;
+    if (cpOverride) {
+      if (user.platformRole !== 'admin') {
         return NextResponse.json(
-          { error: 'Completa el perfil de tu empresa antes de firmar.', camposFaltantes: err.faltantes },
-          { status: 422 },
+          { error: 'Solo administradores pueden firmar para otro contribuyente.' },
+          { status: 403 },
         );
       }
-      console.error('[/api/habilitacion/firmar-xml] ensureContribuyente', err);
-      return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+      codigoPublico     = cpOverride;
+      firmandoComoAdmin = true;
+    } else {
+      try {
+        codigoPublico = await ensureContribuyente(teamId);
+      } catch (err) {
+        if (err instanceof ContribuyenteCamposFaltantesError) {
+          return NextResponse.json(
+            { error: 'Completa el perfil de tu empresa antes de firmar.', camposFaltantes: err.faltantes },
+            { status: 422 },
+          );
+        }
+        console.error('[/api/habilitacion/firmar-xml] ensureContribuyente', err);
+        return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+      }
+    }
+
+    // Rate limit: 30 firmas/hora scoped por codigoPublico (target empresa)
+    const rl = await rateLimitDb(`habilitacion_sign:${codigoPublico}`, 30, 60 * 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos de firma. Espera un momento antes de reintentar.' },
+        { status: 429 },
+      );
     }
 
     // Delegar firma a ecf-api
@@ -135,7 +154,12 @@ export async function POST(request: NextRequest) {
       teamId, userId: user.id, actor: user.email,
       action: 'HABILITACION_SIGN',
       ip:     getIp(request),
-      meta:   { proposito, tipoDocumento: mapTipoDocumento(proposito) },
+      meta:   {
+        proposito,
+        tipoDocumento:    mapTipoDocumento(proposito),
+        codigoPublico,
+        firmandoComoAdmin,
+      },
     });
 
     return NextResponse.json({

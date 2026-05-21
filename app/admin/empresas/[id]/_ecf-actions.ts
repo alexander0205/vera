@@ -68,9 +68,8 @@ export async function actualizarContribuyente(formData: FormData) {
   const cp = await teamCp(teamId);
 
   try {
+    // ecf-api es la única fuente de verdad del ambiente.
     await contribuyentes.update(cp, { ambiente });
-    // Sincronizar también local team.dgiiEnvironment — el header X-Dgii-Ambiente lo usa
-    await db.update(teams).set({ dgiiEnvironment: ambiente }).where(eq(teams.id, teamId));
     revalidatePath(`/admin/empresas/${teamId}`);
     redirect(`/admin/empresas/${teamId}?ok=ambiente_actualizado`);
   } catch (e) {

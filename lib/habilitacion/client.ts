@@ -106,6 +106,11 @@ export async function firmarXml(params: {
   xmlFile: File;
   proposito: 'postulacion' | 'declaracion-jurada' | 'otro';
   rootElement?: string;
+  /**
+   * Opcional. Si se pasa, fuerza firma con el cert P12 de ese contribuyente
+   * (admin debe tener `platformRole === 'admin'`). Sin esto, usa el team del user.
+   */
+  codigoPublico?: string;
 }): Promise<FirmarXmlResult> {
   const xmlText   = await params.xmlFile.text();
   const xmlBase64 = typeof window === 'undefined'
@@ -117,8 +122,9 @@ export async function firmarXml(params: {
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({
       xmlBase64,
-      rootElement: params.rootElement,
-      proposito:   params.proposito,
+      rootElement:   params.rootElement,
+      proposito:     params.proposito,
+      codigoPublico: params.codigoPublico,
     }),
   });
 

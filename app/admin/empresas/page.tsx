@@ -11,7 +11,6 @@ export default async function AdminEmpresasPage() {
       name:               teams.name,
       rnc:                teams.rnc,
       razonSocial:        teams.razonSocial,
-      dgiiEnvironment:    teams.dgiiEnvironment,
       planName:           teams.planName,
       subscriptionStatus: teams.subscriptionStatus,
       createdAt:          teams.createdAt,
@@ -68,7 +67,6 @@ export default async function AdminEmpresasPage() {
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Empresa</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">RNC</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Ambiente</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Usuarios</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Facturas</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Creada</th>
@@ -86,15 +84,6 @@ export default async function AdminEmpresasPage() {
                   </td>
                   <td className="px-4 py-3 text-xs font-mono text-gray-600">{t.rnc ?? '—'}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      t.dgiiEnvironment === 'Produccion'
-                        ? 'bg-green-50 text-green-700 border border-green-200'
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}>
-                      {t.dgiiEnvironment ?? 'TesteCF'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
                     <span className="flex items-center gap-1 text-gray-600">
                       <Users className="w-3 h-3" />
                       {memberMap[t.id] ?? 0}
@@ -102,7 +91,7 @@ export default async function AdminEmpresasPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600">{(docMap[t.id] ?? 0).toLocaleString('es-DO')}</td>
                   <td className="px-4 py-3 text-xs text-gray-400">
-                    {new Date(t.createdAt).toLocaleDateString('es-DO')}
+                    {new Date(t.createdAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
                   </td>
                   <td className="px-4 py-3">
                     <Link

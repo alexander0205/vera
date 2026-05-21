@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ConfirmButton } from './confirm-button';
+import { HabilitacionStepper } from './_habilitacion-stepper';
 import {
   vincularContribuyente,
   actualizarContribuyente,
@@ -21,6 +22,7 @@ import type {
   NcfRangoResponseDto,
   EmisionResponseDto,
   DgiiStatusDto,
+  MeResponseDto,
 } from '@/lib/ecf-api/client';
 
 interface Props {
@@ -31,11 +33,12 @@ interface Props {
   rangos: NcfRangoResponseDto[] | null;
   status: DgiiStatusDto | null;
   emisiones: EmisionResponseDto[] | null;
+  meData: MeResponseDto | null;
 }
 
-type Tab = 'resumen' | 'certificados' | 'rangos' | 'emisiones';
+type Tab = 'resumen' | 'habilitacion' | 'certificados' | 'rangos' | 'emisiones';
 
-export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status, emisiones }: Props) {
+export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status, emisiones, meData }: Props) {
   const [tab, setTab] = useState<Tab>('resumen');
 
   const certActivo = certs?.find(c => c.activo) ?? null;
@@ -76,6 +79,7 @@ export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status,
         {/* Tabs */}
         <div className="flex gap-1 -mb-px overflow-x-auto">
           <TabBtn active={tab === 'resumen'} onClick={() => setTab('resumen')}>Resumen</TabBtn>
+          <TabBtn active={tab === 'habilitacion'} onClick={() => setTab('habilitacion')} count={15}>Habilitación</TabBtn>
           <TabBtn active={tab === 'certificados'} onClick={() => setTab('certificados')} count={stats.certificados}>Certificados</TabBtn>
           <TabBtn active={tab === 'rangos'} onClick={() => setTab('rangos')} count={stats.rangosActivos}>Rangos NCF</TabBtn>
           <TabBtn active={tab === 'emisiones'} onClick={() => setTab('emisiones')} count={stats.emisiones}>Emisiones</TabBtn>
@@ -86,6 +90,17 @@ export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status,
       <div className="p-5">
         {tab === 'resumen' && (
           <ResumenTab teamId={teamId} contrib={contrib} status={status} certActivo={certActivo} />
+        )}
+        {tab === 'habilitacion' && (
+          <HabilitacionStepper
+            teamId={teamId}
+            embedded
+            software={meData?.software ?? null}
+            webhookBaseUrl={contrib.urlsDgii?.webhookBaseUrl ?? null}
+            codigoPublico={contrib.codigoPublico}
+            rnc={contrib.rnc}
+            ambiente={contrib.ambiente}
+          />
         )}
         {tab === 'certificados' && <CertificadosTab teamId={teamId} certs={certs} />}
         {tab === 'rangos' && <RangosTab teamId={teamId} rangos={rangos} />}
@@ -115,7 +130,7 @@ function ResumenTab({ teamId, contrib, status, certActivo }: {
             ? [
                 ['Vigente', status?.certificado.vigente ? 'Sí' : 'No'],
                 ['Días restantes', status?.certificado.diasRestantes?.toString() ?? '—'],
-                ['Vence', status?.certificado.validTo ? new Date(status.certificado.validTo).toLocaleDateString('es-DO') : '—'],
+                ['Vence', status?.certificado.validTo ? new Date(status.certificado.validTo).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' }) : '—'],
               ]
             : [['Estado', 'Sin certificado']]
         }
@@ -129,7 +144,7 @@ function ResumenTab({ teamId, contrib, status, certActivo }: {
         lines={[
           ['Cached', status?.dgiiToken.cached ? 'Sí' : 'No'],
           ['Ambiente', status?.dgiiToken.ambiente ?? '—'],
-          ['Vigente hasta', status?.dgiiToken.vigenteHasta ? new Date(status.dgiiToken.vigenteHasta).toLocaleTimeString('es-DO') : '—'],
+          ['Vigente hasta', status?.dgiiToken.vigenteHasta ? new Date(status.dgiiToken.vigenteHasta).toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false }) : '—'],
         ]}
         action={
           <form action={refrescarTokenDgii}>
@@ -148,10 +163,10 @@ function ResumenTab({ teamId, contrib, status, certActivo }: {
         ok={!!status?.ultimaEmisionExitosa}
         lines={[
           ['Fecha', status?.ultimaEmisionExitosa
-            ? new Date(status.ultimaEmisionExitosa).toLocaleDateString('es-DO')
+            ? new Date(status.ultimaEmisionExitosa).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })
             : 'Sin emisiones'],
           ['Hora', status?.ultimaEmisionExitosa
-            ? new Date(status.ultimaEmisionExitosa).toLocaleTimeString('es-DO')
+            ? new Date(status.ultimaEmisionExitosa).toLocaleTimeString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false })
             : '—'],
         ]}
       />
@@ -215,8 +230,8 @@ function CertificadosTab({ teamId, certs }: { teamId: number; certs: Certificate
                   )}
                 </div>
                 <p className="text-[11px] text-gray-500 flex items-center gap-3">
-                  <span><Calendar className="w-3 h-3 inline mr-1" />Vence {new Date(c.validTo).toLocaleDateString('es-DO')}</span>
-                  <span>Subido {new Date(c.createdAt).toLocaleDateString('es-DO')}</span>
+                  <span><Calendar className="w-3 h-3 inline mr-1" />Vence {new Date(c.validTo).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}</span>
+                  <span>Subido {new Date(c.createdAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}</span>
                 </p>
               </div>
               {c.activo && (
@@ -288,7 +303,7 @@ function RangosTab({ teamId, rangos }: { teamId: number; rangos: NcfRangoRespons
                       )}
                     </div>
                     <p className="text-[11px] text-gray-500 mt-0.5">
-                      {r.desde.toLocaleString()}–{r.hasta.toLocaleString()} · Vence {new Date(r.fechaVencimiento).toLocaleDateString('es-DO')}
+                      {r.desde.toLocaleString()}–{r.hasta.toLocaleString()} · Vence {new Date(r.fechaVencimiento).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
                     </p>
                   </div>
                   <ConfirmButton
@@ -482,7 +497,7 @@ function EmisionesTab({ emisiones, ambiente }: { emisiones: EmisionResponseDto[]
                   <td className="px-4 py-2 text-xs text-gray-700 text-right tabular-nums">
                     ${(e.montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-500">{new Date(e.fechaEmision).toLocaleDateString('es-DO')}</td>
+                  <td className="px-4 py-2 text-xs text-gray-500">{new Date(e.fechaEmision).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}</td>
                 </tr>
               ))}
             </tbody>
@@ -555,9 +570,9 @@ function EmisionDetailModal({ emision, onClose }: { emision: EmisionResponseDto;
               <DetailItem label="Track ID DGII" value={e.trackId ?? '—'} mono />
               <DetailItem label="Código seguridad" value={e.codigoSeguridad ?? '—'} mono />
               <DetailItem label="Monto total" value={`$${(e.montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`} />
-              <DetailItem label="Fecha emisión" value={new Date(e.fechaEmision).toLocaleString('es-DO')} />
+              <DetailItem label="Fecha emisión" value={new Date(e.fechaEmision).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false })} />
               <DetailItem label="Firmado en" value={e.fechaHoraFirma ?? '—'} />
-              <DetailItem label="Creado en sistema" value={new Date(e.createdAt).toLocaleString('es-DO')} />
+              <DetailItem label="Creado en sistema" value={new Date(e.createdAt).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo', hour12: false })} />
             </div>
           </div>
 
@@ -666,7 +681,7 @@ function StatusCard({ icon, title, ok, lines, action }: {
         {lines.map(([k, v], i) => (
           <div key={i} className="flex justify-between gap-2">
             <span className="text-gray-500">{k}</span>
-            <span className="text-gray-900 font-medium truncate">{v}</span>
+            <span className="text-gray-900 font-medium truncate" suppressHydrationWarning>{v}</span>
           </div>
         ))}
       </div>

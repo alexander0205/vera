@@ -342,23 +342,13 @@ export async function POST(request: NextRequest) {
       skipRangeValidation,
     });
 
-    // Ambiente DGII: siempre enviado explícito en header.
-    // - Habilitación (skipRangeValidation): usa ECF_HABILITACION_AMBIENTE override (dev=TesteCF, prod=CerteCF)
-    // - Emisión normal: usa team.dgiiEnvironment ('TesteCF' | 'CerteCF' | 'Produccion')
-    const habilitacionAmbiente = process.env.ECF_HABILITACION_AMBIENTE
-      ?? (process.env.NODE_ENV === 'production' ? 'CerteCF' : 'TesteCF');
-    const ambiente = skipRangeValidation
-      ? habilitacionAmbiente
-      : (team.dgiiEnvironment ?? 'TesteCF');
-    const habilitacionHeaders: Record<string, string> = {
-      'X-Dgii-Ambiente': ambiente,
-    };
+    // Ambiente DGII: NO se envía. ecf-api ya conoce el ambiente del
+    // contribuyente (contrib.ambiente) y emite en el ambiente correcto.
 
     // ── Log server-side del body exacto que se envía a ecf-api ──────────────────
     console.log(
       `[ecf/emitir] → ecf-api | tipo=${tipo} esRfce=${esRfce} contribuyente=${codigoPublico}`,
       '\nDTO:', JSON.stringify(ecfApiDto, null, 2),
-      habilitacionHeaders ? `\nHeaders: ${JSON.stringify(habilitacionHeaders)}` : '',
     );
 
     // Llamar a ecf-api — usar endpoint unificado (/emisiones/emitir)
@@ -375,7 +365,7 @@ export async function POST(request: NextRequest) {
         ...(fmt ? { formato: fmt } : {}),
         payload: payloadFields,
       };
-      resultado = await emision.emitirUnified(codigoPublico, wrappedBody, habilitacionHeaders);
+      resultado = await emision.emitirUnified(codigoPublico, wrappedBody);
     } catch (err) {
       console.error('[/api/ecf/emitir ecf-api]', err);
 

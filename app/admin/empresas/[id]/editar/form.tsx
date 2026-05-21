@@ -16,7 +16,6 @@ interface InitialData {
   telefono:        string;
   emailFacturacion:string;
   sitioWeb:        string;
-  dgiiEnvironment: string;
   provincia:       string;
   municipio:       string;
   planName:        string; // key lowercase
@@ -35,7 +34,6 @@ export function EditarEmpresaForm({ initial, provincias }: Props) {
   const [telefono,        setTelefono]        = useState(initial.telefono);
   const [emailFact,       setEmailFact]       = useState(initial.emailFacturacion);
   const [sitioWeb,        setSitioWeb]        = useState(initial.sitioWeb);
-  const [ambiente,        setAmbiente]        = useState(initial.dgiiEnvironment || 'TesteCF');
   const [provincia,       setProvincia]       = useState(initial.provincia);
   const [municipio,       setMunicipio]       = useState(initial.municipio);
   const [municipios,      setMunicipios]      = useState<CatalogItem[]>([]);
@@ -174,17 +172,6 @@ export function EditarEmpresaForm({ initial, provincias }: Props) {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Ambiente DGII</label>
-            <select
-              name="dgiiEnvironment" value={ambiente}
-              onChange={e => setAmbiente(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-            >
-              <option value="TesteCF">TesteCF (pruebas)</option>
-              <option value="Produccion">Producción</option>
-            </select>
-          </div>
         </div>
       </div>
 

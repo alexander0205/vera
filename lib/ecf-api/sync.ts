@@ -99,7 +99,8 @@ export async function createContribuyenteForTeam(teamId: number): Promise<Contri
     telefono: team.telefono ?? undefined,
     provincia: team.provincia ?? undefined,
     municipio: team.municipio ?? undefined,
-    ambiente: (team.dgiiEnvironment as 'TesteCF' | 'CerteCF' | 'Produccion') ?? 'TesteCF',
+    // Ambiente inicial siempre TesteCF. ecf-api gestiona la promoción de ambiente.
+    ambiente: 'TesteCF',
   });
 
   await db

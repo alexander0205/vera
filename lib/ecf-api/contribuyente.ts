@@ -69,7 +69,9 @@ export async function ensureContribuyente(teamId: number): Promise<string> {
       telefono:        team.telefono && team.telefono.length <= 12 ? team.telefono : undefined,
       provincia:       team.provincia ?? undefined,
       municipio:       team.municipio ?? undefined,
-      ambiente:        mapAmbiente(team.dgiiEnvironment),
+      // Ambiente inicial siempre TesteCF. ecf-api es dueño del ambiente
+      // y lo promueve (testecf → certecf → produccion) vía habilitación.
+      ambiente:        'TesteCF',
     });
     codigoPublico = result.codigoPublico;
   }
@@ -81,12 +83,6 @@ export async function ensureContribuyente(teamId: number): Promise<string> {
     .where(eq(teams.id, teamId));
 
   return codigoPublico;
-}
-
-function mapAmbiente(env: string | null): 'TesteCF' | 'CerteCF' | 'Produccion' {
-  if (env === 'CerteCF') return 'CerteCF';
-  if (env === 'eCF')     return 'Produccion';
-  return 'TesteCF';
 }
 
 export class ContribuyenteCamposFaltantesError extends Error {

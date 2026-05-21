@@ -172,7 +172,7 @@ export default async function EmpresaDetailPage({
   const inviteUrl = (tok: string) => `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${tok}`;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="w-full space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-3">
         <Link href="/admin/empresas" className="text-sm text-gray-500 hover:text-gray-700">← Empresas</Link>
@@ -217,13 +217,13 @@ export default async function EmpresaDetailPage({
       {error?.startsWith('rango_') && <Alert color="amber" msg={`⚠ Rango: ${decodeURIComponent(error.slice(6))}`} />}
       {error?.startsWith('token_') && <Alert color="amber" msg={`⚠ Token DGII: ${decodeURIComponent(error.slice(6))}`} />}
 
-      {/* Datos fiscales */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      {/* Datos fiscales — strip horizontal compacto */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-3">
           <Building2 className="w-4 h-4 text-gray-400" />
           <h2 className="text-sm font-semibold text-gray-700">Datos fiscales</h2>
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
           <Item label="RNC"          value={team.rnc} mono />
           <Item label="Razón social" value={team.razonSocial} />
           <Item label="Comercial"    value={team.nombreComercial} />
@@ -231,12 +231,11 @@ export default async function EmpresaDetailPage({
           <Item label="Teléfono"     value={team.telefono} />
           <Item label="Email fact."  value={team.emailFacturacion} />
           <Item label="Plan"         value={team.planName ?? 'Sin plan'} />
-          <Item label="Ambiente"     value={team.dgiiEnvironment ?? 'TesteCF'}
-            badge badgeColor={team.dgiiEnvironment === 'Produccion' ? 'green' : 'amber'} />
+          {/* Ambiente DGII se muestra en la sección ecf-api (fuente de verdad). */}
         </div>
       </div>
 
-      {/* Integración ecf-api */}
+      {/* Integración ecf-api — incluye tab Habilitación */}
       <EcfApiSection teamId={teamId} rnc={team.rnc} />
 
       {/* Miembros */}
@@ -277,7 +276,7 @@ export default async function EmpresaDetailPage({
                     />
                   </td>
                   <td className="px-5 py-3 text-xs text-gray-400">
-                    {new Date(m.joinedAt).toLocaleDateString('es-DO')}
+                    {new Date(m.joinedAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
                   </td>
                   <td className="px-5 py-3 text-right">
                     <ConfirmButton

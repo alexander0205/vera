@@ -65,7 +65,9 @@ export async function getDgiiAuth(teamId: number): Promise<DgiiAuthResult> {
 
   if (!team) throw new Error('Empresa no encontrada');
 
-  const environment = (team.dgiiEnvironment as DgiiEnvironment) ?? 'TesteCF';
+  // Legacy DGII directo (solo scripts). Ambiente por defecto TesteCF;
+  // ecf-api es la fuente de verdad del ambiente en el flujo productivo.
+  const environment = 'TesteCF' as DgiiEnvironment;
   const client      = new DgiiClient(environment);
 
   // ── 2. ¿Token sigue vigente? ─────────────────────────────────────────────
