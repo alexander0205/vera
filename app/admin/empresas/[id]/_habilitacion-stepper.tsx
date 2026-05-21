@@ -468,6 +468,8 @@ function StepRow({
             <PortalStepBody stepId={step.id} ctx={ctx} />
           ) : step.id === 13 ? (
             <Step13Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
+          ) : (step.id === 6 || step.id === 14 || step.id === 15) ? (
+            <PasoPasivoBody stepId={step.id} />
           ) : (
             <StepPlaceholderBody step={step} />
           )}
@@ -1941,6 +1943,42 @@ function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState
           <p className="text-[11px] text-red-700 flex-1">{error}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Steps 6 / 14 / 15: pasos pasivos (DGII valida / finalizado) ──────────────
+
+function PasoPasivoBody({ stepId }: { stepId: number }) {
+  if (stepId === 15) {
+    return (
+      <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+        <PartyPopper className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+        <div className="text-xs text-emerald-900">
+          <p className="font-semibold mb-0.5">¡Habilitación completada!</p>
+          <p>El contribuyente está habilitado para emitir e-CF en producción. No requiere más acciones.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const info = stepId === 6
+    ? {
+        title: 'Validación de la Representación Impresa',
+        body:  'DGII valida las representaciones impresas (PDF) subidas en el paso 5. No requiere acción en el sistema — espera la confirmación en el portal DGII.',
+      }
+    : {
+        title: 'Verificación de Estatus',
+        body:  'DGII verifica el estatus final de la habilitación. No requiere acción en el sistema — el resultado se refleja en el portal DGII.',
+      };
+
+  return (
+    <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+      <div className="text-xs text-blue-900">
+        <p className="font-semibold mb-0.5">{info.title}</p>
+        <p className="text-blue-800/80">{info.body}</p>
+      </div>
     </div>
   );
 }
