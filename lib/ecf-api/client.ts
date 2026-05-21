@@ -695,6 +695,15 @@ export const recepcion = {
     request<RecepcionDto>('POST', `/contribuyentes/${codigoPublico}/recepcion/rechazar-comercial`, dto),
 };
 
+// ─── Emisiones (global, por id) ───────────────────────────────────────────────
+
+export const emisionesGlobal = {
+  /** PDF de representación impresa por emisionId (global, no cp-scoped). */
+  pdf: (emisionId: string) => requestRaw('GET', `/emisiones/${emisionId}/pdf`),
+  /** XML firmado por emisionId. */
+  xml: (emisionId: string) => requestRaw('GET', `/emisiones/${emisionId}/xml`),
+};
+
 // ─── Anulaciones (ANECF) ──────────────────────────────────────────────────────
 
 export interface AnecfDto {

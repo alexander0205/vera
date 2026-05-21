@@ -6,7 +6,7 @@ import {
   Link2, PlayCircle, Inbox, ThumbsUp, Globe, ScrollText, ShieldCheck,
   PartyPopper, ChevronDown, ChevronRight, Circle, CheckCircle2,
   Clock, AlertCircle, Rocket, Copy, Check, ExternalLink, Settings, User,
-  FileSignature, Upload, Download, Loader2, X, ArrowRight, RotateCcw,
+  FileSignature, Upload, Download, Loader2, X, ArrowRight, RotateCcw, FileText,
 } from 'lucide-react';
 import { firmarXml, descargarBase64 } from '@/lib/habilitacion/client';
 
@@ -460,6 +460,8 @@ function StepRow({
             <Step3Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : step.id === 4 ? (
             <Step4Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
+          ) : step.id === 5 ? (
+            <Step5Body ctx={ctx} persisted={persisted} />
           ) : (
             <StepPlaceholderBody step={step} />
           )}
@@ -878,6 +880,8 @@ interface RunStatus {
     trackId?:   string;
     error?:     string;
     mensajesDgii?: string[];
+    emisionId?: string;       // para descargar PDF/XML individual (paso 5)
+    pdfUrl?:    string;
   }>;
 }
 
@@ -1771,6 +1775,151 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
           </p>
         </CardSection>
       )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+          <p className="text-[11px] text-red-700 flex-1">{error}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 5: Pruebas de Simulación Representación Impresa ──────────────────────
+// Subida MANUAL al portal DGII. El API solo entrega los PDF (con QR correcto).
+// Reusa el runId del paso 4: package ZIP (todos) + PDF individual por tipo.
+
+const REPR_TIPOS: Array<{ key: string; label: string; tipo: string; formato?: string; menor250?: boolean }> = [
+  { key: '31',   label: 'Tipo 31',                 tipo: '31', formato: 'ECF' },
+  { key: '32g',  label: 'Tipo 32 ≥RD$250mil',      tipo: '32', formato: 'ECF' },
+  { key: '33',   label: 'Tipo 33',                 tipo: '33', formato: 'ECF' },
+  { key: '34',   label: 'Tipo 34',                 tipo: '34', formato: 'ECF' },
+  { key: '41',   label: 'Tipo 41',                 tipo: '41', formato: 'ECF' },
+  { key: '43',   label: 'Tipo 43',                 tipo: '43', formato: 'ECF' },
+  { key: '44',   label: 'Tipo 44',                 tipo: '44', formato: 'ECF' },
+  { key: '45',   label: 'Tipo 45',                 tipo: '45', formato: 'ECF' },
+  { key: '46',   label: 'Tipo 46',                 tipo: '46', formato: 'ECF' },
+  { key: '47',   label: 'Tipo 47',                 tipo: '47', formato: 'ECF' },
+];
+
+function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState }) {
+  const runId = persisted.step4?.runId ?? null;
+  const apiBase = `/api/admin/empresas/${ctx.teamId}`;
+  const zipBase = `${apiBase}/set-pruebas`;
+
+  const [run, setRun]     = useState<RunStatus | null>(null);
+  const [loading, setLoad] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cargar rows del run del paso 4 (para listar PDFs por tipo)
+  useEffect(() => {
+    if (!runId) return;
+    let cancelled = false;
+    (async () => {
+      setLoad(true);
+      try {
+        const res = await fetch(`${apiBase}/simulacion/runs/${runId}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? 'Error cargando emisiones del paso 4');
+        if (!cancelled) setRun(data);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Error cargando emisiones');
+      } finally {
+        if (!cancelled) setLoad(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [runId, apiBase]);
+
+  const rows = run?.rows ?? [];
+  const pdfFor = (tipo: string, formato?: string) =>
+    rows.find(r => r.tipoECF === tipo && (!formato || r.formato === formato) && r.emisionId);
+
+  if (!runId) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+        <div className="text-xs text-amber-900">
+          <p className="font-semibold mb-0.5">Completa el paso 4 primero</p>
+          <p>Las representaciones impresas (PDF) salen de los e-CF emitidos en la Simulación (paso 4).</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Banner */}
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
+          <p>
+            Genera y envía las Representaciones Impresas (PDF) de los e-CF del paso 4.
+            La subida es <strong>manual en el portal DGII</strong> — el sistema solo entrega los PDF con el QR correcto.
+          </p>
+          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+            <li>Descarga el paquete, descomprime y sube un PDF de cada tipo en el portal (Paso 5 → ENVIAR ARCHIVOS).</li>
+            <li>La suma de archivos no puede superar <strong>10MB</strong>.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Card: Descargar paquete */}
+      <CardSection title="1. Descargar representaciones (PDF)" icon={Printer} color="teal">
+        <a
+          href={`${zipBase}/runs/${runId}/package`}
+          className="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+        >
+          <Download className="w-3.5 h-3.5" /> Paquete completo (PDF + XML por tipo)
+        </a>
+        <p className="text-[10px] text-gray-500 text-center mt-2">
+          PDFs nombrados por tipo (incluye 32 ≥250mil y 32 &lt;250mil).
+        </p>
+      </CardSection>
+
+      {/* Card: PDF individual por tipo */}
+      <CardSection title="2. PDF individual por tipo" icon={FileText} color="teal">
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-gray-500 py-3 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Cargando emisiones…
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {REPR_TIPOS.map(t => {
+              const row = pdfFor(t.tipo, t.formato);
+              return (
+                <div key={t.key} className="flex items-center gap-2 border border-gray-200 rounded-md px-2.5 py-1.5">
+                  <span className="text-[11px] text-gray-700 flex-1">{t.label}</span>
+                  {row?.emisionId ? (
+                    <a
+                      href={`${apiBase}/emisiones/${row.emisionId}/pdf`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-[11px] text-teal-600 hover:text-teal-700 font-semibold flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" /> PDF
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-gray-300">—</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-[10px] text-gray-400 mt-2">
+          La FC tipo 32 &lt;RD$250mil se incluye en el paquete completo.
+        </p>
+      </CardSection>
+
+      {/* Aviso responsabilidad */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+        <p className="text-[11px] text-amber-800">
+          Es responsabilidad del contribuyente que la representación impresa cumpla con la Ley 32-23
+          y la documentación técnica del Formato de e-CF.
+        </p>
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
