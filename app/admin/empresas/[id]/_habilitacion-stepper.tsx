@@ -462,6 +462,8 @@ function StepRow({
             <Step4Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : step.id === 5 ? (
             <Step5Body ctx={ctx} persisted={persisted} />
+          ) : step.id === 7 || step.id === 12 ? (
+            <UrlServiciosBody ctx={ctx} produccion={step.id === 12} />
           ) : (
             <StepPlaceholderBody step={step} />
           )}
@@ -1927,6 +1929,53 @@ function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState
           <p className="text-[11px] text-red-700 flex-1">{error}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Steps 7 / 12: URL Servicios (Prueba / Producción) ────────────────────────
+// Igual al paso 1: presenta el webhookBaseUrl para copiar al portal DGII.
+// El portal añade el suffix (/fe/recepcion/api/ecf, etc).
+
+function UrlServiciosBody({ ctx, produccion }: { ctx: StepCtx; produccion: boolean }) {
+  const baseValue = ctx.webhookBaseUrl ?? 'Cargando…';
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
+          <p>
+            Etapa en la que deben ser validadas y/o actualizadas las URL de los servicios de
+            Recepción, Aprobación Comercial y/o Autenticación
+            {produccion ? ' para el ambiente de PRODUCCIÓN.' : '.'}
+          </p>
+          <p className="mt-1.5">
+            Pega la misma URL en cada campo del portal DGII — el portal añade el sufijo
+            (<code>/fe/recepcion/api/ecf</code>, etc.) automáticamente.
+          </p>
+        </div>
+      </div>
+
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <Link2 className="w-4 h-4 text-gray-500" />
+          <h3 className="text-sm font-semibold text-gray-800">URLs para confirmación</h3>
+        </div>
+        <div className="space-y-3">
+          <DgiiCopyField label="Servicio de Autenticación"     value={baseValue} isUrl required={false} />
+          <DgiiCopyField label="Servicio de Recepción"         value={baseValue} isUrl />
+          <DgiiCopyField label="Servicio de Aprobación Comercial" value={baseValue} isUrl />
+        </div>
+      </section>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+        <p className="text-[11px] text-amber-800">
+          Tras pegar las URLs en el portal DGII, haz clic en <strong>"Confirmar URLs"</strong> ahí,
+          luego marca este paso como completado.
+        </p>
+      </div>
     </div>
   );
 }
