@@ -464,6 +464,8 @@ function StepRow({
             <Step5Body ctx={ctx} persisted={persisted} />
           ) : step.id === 7 || step.id === 12 ? (
             <UrlServiciosBody ctx={ctx} produccion={step.id === 12} />
+          ) : (step.id >= 8 && step.id <= 11) ? (
+            <PortalStepBody stepId={step.id} ctx={ctx} />
           ) : (
             <StepPlaceholderBody step={step} />
           )}
@@ -1929,6 +1931,75 @@ function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState
           <p className="text-[11px] text-red-700 flex-1">{error}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Steps 8-11: acción en portal DGII + DGII valida (pasivo) ─────────────────
+
+const PORTAL_STEP_INFO: Record<number, { intro: string; accion: string; valida: string }> = {
+  8: {
+    intro: 'Inicio de la prueba de Recepción de e-CF. DGII enviará e-CF de prueba a tu Servicio de Recepción.',
+    accion: 'En el portal DGII haz clic en "Enviar prueba de recepción e-CF".',
+    valida: 'DGII enviará los comprobantes a tu webhook de recepción registrado en el paso 7.',
+  },
+  9: {
+    intro: 'Recepción de e-CF. DGII valida que tu servicio recibió y respondió correctamente los e-CF de prueba.',
+    accion: 'No requiere acción en el sistema — el flujo ocurre entre DGII y tu Servicio de Recepción.',
+    valida: 'DGII valida las respuestas (ARECF) que devolvió tu servicio. Verifica el estatus en el portal.',
+  },
+  10: {
+    intro: 'Inicio de la prueba de Recepción de Aprobación Comercial.',
+    accion: 'En el portal DGII haz clic en "Enviar prueba de aprobaciones comerciales".',
+    valida: 'DGII enviará las aprobaciones comerciales de prueba a tu webhook registrado.',
+  },
+  11: {
+    intro: 'Recepción de Aprobación Comercial. DGII valida que tu servicio procesó las aprobaciones recibidas.',
+    accion: 'No requiere acción en el sistema — el flujo ocurre entre DGII y tu Servicio de Aprobación Comercial.',
+    valida: 'DGII valida el procesamiento. Verifica el estatus en el portal DGII.',
+  },
+};
+
+function PortalStepBody({ stepId, ctx }: { stepId: number; ctx: StepCtx }) {
+  const info = PORTAL_STEP_INFO[stepId];
+  const portalUrl = ctx.ambiente === 'Produccion'
+    ? 'https://ecf.dgii.gov.do/ecf/contribuyentes'
+    : ctx.ambiente === 'CerteCF'
+      ? 'https://ecf.dgii.gov.do/certecf/contribuyentes'
+      : 'https://ecf.dgii.gov.do/testecf/contribuyentes';
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <p className="flex-1 text-xs text-blue-900 leading-relaxed">{info.intro}</p>
+      </div>
+
+      <div className="space-y-2.5">
+        <div className="flex items-start gap-2.5">
+          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-100 text-teal-700 text-[11px] font-bold flex items-center justify-center">1</span>
+          <p className="text-xs text-gray-700 flex-1">{info.accion}</p>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-[11px] font-bold flex items-center justify-center">2</span>
+          <p className="text-xs text-gray-600 flex-1">{info.valida}</p>
+        </div>
+      </div>
+
+      <a
+        href={portalUrl}
+        target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-md"
+      >
+        Abrir portal DGII <ExternalLink className="w-3.5 h-3.5" />
+      </a>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+        <p className="text-[11px] text-amber-800">
+          Cuando DGII confirme este paso en el portal, márcalo como completado abajo.
+        </p>
+      </div>
     </div>
   );
 }
