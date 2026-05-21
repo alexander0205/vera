@@ -228,10 +228,7 @@ export async function POST(
       encfOverride:         encfAsignado,
     });
 
-    const ambiente = team.dgiiEnvironment ?? 'TesteCF';
-    const habilitacionHeaders: Record<string, string> = {
-      'X-Dgii-Ambiente': ambiente,
-    };
+    // Ambiente DGII: no se envía. ecf-api usa el del contribuyente (contrib.ambiente).
 
     // Call ecf-api
     let resultado;
@@ -245,7 +242,7 @@ export async function POST(
         ...(fmt ? { formato: fmt } : {}),
         payload: payloadFields,
       };
-      resultado = await emision.emitirUnified(codigoPublico, wrappedBody, habilitacionHeaders);
+      resultado = await emision.emitirUnified(codigoPublico, wrappedBody);
     } catch (err) {
       console.error('[emitir-ecf ecf-api]', err);
       if (err instanceof EcfApiError) {
