@@ -12,9 +12,10 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
-  Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp,
+  Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { ImportModal } from '@/components/import-modal';
 
 interface Producto {
   id: number;
@@ -64,6 +65,7 @@ export default function ProductosPage() {
   const [showForm, setShowForm]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Producto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Producto | null>(null);
+  const [showImport, setShowImport]     = useState(false);
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [saving, setSaving]             = useState(false);
   const [deleting, setDeleting]         = useState(false);
@@ -249,11 +251,33 @@ export default function ProductosPage() {
           ),
         }}
         headerActions={
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo ítem
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setShowImport(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importar de Alegra
+            </Button>
+            <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo ítem
+            </Button>
+          </div>
         }
+      />
+
+      <ImportModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        endpoint="/api/import/productos"
+        title="Importar productos de Alegra"
+        helpText="Archivo CSV exportado de Alegra (Productos-servicios). Se omiten duplicados por referencia o nombre."
+        columns={[
+          { key: 'nombre',      label: 'Nombre' },
+          { key: 'referencia',  label: 'Referencia' },
+          { key: 'precio',      label: 'Precio (¢)' },
+          { key: 'tasaItbis',   label: 'ITBIS' },
+          { key: 'tipo',        label: 'Tipo' },
+        ]}
+        onDone={() => cargar(search, tipoFilter)}
       />
 
       {/* ── Modal: Crear / Editar ─────────────────────────────────────────────── */}

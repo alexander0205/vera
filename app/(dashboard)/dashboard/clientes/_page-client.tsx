@@ -8,9 +8,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Users, Plus, Pencil, Trash2, Loader2, AlertTriangle,
+  Users, Plus, Pencil, Trash2, Loader2, AlertTriangle, Upload,
 } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
+import { ImportModal } from '@/components/import-modal';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 
@@ -25,6 +26,13 @@ interface Cliente {
 
 const EMPTY_FORM = { razonSocial: '', rnc: '', email: '', telefono: '', direccion: '' };
 type ClienteForm = typeof EMPTY_FORM;
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 /**
  * Campo de formulario. Definido FUERA del componente página — si se define
@@ -65,6 +73,7 @@ export default function ClientesPage() {
   const [showForm, setShowForm]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Cliente | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null);
+  const [showImport, setShowImport]     = useState(false);
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [saving, setSaving]             = useState(false);
   const [deleting, setDeleting]         = useState(false);
@@ -157,7 +166,14 @@ export default function ClientesPage() {
       id: 'razonSocial',
       header: 'Nombre / Razón Social',
       sortable: true,
-      render: c => <span className="font-medium text-gray-900">{c.razonSocial}</span>,
+      render: c => (
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold uppercase">
+            {initials(c.razonSocial)}
+          </span>
+          <span className="font-medium text-gray-900">{c.razonSocial}</span>
+        </div>
+      ),
     },
     {
       id: 'rnc',
@@ -209,11 +225,32 @@ export default function ClientesPage() {
           ),
         }}
         headerActions={
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo cliente
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setShowImport(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importar de Alegra
+            </Button>
+            <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo cliente
+            </Button>
+          </div>
         }
+      />
+
+      <ImportModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        endpoint="/api/import/clientes"
+        title="Importar clientes de Alegra"
+        helpText="Archivo CSV exportado de Alegra (Contactos). Se omiten duplicados por RNC o nombre."
+        columns={[
+          { key: 'razonSocial', label: 'Nombre / Razón Social' },
+          { key: 'rnc',         label: 'RNC / Cédula' },
+          { key: 'email',       label: 'Email' },
+          { key: 'telefono',    label: 'Teléfono' },
+        ]}
+        onDone={() => cargar(search)}
       />
 
       {/* ── Modal: Crear / Editar ─────────────────────────────────────────────── */}

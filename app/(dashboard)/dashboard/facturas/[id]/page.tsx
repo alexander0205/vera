@@ -26,6 +26,7 @@ import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
+import { useSecuencia } from '../nueva/hooks/useSecuencia';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -257,11 +258,18 @@ export default function FacturaDetallePage() {
   const [emailTo, setEmailTo]         = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
 
-  // ─── Enviar a DGII (para borradores sin eCF) ────────────────────────────────
+  // ─── Enviar a DGII (para facturas sin eCF) ──────────────────────────────────
   const [showEnviarDgii, setShowEnviarDgii]   = useState(false);
   const [dgiiTipoEcf, setDgiiTipoEcf]         = useState('32');
   const [enviandoDgii, setEnviandoDgii]       = useState(false);
   const [enviandoDgiiError, setEnviandoDgiiError] = useState<string | null>(null);
+  // Numeración: próximo e-NCF de la secuencia activa del tipo seleccionado.
+  // Editable para ajustar el siguiente número cuando la DGII reporta colisión.
+  const [ncfNum, setNcfNum]                   = useState('');
+  const { secuencia: seqInfo, invalidar: invalidarSeq } = useSecuencia(dgiiTipoEcf);
+  useEffect(() => {
+    if (seqInfo?.numero != null) setNcfNum(String(seqInfo.numero));
+  }, [seqInfo?.numero]);
 
   const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
 
@@ -376,6 +384,22 @@ export default function FacturaDetallePage() {
     setEnviandoDgii(true);
     setEnviandoDgiiError(null);
     try {
+      // Si el usuario ajustó el siguiente número, actualizar la secuencia antes de emitir.
+      if (seqInfo?.id && ncfNum && seqInfo.numero != null && Number(ncfNum) !== seqInfo.numero) {
+        const pres  = await fetch(`/api/secuencias/${seqInfo.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ siguiente: parseInt(ncfNum, 10) }),
+        });
+        const pdata = await pres.json().catch(() => ({}));
+        if (!pres.ok) {
+          setEnviandoDgiiError(pdata.error ?? 'No se pudo ajustar la numeración');
+          setEnviandoDgii(false);
+          return;
+        }
+        invalidarSeq(dgiiTipoEcf);
+      }
+
       const res = await fetch(`/api/facturas/${docId}/emitir-ecf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -436,6 +460,10 @@ export default function FacturaDetallePage() {
   }
 
   const esBorrador  = factura.estado === 'BORRADOR';
+  // Sin e-CF real → se puede emitir a DGII (borrador, histórica de Alegra, sin-ncf).
+  const yaEnDgii    = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(factura.estado);
+  const puedeEmitir = factura.estado !== 'ANULADO' && !yaEnDgii;
+  const sinLineas   = factura.lineas.length === 0;
   const esAnulable  = !['ANULADO'].includes(factura.estado);
   const esFinal     = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO', 'ANULADO'].includes(factura.estado);
   // Consultar disponible siempre que la factura esté emitida (no borrador) y no en estado final ACEPTADO definitivo.
@@ -1021,7 +1049,7 @@ export default function FacturaDetallePage() {
             </a>
           </Button>
 
-          {esBorrador ? (
+          {puedeEmitir ? (
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
               <Button
                 type="button"
@@ -1030,16 +1058,25 @@ export default function FacturaDetallePage() {
                 asChild
               >
                 <Link href={`/dashboard/facturas/${factura.id}/editar`}>
-                  Editar borrador
+                  {esBorrador ? 'Editar borrador' : 'Editar'}
                 </Link>
               </Button>
               <Button
                 type="button"
                 className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
-                onClick={() => { setEnviandoDgiiError(null); setShowEnviarDgii(true); }}
+                onClick={() => {
+                  // Sin ítems no se puede emitir → llevar al editor a completarlos.
+                  if (sinLineas) {
+                    toast.info('Agrega ítems a la factura antes de emitirla a la DGII');
+                    router.push(`/dashboard/facturas/${factura.id}/editar`);
+                    return;
+                  }
+                  setEnviandoDgiiError(null);
+                  setShowEnviarDgii(true);
+                }}
               >
                 <Send className="h-4 w-4 mr-1.5" />
-                Enviar a DGII
+                {sinLineas ? 'Completar y emitir' : 'Enviar a DGII'}
               </Button>
             </div>
           ) : (
@@ -1233,6 +1270,47 @@ export default function FacturaDetallePage() {
                 <option value="47">e47 — Pagos al Exterior</option>
               </select>
             </div>
+
+            {/* Numeración — próximo e-NCF, editable para resolver colisiones de secuencia */}
+            {dgiiTipoEcf !== 'sin-ncf' && (
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-gray-600">Próximo e-NCF</label>
+                {seqInfo == null ? (
+                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Cargando numeración…
+                  </p>
+                ) : seqInfo.sinSecuencia ? (
+                  <p className="text-xs text-red-600">
+                    No hay secuencia activa para e{dgiiTipoEcf}.{' '}
+                    <Link href="/dashboard/secuencias" className="underline font-medium">Crea una</Link>.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-gray-900">
+                        E{dgiiTipoEcf}{(ncfNum || '0').padStart(10, '0')}
+                      </span>
+                      {seqInfo.disponibles >= 0 && (
+                        <span className="text-[11px] text-gray-400">{seqInfo.disponibles} disponibles</span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={ncfNum}
+                      onChange={e => setNcfNum(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      aria-label="Siguiente número de e-NCF"
+                    />
+                    <p className="text-[11px] text-gray-400">
+                      Si la DGII reporta el e-NCF como ya emitido, sube el siguiente número. No puede ser menor al actual.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               <span>

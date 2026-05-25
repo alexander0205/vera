@@ -33,6 +33,8 @@
     "lucide-react": "^0.511.0",
     "next": "15.6.0-canary.59",
     "otpauth": "^9.5.0",
+    "papaparse": "^5.5.3",
+    "pdf-parse": "^2.4.5",
     "postcss": "^8.5.3",
     "postgres": "^3.4.5",
     "qrcode": "^1.5.4",
@@ -52,6 +54,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "@types/papaparse": "^5.5.2",
+    "@types/pdf-parse": "^1.1.5",
     "@types/qrcode": "^1.5.6"
   }
 }

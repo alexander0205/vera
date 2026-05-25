@@ -1,7 +1,7 @@
 /**
  * /dashboard/facturas/[id]/editar
- * Carga un borrador existente y abre el formulario pre-relleno.
- * Solo permite editar documentos en estado BORRADOR.
+ * Carga un documento sin e-CF existente y abre el formulario pre-relleno.
+ * Permite editar documentos en estado BORRADOR o HISTORICA (no emitidos a DGII).
  */
 import { notFound, redirect } from 'next/navigation';
 import { Suspense } from 'react';
@@ -46,8 +46,9 @@ export default async function EditarBorradorPage({
   ]);
 
   if (!row) notFound();
-  if (row.doc.estado !== 'BORRADOR') {
-    // No es borrador — redirigir al detalle
+  // Editables: documentos sin e-CF real (borrador, histórica de Alegra).
+  // Los ya emitidos a DGII / anulados no se editan.
+  if (!['BORRADOR', 'HISTORICA'].includes(row.doc.estado)) {
     redirect(`/dashboard/facturas`);
   }
 

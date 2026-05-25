@@ -25,6 +25,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Desactivar el indicador de dev para evitar conflicto con extensiones del browser
   devIndicators: false,
+  // pdf-parse / pdfjs-dist cargan su worker desde node_modules en runtime;
+  // si Next los bundlea, el worker no se resuelve. Mantenerlos externos.
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
   experimental: {
     ppr: true,
     clientSegmentCache: true,

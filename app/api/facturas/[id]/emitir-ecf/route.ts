@@ -98,10 +98,13 @@ export async function POST(
 
     const { doc, team } = row;
 
-    // Only allow emission for BORRADOR or sin-ncf documents
-    if (doc.estado !== 'BORRADOR') {
+    // Permitir emisión para documentos SIN e-CF real: BORRADOR, HISTORICA
+    // (importadas de Alegra) o sin-ncf. Bloquear los que ya fueron a DGII o
+    // están anulados.
+    const yaEnDgii = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(doc.estado);
+    if (doc.estado === 'ANULADO' || yaEnDgii) {
       return NextResponse.json(
-        { error: `El documento ya fue procesado (estado: ${doc.estado}). Solo se pueden enviar a DGII documentos en estado BORRADOR.` },
+        { error: `El documento ya fue procesado (estado: ${doc.estado}). Solo se pueden enviar a DGII facturas sin e-CF (borrador, histórica o sin-ncf).` },
         { status: 422 },
       );
     }

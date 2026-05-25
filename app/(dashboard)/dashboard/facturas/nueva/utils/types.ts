@@ -75,6 +75,7 @@ export interface Retencion {
 export interface SecuenciaInfo {
   id?:               number;
   encf:              string | null;
+  numero?:           number;
   disponibles:       number;
   agotada:           boolean;
   vencida?:          boolean;

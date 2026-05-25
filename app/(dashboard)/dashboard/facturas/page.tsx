@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText,
+  Plus, Download, Mail, Ban, FileText, Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, diasVencido } from '@/lib/utils/format';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -17,6 +18,7 @@ const ESTADOS = [
   { value: 'ACEPTADO_CONDICIONAL', label: 'Aceptado condicional' },
   { value: 'RECHAZADO',            label: 'Rechazado' },
   { value: 'ANULADO',              label: 'Anulado' },
+  { value: 'HISTORICA',            label: 'Histórica (Alegra)' },
 ];
 const ESTADO_BADGE: Record<string, string> = {
   ACEPTADO:             'bg-green-100 text-green-700',
@@ -25,11 +27,13 @@ const ESTADO_BADGE: Record<string, string> = {
   RECHAZADO:            'bg-red-100 text-red-700',
   BORRADOR:             'bg-gray-100 text-gray-600',
   ANULADO:              'bg-gray-100 text-gray-400 line-through',
+  HISTORICA:            'bg-indigo-100 text-indigo-700',
 };
 const TIPO_LABELS: Record<string, string> = {
   '31': 'Créd. Fiscal', '32': 'Consumo', '33': 'Nota Débito',
   '34': 'Nota Crédito', '41': 'Compras', '43': 'Gastos Men.',
   '44': 'Reg. Único', '45': 'Gub.', '46': 'Export.', '47': 'Otros',
+  '00': 'Histórica',
 };
 const TIPO_PAGO_LABEL: Record<number, string> = {
   1: 'Contado', 2: 'Crédito', 3: 'Gratuito', 4: 'Uso o consumo',
@@ -57,6 +61,7 @@ export default function FacturasPage() {
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [emailModal, setEmailModal] = useState<{ id: number; email: string } | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const limit = 50;
 
   // Reset page on filter change
@@ -300,6 +305,10 @@ export default function FacturasPage() {
         }}
         headerActions={
           <>
+            <button onClick={() => setShowImport(true)}
+              className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700">
+              <Upload className="h-4 w-4" /> Importar de Alegra
+            </button>
             <button onClick={exportCsv}
               className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700">
               <Download className="h-4 w-4" /> CSV
@@ -310,6 +319,23 @@ export default function FacturasPage() {
             </Link>
           </>
         }
+      />
+
+      <ImportModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        endpoint="/api/import/facturas"
+        title="Importar facturas de Alegra"
+        helpText="CSV de Alegra (Facturas). Se agrupan por código, no van a DGII (estado Histórica). Crea clientes y productos faltantes. Dedup por código."
+        columns={[
+          { key: 'codigo',        label: 'Código' },
+          { key: 'fecha',         label: 'Fecha' },
+          { key: 'clienteNombre', label: 'Cliente' },
+          { key: 'clienteRnc',    label: 'RNC' },
+          { key: 'lineasCount',   label: 'Líneas' },
+          { key: 'montoTotal',    label: 'Total (¢)' },
+        ]}
+        onDone={() => fetchDocs()}
       />
 
       {/* Email modal */}

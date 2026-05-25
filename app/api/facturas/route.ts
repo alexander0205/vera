@@ -21,12 +21,10 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(parseInt(sp.get('limit') ?? '50', 10), 200);
   const offset = parseInt(sp.get('offset') ?? '0', 10);
 
-  // Excluir cuentas históricas (estado=HISTORICA, tipoEcf='00') — son tracking
-  // interno de cuentas por cobrar legacy, no facturas DGII. Solo aparecen en
-  // /dashboard/cuentas-por-cobrar.
+  // Facturas históricas (estado=HISTORICA, tipoEcf='00') importadas de Alegra
+  // SÍ se listan aquí como ventas — además de en /dashboard/cuentas-por-cobrar.
   const conditions = [
     eq(ecfDocuments.teamId, teamId),
-    sql`${ecfDocuments.estado} != 'HISTORICA'`,
   ];
 
   if (search) {

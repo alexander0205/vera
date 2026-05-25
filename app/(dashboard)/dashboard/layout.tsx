@@ -388,6 +388,31 @@ function ProfileDropdown({
   );
 }
 
+// ─── Ambiente DGII badge ──────────────────────────────────────────────────────
+// Advierte cuando el software NO está en Producción (comprobantes no fiscales).
+// Fuente: ecf-api /me → software.ambienteDefault (vía /api/sistema/ambiente).
+
+function AmbienteBadge({ ambiente }: { ambiente: string | null }) {
+  if (!ambiente || ambiente === 'Produccion') return null;
+
+  const map: Record<string, { friendly: string; cls: string }> = {
+    TesteCF: { friendly: 'Pruebas',       cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    CerteCF: { friendly: 'Certificación', cls: 'bg-purple-50 text-purple-700 border-purple-200' },
+  };
+  const item = map[ambiente] ?? { friendly: 'No producción', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 shrink-0 text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full border ${item.cls}`}
+      title={`Ambiente DGII: ${ambiente} — los comprobantes emitidos NO son fiscales`}
+    >
+      <AlertCircle className="h-3 w-3 shrink-0" />
+      <span>{ambiente}</span>
+      <span className="hidden md:inline font-normal opacity-80">· {item.friendly}</span>
+    </span>
+  );
+}
+
 // ─── Top bar ──────────────────────────────────────────────────────────────────
 
 function DashboardTopBar({
@@ -395,6 +420,7 @@ function DashboardTopBar({
   activeTeamId,
   user,
   plan,
+  dgiiAmbiente,
   onMenuClick,
   onToggleSidebar,
   sidebarCollapsed,
@@ -404,6 +430,7 @@ function DashboardTopBar({
   activeTeamId: number | null;
   user: UserInfo | null;
   plan: string | null;
+  dgiiAmbiente: string | null;
   onMenuClick: () => void;
   onToggleSidebar: () => void;
   sidebarCollapsed: boolean;
@@ -443,6 +470,9 @@ function DashboardTopBar({
 
       {/* Company switcher */}
       <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={onSwitch} />
+
+      {/* Ambiente DGII — solo visible cuando no es Producción */}
+      <AmbienteBadge ambiente={dgiiAmbiente} />
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -705,6 +735,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
   );
 
+  const { data: ambienteData } = useSWR<{ ambiente: string | null } | null>(
+    '/api/sistema/ambiente',
+    layoutFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+  const dgiiAmbiente = ambienteData?.ambiente ?? null;
+
   const teams: Team[] = empresaData?.teams ?? [];
   const activeTeamId = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
 
@@ -745,6 +785,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           activeTeamId={activeTeamId}
           user={user ?? null}
           plan={plan}
+          dgiiAmbiente={dgiiAmbiente}
           onMenuClick={() => setSidebarOpen(true)}
           onToggleSidebar={toggleSidebar}
           sidebarCollapsed={sidebarCollapsed}

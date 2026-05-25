@@ -35,9 +35,12 @@
  */
 
 import * as React from 'react';
-import { useState, useMemo } from 'react';
-import { Search, Filter, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, Filter, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Loader2, X, MoreVertical } from 'lucide-react';
 import Link from 'next/link';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -201,7 +204,48 @@ export function DataTable<T>({
     [sortedData, selectedIds, rowId],
   );
 
-  const totalPages = pagination ? Math.max(1, Math.ceil(pagination.total / pagination.pageSize)) : 1;
+  // Paginación client-side cuando NO se controla server-side vía `pagination`.
+  const serverPaginated = !!pagination;
+  const [clientPage, setClientPage] = useState(1);
+  const [clientPageSize, setClientPageSize] = useState(25);
+  const clientTotalPages = Math.max(1, Math.ceil(sortedData.length / clientPageSize));
+
+  // Volver a página 1 cuando cambia el tamaño del dataset (búsqueda/filtro) o el sort.
+  const prevLenRef = useRef(sortedData.length);
+  useEffect(() => {
+    if (prevLenRef.current !== sortedData.length) {
+      prevLenRef.current = sortedData.length;
+      setClientPage(1);
+    }
+  }, [sortedData.length]);
+  useEffect(() => { setClientPage(1); }, [sortBy]);
+  useEffect(() => {
+    if (clientPage > clientTotalPages) setClientPage(clientTotalPages);
+  }, [clientPage, clientTotalPages]);
+
+  const pageData = serverPaginated
+    ? sortedData
+    : sortedData.slice((clientPage - 1) * clientPageSize, clientPage * clientPageSize);
+
+  // Vista unificada de paginación (server o client) para el pie de tabla.
+  const pageView = serverPaginated
+    ? {
+        page: pagination!.page,
+        pageSize: pagination!.pageSize,
+        total: pagination!.total,
+        totalPages: Math.max(1, Math.ceil(pagination!.total / pagination!.pageSize)),
+        onChange: pagination!.onPageChange,
+      }
+    : {
+        page: clientPage,
+        pageSize: clientPageSize,
+        total: sortedData.length,
+        totalPages: clientTotalPages,
+        onChange: setClientPage,
+      };
+  const rangeFrom = pageView.total === 0 ? 0 : (pageView.page - 1) * pageView.pageSize + 1;
+  const rangeTo   = Math.min(pageView.page * pageView.pageSize, pageView.total);
+
   const hasFilters = filters.length > 0;
   const hasBulk    = bulkActions.length > 0;
   const cols = columns.length + (hasBulk ? 1 : 0) + (rowActions ? 1 : 0);
@@ -221,9 +265,12 @@ export function DataTable<T>({
         </div>
       )}
 
+      {/* ── Card unificada: filtros + tabla + paginación ── */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+
       {/* ── Filtros ── */}
       {hasFilters && (
-        <div className="flex gap-2 flex-wrap items-center">
+        <div className="flex gap-2 flex-wrap items-center p-3 border-b border-gray-100 bg-gray-50/60">
           {filters.map(f => {
             if (f.type === 'search') {
               return (
@@ -290,7 +337,7 @@ export function DataTable<T>({
 
       {/* ── Bulk actions bar ── */}
       {hasBulk && selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2">
+        <div className="flex items-center gap-3 bg-teal-50 border-b border-teal-100 px-4 py-2.5">
           <span className="text-sm font-medium text-teal-800">{selectedIds.size} seleccionado(s)</span>
           {bulkActions.map((a, i) => {
             const Icon = a.icon;
@@ -317,7 +364,7 @@ export function DataTable<T>({
       )}
 
       {/* ── Tabla ── */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div>
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-teal-500" />
@@ -357,20 +404,22 @@ export function DataTable<T>({
                       >
                         <span className="inline-flex items-center gap-1">
                           {col.header}
-                          {col.sortable && isSorted && (
-                            sortBy?.dir === 'asc'
-                              ? <ChevronUp className="h-3 w-3" />
-                              : <ChevronDown className="h-3 w-3" />
+                          {col.sortable && (
+                            isSorted
+                              ? (sortBy?.dir === 'asc'
+                                  ? <ChevronUp className="h-3 w-3 text-teal-600" />
+                                  : <ChevronDown className="h-3 w-3 text-teal-600" />)
+                              : <ChevronsUpDown className="h-3 w-3 opacity-30" />
                           )}
                         </span>
                       </th>
                     );
                   })}
-                  {rowActions && <th className="w-20 px-3 py-2.5" />}
+                  {rowActions && <th className="w-12 px-3 py-2.5" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {sortedData.map(row => {
+                {pageData.map(row => {
                   const id = rowId(row);
                   const isSelected = selectedIds.has(id);
                   const href = rowHref?.(row);
@@ -409,27 +458,8 @@ export function DataTable<T>({
                       })}
                       {rowActions && (
                         <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center gap-1 justify-end">
-                            {rowActions(row).map((a, i) => {
-                              const Icon = a.icon;
-                              const cls = `p-1.5 rounded-lg hover:bg-gray-100 transition-colors ${
-                                a.variant === 'danger'
-                                  ? 'text-red-400 hover:text-red-600'
-                                  : 'text-gray-400 hover:text-gray-700'
-                              }`;
-                              if (a.href) {
-                                return (
-                                  <Link key={i} href={a.href} target={a.href.startsWith('http') || a.href.startsWith('/api/') ? '_blank' : undefined} className={cls} title={a.title}>
-                                    <Icon className="h-3.5 w-3.5" />
-                                  </Link>
-                                );
-                              }
-                              return (
-                                <button key={i} type="button" onClick={a.onClick} className={cls} title={a.title}>
-                                  <Icon className="h-3.5 w-3.5" />
-                                </button>
-                              );
-                            })}
+                          <div className="flex items-center justify-end">
+                            <RowActionsMenu actions={rowActions(row)} />
                           </div>
                         </td>
                       )}
@@ -442,33 +472,49 @@ export function DataTable<T>({
         )}
       </div>
 
-      {/* ── Pagination ── */}
-      {pagination && totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            {pagination.total.toLocaleString()} resultado{pagination.total !== 1 ? 's' : ''}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => pagination.onPageChange(Math.max(1, pagination.page - 1))}
-              disabled={pagination.page === 1}
-              className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
-              aria-label="Anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="text-sm text-gray-700">Página {pagination.page} de {totalPages}</span>
-            <button
-              onClick={() => pagination.onPageChange(Math.min(totalPages, pagination.page + 1))}
-              disabled={pagination.page === totalPages}
-              className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
-              aria-label="Siguiente"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+      {/* ── Pie: paginación (siempre visible cuando hay datos) ── */}
+      {!loading && !error && sortedData.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-2.5 border-t border-gray-100 bg-gray-50/40">
+          <div className="flex items-center gap-3">
+            {!serverPaginated && (
+              <select
+                value={clientPageSize}
+                onChange={e => { setClientPageSize(Number(e.target.value)); setClientPage(1); }}
+                className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                aria-label="Filas por página"
+              >
+                {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / pág.</option>)}
+              </select>
+            )}
+            <p className="text-sm text-gray-500">
+              Mostrando {rangeFrom.toLocaleString()}–{rangeTo.toLocaleString()} de {pageView.total.toLocaleString()}
+            </p>
           </div>
+          {pageView.totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => pageView.onChange(Math.max(1, pageView.page - 1))}
+                disabled={pageView.page === 1}
+                className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
+                aria-label="Anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-sm text-gray-700">Página {pageView.page} de {pageView.totalPages}</span>
+              <button
+                onClick={() => pageView.onChange(Math.min(pageView.totalPages, pageView.page + 1))}
+                disabled={pageView.page === pageView.totalPages}
+                className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
+                aria-label="Siguiente"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
       )}
+
+      </div>
     </div>
   );
 }
@@ -489,5 +535,46 @@ function EmptyState({ config }: { config?: EmptyStateConfig }) {
       {config.hint && <p className="text-xs text-gray-500 mt-1">{config.hint}</p>}
       {config.cta && <div className="mt-4">{config.cta}</div>}
     </div>
+  );
+}
+
+function RowActionsMenu({ actions }: { actions: RowAction[] }) {
+  if (!actions || actions.length === 0) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={e => e.stopPropagation()}
+          aria-label="Acciones"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors data-[state=open]:bg-gray-100 data-[state=open]:text-gray-700"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        {actions.map((a, i) => {
+          const Icon = a.icon;
+          const variant = a.variant === 'danger' ? 'destructive' : 'default';
+          if (a.href) {
+            const external = a.href.startsWith('http') || a.href.startsWith('/api/');
+            return (
+              <DropdownMenuItem key={i} asChild variant={variant}>
+                <Link href={a.href} target={external ? '_blank' : undefined}>
+                  <Icon className="h-4 w-4" />
+                  {a.title}
+                </Link>
+              </DropdownMenuItem>
+            );
+          }
+          return (
+            <DropdownMenuItem key={i} variant={variant} onSelect={() => a.onClick?.()}>
+              <Icon className="h-4 w-4" />
+              {a.title}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
