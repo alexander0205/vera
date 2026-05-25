@@ -23,7 +23,7 @@ const schema = z.object({
   telefono:          z.string().max(30).optional(),
   sitioWeb:          z.string().max(200).optional(),
   emailFacturacion:  z.string().email().max(255).optional().or(z.literal('')),
-  colorPrimario:     z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  colorPrimario:     z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Color debe ser hex de 3 o 6 dígitos (#fff o #ffffff)').optional(),
   logo:              z.string().max(MAX_IMG_SIZE).optional().or(z.literal('')),
   firma:             z.string().max(MAX_IMG_SIZE).optional().or(z.literal('')),
 });
