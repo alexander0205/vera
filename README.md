@@ -24,6 +24,36 @@ This is a starter template for building a SaaS application using **Next.js** wit
 - **Payments**: [Stripe](https://stripe.com/)
 - **UI Library**: [shadcn/ui](https://ui.shadcn.com/)
 
+## Quick Start (DEV — un solo comando)
+
+Requisitos: Node 20+, pnpm 10, Docker Desktop corriendo.
+
+```bash
+git clone https://github.com/alexander0205/vera.git
+cd vera
+git checkout developer
+pnpm install
+pnpm dev:bootstrap     # docker postgres + .env + migrate + seed
+pnpm dev               # http://localhost:3000
+```
+
+Credenciales seed:
+
+- Email: `admin@emitedo.test`
+- Password: `Admin1234!`
+
+Resetear DB local (borra container + volumen, re-seed):
+
+```bash
+pnpm dev:reset
+```
+
+Notas:
+
+- `pnpm dev:bootstrap` es idempotente: si ya existe `.env` no lo sobrescribe.
+- Stripe queda con stubs (`sk_test_dummy`). Reemplazá en `.env` si vas a probar pagos.
+- `CERT_MASTER_KEY` se genera random; **no la cambies** una vez creada o perdés acceso a los certs guardados.
+
 ## Getting Started
 
 ```bash
