@@ -51,7 +51,9 @@ const FRECUENCIAS = [
   { value: 'semanal',    label: 'Semanal' },
   { value: 'quincenal',  label: 'Quincenal' },
   { value: 'mensual',    label: 'Mensual' },
+  { value: 'bimestral',  label: 'Bimestral' },
   { value: 'trimestral', label: 'Trimestral' },
+  { value: 'semestral',  label: 'Semestral' },
   { value: 'anual',      label: 'Anual' },
 ];
 
@@ -68,7 +70,9 @@ function sumarPeriodo(fecha: string, frecuencia: string): string {
     case 'semanal':    dt.setDate(dt.getDate() + 7); break;
     case 'quincenal':  dt.setDate(dt.getDate() + 15); break;
     case 'mensual':    dt.setMonth(dt.getMonth() + 1); break;
+    case 'bimestral':  dt.setMonth(dt.getMonth() + 2); break;
     case 'trimestral': dt.setMonth(dt.getMonth() + 3); break;
+    case 'semestral':  dt.setMonth(dt.getMonth() + 6); break;
     case 'anual':      dt.setFullYear(dt.getFullYear() + 1); break;
   }
   return dt.toISOString().slice(0, 10);
@@ -116,11 +120,13 @@ function formatFechaCorta(iso: string): string {
 }
 
 const FRECUENCIA_LABEL: Record<string, string> = {
-  semanal: 'Semanal',
-  quincenal: 'Quincenal',
-  mensual: 'Mensual',
+  semanal:    'Semanal',
+  quincenal:  'Quincenal',
+  mensual:    'Mensual',
+  bimestral:  'Bimestral',
   trimestral: 'Trimestral',
-  anual: 'Anual',
+  semestral:  'Semestral',
+  anual:      'Anual',
 };
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -668,7 +674,9 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
                     {frecuencia === 'semanal'    && <>Se cobrará cada <span className="font-semibold">{new Date(fechaInicio + 'T00:00').toLocaleDateString('es-DO', { weekday: 'long' })}</span>.</>}
                     {frecuencia === 'quincenal'  && <>Se cobrará cada <span className="font-semibold">15 días</span> desde {formatFechaCorta(fechaInicio)}.</>}
                     {frecuencia === 'mensual'    && <>Se cobrará el día <span className="font-semibold">{diaCobro}</span> de cada mes.</>}
+                    {frecuencia === 'bimestral'  && <>Se cobrará cada <span className="font-semibold">2 meses</span> el día {diaCobro}.</>}
                     {frecuencia === 'trimestral' && <>Se cobrará cada <span className="font-semibold">3 meses</span> el día {diaCobro}.</>}
+                    {frecuencia === 'semestral'  && <>Se cobrará cada <span className="font-semibold">6 meses</span> el día {diaCobro}.</>}
                     {frecuencia === 'anual'      && <>Se cobrará cada <span className="font-semibold">año</span> el día {diaCobro}.</>}
                   </p>
                 </div>

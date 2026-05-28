@@ -99,10 +99,11 @@ export async function GET(req: NextRequest) {
         nextDate.setDate(nextDate.getDate() + 15);
       } else {
         const monthOffset =
-          fr.frecuencia === 'mensual'    ? 1  :
-          fr.frecuencia === 'trimestral' ? 3  :
-          fr.frecuencia === 'anual'      ? 12 : 1;
-
+        fr.frecuencia === 'mensual'    ? 1  :
+        fr.frecuencia === 'bimestral'  ? 2  :
+        fr.frecuencia === 'trimestral' ? 3  :
+        fr.frecuencia === 'semestral'  ? 6  :
+        fr.frecuencia === 'anual'      ? 12 : 1;
         // Sumar meses preservando diaCobro (clamp al último día del mes destino)
         const targetMonth = nextDate.getMonth() + monthOffset;
         const targetYear  = nextDate.getFullYear() + Math.floor(targetMonth / 12);
