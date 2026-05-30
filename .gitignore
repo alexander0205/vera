@@ -30,6 +30,11 @@ yarn-error.log*
 .env.development
 .env.qa
 .env*.local
+.env.production
+.env.dev
+.env.vercel.tmp
+.env.*.bak
+*.bak
 
 # vercel
 .vercel
@@ -41,6 +46,9 @@ next-env.d.ts
 
 # Docker
 postgres_data/
+
+# Database seed dumps (contienen datos reales — distribuir por canal seguro, nunca commitear)
+scripts/db-seed/*.dump
 .env*.local
 output/
 .claude/worktrees/
