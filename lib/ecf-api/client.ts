@@ -432,15 +432,21 @@ export const emision = {
 
 export interface RecepcionEcfDto {
   id:           string;
-  rnc:          string;
-  rncEmisor?:   string;
+  rncReceptor?: string;   // nuestro RNC (a quién le emitieron)
+  rncEmisor?:   string;   // quién emitió
   eNcf:         string;
-  tipoComprobante: string;
+  tipoECF?:     string | null;  // suele venir null; el tipo real va en el e-NCF (E31…) / XML
   estado?:      string;
-  fechaRecepcion?: string;
-  xmlOriginal?: string;
-  arecfXml?:    string;
+  firmaValida?: boolean;
+  xmlFirmado?:  string;   // XML del emisor (firmado)
+  arecfXml?:    string;   // ARECF que respondimos
   createdAt:    string;
+  updatedAt?:   string;
+  // Compat: el API puede traer estos en otras rutas/versiones.
+  rnc?:             string;
+  fechaRecepcion?:  string;
+  xmlOriginal?:     string;
+  tipoComprobante?: string;
   [k: string]: unknown;
 }
 

@@ -45,6 +45,8 @@ export type Permission =
   // Configuración de empresa
   | 'configuracion:ver'
   | 'configuracion:gestionar'
+  // Compras / Facturas recibidas
+  | 'compras:ver'
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
@@ -87,6 +89,7 @@ export const ROLES: RoleDef[] = [
       'reportes:ver',
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
+      'compras:ver',
       'suscripcion:gestionar',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
@@ -104,6 +107,7 @@ export const ROLES: RoleDef[] = [
       'reportes:ver',
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
+      'compras:ver',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },

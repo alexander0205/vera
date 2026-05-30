@@ -9,7 +9,7 @@ import {
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, ShoppingCart,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -59,6 +59,14 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: 'compras',
+    label: 'Compras',
+    icon: ShoppingCart,
+    children: [
+      { href: '/dashboard/compras', label: 'Facturas recibidas' },
+    ],
+  },
+  {
     id: 'configuracion',
     label: 'Configuración',
     icon: Settings,
@@ -102,6 +110,9 @@ const HREF_PERMISSION: Record<string, Permission> = {
   '/dashboard/almacenes':             'productos:ver',
   '/dashboard/listas-precios':        'productos:ver',
   '/dashboard/vendedores':            'productos:ver',
+
+  // Compras — solo owner y admin
+  '/dashboard/compras':               'compras:ver',
 
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
