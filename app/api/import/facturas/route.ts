@@ -19,6 +19,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, clients, products } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireImport, readUpload, ImportError } from '@/lib/import/server';
+import { registrarPago } from '@/lib/db/queries';
 import {
   decodeBuffer, parseCsv, pick, normKey, toCents, toIsoDate, isPlaceholderRnc,
   type ImportRow, type ImportResult,
@@ -40,12 +41,13 @@ interface FacturaData {
   clienteNombre: string;
   clienteRnc: string | null;
   montoTotal: number;        // centavos
+  cobrada: boolean;          // ESTADO=Cobrada en Alegra → se registra pago full
   lineas: LineaData[];
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { teamId } = await requireImport('facturas:crear');
+    const { user, teamId } = await requireImport('facturas:crear');
     const { buf, mode } = await readUpload(req);
 
     const csvRows = parseCsv(decodeBuffer(buf));
@@ -92,6 +94,8 @@ export async function POST(req: NextRequest) {
       const clienteNombre = pick(head, 'CLIENTE - NOMBRE', 'Cliente - Nombre', 'Cliente').trim();
       const rncDigits = pick(head, 'CLIENTE - RNC O CÉDULA', 'Cliente - RNC o Cédula', 'RNC/Cédula').replace(/\D/g, '');
       const clienteRnc = (!isPlaceholderRnc(rncDigits) && /^\d{9}$|^\d{11}$/.test(rncDigits)) ? rncDigits : null;
+      // ESTADO de Alegra (col 'ESTADO', distinta de 'ESTADO LEGAL'). 'Cobrada' → pago full.
+      const cobrada = normKey(pick(head, 'ESTADO', 'Estado')) === 'cobrada';
 
       const lineas: LineaData[] = lineRows.map(r => {
         const nombre = pick(r, 'PRODUCTO/SERVICIO - NOMBRE', 'Producto/Servicio - Nombre').trim() || 'Ítem';
@@ -106,7 +110,7 @@ export async function POST(req: NextRequest) {
       let montoTotal = toCents(pick(head, 'TOTAL - FACTURA', 'Total - Factura', 'Total factura'));
       if (montoTotal === 0) montoTotal = Math.round(lineas.reduce((s, l) => s + l.subtotal, 0) * 100);
 
-      const data = { encf, codigo, fecha, clienteNombre, clienteRnc, montoTotal, lineasCount: lineas.length };
+      const data = { encf, codigo, fecha, clienteNombre, clienteRnc, montoTotal, cobrada, lineasCount: lineas.length };
 
       if (!fecha) {
         rows.push({ ref, data, action: 'skip', reason: 'fecha inválida' });
@@ -135,7 +139,7 @@ export async function POST(req: NextRequest) {
 
       encfSet.add(encf);
       rows.push({ ref, data, action: 'create' });
-      parsed.push({ encf, codigo, fecha, clienteNombre, clienteRnc, montoTotal, lineas });
+      parsed.push({ encf, codigo, fecha, clienteNombre, clienteRnc, montoTotal, cobrada, lineas });
     }
 
     // ── Commit ────────────────────────────────────────────────────────────────
@@ -184,12 +188,45 @@ export async function POST(req: NextRequest) {
           tipoPago: 2,
           fechaEmision: new Date(f.fecha + 'T12:00:00'),
           fechaLimitePago: f.fecha,
-          lineasJson: JSON.stringify(f.lineas),
+          // Formato canónico ItemLinea (nombreItem/cantidadItem/...) para que el
+          // detalle, la edición y "Generar e-CF" (emitir-ecf) reconstruyan los ítems.
+          lineasJson: JSON.stringify(f.lineas.map((l, i) => ({
+            id:                     i + 1,
+            nombreItem:             l.nombre,
+            referencia:             '',
+            descripcionItem:        l.descripcion ?? '',
+            cantidadItem:           l.cantidad,
+            precioUnitarioItem:     l.precio,
+            descuentoPct:           0,
+            tasaItbis:              'exento',
+            indicadorBienoServicio: '2',
+          }))),
           notas: `Importada de Alegra (factura ${f.codigo})`,
         };
       });
+      const insertedDocs: { id: number; encf: string }[] = [];
       for (let i = 0; i < docValues.length; i += 200) {
-        await db.insert(ecfDocuments).values(docValues.slice(i, i + 200));
+        const chunk = await db.insert(ecfDocuments)
+          .values(docValues.slice(i, i + 200))
+          .returning({ id: ecfDocuments.id, encf: ecfDocuments.encf });
+        insertedDocs.push(...chunk);
+      }
+
+      // 4. ESTADO=Cobrada en Alegra → registrar pago full (queda 'Pagada' en AR/export).
+      const idByEncf = new Map(insertedDocs.map(d => [d.encf, d.id]));
+      for (const f of parsed) {
+        if (!f.cobrada) continue;
+        const docId = idByEncf.get(f.encf);
+        if (!docId) continue;
+        await registrarPago({
+          teamId,
+          ecfDocumentId:  docId,
+          montoCentavos:  f.montoTotal,
+          metodo:         'otro',
+          fechaPago:      f.fecha,
+          notas:          `Cobrada en Alegra (import factura ${f.codigo})`,
+          createdBy:      user.id,
+        });
       }
     }
 

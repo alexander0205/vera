@@ -4,10 +4,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2, Receipt,
+  X, Wallet, Loader2, Archive, Wallet2,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
-import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 interface Cuenta {
@@ -55,7 +54,6 @@ export default function CuentasPorCobrarPage() {
   const [filterValues, setFilterValues] = useState<Record<string, string>>({ tipo: 'todas' });
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
-  const [importPagos, setImportPagos] = useState(false);
 
   const filtro = (filterValues.tipo as 'todas' | 'vencidas') || 'todas';
 
@@ -165,14 +163,6 @@ export default function CuentasPorCobrarPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setImportPagos(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
-            title="Importar pagos desde PDF de recibos de caja"
-          >
-            <Receipt className="h-4 w-4" />
-            Importar pagos (Alegra)
-          </button>
-          <button
             onClick={() => setHistoricaModal(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
             title="Importar factura previa al uso de emitedo (no va a DGII)"
@@ -259,25 +249,6 @@ export default function CuentasPorCobrarPage() {
           onSuccess={() => { setHistoricaModal(false); cargar(); }}
         />
       )}
-
-      {/* Import de pagos desde PDF de recibos */}
-      <ImportModal
-        open={importPagos}
-        onClose={() => setImportPagos(false)}
-        endpoint="/api/import/pagos"
-        title="Importar pagos de Alegra (recibos)"
-        accept=".pdf"
-        helpText="PDF de recibos de caja de Alegra. Enlaza cada pago a su factura por 'Pago a factura No. X'."
-        columns={[
-          { key: 'recibo',  label: 'Recibo' },
-          { key: 'factura', label: 'Factura' },
-          { key: 'cliente', label: 'Cliente' },
-          { key: 'metodo',  label: 'Método' },
-          { key: 'fecha',   label: 'Fecha' },
-          { key: 'montoDOP', label: 'Monto' },
-        ]}
-        onDone={() => cargar()}
-      />
     </section>
   );
 }

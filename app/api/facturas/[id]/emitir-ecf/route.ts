@@ -29,7 +29,27 @@ import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 
 const bodySchema = z.object({
   tipoEcf: z.enum(['31', '32', '33', '34', '41', '43', '44', '45', '46', '47']),
+  // Permite completar el comprador al emitir (cuando la factura se creó sin RNC).
+  rncComprador:         z.string().trim().min(1).max(20).optional(),
+  razonSocialComprador: z.string().trim().min(1).max(255).optional(),
 });
+
+// Reglas por tipoEcf — espejo de lib/ecf/types.ts (no importable porque ese módulo
+// trae además helpers cliente que no necesitamos acá).
+const REGLAS: Record<string, { rnc: boolean; razon: boolean; ncfMod: boolean; permiteItbis: boolean }> = {
+  '31': { rnc: true,  razon: true,  ncfMod: false, permiteItbis: true  },
+  '32': { rnc: false, razon: false, ncfMod: false, permiteItbis: true  },
+  '33': { rnc: true,  razon: true,  ncfMod: true,  permiteItbis: true  },
+  '34': { rnc: true,  razon: true,  ncfMod: true,  permiteItbis: true  },
+  '41': { rnc: true,  razon: true,  ncfMod: false, permiteItbis: true  },
+  '43': { rnc: false, razon: false, ncfMod: false, permiteItbis: false },
+  '44': { rnc: true,  razon: true,  ncfMod: false, permiteItbis: false },
+  '45': { rnc: true,  razon: true,  ncfMod: false, permiteItbis: true  },
+  '46': { rnc: false, razon: true,  ncfMod: false, permiteItbis: false },
+  '47': { rnc: false, razon: true,  ncfMod: false, permiteItbis: false },
+};
+
+const RNC_RE = /^\d{9}$|^\d{11}$/;
 
 // ─── Adquirir próximo eNCF (same as in /api/ecf/emitir) ─────────────────────
 
@@ -84,7 +104,7 @@ export async function POST(
     if (!parsed.success) {
       return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
     }
-    const { tipoEcf } = parsed.data;
+    const { tipoEcf, rncComprador: rncOverride, razonSocialComprador: razonOverride } = parsed.data;
 
     // Load document + team
     const [row] = await db
@@ -114,6 +134,71 @@ export async function POST(
         { error: 'RNC no configurado. Completa el perfil de tu empresa.' },
         { status: 422 },
       );
+    }
+
+    // ─── Pre-flight: validar campos obligatorios para el tipoEcf seleccionado ──
+    const regla = REGLAS[tipoEcf];
+    const rncFinal   = (rncOverride   ?? doc.rncComprador         ?? '').trim();
+    const razonFinal = (razonOverride ?? doc.razonSocialComprador ?? '').trim();
+
+    const errores: { campo: string; mensaje: string; resoluble: boolean }[] = [];
+
+    if (regla.rnc && !rncFinal) {
+      errores.push({
+        campo: 'rncComprador',
+        mensaje: `e${tipoEcf} requiere RNC o Cédula del comprador.`,
+        resoluble: true,
+      });
+    }
+    if (rncFinal && !RNC_RE.test(rncFinal.replace(/[-\s]/g, ''))) {
+      errores.push({
+        campo: 'rncComprador',
+        mensaje: 'El RNC/Cédula debe tener 9 u 11 dígitos.',
+        resoluble: true,
+      });
+    }
+    if (regla.razon && !razonFinal) {
+      errores.push({
+        campo: 'razonSocialComprador',
+        mensaje: `e${tipoEcf} requiere razón social del comprador.`,
+        resoluble: true,
+      });
+    }
+    if (regla.ncfMod && !doc.ncfModificado) {
+      errores.push({
+        campo: 'ncfModificado',
+        mensaje: `e${tipoEcf} debe referenciar un e-NCF previo (factura original).`,
+        resoluble: false,
+      });
+    }
+
+    if (errores.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Faltan datos requeridos por la DGII',
+          mensaje: errores.map(e => e.mensaje).join(' '),
+          errores,
+          action: errores.every(e => e.resoluble) ? 'complete-in-modal' : 'edit-factura',
+        },
+        { status: 422 },
+      );
+    }
+
+    // Persistir overrides en ecf_documents (sobrevive al emit)
+    if (
+      (rncOverride   && rncOverride   !== (doc.rncComprador ?? '')) ||
+      (razonOverride && razonOverride !== (doc.razonSocialComprador ?? ''))
+    ) {
+      await db
+        .update(ecfDocuments)
+        .set({
+          rncComprador:         rncFinal || null,
+          razonSocialComprador: razonFinal || null,
+          updatedAt:            new Date(),
+        })
+        .where(eq(ecfDocuments.id, docId));
+      doc.rncComprador         = rncFinal || null;
+      doc.razonSocialComprador = razonFinal || null;
     }
 
     // Cross-doc: si es NC/débito (33/34) con padre referenciado, el padre debe
@@ -185,10 +270,47 @@ export async function POST(
     }
 
     if (items.length === 0) {
-      return NextResponse.json({ error: 'El documento no tiene ítems válidos para emitir.' }, { status: 422 });
+      return NextResponse.json(
+        {
+          error:   'La factura no tiene ítems válidos',
+          mensaje: 'Para emitir a la DGII la factura debe tener al menos un ítem con nombre, cantidad y precio. Edita la factura para agregarlos.',
+          errores: [{ campo: 'lineas', mensaje: 'No hay ítems válidos.', resoluble: false }],
+          action:  'edit-factura',
+        },
+        { status: 422 },
+      );
     }
 
     const totales = calcularTotales(items);
+
+    // DGII: e32 (Factura de Consumo) >= DOP 250,000 exige RNC + razón social.
+    if (tipoEcf === '32' && totales.montoTotal >= 250_000 && (!rncFinal || !razonFinal)) {
+      return NextResponse.json(
+        {
+          error:   'e32 sobre DOP 250,000 requiere comprador',
+          mensaje: 'Por norma DGII, una Factura de Consumo (e32) por DOP 250,000 o más debe incluir RNC/Cédula y razón social del comprador.',
+          errores: [
+            ...(!rncFinal   ? [{ campo: 'rncComprador',         mensaje: 'RNC/Cédula requerido por superar DOP 250,000.', resoluble: true }] : []),
+            ...(!razonFinal ? [{ campo: 'razonSocialComprador', mensaje: 'Razón social requerida por superar DOP 250,000.', resoluble: true }] : []),
+          ],
+          action:  'complete-in-modal',
+        },
+        { status: 422 },
+      );
+    }
+
+    // ITBIS no permitido en este tipo pero hay items con ITBIS → debe editar la factura.
+    if (!regla.permiteItbis && items.some(i => (i.tasaItbis ?? 0) > 0)) {
+      return NextResponse.json(
+        {
+          error:   `e${tipoEcf} no permite ITBIS`,
+          mensaje: `El tipo e${tipoEcf} no admite ítems con ITBIS. Edita la factura y marca los ítems como exentos o cambia el tipo.`,
+          errores: [{ campo: 'lineas', mensaje: 'Hay ítems con ITBIS pero el tipo no lo permite.', resoluble: false }],
+          action:  'edit-factura',
+        },
+        { status: 422 },
+      );
+    }
 
     // Ensure contribuyente en ecf-api
     let codigoPublico: string;

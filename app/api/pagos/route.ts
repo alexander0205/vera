@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { db } from '@/lib/db/drizzle';
-import { payments, ecfDocuments } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { getUser, getTeamIdForUser, registrarPago, getPagosDocumento } from '@/lib/db/queries';
 
+/**
+ * Pagos de una factura — usa el ledger `pagos_recibidos` (source of truth).
+ * GET  ?ecfDocumentId=ID  → lista pagos del doc.
+ * POST { ecfDocumentId, monto (DOP), metodo, referencia?, notas?, fecha } → registra pago.
+ */
 export async function GET(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   const docId = req.nextUrl.searchParams.get('ecfDocumentId');
-  const conditions: Parameters<typeof and>[0][] = [eq(payments.teamId, teamId)];
-  if (docId) conditions.push(eq(payments.ecfDocumentId, Number(docId)));
-  const rows = await db.select().from(payments).where(and(...conditions));
-  return NextResponse.json(rows);
+  if (!docId) return NextResponse.json([]);
+  const pagos = await getPagosDocumento(teamId, Number(docId));
+  return NextResponse.json(pagos);
 }
 
 export async function POST(req: NextRequest) {
@@ -21,31 +22,23 @@ export async function POST(req: NextRequest) {
   if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 400 });
 
   const { ecfDocumentId, monto, metodo, referencia, notas, fecha } = await req.json();
-  if (!monto || !fecha) return NextResponse.json({ error: 'Monto y fecha son requeridos' }, { status: 400 });
-
-  const [pago] = await db.insert(payments).values({
-    teamId,
-    ecfDocumentId: ecfDocumentId ?? null,
-    monto: Math.round(Number(monto) * 100),
-    metodo,
-    referencia,
-    notas,
-    fecha,
-    registradoPorId: user.id,
-  }).returning();
-
-  // If associated with a document, mark it as paid
-  if (ecfDocumentId) {
-    await db.update(ecfDocuments)
-      .set({
-        pagoRecibido: 'true',
-        pagoMetodo: metodo,
-        pagoValorCts: Math.round(Number(monto) * 100),
-        pagoFecha: fecha,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(ecfDocuments.id, Number(ecfDocumentId)), eq(ecfDocuments.teamId, teamId)));
+  if (!ecfDocumentId || !monto || !fecha) {
+    return NextResponse.json({ error: 'ecfDocumentId, monto y fecha son requeridos' }, { status: 400 });
   }
 
-  return NextResponse.json(pago, { status: 201 });
+  try {
+    const result = await registrarPago({
+      teamId,
+      ecfDocumentId: Number(ecfDocumentId),
+      montoCentavos: Math.round(Number(monto) * 100),
+      metodo:        metodo ?? 'otro',
+      referencia:    referencia ?? null,
+      fechaPago:     String(fecha),
+      notas:         notas ?? null,
+      createdBy:     user.id,
+    });
+    return NextResponse.json(result.pago, { status: 201 });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar pago' }, { status: 422 });
+  }
 }

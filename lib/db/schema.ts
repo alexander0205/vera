@@ -1,7 +1,9 @@
 import {
   pgTable,
   serial,
+  bigserial,
   varchar,
+  char,
   text,
   timestamp,
   integer,
@@ -645,6 +647,55 @@ export const auditLogs = pgTable('audit_logs', {
   index('audit_logs_action_idx').on(t.action),
   index('audit_logs_created_idx').on(t.createdAt),
 ]);
+
+// ─── EmiteDO: Notas genéricas por entidad ─────────────────────────────────────
+// Notas adjuntas a cualquier entidad (factura, cliente, producto, etc.).
+// Reusable vía <EntityNotes entityType="..." entityId={n} />.
+
+export const entityNotes = pgTable('entity_notes', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  entityType: varchar('entity_type', { length: 50 }).notNull(),
+  entityId:   integer('entity_id').notNull(),
+  userId:     integer('user_id').references(() => users.id),
+  text:       text('text').notNull(),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+  deletedAt:  timestamp('deleted_at'),
+}, (t) => [
+  index('entity_notes_entity_idx').on(t.teamId, t.entityType, t.entityId),
+]);
+
+export type EntityNote    = typeof entityNotes.$inferSelect;
+export type NewEntityNote = typeof entityNotes.$inferInsert;
+
+// ─── EmiteDO: Row Audit Log (DB triggers) ────────────────────────────────────
+// Captura cada INSERT/UPDATE/DELETE en business tables vía Postgres triggers.
+// Ver migration 0029_row_audit_log.sql y lib/db/audit-context.ts.
+
+export const rowAuditLog = pgTable('row_audit_log', {
+  id:          bigserial('id', { mode: 'number' }).primaryKey(),
+  tableName:   text('table_name').notNull(),
+  rowPk:       text('row_pk'),
+  operation:   char('operation', { length: 1 }).notNull(), // 'I' | 'U' | 'D'
+  oldData:     jsonb('old_data'),
+  newData:     jsonb('new_data'),
+  changedCols: text('changed_cols').array(),
+  userId:      integer('user_id'),
+  teamId:      integer('team_id'),
+  actor:       text('actor'),
+  ipAddress:   varchar('ip_address', { length: 45 }),
+  changedAt:   timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('row_audit_log_table_idx').on(t.tableName),
+  index('row_audit_log_table_pk_idx').on(t.tableName, t.rowPk),
+  index('row_audit_log_user_idx').on(t.userId),
+  index('row_audit_log_team_idx').on(t.teamId),
+  index('row_audit_log_changed_idx').on(t.changedAt),
+  index('row_audit_log_op_idx').on(t.operation),
+]);
+
+export type RowAuditLog = typeof rowAuditLog.$inferSelect;
 
 // ─── EmiteDO: Rate Limits (distribuido — funciona en multi-instancia) ─────────
 

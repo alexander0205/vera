@@ -85,7 +85,10 @@ export default function NuevaFacturaForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [tipoEcf, setTipoEcf]         = useState(initialData?.tipoEcf ?? 'sin-ncf');
+  // '00' = marcador HISTORICA (sin e-CF real) → en el form equivale a 'sin-ncf'.
+  const [tipoEcf, setTipoEcf]         = useState(
+    initialData?.tipoEcf && initialData.tipoEcf !== '00' ? initialData.tipoEcf : 'sin-ncf',
+  );
   const [categoriaId, setCategoriaId] = useState('factura-venta');
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
@@ -734,6 +737,7 @@ export default function NuevaFacturaForm({
       <a href="#main-content" className="skip-link">Saltar al contenido</a>
       <div className="p-3 sm:p-4 md:p-5">
         <NavBar
+          title={initialData ? 'Editar factura' : 'Nueva factura'}
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
           showListaPrecios={showListaPrecios}   setShowListaPrecios={setShowListaPrecios}
           showVendedor={showVendedor}           setShowVendedor={setShowVendedor}

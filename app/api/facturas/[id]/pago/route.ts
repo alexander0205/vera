@@ -1,20 +1,26 @@
 /**
- * POST /api/facturas/[id]/pago — Registrar o actualizar el pago recibido
- * de una factura existente. Valida team membership y existencia.
+ * POST /api/facturas/[id]/pago — Registra/actualiza el pago de una factura.
+ *
+ * Source of truth: ledger `pagos_recibidos` (vía registrarPago/syncPagoMirror).
+ * Este endpoint es el "pago único" del detalle: reemplaza el pago del doc por
+ * un solo movimiento. Para abonos parciales múltiples usar Cuentas por cobrar.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
+import { getUser, getTeamIdForUser, registrarPago, syncPagoMirror } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 
 const METODOS_VALIDOS = new Set([
   'efectivo',
   'transferencia',
+  'tarjeta',
   'tarjeta_credito',
   'tarjeta_debito',
   'cheque',
+  'deposito',
+  'otro',
 ]);
 
 interface PagoBody {
@@ -48,7 +54,7 @@ export async function POST(
 
   // Validar membresía y existencia
   const [doc] = await db
-    .select({ id: ecfDocuments.id, estado: ecfDocuments.estado })
+    .select({ id: ecfDocuments.id, estado: ecfDocuments.estado, montoTotal: ecfDocuments.montoTotal })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
     .limit(1);
@@ -57,7 +63,6 @@ export async function POST(
     return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
   }
 
-  // No permitir editar pago en facturas anuladas
   if (doc.estado === 'ANULADO') {
     return NextResponse.json(
       { error: 'No se puede registrar pagos en una factura anulada' },
@@ -65,23 +70,15 @@ export async function POST(
     );
   }
 
-  // Normalizar
   const recibido = Boolean(body.recibido);
 
-  if (!recibido) {
-    // Limpiar pago
-    await db
-      .update(ecfDocuments)
-      .set({
-        pagoRecibido: 'false',
-        pagoMetodo:   null,
-        pagoCuenta:   null,
-        pagoValorCts: 0,
-        pagoFecha:    null,
-        updatedAt:    new Date(),
-      })
-      .where(eq(ecfDocuments.id, docId));
+  // El detalle es "pago único": limpia el ledger del doc y reemplaza.
+  await db.delete(pagosRecibidos).where(
+    and(eq(pagosRecibidos.teamId, teamId), eq(pagosRecibidos.ecfDocumentId, docId)),
+  );
 
+  if (!recibido) {
+    await syncPagoMirror(teamId, docId); // → inline pago* = 0/false
     return NextResponse.json({ ok: true, recibido: false });
   }
 
@@ -91,40 +88,30 @@ export async function POST(
   }
 
   const valorNum =
-    typeof body.valor === 'number'
-      ? body.valor
-      : parseFloat(String(body.valor ?? '0'));
-  if (!Number.isFinite(valorNum) || valorNum < 0) {
+    typeof body.valor === 'number' ? body.valor : parseFloat(String(body.valor ?? '0'));
+  if (!Number.isFinite(valorNum) || valorNum <= 0) {
+    await syncPagoMirror(teamId, docId);
     return NextResponse.json({ error: 'Valor inválido' }, { status: 400 });
   }
-  const valorCts = Math.round(valorNum * 100);
+  const valorCts = Math.min(Math.round(valorNum * 100), doc.montoTotal);
 
   const cuenta = body.cuenta ? String(body.cuenta).slice(0, 100) : null;
-
-  // Validar fecha YYYY-MM-DD si viene
   let fecha = body.fecha ? String(body.fecha).slice(0, 10) : null;
-  if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-    fecha = null;
+  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) fecha = new Date().toISOString().slice(0, 10);
+
+  try {
+    await registrarPago({
+      teamId,
+      ecfDocumentId: docId,
+      montoCentavos: valorCts,
+      metodo,
+      cuenta,
+      fechaPago:     fecha,
+      createdBy:     user.id,
+    });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar pago' }, { status: 422 });
   }
 
-  await db
-    .update(ecfDocuments)
-    .set({
-      pagoRecibido: 'true',
-      pagoMetodo:   metodo,
-      pagoCuenta:   cuenta,
-      pagoValorCts: valorCts,
-      pagoFecha:    fecha,
-      updatedAt:    new Date(),
-    })
-    .where(eq(ecfDocuments.id, docId));
-
-  return NextResponse.json({
-    ok: true,
-    recibido: true,
-    metodo,
-    cuenta,
-    valorCts,
-    fecha,
-  });
+  return NextResponse.json({ ok: true, recibido: true, metodo, cuenta, valorCts, fecha });
 }

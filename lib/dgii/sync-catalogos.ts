@@ -51,7 +51,8 @@ interface CatalogoFetcher {
 }
 
 const FETCHERS: CatalogoFetcher[] = [
-  { tipo: 'ambientes',             fetch: () => remote.ambientes() },
+  // 'ambientes' NO se sincroniza a la DB local — el ambiente se lee siempre
+  // del ecf-api directo (getAmbientes / me().software.ambienteDefault).
   { tipo: 'tipos_comprobante',     fetch: () => remote.tiposComprobante() },
   { tipo: 'tipos_documento',       fetch: () => remote.tiposDocumento() },
   { tipo: 'formas_pago',           fetch: () => remote.formasPago() },

@@ -78,10 +78,16 @@ export async function GET(req: NextRequest) {
         // Subquery correlacionada — usar nombre literal de tabla. Drizzle
         // interpola ${ecfDocuments.id} como parámetro, no como column ref,
         // causando que todas las filas devolvieran el mismo SUM.
-        pagado: sql<number>`coalesce((
-          SELECT SUM(monto_centavos) FROM pagos_recibidos
-          WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
-        ), 0)`,
+        // Cobranza: ledger pagos_recibidos = source of truth. Fallback al pago
+        // inline (pago_valor_cts) para docs legacy aún sin fila en el ledger.
+        pagado: sql<number>`GREATEST(
+          coalesce((
+            SELECT SUM(monto_centavos) FROM pagos_recibidos
+            WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
+          ), 0),
+          CASE WHEN ecf_documents.pago_recibido = 'true'
+               THEN coalesce(ecf_documents.pago_valor_cts, 0) ELSE 0 END
+        )`,
       })
       .from(ecfDocuments)
       .where(where)

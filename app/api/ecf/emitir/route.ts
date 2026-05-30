@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
@@ -282,6 +282,22 @@ export async function POST(request: NextRequest) {
         ...extraFields,
       }).returning();
 
+      // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
+      // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
+      if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+        try {
+          await registrarPago({
+            teamId,
+            ecfDocumentId: saved.id,
+            montoCentavos: Math.min(Math.round(data.pagoValor * 100), Math.round(totales.montoTotal * 100)),
+            metodo:        data.pagoMetodo || 'otro',
+            cuenta:        data.pagoCuenta || null,
+            fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+            createdBy:     user.id,
+          });
+        } catch (e) { console.error('[emitir borrador registrarPago]', e); }
+      }
+
       return NextResponse.json({ ok: true, modo: 'borrador', documentoId: saved.id, estado: 'BORRADOR' });
     }
 
@@ -460,6 +476,21 @@ export async function POST(request: NextRequest) {
       fechaLimitePago:      data.fechaLimitePago ?? null,
       ...extraFields,
     }).returning();
+
+    // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
+    if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+      try {
+        await registrarPago({
+          teamId,
+          ecfDocumentId: saved.id,
+          montoCentavos: Math.min(Math.round(data.pagoValor * 100), Math.round(totales.montoTotal * 100)),
+          metodo:        data.pagoMetodo || 'otro',
+          cuenta:        data.pagoCuenta || null,
+          fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+          createdBy:     user.id,
+        });
+      } catch (e) { console.error('[emitir registrarPago]', e); }
+    }
 
     await logInfo({
       teamId,

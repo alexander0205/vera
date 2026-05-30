@@ -404,7 +404,7 @@ function AmbienteBadge({ ambiente }: { ambiente: string | null }) {
   return (
     <span
       className={`inline-flex items-center gap-1 shrink-0 text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full border ${item.cls}`}
-      title={`Ambiente DGII: ${ambiente} — los comprobantes emitidos NO son fiscales`}
+      title={`Ambiente DGII: ${ambiente} — en vivo desde ecf-api (llamada directa al API, no de la DB local). Los comprobantes emitidos NO son fiscales.`}
     >
       <AlertCircle className="h-3 w-3 shrink-0" />
       <span>{ambiente}</span>
@@ -735,7 +735,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     },
   );
 
-  const { data: ambienteData } = useSWR<{ ambiente: string | null } | null>(
+  const { data: ambienteData, mutate: mutateAmbiente } = useSWR<{ ambiente: string | null } | null>(
     '/api/sistema/ambiente',
     layoutFetcher,
     {
@@ -753,6 +753,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   function handleSwitch(teamId: number) {
     setActiveTeamOverride(teamId);
     mutateEmpresa();
+    mutateAmbiente(); // ambiente es por-tenant → refrescar al cambiar de empresa
   }
 
   const plan = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.planName ?? null;

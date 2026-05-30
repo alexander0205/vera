@@ -154,7 +154,9 @@ export const getIndicadoresItbis        = ()             => getCatalogo('indicad
 export const getPaises                  = ()             => getCatalogo('paises');
 export const getTiposIngreso            = ()             => getCatalogo('tipos_ingreso');
 export const getTiposPago               = ()             => getCatalogo('tipos_pago');
-export const getAmbientes               = ()             => getCatalogo('ambientes');
+// Ambientes (TesteCF/CerteCF/Produccion): SIEMPRE desde ecf-api directo,
+// nunca de la DB local — el ambiente lo decide el API, no debe cachearse.
+export const getAmbientes               = (): Promise<CatalogItem[]> => readCatalogoFromRemote('ambientes');
 export const getImpuestosAdicionales    = ()             => getCatalogo('impuestos_adicionales');
 export const getCodigosModificacion     = ()             => getCatalogo('codigos_modificacion');
 

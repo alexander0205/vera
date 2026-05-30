@@ -42,7 +42,8 @@ export function NavBar({
   showListaPrecios, setShowListaPrecios,
   showVendedor, setShowVendedor,
   toggleOpcion,
-}: Pick<Props, 'showAlmacen' | 'setShowAlmacen' | 'showListaPrecios' | 'setShowListaPrecios' | 'showVendedor' | 'setShowVendedor' | 'toggleOpcion'>) {
+  title = 'Nueva factura',
+}: Pick<Props, 'showAlmacen' | 'setShowAlmacen' | 'showListaPrecios' | 'setShowListaPrecios' | 'showVendedor' | 'setShowVendedor' | 'toggleOpcion'> & { title?: string }) {
   const personalizarRef = useRef<HTMLDivElement>(null);
   const [showPersonalizar, setShowPersonalizar] = useState(false);
 
@@ -63,7 +64,7 @@ export function NavBar({
           <ArrowLeft className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Volver</span>
         </Link>
       </Button>
-      <h1 className="text-base sm:text-lg font-semibold text-gray-700 flex-1 sm:flex-none truncate">Nueva factura</h1>
+      <h1 className="text-base sm:text-lg font-semibold text-gray-700 flex-1 sm:flex-none truncate">{title}</h1>
 
       <div className="relative ml-auto" ref={personalizarRef}>
         <Button

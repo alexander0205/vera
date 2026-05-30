@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CreditCard, ChevronDown, FileX, Loader2, CheckCircle2 } from 'lucide-react';
+import { CreditCard, ChevronDown, FileX, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,6 +39,7 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
   const [editing, setEditing]   = useState(initial.recibido);
   const [saving, setSaving]     = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   const [metodo, setMetodo] = useState(initial.metodo ?? 'efectivo');
   const [cuenta, setCuenta] = useState(initial.cuenta ?? '');
@@ -102,6 +103,7 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
       toast.success('Pago removido');
       setJustSaved(false);
       setEditing(false);
+      setConfirmingClear(false);
       onSaved?.({ recibido: false, valorDOP: '0.00' });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Error');
@@ -171,7 +173,7 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
                   type="checkbox"
                   checked
                   readOnly={readOnly}
-                  onChange={(e) => { if (!e.target.checked) handleClear(); }}
+                  onChange={(e) => { if (!e.target.checked) setConfirmingClear(true); }}
                   disabled={readOnly || saving}
                   className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
                 />
@@ -190,9 +192,12 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
                     <SelectContent>
                       <SelectItem value="efectivo">Efectivo</SelectItem>
                       <SelectItem value="transferencia">Transferencia</SelectItem>
+                      <SelectItem value="tarjeta">Tarjeta</SelectItem>
                       <SelectItem value="tarjeta_credito">Tarjeta de crédito</SelectItem>
                       <SelectItem value="tarjeta_debito">Tarjeta de débito</SelectItem>
                       <SelectItem value="cheque">Cheque</SelectItem>
+                      <SelectItem value="deposito">Depósito</SelectItem>
+                      <SelectItem value="otro">Otro</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -252,7 +257,7 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
                 </div>
               )}
 
-              {!readOnly && (
+              {!readOnly && !confirmingClear && (
                 <div className="flex gap-2 pt-1">
                   <Button
                     type="button"
@@ -270,11 +275,48 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
                     size="sm"
                     variant="outline"
                     className="text-red-600 border-red-200 hover:bg-red-50 h-9"
-                    onClick={handleClear}
+                    onClick={() => setConfirmingClear(true)}
                     disabled={saving}
                   >
                     Quitar
                   </Button>
+                </div>
+              )}
+
+              {!readOnly && confirmingClear && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-3">
+                  <div className="flex gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-800">¿Quitar el pago registrado?</p>
+                      <p className="text-xs text-red-700 mt-0.5">
+                        Esta acción eliminará el pago de la factura. Puedes volver a registrarlo después.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1 bg-red-600 hover:bg-red-700 h-9 text-white"
+                      onClick={handleClear}
+                      disabled={saving}
+                    >
+                      {saving
+                        ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Quitando…</>
+                        : 'Sí, quitar pago'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9"
+                      onClick={() => setConfirmingClear(false)}
+                      disabled={saving}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
                 </div>
               )}
             </>

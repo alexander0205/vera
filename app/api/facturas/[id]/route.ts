@@ -4,9 +4,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, clients } from '@/lib/db/schema';
+import { ecfDocuments, teams, clients, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { TIPOS_ECF, TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 
 export async function GET(
@@ -33,6 +33,18 @@ export async function GET(
   if (!row) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
 
   const { doc, team } = row;
+
+  // Cobranza — source of truth: pagos_recibidos (multi-pago, AR/import) +
+  // el pago inline registrado al emitir (pago al momento). Suma de ambos.
+  const [pagAgg] = await db
+    .select({ sum: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
+    .from(pagosRecibidos)
+    .where(eq(pagosRecibidos.ecfDocumentId, docId));
+  const sumLedger = Number(pagAgg?.sum ?? 0);
+  const inlineCts = doc.pagoRecibido === 'true' ? (doc.pagoValorCts ?? 0) : 0;
+  // Ledger (pagos_recibidos) = source of truth. Inline solo como fallback para
+  // docs legacy aún sin migrar al ledger (evita doble conteo: OR, no suma).
+  const pagadoCts = sumLedger > 0 ? sumLedger : inlineCts;
 
   // Cargar cliente si existe
   let cliente = null;
@@ -104,6 +116,7 @@ export async function GET(
     ncfModificado: doc.ncfModificado,
     fechaEmision: doc.fechaEmision.toISOString(),
     fechaLimitePago: doc.fechaLimitePago,
+    tipoPago: doc.tipoPago,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
 
@@ -116,11 +129,11 @@ export async function GET(
     retencionesList:     retencionesArr,
 
     pago: {
-      recibido: doc.pagoRecibido === 'true',
+      recibido: pagadoCts > 0,
       metodo:   doc.pagoMetodo,
       cuenta:   doc.pagoCuenta,
-      valorCts: doc.pagoValorCts ?? 0,
-      valorDOP: ((doc.pagoValorCts ?? 0) / 100).toFixed(2),
+      valorCts: pagadoCts,
+      valorDOP: (pagadoCts / 100).toFixed(2),
       fecha:    doc.pagoFecha,
     },
 

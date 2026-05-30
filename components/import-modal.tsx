@@ -11,6 +11,8 @@ import type { ImportResult, ImportRow, RowAction } from '@/lib/import/csv';
 export interface ImportColumn {
   key: string;
   label: string;
+  /** Formato custom del valor de la celda (ej. boolean → 'Cobrada'/'Pendiente'). */
+  format?: (value: unknown) => string;
 }
 
 interface ImportModalProps {
@@ -196,7 +198,7 @@ export function ImportModal({
                             </td>
                             {columns.map((c) => (
                               <td key={c.key} className="px-3 py-1.5 text-gray-700 truncate max-w-[180px]">
-                                {fmt(r.data[c.key])}
+                                {c.format ? c.format(r.data[c.key]) : fmt(r.data[c.key])}
                               </td>
                             ))}
                           </tr>

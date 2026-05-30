@@ -570,6 +570,38 @@ export async function getPagosDocumento(teamId: number, ecfDocumentId: number) {
  * - El monto no supera el saldo pendiente
  * Retorna el pago insertado + nuevo saldo.
  */
+/**
+ * Sincroniza el espejo inline `ecfDocuments.pago*` desde el ledger
+ * `pagos_recibidos` (source of truth). El inline queda denormalizado para
+ * reportes DGII (606/607/609) y ticket PDF, que aún leen esos campos.
+ * Debe llamarse tras cualquier insert/delete en pagos_recibidos de un doc.
+ */
+export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
+  const [agg] = await db
+    .select({ sum: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
+    .from(pagosRecibidos)
+    .where(and(eq(pagosRecibidos.teamId, teamId), eq(pagosRecibidos.ecfDocumentId, ecfDocumentId)));
+  const sum = Number(agg?.sum ?? 0);
+
+  const [latest] = await db
+    .select({ metodo: pagosRecibidos.metodo, cuenta: pagosRecibidos.cuenta, fecha: pagosRecibidos.fechaPago })
+    .from(pagosRecibidos)
+    .where(and(eq(pagosRecibidos.teamId, teamId), eq(pagosRecibidos.ecfDocumentId, ecfDocumentId)))
+    .orderBy(sql`${pagosRecibidos.fechaPago} DESC, ${pagosRecibidos.id} DESC`)
+    .limit(1);
+
+  await db.update(ecfDocuments).set({
+    pagoRecibido: sum > 0 ? 'true' : 'false',
+    pagoValorCts: sum,
+    pagoMetodo:   latest?.metodo ?? null,
+    pagoCuenta:   latest?.cuenta ?? null,
+    pagoFecha:    latest?.fecha ?? null,
+    updatedAt:    new Date(),
+  }).where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)));
+
+  return sum;
+}
+
 export async function registrarPago(input: {
   teamId:        number;
   ecfDocumentId: number;
@@ -621,6 +653,8 @@ export async function registrarPago(input: {
     createdBy:     input.createdBy ?? null,
   }).returning();
 
+  await syncPagoMirror(input.teamId, input.ecfDocumentId);
+
   return {
     pago,
     saldoAnterior: saldo,
@@ -638,5 +672,6 @@ export async function eliminarPago(teamId: number, pagoId: number) {
     .limit(1);
   if (!pago) throw new Error('Pago no encontrado');
   await db.delete(pagosRecibidos).where(eq(pagosRecibidos.id, pagoId));
+  await syncPagoMirror(teamId, pago.ecfDocumentId);
   return pago;
 }

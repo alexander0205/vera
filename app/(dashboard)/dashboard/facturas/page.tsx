@@ -217,27 +217,36 @@ export default function FacturasPage() {
     },
     {
       id: 'saldo',
-      header: 'Saldo',
+      header: 'Cobro',
       visibleAt: 'lg',
-      align: 'right',
+      align: 'center',
       render: doc => {
+        const pagado = doc.pagado ?? 0;
+        const saldo  = doc.montoTotal - pagado;
         const esCredito = doc.tipoPago === 2;
-        const saldo = doc.montoTotal - (doc.pagado ?? 0);
-        const dias = diasVencido(doc.fechaLimitePago);
-        const vencida = esCredito && saldo > 0 && dias > 0;
-        if (!esCredito) return <span className="text-xs text-gray-300">—</span>;
-        if (saldo === 0) return <span className="text-xs text-emerald-600 font-medium">Pagada</span>;
-        return (
-          <div className="text-right">
-            <p className={`text-sm font-medium ${vencida ? 'text-red-600' : 'text-gray-900'}`}>{fmtDOP(saldo)}</p>
-            {doc.pagado > 0 && <p className="text-[10px] text-emerald-600">+{fmtDOP(doc.pagado)} pagado</p>}
-          </div>
-        );
+        // Gratuita / uso
+        if (doc.tipoPago === 3) return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">Gratuita</span>;
+        if (doc.tipoPago === 4) return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">Uso</span>;
+        // Pagada (full)
+        if (doc.montoTotal > 0 && pagado >= doc.montoTotal) {
+          return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">Pagada</span>;
+        }
+        // Parcial
+        if (pagado > 0) {
+          return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700" title={`Falta ${fmtDOP(saldo)}`}>Parcial</span>;
+        }
+        // Sin pago: crédito vencido (rojo) vs pendiente (amber) vs contado sin cobro (rojo)
+        if (esCredito) {
+          const dias = diasVencido(doc.fechaLimitePago);
+          if (dias > 0) return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700" title={`Vencida hace ${dias}d`}>Vencida</span>;
+          return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700">Pendiente</span>;
+        }
+        return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700" title="Contado sin cobro registrado">Sin pago</span>;
       },
     },
     {
       id: 'estado',
-      header: 'Estado',
+      header: 'Estado DGII',
       align: 'center',
       render: doc => (
         <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -334,6 +343,7 @@ export default function FacturasPage() {
           { key: 'clienteRnc',    label: 'RNC' },
           { key: 'lineasCount',   label: 'Líneas' },
           { key: 'montoTotal',    label: 'Total (¢)' },
+          { key: 'cobrada',       label: 'Cobro', format: v => v ? 'Cobrada' : 'Pendiente' },
         ]}
         onDone={() => fetchDocs()}
       />

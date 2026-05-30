@@ -25,8 +25,14 @@ import {
 import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { EntityNotes } from '@/components/entity-notes';
+import { EntityHistory } from '@/components/entity-history';
+import { StickyNote, History as HistoryIcon } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
+import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { RncSearch } from '@/components/RncSearch';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +71,7 @@ interface FacturaDetalle {
   ncfModificado: string | null;
   fechaEmision: string;
   fechaLimitePago: string | null;
+  tipoPago: number | null;
   updatedAt: string;
   terminosCondiciones: string | null;
   notas: string | null;
@@ -260,9 +267,15 @@ export default function FacturaDetallePage() {
 
   // ─── Enviar a DGII (para facturas sin eCF) ──────────────────────────────────
   const [showEnviarDgii, setShowEnviarDgii]   = useState(false);
+  const [showPagoMissingAlert, setShowPagoMissingAlert] = useState(false);
   const [dgiiTipoEcf, setDgiiTipoEcf]         = useState('32');
   const [enviandoDgii, setEnviandoDgii]       = useState(false);
   const [enviandoDgiiError, setEnviandoDgiiError] = useState<string | null>(null);
+  // Errores estructurados devueltos por la API (con `action: 'edit-factura' | 'complete-in-modal'`).
+  const [enviandoDgiiAction, setEnviandoDgiiAction] = useState<'edit-factura' | 'complete-in-modal' | null>(null);
+  // Overrides locales del comprador (cuando la factura no tiene RNC y se completa al emitir).
+  const [tempRnc, setTempRnc]                 = useState('');
+  const [tempRazon, setTempRazon]             = useState('');
   // Numeración: próximo e-NCF de la secuencia activa del tipo seleccionado.
   // Editable para ajustar el siguiente número cuando la DGII reporta colisión.
   const [ncfNum, setNcfNum]                   = useState('');
@@ -270,6 +283,66 @@ export default function FacturaDetallePage() {
   useEffect(() => {
     if (seqInfo?.numero != null) setNcfNum(String(seqInfo.numero));
   }, [seqInfo?.numero]);
+
+  // Prefill comprador overrides al abrir el modal. Si la factura ya trae RNC,
+  // default a e31 (Crédito Fiscal); si no, e32 (Consumo).
+  useEffect(() => {
+    if (showEnviarDgii && factura) {
+      setTempRnc(factura.comprador.rnc ?? '');
+      setTempRazon(factura.comprador.razonSocial ?? '');
+      setEnviandoDgiiError(null);
+      setEnviandoDgiiAction(null);
+      setDgiiTipoEcf(factura.comprador.rnc ? '31' : '32');
+    }
+  }, [showEnviarDgii, factura]);
+
+  // ─── Validación pre-flight (espejo de la API) ────────────────────────────────
+  const dgiiRegla = TIPO_ECF_REGLAS[dgiiTipoEcf];
+  const dgiiValidacion = useMemo(() => {
+    if (!factura || !dgiiRegla) return { ok: true as const };
+
+    const rnc   = (tempRnc   || factura.comprador.rnc         || '').trim();
+    const razon = (tempRazon || factura.comprador.razonSocial || '').trim();
+    const total = parseFloat(factura.montos.montoTotalDOP) || 0;
+
+    const camposFaltantes: { campo: string; mensaje: string; resoluble: boolean }[] = [];
+
+    if (dgiiRegla.requiereRncComprador && !rnc) {
+      camposFaltantes.push({ campo: 'rncComprador', mensaje: `e${dgiiTipoEcf} requiere RNC/Cédula del comprador.`, resoluble: true });
+    }
+    if (rnc && !/^\d{9}$|^\d{11}$/.test(rnc.replace(/[-\s]/g, ''))) {
+      camposFaltantes.push({ campo: 'rncComprador', mensaje: 'El RNC/Cédula debe tener 9 u 11 dígitos.', resoluble: true });
+    }
+    if (dgiiRegla.requiereRazonSocial && !razon) {
+      camposFaltantes.push({ campo: 'razonSocialComprador', mensaje: `e${dgiiTipoEcf} requiere razón social del comprador.`, resoluble: true });
+    }
+    if (dgiiRegla.requiereNcfModificado && !factura.ncfModificado) {
+      camposFaltantes.push({ campo: 'ncfModificado', mensaje: `e${dgiiTipoEcf} debe referenciar un e-NCF previo. Edita la factura para añadirlo.`, resoluble: false });
+    }
+    if (factura.lineas.length === 0) {
+      camposFaltantes.push({ campo: 'lineas', mensaje: 'La factura no tiene ítems. Edítala para agregarlos.', resoluble: false });
+    }
+    if (!dgiiRegla.permiteItbis && factura.lineas.some(l => {
+      const t = parseFloat(String(l.tasaItbis ?? '0'));
+      return t > 0;
+    })) {
+      camposFaltantes.push({ campo: 'lineas', mensaje: `e${dgiiTipoEcf} no permite ITBIS pero hay ítems gravados. Edita la factura.`, resoluble: false });
+    }
+    // e32 ≥ DOP 250,000 → DGII exige RNC + razón social.
+    if (dgiiTipoEcf === '32' && total >= 250_000) {
+      if (!rnc)   camposFaltantes.push({ campo: 'rncComprador',         mensaje: 'e32 sobre DOP 250,000 requiere RNC/Cédula del comprador.',  resoluble: true });
+      if (!razon) camposFaltantes.push({ campo: 'razonSocialComprador', mensaje: 'e32 sobre DOP 250,000 requiere razón social del comprador.', resoluble: true });
+    }
+
+    if (camposFaltantes.length === 0) return { ok: true as const };
+
+    return {
+      ok: false as const,
+      errores: camposFaltantes,
+      requiereEditar: camposFaltantes.some(c => !c.resoluble),
+      requiereCompletarAqui: camposFaltantes.every(c => c.resoluble),
+    };
+  }, [factura, dgiiRegla, dgiiTipoEcf, tempRnc, tempRazon]);
 
   const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
 
@@ -400,14 +473,22 @@ export default function FacturaDetallePage() {
         invalidarSeq(dgiiTipoEcf);
       }
 
+      const rncBody   = tempRnc.trim();
+      const razonBody = tempRazon.trim();
       const res = await fetch(`/api/facturas/${docId}/emitir-ecf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipoEcf: dgiiTipoEcf }),
+        body: JSON.stringify({
+          tipoEcf: dgiiTipoEcf,
+          ...(rncBody   ? { rncComprador:         rncBody }   : {}),
+          ...(razonBody ? { razonSocialComprador: razonBody } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setEnviandoDgiiError(data.error ?? 'Error enviando a DGII');
+        const msg = data.mensaje ?? data.error ?? 'Error enviando a DGII';
+        setEnviandoDgiiError(msg);
+        setEnviandoDgiiAction(data.action ?? null);
         return;
       }
       toast.success(`Comprobante emitido: ${data.encf}`);
@@ -460,18 +541,38 @@ export default function FacturaDetallePage() {
   }
 
   const esBorrador  = factura.estado === 'BORRADOR';
+  // e-CF real = fue emitido a DGII (e-NCF "E..." con datos DGII). HISTORICA
+  // (encf ALG-), borrador (BOR-) y sin-ncf NUNCA fueron a DGII → sin estado
+  // ni consulta DGII.
+  const esEcfReal   = /^E\d/.test(factura.encf) && !['HISTORICA', 'BORRADOR'].includes(factura.estado);
   // Sin e-CF real → se puede emitir a DGII (borrador, histórica de Alegra, sin-ncf).
   const yaEnDgii    = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(factura.estado);
   const puedeEmitir = factura.estado !== 'ANULADO' && !yaEnDgii;
   const sinLineas   = factura.lineas.length === 0;
   const esAnulable  = !['ANULADO'].includes(factura.estado);
   const esFinal     = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO', 'ANULADO'].includes(factura.estado);
-  // Consultar disponible siempre que la factura esté emitida (no borrador) y no en estado final ACEPTADO definitivo.
-  // Permite refrescar también en ACEPTADO_CONDICIONAL/EN_PROCESO/etc.
-  const puedePolling = factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO';
+  // Consultar/Estado DGII solo para e-CF real (ya emitido a DGII), no anulado.
+  const puedePolling = esEcfReal && factura.estado !== 'ANULADO';
+
+  // Trigger unificado para "Enviar a DGII" (footer + sidebar card). Si la factura
+  // es de contado y no tiene pago registrado, abre el alert de confirmación.
+  function triggerEnviarDgii() {
+    if (!factura) return;
+    if (sinLineas) {
+      toast.info('Agrega ítems a la factura antes de emitirla a la DGII');
+      router.push(`/dashboard/facturas/${factura.id}/editar`);
+      return;
+    }
+    if (factura.tipoPago === 1 && saldo > 0) {
+      setShowPagoMissingAlert(true);
+      return;
+    }
+    setEnviandoDgiiError(null);
+    setShowEnviarDgii(true);
+  }
 
   return (
-    <section className="p-4 sm:p-6">
+    <section className="p-4 sm:p-6 min-h-full flex flex-col">
 
       {/* ─── Header ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
@@ -677,8 +778,16 @@ export default function FacturaDetallePage() {
       {/* ─── Split layout: main + sticky sidebar ─────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
 
-        {/* ━━━ LEFT: contenido principal ━━━ */}
-        <div className="space-y-4 min-w-0">
+        {/* ━━━ LEFT: contenido principal (tabbed) ━━━ */}
+        <div className="min-w-0">
+          <Tabs defaultValue="detalles" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="detalles">Detalles</TabsTrigger>
+              <TabsTrigger value="notas">Notas</TabsTrigger>
+              <TabsTrigger value="historia">Historia</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="detalles" className="space-y-4">
 
           {/* Productos y servicios */}
           <SectionCard number={1} title="Productos y servicios" icon={Package}>
@@ -847,6 +956,28 @@ export default function FacturaDetallePage() {
             )}
           </SectionCard>
 
+            </TabsContent>
+
+            <TabsContent value="notas">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <StickyNote className="h-4 w-4 text-teal-600" />
+                  <h3 className="text-sm font-semibold text-gray-900">Notas</h3>
+                </div>
+                <EntityNotes entityType="factura" entityId={factura.id} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="historia">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <HistoryIcon className="h-4 w-4 text-teal-600" />
+                  <h3 className="text-sm font-semibold text-gray-900">Historia de la factura</h3>
+                </div>
+                <EntityHistory docId={factura.id} encf={factura.encf} />
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* ━━━ RIGHT: sticky sidebar ━━━ */}
@@ -947,9 +1078,42 @@ export default function FacturaDetallePage() {
             }}
           />
 
-          {/* Estado DGII card — solo cuando hay e-NCF real (no sin-ncf / BOR-) */}
-          {factura.tipoEcf !== 'sin-ncf' && !factura.encf.startsWith('BOR-') && (
+          {/* Estado DGII card — solo cuando hay e-CF real emitido a DGII.
+              HISTORICA (ALG-), borrador (BOR-) y sin-ncf no fueron a DGII. */}
+          {esEcfReal && (
             <EstadoDgiiCard factura={factura} onConsultar={consultarEstado} consultarStatus={pollingStatus} />
+          )}
+
+          {/* No emitida a DGII (histórica/borrador/sin-ncf) → CTA para generar e-CF. */}
+          {!esEcfReal && puedeEmitir && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-gray-900">Estado DGII</h2>
+              </div>
+              <p className="text-xs text-gray-500 mb-3 leading-snug">
+                No emitida a la DGII. Es un registro {esBorrador ? 'borrador' : 'histórico'} sin e-CF.
+                Genera un e-CF para enviarla a la DGII.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  className="bg-teal-600 hover:bg-teal-700 text-white h-9 w-full"
+                  onClick={triggerEnviarDgii}
+                >
+                  <Send className="h-4 w-4 mr-1.5" />
+                  {sinLineas ? 'Completar y generar e-CF' : 'Generar e-CF / Enviar a DGII'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 w-full text-teal-700 border-teal-300 hover:bg-teal-50"
+                  asChild
+                >
+                  <Link href={`/dashboard/facturas/${factura.id}/editar`}>Editar antes de emitir</Link>
+                </Button>
+              </div>
+            </section>
           )}
 
           {/* NCA-20: NCs/débitos asociados — solo si hay alguno */}
@@ -980,8 +1144,8 @@ export default function FacturaDetallePage() {
             </section>
           )}
 
-          {/* Info del comprobante — solo cuando hay e-NCF real */}
-          {!factura.encf.startsWith('BOR-') && factura.tipoEcf !== 'sin-ncf' && (
+          {/* Info del comprobante — solo cuando hay e-CF real emitido a DGII */}
+          {esEcfReal && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
               <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
                 Información del comprobante
@@ -1022,7 +1186,7 @@ export default function FacturaDetallePage() {
       {/* ─── Bottom action bar ────────────────────────────────────────────── */}
       {/* Vista detalle = read-only. Solo borrador habilita acciones de edición.
           Para facturas emitidas: Volver + Ver PDF + Acciones (imprimir/email). */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-6 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           type="button"
           variant="outline"
@@ -1064,16 +1228,7 @@ export default function FacturaDetallePage() {
               <Button
                 type="button"
                 className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
-                onClick={() => {
-                  // Sin ítems no se puede emitir → llevar al editor a completarlos.
-                  if (sinLineas) {
-                    toast.info('Agrega ítems a la factura antes de emitirla a la DGII');
-                    router.push(`/dashboard/facturas/${factura.id}/editar`);
-                    return;
-                  }
-                  setEnviandoDgiiError(null);
-                  setShowEnviarDgii(true);
-                }}
+                onClick={triggerEnviarDgii}
               >
                 <Send className="h-4 w-4 mr-1.5" />
                 {sinLineas ? 'Completar y emitir' : 'Enviar a DGII'}
@@ -1236,15 +1391,27 @@ export default function FacturaDetallePage() {
 
       {/* Enviar a DGII */}
       <Dialog open={showEnviarDgii} onOpenChange={setShowEnviarDgii}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Enviar a la DGII</DialogTitle>
           </DialogHeader>
           <div className="py-2 space-y-4">
             {enviandoDgiiError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 flex gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                {enviandoDgiiError}
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 space-y-2">
+                <div className="flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{enviandoDgiiError}</span>
+                </div>
+                {enviandoDgiiAction === 'edit-factura' && (
+                  <div className="flex justify-end">
+                    <Link
+                      href={`/dashboard/facturas/${factura.id}/editar`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-red-700 underline hover:text-red-900"
+                    >
+                      Editar factura para completarla →
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
             <p className="text-sm text-gray-700">
@@ -1269,7 +1436,81 @@ export default function FacturaDetallePage() {
                 <option value="43">e43 — Gastos Menores</option>
                 <option value="47">e47 — Pagos al Exterior</option>
               </select>
+              {dgiiRegla && (
+                <p className="text-[11px] text-gray-500 leading-snug">{dgiiRegla.descripcion}</p>
+              )}
             </div>
+
+            {/* ─── Comprador (RNC + razón social) ─────────────────────────── */}
+            {dgiiRegla && (dgiiRegla.requiereRncComprador || dgiiRegla.requiereRazonSocial || tempRnc || tempRazon) && (
+              <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-gray-700">
+                    {dgiiRegla.compradorLabel}
+                    {(dgiiRegla.requiereRncComprador || dgiiRegla.requiereRazonSocial) && (
+                      <span className="text-red-500 ml-0.5">*</span>
+                    )}
+                  </label>
+                  {factura.comprador.rnc && (
+                    <span className="text-[10px] text-gray-400">guardado en factura</span>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] text-gray-600">{dgiiRegla.rncLabel}</label>
+                  <RncSearch
+                    value={tempRnc ? `${tempRnc}${tempRazon ? ` · ${tempRazon}` : ''}` : ''}
+                    onSelect={(r) => { setTempRnc(r.rnc); setTempRazon(r.nombre); }}
+                    onClear={() => { setTempRnc(''); setTempRazon(''); }}
+                    placeholder="Buscar RNC, Cédula o razón social…"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] text-gray-600">Razón social / nombre</label>
+                  <input
+                    type="text"
+                    value={tempRazon}
+                    onChange={e => setTempRazon(e.target.value)}
+                    placeholder="Nombre o razón social"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ─── Validaciones pre-flight ──────────────────────────────── */}
+            {!dgiiValidacion.ok && (
+              <div className={`rounded-lg border p-3 text-xs space-y-2 ${
+                dgiiValidacion.requiereEditar
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}>
+                <div className="flex gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-medium">
+                      {dgiiValidacion.requiereEditar
+                        ? 'No se puede emitir desde aquí'
+                        : 'Faltan datos requeridos por la DGII'}
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {dgiiValidacion.errores.map((e, i) => (
+                        <li key={i}>{e.mensaje}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                {dgiiValidacion.requiereEditar && (
+                  <div className="flex justify-end">
+                    <Link
+                      href={`/dashboard/facturas/${factura.id}/editar`}
+                      className="inline-flex items-center gap-1 text-xs font-medium underline hover:opacity-80"
+                    >
+                      Editar factura para completarla →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Numeración — próximo e-NCF, editable para resolver colisiones de secuencia */}
             {dgiiTipoEcf !== 'sin-ncf' && (
@@ -1325,7 +1566,7 @@ export default function FacturaDetallePage() {
             </Button>
             <Button
               onClick={handleEnviarDgii}
-              disabled={enviandoDgii}
+              disabled={enviandoDgii || !dgiiValidacion.ok}
               className="bg-teal-600 hover:bg-teal-700"
             >
               {enviandoDgii
@@ -1337,6 +1578,53 @@ export default function FacturaDetallePage() {
       </Dialog>
 
       {proximamenteDialog}
+
+      {/* Alert: factura contado sin pago registrado → confirmar antes de emitir */}
+      {showPagoMissingAlert && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  Esta factura aún no tiene pago registrado
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Es de contado pero no marcaste el cobro. ¿Cómo continúas?
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 pt-2">
+              <Button
+                className="bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={() => {
+                  setShowPagoMissingAlert(false);
+                  document.querySelector('[data-pago-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+              >
+                Registrar pago primero
+              </Button>
+              <Button
+                variant="outline"
+                className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                onClick={() => {
+                  setShowPagoMissingAlert(false);
+                  setEnviandoDgiiError(null);
+                  setShowEnviarDgii(true);
+                }}
+              >
+                Emitir sin registrar pago
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setShowPagoMissingAlert(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
