@@ -61,12 +61,30 @@ export async function GET(
   const tipoNombre = TIPOS_ECF[doc.tipoEcf as keyof typeof TIPOS_ECF] ?? TIPO_NOMBRE_EXTRA[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`;
   const regla = TIPO_ECF_REGLAS[doc.tipoEcf];
 
-  // Lineas / items
+  // Lineas / items.
+  // Soporta dos formatos en lineas_json:
+  //  - canónico: { nombreItem, cantidadItem, precioUnitarioItem, descripcionItem, tasaItbis }
+  //  - Alegra/legacy: { nombre, cantidad, precio, descripcion, tasa }
+  // Normaliza a las keys canónicas que lee el frontend (el `??` deja intactas las canónicas).
+  function normalizeLinea(l: Record<string, unknown>) {
+    return {
+      ...l,
+      nombreItem:         l.nombreItem         ?? l.nombre,
+      descripcionItem:    l.descripcionItem    ?? l.descripcion ?? '',
+      cantidadItem:       l.cantidadItem       ?? l.cantidad,
+      precioUnitarioItem: l.precioUnitarioItem ?? l.precio,
+      tasaItbis:          l.tasaItbis          ?? l.tasa,
+    };
+  }
   let lineas: unknown[] = [];
   if (doc.lineasJson) {
     try {
       const parsed = JSON.parse(doc.lineasJson);
-      if (Array.isArray(parsed)) lineas = parsed;
+      if (Array.isArray(parsed)) {
+        lineas = parsed.map(p =>
+          p && typeof p === 'object' ? normalizeLinea(p as Record<string, unknown>) : p,
+        );
+      }
     } catch {
       // ignore — borrador antiguo sin items
     }
