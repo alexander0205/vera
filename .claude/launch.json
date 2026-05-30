@@ -6,6 +6,12 @@
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": ["-c", "PATH=/Users/alexanderferreras/.nvm/versions/node/v20.19.6/bin:$PATH pnpm dev"],
       "autoPort": true
+    },
+    {
+      "name": "emitedo-prod",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "PATH=/Users/alexanderferreras/.nvm/versions/node/v20.19.6/bin:$PATH pnpm dev:prod"],
+      "autoPort": true
     }
   ]
 }
