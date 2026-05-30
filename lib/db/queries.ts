@@ -9,6 +9,7 @@ import {
   sequences,
   ecfDocuments,
   pagosRecibidos,
+  recargosMora,
 } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
@@ -514,6 +515,18 @@ export async function getCuentasPorCobrar(
         SELECT SUM(monto_centavos) FROM pagos_recibidos
         WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
       ), 0)`,
+      // Recargo por mora (ARQUITECTURA OPCIÓN A): se suma al saldo visible en
+      // cobranza pero NO modifica el e-CF original (XML fiscal inmutable).
+      recargoMora: sql<number>`coalesce((
+        SELECT monto_centavos FROM recargos_mora
+        WHERE recargos_mora.ecf_document_id = ecf_documents.id
+        LIMIT 1
+      ), 0)`,
+      recargoMoraPct: sql<number>`coalesce((
+        SELECT porcentaje_aplicado FROM recargos_mora
+        WHERE recargos_mora.ecf_document_id = ecf_documents.id
+        LIMIT 1
+      ), 0)`,
     })
     .from(ecfDocuments)
     .where(and(
@@ -526,13 +539,23 @@ export async function getCuentasPorCobrar(
 
   const enriquecidas = rows
     .map(r => {
-      const pagado = Number(r.pagado);
-      const saldo = r.montoTotal - pagado;
+      const pagado      = Number(r.pagado);
+      const recargoMora = Number(r.recargoMora);
+      // saldo incluye recargo por mora (dato de cobranza, no modifica XML fiscal)
+      const saldo = r.montoTotal + recargoMora - pagado;
       const vencida = !!r.fechaLimitePago && r.fechaLimitePago < hoy && saldo > 0;
       const diasVencido = vencida && r.fechaLimitePago
         ? Math.floor((new Date(hoy).getTime() - new Date(r.fechaLimitePago).getTime()) / 86400000)
         : 0;
-      return { ...r, pagado, saldo, vencida, diasVencido };
+      return {
+        ...r,
+        pagado,
+        recargoMora,
+        recargoMoraPct: Number(r.recargoMoraPct),
+        saldo,
+        vencida,
+        diasVencido,
+      };
     })
     .filter(r => r.saldo > 0)
     .filter(r => !opts.soloVencidas || r.vencida);

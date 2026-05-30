@@ -24,8 +24,10 @@ export type Permission =
   // Facturas
   | 'facturas:ver'
   | 'facturas:crear'
+  | 'facturas:editar'
   | 'facturas:anular'
   | 'facturas:exportar'
+  | 'facturas:emitir-dgii'
   // Clientes
   | 'clientes:ver'
   | 'clientes:gestionar'
@@ -78,7 +80,7 @@ export const ROLES: RoleDef[] = [
     description: 'Control total de la cuenta y el equipo',
     invitable:   false,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -95,7 +97,7 @@ export const ROLES: RoleDef[] = [
     description: 'Acceso total excepto gestionar la suscripción',
     invitable:   true,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -111,7 +113,8 @@ export const ROLES: RoleDef[] = [
     description: 'Acceso operativo: facturas, clientes, productos, reportes. Sin configuración ni equipo.',
     invitable:   true,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'facturas:ver', 'facturas:crear', 'facturas:exportar', 'facturas:emitir-dgii',
+      // facturas:editar y facturas:anular NO incluidos — debe pedirle al admin
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -127,7 +130,7 @@ export const ROLES: RoleDef[] = [
     description: 'Rol legacy — mapea a Usuario',
     invitable:   false,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'facturas:ver', 'facturas:crear', 'facturas:exportar', 'facturas:emitir-dgii',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -142,7 +145,7 @@ export const ROLES: RoleDef[] = [
     description: 'Rol legacy — mapea a Usuario',
     invitable:   false,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'facturas:ver', 'facturas:crear', 'facturas:exportar', 'facturas:emitir-dgii',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -157,7 +160,7 @@ export const ROLES: RoleDef[] = [
     description: 'Rol legacy — mapea a Usuario',
     invitable:   false,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:anular', 'facturas:exportar',
+      'facturas:ver', 'facturas:crear', 'facturas:exportar', 'facturas:emitir-dgii',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',

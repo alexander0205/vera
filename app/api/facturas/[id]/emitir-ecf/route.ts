@@ -14,9 +14,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql } from 'drizzle-orm';
+import { userCan } from '@/lib/config/roles';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -93,6 +94,15 @@ export async function POST(
 
     const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa configurada' }, { status: 403 });
+
+    // ── Gate: facturas:emitir-dgii ────────────────────────────────────────────
+    const [[u], [m]] = await Promise.all([
+      db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
+      db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
+    ]);
+    if (!userCan(u?.platformRole, m?.role, 'facturas:emitir-dgii')) {
+      return NextResponse.json({ error: 'Sin permiso para emitir a la DGII' }, { status: 403 });
+    }
 
     const { id } = await params;
     const docId = parseInt(id);

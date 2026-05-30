@@ -10,6 +10,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import NuevaFacturaFormClient from './_nueva-factura-client';
+import { requirePermission } from '@/lib/auth/page-guard';
 
 export interface EmpresaPerfil {
   razonSocial:     string | null;
@@ -37,6 +38,7 @@ async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
 }
 
 export default async function NuevaFacturaPage() {
+  await requirePermission('facturas:crear');
   const perfil = await getEmpresaPerfil();
 
   return (

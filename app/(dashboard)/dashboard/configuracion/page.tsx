@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
@@ -130,6 +130,10 @@ export default function ConfiguracionPage() {
   const [previewPDF, setPreviewPDF]             = useState(false);
   const [provincia, setProvincia]               = useState('');
   const [municipio, setMunicipio]               = useState('');
+  // Recargo por mora
+  const [recargoActivo, setRecargoActivo]               = useState(false);
+  const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
+  const [recargoDiasGracia, setRecargoDiasGracia]       = useState('5');
 
   // Cargar datos actuales
   useEffect(() => {
@@ -148,6 +152,10 @@ export default function ConfiguracionPage() {
         setFirma(d.firma ?? '');
         setProvincia(d.provincia ?? '');
         setMunicipio(d.municipio ?? '');
+        // Recargo por mora — convertir bps → %
+        setRecargoActivo(d.recargoMoraActivo ?? false);
+        setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
+        setRecargoDiasGracia(String(d.recargoMoraDiasGracia ?? 5));
       })
       .finally(() => setLoading(false));
   }, []);
@@ -157,6 +165,10 @@ export default function ConfiguracionPage() {
     setError(null);
     setSaved(false);
     try {
+      // Convertir % → bps para guardar (ej: "2.50" → 250)
+      const pctBps = Math.round(parseFloat(recargoPorcentaje || '0') * 100);
+      const diasGracia = parseInt(recargoDiasGracia || '0', 10);
+
       const res = await fetch('/api/equipo/perfil', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,6 +177,9 @@ export default function ConfiguracionPage() {
           provincia, municipio,
           telefono, sitioWeb, emailFacturacion, colorPrimario,
           logo, firma,
+          recargoMoraActivo:     recargoActivo,
+          recargoMoraPorcentaje: pctBps,
+          recargoMoraDiasGracia: diasGracia,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');
@@ -405,6 +420,93 @@ export default function ConfiguracionPage() {
       </Card>
 
       {/* Padrón DGII se sincroniza automáticamente vía cron diario — no UI expuesta */}
+
+      {/* 5. Recargo por mora */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-teal-600" />
+            Recargo por mora
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Aplica automáticamente un recargo a facturas a crédito vencidas.
+            El recargo se suma al saldo de cobranza — el documento fiscal original no se modifica.
+          </p>
+
+          {/* Toggle activar */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Activar recargo por mora</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                El cron diario (09:00 UTC) aplicará el recargo una sola vez por factura.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={recargoActivo}
+              onClick={() => setRecargoActivo(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                recargoActivo ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  recargoActivo ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Porcentaje y días de gracia */}
+          <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity ${recargoActivo ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+            <div className="space-y-1.5">
+              <Label>Porcentaje de recargo (%)</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max="100"
+                  value={recargoPorcentaje}
+                  onChange={e => setRecargoPorcentaje(e.target.value)}
+                  placeholder="2.00"
+                  className="pr-8"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+              </div>
+              <p className="text-xs text-gray-400">Default: 2.00% (200 basis points)</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Días de gracia</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min="0"
+                  max="365"
+                  value={recargoDiasGracia}
+                  onChange={e => setRecargoDiasGracia(e.target.value)}
+                  placeholder="5"
+                  className="pr-14"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+              </div>
+              <p className="text-xs text-gray-400">
+                El recargo se aplica si la factura lleva más de estos días vencida. Default: 5.
+              </p>
+            </div>
+          </div>
+
+          {recargoActivo && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
+              <strong>Nota fiscal:</strong> El recargo NO modifica la factura electrónica emitida ante la DGII.
+              Solo se suma al saldo visible en Cuentas por cobrar y en tickets de cobranza.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Equipo y permisos — solo el owner ve esta pantalla (gate en layout.tsx) */}
       <EquipoCard />

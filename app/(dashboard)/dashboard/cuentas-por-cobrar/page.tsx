@@ -25,6 +25,9 @@ interface Cuenta {
   saldo:                number;
   vencida:              boolean;
   diasVencido:          number;
+  // Recargo por mora (cobranza — no modifica e-CF emitido)
+  recargoMora:    number;
+  recargoMoraPct: number;
 }
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
@@ -140,10 +143,29 @@ export default function CuentasPorCobrarPage() {
       render: c => <span className="text-xs text-emerald-700 whitespace-nowrap">{fmtDOP(c.pagado)}</span>,
     },
     {
+      id: 'recargo',
+      header: 'Recargo mora',
+      align: 'right',
+      visibleAt: 'lg',
+      render: c => c.recargoMora > 0 ? (
+        <div className="text-right">
+          <span className="text-xs font-medium text-orange-600 whitespace-nowrap">{fmtDOP(c.recargoMora)}</span>
+          <p className="text-[10px] text-orange-400">{(c.recargoMoraPct / 100).toFixed(2)}%</p>
+        </div>
+      ) : <span className="text-gray-300 text-xs">—</span>,
+    },
+    {
       id: 'saldo',
       header: 'Saldo',
       align: 'right',
-      render: c => <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>,
+      render: c => (
+        <div className="text-right">
+          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>
+          {c.recargoMora > 0 && (
+            <p className="text-[10px] text-orange-500 whitespace-nowrap">inc. recargo mora</p>
+          )}
+        </div>
+      ),
     },
   ], []);
 
@@ -279,6 +301,7 @@ function PagoModal({
   onSuccess: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
+  // saldo ya incluye recargo por mora (suma al saldo de cobranza)
   const [montoDOP, setMontoDOP]   = useState((cuenta.saldo / 100).toFixed(2));
   const [metodo, setMetodo]       = useState('transferencia');
   const [fecha, setFecha]         = useState(today);
@@ -331,9 +354,17 @@ function PagoModal({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
             <div className="flex justify-between">
-              <span className="text-gray-500">Total factura</span>
+              <span className="text-gray-500">Total factura (e-CF)</span>
               <span className="text-gray-700">{fmtDOP(cuenta.montoTotal)}</span>
             </div>
+            {cuenta.recargoMora > 0 && (
+              <div className="flex justify-between">
+                <span className="text-orange-500">
+                  Recargo mora ({(cuenta.recargoMoraPct / 100).toFixed(2)}%)
+                </span>
+                <span className="text-orange-600 font-medium">{fmtDOP(cuenta.recargoMora)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-gray-500">Ya pagado</span>
               <span className="text-emerald-700">{fmtDOP(cuenta.pagado)}</span>

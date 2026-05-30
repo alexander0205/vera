@@ -18,10 +18,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
+import { ecfDocuments, pagosRecibidos, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
+import { userCan } from '@/lib/config/roles';
 
 const ESTADOS_ANULABLES = ['BORRADOR', 'EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'];
 
@@ -49,6 +50,15 @@ export async function POST(
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+
+  // ── Gate: facturas:anular ─────────────────────────────────────────────────
+  const [[u], [m]] = await Promise.all([
+    db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
+    db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
+  ]);
+  if (!userCan(u?.platformRole, m?.role, 'facturas:anular')) {
+    return NextResponse.json({ error: 'Sin permiso para anular facturas' }, { status: 403 });
+  }
 
   const { id } = await params;
   const docId = parseInt(id);

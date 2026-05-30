@@ -7,9 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { sequences } from '@/lib/db/schema';
+import { sequences, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, ne } from 'drizzle-orm';
+import { userCan } from '@/lib/config/roles';
 
 const updateSchema = z.object({
   hasta:            z.number().int().positive().optional(),
@@ -42,6 +43,17 @@ export async function PATCH(
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+
+  // ── Gate: facturas:emitir-dgii ────────────────────────────────────────────
+  // PATCH ajusta el siguiente número de secuencia desde el modal "Enviar a DGII".
+  // Solo usuarios que pueden emitir a DGII necesitan este ajuste.
+  const [[u], [m]] = await Promise.all([
+    db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
+    db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
+  ]);
+  if (!userCan(u?.platformRole, m?.role, 'facturas:emitir-dgii')) {
+    return NextResponse.json({ error: 'Sin permiso para ajustar secuencias' }, { status: 403 });
+  }
 
   const { id } = await params;
   const seqId = parseInt(id);
@@ -117,6 +129,15 @@ export async function PUT(
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+
+  // ── Gate: configuracion:gestionar ─────────────────────────────────────────
+  const [[u], [m]] = await Promise.all([
+    db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
+    db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
+  ]);
+  if (!userCan(u?.platformRole, m?.role, 'configuracion:gestionar')) {
+    return NextResponse.json({ error: 'Sin permiso para gestionar secuencias' }, { status: 403 });
+  }
 
   const { id } = await params;
   const seqId = parseInt(id);
@@ -205,6 +226,15 @@ export async function DELETE(
 
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+
+  // ── Gate: configuracion:gestionar ─────────────────────────────────────────
+  const [[u], [m]] = await Promise.all([
+    db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
+    db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
+  ]);
+  if (!userCan(u?.platformRole, m?.role, 'configuracion:gestionar')) {
+    return NextResponse.json({ error: 'Sin permiso para eliminar secuencias' }, { status: 403 });
+  }
 
   const { id } = await params;
   const seqId = parseInt(id);

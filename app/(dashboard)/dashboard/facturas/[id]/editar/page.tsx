@@ -12,12 +12,17 @@ import { eq, and } from 'drizzle-orm';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import EditarBorradorClient from './_editar-client';
 import type { EmpresaPerfil } from '../../nueva/page';
+import { requirePermission } from '@/lib/auth/page-guard';
 
 export default async function EditarBorradorPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // Gate: solo roles con facturas:editar (bloquea al rol `user`, que debe pedir
+  // al admin). HISTORICA importadas también quedan bloqueadas para `user`.
+  await requirePermission('facturas:editar');
+
   const { id } = await params;
   const docId  = parseInt(id);
   if (isNaN(docId)) notFound();

@@ -103,6 +103,15 @@ export const teams = pgTable('teams', {
   // ── ECF API — identificador del contribuyente en el proveedor NCF ─────────
   // Asignado al registrar la empresa en ecf-api. Null = aún no registrada.
   ecfCodigoPublico: varchar('ecf_codigo_publico', { length: 50 }),
+
+  // ── Recargo por mora (cobranza) ───────────────────────────────────────────
+  // Si está activo, el cron diario aplica un recargo automático como dato de
+  // cobranza sobre las facturas vencidas. NO modifica el e-CF ya emitido ni
+  // su XML fiscal — el recargo se registra en `recargos_mora` y se suma al
+  // saldo mostrado en la vista de cuentas por cobrar (Opción A arquitectura).
+  recargoMoraActivo:      boolean('recargo_mora_activo').notNull().default(false),
+  recargoMoraPorcentaje:  integer('recargo_mora_porcentaje').notNull().default(200),  // basis points; 200 = 2.00%
+  recargoMoraDiasGracia:  integer('recargo_mora_dias_gracia').notNull().default(5),
 });
 
 export const teamMembers = pgTable('team_members', {
@@ -696,6 +705,37 @@ export const rowAuditLog = pgTable('row_audit_log', {
 ]);
 
 export type RowAuditLog = typeof rowAuditLog.$inferSelect;
+
+// ─── EmiteDO: Recargo por mora (cobranza) ────────────────────────────────────
+//
+// ARQUITECTURA (Opción A): el recargo por mora es un dato EXCLUSIVO de cobranza.
+// NO se modifica el e-CF ya emitido (xmlFirmado, montoTotal, lineasJson) porque
+// las facturas ACEPTADAS/FIRMADAS en DGII son inmutables — alterarlas rompería
+// la integridad fiscal y la urlVerificacion DGII.
+//
+// El recargo se SUMA al saldo visible en cuentas por cobrar y en el ticket PDF
+// de cobranza, pero el documento fiscal permanece intacto.
+//
+// El constraint UNIQUE en ecf_document_id garantiza idempotencia: "una sola vez"
+// por factura, incluso si el cron corre múltiples veces.
+
+export const recargosMora = pgTable('recargos_mora', {
+  id:                   serial('id').primaryKey(),
+  teamId:               integer('team_id').notNull().references(() => teams.id),
+  ecfDocumentId:        integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
+  montoCentavos:        integer('monto_centavos').notNull(),
+  porcentajeAplicado:   integer('porcentaje_aplicado').notNull(),   // basis points (igual que listasPrecios.porcentaje)
+  diasGraciaAplicados:  integer('dias_gracia_aplicados').notNull(),
+  baseSaldoCentavos:    integer('base_saldo_centavos').notNull(),   // saldo sobre el que se calculó el recargo
+  diasVencidoAlAplicar: integer('dias_vencido_al_aplicar'),
+  fechaAplicacion:      timestamp('fecha_aplicacion').notNull().defaultNow(),
+  createdBy:            integer('created_by'),                      // null = cron 'system'
+}, (t) => [
+  index('recargos_mora_team_idx').on(t.teamId),
+]);
+
+export type RecargoMora    = typeof recargosMora.$inferSelect;
+export type NewRecargoMora = typeof recargosMora.$inferInsert;
 
 // ─── EmiteDO: Rate Limits (distribuido — funciona en multi-instancia) ─────────
 

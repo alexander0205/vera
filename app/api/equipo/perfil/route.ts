@@ -26,6 +26,10 @@ const schema = z.object({
   colorPrimario:     z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Color debe ser hex de 3 o 6 dígitos (#fff o #ffffff)').optional(),
   logo:              z.string().max(MAX_IMG_SIZE).optional().or(z.literal('')),
   firma:             z.string().max(MAX_IMG_SIZE).optional().or(z.literal('')),
+  // Recargo por mora (cobranza — no modifica XML fiscal)
+  recargoMoraActivo:     z.boolean().optional(),
+  recargoMoraPorcentaje: z.number().int().min(1).max(10000).optional(),  // 1–100% en bps
+  recargoMoraDiasGracia: z.number().int().min(0).max(365).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -79,6 +83,10 @@ export async function POST(req: NextRequest) {
     ...(data.colorPrimario     !== undefined && { colorPrimario: data.colorPrimario } as any),
     ...(data.logo              !== undefined && { logo: data.logo } as any),
     ...(data.firma             !== undefined && { firma: data.firma } as any),
+    // Recargo por mora
+    ...(data.recargoMoraActivo     !== undefined && { recargoMoraActivo: data.recargoMoraActivo }),
+    ...(data.recargoMoraPorcentaje !== undefined && { recargoMoraPorcentaje: data.recargoMoraPorcentaje }),
+    ...(data.recargoMoraDiasGracia !== undefined && { recargoMoraDiasGracia: data.recargoMoraDiasGracia }),
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
@@ -113,5 +121,9 @@ export async function GET(_req: NextRequest) {
     firma:             (team as any).firma,
     // Token de enrutamiento DGII — va en la URL que el cliente copia al portal
     dgiiRoutingToken:  team.dgiiRoutingToken,
+    // Recargo por mora (cobranza)
+    recargoMoraActivo:     team.recargoMoraActivo,
+    recargoMoraPorcentaje: team.recargoMoraPorcentaje,
+    recargoMoraDiasGracia: team.recargoMoraDiasGracia,
   });
 }

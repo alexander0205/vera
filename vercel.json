@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/dgii-catalogos-sync",
       "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/recargos-mora",
+      "schedule": "0 9 * * *"
     }
   ]
 }

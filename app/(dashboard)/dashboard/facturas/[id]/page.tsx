@@ -30,6 +30,7 @@ import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
 import { StickyNote, History as HistoryIcon } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { RncSearch } from '@/components/RncSearch';
@@ -349,6 +350,13 @@ export default function FacturaDetallePage() {
   // ─── Impresora predeterminada ────────────────────────────────────────────────
   const { printUrl, printerLabel } = useDefaultPrinter();
 
+  // ─── Permisos del usuario (gating de UI) ─────────────────────────────────────
+  // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
+  const { can } = usePermissions();
+  const canEdit   = can('facturas:editar');
+  const canAnular = can('facturas:anular');
+  const canEmitir = can('facturas:emitir-dgii');
+
   // ─── Carga inicial ──────────────────────────────────────────────────────────
 
   const cargar = useCallback(async () => {
@@ -559,8 +567,14 @@ export default function FacturaDetallePage() {
   function triggerEnviarDgii() {
     if (!factura) return;
     if (sinLineas) {
-      toast.info('Agrega ítems a la factura antes de emitirla a la DGII');
-      router.push(`/dashboard/facturas/${factura.id}/editar`);
+      // Sin ítems hay que editar primero. El rol `user` no puede editar →
+      // se le indica que pida al admin en lugar de redirigir al guard.
+      if (canEdit) {
+        toast.info('Agrega ítems a la factura antes de emitirla a la DGII');
+        router.push(`/dashboard/facturas/${factura.id}/editar`);
+      } else {
+        toast.info('Esta factura no tiene ítems. Pídele al administrador que la edite antes de emitirla.');
+      }
       return;
     }
     if (factura.tipoPago === 1 && saldo > 0) {
@@ -729,7 +743,7 @@ export default function FacturaDetallePage() {
                 <Copy className="h-4 w-4 text-gray-500" />
                 Duplicar
               </DropdownMenuItem>
-              {esBorrador && (
+              {esBorrador && canEdit && (
                 <DropdownMenuItem asChild>
                   <Link
                     href={`/dashboard/facturas/${factura.id}/editar`}
@@ -740,7 +754,7 @@ export default function FacturaDetallePage() {
                   </Link>
                 </DropdownMenuItem>
               )}
-              {esAnulable && (
+              {esAnulable && canAnular && (
                 <DropdownMenuItem
                   onSelect={() => { setShowAnular(true); setAnularError(null); }}
                   className="flex items-center gap-2 cursor-pointer text-red-600"
@@ -846,7 +860,7 @@ export default function FacturaDetallePage() {
               </div>
             )}
 
-            {esBorrador && (
+            {esBorrador && canEdit && (
               <div className="mt-3">
                 <Button
                   type="button"
@@ -1096,22 +1110,32 @@ export default function FacturaDetallePage() {
                 Genera un e-CF para enviarla a la DGII.
               </p>
               <div className="flex flex-col gap-2">
-                <Button
-                  type="button"
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-9 w-full"
-                  onClick={triggerEnviarDgii}
-                >
-                  <Send className="h-4 w-4 mr-1.5" />
-                  {sinLineas ? 'Completar y generar e-CF' : 'Generar e-CF / Enviar a DGII'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 w-full text-teal-700 border-teal-300 hover:bg-teal-50"
-                  asChild
-                >
-                  <Link href={`/dashboard/facturas/${factura.id}/editar`}>Editar antes de emitir</Link>
-                </Button>
+                {canEmitir && (
+                  <Button
+                    type="button"
+                    className="bg-teal-600 hover:bg-teal-700 text-white h-9 w-full"
+                    onClick={triggerEnviarDgii}
+                  >
+                    <Send className="h-4 w-4 mr-1.5" />
+                    {sinLineas && canEdit ? 'Completar y generar e-CF' : 'Generar e-CF / Enviar a DGII'}
+                  </Button>
+                )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 w-full text-teal-700 border-teal-300 hover:bg-teal-50"
+                    asChild
+                  >
+                    <Link href={`/dashboard/facturas/${factura.id}/editar`}>Editar antes de emitir</Link>
+                  </Button>
+                )}
+                {!canEdit && (
+                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                    <span>Para editar esta factura, pídele al administrador.</span>
+                  </div>
+                )}
               </div>
             </section>
           )}
@@ -1214,25 +1238,34 @@ export default function FacturaDetallePage() {
           </Button>
 
           {puedeEmitir ? (
-            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <Button
-                type="button"
-                variant="outline"
-                className="text-teal-700 border-teal-300 hover:bg-teal-50 h-11 sm:h-9 w-full sm:w-auto"
-                asChild
-              >
-                <Link href={`/dashboard/facturas/${factura.id}/editar`}>
-                  {esBorrador ? 'Editar borrador' : 'Editar'}
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
-                onClick={triggerEnviarDgii}
-              >
-                <Send className="h-4 w-4 mr-1.5" />
-                {sinLineas ? 'Completar y emitir' : 'Enviar a DGII'}
-              </Button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto sm:items-center">
+              {canEdit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-teal-700 border-teal-300 hover:bg-teal-50 h-11 sm:h-9 w-full sm:w-auto"
+                  asChild
+                >
+                  <Link href={`/dashboard/facturas/${factura.id}/editar`}>
+                    {esBorrador ? 'Editar borrador' : 'Editar'}
+                  </Link>
+                </Button>
+              ) : (
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 w-full sm:w-auto sm:max-w-[260px]">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  <span>Para editar esta factura, pídele al administrador.</span>
+                </div>
+              )}
+              {canEmitir && (
+                <Button
+                  type="button"
+                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  onClick={triggerEnviarDgii}
+                >
+                  <Send className="h-4 w-4 mr-1.5" />
+                  {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
+                </Button>
+              )}
             </div>
           ) : (
             <DropdownMenu>
@@ -1404,12 +1437,18 @@ export default function FacturaDetallePage() {
                 </div>
                 {enviandoDgiiAction === 'edit-factura' && (
                   <div className="flex justify-end">
-                    <Link
-                      href={`/dashboard/facturas/${factura.id}/editar`}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-red-700 underline hover:text-red-900"
-                    >
-                      Editar factura para completarla →
-                    </Link>
+                    {canEdit ? (
+                      <Link
+                        href={`/dashboard/facturas/${factura.id}/editar`}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-red-700 underline hover:text-red-900"
+                      >
+                        Editar factura para completarla →
+                      </Link>
+                    ) : (
+                      <span className="text-xs font-medium text-red-700">
+                        Pídele al administrador que edite la factura.
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1501,12 +1540,18 @@ export default function FacturaDetallePage() {
                 </div>
                 {dgiiValidacion.requiereEditar && (
                   <div className="flex justify-end">
-                    <Link
-                      href={`/dashboard/facturas/${factura.id}/editar`}
-                      className="inline-flex items-center gap-1 text-xs font-medium underline hover:opacity-80"
-                    >
-                      Editar factura para completarla →
-                    </Link>
+                    {canEdit ? (
+                      <Link
+                        href={`/dashboard/facturas/${factura.id}/editar`}
+                        className="inline-flex items-center gap-1 text-xs font-medium underline hover:opacity-80"
+                      >
+                        Editar factura para completarla →
+                      </Link>
+                    ) : (
+                      <span className="text-xs font-medium">
+                        Pídele al administrador que edite la factura.
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

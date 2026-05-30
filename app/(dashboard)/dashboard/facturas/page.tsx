@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Plus, Download, Mail, Ban, FileText, Upload,
@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, diasVencido } from '@/lib/utils/format';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -20,14 +21,26 @@ const ESTADOS = [
   { value: 'ANULADO',              label: 'Anulado' },
   { value: 'HISTORICA',            label: 'Histórica (Alegra)' },
 ];
+
+// Etiqueta legible para el badge de estado DGII
+const ESTADO_LABEL: Record<string, string> = {
+  ACEPTADO:             'Aceptado',
+  ACEPTADO_CONDICIONAL: 'Cond.',
+  EN_PROCESO:           'En proceso',
+  RECHAZADO:            'Rechazado',
+  BORRADOR:             'Borrador',
+  ANULADO:              'Anulado',
+  HISTORICA:            'Histórica',
+};
+
 const ESTADO_BADGE: Record<string, string> = {
-  ACEPTADO:             'bg-green-100 text-green-700',
-  ACEPTADO_CONDICIONAL: 'bg-yellow-100 text-yellow-700',
-  EN_PROCESO:           'bg-blue-100 text-blue-700',
-  RECHAZADO:            'bg-red-100 text-red-700',
-  BORRADOR:             'bg-gray-100 text-gray-600',
-  ANULADO:              'bg-gray-100 text-gray-400 line-through',
-  HISTORICA:            'bg-indigo-100 text-indigo-700',
+  ACEPTADO:             'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  ACEPTADO_CONDICIONAL: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  EN_PROCESO:           'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
+  RECHAZADO:            'bg-red-50 text-red-700 ring-1 ring-red-200',
+  BORRADOR:             'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
+  ANULADO:              'bg-gray-100 text-gray-400 ring-1 ring-gray-200 line-through',
+  HISTORICA:            'bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200',
 };
 const TIPO_LABELS: Record<string, string> = {
   '31': 'Créd. Fiscal', '32': 'Consumo', '33': 'Nota Débito',
@@ -38,6 +51,11 @@ const TIPO_LABELS: Record<string, string> = {
 const TIPO_PAGO_LABEL: Record<number, string> = {
   1: 'Contado', 2: 'Crédito', 3: 'Gratuito', 4: 'Uso o consumo',
 };
+
+/** Devuelve true si el encf es un e-CF real de DGII (E31..., E32..., etc.) */
+function isECFReal(encf: string): boolean {
+  return /^E\d{12}$/.test(encf);
+}
 
 interface Doc {
   id: number; encf: string; tipoEcf: string; estado: string;
@@ -54,6 +72,8 @@ interface Doc {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function FacturasPage() {
+  const { can, isLoading: permLoading } = usePermissions();
+
   const [docs, setDocs]       = useState<Doc[]>([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
@@ -136,26 +156,51 @@ export default function FacturasPage() {
   const columns: DataTableColumn<Doc>[] = [
     {
       id: 'encf',
-      header: 'e-NCF / Tipo',
+      header: 'Comprobante',
       sortable: true,
-      render: doc => (
-        <div>
-          <Link href={`/dashboard/facturas/${doc.id}`} className="font-mono text-xs font-medium text-teal-700 hover:underline">
-            {doc.encf}
-          </Link>
-          <p className="text-[11px] text-gray-400 mt-0.5">{TIPO_LABELS[doc.tipoEcf] ?? doc.tipoEcf}</p>
-        </div>
-      ),
+      render: doc => {
+        const esReal = isECFReal(doc.encf);
+        const esBorrador = doc.estado === 'BORRADOR';
+        return (
+          <div className="min-w-0">
+            <Link
+              href={`/dashboard/facturas/${doc.id}`}
+              className={`font-mono text-xs font-semibold hover:underline leading-tight block ${
+                esReal ? 'text-teal-700' : esBorrador ? 'text-amber-700' : 'text-gray-500'
+              }`}
+              title={doc.encf}
+            >
+              {esReal
+                /* e-CF real: separar en grupos legibles E31 · 0000000015 */
+                ? <>{doc.encf.slice(0, 3)}<span className="text-teal-400 mx-0.5">·</span>{doc.encf.slice(3)}</>
+                /* Borrador / Histórica: mostrar tal cual */
+                : doc.encf
+              }
+            </Link>
+            <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">
+              {TIPO_LABELS[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`}
+            </p>
+          </div>
+        );
+      },
     },
     {
       id: 'cliente',
-      header: 'Cliente / RNC',
+      header: 'Cliente',
       sortable: true,
       sortAccessor: doc => doc.razonSocialComprador ?? '',
       render: doc => (
-        <div className="max-w-[200px]">
-          <p className="text-sm text-gray-900 truncate">{doc.razonSocialComprador ?? 'Consumidor Final'}</p>
-          {doc.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{doc.rncComprador}</p>}
+        <div className="max-w-[200px] min-w-0">
+          <p
+            className="text-sm text-gray-900 truncate font-medium leading-tight"
+            title={doc.razonSocialComprador ?? 'Consumidor Final'}
+          >
+            {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
+          </p>
+          {doc.rncComprador
+            ? <p className="text-[11px] text-gray-400 font-mono mt-0.5 leading-tight">{doc.rncComprador}</p>
+            : <p className="text-[11px] text-gray-300 mt-0.5 leading-tight">Sin RNC</p>
+          }
         </div>
       ),
     },
@@ -165,11 +210,15 @@ export default function FacturasPage() {
       visibleAt: 'md',
       sortable: true,
       sortAccessor: doc => doc.fechaEmision,
-      render: doc => <span className="text-xs text-gray-600">{fmtFechaCorta(doc.fechaEmision)}</span>,
+      render: doc => (
+        <span className="text-xs text-gray-600 whitespace-nowrap tabular-nums">
+          {fmtFechaCorta(doc.fechaEmision)}
+        </span>
+      ),
     },
     {
       id: 'pagoVence',
-      header: 'Pago / Vence',
+      header: 'Vencimiento',
       visibleAt: 'lg',
       render: doc => {
         const esCredito = doc.tipoPago === 2;
@@ -177,14 +226,14 @@ export default function FacturasPage() {
         const saldo = doc.montoTotal - (doc.pagado ?? 0);
         const vencida = esCredito && saldo > 0 && dias > 0 && ['ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'].includes(doc.estado);
         return (
-          <div>
-            <p className={`text-xs font-medium ${esCredito ? 'text-amber-700' : 'text-gray-600'}`}>
+          <div className="min-w-0">
+            <p className={`text-xs font-medium leading-tight ${esCredito ? 'text-amber-700' : 'text-gray-500'}`}>
               {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
             </p>
             {esCredito && doc.fechaLimitePago && (
-              <p className={`text-[11px] mt-0.5 ${vencida ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+              <p className={`text-[11px] mt-0.5 tabular-nums leading-tight whitespace-nowrap ${vencida ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
                 {fmtFechaCorta(doc.fechaLimitePago)}
-                {vencida && ` · ${dias}d vencida`}
+                {vencida && <span className="ml-1 text-red-500">· {dias}d</span>}
               </p>
             )}
           </div>
@@ -198,14 +247,22 @@ export default function FacturasPage() {
       align: 'right',
       sortable: true,
       sortAccessor: doc => doc.montoTotal - doc.totalItbis,
-      render: doc => <span className="text-xs text-gray-600 whitespace-nowrap">{fmtDOP(doc.montoTotal - doc.totalItbis)}</span>,
+      render: doc => (
+        <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
+          {fmtDOP(doc.montoTotal - doc.totalItbis)}
+        </span>
+      ),
     },
     {
       id: 'itbis',
       header: 'ITBIS',
       visibleAt: 'xl',
       align: 'right',
-      render: doc => <span className="text-xs text-gray-600 whitespace-nowrap">{doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : '—'}</span>,
+      render: doc => (
+        <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
+          {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : <span className="text-gray-300">—</span>}
+        </span>
+      ),
     },
     {
       id: 'total',
@@ -213,7 +270,11 @@ export default function FacturasPage() {
       align: 'right',
       sortable: true,
       sortAccessor: doc => doc.montoTotal,
-      render: doc => <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{fmtDOP(doc.montoTotal)}</span>,
+      render: doc => (
+        <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
+          {fmtDOP(doc.montoTotal)}
+        </span>
+      ),
     },
     {
       id: 'saldo',
@@ -224,24 +285,16 @@ export default function FacturasPage() {
         const pagado = doc.pagado ?? 0;
         const saldo  = doc.montoTotal - pagado;
         const esCredito = doc.tipoPago === 2;
-        // Gratuita / uso
-        if (doc.tipoPago === 3) return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">Gratuita</span>;
-        if (doc.tipoPago === 4) return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">Uso</span>;
-        // Pagada (full)
-        if (doc.montoTotal > 0 && pagado >= doc.montoTotal) {
-          return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700">Pagada</span>;
-        }
-        // Parcial
-        if (pagado > 0) {
-          return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700" title={`Falta ${fmtDOP(saldo)}`}>Parcial</span>;
-        }
-        // Sin pago: crédito vencido (rojo) vs pendiente (amber) vs contado sin cobro (rojo)
+        if (doc.tipoPago === 3) return <Badge color="gray">Gratuita</Badge>;
+        if (doc.tipoPago === 4) return <Badge color="gray">Uso</Badge>;
+        if (doc.montoTotal > 0 && pagado >= doc.montoTotal) return <Badge color="green">Pagada</Badge>;
+        if (pagado > 0) return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
         if (esCredito) {
           const dias = diasVencido(doc.fechaLimitePago);
-          if (dias > 0) return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700" title={`Vencida hace ${dias}d`}>Vencida</span>;
-          return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700">Pendiente</span>;
+          if (dias > 0) return <Badge color="red" title={`Vencida hace ${dias}d`}>Vencida</Badge>;
+          return <Badge color="amber">Pendiente</Badge>;
         }
-        return <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700" title="Contado sin cobro registrado">Sin pago</span>;
+        return <Badge color="red" title="Contado sin cobro registrado">Sin pago</Badge>;
       },
     },
     {
@@ -249,8 +302,10 @@ export default function FacturasPage() {
       header: 'Estado DGII',
       align: 'center',
       render: doc => (
-        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600'}`}>
-          {doc.estado}
+        <span
+          className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600 ring-1 ring-gray-200'}`}
+        >
+          {ESTADO_LABEL[doc.estado] ?? doc.estado}
         </span>
       ),
     },
@@ -268,6 +323,11 @@ export default function FacturasPage() {
       { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
     ];
   };
+
+  // Derivar bulk/header actions según permisos (default-deny mientras carga)
+  const canAnular   = !permLoading && can('facturas:anular');
+  const canExportar = !permLoading && can('facturas:exportar');
+  const canCrear    = !permLoading && can('facturas:crear');
 
   return (
     <section className="p-4 sm:p-6 space-y-4">
@@ -294,7 +354,7 @@ export default function FacturasPage() {
         filterValues={filterValues}
         onFilterChange={setFilterValues}
         bulkActions={[
-          { label: 'Anular seleccionados', icon: Ban, variant: 'danger', onClick: ids => bulkAnular(ids) },
+          ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
         rowActions={rowActions}
         pagination={{
@@ -306,26 +366,32 @@ export default function FacturasPage() {
         emptyState={{
           icon: FileText,
           title: 'No se encontraron comprobantes',
-          cta: (
+          cta: canCrear ? (
             <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-teal-600 hover:underline">
               <Plus className="h-4 w-4" /> Emitir primer comprobante
             </Link>
-          ),
+          ) : undefined,
         }}
         headerActions={
           <>
-            <button onClick={() => setShowImport(true)}
-              className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700">
-              <Upload className="h-4 w-4" /> Importar de Alegra
-            </button>
-            <button onClick={exportCsv}
-              className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700">
-              <Download className="h-4 w-4" /> CSV
-            </button>
-            <Link href="/dashboard/facturas/nueva"
-              className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium">
-              <Plus className="h-4 w-4" /> Nueva Factura
-            </Link>
+            {canCrear && (
+              <button onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
+                <Upload className="h-4 w-4" /> Importar de Alegra
+              </button>
+            )}
+            {canExportar && (
+              <button onClick={exportCsv}
+                className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
+                <Download className="h-4 w-4" /> CSV
+              </button>
+            )}
+            {canCrear && (
+              <Link href="/dashboard/facturas/nueva"
+                className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium transition-colors">
+                <Plus className="h-4 w-4" /> Nueva Factura
+              </Link>
+            )}
           </>
         }
       />
@@ -377,5 +443,33 @@ export default function FacturasPage() {
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Badge helper (uso interno a esta página) ─────────────────────────────────
+
+const BADGE_COLORS = {
+  green: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  amber: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  red:   'bg-red-50 text-red-700 ring-1 ring-red-200',
+  gray:  'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
+} as const;
+
+function Badge({
+  color,
+  title,
+  children,
+}: {
+  color: keyof typeof BADGE_COLORS;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${BADGE_COLORS[color]}`}
+      title={title}
+    >
+      {children}
+    </span>
   );
 }
