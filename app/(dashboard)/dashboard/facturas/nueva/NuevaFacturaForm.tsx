@@ -331,6 +331,11 @@ export default function NuevaFacturaForm({
 
   function seleccionarProducto(idx: number, p: Producto) {
     const tasa = (p.tasaItbis as ItemLinea['tasaItbis']) ?? '0.18';
+    // Si la regla no existe (tipoEcf = 'sin-ncf' o sin tipo) usar la tasa del
+    // producto. Solo forzar 'exento' si la regla explícitamente prohíbe ITBIS.
+    const tasaFinal: ItemLinea['tasaItbis'] =
+      regla === undefined         ? tasa :
+      regla.permiteItbis          ? tasa : 'exento';
     dispatchItems({
       type: 'APPLY_PRODUCTO',
       idx,
@@ -340,7 +345,7 @@ export default function NuevaFacturaForm({
         referencia: p.referencia ?? '',
         descripcionItem: p.descripcion ?? '',
         precioUnitarioItem: p.precioDOP,
-        tasaItbis: regla?.permiteItbis ? tasa : 'exento',
+        tasaItbis: tasaFinal,
         indicadorBienoServicio: p.tipo === 'bien' ? '1' : '2',
         unidadMedida: (p as Producto & { unidad?: string }).unidad ?? '',
       },
