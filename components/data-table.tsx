@@ -86,6 +86,8 @@ export interface RowAction {
   href?:   string;
   onClick?: () => void;
   variant?: 'default' | 'danger';
+  /** Si true, se muestra como botón ícono inline (antes del menú de 3 puntos). */
+  primary?: boolean;
 }
 
 export interface PaginationConfig {
@@ -456,13 +458,19 @@ export function DataTable<T>({
                           </td>
                         );
                       })}
-                      {rowActions && (
-                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-end">
-                            <RowActionsMenu actions={rowActions(row)} />
-                          </div>
-                        </td>
-                      )}
+                      {rowActions && (() => {
+                        const acts = rowActions(row);
+                        const primary = acts.filter(a => a.primary);
+                        const rest    = acts.filter(a => !a.primary);
+                        return (
+                          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-0.5">
+                              {primary.map((a, i) => <RowActionInline key={i} action={a} />)}
+                              <RowActionsMenu actions={rest} />
+                            </div>
+                          </td>
+                        );
+                      })()}
                     </tr>
                   );
                 })}
@@ -535,6 +543,32 @@ function EmptyState({ config }: { config?: EmptyStateConfig }) {
       {config.hint && <p className="text-xs text-gray-500 mt-1">{config.hint}</p>}
       {config.cta && <div className="mt-4">{config.cta}</div>}
     </div>
+  );
+}
+
+function RowActionInline({ action }: { action: RowAction }) {
+  const Icon = action.icon;
+  const danger = action.variant === 'danger';
+  const cls = `p-1.5 rounded-lg transition-colors ${
+    danger
+      ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+      : 'text-gray-400 hover:text-teal-700 hover:bg-teal-50'
+  }`;
+  if (action.href) {
+    const external = action.href.startsWith('http') || action.href.startsWith('/api/');
+    return (
+      <Link href={action.href} target={external ? '_blank' : undefined}
+        aria-label={action.title} title={action.title}
+        onClick={e => e.stopPropagation()} className={cls}>
+        <Icon className="h-4 w-4" />
+      </Link>
+    );
+  }
+  return (
+    <button type="button" aria-label={action.title} title={action.title}
+      onClick={e => { e.stopPropagation(); action.onClick?.(); }} className={cls}>
+      <Icon className="h-4 w-4" />
+    </button>
   );
 }
 

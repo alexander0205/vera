@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText, Upload,
+  Plus, Download, Mail, Ban, FileText, Upload, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
@@ -324,13 +324,16 @@ export default function FacturasPage() {
   ];
 
   const rowActions = (doc: Doc): RowAction[] => {
+    // "Ver" inline (👁) antes de los 3 puntos — abre el detalle.
+    const ver: RowAction = { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${doc.id}`, primary: true };
     if (doc.estado === 'BORRADOR') {
-      // Para borradores no es ícono — usamos un link "Editar" inline. Lo emulamos via row action.
       return [
+        ver,
         { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
       ];
     }
     return [
+      ver,
       { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.id}` },
       { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
     ];
