@@ -47,6 +47,7 @@ const TIPO_LABELS: Record<string, string> = {
   '34': 'Nota Crédito', '41': 'Compras', '43': 'Gastos Men.',
   '44': 'Reg. Único', '45': 'Gub.', '46': 'Export.', '47': 'Otros',
   '00': 'Histórica',
+  'sin-ncf': '—',
 };
 const TIPO_PAGO_LABEL: Record<number, string> = {
   1: 'Contado', 2: 'Crédito', 3: 'Gratuito', 4: 'Uso o consumo',
@@ -174,12 +175,12 @@ export default function FacturasPage() {
               {esReal
                 /* e-CF real: separar en grupos legibles E31 · 0000000015 */
                 ? <>{doc.encf.slice(0, 3)}<span className="text-teal-400 mx-0.5">·</span>{doc.encf.slice(3)}</>
-                /* Borrador / Histórica: mostrar tal cual */
-                : doc.encf
+                /* Borrador / Histórica / sin-ncf (encf vacío): mostrar tal cual o — */
+                : (doc.encf || '—')
               }
             </Link>
             <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">
-              {TIPO_LABELS[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`}
+              {TIPO_LABELS[doc.tipoEcf] ?? '—'}
             </p>
           </div>
         );
