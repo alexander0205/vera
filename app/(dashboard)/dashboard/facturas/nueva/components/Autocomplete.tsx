@@ -155,6 +155,15 @@ export function Autocomplete<T extends { id: number }>({
       }}
       className="bg-white border border-gray-200 rounded-xl shadow-xl max-h-56 overflow-auto"
     >
+      {/* "+ Nuevo producto" siempre al inicio */}
+      {onCreate && (
+        <button type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { setOpen(false); onCreate(); }}
+          className="w-full text-left px-4 py-2.5 text-sm text-teal-700 font-medium hover:bg-teal-50 flex items-center gap-2 border-b border-gray-200">
+          <Plus className="h-4 w-4" />{createLabel ?? 'Crear nuevo'}
+        </button>
+      )}
       {results.length === 0 ? (
         <>
           <div className="px-4 py-3 text-sm text-gray-500">No se han encontrado resultados</div>
@@ -180,14 +189,6 @@ export function Autocomplete<T extends { id: number }>({
             {renderOption(item)}
           </button>
         ))
-      )}
-      {onCreate && (
-        <button type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => { setOpen(false); onCreate(); }}
-          className="w-full text-left px-4 py-2.5 text-sm text-teal-700 font-medium hover:bg-teal-50 flex items-center gap-2 border-t border-gray-200">
-          <Plus className="h-4 w-4" />{createLabel ?? 'Crear nuevo'}
-        </button>
       )}
     </div>
   ) : null;
