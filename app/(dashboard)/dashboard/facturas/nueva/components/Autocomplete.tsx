@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Input } from '@/components/ui/input';
-import { Loader2, Plus, Search, X } from 'lucide-react';
+import { Loader2, Plus, Search } from 'lucide-react';
 
 export function Autocomplete<T extends { id: number }>({
   placeholder, onSearch, renderOption, onSelect, value, onClear, onCreate, createLabel,
@@ -60,6 +60,11 @@ export function Autocomplete<T extends { id: number }>({
     };
   }, [open, calcRect]);
 
+  // Sync input text with the externally selected value
+  useEffect(() => {
+    setQuery(value ?? '');
+  }, [value]);
+
   async function handleInput(v: string) {
     setQuery(v);
     if (timer.current) clearTimeout(timer.current);
@@ -93,7 +98,8 @@ export function Autocomplete<T extends { id: number }>({
 
   function select(item: T) {
     onSelect(item);
-    setQuery('');
+    // No limpiar query aquí — el useEffect([value]) lo sincroniza al nombre
+    // del producto seleccionado una vez que el padre actualiza el prop value.
     setOpen(false);
     setResults([]);
   }
@@ -132,17 +138,6 @@ export function Autocomplete<T extends { id: number }>({
       e.preventDefault();
       setOpen(false);
     }
-  }
-
-  if (value) {
-    return (
-      <div className="flex items-center gap-2 h-9 px-3 bg-teal-50 border border-teal-200 rounded-md text-sm font-medium text-teal-800">
-        <span className="flex-1 truncate">{value}</span>
-        <button type="button" onClick={onClear} className="text-teal-400 hover:text-teal-700">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    );
   }
 
   const dropdown = open && dropRect ? (
@@ -208,8 +203,11 @@ export function Autocomplete<T extends { id: number }>({
           onChange={(e) => handleInput(e.target.value)}
           onFocus={handleFocus}
           onBlur={() => {
-            // Delay para que click en option/create se procese primero.
-            setTimeout(() => setOpen(false), 200);
+            setTimeout(() => {
+              setOpen(false);
+              // Restore displayed text to the selected value if user didn't pick a new one
+              setQuery(value ?? '');
+            }, 200);
           }}
           onKeyDown={handleKeyDown}
           role="combobox"

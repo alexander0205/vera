@@ -167,13 +167,13 @@ export function ItemsTable({
                 <Select
                   value={item.tasaItbis}
                   onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
-                  disabled={!regla?.permiteItbis}
+                  disabled={regla !== undefined && !regla.permiteItbis}
                 >
                   <SelectTrigger className="h-11 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {regla?.permiteItbis
+                    {(regla === undefined || regla.permiteItbis)
                       ? TASA_ITBIS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
                       : <SelectItem value="exento">Exento</SelectItem>
                     }
@@ -346,13 +346,13 @@ export function ItemsTable({
                   <Select
                     value={item.tasaItbis}
                     onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
-                    disabled={!regla?.permiteItbis}
+                    disabled={regla !== undefined && !regla.permiteItbis}
                   >
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {regla?.permiteItbis
+                      {(regla === undefined || regla.permiteItbis)
                         ? TASA_ITBIS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
                         : <SelectItem value="exento">Exento</SelectItem>
                       }
