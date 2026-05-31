@@ -309,13 +309,15 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json({
-        ok:          true,
-        modo:        'borrador',
-        documentoId: saved.id,
-        encf:        saved.encf,
-        estado:      'BORRADOR',
-        montoTotal:  totales.montoTotal,
+        ok:           true,
+        modo:         'borrador',
+        documentoId:  saved.id,
+        encf:         saved.encf,
+        estado:       'BORRADOR',
+        montoTotal:   totales.montoTotal,
         pagoRecibido: data.pagoRecibido ?? false,
+        pagoMetodo:   data.pagoRecibido ? (data.pagoMetodo ?? 'efectivo') : null,
+        pagoValor:    data.pagoRecibido ? Math.min(data.pagoValor ?? totales.montoTotal, totales.montoTotal) : null,
       });
     }
 

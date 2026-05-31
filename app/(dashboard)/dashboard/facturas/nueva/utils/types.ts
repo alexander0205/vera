@@ -62,6 +62,8 @@ export interface ResultadoEmision {
   montoTotal?:     number;
   documentoId:     number;
   pagoRecibido?:   boolean;
+  pagoMetodo?:     string | null;
+  pagoValor?:      number | null;
 }
 
 export interface Retencion {

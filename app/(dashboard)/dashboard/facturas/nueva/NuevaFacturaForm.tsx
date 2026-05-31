@@ -722,6 +722,21 @@ export default function NuevaFacturaForm({
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Código de seguridad</span><span className="font-mono font-bold text-teal-700 text-lg">{resultado.codigoSeguridad}</span></div>
               )}
               <div className="flex justify-between"><span className="text-sm text-gray-500">Monto total</span><span className="font-bold">DOP {(resultado.montoTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
+              {/* Fila cobro — solo en modo borrador (sin-ncf / sin DGII) */}
+              {resultado.modo === 'borrador' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Cobro</span>
+                  {resultado.pagoRecibido ? (
+                    <span className="text-sm font-medium text-emerald-700">
+                      ✓ Cobrado
+                      {resultado.pagoMetodo ? ` · ${resultado.pagoMetodo.charAt(0).toUpperCase() + resultado.pagoMetodo.slice(1).replace('_', ' ')}` : ''}
+                      {resultado.pagoValor != null ? ` · DOP ${resultado.pagoValor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-sm font-medium text-amber-600">⏳ Pendiente de cobro</span>
+                  )}
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-500">Estado</span>
                 <Badge variant="outline">
