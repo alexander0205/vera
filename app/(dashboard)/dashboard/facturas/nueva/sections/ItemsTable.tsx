@@ -90,8 +90,6 @@ export function ItemsTable({
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                 onCreate={() => onOpenNuevoProducto(idx)}
                 createLabel="Nuevo producto"
-                onFreeText={(text) => onCrearProductoLibre(idx, text)}
-                freeTextLabel="Crear y usar como producto"
                 renderOption={(p) => (
                   <div>
                     <p className="font-medium">{p.nombre}</p>
@@ -303,8 +301,6 @@ export function ItemsTable({
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                     onCreate={() => onOpenNuevoProducto(idx)}
                     createLabel="Nuevo producto"
-                    onFreeText={(text) => onCrearProductoLibre(idx, text)}
-                    freeTextLabel="Crear y usar como producto"
                     renderOption={(p) => (
                       <div>
                         <p className="font-medium">{p.nombre}</p>

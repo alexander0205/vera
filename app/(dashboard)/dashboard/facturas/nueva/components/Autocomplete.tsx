@@ -62,12 +62,11 @@ export function Autocomplete<T extends { id: number }>({
 
   async function handleInput(v: string) {
     setQuery(v);
-    if (!v.trim()) { setResults([]); setOpen(false); return; }
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await onSearch(v);
+        const r = await onSearch(v); // query vacío → todos los productos
         setResults(r);
         setHighlight(0);
         calcRect();
@@ -75,7 +74,21 @@ export function Autocomplete<T extends { id: number }>({
       } finally {
         setLoading(false);
       }
-    }, 250);
+    }, 200);
+  }
+
+  async function handleFocus() {
+    // Mostrar todos los productos al hacer focus (sin necesidad de escribir)
+    if (results.length > 0) { calcRect(); setOpen(true); return; }
+    setLoading(true);
+    try {
+      const r = await onSearch('');
+      setResults(r);
+      calcRect();
+      setOpen(r.length > 0);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function select(item: T) {
@@ -193,13 +206,10 @@ export function Autocomplete<T extends { id: number }>({
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleInput(e.target.value)}
-          onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
+          onFocus={handleFocus}
           onBlur={() => {
-            // Si onFreeText permitido y user dejó query sin seleccionar, promover.
             // Delay para que click en option/create se procese primero.
-            if (onFreeText && query.trim()) {
-              setTimeout(commitFreeText, 200);
-            }
+            setTimeout(() => setOpen(false), 200);
           }}
           onKeyDown={handleKeyDown}
           role="combobox"
