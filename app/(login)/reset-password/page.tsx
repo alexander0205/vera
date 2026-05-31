@@ -17,14 +17,25 @@ function ResetForm() {
     if (password !== confirm) { setError('Las contraseñas no coinciden'); return; }
     if (password.length < 8) { setError('Mínimo 8 caracteres'); return; }
     setLoading(true);
-    const res = await fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error ?? 'Error'); setLoading(false); return; }
-    router.push('/sign-in?reset=1');
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password }),
+      });
+      // El handler puede devolver body vacío en un 500 sin JSON — no asumir JSON.
+      const raw = await res.text();
+      const data = raw ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
+      if (!res.ok) {
+        setError(data?.error ?? `Error ${res.status}. Intenta solicitar un nuevo enlace.`);
+        setLoading(false);
+        return;
+      }
+      router.push('/sign-in?reset=1');
+    } catch {
+      setError('No se pudo conectar. Verifica tu conexión e intenta de nuevo.');
+      setLoading(false);
+    }
   }
 
   return (
