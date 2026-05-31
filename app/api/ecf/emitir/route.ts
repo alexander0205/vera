@@ -308,7 +308,15 @@ export async function POST(request: NextRequest) {
         } catch (e) { console.error('[emitir borrador registrarPago]', e); }
       }
 
-      return NextResponse.json({ ok: true, modo: 'borrador', documentoId: saved.id, estado: 'BORRADOR' });
+      return NextResponse.json({
+        ok:          true,
+        modo:        'borrador',
+        documentoId: saved.id,
+        encf:        saved.encf,
+        estado:      'BORRADOR',
+        montoTotal:  totales.montoTotal,
+        pagoRecibido: data.pagoRecibido ?? false,
+      });
     }
 
     // ── MODO EMITIR via ecf-api ────────────────────────────────────────────────

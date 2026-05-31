@@ -8,8 +8,9 @@ import { eq, and } from 'drizzle-orm';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, clients } from '@/lib/db/schema';
+import { ecfDocuments, teams, clients, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { sql } from 'drizzle-orm';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
 import { FacturaTirillaPDF } from '@/lib/pdf/FacturaTirillaPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
@@ -108,6 +109,17 @@ export async function GET(
 
     const { doc, team } = row;
 
+    // Saldo real desde ledger pagos_recibidos (source of truth).
+    // Fallback al campo inline legacy si el ledger está vacío (docs pre-migración).
+    const [pagAgg] = await db
+      .select({ sum: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
+      .from(pagosRecibidos)
+      .where(eq(pagosRecibidos.ecfDocumentId, docId));
+    const sumLedger = Number(pagAgg?.sum ?? 0);
+    const inlineCts = doc.pagoRecibido === 'true' ? (doc.pagoValorCts ?? 0) : 0;
+    const pagadoCts = sumLedger > 0 ? sumLedger : inlineCts;
+    const saldoCts  = Math.max(0, doc.montoTotal - pagadoCts);
+
     // Cargar teléfono del cliente si existe referencia
     let telefonoComprador: string | undefined;
     if (doc.clientId) {
@@ -195,7 +207,9 @@ export async function GET(
       }),
       tipoPagoNombre: TIPO_PAGO_NOMBRE[1] ?? 'Contado',
       estado:        doc.estado,
-      esBorrador:    doc.estado === 'BORRADOR',
+      // B3 fix: solo watermark BORRADOR si no tiene pago registrado.
+      // Factura sin NCF pero con pago = documento final, no borrador real.
+      esBorrador:    doc.estado === 'BORRADOR' && pagadoCts === 0,
       codigoSeguridad: codigoSeguridad ?? undefined,
       trackId:       doc.trackId ?? undefined,
       // Prefer columna persistida (rápido). Fallback: parsear XML firmado.
@@ -223,11 +237,12 @@ export async function GET(
       },
 
       items,
-      subtotal:   subtotalDOP,
-      totalItbis: totalItbisDOP,
-      montoTotal: montoTotalDOP,
+      subtotal:    subtotalDOP,
+      totalItbis:  totalItbisDOP,
+      montoTotal:  montoTotalDOP,
+      saldo:       saldoCts / 100,  // B2 fix: saldo real (0 si pagada)
       qrDataUrl,
-      pieFactura: doc.pieFactura ?? undefined,
+      pieFactura:  doc.pieFactura ?? undefined,
     };
 
     // Renderizar PDF — cast necesario por incompatibilidad de tipos con react-pdf

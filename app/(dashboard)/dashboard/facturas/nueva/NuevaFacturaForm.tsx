@@ -717,7 +717,14 @@ export default function NuevaFacturaForm({
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Código de seguridad</span><span className="font-mono font-bold text-teal-700 text-lg">{resultado.codigoSeguridad}</span></div>
               )}
               <div className="flex justify-between"><span className="text-sm text-gray-500">Monto total</span><span className="font-bold">DOP {(resultado.montoTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
-              <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge variant="outline">{resultado.estado}</Badge></div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-500">Estado</span>
+                <Badge variant="outline">
+                  {resultado.modo === 'borrador'
+                    ? (resultado.pagoRecibido ? 'Pagada' : 'Guardada')
+                    : resultado.estado}
+                </Badge>
+              </div>
             </div>
             <div className="flex gap-3 justify-center flex-wrap">
               <Button variant="outline" asChild><a href={`/api/pdf/factura/${resultado.documentoId}`} target="_blank" rel="noreferrer">Descargar PDF</a></Button>

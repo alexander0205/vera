@@ -64,6 +64,8 @@ export interface FacturaPDFData {
   subtotal:    number;
   totalItbis:  number;
   montoTotal:  number;
+  /** Saldo pendiente. 0 = pagada. Fallback a montoTotal si no se pasa. */
+  saldo?:      number;
 
   qrDataUrl?:  string;
   pieFactura?: string | null;
@@ -588,8 +590,19 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             <Text style={S.monedaText}>
               <Text style={S.buyerLabel}>Moneda: </Text>{moneda}
             </Text>
-            <Text style={S.valorRestanteLabel}>Valor restante por pagar:</Text>
-            <Text style={S.valorRestanteValue}>{fmt(data.montoTotal)}</Text>
+            {/* B2 fix: usar saldo real; si es 0 mostrar PAGADA */}
+            {(() => {
+              const saldo = data.saldo ?? data.montoTotal;
+              if (saldo <= 0) {
+                return <Text style={[S.valorRestanteLabel, { color: '#16a34a', fontWeight: 'bold' }]}>PAGADA</Text>;
+              }
+              return (
+                <>
+                  <Text style={S.valorRestanteLabel}>Valor restante por pagar:</Text>
+                  <Text style={S.valorRestanteValue}>{fmt(saldo)}</Text>
+                </>
+              );
+            })()}
           </View>
         </View>
 

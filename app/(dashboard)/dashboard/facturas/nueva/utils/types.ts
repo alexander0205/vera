@@ -61,6 +61,7 @@ export interface ResultadoEmision {
   codigoSeguridad?: string;
   montoTotal?:     number;
   documentoId:     number;
+  pagoRecibido?:   boolean;
 }
 
 export interface Retencion {
