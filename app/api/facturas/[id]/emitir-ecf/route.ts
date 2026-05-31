@@ -25,6 +25,7 @@ import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
+import { withRequestAuditContext } from '@/lib/db/audit-context';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -426,22 +427,25 @@ export async function POST(
       console.warn(`[emitir-ecf] eNCF DIVERGENTE: local=${encfAsignado} ecf-api=${encfFinal} (seq.id=${sequenceConsumedId})`);
     }
 
-    // Update the existing document in-place
-    await db
-      .update(ecfDocuments)
-      .set({
-        encf:            encfFinal,
-        tipoEcf,
-        estado:          estadoFinal,
-        trackId,
-        codigoSeguridad: resultado.codigoSeguridad ?? null,
-        fechaFirma:      resultado.fechaHoraFirma ?? null,
-        urlVerificacion: resultado.urlVerificacion ?? resultado.qrCodeData ?? null,
-        ecfApiEmisionId: resultado.id,
-        fechaEmision:    new Date(resultado.fechaEmision),
-        updatedAt:       new Date(),
-      })
-      .where(eq(ecfDocuments.id, docId));
+    // Update the existing document in-place (within audit context so trigger captures user)
+    await withRequestAuditContext(
+      (tx) => tx
+        .update(ecfDocuments)
+        .set({
+          encf:            encfFinal,
+          tipoEcf,
+          estado:          estadoFinal,
+          trackId,
+          codigoSeguridad: resultado.codigoSeguridad ?? null,
+          fechaFirma:      resultado.fechaHoraFirma ?? null,
+          urlVerificacion: resultado.urlVerificacion ?? resultado.qrCodeData ?? null,
+          ecfApiEmisionId: resultado.id,
+          fechaEmision:    new Date(resultado.fechaEmision),
+          updatedAt:       new Date(),
+        })
+        .where(eq(ecfDocuments.id, docId)),
+      { userId: user.id, teamId },
+    );
 
     await logInfo({
       teamId,

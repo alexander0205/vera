@@ -67,6 +67,7 @@ interface Doc {
   fechaLimitePago: string | null;
   pagado: number;
   createdAt: string;
+  createdByName?: string | null;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -306,6 +307,16 @@ export default function FacturasPage() {
           className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600 ring-1 ring-gray-200'}`}
         >
           {ESTADO_LABEL[doc.estado] ?? doc.estado}
+        </span>
+      ),
+    },
+    {
+      id: 'createdBy',
+      header: 'Creado por',
+      visibleAt: 'xl',
+      render: doc => (
+        <span className="text-xs text-gray-500 truncate max-w-[120px] block" title={doc.createdByName ?? undefined}>
+          {doc.createdByName ?? '—'}
         </span>
       ),
     },

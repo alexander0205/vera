@@ -106,6 +106,7 @@ interface FacturaDetalle {
     tieneXmlFirmado: boolean;
   };
   pago: PagoData;
+  createdByName?: string | null;
 }
 
 // ─── Estado badge ─────────────────────────────────────────────────────────────
@@ -932,8 +933,20 @@ export default function FacturaDetallePage() {
             )}
           </AccordionSection>
 
+          {/* Metadatos del documento */}
+          {factura.createdByName && (
+            <SectionCard number={6} title="Información del documento">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-gray-500">Creado por</p>
+                  <p className="font-medium text-gray-900">{factura.createdByName}</p>
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
           {/* Cliente compacto */}
-          <SectionCard number={6} title="Datos del comprador">
+          <SectionCard number={factura.createdByName ? 7 : 6} title="Datos del comprador">
             {factura.comprador.razonSocial ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <div>

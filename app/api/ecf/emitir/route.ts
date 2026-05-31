@@ -24,6 +24,7 @@ import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
+import { withRequestAuditContext } from '@/lib/db/audit-context';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -271,26 +272,35 @@ export async function POST(request: NextRequest) {
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
       const totales = calcularTotales(data.items);
-      const encfBorrador = `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+      // sin-ncf: encf vacío (no hay comprobante, no generar BOR-sin-ncf-XXX).
+      // Otros borradores (borrador real de tipo e31/e32/etc): prefijo BOR- para
+      // distinguir de e-CF reales (E31...) y evitar colisiones.
+      const encfBorrador = data.tipoEcf === 'sin-ncf'
+        ? ''
+        : `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
-      const [saved] = await db.insert(ecfDocuments).values({
-        teamId,
-        clientId:             data.clientId ?? null,
-        encf:                 encfBorrador,
-        tipoEcf:              data.tipoEcf,
-        estado:               'BORRADOR',
-        rncComprador:         data.rncComprador,
-        razonSocialComprador: data.razonSocialComprador,
-        emailComprador:       data.emailComprador,
-        montoTotal:           Math.round(totales.montoTotal * 100),
-        totalItbis:           Math.round(totales.totalItbis * 100),
-        ncfModificado:        data.ncfModificado,
-        fechaEmision:         new Date(),
-        lineasJson:           data.lineasJson ?? null,
-        tipoPago:             data.tipoPago ?? 1,
-        fechaLimitePago:      data.fechaLimitePago ?? null,
-        ...extraFields,
-      }).returning();
+      const [saved] = await withRequestAuditContext(
+        (tx) => tx.insert(ecfDocuments).values({
+          teamId,
+          clientId:             data.clientId ?? null,
+          encf:                 encfBorrador,
+          tipoEcf:              data.tipoEcf,
+          estado:               'BORRADOR',
+          rncComprador:         data.rncComprador,
+          razonSocialComprador: data.razonSocialComprador,
+          emailComprador:       data.emailComprador,
+          montoTotal:           Math.round(totales.montoTotal * 100),
+          totalItbis:           Math.round(totales.totalItbis * 100),
+          ncfModificado:        data.ncfModificado,
+          fechaEmision:         new Date(),
+          lineasJson:           data.lineasJson ?? null,
+          tipoPago:             data.tipoPago ?? 1,
+          fechaLimitePago:      data.fechaLimitePago ?? null,
+          createdBy:            user.id,
+          ...extraFields,
+        }).returning(),
+        { userId: user.id, teamId },
+      );
 
       // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
       // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
@@ -474,28 +484,32 @@ export async function POST(request: NextRequest) {
           unidadMedida:       item.unidadMedidaItem,
         })));
 
-    const [saved] = await db.insert(ecfDocuments).values({
-      teamId,
-      encf,
-      tipoEcf:              data.tipoEcf,
-      estado:               estadoInicial,
-      trackId,
-      codigoSeguridad:      resultado.codigoSeguridad ?? null,
-      fechaFirma:           resultado.fechaHoraFirma ?? null,
-      urlVerificacion:      resultado.urlVerificacion ?? resultado.qrCodeData ?? null,
-      ecfApiEmisionId:      resultado.id,
-      rncComprador:         data.rncComprador,
-      razonSocialComprador: data.razonSocialComprador,
-      emailComprador:       data.emailComprador,
-      montoTotal:           Math.round(totales.montoTotal * 100),
-      totalItbis:           Math.round(totales.totalItbis * 100),
-      ncfModificado:        data.ncfModificado,
-      fechaEmision:         new Date(resultado.fechaEmision),
-      lineasJson:           lineasJsonParaGuardar,
-      tipoPago:             data.tipoPago ?? 1,
-      fechaLimitePago:      data.fechaLimitePago ?? null,
-      ...extraFields,
-    }).returning();
+    const [saved] = await withRequestAuditContext(
+      (tx) => tx.insert(ecfDocuments).values({
+        teamId,
+        encf,
+        tipoEcf:              data.tipoEcf,
+        estado:               estadoInicial,
+        trackId,
+        codigoSeguridad:      resultado.codigoSeguridad ?? null,
+        fechaFirma:           resultado.fechaHoraFirma ?? null,
+        urlVerificacion:      resultado.urlVerificacion ?? resultado.qrCodeData ?? null,
+        ecfApiEmisionId:      resultado.id,
+        rncComprador:         data.rncComprador,
+        razonSocialComprador: data.razonSocialComprador,
+        emailComprador:       data.emailComprador,
+        montoTotal:           Math.round(totales.montoTotal * 100),
+        totalItbis:           Math.round(totales.totalItbis * 100),
+        ncfModificado:        data.ncfModificado,
+        fechaEmision:         new Date(resultado.fechaEmision),
+        lineasJson:           lineasJsonParaGuardar,
+        tipoPago:             data.tipoPago ?? 1,
+        fechaLimitePago:      data.fechaLimitePago ?? null,
+        createdBy:            user.id,
+        ...extraFields,
+      }).returning(),
+      { userId: user.id, teamId },
+    );
 
     // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
     if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {

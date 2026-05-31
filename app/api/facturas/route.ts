@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments } from '@/lib/db/schema';
+import { ecfDocuments, users } from '@/lib/db/schema';
 import { and, eq, gte, lte, desc, like, count, or, sql } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
@@ -88,8 +88,10 @@ export async function GET(req: NextRequest) {
           CASE WHEN ecf_documents.pago_recibido = 'true'
                THEN coalesce(ecf_documents.pago_valor_cts, 0) ELSE 0 END
         )`,
+        createdByName: users.name,
       })
       .from(ecfDocuments)
+      .leftJoin(users, eq(users.id, ecfDocuments.createdBy))
       .where(where)
       .orderBy(desc(ecfDocuments.createdAt))
       .limit(limit)

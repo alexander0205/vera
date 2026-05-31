@@ -285,6 +285,9 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // ID de la emisión en ecf-api (para consultar estado sin ir a DGII directo)
   ecfApiEmisionId: varchar('ecf_api_emision_id', { length: 50 }),
 
+  // Usuario que creó el documento (nullable para registros legacy)
+  createdBy: integer('created_by').references(() => users.id),
+
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -554,6 +557,10 @@ export const ecfDocumentsRelations = relations(ecfDocuments, ({ one }) => ({
   client: one(clients, {
     fields: [ecfDocuments.clientId],
     references: [clients.id],
+  }),
+  createdByUser: one(users, {
+    fields: [ecfDocuments.createdBy],
+    references: [users.id],
   }),
 }));
 

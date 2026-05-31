@@ -16,7 +16,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Loader2, X, Building2, User, AlertCircle } from 'lucide-react';
+import { Search, Loader2, Building2, User, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -96,6 +96,12 @@ export function RncSearch({
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  // Sincroniza el texto del input con el valor seleccionado externamente
+  // (mismo patrón que el Autocomplete de producto — sin "chip" verde).
+  useEffect(() => {
+    setQuery(value ?? '');
+  }, [value]);
+
   // ── Búsqueda ──────────────────────────────────────────────────────────────
 
   async function handleInput(v: string) {
@@ -103,6 +109,8 @@ export function RncSearch({
     setNoData(false);
 
     const trimmed = v.trim();
+    // Si había un valor seleccionado y el usuario vacía el campo → limpiar selección.
+    if (trimmed.length === 0 && value && onClear) onClear();
     if (trimmed.length < 2) { setResults([]); setOpen(false); return; }
 
     if (timer.current) clearTimeout(timer.current);
@@ -149,26 +157,10 @@ export function RncSearch({
 
   function select(r: RncResult) {
     onSelect(r);
-    setQuery('');
+    // No limpiar query — el useEffect([value]) lo sincroniza al valor seleccionado.
     setOpen(false);
     setResults([]);
     setNoData(false);
-  }
-
-  // ── Modo "valor seleccionado" ─────────────────────────────────────────────
-
-  if (value) {
-    return (
-      <div className={`flex items-center gap-2 h-9 px-3 bg-teal-50 border border-teal-200 rounded-md text-sm font-medium text-teal-800 ${className}`}>
-        <Building2 className="h-3.5 w-3.5 text-teal-500 shrink-0" />
-        <span className="flex-1 truncate">{value}</span>
-        {onClear && (
-          <button type="button" onClick={onClear} className="text-teal-400 hover:text-teal-700 shrink-0">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-    );
   }
 
   // ── Dropdown (portal) ─────────────────────────────────────────────────────
@@ -267,6 +259,13 @@ export function RncSearch({
           value={query}
           onChange={(e) => handleInput(e.target.value)}
           onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
+          onBlur={() => {
+            setTimeout(() => {
+              setOpen(false);
+              // Restaurar el texto al valor seleccionado si el usuario no eligió otro.
+              setQuery(value ?? '');
+            }, 200);
+          }}
         />
         {loading && (
           <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-400" />

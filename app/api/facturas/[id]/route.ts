@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, clients, pagosRecibidos } from '@/lib/db/schema';
+import { ecfDocuments, teams, clients, pagosRecibidos, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql } from 'drizzle-orm';
 import { TIPOS_ECF, TIPO_ECF_REGLAS } from '@/lib/ecf/types';
@@ -55,6 +55,17 @@ export async function GET(
       .where(eq(clients.id, doc.clientId))
       .limit(1);
     cliente = cl ?? null;
+  }
+
+  // Cargar nombre del usuario que creó el documento
+  let createdByName: string | null = null;
+  if (doc.createdBy) {
+    const [creator] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, doc.createdBy))
+      .limit(1);
+    createdByName = creator?.name ?? null;
   }
 
   const TIPO_NOMBRE_EXTRA: Record<string, string> = { 'sin-ncf': 'Factura' };
@@ -137,6 +148,7 @@ export async function GET(
     tipoPago: doc.tipoPago,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+    createdByName,
 
     // Form payload (terminos / notas / pie / comentario)
     terminosCondiciones: doc.terminosCondiciones,
