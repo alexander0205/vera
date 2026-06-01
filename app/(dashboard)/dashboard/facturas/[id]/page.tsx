@@ -31,8 +31,23 @@ import { EntityHistory } from '@/components/entity-history';
 import { StickyNote, History as HistoryIcon } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+
+// Opciones del dropdown "Tipo de comprobante" del modal Enviar a DGII.
+const TIPOS_EMIT_DGII: { value: string; label: string }[] = [
+  { value: '32', label: 'e32 — Factura de Consumo' },
+  { value: '31', label: 'e31 — Crédito Fiscal (empresas con RNC)' },
+  { value: '44', label: 'e44 — Régimen Especial' },
+  { value: '45', label: 'e45 — Gubernamental' },
+  { value: '46', label: 'e46 — Exportaciones' },
+  { value: '33', label: 'e33 — Nota de Débito' },
+  { value: '34', label: 'e34 — Nota de Crédito' },
+  { value: '41', label: 'e41 — Compras' },
+  { value: '43', label: 'e43 — Gastos Menores' },
+  { value: '47', label: 'e47 — Pagos al Exterior' },
+];
 import { RncSearch } from '@/components/RncSearch';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -354,6 +369,7 @@ export default function FacturaDetallePage() {
   // ─── Permisos del usuario (gating de UI) ─────────────────────────────────────
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
   const { can } = usePermissions();
+  const { tipoVisible } = useTiposDisponibles();
   const canEdit   = can('facturas:editar');
   const canAnular = can('facturas:anular');
   const canEmitir = can('facturas:emitir-dgii');
@@ -1477,16 +1493,9 @@ export default function FacturaDetallePage() {
                 onChange={e => setDgiiTipoEcf(e.target.value)}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
               >
-                <option value="32">e32 — Factura de Consumo</option>
-                <option value="31">e31 — Crédito Fiscal (empresas con RNC)</option>
-                <option value="44">e44 — Régimen Especial</option>
-                <option value="45">e45 — Gubernamental</option>
-                <option value="46">e46 — Exportaciones</option>
-                <option value="33">e33 — Nota de Débito</option>
-                <option value="34">e34 — Nota de Crédito</option>
-                <option value="41">e41 — Compras</option>
-                <option value="43">e43 — Gastos Menores</option>
-                <option value="47">e47 — Pagos al Exterior</option>
+                {TIPOS_EMIT_DGII.filter(t => tipoVisible(t.value)).map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
               </select>
               {dgiiRegla && (
                 <p className="text-[11px] text-gray-500 leading-snug">{dgiiRegla.descripcion}</p>
@@ -1494,7 +1503,13 @@ export default function FacturaDetallePage() {
             </div>
 
             {/* ─── Comprador (RNC + razón social) ─────────────────────────── */}
-            {dgiiRegla && (dgiiRegla.requiereRncComprador || dgiiRegla.requiereRazonSocial || tempRnc || tempRazon) && (
+            {/* Mostrar solo si el tipo lo requiere (e31 sí) o e32 ≥ DOP 250,000.
+                e32 normal (consumo) → oculto, aunque haya cliente preseleccionado. */}
+            {dgiiRegla && (
+              dgiiRegla.requiereRncComprador ||
+              dgiiRegla.requiereRazonSocial ||
+              (dgiiTipoEcf === '32' && (parseFloat(factura.montos.montoTotalDOP) || 0) >= 250000)
+            ) && (
               <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-gray-700">

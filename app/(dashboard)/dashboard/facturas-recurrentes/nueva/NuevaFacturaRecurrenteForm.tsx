@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 
 import { SectionCard } from '../../facturas/nueva/sections/SectionCard';
 import { AccordionSection } from '../../facturas/nueva/sections/AccordionSection';
@@ -157,6 +158,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   const router = useRouter();
   const empresa = initialPerfil;
   const isEdit = Boolean(initialPlan);
+  const { tipoVisible } = useTiposDisponibles();
 
   // ── Cabecera ───────────────────────────────────────────────────────────────
   const [tipoEcf, setTipoEcf]           = useState(initialPlan?.tipoEcf ?? '31');
@@ -510,7 +512,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
               <Select value={tipoEcf} onValueChange={handleChangeTipo}>
                 <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TIPOS_ECF.map(t => (
+                  {TIPOS_ECF.filter(t => tipoVisible(t.value)).map(t => (
                     <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                   ))}
                 </SelectContent>

@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/select';
 import { Settings } from 'lucide-react';
 import { CATEGORIAS_ECF } from '@/lib/ecf/categorias';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import type { EmpresaPerfil, SecuenciaInfo } from '../utils/types';
 import { EmpresaBlock } from './EmpresaBlock';
 
@@ -29,8 +30,12 @@ export function CompactHeader({
   empresa, categoriaId, setCategoriaId, tipoEcf, onChangeTipo,
   secuencia, fechaEmision, onEditarNcf,
 }: Props) {
+  const { tipoVisible } = useTiposDisponibles();
   const categoriaActual = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
-  const tiposCategoria  = categoriaActual.tipos;
+  // Filtrar por secuencias disponibles (e31/e32/sin-ncf siempre). Fallback a la
+  // lista completa si el filtro deja vacío (evita dropdown sin opciones).
+  const tiposVisibles  = categoriaActual.tipos.filter(t => tipoVisible(t.codigo));
+  const tiposCategoria = tiposVisibles.length ? tiposVisibles : categoriaActual.tipos;
 
   // Auto-correct tipoEcf when category change desyncs.
   useEffect(() => {
