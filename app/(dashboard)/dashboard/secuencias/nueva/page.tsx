@@ -148,7 +148,7 @@ export default function NuevaSecuenciaPage() {
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-[#eef0f7] min-h-full">
+    <div className="bg-[#eef0f7] min-h-full flex flex-col">
 
       {/* Top bar */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -176,7 +176,7 @@ export default function NuevaSecuenciaPage() {
       </div>
 
       {/* Contenido */}
-      <div className="px-6 py-6 space-y-5">
+      <div className="flex-1 flex flex-col px-6 py-6 gap-5">
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4">
@@ -444,29 +444,29 @@ export default function NuevaSecuenciaPage() {
           </div>
         )}
 
-        {/* Bottom bar con nota y botones */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-4 flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            Los campos con <span className="text-red-500">*</span> son obligatorios
-          </p>
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard/secuencias">
-              <Button variant="outline" disabled={saving}>Cancelar</Button>
-            </Link>
-            <Button
-              className="bg-teal-600 hover:bg-teal-700 text-white px-6"
-              onClick={handleGuardar}
-              disabled={saving}
-            >
-              {saving ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
-              ) : (
-                'Guardar'
-              )}
-            </Button>
-          </div>
-        </div>
+      </div>
 
+      {/* Bottom bar */}
+      <div className="sticky bottom-0 z-30 -mx-0 px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex items-center justify-between py-3">
+        <p className="text-sm text-gray-500">
+          Los campos con <span className="text-red-500">*</span> son obligatorios
+        </p>
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/secuencias">
+            <Button variant="outline" disabled={saving}>Cancelar</Button>
+          </Link>
+          <Button
+            className="bg-teal-600 hover:bg-teal-700 text-white px-6"
+            onClick={handleGuardar}
+            disabled={saving}
+          >
+            {saving ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
+            ) : (
+              'Guardar'
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

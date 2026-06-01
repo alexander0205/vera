@@ -201,7 +201,8 @@ export default function ConfiguracionPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="p-4 sm:p-6 min-h-full flex flex-col">
+      <div className="flex flex-col flex-1 gap-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -511,8 +512,10 @@ export default function ConfiguracionPage() {
       {/* Equipo y permisos — solo el owner ve esta pantalla (gate en layout.tsx) */}
       <EquipoCard />
 
-      {/* Botón guardar final */}
-      <div className="flex justify-end pb-6">
+      </div>
+
+      {/* Botón guardar final — barra sticky inferior */}
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
         <Button
           onClick={handleSave}
           disabled={saving}

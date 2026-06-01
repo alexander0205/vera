@@ -106,7 +106,8 @@ export default function NuevaCotizacionPage() {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-[#eef0f7] min-h-full p-6 space-y-6">
+    <div className="bg-[#eef0f7] min-h-full flex flex-col p-6">
+      <div className="flex flex-col flex-1 gap-6">
 
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -287,8 +288,10 @@ export default function NuevaCotizacionPage() {
         </CardContent>
       </Card>
 
+      </div>
+
       {/* ── Acciones ─────────────────────────────────────────────────────────── */}
-      <div className="flex justify-end gap-3 pb-6">
+      <div className="sticky bottom-0 z-30 -mx-6 px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end gap-3 py-3">
         <Link href="/dashboard/cotizaciones">
           <Button variant="outline" disabled={saving}>Cancelar</Button>
         </Link>
