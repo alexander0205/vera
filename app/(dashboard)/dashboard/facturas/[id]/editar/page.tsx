@@ -91,6 +91,8 @@ export default async function EditarBorradorPage({
     retenciones:          doc.retenciones,
     comentario:           doc.comentario,
     lineasJson:           doc.lineasJson,
+    dependienteId:        doc.dependienteId   ?? null,
+    dependienteNombre:    doc.dependienteNombre ?? null,
   };
 
   const sinItems = !doc.lineasJson;

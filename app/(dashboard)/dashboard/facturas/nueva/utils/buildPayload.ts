@@ -34,6 +34,8 @@ export interface BuildPayloadInput {
   almacenId: number | null;
   listaPreciosId: number | null;
   vendedorId: number | null;
+  dependienteId?: number | null;
+  dependienteNombre?: string | null;
 }
 
 export function buildPayload(input: BuildPayloadInput) {
@@ -44,6 +46,7 @@ export function buildPayload(input: BuildPayloadInput) {
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
     pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
     almacenId, listaPreciosId, vendedorId,
+    dependienteId, dependienteNombre,
   } = input;
 
   const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
@@ -93,6 +96,9 @@ export function buildPayload(input: BuildPayloadInput) {
     almacenId:      almacenId      || undefined,
     listaPreciosId: listaPreciosId || undefined,
     vendedorId:     vendedorId     || undefined,
+    // Dependiente (metadato — no va al XML DGII)
+    dependienteId:     dependienteId     ?? undefined,
+    dependienteNombre: dependienteNombre ?? undefined,
     // Para editar borradores
     clientId:   clienteSeleccionado?.id ?? undefined,
     lineasJson: JSON.stringify(

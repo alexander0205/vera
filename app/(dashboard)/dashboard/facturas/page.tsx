@@ -69,6 +69,7 @@ interface Doc {
   pagado: number;
   createdAt: string;
   createdByName?: string | null;
+  dependienteNombre?: string | null;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -203,6 +204,11 @@ export default function FacturasPage() {
             ? <p className="text-[11px] text-gray-400 font-mono mt-0.5 leading-tight">{doc.rncComprador}</p>
             : <p className="text-[11px] text-gray-300 mt-0.5 leading-tight">Sin RNC</p>
           }
+          {doc.dependienteNombre && (
+            <p className="text-[11px] text-gray-400 mt-0.5 leading-tight truncate" title={`Beneficiario: ${doc.dependienteNombre}`}>
+              Benef.: {doc.dependienteNombre}
+            </p>
+          )}
         </div>
       ),
     },

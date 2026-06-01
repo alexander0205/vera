@@ -149,6 +149,7 @@ export async function GET(
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
     createdByName,
+    dependienteNombre: doc.dependienteNombre ?? null,
 
     // Form payload (terminos / notas / pie / comentario)
     terminosCondiciones: doc.terminosCondiciones,

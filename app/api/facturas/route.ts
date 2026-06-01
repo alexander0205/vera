@@ -88,7 +88,8 @@ export async function GET(req: NextRequest) {
           CASE WHEN ecf_documents.pago_recibido = 'true'
                THEN coalesce(ecf_documents.pago_valor_cts, 0) ELSE 0 END
         )`,
-        createdByName: users.name,
+        createdByName:     users.name,
+        dependienteNombre: ecfDocuments.dependienteNombre,
       })
       .from(ecfDocuments)
       .leftJoin(users, eq(users.id, ecfDocuments.createdBy))

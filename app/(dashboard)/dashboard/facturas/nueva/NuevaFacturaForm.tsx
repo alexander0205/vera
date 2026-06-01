@@ -100,6 +100,12 @@ export default function NuevaFacturaForm({
   const [telefonoManual, setTelefonoManual]   = useState(initialData?.telefonoComprador ?? '');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
 
+  // ── Dependiente ────────────────────────────────────────────────────────────
+  const [dependienteId,     setDependienteId]     = useState<number | null>(initialData?.dependienteId ?? null);
+  const [dependienteNombre, setDependienteNombre] = useState<string | null>(initialData?.dependienteNombre ?? null);
+  // Track whether the selected client has dependientes (set by ClienteSection via callback)
+  const [clienteTieneDeps, setClienteTieneDeps] = useState(false);
+
   // ── Plazos de pago ─────────────────────────────────────────────────────────
   const tipoPagoToPlazaId = (tp: number | null): string => {
     if (!tp || tp === 1) return 'contado';
@@ -312,6 +318,10 @@ export default function NuevaFacturaForm({
     setRncManualNombre('');
     setEmailManual(c.email ?? '');
     setTelefonoManual(c.telefono ?? '');
+    // Reset dependiente when switching client
+    setDependienteId(null);
+    setDependienteNombre(null);
+    setClienteTieneDeps(false);
   }
 
   function limpiarCliente() {
@@ -320,6 +330,34 @@ export default function NuevaFacturaForm({
     setRncManualNombre('');
     setEmailManual('');
     setTelefonoManual('');
+    setDependienteId(null);
+    setDependienteNombre(null);
+    setClienteTieneDeps(false);
+  }
+
+  /**
+   * Called by ClienteSection when user selects/clears a dependiente.
+   * Stores the selection and auto-fills empty item descriptions.
+   */
+  function handleSelectDependiente(id: number | null, nombreCompleto: string | null) {
+    setDependienteId(id);
+    setDependienteNombre(nombreCompleto);
+    // Also track whether the current client has deps (when id===null it was cleared/reset)
+    // ClienteSection calls with (null,null) on reset too — we infer clienteTieneDeps
+    // separately via the "hasDependientes" state bubbled up below.
+
+    if (!nombreCompleto) return;
+    // Auto-fill descriptions of items that have no description yet
+    const suffix = ` — ${nombreCompleto}`;
+    dispatchItems({ type: 'AUTOFILL_DEP_DESC', suffix });
+  }
+
+  function handleDependienteListLoaded(hasDeps: boolean) {
+    setClienteTieneDeps(hasDeps);
+    if (!hasDeps) {
+      setDependienteId(null);
+      setDependienteNombre(null);
+    }
   }
 
   // ─── Búsqueda productos ───────────────────────────────────────────────────
@@ -418,7 +456,7 @@ export default function NuevaFacturaForm({
 
   // ─── Reset ────────────────────────────────────────────────────────────────
   function resetForm() {
-    limpiarCliente();
+    limpiarCliente(); // also resets dependienteId/Nombre/clienteTieneDeps
     setPlazoId('contado'); setFechaEmision(new Date().toISOString().slice(0, 10)); setFechaLimitePago(''); setNcfModificado('');
     setCodigoModificacion(''); setFechaNcfModificado(''); setTipoIngresos('1');
     dispatchItems({ type: 'RESET' });
@@ -443,6 +481,7 @@ export default function NuevaFacturaForm({
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
+      dependienteId, dependienteNombre,
     });
   }
 
@@ -513,6 +552,8 @@ export default function NuevaFacturaForm({
       return 'Factura de Consumo ≥ DOP 250,000 requiere RNC o cédula del comprador';
     if (plazoActual?.dgiiTipo === 2 && !fechaLimitePago)
       return 'Para tipo de pago Crédito, debes definir fecha límite de pago.';
+    if (clienteTieneDeps && !dependienteId)
+      return 'Selecciona el beneficiario antes de emitir';
     if (items.every((i) => !i.nombreItem.trim()))
       return 'Agrega al menos un ítem con nombre';
     if (items.filter(i => i.nombreItem.trim()).every(i => i.precioUnitarioItem <= 0))
@@ -837,6 +878,9 @@ export default function NuevaFacturaForm({
                   emailManual={emailManual} setEmailManual={setEmailManual}
                   telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
                   tipoEcf={tipoEcf} totalDocumento={totales.total}
+                  dependienteId={dependienteId}
+                  onSelectDependiente={handleSelectDependiente}
+                  onDependienteListLoaded={handleDependienteListLoaded}
                 />
               </SectionCard>
 

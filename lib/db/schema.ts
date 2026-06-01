@@ -298,6 +298,10 @@ export const ecfDocuments = pgTable('ecf_documents', {
   tipoPago:         integer('tipo_pago').default(1),  // 1=contado,2=crédito,3=gratuito,4=uso
   fechaLimitePago:  varchar('fecha_limite_pago', { length: 10 }), // YYYY-MM-DD
 
+  // Dependiente del cliente seleccionado al emitir (metadato — no va al XML DGII)
+  dependienteId:     integer('dependiente_id').references(() => dependientes.id),
+  dependienteNombre: varchar('dependiente_nombre', { length: 255 }),
+
   // ID de la emisión en ecf-api (para consultar estado sin ir a DGII directo)
   ecfApiEmisionId: varchar('ecf_api_emision_id', { length: 50 }),
 

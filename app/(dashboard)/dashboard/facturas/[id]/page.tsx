@@ -122,6 +122,7 @@ interface FacturaDetalle {
   };
   pago: PagoData;
   createdByName?: string | null;
+  dependienteNombre?: string | null;
 }
 
 // ─── Estado badge ─────────────────────────────────────────────────────────────
@@ -991,6 +992,12 @@ export default function FacturaDetallePage() {
                   <div className="sm:col-span-2">
                     <p className="text-[11px] uppercase tracking-wide text-gray-500">Dirección</p>
                     <p className="text-gray-800">{factura.comprador.direccion}</p>
+                  </div>
+                )}
+                {factura.dependienteNombre && (
+                  <div className="sm:col-span-2">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Beneficiario</p>
+                    <p className="text-gray-800 font-medium">{factura.dependienteNombre}</p>
                   </div>
                 )}
               </div>

@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, dependientes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql } from 'drizzle-orm';
@@ -88,6 +88,10 @@ const emitirSchema = z.object({
   // Tipo 47 — tasa de retención ISR pagos al exterior.
   // Default 0.27 (general). 0.10 países con tratado, 0.15 servicios técnicos, etc.
   tasaIsrRetencion: z.number().min(0).max(1).optional(),
+
+  // Dependiente del cliente — metadato, no va al XML DGII
+  dependienteId:     z.number().int().positive().optional(),
+  dependienteNombre: z.string().max(255).optional(),
 });
 
 // ─── Adquirir próximo eNCF de secuencia local ────────────────────────────────
@@ -253,6 +257,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Validación dependiente ────────────────────────────────────────────────
+    if (data.clientId) {
+      // Count how many dependientes this client has (scoped to team for security)
+      const [depCount] = await db
+        .select({ cnt: sql`COUNT(*)::int` })
+        .from(dependientes)
+        .where(and(eq(dependientes.clientId, data.clientId), eq(dependientes.teamId, teamId)));
+      const hasDependientes = Number((depCount as { cnt: number })?.cnt ?? 0) > 0;
+
+      if (hasDependientes && !data.dependienteId) {
+        return NextResponse.json(
+          { error: 'Este cliente requiere seleccionar un dependiente.' },
+          { status: 422 },
+        );
+      }
+
+      // Security: verify the submitted dependienteId belongs to this clientId and team
+      if (data.dependienteId) {
+        const [dep] = await db
+          .select({ id: dependientes.id })
+          .from(dependientes)
+          .where(and(
+            eq(dependientes.id,       data.dependienteId),
+            eq(dependientes.clientId, data.clientId),
+            eq(dependientes.teamId,   teamId),
+          ))
+          .limit(1);
+        if (!dep) {
+          return NextResponse.json(
+            { error: 'El dependiente seleccionado no pertenece a este cliente.' },
+            { status: 422 },
+          );
+        }
+      }
+    }
+
     const extraFields = {
       notas:               data.notas          || null,
       terminosCondiciones: data.terminosCondiciones || null,
@@ -297,6 +337,8 @@ export async function POST(request: NextRequest) {
           tipoPago:             data.tipoPago ?? 1,
           fechaLimitePago:      data.fechaLimitePago ?? null,
           createdBy:            user.id,
+          dependienteId:        data.dependienteId ?? null,
+          dependienteNombre:    data.dependienteNombre ?? null,
           ...extraFields,
         }).returning(),
         { userId: user.id, teamId },
@@ -506,6 +548,8 @@ export async function POST(request: NextRequest) {
         tipoPago:             data.tipoPago ?? 1,
         fechaLimitePago:      data.fechaLimitePago ?? null,
         createdBy:            user.id,
+        dependienteId:        data.dependienteId ?? null,
+        dependienteNombre:    data.dependienteNombre ?? null,
         ...extraFields,
       }).returning(),
       { userId: user.id, teamId },

@@ -245,6 +245,7 @@ export async function GET(
       pieFactura:          doc.pieFactura ?? undefined,
       terminosCondiciones: doc.terminosCondiciones ?? undefined,
       notas:               doc.notas ?? undefined,
+      dependienteNombre:   doc.dependienteNombre ?? undefined,
     };
 
     // Renderizar PDF — cast necesario por incompatibilidad de tipos con react-pdf

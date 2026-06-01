@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertTriangle, Info, Plus } from 'lucide-react';
@@ -9,6 +10,12 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { getCampoHint } from '@/lib/factura/validator/ui-helpers';
 import { Autocomplete } from '../components/Autocomplete';
 import type { Cliente } from '../utils/types';
+
+interface DependienteOpt {
+  id: number;
+  nombre: string;
+  apellido: string;
+}
 
 interface Props {
   clienteSeleccionado: Cliente | null;
@@ -27,10 +34,16 @@ interface Props {
   setTelefonoManual: (v: string) => void;
   tipoEcf: string;
   totalDocumento: number;
+  /** Callback called when a dependiente is selected/cleared. */
+  onSelectDependiente?: (id: number | null, nombreCompleto: string | null) => void;
+  /** Called after dependientes are loaded — passes whether the list is non-empty. */
+  onDependienteListLoaded?: (hasDeps: boolean) => void;
+  /** Current value (controlled from parent). */
+  dependienteId?: number | null;
 }
 
 /**
- * Datos del cliente. Cliente autocomplete + RNC + teléfono + email.
+ * Datos del cliente. Cliente autocomplete + RNC + teléfono + email + dependiente.
  * The "fechas / plazo / tipo ingresos / NCF modificado" fields used to live
  * here too — those moved to DetallesSection.
  */
@@ -39,7 +52,61 @@ export function ClienteSection({
   regla, rncManual, rncManualNombre, setRncManual, setRncManualNombre,
   emailManual, setEmailManual, telefonoManual, setTelefonoManual,
   tipoEcf, totalDocumento,
+  onSelectDependiente, onDependienteListLoaded, dependienteId,
 }: Props) {
+  const [dependientes, setDependientes] = useState<DependienteOpt[]>([]);
+  const [loadingDeps, setLoadingDeps] = useState(false);
+
+  // Fetch dependientes when client changes
+  useEffect(() => {
+    if (!clienteSeleccionado?.id) {
+      setDependientes([]);
+      onSelectDependiente?.(null, null);
+      onDependienteListLoaded?.(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingDeps(true);
+    fetch(`/api/clientes/${clienteSeleccionado.id}/dependientes`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        const lista: DependienteOpt[] = Array.isArray(data.dependientes) ? data.dependientes : [];
+        setDependientes(lista);
+        // Reset selection when switching clients
+        onSelectDependiente?.(null, null);
+        onDependienteListLoaded?.(lista.length > 0);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDependientes([]);
+          onDependienteListLoaded?.(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDeps(false);
+      });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteSeleccionado?.id]);
+
+  function handleDependienteChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const val = e.target.value;
+    if (!val) {
+      onSelectDependiente?.(null, null);
+      return;
+    }
+    const id = parseInt(val, 10);
+    const dep = dependientes.find(d => d.id === id);
+    if (dep) {
+      onSelectDependiente?.(id, `${dep.nombre} ${dep.apellido}`);
+    }
+  }
+
+  const hasDependientes = dependientes.length > 0;
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -67,6 +134,33 @@ export function ClienteSection({
           <Plus className="h-3.5 w-3.5" />Nuevo contacto
         </button>
       </div>
+
+      {/* Dependiente selector — only shown if client has dependientes */}
+      {hasDependientes && (
+        <div className="min-w-0">
+          <Label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1">
+            Beneficiario
+            <span className="text-red-500 ml-0.5" aria-label="campo obligatorio">*</span>
+            <Tooltip text="Selecciona el miembro del cliente para este comprobante">
+              <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+            </Tooltip>
+          </Label>
+          <select
+            className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            value={dependienteId ?? ''}
+            onChange={handleDependienteChange}
+            disabled={loadingDeps}
+            aria-required="true"
+          >
+            <option value="">— Selecciona beneficiario —</option>
+            {dependientes.map(d => (
+              <option key={d.id} value={d.id}>
+                {d.nombre} {d.apellido}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
         <div className="min-w-0">

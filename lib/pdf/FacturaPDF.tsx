@@ -72,6 +72,8 @@ export interface FacturaPDFData {
   /** Se renderizan solo si tienen contenido. */
   terminosCondiciones?: string | null;
   notas?:               string | null;
+  /** Beneficiario (dependiente del cliente). Se muestra bajo los datos del comprador. */
+  dependienteNombre?:   string | null;
 }
 
 // ─── Monto en letras ──────────────────────────────────────────────────────────
@@ -591,6 +593,11 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             {data.comprador.email && (
               <Text style={S.buyerField}>
                 <Text style={S.buyerLabel}>Email: </Text>{data.comprador.email}
+              </Text>
+            )}
+            {data.dependienteNombre && (
+              <Text style={S.buyerField}>
+                <Text style={S.buyerLabel}>Beneficiario: </Text>{data.dependienteNombre}
               </Text>
             )}
           </View>

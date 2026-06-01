@@ -36,6 +36,8 @@ export interface BorradorInicial {
   retenciones:          string | null; // JSON string
   comentario:           string | null;
   lineasJson:           string | null; // JSON string de ItemLinea[]
+  dependienteId:        number | null;
+  dependienteNombre:    string | null;
 }
 
 export interface ItemLinea {

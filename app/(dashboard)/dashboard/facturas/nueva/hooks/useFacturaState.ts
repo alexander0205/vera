@@ -23,6 +23,7 @@ export type ItemsAction =
   | { type: 'APPLY_PRODUCTO'; idx: number; patch: Partial<ItemLinea> & { productoId: number } }
   | { type: 'APPLY_LISTA_PORC'; porcentaje: number }
   | { type: 'FORCE_EXENTO' }
+  | { type: 'AUTOFILL_DEP_DESC'; suffix: string }
   | { type: 'RESET' };
 
 export function itemsReducer(state: ItemLinea[], action: ItemsAction): ItemLinea[] {
@@ -47,6 +48,18 @@ export function itemsReducer(state: ItemLinea[], action: ItemsAction): ItemLinea
     }
     case 'FORCE_EXENTO':
       return state.map(i => ({ ...i, tasaItbis: 'exento' as const }));
+    case 'AUTOFILL_DEP_DESC': {
+      // Append suffix to items whose descripcionItem is empty or already ends with a prior " — X" pattern.
+      // Do NOT overwrite descriptions the user explicitly typed.
+      const depPattern = / — .+$/;
+      return state.map(item => {
+        if (!item.nombreItem.trim()) return item;
+        const desc = item.descripcionItem ?? '';
+        // Strip any previous dep suffix, then append the new one
+        const base = desc.replace(depPattern, '').trimEnd();
+        return { ...item, descripcionItem: base + action.suffix };
+      });
+    }
     case 'RESET':
       return [itemVacio()];
     default:
