@@ -192,8 +192,24 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   const initialItems = useMemo<ItemLinea[] | undefined>(() => {
     if (!initialPlan?.items) return undefined;
     try {
-      const parsed = JSON.parse(initialPlan.items) as ItemLinea[];
-      return Array.isArray(parsed) && parsed.length ? parsed : undefined;
+      const parsed = JSON.parse(initialPlan.items) as Array<Partial<ItemLinea>>;
+      if (!Array.isArray(parsed) || !parsed.length) return undefined;
+      // Asignar id único (el JSON guardado no lo trae) + normalizar campos.
+      return parsed.map((it, i) => ({
+        id:                     i + 1,
+        productoId:             it.productoId,
+        nombreItem:             it.nombreItem ?? '',
+        referencia:             it.referencia ?? '',
+        descripcionItem:        it.descripcionItem ?? '',
+        cantidadItem:           it.cantidadItem ?? 1,
+        precioUnitarioItem:     it.precioUnitarioItem ?? 0,
+        descuentoPct:           it.descuentoPct ?? 0,
+        tasaItbis:              (it.tasaItbis ?? 'exento') as ItemLinea['tasaItbis'],
+        indicadorBienoServicio: (it.indicadorBienoServicio ?? '2') as '1' | '2',
+        unidadMedida:           it.unidadMedida,
+        dependienteId:          it.dependienteId ?? null,
+        dependienteNombre:      it.dependienteNombre ?? '',
+      }));
     } catch {
       return undefined;
     }
