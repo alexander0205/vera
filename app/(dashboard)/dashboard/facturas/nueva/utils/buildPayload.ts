@@ -92,6 +92,9 @@ export function buildPayload(input: BuildPayloadInput) {
           descuentoMonto:         item.descuentoPct > 0 ? descuentoMonto : undefined,
           tasaItbis:              tasaToFloat(item.tasaItbis),
           indicadorBienoServicio: parseInt(item.indicadorBienoServicio) as 1 | 2,
+          // Beneficiario por línea — el backend valida items[].dependienteId.
+          dependienteId:          item.dependienteId ?? undefined,
+          dependienteNombre:      item.dependienteNombre || undefined,
         };
       }),
     // Campos extra

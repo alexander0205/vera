@@ -356,6 +356,7 @@ export default function NuevaFacturaForm({
 
   function handleSelectBeneficiario(itemId: number, depId: number | null, nombreCompleto: string) {
     dispatchItems({ type: 'UPDATE_BENEFICIARIO', id: itemId, dependienteId: depId, dependienteNombre: nombreCompleto });
+    if (depId) setError(null); // limpiar el banner de "falta beneficiario" al elegir uno
   }
 
   // ─── Búsqueda productos ───────────────────────────────────────────────────

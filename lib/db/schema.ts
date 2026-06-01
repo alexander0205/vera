@@ -305,6 +305,11 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // ID de la emisión en ecf-api (para consultar estado sin ir a DGII directo)
   ecfApiEmisionId: varchar('ecf_api_emision_id', { length: 50 }),
 
+  // Origen: si este documento fue generado por una factura recurrente, apunta a ella.
+  // Permite que AR muestre borradores de origen recurrente (crédito/tipoPago=2) aunque
+  // todavía no estén emitidos a la DGII.
+  origenRecurrenteId: integer('origen_recurrente_id').references(() => facturasRecurrentes.id),
+
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
 

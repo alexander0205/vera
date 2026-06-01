@@ -8,10 +8,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  RefreshCw, Plus, Trash2, Loader2, AlertTriangle, Pencil, PauseCircle, PlayCircle,
+  RefreshCw, Plus, Trash2, Loader2, AlertTriangle, Pencil, PauseCircle, PlayCircle, Zap,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { toast } from 'sonner';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ export default function FacturasRecurrentesPage() {
   const [deleting, setDeleting]         = useState(false);
   const [opError, setOpError]           = useState<string | null>(null);
   const [toggling, setToggling]         = useState<number | null>(null);
+  const [generando, setGenerando]       = useState<number | null>(null);
   const didLoad                         = useRef(false);
 
   const cargar = useCallback(async () => {
@@ -110,6 +112,33 @@ export default function FacturasRecurrentesPage() {
       setFacturas(prev => prev.map(fr => fr.id === f.id ? { ...fr, estado: nuevoEstado } : fr));
     } finally {
       setToggling(null);
+    }
+  }
+
+  async function handleGenerarAhora(f: FacturaRecurrente) {
+    setGenerando(f.id);
+    try {
+      const res  = await fetch(`/api/facturas-recurrentes/${f.id}/generar`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? 'Error generando factura');
+        return;
+      }
+      toast.success(
+        `Factura generada: ${data.encf}`,
+        {
+          action: {
+            label: 'Ver factura',
+            onClick: () => { window.location.href = `/dashboard/facturas/${data.documentoId}`; },
+          },
+        },
+      );
+      // Refrescar lista para actualizar "Próxima emisión" y "Emitidas"
+      cargar();
+    } catch {
+      toast.error('Error de conexión al generar la factura');
+    } finally {
+      setGenerando(null);
     }
   }
 
@@ -183,6 +212,13 @@ export default function FacturasRecurrentesPage() {
         onClick: () => handleToggleEstado(f),
       });
     }
+    // Acción "Generar ahora": disparo manual para probar sin esperar el cron
+    const isGenerando = generando === f.id;
+    actions.push({
+      icon:    isGenerando ? Loader2 : Zap,
+      title:   'Generar ahora',
+      onClick: () => handleGenerarAhora(f),
+    });
     actions.push({
       icon: Trash2, title: 'Eliminar', variant: 'danger',
       onClick: () => { setDeleteTarget(f); setOpError(null); },
