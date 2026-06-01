@@ -28,7 +28,7 @@ const ESTADO_LABEL: Record<string, string> = {
   ACEPTADO_CONDICIONAL: 'Cond.',
   EN_PROCESO:           'En proceso',
   RECHAZADO:            'Rechazado',
-  BORRADOR:             'Borrador',
+  BORRADOR:             'Sin comprobante',
   ANULADO:              'Anulado',
   HISTORICA:            'Histórica',
 };

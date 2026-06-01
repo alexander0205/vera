@@ -136,7 +136,7 @@ const ESTADO_CONFIG: Record<
   ACEPTADO_CONDICIONAL: { label: 'Condicional', variant: 'secondary',   icon: CheckCircle },
   EN_PROCESO:           { label: 'En Proceso',  variant: 'outline',     icon: Clock },
   RECHAZADO:            { label: 'Rechazado',   variant: 'destructive', icon: XCircle },
-  BORRADOR:             { label: 'Borrador',    variant: 'outline',     icon: Clock },
+  BORRADOR:             { label: 'Sin comprobante', variant: 'outline', icon: Clock },
   ANULADO:              { label: 'Anulado',     variant: 'secondary',   icon: XCircle },
 };
 
@@ -622,6 +622,16 @@ export default function FacturaDetallePage() {
                 {factura.encf.startsWith('BOR-') ? `Factura #${factura.id}` : factura.encf}
               </h1>
               <EstadoBadge estado={factura.estado} />
+              {/* Estado de COBRO (independiente del estado DGII) */}
+              {facturaPagada ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                  Pagada
+                </span>
+              ) : saldo > 0 && pagadoDOP > 0 ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+                  Pago parcial
+                </span>
+              ) : null}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
               <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
