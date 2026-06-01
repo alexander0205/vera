@@ -1,65 +1,74 @@
-# scripts/db-seed — Dumps de base de datos local
+# scripts/db-seed — Bootstrap de base de datos local (devs)
 
-Este directorio contiene los dumps de Postgres para bootstrap local.
+Arranca EmiteDO en local con datos reales + login de prueba, sin tocar prod.
+
+## Quickstart (dev nuevo)
+
+```bash
+git checkout developer
+pnpm install
+
+# Coloca el dump seed (te lo pasa el lead — NO está en git por PII):
+#   scripts/db-seed/emitedo-local-seed.dump
+
+pnpm db:local:setup    # Docker postgres + restaura seed + setea login de prueba
+pnpm dev               # app local (usa .env → localhost:54322, NO toca prod)
+```
+
+Abre http://localhost:3000
+
+## Login de prueba
+
+Tras `pnpm db:local:setup`, **todos los usuarios locales** quedan con el mismo password:
+
+| Email | Password |
+|---|---|
+| (el owner que imprime el script al final) | `Dev1234!` |
+
+Cualquier email de la tabla `users` sirve con ese mismo password (solo en LOCAL).
 
 ## ¿Por qué los .dump no están en git?
 
-Los archivos `.dump` **nunca se commitean** porque contienen:
-- Datos reales de clientes (RNC, nombre, email) — PII bajo LGPD/normativas DR
-- Hashes de passwords de usuarios de demo
-- Datos confidenciales del negocio
+Contienen PII (RNC/nombre/email de clientes) + hashes de usuarios. `.gitignore`
+excluye `scripts/db-seed/*.dump`. Obtén el dump del lead (Alexander) o del Drive
+compartido. **Canales seguros únicamente.**
 
-`.gitignore` ya está configurado para excluir `*.dump` de este directorio.
+## Qué contiene el seed actual
 
-## Cómo obtener el dump
-
-Pídelo al lead del proyecto (Alexander) o descárgalo desde el Drive compartido del equipo EmiteDO. El archivo se llama `emitedo-local-seed.dump` y debe colocarse en este directorio.
-
-**Canales seguros únicamente** — no compartir por email sin cifrar ni repositorios públicos.
-
-## Qué contiene el dump actual (`emitedo-local-seed.dump`)
-
-| Tabla   | Registros | Notas                            |
-|---------|-----------|----------------------------------|
-| teams   | 7         | Equipos de demo/QA               |
-| users   | 7         | Un usuario por equipo             |
-| clients | 87        | Clientes de prueba con datos reales ficcionalizados |
-| facturas| 0         | Slate limpio para demos          |
-| products| 0         | Slate limpio para demos          |
-
-- Formato: pg_dump custom (`-Fc`), generado con Postgres 17
-- Tamaño: ~16 MB
+`pg_dump -Fc` de producción (schema completo: migraciones 0027-0032 + data real
+actual). ~16 MB. El script imprime los counts (facturas/clientes/productos/users)
+al restaurar.
 
 ## Cómo usar
 
 ```bash
-# Prerequisito: Docker Desktop corriendo
-
-pnpm db:local:setup
+pnpm db:local:setup     # idempotente — re-córrelo para resetear la DB local
 ```
 
-El script hace todo automáticamente:
-1. Levanta el container `emitedo_postgres` (puerto `54322`)
-2. Espera a que esté healthy
-3. Restaura el dump (es idempotente — puede correrse N veces)
-4. Verifica los counts y muestra un resumen
+El script:
+1. Verifica Docker.
+2. Levanta `emitedo_postgres` (puerto host 54322) y espera healthy.
+3. Restaura el dump (`--clean` → idempotente).
+4. Setea el password `Dev1234!` en todos los usuarios (solo LOCAL).
+5. Imprime counts + login de prueba.
 
-## Resetear la DB desde cero
+## Resetear desde cero
 
 ```bash
-# Borra el volume y vuelve a levantar limpio
-docker compose down -v
-pnpm db:local:setup
+docker compose down -v && pnpm db:local:setup
 ```
 
-## Cómo crear un nuevo dump (solo el lead)
+## Crear/actualizar el seed (solo el lead)
 
 ```bash
-# Desde el host, contra el container local
-docker exec emitedo_postgres \
-  pg_dump -U postgres -d emitedo -Fc -f /tmp/nuevo-seed.dump
-
-docker cp emitedo_postgres:/tmp/nuevo-seed.dump scripts/db-seed/emitedo-local-seed.dump
+# Dump fresco de prod (Neon) — requiere .env.prod con POSTGRES_URL
+docker exec -e PGCONNECT_TIMEOUT=20 emitedo_postgres pg_dump "$POSTGRES_URL_PROD" -Fc \
+  > scripts/db-seed/emitedo-local-seed.dump
+# Distribuir por canal seguro (Drive). NO commitear.
 ```
 
-Distribuir el nuevo dump por canal seguro antes de actualizar la versión en el Drive.
+## Correr contra prod (solo si lo necesitas)
+
+```bash
+pnpm dev:prod    # requiere .env.prod — usa Neon, NO local
+```

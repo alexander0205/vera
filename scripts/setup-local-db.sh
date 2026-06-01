@@ -41,6 +41,12 @@ DB_USER="postgres"
 COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 HEALTH_TIMEOUT=60   # segundos máximos esperando el healthcheck
 
+# Password de prueba para desarrollo local. El hash bcrypt es seguro de commitear
+# (one-way). Tras restaurar, TODOS los usuarios quedan con este password en LOCAL,
+# así cualquier dev entra sin saber las contraseñas reales de prod.
+DEV_PASSWORD="Dev1234!"
+DEV_PASSWORD_HASH='$2b$10$j.xtWnrDqgDF3lK1Im9eFu8bDTcj4arpCCG/Yp9UTyRVSFetaImsO'
+
 echo ""
 echo -e "${CYAN}========================================${RESET}"
 echo -e "${CYAN}  EmiteDO — Bootstrap Base de Datos Local${RESET}"
@@ -179,31 +185,42 @@ docker exec "$CONTAINER_NAME" rm -f "$CONTAINER_DUMP_PATH"
 
 ok "Dump restaurado."
 
-# ── 6. Verificar el restore ───────────────────────────────────────────────────
-info "Verificando datos restaurados..."
-
 run_sql() {
   docker exec "$CONTAINER_NAME" \
     psql -U "$DB_USER" -d "$DB_NAME" -t -c "$1" 2>/dev/null | tr -d ' '
 }
 
+# ── 6. Setear password de prueba en todos los usuarios (solo LOCAL) ───────────
+info "Seteando password de prueba en usuarios locales..."
+docker exec "$CONTAINER_NAME" \
+  psql -U "$DB_USER" -d "$DB_NAME" -c \
+  "UPDATE users SET password_hash = '${DEV_PASSWORD_HASH}';" >/dev/null 2>&1
+ok "Todos los usuarios locales ahora usan el password: ${DEV_PASSWORD}"
+
+# ── 7. Verificar el restore ───────────────────────────────────────────────────
+info "Verificando datos restaurados..."
+
 TEAMS_COUNT=$(run_sql "SELECT COUNT(*) FROM teams;")
 USERS_COUNT=$(run_sql "SELECT COUNT(*) FROM users;")
 CLIENTS_COUNT=$(run_sql "SELECT COUNT(*) FROM clients;" 2>/dev/null || echo "N/A")
+FACTURAS_COUNT=$(run_sql "SELECT COUNT(*) FROM ecf_documents;" 2>/dev/null || echo "N/A")
+# Email de un owner para mostrar al dev como login de ejemplo
+OWNER_EMAIL=$(run_sql "SELECT u.email FROM users u JOIN team_members tm ON tm.user_id=u.id WHERE tm.role='owner' ORDER BY u.id LIMIT 1;" 2>/dev/null || echo "")
 
 echo ""
 echo -e "  Equipos  (teams)  : ${GREEN}${TEAMS_COUNT}${RESET}"
 echo -e "  Usuarios (users)  : ${GREEN}${USERS_COUNT}${RESET}"
 echo -e "  Clientes (clients): ${GREEN}${CLIENTS_COUNT}${RESET}"
+echo -e "  Facturas          : ${GREEN}${FACTURAS_COUNT}${RESET}"
 echo ""
 
-if [[ "$TEAMS_COUNT" == "7" ]]; then
-  ok "Verificación OK — 7 teams restaurados correctamente."
+if [[ "${USERS_COUNT}" =~ ^[0-9]+$ ]] && [[ "${USERS_COUNT}" -gt 0 ]]; then
+  ok "Verificación OK — ${USERS_COUNT} usuarios restaurados."
 else
-  warn "Se esperaban 7 teams pero se encontraron ${TEAMS_COUNT}. Revisa el dump."
+  warn "No se encontraron usuarios. Revisa el dump."
 fi
 
-# ── 7. Mensaje final ──────────────────────────────────────────────────────────
+# ── 8. Mensaje final ──────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}========================================${RESET}"
 echo -e "${GREEN}  Base de datos lista.${RESET}"
@@ -212,13 +229,18 @@ echo ""
 echo "  Conexión : postgresql://postgres:postgres@localhost:54322/emitedo"
 echo "  Container: $CONTAINER_NAME (puerto host 54322)"
 echo ""
+echo -e "  ${CYAN}LOGIN DE PRUEBA:${RESET}"
+echo -e "    Email   : ${GREEN}${OWNER_EMAIL:-<cualquier email de la tabla users>}${RESET}"
+echo -e "    Password: ${GREEN}${DEV_PASSWORD}${RESET}"
+echo "    (todos los usuarios locales tienen este mismo password)"
+echo ""
 echo "  Siguiente paso — arrancar la app:"
 echo ""
 echo "    pnpm install"
 echo "    pnpm dev"
 echo ""
-echo "  La app usa POSTGRES_URL del archivo .env, que ya apunta a localhost:54322."
+echo "  La app usa POSTGRES_URL del .env (localhost:54322). NO toca prod."
 echo ""
-echo "  Para volver a resetear la DB desde cero:"
-echo "    pnpm db:local:setup   (idempotente — puede correrse N veces)"
+echo "  Resetear la DB desde cero (idempotente):"
+echo "    pnpm db:local:setup"
 echo ""
