@@ -242,7 +242,9 @@ export async function GET(
       montoTotal:  montoTotalDOP,
       saldo:       saldoCts / 100,  // B2 fix: saldo real (0 si pagada)
       qrDataUrl,
-      pieFactura:  doc.pieFactura ?? undefined,
+      pieFactura:          doc.pieFactura ?? undefined,
+      terminosCondiciones: doc.terminosCondiciones ?? undefined,
+      notas:               doc.notas ?? undefined,
     };
 
     // Renderizar PDF — cast necesario por incompatibilidad de tipos con react-pdf

@@ -69,6 +69,9 @@ export interface FacturaPDFData {
 
   qrDataUrl?:  string;
   pieFactura?: string | null;
+  /** Se renderizan solo si tienen contenido. */
+  terminosCondiciones?: string | null;
+  notas?:               string | null;
 }
 
 // ─── Monto en letras ──────────────────────────────────────────────────────────
@@ -363,6 +366,11 @@ const S = StyleSheet.create({
     marginTop: 4,
     width:     190,
   },
+
+  // ── Términos / Notas ──
+  notasBlock:  { marginTop: 12 },
+  notasTitle:  { fontFamily: 'Helvetica-Bold', fontSize: 8.5, color: '#1a1a1a', marginBottom: 2 },
+  notasText:   { fontSize: 8, color: '#555555', lineHeight: 1.4, marginBottom: 6 },
 
   // ── Pie de factura ──
   pieFactura: {
@@ -673,8 +681,26 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           </View>
         </View>
 
-        {/* ── Pie de factura ── */}
-        {data.pieFactura && (
+        {/* ── Términos y condiciones / Notas (solo si existen) ── */}
+        {(data.terminosCondiciones?.trim() || data.notas?.trim()) && (
+          <View style={S.notasBlock}>
+            {data.terminosCondiciones?.trim() && (
+              <>
+                <Text style={S.notasTitle}>TÉRMINOS Y CONDICIONES:</Text>
+                <Text style={S.notasText}>{data.terminosCondiciones}</Text>
+              </>
+            )}
+            {data.notas?.trim() && (
+              <>
+                <Text style={S.notasTitle}>NOTAS:</Text>
+                <Text style={S.notasText}>{data.notas}</Text>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* ── Pie de factura (solo si existe) ── */}
+        {data.pieFactura?.trim() && (
           <Text style={S.pieFactura}>{data.pieFactura}</Text>
         )}
 
