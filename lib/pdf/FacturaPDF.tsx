@@ -19,6 +19,8 @@ export interface ItemPDF {
   unidadMedida?:       string;
   tasaItbis?:          number;   // 0.18, 0.16, 0 = exento/undefined
   subtotalConItbis:    number;   // en DOP
+  /** Beneficiario por línea (dependiente del cliente). */
+  dependienteNombre?:  string | null;
 }
 
 export interface EmisorPDF {
@@ -595,9 +597,10 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
                 <Text style={S.buyerLabel}>Email: </Text>{data.comprador.email}
               </Text>
             )}
-            {data.dependienteNombre && (
+            {/* Beneficiario resumen — solo cuando todos los ítems apuntan al mismo (ej. "María Pérez") */}
+            {data.dependienteNombre && !data.dependienteNombre.startsWith('Varios') && (
               <Text style={S.buyerField}>
-                <Text style={S.buyerLabel}>Beneficiario: </Text>{data.dependienteNombre}
+                <Text style={S.buyerLabel}>Benef.: </Text>{data.dependienteNombre}
               </Text>
             )}
           </View>
@@ -650,6 +653,7 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
                 <Text style={S.tdBold}>{item.nombreItem}</Text>
                 {item.referencia ? <Text style={S.tdGray}>Ref: {item.referencia}</Text> : null}
                 {item.descripcionItem ? <Text style={S.tdGray}>{item.descripcionItem}</Text> : null}
+                {item.dependienteNombre ? <Text style={[S.tdGray, { color: '#0f766e' }]}>Benef.: {item.dependienteNombre}</Text> : null}
               </View>
               <Text style={[S.tdCell, S.colUnidad]}>{item.unidadMedida ?? ''}</Text>
               <Text style={[S.tdCell, S.colPrecio]}>{fmt(item.precioUnitarioItem)}</Text>

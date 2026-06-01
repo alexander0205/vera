@@ -19,11 +19,12 @@ export type ItemsAction =
   | { type: 'SET';      items: ItemLinea[] }
   | { type: 'ADD' }
   | { type: 'REMOVE';   id: number }
-  | { type: 'UPDATE';   id: number; field: keyof ItemLinea; value: string | number }
+  | { type: 'UPDATE';   id: number; field: keyof ItemLinea; value: string | number | null }
+  | { type: 'UPDATE_BENEFICIARIO'; id: number; dependienteId: number | null; dependienteNombre: string }
+  | { type: 'CLEAR_BENEFICIARIOS' }
   | { type: 'APPLY_PRODUCTO'; idx: number; patch: Partial<ItemLinea> & { productoId: number } }
   | { type: 'APPLY_LISTA_PORC'; porcentaje: number }
   | { type: 'FORCE_EXENTO' }
-  | { type: 'AUTOFILL_DEP_DESC'; suffix: string }
   | { type: 'RESET' };
 
 export function itemsReducer(state: ItemLinea[], action: ItemsAction): ItemLinea[] {
@@ -36,6 +37,14 @@ export function itemsReducer(state: ItemLinea[], action: ItemsAction): ItemLinea
       return state.filter(i => i.id !== action.id);
     case 'UPDATE':
       return state.map(i => i.id === action.id ? { ...i, [action.field]: action.value } : i);
+    case 'UPDATE_BENEFICIARIO':
+      return state.map(i =>
+        i.id === action.id
+          ? { ...i, dependienteId: action.dependienteId, dependienteNombre: action.dependienteNombre }
+          : i,
+      );
+    case 'CLEAR_BENEFICIARIOS':
+      return state.map(i => ({ ...i, dependienteId: null, dependienteNombre: '' }));
     case 'APPLY_PRODUCTO':
       return state.map((item, i) => i === action.idx ? { ...item, ...action.patch } : item);
     case 'APPLY_LISTA_PORC': {
@@ -48,18 +57,6 @@ export function itemsReducer(state: ItemLinea[], action: ItemsAction): ItemLinea
     }
     case 'FORCE_EXENTO':
       return state.map(i => ({ ...i, tasaItbis: 'exento' as const }));
-    case 'AUTOFILL_DEP_DESC': {
-      // Append suffix to items whose descripcionItem is empty or already ends with a prior " — X" pattern.
-      // Do NOT overwrite descriptions the user explicitly typed.
-      const depPattern = / — .+$/;
-      return state.map(item => {
-        if (!item.nombreItem.trim()) return item;
-        const desc = item.descripcionItem ?? '';
-        // Strip any previous dep suffix, then append the new one
-        const base = desc.replace(depPattern, '').trimEnd();
-        return { ...item, descripcionItem: base + action.suffix };
-      });
-    }
     case 'RESET':
       return [itemVacio()];
     default:

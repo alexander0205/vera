@@ -14,6 +14,12 @@ import { calcularMontoItem } from '../utils/calculos';
 import { TASA_ITBIS } from '../utils/types';
 import type { ItemLinea, Producto } from '../utils/types';
 
+interface DependienteOpt {
+  id: number;
+  nombre: string;
+  apellido: string;
+}
+
 interface Props {
   items: ItemLinea[];
   regla: TipoEcfRegla | undefined;
@@ -23,39 +29,24 @@ interface Props {
   onCrearProductoLibre: (idx: number, texto: string) => void;
   onAddItem: () => void;
   onRemoveItem: (id: number) => void;
-  onUpdateItem: (id: number, field: keyof ItemLinea, value: string | number) => void;
+  onUpdateItem: (id: number, field: keyof ItemLinea, value: string | number | null) => void;
+  onSelectBeneficiario: (itemId: number, depId: number | null, nombreCompleto: string) => void;
   onOpenNuevoProducto: (idx: number) => void;
   /** Estado lifted al padre — controla visibilidad de columnas Referencia/Descripción */
   showReferencia: boolean;
   showDescripcion: boolean;
+  /** Lista de dependientes del cliente seleccionado. Vacía = no mostrar columna. */
+  dependientes: DependienteOpt[];
 }
 
-function readColsPref(): { referencia: boolean; descripcion: boolean } {
-  if (typeof window === 'undefined') return { referencia: false, descripcion: false };
-  try {
-    const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
-    const cols = prefs.itemsCols ?? {};
-    return {
-      referencia:  Boolean(cols.referencia),
-      descripcion: Boolean(cols.descripcion),
-    };
-  } catch { return { referencia: false, descripcion: false }; }
-}
-
-function writeColsPref(cols: { referencia: boolean; descripcion: boolean }) {
-  try {
-    const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
-    prefs.itemsCols = cols;
-    localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
-  } catch {}
-}
 
 export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
-  onAddItem, onRemoveItem, onUpdateItem, onOpenNuevoProducto,
-  showReferencia, showDescripcion,
+  onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
+  showReferencia, showDescripcion, dependientes,
 }: Props) {
   const { openProximamente, dialog } = useProximamenteDialog();
+  const hasDeps = dependientes.length > 0;
   return (
     <div>
       {/* ───────── MOBILE: card list (< md) ───────── */}
@@ -77,6 +68,34 @@ export function ItemsTable({
                 </button>
               )}
             </div>
+
+            {/* Beneficiario — mobile */}
+            {hasDeps && (
+              <div>
+                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+                  Beneficiario <span className="text-red-500 ml-0.5">*</span>
+                </Label>
+                <select
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  value={item.dependienteId ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      onSelectBeneficiario(item.id, null, '');
+                    } else {
+                      const id = parseInt(val, 10);
+                      const dep = dependientes.find(d => d.id === id);
+                      onSelectBeneficiario(item.id, id, dep ? `${dep.nombre} ${dep.apellido}` : '');
+                    }
+                  }}
+                >
+                  <option value="">— Beneficiario —</option>
+                  {dependientes.map(d => (
+                    <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
@@ -210,13 +229,21 @@ export function ItemsTable({
       <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200">
         {/* min-w dinámico — solo expandir cuando hay opcionales visibles */}
         <table className={`w-full border-collapse table-fixed ${
+          hasDeps && showReferencia && showDescripcion ? 'min-w-[960px]' :
+          hasDeps && (showReferencia || showDescripcion) ? 'min-w-[860px]' :
+          hasDeps ? 'min-w-[740px]' :
           showReferencia && showDescripcion ? 'min-w-[820px]' :
           (showReferencia || showDescripcion) ? 'min-w-[720px]' :
           'min-w-[600px]'
         }`}>
           <colgroup>
+            {/* Beneficiario */}
+            {hasDeps && <col className="w-[16%]" />}
             {/* Producto */}
             <col className={
+              hasDeps && showReferencia && showDescripcion ? 'w-[16%]' :
+              hasDeps && (showReferencia || showDescripcion) ? 'w-[18%]' :
+              hasDeps ? 'w-[22%]' :
               showReferencia && showDescripcion ? 'w-[22%]' :
               showReferencia ? 'w-[28%]' :
               showDescripcion ? 'w-[22%]' :
@@ -226,7 +253,7 @@ export function ItemsTable({
             {showReferencia && <col className="w-[10%]" />}
             {/* Precio */}
             <col className={
-              showReferencia && showDescripcion ? 'w-[10%]' :
+              (showReferencia && showDescripcion) ? 'w-[10%]' :
               (showReferencia || showDescripcion) ? 'w-[12%]' :
               'w-[14%]'
             } />
@@ -234,21 +261,21 @@ export function ItemsTable({
             <col className="w-[8%]" />
             {/* Impuesto */}
             <col className={
-              showReferencia && showDescripcion ? 'w-[10%]' :
+              (showReferencia && showDescripcion) ? 'w-[10%]' :
               (showReferencia || showDescripcion) ? 'w-[12%]' :
               'w-[14%]'
             } />
             {/* Descripción */}
-            {showDescripcion && <col className="w-[18%]" />}
+            {showDescripcion && <col className="w-[16%]" />}
             {/* Cantidad */}
             <col className={
-              showReferencia && showDescripcion ? 'w-[10%]' :
+              (showReferencia && showDescripcion) ? 'w-[10%]' :
               (showReferencia || showDescripcion) ? 'w-[12%]' :
               'w-[14%]'
             } />
             {/* Total */}
             <col className={
-              showReferencia && showDescripcion ? 'w-[12%]' :
+              (showReferencia && showDescripcion) ? 'w-[12%]' :
               (showReferencia || showDescripcion) ? 'w-[14%]' :
               'w-[16%]'
             } />
@@ -257,6 +284,11 @@ export function ItemsTable({
           </colgroup>
           <thead>
             <tr className="border-b-2 border-gray-200 bg-gray-50">
+              {hasDeps && (
+                <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">
+                  Beneficiario <span className="text-red-500 ml-0.5">*</span>
+                </th>
+              )}
               <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">
                 <span className="inline-flex items-center gap-1">
                   Producto
@@ -292,6 +324,30 @@ export function ItemsTable({
           <tbody>
             {items.map((item, idx) => (
               <tr key={item.id} className="border-b border-gray-50 align-top group">
+                {/* Beneficiario cell — desktop */}
+                {hasDeps && (
+                  <td className="px-2 py-2">
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      value={item.dependienteId ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          onSelectBeneficiario(item.id, null, '');
+                        } else {
+                          const id = parseInt(val, 10);
+                          const dep = dependientes.find(d => d.id === id);
+                          onSelectBeneficiario(item.id, id, dep ? `${dep.nombre} ${dep.apellido}` : '');
+                        }
+                      }}
+                    >
+                      <option value="">— Beneficiario —</option>
+                      {dependientes.map(d => (
+                        <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                      ))}
+                    </select>
+                  </td>
+                )}
                 <td className="px-4 py-2">
                   <Autocomplete<Producto>
                     placeholder="Buscar producto o servicio..."

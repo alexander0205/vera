@@ -34,8 +34,6 @@ export interface BuildPayloadInput {
   almacenId: number | null;
   listaPreciosId: number | null;
   vendedorId: number | null;
-  dependienteId?: number | null;
-  dependienteNombre?: string | null;
 }
 
 export function buildPayload(input: BuildPayloadInput) {
@@ -46,12 +44,28 @@ export function buildPayload(input: BuildPayloadInput) {
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
     pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
     almacenId, listaPreciosId, vendedorId,
-    dependienteId, dependienteNombre,
   } = input;
 
   const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
   const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
   const emailFinal = clienteSeleccionado?.email ?? emailManual;
+
+  // ── Resumen denormalizado de beneficiarios para nivel factura ──────────────
+  const itemsConBenef = items.filter(i => i.nombreItem.trim() && i.dependienteId);
+  let dependienteIdResumen: number | undefined;
+  let dependienteNombreResumen: string | undefined;
+  if (itemsConBenef.length > 0) {
+    const nombresUnicos = [...new Set(itemsConBenef.map(i => i.dependienteNombre ?? '').filter(Boolean))];
+    const idsUnicas     = [...new Set(itemsConBenef.map(i => i.dependienteId!))];
+    if (idsUnicas.length === 1) {
+      dependienteIdResumen     = idsUnicas[0];
+      dependienteNombreResumen = nombresUnicos[0];
+    } else {
+      dependienteIdResumen     = undefined;
+      dependienteNombreResumen = `Varios (${idsUnicas.length})`;
+    }
+  }
+
   return {
     modo,
     tipoEcf,
@@ -96,9 +110,9 @@ export function buildPayload(input: BuildPayloadInput) {
     almacenId:      almacenId      || undefined,
     listaPreciosId: listaPreciosId || undefined,
     vendedorId:     vendedorId     || undefined,
-    // Dependiente (metadato — no va al XML DGII)
-    dependienteId:     dependienteId     ?? undefined,
-    dependienteNombre: dependienteNombre ?? undefined,
+    // Dependiente resumen — denormalizado a nivel factura (resumen de los beneficiarios por línea)
+    dependienteId:     dependienteIdResumen,
+    dependienteNombre: dependienteNombreResumen,
     // Para editar borradores
     clientId:   clienteSeleccionado?.id ?? undefined,
     lineasJson: JSON.stringify(
@@ -113,6 +127,8 @@ export function buildPayload(input: BuildPayloadInput) {
         unidadMedida:           i.unidadMedida,
         referencia:             i.referencia,
         productoId:             i.productoId,
+        dependienteId:          i.dependienteId ?? null,
+        dependienteNombre:      i.dependienteNombre ?? '',
       }))
     ),
   };

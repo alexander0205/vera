@@ -52,6 +52,9 @@ export interface ItemLinea {
   tasaItbis: 'exento' | '0.18' | '0.16' | '0';
   indicadorBienoServicio: '1' | '2';
   unidadMedida?: string;
+  /** Beneficiario por línea (dependiente del cliente). */
+  dependienteId?: number | null;
+  dependienteNombre?: string;
 }
 
 export interface ResultadoEmision {

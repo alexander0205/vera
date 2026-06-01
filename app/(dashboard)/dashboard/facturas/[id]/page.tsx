@@ -60,6 +60,7 @@ interface Linea {
   precioUnitarioItem?: number;
   descuentoPct?: number;
   tasaItbis?: string;
+  dependienteNombre?: string | null;
 }
 
 interface NcAsociada {
@@ -853,6 +854,9 @@ export default function FacturaDetallePage() {
                             {l.descripcionItem && (
                               <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{l.descripcionItem}</p>
                             )}
+                            {l.dependienteNombre && (
+                              <p className="text-xs text-teal-700 mt-0.5 font-medium">Benef.: {l.dependienteNombre}</p>
+                            )}
                           </td>
                           <td className="text-right tabular-nums text-gray-700 px-2">
                             {fmtDOP(Number(l.precioUnitarioItem) || 0)}
@@ -996,7 +1000,7 @@ export default function FacturaDetallePage() {
                 )}
                 {factura.dependienteNombre && (
                   <div className="sm:col-span-2">
-                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Beneficiario</p>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Beneficiario (resumen)</p>
                     <p className="text-gray-800 font-medium">{factura.dependienteNombre}</p>
                   </div>
                 )}

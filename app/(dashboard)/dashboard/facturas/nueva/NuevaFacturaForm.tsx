@@ -80,6 +80,8 @@ export default function NuevaFacturaForm({
         tasaItbis:              (it.tasaItbis ?? 'exento') as ItemLinea['tasaItbis'],
         indicadorBienoServicio: (it.indicadorBienoServicio ?? '2') as '1' | '2',
         unidadMedida:           it.unidadMedida,
+        dependienteId:          it.dependienteId ?? null,
+        dependienteNombre:      it.dependienteNombre ?? '',
       }));
     } catch { return []; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,11 +102,22 @@ export default function NuevaFacturaForm({
   const [telefonoManual, setTelefonoManual]   = useState(initialData?.telefonoComprador ?? '');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
 
-  // ── Dependiente ────────────────────────────────────────────────────────────
-  const [dependienteId,     setDependienteId]     = useState<number | null>(initialData?.dependienteId ?? null);
-  const [dependienteNombre, setDependienteNombre] = useState<string | null>(initialData?.dependienteNombre ?? null);
-  // Track whether the selected client has dependientes (set by ClienteSection via callback)
-  const [clienteTieneDeps, setClienteTieneDeps] = useState(false);
+  // ── Dependientes (por línea) ───────────────────────────────────────────────
+  const [dependientesCliente, setDependientesCliente] = useState<
+    { id: number; nombre: string; apellido: string }[]
+  >([]);
+  // Si hay borrador con clientId, cargar dependientes al montar
+  useEffect(() => {
+    if (!initialData?.clientId) return;
+    fetch(`/api/clientes/${initialData.clientId}/dependientes`)
+      .then(r => r.json())
+      .then(data => {
+        const lista = Array.isArray(data.dependientes) ? data.dependientes : [];
+        setDependientesCliente(lista);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Plazos de pago ─────────────────────────────────────────────────────────
   const tipoPagoToPlazaId = (tp: number | null): string => {
@@ -318,10 +331,17 @@ export default function NuevaFacturaForm({
     setRncManualNombre('');
     setEmailManual(c.email ?? '');
     setTelefonoManual(c.telefono ?? '');
-    // Reset dependiente when switching client
-    setDependienteId(null);
-    setDependienteNombre(null);
-    setClienteTieneDeps(false);
+    // Limpiar dependientes y beneficiarios de items al cambiar cliente
+    setDependientesCliente([]);
+    dispatchItems({ type: 'CLEAR_BENEFICIARIOS' });
+    // Fetch dependientes del cliente
+    fetch(`/api/clientes/${c.id}/dependientes`)
+      .then(r => r.json())
+      .then(data => {
+        const lista = Array.isArray(data.dependientes) ? data.dependientes : [];
+        setDependientesCliente(lista);
+      })
+      .catch(() => setDependientesCliente([]));
   }
 
   function limpiarCliente() {
@@ -330,34 +350,12 @@ export default function NuevaFacturaForm({
     setRncManualNombre('');
     setEmailManual('');
     setTelefonoManual('');
-    setDependienteId(null);
-    setDependienteNombre(null);
-    setClienteTieneDeps(false);
+    setDependientesCliente([]);
+    dispatchItems({ type: 'CLEAR_BENEFICIARIOS' });
   }
 
-  /**
-   * Called by ClienteSection when user selects/clears a dependiente.
-   * Stores the selection and auto-fills empty item descriptions.
-   */
-  function handleSelectDependiente(id: number | null, nombreCompleto: string | null) {
-    setDependienteId(id);
-    setDependienteNombre(nombreCompleto);
-    // Also track whether the current client has deps (when id===null it was cleared/reset)
-    // ClienteSection calls with (null,null) on reset too — we infer clienteTieneDeps
-    // separately via the "hasDependientes" state bubbled up below.
-
-    if (!nombreCompleto) return;
-    // Auto-fill descriptions of items that have no description yet
-    const suffix = ` — ${nombreCompleto}`;
-    dispatchItems({ type: 'AUTOFILL_DEP_DESC', suffix });
-  }
-
-  function handleDependienteListLoaded(hasDeps: boolean) {
-    setClienteTieneDeps(hasDeps);
-    if (!hasDeps) {
-      setDependienteId(null);
-      setDependienteNombre(null);
-    }
+  function handleSelectBeneficiario(itemId: number, depId: number | null, nombreCompleto: string) {
+    dispatchItems({ type: 'UPDATE_BENEFICIARIO', id: itemId, dependienteId: depId, dependienteNombre: nombreCompleto });
   }
 
   // ─── Búsqueda productos ───────────────────────────────────────────────────
@@ -451,12 +449,12 @@ export default function NuevaFacturaForm({
   // ─── Items ────────────────────────────────────────────────────────────────
   const addItem    = () => dispatchItems({ type: 'ADD' });
   const removeItem = (id: number) => dispatchItems({ type: 'REMOVE', id });
-  const updateItem = (id: number, field: keyof ItemLinea, value: string | number) =>
+  const updateItem = (id: number, field: keyof ItemLinea, value: string | number | null) =>
     dispatchItems({ type: 'UPDATE', id, field, value });
 
   // ─── Reset ────────────────────────────────────────────────────────────────
   function resetForm() {
-    limpiarCliente(); // also resets dependienteId/Nombre/clienteTieneDeps
+    limpiarCliente(); // also resets dependientesCliente + items beneficiarios
     setPlazoId('contado'); setFechaEmision(new Date().toISOString().slice(0, 10)); setFechaLimitePago(''); setNcfModificado('');
     setCodigoModificacion(''); setFechaNcfModificado(''); setTipoIngresos('1');
     dispatchItems({ type: 'RESET' });
@@ -481,7 +479,6 @@ export default function NuevaFacturaForm({
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
-      dependienteId, dependienteNombre,
     });
   }
 
@@ -552,8 +549,11 @@ export default function NuevaFacturaForm({
       return 'Factura de Consumo ≥ DOP 250,000 requiere RNC o cédula del comprador';
     if (plazoActual?.dgiiTipo === 2 && !fechaLimitePago)
       return 'Para tipo de pago Crédito, debes definir fecha límite de pago.';
-    if (clienteTieneDeps && !dependienteId)
-      return 'Selecciona el beneficiario antes de emitir';
+    if (dependientesCliente.length > 0) {
+      const itemsConProducto = items.filter(i => i.nombreItem.trim());
+      if (itemsConProducto.some(i => !i.dependienteId))
+        return 'Cada ítem requiere un beneficiario';
+    }
     if (items.every((i) => !i.nombreItem.trim()))
       return 'Agrega al menos un ítem con nombre';
     if (items.filter(i => i.nombreItem.trim()).every(i => i.precioUnitarioItem <= 0))
@@ -878,9 +878,6 @@ export default function NuevaFacturaForm({
                   emailManual={emailManual} setEmailManual={setEmailManual}
                   telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
                   tipoEcf={tipoEcf} totalDocumento={totales.total}
-                  dependienteId={dependienteId}
-                  onSelectDependiente={handleSelectDependiente}
-                  onDependienteListLoaded={handleDependienteListLoaded}
                 />
               </SectionCard>
 
@@ -921,9 +918,11 @@ export default function NuevaFacturaForm({
                   onAddItem={addItem}
                   onRemoveItem={removeItem}
                   onUpdateItem={updateItem}
+                  onSelectBeneficiario={handleSelectBeneficiario}
                   onOpenNuevoProducto={(idx) => setShowNuevoProductoIdx(idx)}
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
+                  dependientes={dependientesCliente}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}

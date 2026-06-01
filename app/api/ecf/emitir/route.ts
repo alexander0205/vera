@@ -37,6 +37,9 @@ const itemSchema = z.object({
   descuentoMonto:         z.number().min(0).optional(),
   tasaItbis:              z.union([z.literal(0.18), z.literal(0.16), z.literal(0)]).optional(),
   indicadorBienoServicio: z.union([z.literal(1), z.literal(2)]).optional(),
+  // Beneficiario por línea — metadato, no va al XML DGII
+  dependienteId:          z.number().int().positive().optional().nullable(),
+  dependienteNombre:      z.string().max(255).optional(),
 });
 
 const retencionSchema = z.object({
@@ -257,7 +260,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Validación dependiente ────────────────────────────────────────────────
+    // ── Validación dependiente (por línea) ───────────────────────────────────
     if (data.clientId) {
       // Count how many dependientes this client has (scoped to team for security)
       const [depCount] = await db
@@ -266,27 +269,36 @@ export async function POST(request: NextRequest) {
         .where(and(eq(dependientes.clientId, data.clientId), eq(dependientes.teamId, teamId)));
       const hasDependientes = Number((depCount as { cnt: number })?.cnt ?? 0) > 0;
 
-      if (hasDependientes && !data.dependienteId) {
-        return NextResponse.json(
-          { error: 'Este cliente requiere seleccionar un dependiente.' },
-          { status: 422 },
-        );
+      if (hasDependientes) {
+        // Validar que cada ítem con nombre tenga dependienteId
+        const itemsSinBenef = data.items.filter(i => i.nombreItem.trim() && !i.dependienteId);
+        if (itemsSinBenef.length > 0) {
+          return NextResponse.json(
+            { error: 'Cada ítem requiere un beneficiario cuando el cliente tiene dependientes.' },
+            { status: 422 },
+          );
+        }
       }
 
-      // Security: verify the submitted dependienteId belongs to this clientId and team
-      if (data.dependienteId) {
-        const [dep] = await db
+      // Security: verify all submitted dependienteIds belong to this clientId and team
+      const depIdsSubmitted = [...new Set(
+        data.items
+          .map(i => i.dependienteId)
+          .filter((id): id is number => typeof id === 'number' && id > 0),
+      )];
+      if (depIdsSubmitted.length > 0) {
+        const validDeps = await db
           .select({ id: dependientes.id })
           .from(dependientes)
           .where(and(
-            eq(dependientes.id,       data.dependienteId),
             eq(dependientes.clientId, data.clientId),
             eq(dependientes.teamId,   teamId),
-          ))
-          .limit(1);
-        if (!dep) {
+          ));
+        const validIds = new Set(validDeps.map(d => d.id));
+        const invalid  = depIdsSubmitted.find(id => !validIds.has(id));
+        if (invalid) {
           return NextResponse.json(
-            { error: 'El dependiente seleccionado no pertenece a este cliente.' },
+            { error: 'Uno o más beneficiarios seleccionados no pertenecen a este cliente.' },
             { status: 422 },
           );
         }

@@ -38,6 +38,7 @@ export function extraerItems(
           tasaItbis:          Number(l.tasaItbis  ?? l.tasa     ?? 0) || undefined,
           subtotalConItbis:   Number(l.subtotalConItbis ?? l.subtotal ?? 0),
           unidadMedida:       l.unidadMedida ?? undefined,
+          dependienteNombre:  (l.dependienteNombre as string | undefined | null) || undefined,
         }));
         if (items.length > 0) return items;
       }

@@ -61,5 +61,6 @@ export function itemVacio(): ItemLinea {
     nombreItem: '', referencia: '', descripcionItem: '',
     cantidadItem: 1, precioUnitarioItem: 0, descuentoPct: 0,
     tasaItbis: '0.18', indicadorBienoServicio: '2',
+    dependienteId: null, dependienteNombre: '',
   };
 }

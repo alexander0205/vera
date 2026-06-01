@@ -355,7 +355,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   // ─── Items CRUD ─────────────────────────────────────────────────────────────
   const addItem    = () => dispatchItems({ type: 'ADD' });
   const removeItem = (id: number) => dispatchItems({ type: 'REMOVE', id });
-  const updateItem = (id: number, field: keyof ItemLinea, value: string | number) =>
+  const updateItem = (id: number, field: keyof ItemLinea, value: string | number | null) =>
     dispatchItems({ type: 'UPDATE', id, field, value });
 
   // ─── Cambio de tipo ─────────────────────────────────────────────────────────
@@ -750,9 +750,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
               onAddItem={addItem}
               onRemoveItem={removeItem}
               onUpdateItem={updateItem}
+              onSelectBeneficiario={() => {}}
               onOpenNuevoProducto={() => router.push('/dashboard/productos/nuevo')}
               showReferencia={showItemRef}
               showDescripcion={showItemDesc}
+              dependientes={[]}
             />
 
             {/* Totales */}
