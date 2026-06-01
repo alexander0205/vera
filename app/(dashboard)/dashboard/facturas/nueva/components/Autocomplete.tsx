@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Input } from '@/components/ui/input';
 import { Loader2, Plus, Search } from 'lucide-react';
@@ -31,7 +31,8 @@ export function Autocomplete<T extends { id: number }>({
   const timer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef              = useRef<HTMLDivElement>(null);
   const dropRef                 = useRef<HTMLDivElement>(null);
-  const listboxId               = useRef(`autocomplete-listbox-${Math.random().toString(36).slice(2, 9)}`).current;
+  // useId → estable entre SSR y cliente (evita hydration mismatch en aria-controls).
+  const listboxId               = useId();
 
   // Calcula posición del dropdown en coordenadas del viewport (fixed)
   const calcRect = useCallback(() => {
