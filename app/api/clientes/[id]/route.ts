@@ -17,6 +17,7 @@ const updateSchema = z.object({
   email:       z.string().email().optional().nullable(),
   telefono:    z.string().max(20).optional().nullable(),
   direccion:   z.string().max(500).optional().nullable(),
+  descripcion: z.string().max(2000).optional().nullable(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -69,9 +70,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     .where(and(eq(clients.id, clientId), eq(clients.teamId, teamId))).limit(1);
   if (!existing) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
 
-  const { razonSocial, rnc, email, telefono, direccion } = parsed.data;
+  const { razonSocial, rnc, email, telefono, direccion, descripcion } = parsed.data;
   const [updated] = await db.update(clients)
-    .set({ razonSocial, rnc: rnc || null, email: email || null, telefono: telefono || null, direccion: direccion || null, updatedAt: new Date() })
+    .set({ razonSocial, rnc: rnc || null, email: email || null, telefono: telefono || null, direccion: direccion || null, descripcion: descripcion ?? null, updatedAt: new Date() })
     .where(eq(clients.id, clientId))
     .returning();
 

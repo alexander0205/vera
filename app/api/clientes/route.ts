@@ -35,8 +35,9 @@ const clienteSchema = z.object({
     v => (typeof v === 'string' && v.trim() === '' ? null : v),
     z.string().email('Correo electrónico inválido').nullable().optional()
   ),
-  telefono:  optStr(30),
-  direccion: optStr(500),
+  telefono:    optStr(30),
+  direccion:   optStr(500),
+  descripcion: optStr(2000),
 });
 
 export async function GET(req: NextRequest) {
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
   const parsed = clienteSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
-  const { razonSocial, rnc, email, telefono, direccion } = parsed.data;
+  const { razonSocial, rnc, email, telefono, direccion, descripcion } = parsed.data;
 
   // CLI-12: avisar al cliente si ya existe un cliente con el mismo RNC en el team.
   // Si el caller envía `?force=1` (o `force:true` en body) se permite duplicado.
@@ -101,10 +102,11 @@ export async function POST(req: NextRequest) {
   const [created] = await db.insert(clients).values({
     teamId,
     razonSocial,
-    rnc:      rnc      || null,
-    email:    email    || null,
-    telefono: telefono || null,
-    direccion: direccion || null,
+    rnc:         rnc         || null,
+    email:       email       || null,
+    telefono:    telefono    || null,
+    direccion:   direccion   || null,
+    descripcion: descripcion || null,
   }).returning();
 
   return NextResponse.json({ ok: true, cliente: created }, { status: 201 });

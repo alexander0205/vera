@@ -165,9 +165,25 @@ export const clients = pgTable('clients', {
   email: varchar('email', { length: 255 }),
   telefono: varchar('telefono', { length: 20 }),
   direccion: varchar('direccion', { length: 500 }),
+  descripcion: text('descripcion'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ─── EmiteDO — Dependientes de Clientes ──────────────────────────────────────
+
+export const dependientes = pgTable('dependientes', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  clientId: integer('client_id')
+    .notNull()
+    .references(() => clients.id),
+  nombre: varchar('nombre', { length: 120 }).notNull(),
+  apellido: varchar('apellido', { length: 120 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('dependientes_client_idx').on(t.clientId)]);
 
 // ─── EmiteDO — Productos y Servicios ─────────────────────────────────────────
 
@@ -533,6 +549,12 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
     references: [teams.id],
   }),
   ecfDocuments: many(ecfDocuments),
+  dependientes: many(dependientes),
+}));
+
+export const dependientesRelations = relations(dependientes, ({ one }) => ({
+  team: one(teams, { fields: [dependientes.teamId], references: [teams.id] }),
+  client: one(clients, { fields: [dependientes.clientId], references: [clients.id] }),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({
@@ -864,6 +886,8 @@ export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
 export type Client = typeof clients.$inferSelect;
 export type NewClient = typeof clients.$inferInsert;
+export type Dependiente = typeof dependientes.$inferSelect;
+export type NewDependiente = typeof dependientes.$inferInsert;
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
 export type Sequence = typeof sequences.$inferSelect;
