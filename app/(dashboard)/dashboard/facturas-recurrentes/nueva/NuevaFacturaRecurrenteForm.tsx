@@ -201,6 +201,28 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   }, []);
   const [items, dispatchItems] = useItemsState(initialItems);
 
+  // ── Beneficiarios (dependientes del cliente) — igual que en factura ──────────
+  const [dependientesCliente, setDependientesCliente] = useState<
+    { id: number; nombre: string; apellido: string }[]
+  >([]);
+
+  function cargarDependientes(clienteId: number) {
+    fetch(`/api/clientes/${clienteId}/dependientes`)
+      .then(r => r.json())
+      .then(data => setDependientesCliente(Array.isArray(data.dependientes) ? data.dependientes : []))
+      .catch(() => setDependientesCliente([]));
+  }
+
+  function handleSelectBeneficiario(itemId: number, depId: number | null, nombreCompleto: string) {
+    dispatchItems({ type: 'UPDATE_BENEFICIARIO', id: itemId, dependienteId: depId, dependienteNombre: nombreCompleto });
+  }
+
+  // Cargar dependientes al montar si ya hay cliente (editar suscripción existente)
+  useEffect(() => {
+    if (clienteSeleccionado?.id) cargarDependientes(clienteSeleccionado.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Columnas Referencia/Descripción ────────────────────────────────────────
   const [showItemRef, setShowItemRef]   = useState(false);
   const [showItemDesc, setShowItemDesc] = useState(false);
@@ -285,6 +307,9 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
     setRncManualNombre('');
     setEmailManual(c.email ?? '');
     setTelefonoManual(c.telefono ?? '');
+    setDependientesCliente([]);
+    dispatchItems({ type: 'CLEAR_BENEFICIARIOS' });
+    cargarDependientes(c.id);
   }
 
   function limpiarCliente() {
@@ -293,6 +318,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
     setRncManualNombre('');
     setEmailManual('');
     setTelefonoManual('');
+    setDependientesCliente([]);
+    dispatchItems({ type: 'CLEAR_BENEFICIARIOS' });
   }
 
   // ─── Búsqueda productos ─────────────────────────────────────────────────────
@@ -390,6 +417,9 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
     if (!nombre.trim())      { setError('El nombre identificador es obligatorio'); return; }
     if (!fechaInicio)        { setError('La fecha de inicio es obligatoria'); return; }
     if (items.every(i => !i.nombreItem.trim())) { setError('Agrega al menos un ítem con nombre'); return; }
+    if (dependientesCliente.length > 0 && items.filter(i => i.nombreItem.trim()).some(i => !i.dependienteId)) {
+      setError('Cada ítem requiere un beneficiario'); return;
+    }
 
     const proximaEmision = fechaInicio; // Primera emisión = fecha de inicio
     const notasFinal = [terminosCondiciones, notas, pieFactura]
@@ -425,6 +455,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
             precioUnitarioItem: item.precioUnitarioItem,
             descuentoPct:       item.descuentoPct,
             tasaItbis:          item.tasaItbis,
+            dependienteId:      item.dependienteId ?? null,
+            dependienteNombre:  item.dependienteNombre || undefined,
           })),
         }),
       });
@@ -750,11 +782,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
               onAddItem={addItem}
               onRemoveItem={removeItem}
               onUpdateItem={updateItem}
-              onSelectBeneficiario={() => {}}
+              onSelectBeneficiario={handleSelectBeneficiario}
               onOpenNuevoProducto={() => router.push('/dashboard/productos/nuevo')}
               showReferencia={showItemRef}
               showDescripcion={showItemDesc}
-              dependientes={[]}
+              dependientes={dependientesCliente}
             />
 
             {/* Totales */}
