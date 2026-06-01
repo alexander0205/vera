@@ -440,8 +440,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="bg-[#eef0f7] min-h-full">
-      <div className="p-3 sm:p-4 md:p-5">
+    <div className="bg-[#eef0f7] min-h-full flex flex-col">
+      <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
 
         {/* Back nav */}
         <div className="flex items-center gap-3 mb-4">
@@ -471,7 +471,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
             const isSubmitBtn = t.tagName === 'BUTTON' && (t as HTMLButtonElement).type === 'submit';
             if (e.key === 'Enter' && isInput && !isSubmitBtn) e.preventDefault();
           }}
-          className="space-y-4"
+          className="flex-1 flex flex-col space-y-4"
         >
           <div className="space-y-4">
           {/* ── SPLIT LAYOUT: form left, sticky resumen right (solo xl+) ──── */}

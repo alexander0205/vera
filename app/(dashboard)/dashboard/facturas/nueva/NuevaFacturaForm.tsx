@@ -760,9 +760,9 @@ export default function NuevaFacturaForm({
 
   // ─── Formulario ───────────────────────────────────────────────────────────
   return (
-    <div className="bg-[#eef0f7] min-h-full">
+    <div className="bg-[#eef0f7] min-h-full flex flex-col">
       <a href="#main-content" className="skip-link">Saltar al contenido</a>
-      <div className="p-3 sm:p-4 md:p-5">
+      <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
         <NavBar
           title={initialData ? 'Editar factura' : 'Nueva factura'}
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
@@ -789,6 +789,7 @@ export default function NuevaFacturaForm({
               e.preventDefault();
             }
           }}
+          className="flex-1 flex flex-col"
         >
           <TopBar
             showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
