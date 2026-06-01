@@ -505,13 +505,6 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
     >
       <Page size="A4" style={S.page}>
 
-        {/* ── Watermark BORRADOR ── */}
-        {(data.esBorrador || data.estado === 'BORRADOR') && (
-          <View style={S.watermark} fixed>
-            <Text style={S.watermarkText}>BORRADOR</Text>
-          </View>
-        )}
-
         {/* ── Header (fixed → se repite en cada página) ── */}
         <View style={S.header} fixed>
           {/* Izquierda: logo/nombre + metadatos */}
@@ -597,12 +590,6 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
                 <Text style={S.buyerLabel}>Email: </Text>{data.comprador.email}
               </Text>
             )}
-            {/* Beneficiario resumen — solo cuando todos los ítems apuntan al mismo (ej. "María Pérez") */}
-            {data.dependienteNombre && !data.dependienteNombre.startsWith('Varios') && (
-              <Text style={S.buyerField}>
-                <Text style={S.buyerLabel}>Benef.: </Text>{data.dependienteNombre}
-              </Text>
-            )}
           </View>
           <View style={S.buyerRight}>
             <Text style={S.monedaText}>
@@ -650,10 +637,11 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             <View key={idx} style={[S.tableRow, idx % 2 === 1 ? S.tableRowAlt : {}]}>
               <Text style={[S.tdCell, S.colCant]}>{item.cantidadItem}</Text>
               <View style={S.colDesc}>
-                <Text style={S.tdBold}>{item.nombreItem}</Text>
+                <Text style={S.tdBold}>
+                  {item.dependienteNombre ? `${item.dependienteNombre} - ${item.nombreItem}` : item.nombreItem}
+                </Text>
                 {item.referencia ? <Text style={S.tdGray}>Ref: {item.referencia}</Text> : null}
                 {item.descripcionItem ? <Text style={S.tdGray}>{item.descripcionItem}</Text> : null}
-                {item.dependienteNombre ? <Text style={[S.tdGray, { color: '#0f766e' }]}>Benef.: {item.dependienteNombre}</Text> : null}
               </View>
               <Text style={[S.tdCell, S.colUnidad]}>{item.unidadMedida ?? ''}</Text>
               <Text style={[S.tdCell, S.colPrecio]}>{fmt(item.precioUnitarioItem)}</Text>

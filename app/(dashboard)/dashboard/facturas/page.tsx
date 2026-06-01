@@ -180,9 +180,6 @@ export default function FacturasPage() {
                 : (doc.encf || '—')
               }
             </Link>
-            <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">
-              {TIPO_LABELS[doc.tipoEcf] ?? '—'}
-            </p>
           </div>
         );
       },
@@ -200,10 +197,9 @@ export default function FacturasPage() {
           >
             {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
           </p>
-          {doc.rncComprador
-            ? <p className="text-[11px] text-gray-400 font-mono mt-0.5 leading-tight">{doc.rncComprador}</p>
-            : <p className="text-[11px] text-gray-300 mt-0.5 leading-tight">Sin RNC</p>
-          }
+          {doc.rncComprador && (
+            <p className="text-[11px] text-gray-400 font-mono mt-0.5 leading-tight">{doc.rncComprador}</p>
+          )}
           {doc.dependienteNombre && (
             <p className="text-[11px] text-gray-400 mt-0.5 leading-tight truncate" title={`Beneficiario: ${doc.dependienteNombre}`}>
               Benef.: {doc.dependienteNombre}

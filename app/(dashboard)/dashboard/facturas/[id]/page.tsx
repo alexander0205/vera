@@ -860,12 +860,11 @@ export default function FacturaDetallePage() {
                       return (
                         <tr key={l.id ?? idx} className="hover:bg-gray-50/60">
                           <td className="py-2.5 px-2 align-top">
-                            <p className="font-medium text-gray-900">{l.nombreItem || '—'}</p>
+                            <p className="font-medium text-gray-900">
+                              {l.dependienteNombre ? `${l.dependienteNombre} - ${l.nombreItem || '—'}` : (l.nombreItem || '—')}
+                            </p>
                             {l.descripcionItem && (
                               <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{l.descripcionItem}</p>
-                            )}
-                            {l.dependienteNombre && (
-                              <p className="text-xs text-teal-700 mt-0.5 font-medium">Benef.: {l.dependienteNombre}</p>
                             )}
                           </td>
                           <td className="text-right tabular-nums text-gray-700 px-2">
@@ -1006,12 +1005,6 @@ export default function FacturaDetallePage() {
                   <div className="sm:col-span-2">
                     <p className="text-[11px] uppercase tracking-wide text-gray-500">Dirección</p>
                     <p className="text-gray-800">{factura.comprador.direccion}</p>
-                  </div>
-                )}
-                {factura.dependienteNombre && (
-                  <div className="sm:col-span-2">
-                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Beneficiario (resumen)</p>
-                    <p className="text-gray-800 font-medium">{factura.dependienteNombre}</p>
                   </div>
                 )}
               </div>
