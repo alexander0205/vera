@@ -97,17 +97,24 @@ function calcularProximaEmision(fechaInicio: string, frecuencia: string): string
  * Calcula las próximas N emisiones empezando por la próxima REAL (que puede
  * ser la propia fechaInicio si aún no ha pasado).
  */
-function calcularProximasEmisiones(fechaInicio: string, frecuencia: string, count: number): string[] {
+function calcularProximasEmisiones(
+  fechaInicio: string,
+  frecuencia: string,
+  maxCount: number,
+  fechaFin?: string,
+): string[] {
   if (!fechaInicio) return [];
   const result: string[] = [];
   let current = calcularProximaEmision(fechaInicio, frecuencia);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < maxCount; i++) {
     if (!current) break;
+    if (fechaFin && current > fechaFin) break;
     result.push(current);
     current = sumarPeriodo(current, frecuencia);
   }
   return result;
 }
+
 
 /** Formatea YYYY-MM-DD → DD/MM/YYYY */
 function formatFechaCorta(iso: string): string {
@@ -375,10 +382,10 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
     [fechaInicio, frecuencia],
   );
 
-  const proximas3Emisiones = useMemo(
-    () => calcularProximasEmisiones(fechaInicio, frecuencia, 3),
-    [fechaInicio, frecuencia],
-  );
+  const proximasEmisiones = useMemo(
+  () => calcularProximasEmisiones(fechaInicio, frecuencia, 12, fechaFin || undefined),
+  [fechaInicio, frecuencia, fechaFin],
+);
 
   const diaCobro = fechaInicio ? parseInt(fechaInicio.split('-')[2], 10) : null;
 
@@ -875,13 +882,13 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
               </section>
 
               {/* Próximas facturas (3) */}
-              {proximas3Emisiones.length > 0 && (
+              {proximasEmisiones.length > 0 && (
                 <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
                   <header className="px-4 py-3 border-b border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900">Próximas facturas ({proximas3Emisiones.length})</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">Próximas facturas ({proximasEmisiones.length})</h3>
                   </header>
                   <ul className="px-4 py-2 divide-y divide-gray-100">
-                    {proximas3Emisiones.map((fecha, i) => (
+                    {proximasEmisiones.map((fecha, i) => (
                       <li key={i} className="flex items-center justify-between gap-2 py-2 text-sm">
                         <div className="flex items-center gap-2 min-w-0">
                           <Calendar className="h-3.5 w-3.5 text-gray-400 shrink-0" />
