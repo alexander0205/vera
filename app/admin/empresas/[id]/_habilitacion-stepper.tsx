@@ -895,7 +895,7 @@ interface RunStatus {
     estadoDgii?: string;      // ACEPTADO | RECHAZADO | ...
     trackId?:   string;
     error?:     string;
-    mensajesDgii?: string[];
+    mensajesDgii?: Array<{ codigo?: number | string; valor?: string }>;
     emisionId?: string;       // para descargar PDF/XML individual (paso 5)
     pdfUrl?:    string;
   }>;
@@ -1053,9 +1053,13 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
   const rfceAceptados = rfceRows.filter(r => r.estadoDgii === 'ACEPTADO' || r.estadoDgii === 'ACEPTADO_CONDICIONAL').length;
   const isComplete = run?.status === 'COMPLETO';
 
-  // Casos fallidos: emisión FAILED o DGII RECHAZADO/ERROR
+  // Casos fallidos: solo DGII RECHAZADO/ERROR, o FAILED sin estadoDgii (no llegó a DGII).
+  // OJO: ecf-api rebuildRowsFromDb mapea ENVIADO → status=FAILED, así que NO se puede
+  // confiar en status='FAILED' solo — habría que excluir los aún en vuelo (ENVIADO/PENDIENTE).
   const failedCases = run?.rows?.filter(r =>
-    r.status === 'FAILED' || r.estadoDgii === 'RECHAZADO' || r.estadoDgii === 'ERROR',
+    r.estadoDgii === 'RECHAZADO' ||
+    r.estadoDgii === 'ERROR' ||
+    (r.status === 'FAILED' && !r.estadoDgii),
   ) ?? [];
   const failedEncfs = failedCases.map(c => c.eNcf).filter(Boolean);
 
@@ -1223,7 +1227,10 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
                       </div>
                       {(c.error || (c.mensajesDgii && c.mensajesDgii.length > 0)) && (
                         <p className="text-red-600 mt-0.5 leading-snug">
-                          {c.error ?? c.mensajesDgii?.join(' · ')}
+                          {c.error ?? c.mensajesDgii
+                            ?.map(m => [m.codigo, m.valor].filter(Boolean).join(': '))
+                            .filter(Boolean)
+                            .join(' · ')}
                         </p>
                       )}
                     </div>
@@ -1636,8 +1643,12 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
     ).length;
 
   const isComplete = run?.status === 'COMPLETO';
+  // Solo RECHAZADO/ERROR, o FAILED sin estadoDgii. ecf-api rebuildRowsFromDb
+  // mapea ENVIADO → status=FAILED, así que status='FAILED' solo no basta.
   const failedCases = rows.filter(r =>
-    r.status === 'FAILED' || r.estadoDgii === 'RECHAZADO' || r.estadoDgii === 'ERROR',
+    r.estadoDgii === 'RECHAZADO' ||
+    r.estadoDgii === 'ERROR' ||
+    (r.status === 'FAILED' && !r.estadoDgii),
   );
 
   return (
@@ -1766,7 +1777,10 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
                         <span className="ml-auto px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">{c.estadoDgii ?? c.status}</span>
                       </div>
                       {(c.error || (c.mensajesDgii && c.mensajesDgii.length > 0)) && (
-                        <p className="text-red-600 mt-0.5 leading-snug">{c.error ?? c.mensajesDgii?.join(' · ')}</p>
+                        <p className="text-red-600 mt-0.5 leading-snug">{c.error ?? c.mensajesDgii
+                          ?.map(m => [m.codigo, m.valor].filter(Boolean).join(': '))
+                          .filter(Boolean)
+                          .join(' · ')}</p>
                       )}
                     </div>
                   ))}
