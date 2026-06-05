@@ -574,7 +574,7 @@ function Step1Body({ ctx, persisted, persistUpdate }: {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <DgiiCopyField label="Tipo de software"     value={SOFTWARE_PROVIDER.tipo} required={false} />
               <DgiiCopyField label="Nombre del software"  value={software_or_loading(ctx.software?.nombre)} />
-              <DgiiCopyField label="Versión del software" value={software_or_loading(ctx.software?.version)} />
+              <DgiiCopyField label="Versión del software" value="1" />
             </div>
 
             <div className="space-y-3">
