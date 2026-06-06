@@ -14,6 +14,7 @@ import {
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
+import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 
 export async function getUser() {
   const sessionCookie = (await cookies()).get('session');
@@ -613,12 +614,28 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
     .orderBy(sql`${pagosRecibidos.fechaPago} DESC, ${pagosRecibidos.id} DESC`)
     .limit(1);
 
+  // Cargar campos necesarios para recalcular estado_pago en el mismo update
+  const [doc] = await db
+    .select({
+      estado:     ecfDocuments.estado,
+      tipoPago:   ecfDocuments.tipoPago,
+      montoTotal: ecfDocuments.montoTotal,
+    })
+    .from(ecfDocuments)
+    .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
+    .limit(1);
+
+  const estadoPago = doc
+    ? calcularEstadoPago({ estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal, totalPagado: sum })
+    : 'PENDIENTE';
+
   await db.update(ecfDocuments).set({
     pagoRecibido: sum > 0 ? 'true' : 'false',
     pagoValorCts: sum,
     pagoMetodo:   latest?.metodo ?? null,
     pagoCuenta:   latest?.cuenta ?? null,
     pagoFecha:    latest?.fecha ?? null,
+    estadoPago,
     updatedAt:    new Date(),
   }).where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)));
 

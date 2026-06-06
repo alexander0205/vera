@@ -59,7 +59,8 @@ function isECFReal(encf: string): boolean {
 }
 
 interface Doc {
-  id: number; encf: string; tipoEcf: string; estado: string;
+  id: number; encf: string; codigo: string | null; tipoEcf: string; estado: string;
+  estadoPago: string;
   rncComprador: string | null;
   razonSocialComprador: string | null; emailComprador: string | null;
   montoTotal: number; totalItbis: number;
@@ -157,6 +158,21 @@ export default function FacturasPage() {
   // ─── Columns ────────────────────────────────────────────────────────────────
 
   const columns: DataTableColumn<Doc>[] = [
+    {
+      id: 'codigo',
+      header: 'Código',
+      sortable: true,
+      sortAccessor: doc => doc.codigo ?? '',
+      render: doc => (
+        <Link
+          href={`/dashboard/facturas/${doc.id}`}
+          className="font-mono text-xs font-semibold text-gray-700 hover:text-teal-700 hover:underline tabular-nums leading-tight block"
+          title={doc.codigo ?? `#${doc.id}`}
+        >
+          {doc.codigo ?? `#${doc.id}`}
+        </Link>
+      ),
+    },
     {
       id: 'encf',
       header: 'Comprobante',
@@ -285,20 +301,24 @@ export default function FacturasPage() {
       header: 'Cobro',
       visibleAt: 'lg',
       align: 'center',
+      // Usa estado_pago persistido (recalculado al emitir/pagar/anular).
+      // Fallback al cálculo inline para registros sin migrar.
       render: doc => {
-        const pagado = doc.pagado ?? 0;
-        const saldo  = doc.montoTotal - pagado;
-        const esCredito = doc.tipoPago === 2;
-        if (doc.tipoPago === 3) return <Badge color="gray">Gratuita</Badge>;
-        if (doc.tipoPago === 4) return <Badge color="gray">Uso</Badge>;
-        if (doc.montoTotal > 0 && pagado >= doc.montoTotal) return <Badge color="green">Pagada</Badge>;
-        if (pagado > 0) return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
-        if (esCredito) {
-          const dias = diasVencido(doc.fechaLimitePago);
-          if (dias > 0) return <Badge color="red" title={`Vencida hace ${dias}d`}>Vencida</Badge>;
-          return <Badge color="amber">Pendiente</Badge>;
+        const ep      = doc.estadoPago;
+        const pagado  = doc.pagado ?? 0;
+        const saldo   = doc.montoTotal - pagado;
+        const esCred  = doc.tipoPago === 2;
+        const dias    = diasVencido(doc.fechaLimitePago);
+        if (ep === 'GRATUITA') return <Badge color="gray">Gratuita</Badge>;
+        if (ep === 'USO')      return <Badge color="gray">Uso</Badge>;
+        if (ep === 'PAGADA')   return <Badge color="green">Pagada</Badge>;
+        if (ep === 'PARCIAL')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
+        if (ep === 'PENDIENTE' && esCred && dias > 0) {
+          return <Badge color="red" title={`Vencida hace ${dias}d`}>Vencida</Badge>;
         }
-        return <Badge color="red" title="Contado sin cobro registrado">Sin pago</Badge>;
+        if (ep === 'PENDIENTE') return <Badge color="amber">Pendiente</Badge>;
+        if (ep === 'ANULADA')   return <Badge color="gray">—</Badge>;
+        return <Badge color="red" title="Sin estado">—</Badge>;
       },
     },
     {

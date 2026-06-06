@@ -64,8 +64,10 @@ export async function GET(req: NextRequest) {
       .select({
         id:                   ecfDocuments.id,
         encf:                 ecfDocuments.encf,
+        codigo:               ecfDocuments.codigo,
         tipoEcf:              ecfDocuments.tipoEcf,
         estado:               ecfDocuments.estado,
+        estadoPago:           ecfDocuments.estadoPago,
         rncComprador:         ecfDocuments.rncComprador,
         razonSocialComprador: ecfDocuments.razonSocialComprador,
         emailComprador:       ecfDocuments.emailComprador,

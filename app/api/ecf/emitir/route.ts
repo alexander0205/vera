@@ -23,6 +23,8 @@ import { logAudit, getIp } from '@/lib/audit';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
+import { generarCodigoFactura } from '@/lib/facturas/codigo';
+import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 
@@ -331,13 +333,21 @@ export async function POST(request: NextRequest) {
         ? ''
         : `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
+      const codigo      = await generarCodigoFactura(db, teamId);
+      const montoCts    = Math.round(totales.montoTotal * 100);
+      const estadoPago  = calcularEstadoPago({
+        estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
+      });
+
       const [saved] = await withRequestAuditContext(
         (tx) => tx.insert(ecfDocuments).values({
           teamId,
           clientId:             data.clientId ?? null,
           encf:                 encfBorrador,
+          codigo,
           tipoEcf:              data.tipoEcf,
           estado:               'BORRADOR',
+          estadoPago,
           rncComprador:         data.rncComprador,
           razonSocialComprador: data.razonSocialComprador,
           emailComprador:       data.emailComprador,
@@ -538,12 +548,20 @@ export async function POST(request: NextRequest) {
           unidadMedida:       item.unidadMedidaItem,
         })));
 
+    const codigoEmit     = await generarCodigoFactura(db, teamId);
+    const montoCtsEmit   = Math.round(totales.montoTotal * 100);
+    const estadoPagoInit = calcularEstadoPago({
+      estado: estadoInicial, tipoPago: data.tipoPago ?? 1, montoTotal: montoCtsEmit, totalPagado: 0,
+    });
+
     const [saved] = await withRequestAuditContext(
       (tx) => tx.insert(ecfDocuments).values({
         teamId,
         encf,
+        codigo:               codigoEmit,
         tipoEcf:              data.tipoEcf,
         estado:               estadoInicial,
+        estadoPago:           estadoPagoInit,
         trackId,
         codigoSeguridad:      resultado.codigoSeguridad ?? null,
         fechaFirma:           resultado.fechaHoraFirma ?? null,

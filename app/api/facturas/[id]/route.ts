@@ -133,6 +133,8 @@ export async function GET(
   return NextResponse.json({
     id: doc.id,
     encf: doc.encf,
+    codigo: doc.codigo ?? null,
+    estadoPago: doc.estadoPago,
     tipoEcf: doc.tipoEcf,
     tipoNombre,
     categoria: regla?.categoria ?? 'venta',

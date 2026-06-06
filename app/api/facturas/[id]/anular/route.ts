@@ -154,6 +154,7 @@ export async function POST(
     .update(ecfDocuments)
     .set({
       estado:        'ANULADO',
+      estadoPago:    'ANULADA',
       tipoAnulacion,
       updatedAt:     new Date(),
     })
