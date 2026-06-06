@@ -60,14 +60,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { xmlBase64, proposito, codigoPublico: cpOverride } = parsed.data;
+    const { xmlBase64: xmlBase64Raw, proposito, codigoPublico: cpOverride } = parsed.data;
 
-    // Validación básica: que el base64 decodifique a algo que parezca XML
+    // Validación básica + override de VersionSoftware a "1"
+    // (DGII portal genera el XML con la versión que el usuario tipea; forzamos "1"
+    // para que coincida con el software registrado en DGII.)
+    let xmlBase64: string;
     try {
-      const texto = Buffer.from(xmlBase64, 'base64').toString('utf8');
+      const texto = Buffer.from(xmlBase64Raw, 'base64').toString('utf8');
       if (!texto.trim().startsWith('<')) {
         return NextResponse.json({ error: 'El contenido decodificado no es un XML válido' }, { status: 400 });
       }
+      const textoPatched = texto.replace(
+        /<VersionSoftware>[^<]*<\/VersionSoftware>/g,
+        '<VersionSoftware>1</VersionSoftware>',
+      );
+      xmlBase64 = textoPatched === texto
+        ? xmlBase64Raw
+        : Buffer.from(textoPatched, 'utf8').toString('base64');
     } catch {
       return NextResponse.json({ error: 'xmlBase64 inválido' }, { status: 400 });
     }
