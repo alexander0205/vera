@@ -206,7 +206,7 @@ const S = StyleSheet.create({
   },
   ncfValue: {
     fontFamily:   'Helvetica-Bold',
-    fontSize:     22,
+    fontSize:     13,
     color:        '#1a1a1a',
     textAlign:    'right',
     marginBottom: 2,
