@@ -40,16 +40,16 @@ function extraerFechaFirma(xmlFirmado: string | null): string | null {
 }
 
 const TIPO_NOMBRE: Record<string, string> = {
-  '31': 'Factura Fiscal',
-  '32': 'Factura de Consumo',
-  '33': 'Nota de Débito',
-  '34': 'Nota de Crédito',
-  '41': 'Compras',
-  '43': 'Gastos Menores',
-  '44': 'Regímenes Especiales',
-  '45': 'Gubernamental',
-  '46': 'Exportaciones',
-  '47': 'Pagos al Exterior',
+  '31': 'Factura de Crédito Fiscal Electrónica',
+  '32': 'Factura de Consumo Electrónica',
+  '33': 'Nota de Débito Electrónica',
+  '34': 'Nota de Crédito Electrónica',
+  '41': 'Comprobante Electrónico de Compras',
+  '43': 'Comprobante Electrónico para Gastos Menores',
+  '44': 'Comprobante Electrónico para Regímenes Especiales',
+  '45': 'Comprobante Electrónico Gubernamental',
+  '46': 'Comprobante Electrónico para Exportaciones',
+  '47': 'Comprobante Electrónico para Pagos al Exterior',
   'sin-ncf': 'Factura',
 };
 

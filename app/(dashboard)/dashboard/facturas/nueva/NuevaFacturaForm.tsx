@@ -462,6 +462,7 @@ export default function NuevaFacturaForm({
 
   // ─── Reset ────────────────────────────────────────────────────────────────
   function resetForm() {
+    try { localStorage.removeItem(draftKey); } catch {}
     limpiarCliente(); // also resets dependientesCliente + items beneficiarios
     setPlazoId('contado'); setFechaEmision(new Date().toISOString().slice(0, 10)); setFechaLimitePago(''); setNcfModificado('');
     setCodigoModificacion(''); setFechaNcfModificado(''); setTipoIngresos('1');
@@ -670,9 +671,7 @@ export default function NuevaFacturaForm({
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modoEfectivo)) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
-      if (modoEfectivo === 'emitir') {
-        try { localStorage.removeItem(draftKey); } catch {}
-      }
+      try { localStorage.removeItem(draftKey); } catch {}
       if (opts?.andThen === 'nueva') {
         resetForm();
         return;
@@ -799,7 +798,7 @@ export default function NuevaFacturaForm({
             <div className="flex gap-3 justify-center flex-wrap">
               <Button variant="outline" asChild><a href={`/api/pdf/factura/${resultado.documentoId}`} target="_blank" rel="noreferrer">Descargar PDF</a></Button>
               <Button variant="outline" asChild><Link href={`/dashboard/facturas/${resultado.documentoId}`}>Ver detalle</Link></Button>
-              <Button variant="outline" onClick={() => { setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Nueva factura</Button>
+              <Button variant="outline" onClick={() => { try { localStorage.removeItem(draftKey); } catch {} setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Nueva factura</Button>
               <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => router.push('/dashboard/facturas')}>Ver todas</Button>
             </div>
           </div>
