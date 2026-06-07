@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser, registrarPago, syncPagoMirror } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit, syncPagoMirror } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 
 const METODOS_VALIDOS = new Set([
@@ -23,12 +23,21 @@ const METODOS_VALIDOS = new Set([
   'otro',
 ]);
 
+interface PagoSplitLinea {
+  metodo: string;
+  valor?: number | string | null;   // DOP
+  montoCentavos?: number | null;     // alternativa directa
+  referencia?: string | null;
+  cuenta?: string | null;
+}
+
 interface PagoBody {
   recibido: boolean;
   metodo?: string | null;
   cuenta?: string | null;
   valor?: number | string | null;  // valor en DOP (no centavos)
   fecha?: string | null;            // YYYY-MM-DD
+  pagos?: PagoSplitLinea[];         // split: varias líneas de método
 }
 
 export async function POST(
@@ -70,6 +79,43 @@ export async function POST(
     );
   }
 
+  let fecha = body.fecha ? String(body.fecha).slice(0, 10) : null;
+  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) fecha = new Date().toISOString().slice(0, 10);
+
+  // ── SPLIT: varias líneas de método en una sola operación ─────────────────────
+  if (Array.isArray(body.pagos)) {
+    const lineas = body.pagos.map((p) => {
+      const metodo = (p.metodo ?? 'efectivo').toString().trim();
+      const cts = p.montoCentavos != null
+        ? Math.round(p.montoCentavos)
+        : Math.round((typeof p.valor === 'number' ? p.valor : parseFloat(String(p.valor ?? '0'))) * 100);
+      return { metodo, montoCentavos: cts, referencia: p.referencia ?? null, cuenta: p.cuenta ?? null };
+    });
+
+    if (lineas.length === 0) {
+      return NextResponse.json({ error: 'Sin líneas de pago' }, { status: 400 });
+    }
+    for (const l of lineas) {
+      if (!METODOS_VALIDOS.has(l.metodo)) {
+        return NextResponse.json({ error: `Método inválido: ${l.metodo}` }, { status: 400 });
+      }
+      if (!Number.isFinite(l.montoCentavos) || l.montoCentavos <= 0) {
+        return NextResponse.json({ error: 'Cada línea debe tener monto positivo' }, { status: 400 });
+      }
+    }
+    // El detalle es "reemplazo": limpia ledger del doc y re-inserta el split.
+    await db.delete(pagosRecibidos).where(
+      and(eq(pagosRecibidos.teamId, teamId), eq(pagosRecibidos.ecfDocumentId, docId)),
+    );
+    try {
+      await registrarPagosSplit({ teamId, ecfDocumentId: docId, fechaPago: fecha, createdBy: user.id, pagos: lineas });
+    } catch (e) {
+      await syncPagoMirror(teamId, docId);
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar split' }, { status: 422 });
+    }
+    return NextResponse.json({ ok: true, recibido: true, split: true, lineas: lineas.length });
+  }
+
   const recibido = Boolean(body.recibido);
 
   // El detalle es "pago único": limpia el ledger del doc y reemplaza.
@@ -96,8 +142,6 @@ export async function POST(
   const valorCts = Math.min(Math.round(valorNum * 100), doc.montoTotal);
 
   const cuenta = body.cuenta ? String(body.cuenta).slice(0, 100) : null;
-  let fecha = body.fecha ? String(body.fecha).slice(0, 10) : null;
-  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) fecha = new Date().toISOString().slice(0, 10);
 
   try {
     await registrarPago({

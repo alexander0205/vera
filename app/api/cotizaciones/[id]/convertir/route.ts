@@ -10,6 +10,8 @@ import { db } from '@/lib/db/drizzle';
 import { cotizaciones, ecfDocuments } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { and, eq, desc } from 'drizzle-orm';
+import { generarCodigoFactura } from '@/lib/facturas/codigo';
+import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -52,6 +54,11 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
     lineasJson = JSON.stringify(lineas);
   } catch { /* sin ítems */ }
 
+  const codigo     = await generarCodigoFactura(db, teamId);
+  const estadoPago = calcularEstadoPago({
+    estado: 'BORRADOR', tipoPago: 1, montoTotal: cot.montoTotal, totalPagado: 0,
+  });
+
   // Crear borrador en ecf_documents (tipo 32 por defecto — consumo)
   const [newDoc] = await db
     .insert(ecfDocuments)
@@ -59,8 +66,10 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
       teamId,
       clientId:             cot.clientId ?? null,
       encf,
+      codigo,
       tipoEcf:              '32',
       estado:               'BORRADOR',
+      estadoPago,
       rncComprador:         cot.rncComprador ?? null,
       razonSocialComprador: cot.razonSocialComprador ?? null,
       emailComprador:       cot.emailComprador ?? null,

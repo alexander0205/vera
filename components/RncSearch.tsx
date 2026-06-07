@@ -16,7 +16,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Loader2, Building2, User, AlertCircle } from 'lucide-react';
+import { Search, Loader2, Building2, User, AlertCircle, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -163,6 +163,31 @@ export function RncSearch({
     setNoData(false);
   }
 
+  /** Usa el número tecleado tal cual, aunque no esté en el padrón DGII. */
+  function usarManual(digitos: string) {
+    select({
+      rnc:             digitos,
+      nombre:          '',           // sin razón social → no autocompletar nombre
+      nombreComercial: null,
+      estado:          null,
+      estadoLabel:     'Sin verificar',
+      tipo:            esCedula(digitos) ? 'cedula' : 'rnc',
+    });
+  }
+
+  /** Limpia la selección y el texto del input. */
+  function clear() {
+    onClear?.();
+    setQuery('');
+    setResults([]);
+    setNoData(false);
+    setOpen(false);
+  }
+
+  // RNC (9) o cédula (11) válido a partir del texto actual, para "usar de todos modos".
+  const digitosActuales = soloDigitos(query.trim());
+  const puedeUsarManual = /^\d{9}$|^\d{11}$/.test(digitosActuales);
+
   // ── Dropdown (portal) ─────────────────────────────────────────────────────
 
   const dropdown = open && dropRect ? (
@@ -181,6 +206,15 @@ export function RncSearch({
       {results.length === 0 && noData ? (
         <div className="px-4 py-4 text-center">
           <p className="text-sm text-gray-500 mb-1">No se encontraron resultados en el padrón DGII</p>
+          {puedeUsarManual && (
+            <button
+              type="button"
+              className="mt-1 mb-2 inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-teal-100 transition-colors"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => usarManual(digitosActuales)}>
+              Usar «{digitosActuales}» de todos modos
+            </button>
+          )}
           {showSyncHint && (
             <p className="text-xs text-gray-400">
               ¿Padrón vacío?{' '}
@@ -254,7 +288,7 @@ export function RncSearch({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
         <Input
-          className="pl-8 h-9 text-sm"
+          className="pl-8 pr-8 h-9 text-sm"
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleInput(e.target.value)}
@@ -267,9 +301,18 @@ export function RncSearch({
             }, 200);
           }}
         />
-        {loading && (
+        {loading ? (
           <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-gray-400" />
-        )}
+        ) : query.trim() ? (
+          <button
+            type="button"
+            aria-label="Borrar"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={clear}>
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
 
       {typeof document !== 'undefined' && dropdown && createPortal(dropdown, document.body)}

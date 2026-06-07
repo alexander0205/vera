@@ -15,16 +15,20 @@ const optStr = (max = 500) =>
   z.string().max(max).optional().nullable()
     .transform(v => (typeof v === 'string' && v.trim() === '' ? null : v ?? null));
 
-// RNC dominicano: cédula (11 dígitos) o RNC (9 dígitos)
+// RNC dominicano: cédula (11 dígitos) o RNC (9 dígitos).
+// Normaliza a solo dígitos (acepta guiones/espacios del autocomplete de cédula).
 const rncSchema = z.preprocess(
-  v => (typeof v === 'string' && v.trim() === '' ? null : v),
-  z.string()
-    .nullable()
-    .optional()
-    .refine(v => v == null || /^\d{9}$|^\d{11}$/.test(v.trim()), {
-      message: 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)',
-    })
-    .transform(v => (v == null ? null : v.trim())),
+  v => (typeof v === 'string' ? v.replace(/[-\s]/g, '') : v),
+  z.preprocess(
+    v => (typeof v === 'string' && v === '' ? null : v),
+    z.string()
+      .nullable()
+      .optional()
+      .refine(v => v == null || /^\d{9}$|^\d{11}$/.test(v), {
+        message: 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)',
+      })
+      .transform(v => (v == null ? null : v)),
+  ),
 );
 
 const clienteSchema = z.object({

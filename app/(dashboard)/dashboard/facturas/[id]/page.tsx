@@ -76,6 +76,7 @@ interface NcAsociada {
 interface FacturaDetalle {
   id: number;
   encf: string;
+  codigo: string | null;
   tipoEcf: string;
   tipoNombre: string;
   categoria: string;
@@ -619,7 +620,9 @@ export default function FacturaDetallePage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-mono">
-                {factura.encf.startsWith('BOR-') ? `Factura #${factura.id}` : factura.encf}
+                {factura.encf && !factura.encf.startsWith('BOR-')
+                  ? factura.encf
+                  : (factura.codigo ?? `Factura #${factura.id}`)}
               </h1>
               <EstadoBadge estado={factura.estado} />
               {/* Estado de COBRO (independiente del estado DGII) */}

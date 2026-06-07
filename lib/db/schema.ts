@@ -8,6 +8,7 @@ import {
   timestamp,
   integer,
   bigint,
+  smallint,
   date,
   boolean,
   index,
@@ -241,10 +242,16 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // Identificación
   encf: varchar('encf', { length: 40 }).notNull(),          // E310000000001 (real) o BOR-XXXXXXXX (borrador)
   tipoEcf: varchar('tipo_ecf', { length: 10 }).notNull(),   // "31", "32", ..., "sin-ncf"
+  /** Código humano-legible único por empresa: F-YYYY-NNNNNN. Generado al crear. */
+  codigo: varchar('codigo', { length: 20 }),
 
   // Estado del ciclo de vida
   estado: varchar('estado', { length: 30 }).notNull().default('BORRADOR'),
   // BORRADOR | EN_PROCESO | ACEPTADO | ACEPTADO_CONDICIONAL | RECHAZADO | ANULADO
+
+  /** Estado persistido de cobro. Se recalcula al emitir, pagar, anular. */
+  estadoPago: varchar('estado_pago', { length: 20 }).notNull().default('PENDIENTE'),
+  // PENDIENTE | PARCIAL | PAGADA | ANULADA | GRATUITA | USO
 
   // Respuesta DGII
   trackId: varchar('track_id', { length: 100 }),
@@ -774,6 +781,16 @@ export const recargosMora = pgTable('recargos_mora', {
 
 export type RecargoMora    = typeof recargosMora.$inferSelect;
 export type NewRecargoMora = typeof recargosMora.$inferInsert;
+
+// ─── EmiteDO: Counter por team+año para código factura F-YYYY-NNNNNN ──────────
+// Atomic upsert vía INSERT ... ON CONFLICT DO UPDATE RETURNING garantiza unicidad.
+export const facturaCodigoCounter = pgTable('factura_codigo_counter', {
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  anio:   smallint('anio').notNull(),
+  ultimo: integer('ultimo').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.teamId, t.anio] }),
+]);
 
 // ─── EmiteDO: Rate Limits (distribuido — funciona en multi-instancia) ─────────
 

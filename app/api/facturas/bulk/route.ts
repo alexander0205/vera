@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (action === 'anular') {
     await db
       .update(ecfDocuments)
-      .set({ estado: 'ANULADO', updatedAt: new Date() })
+      .set({ estado: 'ANULADO', estadoPago: 'ANULADA', updatedAt: new Date() })
       .where(and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.id, numericIds)));
     return NextResponse.json({ success: true, updated: numericIds.length });
   }
