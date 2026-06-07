@@ -45,6 +45,8 @@ export interface CompradorPDF {
 
 export interface FacturaPDFData {
   encf:                   string;
+  /** Código humano-legible único por empresa: F-YYYY-NNNNNN */
+  codigo?:                string;
   tipoEcf:                string;
   tipoEcfNombre:          string;
   fechaEmision:           string;
@@ -125,7 +127,7 @@ const S = StyleSheet.create({
     // El header fijo ocupa ~90pt (logo/nombre ~60 + margen 8 + divider 1 + gap).
     // En p.1 el buyer row aparece después del header; en p.2+ la tabla sigue
     // justo después del header repetido.
-    paddingTop:        110,
+    paddingTop:        58,
     paddingBottom:     72,   // espacio para el footer absoluto
     paddingHorizontal: 40,
     color:             '#1a1a1a',
@@ -152,22 +154,22 @@ const S = StyleSheet.create({
     flexDirection:  'row',
     justifyContent: 'space-between',
     alignItems:     'flex-start',
-    marginBottom:   8,
+    marginBottom:   4,
   },
   headerLeft: {
     flex: 1,
   },
   logo: {
-    width:      130,
-    height:     50,
+    width:      104,
+    height:     38,
     objectFit:  'contain',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   emisorNombre: {
     fontFamily: 'Helvetica-Bold',
-    fontSize:   16,
+    fontSize:   13,
     color:      '#1a1a1a',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   emisorMeta: {
     fontSize:     8.5,
@@ -195,9 +197,16 @@ const S = StyleSheet.create({
     textAlign:    'right',
     marginBottom: 1,
   },
+  codigoFactura: {
+    fontFamily:   'Helvetica-Bold',
+    fontSize:     13,
+    color:        '#1a1a1a',
+    textAlign:    'right',
+    marginBottom: 2,
+  },
   ncfValue: {
     fontFamily:   'Helvetica-Bold',
-    fontSize:     16,
+    fontSize:     22,
     color:        '#1a1a1a',
     textAlign:    'right',
     marginBottom: 2,
@@ -212,7 +221,7 @@ const S = StyleSheet.create({
   divider: {
     borderBottomWidth: 1,
     borderBottomColor: '#cccccc',
-    marginBottom:      10,
+    marginBottom:      6,
   },
 
   // ── Buyer row ──
@@ -293,13 +302,51 @@ const S = StyleSheet.create({
   },
 
   // column widths
-  colCant:   { width: 34,  textAlign: 'left'  },
+  colCant:   { width: 52,  textAlign: 'left'  },
   colDesc:   { flex: 3,                       },
   colUnidad: { width: 56,  textAlign: 'left'  },
   colPrecio: { width: 56,  textAlign: 'right' },
   colDesc2:  { width: 50,  textAlign: 'right' },
   colImp:    { width: 46,  textAlign: 'right' },
   colValor:  { width: 64,  textAlign: 'right' },
+  colNum:    { width: 20,  textAlign: 'left'  },
+
+  // COMPRADOR section
+  compLabel: {
+    fontSize:     8,
+    color:        '#0f766e',
+    fontFamily:   'Helvetica-Bold',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  buyerNombre: {
+    fontFamily:   'Helvetica-Bold',
+    fontSize:     10,
+    color:        '#1a1a1a',
+  },
+
+  // MONTO TOTAL row
+  montoTotalRow: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    marginTop:      2,
+    width:          220,
+  },
+  montoTotalLabel: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize:   9,
+    color:      '#ffffff',
+  },
+  montoTotalValor: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize:   9,
+    color:      '#ffffff',
+    textAlign:  'right',
+    minWidth:   80,
+  },
 
   // ── Post-table ──
   postTable: {
@@ -323,14 +370,14 @@ const S = StyleSheet.create({
     color:        '#1a1a1a',
   },
   postTableRight: {
-    minWidth:   190,
+    minWidth:   220,
     alignItems: 'flex-end',
   },
   totalesRow: {
     flexDirection:  'row',
     justifyContent: 'space-between',
     paddingVertical: 3,
-    width:          190,
+    width:          220,
   },
   totalesLabel: {
     fontSize: 8.5,
@@ -340,7 +387,7 @@ const S = StyleSheet.create({
     fontSize:     8.5,
     color:        '#1a1a1a',
     textAlign:    'right',
-    minWidth:     70,
+    minWidth:     80,
   },
   totalFinalRow: {
     flexDirection:  'row',
@@ -349,7 +396,7 @@ const S = StyleSheet.create({
     borderTopColor: '#cccccc',
     paddingTop:     4,
     marginTop:      2,
-    width:          190,
+    width:          220,
   },
   totalFinalLabel: {
     fontFamily: 'Helvetica-Bold',
@@ -361,14 +408,14 @@ const S = StyleSheet.create({
     fontSize:   10,
     color:      '#1a1a1a',
     textAlign:  'right',
-    minWidth:   70,
+    minWidth:   80,
   },
   totalItems: {
     fontSize:  8,
     color:     '#555555',
     textAlign: 'right',
     marginTop: 4,
-    width:     190,
+    width:     220,
   },
 
   // ── Términos / Notas ──
@@ -493,9 +540,37 @@ const S = StyleSheet.create({
 export function FacturaPDF({ data }: { data: FacturaPDFData }) {
   const moneda      = data.moneda ?? 'DOP';
   const itemsFmt    = data.items;
-  const totalItems  = itemsFmt.reduce((s, i) => s + i.cantidadItem, 0);
   // Mostrar NCF solo cuando hay un e-NCF real (no BOR-… ni sin-ncf)
   const tieneEncf   = Boolean(data.encf) && !data.encf.startsWith('BOR-');
+
+  // Columnas opcionales
+  const tieneUnidad    = itemsFmt.some(i => i.unidadMedida);
+  const tieneDescuento = itemsFmt.some(i => {
+    const base = i.cantidadItem * i.precioUnitarioItem;
+    const desc = i.descuentoMonto ?? (i.descuentoPct ? base * i.descuentoPct / 100 : 0);
+    return desc > 0;
+  });
+  const tieneItbis = itemsFmt.some(i => (i.tasaItbis ?? 0) > 0);
+  const totalDescuento = itemsFmt.reduce((s, i) => {
+    const base = i.cantidadItem * i.precioUnitarioItem;
+    const desc = i.descuentoMonto ?? (i.descuentoPct ? base * i.descuentoPct / 100 : 0);
+    return s + desc;
+  }, 0);
+
+  // Agrupar por tasa de ITBIS para mostrar "Gravado ITBIS X%"
+  const ratesMap = new Map<number, { base: number; itbis: number }>();
+  for (const item of itemsFmt) {
+    const tasa = item.tasaItbis ?? 0;
+    if (tasa > 0) {
+      const base = item.cantidadItem * item.precioUnitarioItem;
+      const desc = item.descuentoMonto ?? (item.descuentoPct ? base * item.descuentoPct / 100 : 0);
+      const neto = base - desc;
+      const itbisAmt = neto * tasa;
+      const existing = ratesMap.get(tasa) ?? { base: 0, itbis: 0 };
+      ratesMap.set(tasa, { base: existing.base + neto, itbis: existing.itbis + itbisAmt });
+    }
+  }
+  const ratesArray = Array.from(ratesMap.entries());
 
   return (
     <Document
@@ -526,9 +601,6 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
                 <Text style={S.emisorMetaLabel}>Sucursal: </Text>{data.sucursal}
               </Text>
             )}
-            <Text style={S.emisorMeta}>
-              <Text style={S.emisorMetaLabel}>Fecha de creación: </Text>{data.fechaEmision}
-            </Text>
             {data.fechaVencimientoFactura && (
               <Text style={S.emisorMeta}>
                 <Text style={S.emisorMetaLabel}>Vencimiento de la factura </Text>{data.fechaVencimientoFactura}
@@ -536,7 +608,7 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             )}
             {data.emisor.rnc && (
               <Text style={S.emisorMeta}>
-                <Text style={S.emisorMetaLabel}>RNC emisor: </Text>{data.emisor.rnc}
+                <Text style={S.emisorMetaLabel}>RNC: </Text>{data.emisor.rnc}
               </Text>
             )}
             {data.emisor.direccion && (
@@ -551,17 +623,19 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             )}
           </View>
 
-          {/* Derecha: tipo + NCF (solo cuando hay e-NCF real) */}
+          {/* Derecha: tipo + codigo (13pt) + NCF grande + fecha + pago */}
           <View style={S.headerRight}>
-            <Text style={S.tipoNombre}>{data.tipoEcfNombre}</Text>
+            <Text style={S.tipoNombre}>{data.tipoEcfNombre.toUpperCase()}</Text>
+            {data.codigo && (
+              <Text style={S.codigoFactura}>{data.codigo}</Text>
+            )}
             {tieneEncf && (
-              <>
-                <Text style={S.ncfLabel}>NCF</Text>
-                <Text style={S.ncfValue}>{data.encf}</Text>
-                {data.fechaVencimientoNcf && (
-                  <Text style={S.ncfVenc}>Vencimiento NCF: {data.fechaVencimientoNcf}</Text>
-                )}
-              </>
+              <Text style={S.ncfValue}>{data.encf}</Text>
+            )}
+            <Text style={S.ncfVenc}>Fecha: {data.fechaEmision}</Text>
+            <Text style={S.ncfVenc}>Pago: {data.tipoPagoNombre}</Text>
+            {data.fechaVencimientoNcf && (
+              <Text style={S.ncfVenc}>Vencimiento NCF: {data.fechaVencimientoNcf}</Text>
             )}
           </View>
         </View>
@@ -569,43 +643,42 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
         {/* ── Línea divisora (fixed junto al header) ── */}
         <View style={S.divider} fixed />
 
-        {/* ── Datos del comprador (solo página 1 — sin fixed) ── */}
+        {/* ── Datos del cliente (solo página 1 — sin fixed) ── */}
         <View style={S.buyerRow}>
           <View style={S.buyerLeft}>
-            {data.comprador.razonSocial ? (
+            <Text style={S.compLabel}>CLIENTE</Text>
+            <Text style={S.buyerNombre}>
+              {data.comprador.razonSocial || 'Consumidor Final'}
+            </Text>
+            {data.comprador.rnc ? (
               <Text style={S.buyerField}>
-                <Text style={S.buyerLabel}>Cliente: </Text>{data.comprador.razonSocial}
+                <Text style={S.buyerLabel}>RNC/Cédula: </Text>{data.comprador.rnc}
               </Text>
-            ) : (
-              <Text style={S.buyerField}><Text style={S.buyerLabel}>Cliente: </Text>Consumidor Final</Text>
-            )}
-            <Text style={S.buyerField}>
-              <Text style={S.buyerLabel}>RNC: </Text>{data.comprador.rnc ?? ''}
-            </Text>
-            <Text style={S.buyerField}>
-              <Text style={S.buyerLabel}>Teléfono: </Text>{data.comprador.telefono ?? ''}
-            </Text>
-            {data.comprador.email && (
+            ) : null}
+            {data.comprador.telefono ? (
+              <Text style={S.buyerField}>
+                <Text style={S.buyerLabel}>Tel: </Text>{data.comprador.telefono}
+              </Text>
+            ) : null}
+            {data.comprador.email ? (
               <Text style={S.buyerField}>
                 <Text style={S.buyerLabel}>Email: </Text>{data.comprador.email}
               </Text>
-            )}
+            ) : null}
           </View>
           <View style={S.buyerRight}>
-            <Text style={S.monedaText}>
+            <Text style={S.buyerField}>
               <Text style={S.buyerLabel}>Moneda: </Text>{moneda}
             </Text>
-            {/* B2 fix: usar saldo real; si es 0 mostrar PAGADA */}
             {(() => {
               const saldo = data.saldo ?? data.montoTotal;
               if (saldo <= 0) {
-                return <Text style={[S.valorRestanteLabel, { color: '#16a34a', fontWeight: 'bold' }]}>PAGADA</Text>;
+                return <Text style={[S.valorRestanteLabel, { color: '#16a34a', fontFamily: 'Helvetica-Bold' }]}>PAGADA</Text>;
               }
               return (
-                <>
-                  <Text style={S.valorRestanteLabel}>Valor restante por pagar:</Text>
-                  <Text style={S.valorRestanteValue}>{fmt(saldo)}</Text>
-                </>
+                <Text style={S.buyerField}>
+                  <Text style={S.buyerLabel}>Saldo: </Text>{fmt(saldo)}
+                </Text>
               );
             })()}
           </View>
@@ -614,13 +687,13 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
         {/* ── Tabla de ítems ── */}
         {/* Encabezado de columnas (fixed → se repite en cada página) */}
         <View style={S.tableHeader} fixed>
-          <Text style={[S.thCell, S.colCant]}>Cantidad</Text>
-          <Text style={[S.thCell, S.colDesc]}>Descripción</Text>
-          <Text style={[S.thCell, S.colUnidad]}>Unidad de{'\n'}medida</Text>
-          <Text style={[S.thCell, S.colPrecio]}>Precio</Text>
-          <Text style={[S.thCell, S.colDesc2]}>Descuento</Text>
-          <Text style={[S.thCell, S.colImp]}>Impuesto</Text>
-          <Text style={[S.thCell, S.colValor]}>Valor</Text>
+          <Text style={[S.thCell, S.colNum]}>#</Text>
+          <Text style={[S.thCell, S.colDesc]}>DESCRIPCION</Text>
+          {tieneUnidad && <Text style={[S.thCell, S.colUnidad]}>UNIDAD</Text>}
+          <Text style={[S.thCell, S.colCant]}>CANT</Text>
+          <Text style={[S.thCell, S.colPrecio]}>PRECIO</Text>
+          {tieneItbis && <Text style={[S.thCell, S.colImp]}>ITBIS</Text>}
+          <Text style={[S.thCell, S.colValor]}>TOTAL</Text>
         </View>
 
         {/* Filas */}
@@ -630,12 +703,13 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           const desc   = item.descuentoMonto ?? (item.descuentoPct ? base * item.descuentoPct / 100 : 0);
           const neto   = base - desc;
           const valor  = neto + neto * tasa;
-          const impStr = tasa > 0 ? `${(tasa * 100).toFixed(0)}%` : 'E';
+          const impStr = tasa > 0 ? `${(tasa * 100).toFixed(0)}%` : 'Exento';
           const descStr = desc > 0 ? fmt(desc) : '';
 
+          const itbisAmt = neto * tasa;
           return (
             <View key={idx} style={[S.tableRow, idx % 2 === 1 ? S.tableRowAlt : {}]}>
-              <Text style={[S.tdCell, S.colCant]}>{item.cantidadItem}</Text>
+              <Text style={[S.tdCell, S.colNum]}>{idx + 1}</Text>
               <View style={S.colDesc}>
                 <Text style={S.tdBold}>
                   {item.dependienteNombre ? `${item.dependienteNombre} - ${item.nombreItem}` : item.nombreItem}
@@ -643,40 +717,42 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
                 {item.referencia ? <Text style={S.tdGray}>Ref: {item.referencia}</Text> : null}
                 {item.descripcionItem ? <Text style={S.tdGray}>{item.descripcionItem}</Text> : null}
               </View>
-              <Text style={[S.tdCell, S.colUnidad]}>{item.unidadMedida ?? ''}</Text>
+              {tieneUnidad && <Text style={[S.tdCell, S.colUnidad]}>{item.unidadMedida ?? ''}</Text>}
+              <Text style={[S.tdCell, S.colCant]}>{item.cantidadItem}</Text>
               <Text style={[S.tdCell, S.colPrecio]}>{fmt(item.precioUnitarioItem)}</Text>
-              <Text style={[S.tdCell, S.colDesc2]}>{descStr}</Text>
-              <Text style={[S.tdCell, S.colImp]}>{impStr}</Text>
-              <Text style={[S.tdCell, S.colValor]}>{fmt(item.subtotalConItbis)}</Text>
+              {tieneItbis && <Text style={[S.tdCell, S.colImp]}>{itbisAmt > 0 ? fmt(itbisAmt) : 'Exento'}</Text>}
+              <Text style={[S.tdCell, S.colValor]}>{fmt(valor)}</Text>
             </View>
           );
         })}
 
         {/* ── Post-tabla: lineas + totales ── */}
         <View style={S.postTable}>
-          <View style={S.postTableLeft}>
-            <Text style={S.totalLineas}>
-              Total de lineas: {itemsFmt.length}
-            </Text>
-            <Text style={S.montoLetras}>{numeroALetras(data.montoTotal)}</Text>
-          </View>
+          <View style={S.postTableLeft} />
 
           <View style={S.postTableRight}>
-            <View style={S.totalesRow}>
-              <Text style={S.totalesLabel}>SUBTOTAL</Text>
-              <Text style={S.totalesValor}>{fmt(data.subtotal)}</Text>
-            </View>
+            {ratesArray.map(([tasa, { base, itbis }]) => (
+              <React.Fragment key={tasa}>
+                <View style={S.totalesRow}>
+                  <Text style={S.totalesLabel}>Gravado ITBIS {(tasa * 100).toFixed(0)}%:</Text>
+                  <Text style={S.totalesValor}>{fmt(base)}</Text>
+                </View>
+                <View style={S.totalesRow}>
+                  <Text style={S.totalesLabel}>ITBIS {(tasa * 100).toFixed(0)}%:</Text>
+                  <Text style={S.totalesValor}>{fmt(itbis)}</Text>
+                </View>
+              </React.Fragment>
+            ))}
             {data.totalItbis > 0 && (
               <View style={S.totalesRow}>
-                <Text style={S.totalesLabel}>ITBIS</Text>
+                <Text style={S.totalesLabel}>Total ITBIS:</Text>
                 <Text style={S.totalesValor}>{fmt(data.totalItbis)}</Text>
               </View>
             )}
-            <View style={S.totalFinalRow}>
-              <Text style={S.totalFinalLabel}>Total</Text>
-              <Text style={S.totalFinalValor}>{fmt(data.montoTotal)}</Text>
+            <View style={S.montoTotalRow}>
+              <Text style={S.montoTotalLabel}>MONTO TOTAL:</Text>
+              <Text style={S.montoTotalValor}>{fmt(data.montoTotal)}</Text>
             </View>
-            <Text style={S.totalItems}>Total de items: {totalItems}</Text>
           </View>
         </View>
 

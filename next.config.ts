@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
   // pdf-parse / pdfjs-dist cargan su worker desde node_modules en runtime;
   // si Next los bundlea, el worker no se resuelve. Mantenerlos externos.
   serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
+  allowedDevOrigins: ['10.0.0.63'],
   experimental: {
     ppr: true,
     clientSegmentCache: true,

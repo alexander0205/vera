@@ -41,6 +41,17 @@ export async function GET(
     .from(pagosRecibidos)
     .where(eq(pagosRecibidos.ecfDocumentId, docId));
   const sumLedger = Number(pagAgg?.sum ?? 0);
+  // Líneas individuales del ledger — para mostrar el split real en el detalle.
+  const pagoLineasRows = await db
+    .select({
+      metodo:        pagosRecibidos.metodo,
+      montoCentavos: pagosRecibidos.montoCentavos,
+      cuenta:        pagosRecibidos.cuenta,
+      referencia:    pagosRecibidos.referencia,
+    })
+    .from(pagosRecibidos)
+    .where(eq(pagosRecibidos.ecfDocumentId, docId))
+    .orderBy(pagosRecibidos.id);
   const inlineCts = doc.pagoRecibido === 'true' ? (doc.pagoValorCts ?? 0) : 0;
   // Ledger (pagos_recibidos) = source of truth. Inline solo como fallback para
   // docs legacy aún sin migrar al ledger (evita doble conteo: OR, no suma).
@@ -133,6 +144,8 @@ export async function GET(
   return NextResponse.json({
     id: doc.id,
     encf: doc.encf,
+    codigo: doc.codigo ?? null,
+    estadoPago: doc.estadoPago,
     tipoEcf: doc.tipoEcf,
     tipoNombre,
     categoria: regla?.categoria ?? 'venta',
@@ -166,6 +179,13 @@ export async function GET(
       valorCts: pagadoCts,
       valorDOP: (pagadoCts / 100).toFixed(2),
       fecha:    doc.pagoFecha,
+      // Líneas reales del ledger (split). Vacío → el detalle usa el espejo inline.
+      lineas: pagoLineasRows.map(p => ({
+        metodo:     p.metodo,
+        valor:      (p.montoCentavos / 100).toFixed(2),
+        cuenta:     p.cuenta ?? undefined,
+        referencia: p.referencia ?? undefined,
+      })),
     },
 
     emisor: {

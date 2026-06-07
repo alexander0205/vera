@@ -7,8 +7,8 @@ import { notFound, redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, clients } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { ecfDocuments, teams, clients, pagosRecibidos } from '@/lib/db/schema';
+import { eq, and, asc } from 'drizzle-orm';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import EditarBorradorClient from './_editar-client';
 import type { EmpresaPerfil } from '../../nueva/page';
@@ -59,6 +59,26 @@ export default async function EditarBorradorPage({
 
   const { doc } = row;
 
+  // Cargar pagos del ledger (para restaurar el split al editar)
+  const pagosRows = await db
+    .select({
+      metodo:        pagosRecibidos.metodo,
+      montoCentavos: pagosRecibidos.montoCentavos,
+      cuenta:        pagosRecibidos.cuenta,
+      referencia:    pagosRecibidos.referencia,
+      fechaPago:     pagosRecibidos.fechaPago,
+    })
+    .from(pagosRecibidos)
+    .where(and(eq(pagosRecibidos.ecfDocumentId, docId), eq(pagosRecibidos.teamId, teamId)))
+    .orderBy(asc(pagosRecibidos.id));
+
+  const pagoLineas = pagosRows.map(p => ({
+    metodo:     p.metodo,
+    valor:      (p.montoCentavos / 100).toFixed(2),
+    cuenta:     p.cuenta ?? undefined,
+    referencia: p.referencia ?? undefined,
+  }));
+
   // Si hay clientId, cargar el teléfono del cliente
   let telefonoComprador: string | null = null;
   if (doc.clientId) {
@@ -93,6 +113,10 @@ export default async function EditarBorradorPage({
     lineasJson:           doc.lineasJson,
     dependienteId:        doc.dependienteId   ?? null,
     dependienteNombre:    doc.dependienteNombre ?? null,
+    // Pago — restaurar split al editar
+    pagoRecibido:         pagoLineas.length > 0,
+    pagoFecha:            doc.pagoFecha ?? null,
+    pagoLineas:           pagoLineas.length > 0 ? pagoLineas : undefined,
   };
 
   const sinItems = !doc.lineasJson;

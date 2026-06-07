@@ -356,10 +356,7 @@ export default function ClientesPage() {
                   <Label>RNC / Cédula</Label>
                   <RncSearch
                     placeholder="Buscar RNC, Cédula o razón social…"
-                    value={form.rnc
-                      ? `${form.rnc}${form.razonSocial ? ` · ${form.razonSocial}` : ''}`
-                      : undefined
-                    }
+                    value={form.rnc || undefined}
                     onSelect={(r) => setForm((f) => ({
                       ...f,
                       rnc: r.rnc,

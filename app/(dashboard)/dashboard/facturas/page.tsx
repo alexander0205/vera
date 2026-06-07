@@ -33,15 +33,6 @@ const ESTADO_LABEL: Record<string, string> = {
   HISTORICA:            'Histórica',
 };
 
-const ESTADO_BADGE: Record<string, string> = {
-  ACEPTADO:             'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  ACEPTADO_CONDICIONAL: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  EN_PROCESO:           'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
-  RECHAZADO:            'bg-red-50 text-red-700 ring-1 ring-red-200',
-  BORRADOR:             'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
-  ANULADO:              'bg-gray-100 text-gray-400 ring-1 ring-gray-200 line-through',
-  HISTORICA:            'bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200',
-};
 const TIPO_LABELS: Record<string, string> = {
   '31': 'Créd. Fiscal', '32': 'Consumo', '33': 'Nota Débito',
   '34': 'Nota Crédito', '41': 'Compras', '43': 'Gastos Men.',
@@ -58,8 +49,32 @@ function isECFReal(encf: string): boolean {
   return /^E\d{12}$/.test(encf);
 }
 
+// Color del TEXTO del comprobante según estado DGII (no badge, solo texto)
+const ESTADO_TEXT: Record<string, string> = {
+  ACEPTADO:             'text-emerald-700',
+  ACEPTADO_CONDICIONAL: 'text-amber-700',
+  EN_PROCESO:           'text-sky-700',
+  RECHAZADO:            'text-red-700',
+  BORRADOR:             'text-gray-400',
+  ANULADO:              'text-gray-400 line-through',
+  HISTORICA:            'text-indigo-600',
+};
+
+/**
+ * Formato compacto del e-NCF: E310000000252 → "E31-252".
+ * Toma el prefijo Exx (tipo) y el resto sin ceros a la izquierda.
+ * Borrador (BOR-…) / Histórica / sin-ncf → devuelve null (mostrar fallback).
+ */
+function fmtEncf(encf: string): string | null {
+  if (!isECFReal(encf)) return null;
+  const prefijo = encf.slice(0, 3);                 // E31
+  const num     = encf.slice(3).replace(/^0+/, '') || '0'; // 0000000252 → 252
+  return `${prefijo}-${num}`;
+}
+
 interface Doc {
-  id: number; encf: string; tipoEcf: string; estado: string;
+  id: number; encf: string; codigo: string | null; tipoEcf: string; estado: string;
+  estadoPago: string;
   rncComprador: string | null;
   razonSocialComprador: string | null; emailComprador: string | null;
   montoTotal: number; totalItbis: number;
@@ -158,31 +173,19 @@ export default function FacturasPage() {
 
   const columns: DataTableColumn<Doc>[] = [
     {
-      id: 'encf',
-      header: 'Comprobante',
+      id: 'codigo',
+      header: 'Código',
       sortable: true,
-      render: doc => {
-        const esReal = isECFReal(doc.encf);
-        const esBorrador = doc.estado === 'BORRADOR';
-        return (
-          <div className="min-w-0">
-            <Link
-              href={`/dashboard/facturas/${doc.id}`}
-              className={`font-mono text-xs font-semibold hover:underline leading-tight block ${
-                esReal ? 'text-teal-700' : esBorrador ? 'text-amber-700' : 'text-gray-500'
-              }`}
-              title={doc.encf}
-            >
-              {esReal
-                /* e-CF real: separar en grupos legibles E31 · 0000000015 */
-                ? <>{doc.encf.slice(0, 3)}<span className="text-teal-400 mx-0.5">·</span>{doc.encf.slice(3)}</>
-                /* Borrador / Histórica / sin-ncf (encf vacío): mostrar tal cual o — */
-                : (doc.encf || '—')
-              }
-            </Link>
-          </div>
-        );
-      },
+      sortAccessor: doc => doc.codigo ?? '',
+      render: doc => (
+        <Link
+          href={`/dashboard/facturas/${doc.id}`}
+          className="font-mono text-xs font-semibold text-gray-700 hover:text-teal-700 hover:underline tabular-nums leading-tight block"
+          title={doc.codigo ?? `#${doc.id}`}
+        >
+          {doc.codigo ?? `#${doc.id}`}
+        </Link>
+      ),
     },
     {
       id: 'cliente',
@@ -285,33 +288,25 @@ export default function FacturasPage() {
       header: 'Cobro',
       visibleAt: 'lg',
       align: 'center',
+      // Usa estado_pago persistido (recalculado al emitir/pagar/anular).
+      // Fallback al cálculo inline para registros sin migrar.
       render: doc => {
-        const pagado = doc.pagado ?? 0;
-        const saldo  = doc.montoTotal - pagado;
-        const esCredito = doc.tipoPago === 2;
-        if (doc.tipoPago === 3) return <Badge color="gray">Gratuita</Badge>;
-        if (doc.tipoPago === 4) return <Badge color="gray">Uso</Badge>;
-        if (doc.montoTotal > 0 && pagado >= doc.montoTotal) return <Badge color="green">Pagada</Badge>;
-        if (pagado > 0) return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
-        if (esCredito) {
-          const dias = diasVencido(doc.fechaLimitePago);
-          if (dias > 0) return <Badge color="red" title={`Vencida hace ${dias}d`}>Vencida</Badge>;
-          return <Badge color="amber">Pendiente</Badge>;
+        const ep      = doc.estadoPago;
+        const pagado  = doc.pagado ?? 0;
+        const saldo   = doc.montoTotal - pagado;
+        const esCred  = doc.tipoPago === 2;
+        const dias    = diasVencido(doc.fechaLimitePago);
+        if (ep === 'GRATUITA') return <Badge color="gray">Gratuita</Badge>;
+        if (ep === 'USO')      return <Badge color="gray">Uso</Badge>;
+        if (ep === 'PAGADA')   return <Badge color="green">Pagada</Badge>;
+        if (ep === 'PARCIAL')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
+        if (ep === 'PENDIENTE' && esCred && dias > 0) {
+          return <Badge color="red" title={`Vencida hace ${dias}d`}>Vencida</Badge>;
         }
-        return <Badge color="red" title="Contado sin cobro registrado">Sin pago</Badge>;
+        if (ep === 'PENDIENTE') return <Badge color="amber">Pendiente</Badge>;
+        if (ep === 'ANULADA')   return <Badge color="gray">—</Badge>;
+        return <Badge color="red" title="Sin estado">—</Badge>;
       },
-    },
-    {
-      id: 'estado',
-      header: 'Estado DGII',
-      align: 'center',
-      render: doc => (
-        <span
-          className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${ESTADO_BADGE[doc.estado] ?? 'bg-gray-100 text-gray-600 ring-1 ring-gray-200'}`}
-        >
-          {ESTADO_LABEL[doc.estado] ?? doc.estado}
-        </span>
-      ),
     },
     {
       id: 'createdBy',
@@ -322,6 +317,27 @@ export default function FacturasPage() {
           {doc.createdByName ?? '—'}
         </span>
       ),
+    },
+    {
+      // Comprobante al final. Texto coloreado según estado DGII. Formato E31-252.
+      id: 'encf',
+      header: 'Comprobante',
+      align: 'right',
+      sortable: true,
+      sortAccessor: doc => doc.encf,
+      render: doc => {
+        const compacto = fmtEncf(doc.encf);
+        const color    = ESTADO_TEXT[doc.estado] ?? 'text-gray-400';
+        return (
+          <Link
+            href={`/dashboard/facturas/${doc.id}`}
+            className={`font-mono text-xs font-semibold hover:underline leading-tight block whitespace-nowrap ${color}`}
+            title={`${doc.encf || 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
+          >
+            {compacto ?? (doc.encf || '—')}
+          </Link>
+        );
+      },
     },
   ];
 

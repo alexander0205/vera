@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, dependientes } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
@@ -23,6 +23,8 @@ import { logAudit, getIp } from '@/lib/audit';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
+import { generarCodigoFactura } from '@/lib/facturas/codigo';
+import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 
@@ -81,6 +83,9 @@ const emitirSchema = z.object({
   pagoCuenta:   z.string().optional(),
   pagoValor:    z.number().min(0).optional(),
   pagoFecha:    z.string().optional(),
+  // Pago dividido (split): varios métodos en una sola operación. Cuando viene,
+  // tiene prioridad sobre el pago single y se registra vía registrarPagosSplit.
+  pagos:        z.array(z.object({ metodo: z.string(), valor: z.number().min(0) })).optional(),
 
   clientId:   z.number().int().positive().optional(),
   lineasJson: z.string().optional(),
@@ -95,6 +100,9 @@ const emitirSchema = z.object({
   // Dependiente del cliente — metadato, no va al XML DGII
   dependienteId:     z.number().int().positive().optional(),
   dependienteNombre: z.string().max(255).optional(),
+
+  // Edición de borrador existente — hacer UPDATE en lugar de INSERT
+  borradorId: z.number().int().positive().optional(),
 });
 
 // ─── Adquirir próximo eNCF de secuencia local ────────────────────────────────
@@ -323,7 +331,61 @@ export async function POST(request: NextRequest) {
 
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
-      const totales = calcularTotales(data.items);
+      const totales  = calcularTotales(data.items);
+      const montoCts = Math.round(totales.montoTotal * 100);
+
+      // ── Editar borrador existente (UPDATE) ──────────────────────────────────
+      if (data.borradorId) {
+        const borradorId = data.borradorId; // narrowed to number
+        const [existing] = await db
+          .select({ id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo, estado: ecfDocuments.estado })
+          .from(ecfDocuments)
+          .where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
+          .limit(1);
+
+        if (!existing || !['BORRADOR', 'HISTORICA'].includes(existing.estado)) {
+          return NextResponse.json({ error: 'Borrador no encontrado o ya emitido' }, { status: 404 });
+        }
+
+        const estadoPago = calcularEstadoPago({
+          estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
+        });
+
+        const [saved] = await withRequestAuditContext(
+          (tx) => tx.update(ecfDocuments).set({
+            clientId:             data.clientId ?? null,
+            tipoEcf:              data.tipoEcf,
+            estadoPago,
+            rncComprador:         data.rncComprador ?? null,
+            razonSocialComprador: data.razonSocialComprador ?? null,
+            emailComprador:       data.emailComprador ?? null,
+            montoTotal:           montoCts,
+            totalItbis:           Math.round(totales.totalItbis * 100),
+            ncfModificado:        data.ncfModificado ?? null,
+            lineasJson:           data.lineasJson ?? null,
+            tipoPago:             data.tipoPago ?? 1,
+            fechaLimitePago:      data.fechaLimitePago ?? null,
+            dependienteId:        data.dependienteId ?? null,
+            dependienteNombre:    data.dependienteNombre ?? null,
+            updatedAt:            new Date(),
+            ...extraFields,
+          }).where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
+            .returning(),
+          { userId: user.id, teamId },
+        );
+
+        return NextResponse.json({
+          ok:           true,
+          modo:         'borrador',
+          documentoId:  saved.id,
+          encf:         saved.encf,
+          estado:       'BORRADOR',
+          montoTotal:   totales.montoTotal,
+          pagoRecibido: data.pagoRecibido ?? false,
+        });
+      }
+
+      // ── Nuevo borrador (INSERT) ─────────────────────────────────────────────
       // sin-ncf: encf vacío (no hay comprobante, no generar BOR-sin-ncf-XXX).
       // Otros borradores (borrador real de tipo e31/e32/etc): prefijo BOR- para
       // distinguir de e-CF reales (E31...) y evitar colisiones.
@@ -331,13 +393,20 @@ export async function POST(request: NextRequest) {
         ? ''
         : `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
+      const codigo      = await generarCodigoFactura(db, teamId);
+      const estadoPago  = calcularEstadoPago({
+        estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
+      });
+
       const [saved] = await withRequestAuditContext(
         (tx) => tx.insert(ecfDocuments).values({
           teamId,
           clientId:             data.clientId ?? null,
           encf:                 encfBorrador,
+          codigo,
           tipoEcf:              data.tipoEcf,
           estado:               'BORRADOR',
+          estadoPago,
           rncComprador:         data.rncComprador,
           razonSocialComprador: data.razonSocialComprador,
           emailComprador:       data.emailComprador,
@@ -358,7 +427,21 @@ export async function POST(request: NextRequest) {
 
       // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
       // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
-      if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+      // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
+      // recalcula estado_pago). Si no, flujo single existente.
+      if (data.pagos?.length) {
+        try {
+          await registrarPagosSplit({
+            teamId,
+            ecfDocumentId: saved.id,
+            fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+            createdBy:     user.id,
+            pagos: data.pagos
+              .filter(p => p.valor > 0)
+              .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+          });
+        } catch (e) { console.error('[emitir borrador registrarPagosSplit]', e); }
+      } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
         try {
           await registrarPago({
             teamId,
@@ -372,6 +455,10 @@ export async function POST(request: NextRequest) {
         } catch (e) { console.error('[emitir borrador registrarPago]', e); }
       }
 
+      // Split: la suma de los métodos (clamped al total) es el pago reportado.
+      const sumaSplit = data.pagos?.length
+        ? data.pagos.filter(p => p.valor > 0).reduce((s, p) => s + p.valor, 0)
+        : null;
       return NextResponse.json({
         ok:           true,
         modo:         'borrador',
@@ -379,9 +466,11 @@ export async function POST(request: NextRequest) {
         encf:         saved.encf,
         estado:       'BORRADOR',
         montoTotal:   totales.montoTotal,
-        pagoRecibido: data.pagoRecibido ?? false,
-        pagoMetodo:   data.pagoRecibido ? (data.pagoMetodo ?? 'efectivo') : null,
-        pagoValor:    data.pagoRecibido ? Math.min(data.pagoValor ?? totales.montoTotal, totales.montoTotal) : null,
+        pagoRecibido: sumaSplit != null ? true : (data.pagoRecibido ?? false),
+        pagoMetodo:   sumaSplit != null ? 'split' : (data.pagoRecibido ? (data.pagoMetodo ?? 'efectivo') : null),
+        pagoValor:    sumaSplit != null
+          ? Math.min(sumaSplit, totales.montoTotal)
+          : (data.pagoRecibido ? Math.min(data.pagoValor ?? totales.montoTotal, totales.montoTotal) : null),
       });
     }
 
@@ -538,12 +627,20 @@ export async function POST(request: NextRequest) {
           unidadMedida:       item.unidadMedidaItem,
         })));
 
+    const codigoEmit     = await generarCodigoFactura(db, teamId);
+    const montoCtsEmit   = Math.round(totales.montoTotal * 100);
+    const estadoPagoInit = calcularEstadoPago({
+      estado: estadoInicial, tipoPago: data.tipoPago ?? 1, montoTotal: montoCtsEmit, totalPagado: 0,
+    });
+
     const [saved] = await withRequestAuditContext(
       (tx) => tx.insert(ecfDocuments).values({
         teamId,
         encf,
+        codigo:               codigoEmit,
         tipoEcf:              data.tipoEcf,
         estado:               estadoInicial,
+        estadoPago:           estadoPagoInit,
         trackId,
         codigoSeguridad:      resultado.codigoSeguridad ?? null,
         fechaFirma:           resultado.fechaHoraFirma ?? null,
@@ -568,7 +665,21 @@ export async function POST(request: NextRequest) {
     );
 
     // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
-    if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+    // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
+    // recalcula estado_pago). Si no, flujo single existente.
+    if (data.pagos?.length) {
+      try {
+        await registrarPagosSplit({
+          teamId,
+          ecfDocumentId: saved.id,
+          fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+          createdBy:     user.id,
+          pagos: data.pagos
+            .filter(p => p.valor > 0)
+            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+        });
+      } catch (e) { console.error('[emitir registrarPagosSplit]', e); }
+    } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
       try {
         await registrarPago({
           teamId,

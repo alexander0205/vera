@@ -9,6 +9,8 @@ import { db } from '@/lib/db/drizzle';
 import { facturasRecurrentes, sequences, ecfDocuments } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
+import { generarCodigoFactura } from '@/lib/facturas/codigo';
+import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 
 export interface GenerarFacturaResult {
   ok: true;
@@ -91,6 +93,11 @@ export async function generarFacturaDeRecurrente(
     fechaLimitePago = limite.toISOString().slice(0, 10);
   }
 
+  const codigo     = await generarCodigoFactura(db, fr.teamId);
+  const estadoPago = calcularEstadoPago({
+    estado: 'BORRADOR', tipoPago: fr.tipoPago, montoTotal, totalPagado: 0,
+  });
+
   // Insertar documento
   const [inserted] = await db
     .insert(ecfDocuments)
@@ -98,8 +105,10 @@ export async function generarFacturaDeRecurrente(
       teamId: fr.teamId,
       clientId: fr.clientId,
       encf,
+      codigo,
       tipoEcf: fr.tipoEcf,
       estado: 'BORRADOR',
+      estadoPago,
       tipoPago: fr.tipoPago,
       fechaLimitePago,
       montoTotal,

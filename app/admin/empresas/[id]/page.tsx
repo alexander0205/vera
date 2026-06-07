@@ -141,6 +141,40 @@ async function cancelarInvitacion(formData: FormData) {
   redirect(`/admin/empresas/${teamId}`);
 }
 
+// ─── Server Action: reenviar invitación ──────────────────────────────────────
+
+async function reenviarInvitacion(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const invId  = parseInt(formData.get('invId') as string);
+  const teamId = parseInt(formData.get('teamId') as string);
+  if (isNaN(invId) || isNaN(teamId)) return;
+
+  const [inv] = await db
+    .select()
+    .from(invitations)
+    .where(and(eq(invitations.id, invId), eq(invitations.status, 'pending')))
+    .limit(1);
+  if (!inv) redirect(`/admin/empresas/${teamId}?error=inv_no_encontrada`);
+
+  const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+  if (!team) redirect(`/admin/empresas/${teamId}?error=empresa_no_encontrada`);
+
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.update(invitations).set({ expiresAt }).where(eq(invitations.id, invId));
+
+  try {
+    await sendInvitationEmail(inv.email, admin.name, team.razonSocial ?? team.name, inv.token);
+  } catch (e) {
+    console.error('[reenviarInvitacion]', e);
+    redirect(`/admin/empresas/${teamId}?error=reenvio_fallido`);
+  }
+
+  redirect(`/admin/empresas/${teamId}?ok=reenviado`);
+}
+
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default async function EmpresaDetailPage({
@@ -211,7 +245,11 @@ export default async function EmpresaDetailPage({
       {ok === 'rango_registrado'   && <Alert color="green" msg="✓ Rango NCF registrado en ecf-api." />}
       {ok === 'rango_eliminado'    && <Alert color="green" msg="✓ Rango desactivado." />}
       {ok === 'token_refrescado'   && <Alert color="green" msg="✓ Token DGII refrescado." />}
+      {ok === 'reenviado'          && <Alert color="green" msg="✓ Invitación reenviada." />}
       {error === 'ya_miembro' && <Alert color="amber" msg="⚠ Ese usuario ya es miembro." />}
+      {error === 'reenvio_fallido'      && <Alert color="amber" msg="⚠ No se pudo reenviar el correo. Revisa la configuración de Resend." />}
+      {error === 'inv_no_encontrada'    && <Alert color="amber" msg="⚠ Invitación no encontrada o ya cancelada." />}
+      {error === 'empresa_no_encontrada' && <Alert color="amber" msg="⚠ Empresa no encontrada." />}
       {error?.startsWith('ecf_')   && <Alert color="amber" msg={`⚠ ecf-api: ${decodeURIComponent(error.slice(4))}`} />}
       {error?.startsWith('cert_')  && <Alert color="amber" msg={`⚠ Certificado: ${decodeURIComponent(error.slice(5))}`} />}
       {error?.startsWith('rango_') && <Alert color="amber" msg={`⚠ Rango: ${decodeURIComponent(error.slice(6))}`} />}
@@ -314,6 +352,14 @@ export default async function EmpresaDetailPage({
                 >
                   {inviteUrl(inv.token)}
                 </a>
+                <ConfirmButton
+                  action={reenviarInvitacion}
+                  message="¿Reenviar correo de invitación?"
+                  className="text-xs text-teal-600 hover:text-teal-700 flex-shrink-0"
+                  fields={{ invId: inv.id, teamId }}
+                >
+                  Reenviar
+                </ConfirmButton>
                 <ConfirmButton
                   action={cancelarInvitacion}
                   message="¿Cancelar esta invitación?"

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { PagoMetodos, pagosValidos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 
 interface Cuenta {
   id:                   number;
@@ -39,7 +40,8 @@ interface Totales {
   countVencidas: number;
 }
 
-const METODOS = [
+// Métodos aceptados por el endpoint de cobranza (enum más restringido que el set de 8).
+const METODOS_AR = [
   { value: 'efectivo',       label: 'Efectivo' },
   { value: 'transferencia',  label: 'Transferencia' },
   { value: 'tarjeta',        label: 'Tarjeta' },
@@ -301,32 +303,39 @@ function PagoModal({
   onSuccess: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  // saldo ya incluye recargo por mora (suma al saldo de cobranza)
-  const [montoDOP, setMontoDOP]   = useState((cuenta.saldo / 100).toFixed(2));
-  const [metodo, setMetodo]       = useState('transferencia');
+  // saldo ya incluye recargo por mora (suma al saldo de cobranza). Montos en DOP.
+  const pagadoDOP = cuenta.pagado / 100;            // ya pagado (cents → DOP)
+  const saldoDOP  = cuenta.saldo / 100;             // disponible a abonar
+  const totalDOP  = pagadoDOP + saldoDOP;           // total para Suma/Resto en el repeater
   const [fecha, setFecha]         = useState(today);
-  const [referencia, setReferencia] = useState('');
-  const [cuentaBancaria, setCuentaBancaria] = useState('');
-  const [notas, setNotas]         = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
 
+  // Una o varias líneas (1 línea = pago normal). AR usa referencia.
+  const [lineas, setLineas] = useState<PagoLinea[]>([
+    { metodo: 'transferencia', valor: saldoDOP.toFixed(2), referencia: '' },
+  ]);
+
+  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!valido) return;
     setGuardando(true);
     setError(null);
     try {
+      const pagos = lineas
+        .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
+        .map(l => ({
+          montoDOP:   parseFloat(l.valor),
+          metodo:     l.metodo,
+          referencia: l.referencia?.trim() || undefined,
+        }));
+
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          montoDOP:   parseFloat(montoDOP),
-          metodo,
-          fechaPago:  fecha,
-          referencia: referencia.trim() || undefined,
-          cuenta:     cuentaBancaria.trim() || undefined,
-          notas:      notas.trim() || undefined,
-        }),
+        body: JSON.stringify({ fechaPago: fecha, pagos }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error al registrar pago');
@@ -375,77 +384,27 @@ function PagoModal({
             </div>
           </div>
 
+          {/* Fecha (compartida) */}
           <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Monto (RD$) *</label>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha *</label>
             <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              max={(cuenta.saldo / 100).toFixed(2)}
-              value={montoDOP}
-              onChange={e => setMontoDOP(e.target.value)}
+              type="date"
+              value={fecha}
+              onChange={e => setFecha(e.target.value)}
               required
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Método *</label>
-              <select
-                value={metodo}
-                onChange={e => setMetodo(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              >
-                {METODOS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha *</label>
-              <input
-                type="date"
-                value={fecha}
-                onChange={e => setFecha(e.target.value)}
-                required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Referencia (opcional)</label>
-            <input
-              type="text"
-              value={referencia}
-              onChange={e => setReferencia(e.target.value)}
-              placeholder="# cheque, últimos 4 tarjeta, etc."
-              maxLength={100}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Cuenta destino (opcional)</label>
-            <input
-              type="text"
-              value={cuentaBancaria}
-              onChange={e => setCuentaBancaria(e.target.value)}
-              placeholder="Banco Popular - Cuenta operativa"
-              maxLength={100}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Notas (opcional)</label>
-            <textarea
-              value={notas}
-              onChange={e => setNotas(e.target.value)}
-              rows={2}
-              maxLength={500}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
+          <PagoMetodos
+            lineas={lineas}
+            onChange={setLineas}
+            total={totalDOP}
+            yaPagado={pagadoDOP}
+            disabled={guardando}
+            showReferencia
+            metodos={METODOS_AR}
+          />
 
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -464,7 +423,7 @@ function PagoModal({
             </button>
             <button
               type="submit"
-              disabled={guardando}
+              disabled={guardando || !valido}
               className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
             >
               {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
