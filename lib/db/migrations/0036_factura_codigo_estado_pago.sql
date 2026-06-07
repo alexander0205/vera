@@ -49,13 +49,17 @@ BEGIN
   END LOOP;
 END $$;
 
--- 6. Backfill estado_pago según pagos + tipoPago + estado
+-- 6. Backfill estado_pago según pagos reales + estado + tipo.
+--    Para histórico de contado SIN filas de pago, se honra el flag inline
+--    `pago_recibido`/`pago_valor_cts` como "pagado" — así no se inunda AR de
+--    ventas de contado viejas que sí se cobraron pero nunca registraron pago row.
 UPDATE ecf_documents d SET estado_pago = CASE
-  WHEN d.estado = 'ANULADO'   THEN 'ANULADA'
-  WHEN d.tipo_pago = 3        THEN 'GRATUITA'
-  WHEN d.tipo_pago = 4        THEN 'USO'
-  WHEN d.tipo_pago = 2 THEN  -- crédito
+  WHEN d.estado = 'ANULADO' THEN 'ANULADA'
+  WHEN d.tipo_pago = 3      THEN 'GRATUITA'
+  WHEN d.tipo_pago = 4      THEN 'USO'
+  ELSE
     CASE
+      -- Pagos reales del ledger
       WHEN COALESCE((SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
                        WHERE p.ecf_document_id = d.id), 0) >= d.monto_total
            AND d.monto_total > 0
@@ -63,7 +67,9 @@ UPDATE ecf_documents d SET estado_pago = CASE
       WHEN COALESCE((SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
                        WHERE p.ecf_document_id = d.id), 0) > 0
         THEN 'PARCIAL'
+      -- Sin filas de pago: histórico contado con flag inline → tratado como pagado
+      WHEN d.tipo_pago = 1 AND (d.pago_recibido = 'true' OR d.pago_valor_cts >= d.monto_total)
+        THEN 'PAGADA'
       ELSE 'PENDIENTE'
     END
-  ELSE 'PAGADA'  -- contado (tipoPago=1 o null): cobrado al emitir
 END;

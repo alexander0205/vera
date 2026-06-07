@@ -1,12 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText, CreditCard, Info, ChevronDown } from 'lucide-react';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { FileText, CreditCard, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PagoMetodos, sumaPagos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 import type { EmpresaPerfil, Retencion, ItemLinea } from '../utils/types';
 import { calcularMontoItem } from '../utils/calculos';
 
@@ -22,14 +20,11 @@ interface Props {
   /** Optional pago recibido block — rendered inline when enabled. */
   pagoRecibido?: boolean;
   setPagoRecibido?: (v: boolean) => void;
-  pagoMetodo?: string;
-  setPagoMetodo?: (v: string) => void;
-  pagoCuenta?: string;
-  setPagoCuenta?: (v: string) => void;
-  pagoValor?: string;
-  setPagoValor?: (v: string) => void;
   pagoFecha?: string;
   setPagoFecha?: (v: string) => void;
+  /** Líneas de pago (1 línea = pago normal). Controladas por el padre. */
+  pagoLineas?: PagoLinea[];
+  setPagoLineas?: (v: PagoLinea[]) => void;
 }
 
 const fmt = (n: number) =>
@@ -41,18 +36,17 @@ const fmt = (n: number) =>
  * Pago tiene su propio toggle + método/fecha/cuenta/valor.
  */
 export function ResumenSidebar({
-  empresa, totales, retenciones, totalNeto, items,
+  totales, retenciones, totalNeto, items,
   showPago = true,
   pagoRecibido = false, setPagoRecibido,
-  pagoMetodo = '', setPagoMetodo,
-  pagoCuenta = '', setPagoCuenta,
-  pagoValor = '', setPagoValor,
   pagoFecha = '', setPagoFecha,
+  pagoLineas = [{ metodo: 'efectivo', valor: '' }], setPagoLineas,
 }: Props) {
   const [resumenOpen, setResumenOpen] = useState(true);
   const [pagoOpen, setPagoOpen]       = useState(true);
 
-  const pagoNum = parseFloat(pagoValor) || 0;
+  // Pago efectivo = suma de las líneas. El saldo pendiente lo resta del total.
+  const pagoNum = sumaPagos(pagoLineas);
   const saldoPendiente = Math.max(0, totalNeto - pagoNum);
 
   // Items con nombre (filtra líneas vacías)
@@ -142,19 +136,6 @@ export function ResumenSidebar({
             )}
           </div>
         )}
-
-        {/* Firma — discreto */}
-        {resumenOpen && empresa?.firma && (
-          <div className="px-4 pb-4 md:px-5 border-t border-gray-100 pt-3">
-            <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">Firma autorizada</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={empresa.firma}
-              alt="Firma autorizada"
-              className="h-10 object-contain"
-            />
-          </div>
-        )}
       </section>
 
       {/* ─── Pago card (sticky aparte) ─── */}
@@ -186,65 +167,22 @@ export function ResumenSidebar({
 
             {pagoRecibido && (
               <>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Método de pago</Label>
-                    <Select value={pagoMetodo || 'efectivo'} onValueChange={(v) => setPagoMetodo?.(v)}>
-                      <SelectTrigger className="mt-1 h-9 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="efectivo">Efectivo</SelectItem>
-                        <SelectItem value="transferencia">Transferencia</SelectItem>
-                        <SelectItem value="tarjeta_credito">Tarjeta de crédito</SelectItem>
-                        <SelectItem value="tarjeta_debito">Tarjeta de débito</SelectItem>
-                        <SelectItem value="cheque">Cheque</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Fecha</Label>
-                    <Input
-                      type="date"
-                      className="mt-1 h-9 text-sm"
-                      value={pagoFecha}
-                      onChange={(e) => setPagoFecha?.(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Cuenta bancaria</Label>
-                    <Select value={pagoCuenta || ''} onValueChange={(v) => setPagoCuenta?.(v)}>
-                      <SelectTrigger className="mt-1 h-9 text-sm">
-                        <SelectValue placeholder="Seleccionar" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="caja">Caja general</SelectItem>
-                        <SelectItem value="banreservas">Banreservas</SelectItem>
-                        <SelectItem value="popular">Banco Popular</SelectItem>
-                        <SelectItem value="bhd">BHD</SelectItem>
-                        <SelectItem value="otro">Otro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Valor</Label>
-                    <div className="relative mt-1">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-500 font-medium">RD$</span>
-                      <Input
-                        type="number" inputMode="decimal" min={0} step={0.01}
-                        className="h-9 text-sm pl-10"
-                        placeholder="0.00"
-                        value={pagoValor}
-                        onChange={(e) => setPagoValor?.(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs text-gray-600">
-                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-gray-400" />
-                  <span>Registra el pago recibido en esta sección. El resumen se actualiza automáticamente.</span>
+                <PagoMetodos
+                  lineas={pagoLineas}
+                  onChange={(v) => setPagoLineas?.(v)}
+                  total={totalNeto}
+                  showCuenta
+                />
+
+                {/* Fecha — compacta, default hoy, secundaria */}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <Label className="text-[11px] text-gray-500">Fecha de pago</Label>
+                  <Input
+                    type="date"
+                    className="h-8 text-xs w-auto"
+                    value={pagoFecha}
+                    onChange={(e) => setPagoFecha?.(e.target.value)}
+                  />
                 </div>
               </>
             )}

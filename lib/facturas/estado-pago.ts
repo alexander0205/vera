@@ -2,12 +2,15 @@
  * Cálculo y persistencia del estado_pago de un ecf_document.
  *
  * Estados:
- *   PENDIENTE  — crédito sin pagos
- *   PARCIAL    — crédito con pagos < total
- *   PAGADA     — crédito pagado total | contado (cobrado al emitir)
+ *   PENDIENTE  — sin pagos registrados
+ *   PARCIAL    — pagos parciales (0 < pagado < total)
+ *   PAGADA     — SOLO cuando el pago completa el total (pagado >= total)
  *   ANULADA    — factura anulada (precedencia máxima)
  *   GRATUITA   — tipoPago=3 (sin cobro)
  *   USO        — tipoPago=4 (uso/consumo)
+ *
+ * Regla: nunca se marca PAGADA al emitir. Solo el ledger pagos_recibidos
+ * (vía registrarPago/registrarPagosSplit/syncPagoMirror) puede llevar a PAGADA.
  */
 
 import { and, eq, sql } from 'drizzle-orm';
@@ -31,9 +34,9 @@ export function calcularEstadoPago(params: {
   if (params.estado === 'ANULADO') return 'ANULADA';
   if (params.tipoPago === 3)       return 'GRATUITA';
   if (params.tipoPago === 4)       return 'USO';
-  // Contado (1 o null) → cobrado al emitir
-  if (params.tipoPago !== 2) return 'PAGADA';
-  // Crédito
+  // Pago real determina el estado para TODOS los tipos (contado y crédito).
+  // No se asume contado=pagado: un contado emitido sin registrar pago tiene
+  // saldo pendiente y debe aparecer en cuentas por cobrar.
   if (params.montoTotal > 0 && params.totalPagado >= params.montoTotal) return 'PAGADA';
   if (params.totalPagado > 0) return 'PARCIAL';
   return 'PENDIENTE';

@@ -1,6 +1,7 @@
 import type { Cliente, ItemLinea, Plazo, Retencion } from './types';
 import { PLAZOS_BASE } from './types';
 import { tasaToFloat } from './calculos';
+import type { PagoLinea } from '@/components/pagos/PagoMetodos';
 
 export interface BuildPayloadInput {
   modo: 'emitir' | 'borrador';
@@ -27,10 +28,9 @@ export interface BuildPayloadInput {
   pieFactura: string;
   comentario: string;
   pagoRecibido: boolean;
-  pagoMetodo: string;
-  pagoCuenta: string;
-  pagoValor: string;
   pagoFecha: string;
+  /** Líneas de pago (1 línea = pago normal; más de 1 = pago dividido). */
+  pagoLineas?: PagoLinea[];
   almacenId: number | null;
   listaPreciosId: number | null;
   vendedorId: number | null;
@@ -42,9 +42,34 @@ export function buildPayload(input: BuildPayloadInput) {
     emailManual, customPlazos, plazoId, fechaLimitePago, ncfModificado, items,
     codigoModificacion, fechaNcfModificado, tipoIngresos,
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
-    pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
+    pagoRecibido, pagoLineas = [], pagoFecha,
     almacenId, listaPreciosId, vendedorId,
   } = input;
+
+  // ── Pago: 1 línea = pago single; 2+ líneas con valor = pago dividido ────────
+  // Las líneas válidas (valor > 0). El endpoint de emisión acepta `pagos` como
+  // array { metodo, valor } (split, vía registrarPagosSplit) o los campos single
+  // pagoMetodo/pagoCuenta/pagoValor (vía registrarPago).
+  const lineasValidas = pagoLineas
+    .map(l => ({
+      metodo: l.metodo,
+      valor:  parseFloat(l.valor || '0') || 0,
+      cuenta: l.cuenta?.trim() || '',
+    }))
+    .filter(l => l.valor > 0);
+  const usarSplit = pagoRecibido && lineasValidas.length > 1;
+  const pagosArray = usarSplit
+    ? lineasValidas.map(l => ({ metodo: l.metodo, valor: l.valor }))
+    : [];
+  // En modo single tomamos la primera línea válida (o la primera si ninguna tiene valor).
+  const single = lineasValidas[0] ?? {
+    metodo: pagoLineas[0]?.metodo ?? 'efectivo',
+    valor:  0,
+    cuenta: pagoLineas[0]?.cuenta?.trim() || '',
+  };
+  const pagoMetodo = single.metodo;
+  const pagoCuenta = single.cuenta;
+  const pagoValor  = single.valor > 0 ? single.valor.toFixed(2) : '';
 
   const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
   const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
@@ -104,11 +129,14 @@ export function buildPayload(input: BuildPayloadInput) {
     pieFactura:          pieFactura.trim()            || undefined,
     comentario:          comentario.trim()            || undefined,
     // Pago recibido
-    pagoRecibido: pagoRecibido || undefined,
-    pagoMetodo:   pagoRecibido ? pagoMetodo    : undefined,
-    pagoCuenta:   pagoRecibido ? pagoCuenta    : undefined,
-    pagoValor:    pagoRecibido && pagoValor ? parseFloat(pagoValor) : undefined,
-    pagoFecha:    pagoRecibido ? pagoFecha     : undefined,
+    // Modo split: emitir `pagos` + pagoRecibido=true, dejar single fields undefined
+    // (el backend usa `pagos` y registrarPagosSplit, ignorando los single).
+    pagoRecibido: (pagoRecibido || usarSplit) || undefined,
+    pagoMetodo:   (pagoRecibido && !usarSplit) ? pagoMetodo : undefined,
+    pagoCuenta:   (pagoRecibido && !usarSplit) ? pagoCuenta : undefined,
+    pagoValor:    (pagoRecibido && !usarSplit && pagoValor) ? parseFloat(pagoValor) : undefined,
+    pagoFecha:    (pagoRecibido || usarSplit) ? pagoFecha : undefined,
+    pagos:        usarSplit ? pagosArray : undefined,
     // Top section
     almacenId:      almacenId      || undefined,
     listaPreciosId: listaPreciosId || undefined,

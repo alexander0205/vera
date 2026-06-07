@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, dependientes } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
@@ -83,6 +83,9 @@ const emitirSchema = z.object({
   pagoCuenta:   z.string().optional(),
   pagoValor:    z.number().min(0).optional(),
   pagoFecha:    z.string().optional(),
+  // Pago dividido (split): varios métodos en una sola operación. Cuando viene,
+  // tiene prioridad sobre el pago single y se registra vía registrarPagosSplit.
+  pagos:        z.array(z.object({ metodo: z.string(), valor: z.number().min(0) })).optional(),
 
   clientId:   z.number().int().positive().optional(),
   lineasJson: z.string().optional(),
@@ -368,7 +371,21 @@ export async function POST(request: NextRequest) {
 
       // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
       // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
-      if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+      // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
+      // recalcula estado_pago). Si no, flujo single existente.
+      if (data.pagos?.length) {
+        try {
+          await registrarPagosSplit({
+            teamId,
+            ecfDocumentId: saved.id,
+            fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+            createdBy:     user.id,
+            pagos: data.pagos
+              .filter(p => p.valor > 0)
+              .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+          });
+        } catch (e) { console.error('[emitir borrador registrarPagosSplit]', e); }
+      } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
         try {
           await registrarPago({
             teamId,
@@ -382,6 +399,10 @@ export async function POST(request: NextRequest) {
         } catch (e) { console.error('[emitir borrador registrarPago]', e); }
       }
 
+      // Split: la suma de los métodos (clamped al total) es el pago reportado.
+      const sumaSplit = data.pagos?.length
+        ? data.pagos.filter(p => p.valor > 0).reduce((s, p) => s + p.valor, 0)
+        : null;
       return NextResponse.json({
         ok:           true,
         modo:         'borrador',
@@ -389,9 +410,11 @@ export async function POST(request: NextRequest) {
         encf:         saved.encf,
         estado:       'BORRADOR',
         montoTotal:   totales.montoTotal,
-        pagoRecibido: data.pagoRecibido ?? false,
-        pagoMetodo:   data.pagoRecibido ? (data.pagoMetodo ?? 'efectivo') : null,
-        pagoValor:    data.pagoRecibido ? Math.min(data.pagoValor ?? totales.montoTotal, totales.montoTotal) : null,
+        pagoRecibido: sumaSplit != null ? true : (data.pagoRecibido ?? false),
+        pagoMetodo:   sumaSplit != null ? 'split' : (data.pagoRecibido ? (data.pagoMetodo ?? 'efectivo') : null),
+        pagoValor:    sumaSplit != null
+          ? Math.min(sumaSplit, totales.montoTotal)
+          : (data.pagoRecibido ? Math.min(data.pagoValor ?? totales.montoTotal, totales.montoTotal) : null),
       });
     }
 
@@ -586,7 +609,21 @@ export async function POST(request: NextRequest) {
     );
 
     // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
-    if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+    // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
+    // recalcula estado_pago). Si no, flujo single existente.
+    if (data.pagos?.length) {
+      try {
+        await registrarPagosSplit({
+          teamId,
+          ecfDocumentId: saved.id,
+          fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+          createdBy:     user.id,
+          pagos: data.pagos
+            .filter(p => p.valor > 0)
+            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+        });
+      } catch (e) { console.error('[emitir registrarPagosSplit]', e); }
+    } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
       try {
         await registrarPago({
           teamId,

@@ -38,6 +38,10 @@ export interface BorradorInicial {
   lineasJson:           string | null; // JSON string de ItemLinea[]
   dependienteId:        number | null;
   dependienteNombre:    string | null;
+  // Pago — para restaurar el split al editar un borrador.
+  pagoRecibido?:        boolean;
+  pagoFecha?:           string | null;
+  pagoLineas?:          { metodo: string; valor: string; cuenta?: string; referencia?: string }[];
 }
 
 export interface ItemLinea {

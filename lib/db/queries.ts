@@ -532,8 +532,13 @@ export async function getCuentasPorCobrar(
     .from(ecfDocuments)
     .where(and(
       eq(ecfDocuments.teamId, teamId),
-      eq(ecfDocuments.tipoPago, 2),
-      sql`(${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO', 'HISTORICA') OR (${ecfDocuments.estado} = 'BORRADOR' AND ${ecfDocuments.origenRecurrenteId} IS NOT NULL))`,
+      // AR = toda factura con saldo pendiente, sin importar el estado de emisión
+      // (e-CF emitido, sin-ncf o borrador con cobro en curso). estado_pago captura
+      // crédito sin pagar, contado sin cobrar y parciales. PAGADA/ANULADA/GRATUITA/
+      // USO quedan fuera vía estado_pago. Solo se excluyen ANULADO/RECHAZADO (no
+      // cobrables).
+      sql`${ecfDocuments.estadoPago} IN ('PENDIENTE', 'PARCIAL')`,
+      sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
     ))
     .orderBy(desc(ecfDocuments.fechaEmision));
@@ -653,6 +658,53 @@ export async function registrarPago(input: {
   notas?:        string | null;
   createdBy?:    number;
 }) {
+  // Delega en la versión batch con un solo elemento. Mantiene la firma pública
+  // (otros callers la usan) y retorna `pago` singular además del array.
+  const result = await registrarPagosSplit({
+    teamId:        input.teamId,
+    ecfDocumentId: input.ecfDocumentId,
+    fechaPago:     input.fechaPago,
+    createdBy:     input.createdBy,
+    pagos: [{
+      montoCentavos: input.montoCentavos,
+      metodo:        input.metodo,
+      referencia:    input.referencia ?? null,
+      cuenta:        input.cuenta ?? null,
+      notas:         input.notas ?? null,
+    }],
+  });
+
+  return {
+    pago:          result.pagos[0],
+    saldoAnterior: result.saldoAnterior,
+    saldoNuevo:    result.saldoNuevo,
+    montoTotal:    result.montoTotal,
+  };
+}
+
+/**
+ * Registra VARIOS pagos (split / pago dividido) contra una factura en una sola
+ * operación. Cada método es una fila en `pagos_recibidos`. Valida que:
+ * - El doc pertenece al team
+ * - Hay al menos un pago y cada monto es positivo
+ * - La SUMA de los montos no supera el saldo pendiente
+ * Inserta todas las filas y sincroniza el espejo inline UNA sola vez.
+ */
+export async function registrarPagosSplit(input: {
+  teamId:        number;
+  ecfDocumentId: number;
+  fechaPago:     string; // YYYY-MM-DD
+  createdBy?:    number;
+  pagos: Array<{
+    montoCentavos: number;
+    metodo:        string;
+    referencia?:   string | null;
+    cuenta?:       string | null;
+    notas?:        string | null;
+  }>;
+}) {
+  if (input.pagos.length < 1) throw new Error('Debe incluir al menos un método de pago');
+
   // Validar doc pertenece al team
   const [doc] = await db
     .select({ id: ecfDocuments.id, montoTotal: ecfDocuments.montoTotal })
@@ -676,29 +728,38 @@ export async function registrarPago(input: {
   const yaPagado = Number(agg?.pagado ?? 0);
   const saldo    = doc.montoTotal - yaPagado;
 
-  if (input.montoCentavos <= 0) throw new Error('Monto debe ser positivo');
-  if (input.montoCentavos > saldo) {
+  let total = 0;
+  for (const p of input.pagos) {
+    if (p.montoCentavos <= 0) throw new Error('Cada monto debe ser positivo');
+    if (!p.metodo) throw new Error('Cada pago requiere un método');
+    total += p.montoCentavos;
+  }
+
+  if (total <= 0) throw new Error('Monto debe ser positivo');
+  if (total > saldo) {
     throw new Error(`Monto excede saldo pendiente (RD$${(saldo / 100).toFixed(2)})`);
   }
 
-  const [pago] = await db.insert(pagosRecibidos).values({
-    teamId:        input.teamId,
-    ecfDocumentId: input.ecfDocumentId,
-    montoCentavos: input.montoCentavos,
-    metodo:        input.metodo,
-    referencia:    input.referencia ?? null,
-    cuenta:        input.cuenta ?? null,
-    fechaPago:     input.fechaPago,
-    notas:         input.notas ?? null,
-    createdBy:     input.createdBy ?? null,
-  }).returning();
+  const pagos = await db.insert(pagosRecibidos).values(
+    input.pagos.map(p => ({
+      teamId:        input.teamId,
+      ecfDocumentId: input.ecfDocumentId,
+      montoCentavos: p.montoCentavos,
+      metodo:        p.metodo,
+      referencia:    p.referencia ?? null,
+      cuenta:        p.cuenta ?? null,
+      fechaPago:     input.fechaPago,
+      notas:         p.notas ?? null,
+      createdBy:     input.createdBy ?? null,
+    })),
+  ).returning();
 
   await syncPagoMirror(input.teamId, input.ecfDocumentId);
 
   return {
-    pago,
+    pagos,
     saldoAnterior: saldo,
-    saldoNuevo:    saldo - input.montoCentavos,
+    saldoNuevo:    saldo - total,
     montoTotal:    doc.montoTotal,
   };
 }

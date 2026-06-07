@@ -22,6 +22,7 @@ import { ItemsTable } from './sections/ItemsTable';
 import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
+import type { PagoLinea } from '@/components/pagos/PagoMetodos';
 import { Terminos, Notas } from './sections/TerminosNotas';
 import { PieFactura } from './sections/PieFactura';
 import { Comentarios } from './sections/Comentarios';
@@ -192,11 +193,17 @@ export default function NuevaFacturaForm({
   const [pieFactura, setPieFactura]        = useState(initialData?.pieFactura ?? '');
 
   // ── Pago recibido ──────────────────────────────────────────────────────────
-  const [pagoRecibido, setPagoRecibido] = useState(false);
-  const [pagoFecha, setPagoFecha]       = useState(() => new Date().toISOString().slice(0, 10));
-  const [pagoCuenta, setPagoCuenta]     = useState('');
-  const [pagoMetodo, setPagoMetodo]     = useState('efectivo');
-  const [pagoValor, setPagoValor]       = useState('');
+  // Al editar un borrador con split, restauramos las líneas desde initialData.
+  const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? false);
+  const [pagoFecha, setPagoFecha]       = useState(
+    initialData?.pagoFecha ?? new Date().toISOString().slice(0, 10),
+  );
+  // Líneas de pago (1 línea = pago normal; el repeater permite agregar más).
+  const [pagoLineas, setPagoLineas] = useState<PagoLinea[]>(
+    initialData?.pagoLineas && initialData.pagoLineas.length > 0
+      ? initialData.pagoLineas
+      : [{ metodo: 'efectivo', valor: '', cuenta: '' }],
+  );
 
   const [comentario, setComentario] = useState(initialData?.comentario ?? '');
 
@@ -462,7 +469,7 @@ export default function NuevaFacturaForm({
     setRetenciones([]);
     setNotas(''); setTerminos(''); setPieFactura('');
     setPagoRecibido(false); setPagoFecha(new Date().toISOString().slice(0, 10));
-    setPagoCuenta(''); setPagoMetodo('efectivo'); setPagoValor('');
+    setPagoLineas([{ metodo: 'efectivo', valor: '', cuenta: '' }]);
     setComentario('');
     setAlmacenId(null); setAlmacenNombre('');
     setListaPreciosId(null); setListaPreciosNombre('');
@@ -478,7 +485,7 @@ export default function NuevaFacturaForm({
       customPlazos, plazoId, fechaLimitePago, ncfModificado, items,
       codigoModificacion, fechaNcfModificado, tipoIngresos,
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
-      pagoRecibido, pagoMetodo, pagoCuenta, pagoValor, pagoFecha,
+      pagoRecibido, pagoLineas, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
     });
   }
@@ -970,10 +977,8 @@ export default function NuevaFacturaForm({
               totalNeto={totalNeto}
               items={items}
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
-              pagoMetodo={pagoMetodo} setPagoMetodo={setPagoMetodo}
-              pagoCuenta={pagoCuenta} setPagoCuenta={setPagoCuenta}
-              pagoValor={pagoValor} setPagoValor={setPagoValor}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
+              pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
             />
           </div>
 

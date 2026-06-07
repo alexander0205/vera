@@ -6,9 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { PagoMetodos, sumaPagos, pagosValidos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 
 export interface PagoData {
   recibido: boolean;
@@ -16,6 +14,8 @@ export interface PagoData {
   cuenta?: string | null;
   valorDOP: string;
   fecha?: string | null;
+  /** Líneas reales del ledger (split). Si trae 2+, el detalle las muestra todas. */
+  lineas?: { metodo: string; valor: string; cuenta?: string; referencia?: string }[];
 }
 
 interface Props {
@@ -41,45 +41,62 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
   const [justSaved, setJustSaved] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
 
-  const [metodo, setMetodo] = useState(initial.metodo ?? 'efectivo');
-  const [cuenta, setCuenta] = useState(initial.cuenta ?? '');
-  const [valor,  setValor]  = useState(initial.valorDOP);
   const [fecha,  setFecha]  = useState(
     initial.fecha ?? new Date().toISOString().slice(0, 10),
   );
 
+  // Una o varias líneas de método (1 línea = pago normal; 2+ = split del ledger).
+  const initialLineas = (): PagoLinea[] => {
+    if (initial.lineas && initial.lineas.length > 0) {
+      return initial.lineas.map(l => ({
+        metodo: l.metodo, valor: l.valor, cuenta: l.cuenta ?? '', referencia: l.referencia,
+      }));
+    }
+    return initial.recibido
+      ? [{ metodo: initial.metodo ?? 'efectivo', valor: initial.valorDOP || '', cuenta: initial.cuenta ?? '' }]
+      : [{ metodo: 'efectivo', valor: totalDOP || '', cuenta: '' }];
+  };
+  const [lineas, setLineas] = useState<PagoLinea[]>(initialLineas);
+
+  const totalNum = parseFloat(totalDOP || '0') || 0;
+  const valido   = pagosValidos(lineas, totalNum);
+
   // Sync with parent if initial changes (e.g. after page reload)
   useEffect(() => {
     setEditing(initial.recibido);
-    setMetodo(initial.metodo ?? 'efectivo');
-    setCuenta(initial.cuenta ?? '');
-    setValor(initial.valorDOP);
     setFecha(initial.fecha ?? new Date().toISOString().slice(0, 10));
-  }, [initial.recibido, initial.metodo, initial.cuenta, initial.valorDOP, initial.fecha]);
+    setLineas(initialLineas());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial.recibido, initial.metodo, initial.cuenta, initial.valorDOP, initial.fecha, totalDOP,
+      JSON.stringify(initial.lineas)]);
 
   async function handleSave() {
+    if (!valido) return;
     setSaving(true);
     try {
+      const pagos = lineas
+        .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
+        .map(l => ({
+          metodo: l.metodo,
+          valor:  parseFloat(l.valor),
+          cuenta: l.cuenta?.trim() || null,
+        }));
       const res = await fetch(`/api/facturas/${docId}/pago`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recibido: true,
-          metodo,
-          cuenta: cuenta || null,
-          valor:  parseFloat(valor || '0'),
-          fecha,
-        }),
+        body: JSON.stringify({ fecha, pagos }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'Error guardando pago');
       toast.success('Pago registrado exitosamente');
       setJustSaved(true);
+      // Espejo inline: último método + suma total
+      const ultima = lineas[lineas.length - 1];
       onSaved?.({
         recibido: true,
-        metodo,
-        cuenta: cuenta || null,
-        valorDOP: parseFloat(valor || '0').toFixed(2),
+        metodo:   ultima?.metodo ?? null,
+        cuenta:   ultima?.cuenta || null,
+        valorDOP: sumaPagos(lineas).toFixed(2),
         fecha,
       });
     } catch (e: unknown) {
@@ -147,8 +164,8 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
                 className="w-full border-dashed border-teal-300 text-teal-700 hover:bg-teal-50"
                 onClick={() => {
                   if (readOnly) return;
-                  // Sugerir total como valor inicial
-                  if (!valor || parseFloat(valor) === 0) setValor(totalDOP);
+                  // Sugerir total como valor inicial de la primera línea
+                  setLineas([{ metodo: 'efectivo', valor: totalDOP || '', cuenta: '' }]);
                   setEditing(true);
                 }}
                 disabled={readOnly}
@@ -182,67 +199,24 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
                 </span>
               </label>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Método de pago</Label>
-                  <Select value={metodo} onValueChange={setMetodo} disabled={readOnly || saving}>
-                    <SelectTrigger className="mt-1 h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="efectivo">Efectivo</SelectItem>
-                      <SelectItem value="transferencia">Transferencia</SelectItem>
-                      <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                      <SelectItem value="tarjeta_credito">Tarjeta de crédito</SelectItem>
-                      <SelectItem value="tarjeta_debito">Tarjeta de débito</SelectItem>
-                      <SelectItem value="cheque">Cheque</SelectItem>
-                      <SelectItem value="deposito">Depósito</SelectItem>
-                      <SelectItem value="otro">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Fecha</Label>
-                  <Input
-                    type="date"
-                    className="mt-1 h-9 text-sm"
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                    disabled={readOnly || saving}
-                  />
-                </div>
-              </div>
+              <PagoMetodos
+                lineas={lineas}
+                onChange={setLineas}
+                total={totalNum}
+                disabled={readOnly || saving}
+                showCuenta
+              />
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Cuenta bancaria</Label>
-                  <Select value={cuenta || ''} onValueChange={setCuenta} disabled={readOnly || saving}>
-                    <SelectTrigger className="mt-1 h-9 text-sm">
-                      <SelectValue placeholder="Seleccionar" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="caja">Caja general</SelectItem>
-                      <SelectItem value="banreservas">Banreservas</SelectItem>
-                      <SelectItem value="popular">Banco Popular</SelectItem>
-                      <SelectItem value="bhd">BHD</SelectItem>
-                      <SelectItem value="otro">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-[11px] text-gray-600 uppercase tracking-wide">Valor</Label>
-                  <div className="relative mt-1">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-gray-500 font-medium">RD$</span>
-                    <Input
-                      type="number" inputMode="decimal" min={0} step={0.01}
-                      className="h-9 text-sm pl-10"
-                      placeholder="0.00"
-                      value={valor}
-                      onChange={(e) => setValor(e.target.value)}
-                      disabled={readOnly || saving}
-                    />
-                  </div>
-                </div>
+              {/* Fecha — compacta, default hoy, secundaria */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <Label className="text-[11px] text-gray-500">Fecha de pago</Label>
+                <Input
+                  type="date"
+                  className="h-8 text-xs w-auto"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                  disabled={readOnly || saving}
+                />
               </div>
 
               {justSaved && (
@@ -264,7 +238,7 @@ export function PagoCard({ docId, initial, readOnly, onSaved, totalDOP }: Props)
                     size="sm"
                     className="flex-1 bg-teal-600 hover:bg-teal-700 h-9"
                     onClick={handleSave}
-                    disabled={saving}
+                    disabled={saving || !valido}
                   >
                     {saving
                       ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Guardando…</>
