@@ -200,6 +200,7 @@ export async function GET(
 
     const pdfData: FacturaPDFData = {
       encf:          doc.encf,
+      codigo:        doc.codigo ?? undefined,
       tipoEcf:       doc.tipoEcf,
       tipoEcfNombre: TIPO_NOMBRE[doc.tipoEcf] ?? `Tipo ${doc.tipoEcf}`,
       fechaEmision:  new Date(doc.fechaEmision).toLocaleDateString('es-DO', {

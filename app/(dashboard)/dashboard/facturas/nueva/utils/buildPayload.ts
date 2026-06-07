@@ -34,6 +34,8 @@ export interface BuildPayloadInput {
   almacenId: number | null;
   listaPreciosId: number | null;
   vendedorId: number | null;
+  /** ID del borrador existente — indica al API que haga UPDATE en vez de INSERT */
+  borradorId?: number | null;
 }
 
 export function buildPayload(input: BuildPayloadInput) {
@@ -43,7 +45,7 @@ export function buildPayload(input: BuildPayloadInput) {
     codigoModificacion, fechaNcfModificado, tipoIngresos,
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
     pagoRecibido, pagoLineas = [], pagoFecha,
-    almacenId, listaPreciosId, vendedorId,
+    almacenId, listaPreciosId, vendedorId, borradorId,
   } = input;
 
   // ── Pago: 1 línea = pago single; 2+ líneas con valor = pago dividido ────────
@@ -145,6 +147,7 @@ export function buildPayload(input: BuildPayloadInput) {
     dependienteId:     dependienteIdResumen,
     dependienteNombre: dependienteNombreResumen,
     // Para editar borradores
+    borradorId: borradorId ?? undefined,
     clientId:   clienteSeleccionado?.id ?? undefined,
     lineasJson: JSON.stringify(
       items.filter(i => i.nombreItem.trim()).map(i => ({

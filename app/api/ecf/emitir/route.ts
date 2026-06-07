@@ -100,6 +100,9 @@ const emitirSchema = z.object({
   // Dependiente del cliente — metadato, no va al XML DGII
   dependienteId:     z.number().int().positive().optional(),
   dependienteNombre: z.string().max(255).optional(),
+
+  // Edición de borrador existente — hacer UPDATE en lugar de INSERT
+  borradorId: z.number().int().positive().optional(),
 });
 
 // ─── Adquirir próximo eNCF de secuencia local ────────────────────────────────
@@ -328,7 +331,61 @@ export async function POST(request: NextRequest) {
 
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
-      const totales = calcularTotales(data.items);
+      const totales  = calcularTotales(data.items);
+      const montoCts = Math.round(totales.montoTotal * 100);
+
+      // ── Editar borrador existente (UPDATE) ──────────────────────────────────
+      if (data.borradorId) {
+        const borradorId = data.borradorId; // narrowed to number
+        const [existing] = await db
+          .select({ id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo, estado: ecfDocuments.estado })
+          .from(ecfDocuments)
+          .where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
+          .limit(1);
+
+        if (!existing || !['BORRADOR', 'HISTORICA'].includes(existing.estado)) {
+          return NextResponse.json({ error: 'Borrador no encontrado o ya emitido' }, { status: 404 });
+        }
+
+        const estadoPago = calcularEstadoPago({
+          estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
+        });
+
+        const [saved] = await withRequestAuditContext(
+          (tx) => tx.update(ecfDocuments).set({
+            clientId:             data.clientId ?? null,
+            tipoEcf:              data.tipoEcf,
+            estadoPago,
+            rncComprador:         data.rncComprador ?? null,
+            razonSocialComprador: data.razonSocialComprador ?? null,
+            emailComprador:       data.emailComprador ?? null,
+            montoTotal:           montoCts,
+            totalItbis:           Math.round(totales.totalItbis * 100),
+            ncfModificado:        data.ncfModificado ?? null,
+            lineasJson:           data.lineasJson ?? null,
+            tipoPago:             data.tipoPago ?? 1,
+            fechaLimitePago:      data.fechaLimitePago ?? null,
+            dependienteId:        data.dependienteId ?? null,
+            dependienteNombre:    data.dependienteNombre ?? null,
+            updatedAt:            new Date(),
+            ...extraFields,
+          }).where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
+            .returning(),
+          { userId: user.id, teamId },
+        );
+
+        return NextResponse.json({
+          ok:           true,
+          modo:         'borrador',
+          documentoId:  saved.id,
+          encf:         saved.encf,
+          estado:       'BORRADOR',
+          montoTotal:   totales.montoTotal,
+          pagoRecibido: data.pagoRecibido ?? false,
+        });
+      }
+
+      // ── Nuevo borrador (INSERT) ─────────────────────────────────────────────
       // sin-ncf: encf vacío (no hay comprobante, no generar BOR-sin-ncf-XXX).
       // Otros borradores (borrador real de tipo e31/e32/etc): prefijo BOR- para
       // distinguir de e-CF reales (E31...) y evitar colisiones.
@@ -337,7 +394,6 @@ export async function POST(request: NextRequest) {
         : `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
       const codigo      = await generarCodigoFactura(db, teamId);
-      const montoCts    = Math.round(totales.montoTotal * 100);
       const estadoPago  = calcularEstadoPago({
         estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
       });

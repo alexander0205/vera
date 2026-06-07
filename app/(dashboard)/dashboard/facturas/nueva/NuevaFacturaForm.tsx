@@ -487,6 +487,7 @@ export default function NuevaFacturaForm({
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
+      borradorId: initialData?.id ?? null,
     });
   }
 
