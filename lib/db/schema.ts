@@ -113,6 +113,11 @@ export const teams = pgTable('teams', {
   recargoMoraActivo:      boolean('recargo_mora_activo').notNull().default(false),
   recargoMoraPorcentaje:  integer('recargo_mora_porcentaje').notNull().default(200),  // basis points; 200 = 2.00%
   recargoMoraDiasGracia:  integer('recargo_mora_dias_gracia').notNull().default(5),
+
+  // ── Módulo Cuadre de Caja ─────────────────────────────────────────────────
+  // Toggle por empresa. Si está activo: aparece el grupo "Caja" en el sidebar,
+  // el badge de estado en el header, y no se puede facturar sin turno abierto.
+  cajaHabilitada:         boolean('caja_habilitada').notNull().default(false),
 });
 
 export const teamMembers = pgTable('team_members', {
