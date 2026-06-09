@@ -3,14 +3,14 @@
   "configurations": [
     {
       "name": "emitedo-dev",
-      "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "PATH=/Users/alexanderferreras/.nvm/versions/node/v20.19.6/bin:$PATH pnpm dev"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--turbopack"],
       "autoPort": true
     },
     {
       "name": "emitedo-prod",
-      "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "PATH=/Users/alexanderferreras/.nvm/versions/node/v20.19.6/bin:$PATH pnpm dev:prod"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev"],
       "autoPort": true
     }
   ]
