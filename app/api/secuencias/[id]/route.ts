@@ -14,6 +14,9 @@ import { userCan } from '@/lib/config/roles';
 
 const updateSchema = z.object({
   hasta:            z.number().int().positive().optional(),
+  // siguiente: permite corregir secuenciaActual (ej. revertir un número consumido por error).
+  // No tiene restricción de ir hacia atrás — es una corrección administrativa intencional.
+  siguiente:        z.number().int().positive().optional(),
   fechaVencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD requerido').optional(),
   nombre:           z.string().min(1).max(200).optional(),
   // pieDeFactura y sucursal: cliente envía null al limpiar el input. Aceptar
@@ -171,6 +174,10 @@ export async function PUT(
       );
     }
     updates.secuenciaHasta = BigInt(parsed.data.hasta);
+  }
+
+  if (parsed.data.siguiente !== undefined) {
+    updates.secuenciaActual = BigInt(parsed.data.siguiente);
   }
 
   if (parsed.data.fechaVencimiento) {
