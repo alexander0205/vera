@@ -27,6 +27,7 @@ import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
+import { getTurnoAbierto } from '@/lib/caja/core';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -478,6 +479,21 @@ export async function POST(request: NextRequest) {
 
     const totales = calcularTotales(data.items);
 
+    // ── Cuadre de caja ────────────────────────────────────────────────────────
+    // Si la empresa tiene el módulo habilitado, no se puede facturar sin un turno
+    // de caja ABIERTO. La venta (y sus pagos) se atan al turno para la
+    // conciliación efectivo↔comprobante del cierre.
+    let turnoCaja: Awaited<ReturnType<typeof getTurnoAbierto>> = null;
+    if (team.cajaHabilitada) {
+      turnoCaja = await getTurnoAbierto(teamId, user.id);
+      if (!turnoCaja || turnoCaja.estado !== 'ABIERTO') {
+        return NextResponse.json(
+          { error: 'Debes abrir un turno de caja antes de facturar.', code: 'CAJA_SIN_TURNO' },
+          { status: 409 },
+        );
+      }
+    }
+
     // Obtener/registrar contribuyente en ecf-api
     let codigoPublico: string;
     try {
@@ -656,6 +672,7 @@ export async function POST(request: NextRequest) {
         lineasJson:           lineasJsonParaGuardar,
         tipoPago:             data.tipoPago ?? 1,
         fechaLimitePago:      data.fechaLimitePago ?? null,
+        turnoCajaId:          turnoCaja?.id ?? null,
         createdBy:            user.id,
         dependienteId:        data.dependienteId ?? null,
         dependienteNombre:    data.dependienteNombre ?? null,
@@ -674,6 +691,7 @@ export async function POST(request: NextRequest) {
           ecfDocumentId: saved.id,
           fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
           createdBy:     user.id,
+          turnoCajaId:   turnoCaja?.id ?? null,
           pagos: data.pagos
             .filter(p => p.valor > 0)
             .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
@@ -688,6 +706,7 @@ export async function POST(request: NextRequest) {
           metodo:        data.pagoMetodo || 'otro',
           cuenta:        data.pagoCuenta || null,
           fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+          turnoCajaId:   turnoCaja?.id ?? null,
           createdBy:     user.id,
         });
       } catch (e) { console.error('[emitir registrarPago]', e); }

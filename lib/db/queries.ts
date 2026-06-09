@@ -222,6 +222,7 @@ export async function getUserTeams() {
         createdAt: teams.createdAt,
         role: sql<string>`'admin'`.as('role'),
         logo: teams.logo,
+        cajaHabilitada: teams.cajaHabilitada,
       })
       .from(teams)
       .orderBy(teams.createdAt);
@@ -239,6 +240,7 @@ export async function getUserTeams() {
       createdAt: teams.createdAt,
       role: teamMembers.role,
       logo: teams.logo,
+      cajaHabilitada: teams.cajaHabilitada,
     })
     .from(teamMembers)
     .innerJoin(teams, eq(teamMembers.teamId, teams.id))
@@ -656,6 +658,7 @@ export async function registrarPago(input: {
   cuenta?:       string | null;
   fechaPago:     string; // YYYY-MM-DD
   notas?:        string | null;
+  turnoCajaId?:  number | null;
   createdBy?:    number;
 }) {
   // Delega en la versión batch con un solo elemento. Mantiene la firma pública
@@ -665,6 +668,7 @@ export async function registrarPago(input: {
     ecfDocumentId: input.ecfDocumentId,
     fechaPago:     input.fechaPago,
     createdBy:     input.createdBy,
+    turnoCajaId:   input.turnoCajaId,
     pagos: [{
       montoCentavos: input.montoCentavos,
       metodo:        input.metodo,
@@ -695,6 +699,8 @@ export async function registrarPagosSplit(input: {
   ecfDocumentId: number;
   fechaPago:     string; // YYYY-MM-DD
   createdBy?:    number;
+  /** Cuadre de caja: turno al que se atribuye el cobro (null si no aplica). */
+  turnoCajaId?:  number | null;
   pagos: Array<{
     montoCentavos: number;
     metodo:        string;
@@ -750,6 +756,7 @@ export async function registrarPagosSplit(input: {
       cuenta:        p.cuenta ?? null,
       fechaPago:     input.fechaPago,
       notas:         p.notas ?? null,
+      turnoCajaId:   input.turnoCajaId ?? null,
       createdBy:     input.createdBy ?? null,
     })),
   ).returning();

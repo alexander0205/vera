@@ -33,7 +33,14 @@ export type AuditAction =
   | 'DGII_AUTH_FAIL'
   | 'HABILITACION_SIGN'
   | 'PAGO_REGISTRADO'
-  | 'PAGO_ELIMINADO';
+  | 'PAGO_ELIMINADO'
+  // Cuadre de caja
+  | 'CAJA_APERTURA'
+  | 'CAJA_MOVIMIENTO'
+  | 'CAJA_AJUSTE'
+  | 'CAJA_CIERRE_SOLICITADO'
+  | 'CAJA_CIERRE_APROBADO'
+  | 'CAJA_CIERRE_RECHAZADO';
 
 export interface AuditParams {
   teamId:    number;

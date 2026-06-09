@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
@@ -134,6 +134,8 @@ export default function ConfiguracionPage() {
   const [recargoActivo, setRecargoActivo]               = useState(false);
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
   const [recargoDiasGracia, setRecargoDiasGracia]       = useState('5');
+  // Módulo cuadre de caja
+  const [cajaHabilitada, setCajaHabilitada]             = useState(false);
 
   // Cargar datos actuales
   useEffect(() => {
@@ -156,6 +158,8 @@ export default function ConfiguracionPage() {
         setRecargoActivo(d.recargoMoraActivo ?? false);
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
         setRecargoDiasGracia(String(d.recargoMoraDiasGracia ?? 5));
+        // Módulo caja
+        setCajaHabilitada(d.cajaHabilitada ?? false);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -180,6 +184,7 @@ export default function ConfiguracionPage() {
           recargoMoraActivo:     recargoActivo,
           recargoMoraPorcentaje: pctBps,
           recargoMoraDiasGracia: diasGracia,
+          cajaHabilitada,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');
@@ -504,6 +509,56 @@ export default function ConfiguracionPage() {
             <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
               <strong>Nota fiscal:</strong> El recargo NO modifica la factura electrónica emitida ante la DGII.
               Solo se suma al saldo visible en Cuentas por cobrar y en tickets de cobranza.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 6. Módulo de caja */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-teal-600" />
+            Cuadre de Caja
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Habilita el módulo de apertura y cierre de turnos de caja. Los cajeros deberán
+            abrir un turno antes de emitir facturas, y el sistema calculará automáticamente
+            el efectivo esperado al cierre.
+          </p>
+
+          {/* Toggle activar */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Activar cuadre de caja</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Aparecerá el menú "Caja" en el panel y se requerirá turno abierto para facturar.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={cajaHabilitada}
+              onClick={() => setCajaHabilitada(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                cajaHabilitada ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  cajaHabilitada ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {cajaHabilitada && (
+            <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-700">
+              <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
+              debe abrir su turno antes de emitir. Los cierres con descuadre requieren aprobación
+              de un admin u owner.
             </div>
           )}
         </CardContent>

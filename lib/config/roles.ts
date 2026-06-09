@@ -47,6 +47,10 @@ export type Permission =
   | 'configuracion:gestionar'
   // Compras / Facturas recibidas
   | 'compras:ver'
+  // Cuadre de caja
+  | 'caja:ver'       // ver estado de caja, turnos e historial
+  | 'caja:operar'    // abrir turno, registrar movimientos, solicitar cierre (cajero)
+  | 'caja:aprobar'   // aprobar/rechazar cierres con descuadre, ajustes (supervisor)
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
@@ -90,6 +94,7 @@ export const ROLES: RoleDef[] = [
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
       'compras:ver',
+      'caja:ver', 'caja:operar', 'caja:aprobar',
       'suscripcion:gestionar',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
@@ -108,6 +113,7 @@ export const ROLES: RoleDef[] = [
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
       'compras:ver',
+      'caja:ver', 'caja:operar', 'caja:aprobar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -124,6 +130,7 @@ export const ROLES: RoleDef[] = [
       'cotizaciones:ver', 'cotizaciones:gestionar',
       'reportes:ver',
       'equipo:ver',
+      'caja:ver', 'caja:operar',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
   },
@@ -140,6 +147,7 @@ export const ROLES: RoleDef[] = [
       'cotizaciones:ver', 'cotizaciones:gestionar',
       'reportes:ver',
       'equipo:ver',
+      'caja:ver', 'caja:operar',
     ],
     ui: { color: 'text-gray-600 bg-gray-50 border-gray-200',       icon: 'User'       },
   },
@@ -155,6 +163,7 @@ export const ROLES: RoleDef[] = [
       'cotizaciones:ver', 'cotizaciones:gestionar',
       'reportes:ver',
       'equipo:ver',
+      'caja:ver', 'caja:operar',
     ],
     ui: { color: 'text-gray-600 bg-gray-50 border-gray-200',       icon: 'User'       },
   },
@@ -170,6 +179,7 @@ export const ROLES: RoleDef[] = [
       'cotizaciones:ver', 'cotizaciones:gestionar',
       'reportes:ver',
       'equipo:ver',
+      'caja:ver', 'caja:operar',
     ],
     ui: { color: 'text-gray-600 bg-gray-50 border-gray-200',       icon: 'User'       },
   },
