@@ -2148,7 +2148,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
     setDownloading(tipo);
     setDownloadError(null);
     try {
-      const res = await fetch('/api/habilitacion/pdf-representacion', {
+      const res = await fetch('/api/habilitacion/pdf-representacion?soloAprobados=true', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ tipo }),

@@ -352,7 +352,7 @@ export default function FacturasPage() {
     }
     return [
       ver,
-      { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.id}` },
+      { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.codigo ?? doc.id}` },
       { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
     ];
   };

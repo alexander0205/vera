@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getUser, getTeamIdForUser, getPagosDocumento, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getPagosDocumento, registrarPagoFacturaConMora } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -96,74 +96,58 @@ export async function POST(
 
     const body = await req.json();
 
-    // ── Pago dividido (split): el body trae un array `pagos` ──────────────────
+    // Normalizar el body a una lista de líneas {metodo, montoCentavos, ...}.
+    // Single → 1 línea; split (array `pagos`) → N líneas. La distribución
+    // factura→mora la hace registrarPagoFacturaConMora.
+    let lineas: Array<{
+      montoCentavos: number;
+      metodo:        string;
+      referencia?:   string | null;
+      cuenta?:       string | null;
+      notas?:        string | null;
+    }>;
+    let fechaPago: string;
+    let esSplit = false;
+
     if (body && Array.isArray((body as { pagos?: unknown }).pagos)) {
       const parsedSplit = splitSchema.safeParse(body);
       if (!parsedSplit.success) {
         return NextResponse.json({ error: 'Datos inválidos', detalles: parsedSplit.error.flatten() }, { status: 400 });
       }
-
       const split = parsedSplit.data;
-      const pagos = split.pagos.map(p => ({
+      fechaPago = split.fechaPago;
+      esSplit   = true;
+      lineas = split.pagos.map(p => ({
         montoCentavos: p.montoCentavos ?? Math.round((p.montoDOP ?? 0) * 100),
         metodo:        p.metodo,
         referencia:    p.referencia,
         cuenta:        p.cuenta,
         notas:         p.notas,
       }));
-
-      const result = await registrarPagosSplit({
-        teamId,
-        ecfDocumentId: docIdNum,
-        fechaPago:     split.fechaPago,
-        createdBy:     user.id,
-        pagos,
-      });
-
-      const totalCentavos = pagos.reduce((s, p) => s + p.montoCentavos, 0);
-
-      logAudit({
-        teamId, userId: user.id, actor: user.email,
-        action:   'PAGO_REGISTRADO',
-        resource: `doc:${docIdNum}`,
-        ip:       getIp(req),
-        meta:     {
-          split:        true,
-          totalCentavos,
-          metodos:      pagos.map(p => p.metodo),
-          saldoNuevo:   result.saldoNuevo,
-        },
-      });
-
-      return NextResponse.json({
-        ok: true,
-        pagoIds:       result.pagos.map(p => p.id),
-        saldoAnterior: result.saldoAnterior,
-        saldoNuevo:    result.saldoNuevo,
-        montoTotal:    result.montoTotal,
-        saldado:       result.saldoNuevo === 0,
-      });
+    } else {
+      const parsed = schema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
+      }
+      const data = parsed.data;
+      fechaPago = data.fechaPago;
+      lineas = [{
+        montoCentavos: data.montoCentavos ?? Math.round((data.montoDOP ?? 0) * 100),
+        metodo:        data.metodo,
+        referencia:    data.referencia,
+        cuenta:        data.cuenta,
+        notas:         data.notas,
+      }];
     }
 
-    // ── Pago simple (single): flujo existente ────────────────────────────────
-    const parsed = schema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
-    }
+    const totalCentavos = lineas.reduce((s, l) => s + l.montoCentavos, 0);
 
-    const data = parsed.data;
-    const montoCentavos = data.montoCentavos ?? Math.round((data.montoDOP ?? 0) * 100);
-
-    const result = await registrarPago({
+    const result = await registrarPagoFacturaConMora({
       teamId,
       ecfDocumentId: docIdNum,
-      montoCentavos,
-      metodo:        data.metodo,
-      referencia:    data.referencia,
-      cuenta:        data.cuenta,
-      fechaPago:     data.fechaPago,
-      notas:         data.notas,
+      fechaPago,
       createdBy:     user.id,
+      lineas,
     });
 
     logAudit({
@@ -171,21 +155,25 @@ export async function POST(
       action:   'PAGO_REGISTRADO',
       resource: `doc:${docIdNum}`,
       ip:       getIp(req),
-      meta:     { montoCentavos, metodo: data.metodo, saldoNuevo: result.saldoNuevo },
+      meta:     {
+        split:        esSplit,
+        totalCentavos,
+        metodos:      lineas.map(l => l.metodo),
+        saldoNuevo:   result.saldoNuevo,
+        repartido:    result.repartido,
+      },
     });
 
     return NextResponse.json({
-      ok: true,
-      pagoId:        result.pago.id,
-      saldoAnterior: result.saldoAnterior,
-      saldoNuevo:    result.saldoNuevo,
-      montoTotal:    result.montoTotal,
-      saldado:       result.saldoNuevo === 0,
+      ok:         true,
+      saldoNuevo: result.saldoNuevo,
+      saldado:    result.saldado,
+      repartido:  result.repartido,
     });
   } catch (err) {
     console.error('[POST /api/cuentas-por-cobrar/.../pagos]', err);
     const mensaje = err instanceof Error ? err.message : 'Error interno';
-    const status  = /no encontrado|excede saldo|positivo/i.test(mensaje) ? 422 : 500;
+    const status  = /no encontrado|excede|positivo|método/i.test(mensaje) ? 422 : 500;
     return NextResponse.json({ error: mensaje }, { status });
   }
 }

@@ -87,6 +87,7 @@ interface FacturaDetalle {
   fechaFirma: string | null;
   mensajesDgii: Record<string, unknown> | null;
   ncfModificado: string | null;
+  moraOrigenId: number | null;
   fechaEmision: string;
   fechaLimitePago: string | null;
   tipoPago: number | null;
@@ -97,6 +98,8 @@ interface FacturaDetalle {
   comentario: string | null;
   lineas: Linea[];
   ncsAsociadas?: NcAsociada[];
+  notasMora?: { id: number; codigo: string | null; montoTotal: number; estado: string; estadoPago: string }[];
+  moraOrigen?: { id: number; codigo: string | null; encf: string } | null;
   emisor: {
     razonSocial: string;
     nombreComercial?: string;
@@ -529,6 +532,29 @@ export default function FacturaDetallePage() {
     }
   }
 
+  // ─── Generar Nota de Débito por mora (borrador interno, no DGII) ────────────
+  const [generandoMora, setGenerandoMora] = useState(false);
+
+  async function handleGenerarNotaDebitoMora() {
+    if (!factura) return;
+    setGenerandoMora(true);
+    try {
+      const res = await fetch(`/api/facturas/${docId}/nota-debito-mora`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error generando nota de débito por mora');
+      toast.success('Nota de débito por mora generada');
+      if (data.notaDebitoId) {
+        router.push(`/dashboard/facturas/${data.notaDebitoId}`);
+      } else {
+        await cargar();
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Error generando nota de débito por mora');
+    } finally {
+      setGenerandoMora(false);
+    }
+  }
+
   // ─── Cálculos derivados ─────────────────────────────────────────────────────
 
   const totales = useMemo(() => {
@@ -569,6 +595,10 @@ export default function FacturaDetallePage() {
   }
 
   const esBorrador  = factura.estado === 'BORRADOR';
+  // ND de mora: una factura es elegible para generar mora si tiene saldo
+  // pendiente y NO es ella misma una ND de mora ni está anulada.
+  const esNotaMora      = factura.moraOrigenId != null;
+  const puedeGenerarMora = !esNotaMora && factura.estado !== 'ANULADO' && saldo > 0 && can('facturas:crear');
   // e-CF real = fue emitido a DGII (e-NCF "E..." con datos DGII). HISTORICA
   // (encf ALG-), borrador (BOR-) y sin-ncf NUNCA fueron a DGII → sin estado
   // ni consulta DGII.
@@ -637,7 +667,11 @@ export default function FacturaDetallePage() {
               ) : null}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
+              {/* Solo mostrar el nombre fiscal del comprobante si fue emitido a DGII.
+                  Borrador/sin-ncf/histórica → genérico, NO el tipo fiscal. */}
+              <span className="font-medium text-gray-600">
+                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Borrador' : 'Documento sin comprobante fiscal')}
+              </span>
               <span className="mx-1.5">·</span>
               Fecha: {fmtDate(factura.fechaEmision)}
               {factura.fechaLimitePago && (
@@ -687,7 +721,7 @@ export default function FacturaDetallePage() {
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a
-                  href={`/api/pdf/factura/${factura.id}`}
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
@@ -701,7 +735,7 @@ export default function FacturaDetallePage() {
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a
-                  href={`/api/pdf/factura/${factura.id}?formato=tirilla`}
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}?formato=tirilla`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
@@ -715,7 +749,7 @@ export default function FacturaDetallePage() {
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a
-                  href={`/api/pdf/factura/${factura.id}/ticket`}
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}/ticket`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
@@ -740,7 +774,7 @@ export default function FacturaDetallePage() {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem asChild>
                 <a
-                  href={`/api/pdf/factura/${factura.id}`}
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
@@ -775,6 +809,18 @@ export default function FacturaDetallePage() {
                 <Copy className="h-4 w-4 text-gray-500" />
                 Duplicar
               </DropdownMenuItem>
+              {puedeGenerarMora && (
+                <DropdownMenuItem
+                  onSelect={() => { if (!generandoMora) handleGenerarNotaDebitoMora(); }}
+                  disabled={generandoMora}
+                  className="flex items-center gap-2 cursor-pointer text-orange-700"
+                >
+                  {generandoMora
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Plus className="h-4 w-4" />}
+                  Generar nota de débito por mora
+                </DropdownMenuItem>
+              )}
               {esBorrador && canEdit && (
                 <DropdownMenuItem asChild>
                   <Link
@@ -834,6 +880,22 @@ export default function FacturaDetallePage() {
             </TabsList>
 
             <TabsContent value="detalles" className="space-y-4">
+
+          {/* Banner: si es ND de mora, link a la factura padre */}
+          {factura.moraOrigen && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+              <p className="text-sm text-orange-900">
+                Nota de débito por mora de la factura{' '}
+                <span className="font-semibold">{factura.moraOrigen.codigo ?? factura.moraOrigen.encf}</span>
+              </p>
+              <Link
+                href={`/dashboard/facturas/${factura.moraOrigen.id}`}
+                className="text-sm font-medium text-orange-700 hover:text-orange-800 whitespace-nowrap"
+              >
+                Ver factura →
+              </Link>
+            </div>
+          )}
 
           {/* Productos y servicios */}
           <SectionCard number={1} title="Productos y servicios" icon={Package}>
@@ -1012,7 +1074,9 @@ export default function FacturaDetallePage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-400 italic">Consumidor final</p>
+              <p className="text-sm text-gray-400 italic">
+                {esEcfReal ? 'Consumidor final' : 'Sin cliente especificado'}
+              </p>
             )}
           </SectionCard>
 
@@ -1127,17 +1191,6 @@ export default function FacturaDetallePage() {
             )}
           </section>
 
-          {/* Pago — state A/B */}
-          <PagoCard
-            docId={factura.id}
-            initial={factura.pago}
-            readOnly={factura.estado === 'ANULADO'}
-            totalDOP={factura.montos.montoTotalDOP}
-            onSaved={(next) => {
-              setFactura((prev) => prev ? { ...prev, pago: next } : prev);
-            }}
-          />
-
           {/* Estado DGII card — solo cuando hay e-CF real emitido a DGII.
               HISTORICA (ALG-), borrador (BOR-) y sin-ncf no fueron a DGII. */}
           {esEcfReal && (
@@ -1250,6 +1303,34 @@ export default function FacturaDetallePage() {
               </dl>
             </section>
           )}
+
+          {/* Notas de débito por mora atadas a esta factura */}
+          {factura.notasMora && factura.notasMora.length > 0 && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
+                <Plus className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-gray-900">Notas de débito por mora</h2>
+              </div>
+              <div className="px-4 pb-4 md:px-5 space-y-2">
+                {factura.notasMora.map(nd => (
+                  <Link
+                    key={nd.id}
+                    href={`/dashboard/facturas/${nd.id}`}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
+                  >
+                    <span className="font-mono text-xs font-semibold text-orange-800">{nd.codigo ?? `#${nd.id}`}</span>
+                    <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(nd.montoTotal / 100)}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Pago — historial read-only (los pagos se gestionan en Cuentas por cobrar) */}
+          <PagoCard
+            initial={factura.pago}
+            totalDOP={factura.montos.montoTotalDOP}
+          />
         </aside>
       </div>
 
@@ -1274,7 +1355,7 @@ export default function FacturaDetallePage() {
             asChild
           >
             <a
-              href={`/api/pdf/factura/${factura.id}`}
+              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
               target="_blank"
               rel="noreferrer"
             >
@@ -1328,7 +1409,7 @@ export default function FacturaDetallePage() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem asChild>
                   <a
-                    href={`/api/pdf/factura/${factura.id}`}
+                    href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-2 cursor-pointer"

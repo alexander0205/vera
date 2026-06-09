@@ -54,7 +54,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
     lineasJson = JSON.stringify(lineas);
   } catch { /* sin ítems */ }
 
-  const codigo     = await generarCodigoFactura(db, teamId);
+  const codigo     = await generarCodigoFactura(db, { teamId, userId: null, tipoEcf: '32' });
   const estadoPago = calcularEstadoPago({
     estado: 'BORRADOR', tipoPago: 1, montoTotal: cot.montoTotal, totalPagado: 0,
   });

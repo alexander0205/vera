@@ -30,6 +30,8 @@ const schema = z.object({
   recargoMoraActivo:     z.boolean().optional(),
   recargoMoraPorcentaje: z.number().int().min(1).max(10000).optional(),  // 1–100% en bps
   recargoMoraDiasGracia: z.number().int().min(0).max(365).optional(),
+  // Plazo de pago por defecto. null = de contado; N = crédito a N días.
+  plazoPagoDefaultDias:  z.number().int().min(1).max(365).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -87,6 +89,7 @@ export async function POST(req: NextRequest) {
     ...(data.recargoMoraActivo     !== undefined && { recargoMoraActivo: data.recargoMoraActivo }),
     ...(data.recargoMoraPorcentaje !== undefined && { recargoMoraPorcentaje: data.recargoMoraPorcentaje }),
     ...(data.recargoMoraDiasGracia !== undefined && { recargoMoraDiasGracia: data.recargoMoraDiasGracia }),
+    ...(data.plazoPagoDefaultDias  !== undefined && { plazoPagoDefaultDias: data.plazoPagoDefaultDias }),
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
@@ -125,5 +128,6 @@ export async function GET(_req: NextRequest) {
     recargoMoraActivo:     team.recargoMoraActivo,
     recargoMoraPorcentaje: team.recargoMoraPorcentaje,
     recargoMoraDiasGracia: team.recargoMoraDiasGracia,
+    plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
   });
 }

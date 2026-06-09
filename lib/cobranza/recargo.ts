@@ -1,21 +1,21 @@
 /**
  * lib/cobranza/recargo.ts — Lógica de recargo por mora automático.
  *
- * ARQUITECTURA OPCIÓN A:
- * El recargo es un dato EXCLUSIVO de cobranza. NO se modifica el e-CF emitido
- * (xmlFirmado, montoTotal, lineasJson) porque las facturas ACEPTADAS / firmadas
- * en DGII son inmutables: alterarlas rompería la integridad fiscal y la
- * urlVerificacion DGII. El recargo se registra en `recargos_mora` y se suma
- * al saldo en la vista de cuentas por cobrar y tickets de cobranza.
+ * ARQUITECTURA (ND de mora):
+ * El recargo por mora se materializa como una Nota de Débito tipo 33 en estado
+ * BORRADOR interna (ver `generarNotaDebitoMora`), atada a la factura padre vía
+ * `moraOrigenId`. NO se envía a la DGII y es EXENTA de ITBIS. Como no se envía a
+ * DGII, el padre puede estar en cualquier estado de emisión (borrador, sin-ncf,
+ * o e-CF aceptado) — solo se excluyen ANULADO/RECHAZADO.
  *
- * Idempotencia: el UNIQUE constraint en recargos_mora(ecf_document_id) impide
- * doble aplicación. Si el cron corre varias veces, la excepción de duplicado
- * es capturada y la fila es omitida silenciosamente.
+ * Idempotencia: `generarNotaDebitoMora` valida que no exista ya una ND de mora
+ * activa para el padre (reason 'ya_existe'); aquí eso se cuenta como omitido.
  */
 
 import { db } from '@/lib/db/drizzle';
-import { teams, ecfDocuments, recargosMora } from '@/lib/db/schema';
+import { teams, ecfDocuments } from '@/lib/db/schema';
 import { and, eq, sql } from 'drizzle-orm';
+import { generarNotaDebitoMora } from '@/lib/cobranza/nota-debito-mora';
 
 export interface AplicarRecargoOpts {
   /** Si se especifica, solo aplica para ese team. Si no, aplica a TODOS los teams con recargoMoraActivo=true. */
@@ -32,26 +32,27 @@ export interface RecargoDetalle {
 
 export interface AplicarRecargoResult {
   procesados: number;  // facturas evaluadas (vencidas con días >= gracia)
-  aplicados:  number;  // recargos nuevos insertados
-  omitidos:   number;  // ya tenían recargo (idempotencia) o error
+  aplicados:  number;  // notas de débito de mora nuevas generadas
+  omitidos:   number;  // ya tenían ND de mora (idempotencia) o sin saldo / error
   montoTotalCentavos: number;
   detalles: RecargoDetalle[];
 }
 
 /**
- * Aplica recargos por mora a todas las facturas vencidas que cumplan:
+ * Genera notas de débito por mora a todas las facturas vencidas que cumplan:
  * - tipoPago = 2 (crédito)
- * - estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO', 'HISTORICA')
- * - saldo > 0
+ * - fechaLimitePago < hoy y saldo > 0
+ * - moraOrigenId IS NULL (no procesar las propias ND de mora)
+ * - estado NOT IN ('ANULADO', 'RECHAZADO')  ← incluye borradores/sin-ncf
  * - diasVencido >= recargoMoraDiasGracia del team
- * - SIN recargo previo (UNIQUE constraint como seguro de idempotencia)
+ * - SIN ND de mora previa activa (idempotencia vía generarNotaDebitoMora)
  */
 export async function aplicarRecargosMoraVencidos(
   opts: AplicarRecargoOpts = {},
 ): Promise<AplicarRecargoResult> {
   const hoy = new Date().toISOString().slice(0, 10);
 
-  // Obtener teams candidatos
+  // Obtener teams candidatos (solo activos — el cron no debe procesar inactivos)
   const teamsQuery = db
     .select({
       id:                   teams.id,
@@ -76,37 +77,37 @@ export async function aplicarRecargosMoraVencidos(
   };
 
   for (const equipo of equipos) {
-    // Traer facturas vencidas del team con saldo > 0 y sin recargo previo
+    // Traer facturas vencidas del team con saldo > 0 elegibles para ND de mora.
     const facturas = await db
       .select({
         id:              ecfDocuments.id,
         encf:            ecfDocuments.encf,
         montoTotal:      ecfDocuments.montoTotal,
         fechaLimitePago: ecfDocuments.fechaLimitePago,
+        // Override por factura — días de gracia (null = usar default del team).
+        moraDiasGracia:  ecfDocuments.moraDiasGracia,
         // Saldo = montoTotal - pagos recibidos
         pagado: sql<number>`coalesce((
           SELECT SUM(monto_centavos) FROM pagos_recibidos
           WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
         ), 0)`,
-        // Verificar si YA existe recargo
-        tieneRecargo: sql<number>`(
-          SELECT COUNT(*) FROM recargos_mora
-          WHERE recargos_mora.ecf_document_id = ecf_documents.id
-        )`,
       })
       .from(ecfDocuments)
       .where(and(
         eq(ecfDocuments.teamId, equipo.id),
         eq(ecfDocuments.tipoPago, 2),
-        sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO', 'HISTORICA')`,
+        // No procesar las propias ND de mora (no mora sobre mora)
+        sql`${ecfDocuments.moraOrigenId} IS NULL`,
+        // Incluye borradores/sin-ncf: solo se excluyen no-cobrables
+        sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
         // Vencida: tiene fecha límite y ya pasó
         sql`${ecfDocuments.fechaLimitePago} IS NOT NULL`,
         sql`${ecfDocuments.fechaLimitePago} < ${hoy}`,
       ));
 
     for (const factura of facturas) {
-      const pagado  = Number(factura.pagado);
-      const saldo   = factura.montoTotal - pagado;
+      const pagado = Number(factura.pagado);
+      const saldo  = factura.montoTotal - pagado;
 
       // Solo si saldo > 0 (aún sin pagar)
       if (saldo <= 0) continue;
@@ -118,48 +119,26 @@ export async function aplicarRecargosMoraVencidos(
           )
         : 0;
 
-      // Aplicar solo si supera el período de gracia
-      if (diasVencido < equipo.recargoMoraDiasGracia) continue;
-
-      // Ya tiene recargo → saltar (la UNIQUE también lo bloquearía, pero evitamos el try/catch)
-      if (Number(factura.tieneRecargo) > 0) {
-        result.omitidos++;
-        continue;
-      }
+      // Aplicar solo si supera el período de gracia (override por factura → default team)
+      const gracia = factura.moraDiasGracia ?? equipo.recargoMoraDiasGracia;
+      if (diasVencido < gracia) continue;
 
       result.procesados++;
 
-      // monto = round(saldo * pct_bps / 10000)
-      const montoCentavos = Math.round((saldo * equipo.recargoMoraPorcentaje) / 10000);
+      const res = await generarNotaDebitoMora(factura.id);
 
-      try {
-        await db.insert(recargosMora).values({
-          teamId:               equipo.id,
-          ecfDocumentId:        factura.id,
-          montoCentavos,
-          porcentajeAplicado:   equipo.recargoMoraPorcentaje,
-          diasGraciaAplicados:  equipo.recargoMoraDiasGracia,
-          baseSaldoCentavos:    saldo,
-          diasVencidoAlAplicar: diasVencido,
-          createdBy:            null, // null = sistema/cron
-        });
-
+      if (res.ok) {
         result.aplicados++;
-        result.montoTotalCentavos += montoCentavos;
+        result.montoTotalCentavos += res.montoCentavos;
         result.detalles.push({
           ecfDocumentId: factura.id,
           encf:          factura.encf,
           teamId:        equipo.id,
-          montoCentavos,
+          montoCentavos: res.montoCentavos,
           diasVencido,
         });
-      } catch (err: unknown) {
-        // Captura violación UNIQUE (ya existe recargo) y otros errores — continúa
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.includes('unique') && !msg.includes('duplicate')) {
-          // Error inesperado — loguear pero no abortar el lote
-          console.error('[recargo-mora] Error insertando recargo para doc', factura.id, msg);
-        }
+      } else {
+        // 'ya_existe' / 'sin_saldo' / 'mora_cero' / etc. → omitido
         result.omitidos++;
       }
     }

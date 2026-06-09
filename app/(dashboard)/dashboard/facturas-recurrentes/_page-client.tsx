@@ -8,7 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  RefreshCw, Plus, Trash2, Loader2, AlertTriangle, Pencil, PauseCircle, PlayCircle, Zap,
+  RefreshCw, Plus, Trash2, Loader2, AlertTriangle, Pencil, PauseCircle, PlayCircle, Zap, Eye,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
@@ -202,6 +202,7 @@ export default function FacturasRecurrentesPage() {
 
   const rowActions = (f: FacturaRecurrente): RowAction[] => {
     const actions: RowAction[] = [
+      { icon: Eye, title: 'Ver', href: `/dashboard/facturas-recurrentes/${f.id}` },
       { icon: Pencil, title: 'Editar', href: `/dashboard/facturas-recurrentes/${f.id}/editar` },
     ];
     if (f.estado !== 'finalizada') {
@@ -235,6 +236,7 @@ export default function FacturasRecurrentesPage() {
         title="Facturas recurrentes"
         description="Automatiza el ciclo de facturación de tus clientes"
         rowActions={rowActions}
+        rowHref={f => `/dashboard/facturas-recurrentes/${f.id}`}
         emptyState={{
           icon: RefreshCw,
           title: 'Sin facturas recurrentes',

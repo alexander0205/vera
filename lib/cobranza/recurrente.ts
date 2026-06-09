@@ -2,12 +2,13 @@
  * lib/cobranza/recurrente.ts — Lógica de generación de factura desde recurrente.
  *
  * Función reutilizable usada tanto por el cron diario como por el endpoint
- * "Generar ahora" (disparo manual para pruebas).
+ * "Generar ahora" (disparo manual). Soporta generar un período específico del
+ * schedule (no solo el próximo).
  */
 
 import { db } from '@/lib/db/drizzle';
-import { facturasRecurrentes, sequences, ecfDocuments } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { facturasRecurrentes, ecfDocuments } from '@/lib/db/schema';
+import { and, eq, ne } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
@@ -21,15 +22,62 @@ export interface GenerarFacturaResult {
 export type GenerarFacturaError =
   | { ok: false; reason: 'no_sequence' }
   | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'already_generated' }
   | { ok: false; reason: string };
 
 /**
- * Genera una factura borrador a partir de una recurrente.
+ * Avanza UNA fecha de cobro según la frecuencia (helper compartido).
+ * - semanal   = +7 días
+ * - quincenal = +15 días
+ * - mensual   = +1 mes  (clamp de día a diaCobro / último día del mes)
+ * - trimestral= +3 meses (idem clamp)
+ * - anual     = +12 meses(idem clamp)
+ * Entrada/salida en 'YYYY-MM-DD' (fechas locales, sin TZ shift).
+ */
+export function siguientePeriodo(
+  fecha: string,
+  frecuencia: string,
+  diaCobro: number | null,
+): string {
+  const [y, m, d] = fecha.split('-').map(Number);
+  const next = new Date(y, m - 1, d);
+
+  if (frecuencia === 'semanal') {
+    next.setDate(next.getDate() + 7);
+  } else if (frecuencia === 'quincenal') {
+    next.setDate(next.getDate() + 15);
+  } else {
+    const monthOffset =
+      frecuencia === 'mensual'    ? 1  :
+      frecuencia === 'trimestral' ? 3  :
+      frecuencia === 'anual'      ? 12 : 1;
+
+    const targetMonth     = next.getMonth() + monthOffset;
+    const targetYear      = next.getFullYear() + Math.floor(targetMonth / 12);
+    const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+    const lastDayTarget   = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+    const desiredDay      = diaCobro ?? next.getDate();
+    const clampedDay      = Math.min(desiredDay, lastDayTarget);
+    next.setFullYear(targetYear, normalizedMonth, clampedDay);
+  }
+
+  return (
+    `${next.getFullYear()}-` +
+    `${String(next.getMonth() + 1).padStart(2, '0')}-` +
+    `${String(next.getDate()).padStart(2, '0')}`
+  );
+}
+
+/**
+ * Genera una factura borrador a partir de una recurrente para un período dado.
  *
+ * - period efectivo: opts.periodo ?? fr.proximaEmision.
+ * - No genera si ya existe una factura no anulada para ese período (origen+período).
  * - Copia ítems (lineasJson) y recalcula totales.
- * - Marca origenRecurrenteId para que AR la incluya.
- * - Avanza la secuencia + proximaEmision + facturasEmitidas.
- * - ignoreDate=true (para "Generar ahora"): genera aunque proximaEmision sea futura.
+ * - Marca origenRecurrenteId + periodoRecurrente; fechaEmision = ese período.
+ * - Avanza la secuencia + facturasEmitidas.
+ * - Recomputa proximaEmision = primer período del schedule aún sin generar
+ *   (soporta generación fuera de orden). Si no queda ninguno → 'finalizada'.
  */
 export async function generarFacturaDeRecurrente(
   fr: {
@@ -41,6 +89,7 @@ export async function generarFacturaDeRecurrente(
     diasParaPago: number | null;
     frecuencia: string;
     diaCobro: number | null;
+    fechaInicio: string;
     fechaFin: string | null;
     proximaEmision: string;
     items: string;
@@ -48,42 +97,48 @@ export async function generarFacturaDeRecurrente(
     notas: string | null;
     nombre: string;
     facturasEmitidas: number;
+    moraPorcentaje: number | null;
+    moraDiasGracia: number | null;
   },
+  opts?: { periodo?: string },
 ): Promise<GenerarFacturaResult | GenerarFacturaError> {
-  // Obtener secuencia disponible
-  const seq = await db
-    .select()
-    .from(sequences)
-    .where(
-      and(
-        eq(sequences.teamId, fr.teamId),
-        eq(sequences.tipoEcf, fr.tipoEcf),
-      ),
-    )
+  const periodo = opts?.periodo ?? fr.proximaEmision;
+
+  // Evitar duplicados: no generar si ya existe una factura no anulada para este período.
+  const existentes = await db
+    .select({ id: ecfDocuments.id })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.origenRecurrenteId, fr.id),
+      eq(ecfDocuments.periodoRecurrente, periodo),
+      ne(ecfDocuments.estado, 'ANULADO'),
+    ))
     .limit(1);
 
-  if (!seq[0] || seq[0].secuenciaActual > seq[0].secuenciaHasta) {
-    return { ok: false, reason: 'no_sequence' };
+  if (existentes[0]) {
+    return { ok: false, reason: 'already_generated' };
   }
 
   // Parsear ítems y calcular totales
   let montoTotal = fr.totalEstimado;
   let totalItbis = 0;
-  let lineasJson: string = fr.items;
+  const lineasJson: string = fr.items;
 
   try {
     const items = JSON.parse(fr.items);
     if (Array.isArray(items) && items.length > 0) {
       const totales = calcularTotales(items);
-      montoTotal = Math.round(totales.montoTotal);
-      totalItbis = Math.round(totales.totalItbis);
+      // calcularTotales devuelve DOP; la columna montoTotal/totalItbis es en centavos.
+      montoTotal = Math.round(totales.montoTotal * 100);
+      totalItbis = Math.round(totales.totalItbis * 100);
     }
   } catch {
     // fallback a totalEstimado si el JSON es inválido
   }
 
-  // Construir e-NCF
-  const encf = `E${fr.tipoEcf}${String(seq[0].secuenciaActual).padStart(10, '0')}`;
+  // e-NCF de BORRADOR (igual que el flujo manual): NO consume secuencia ni asigna
+  // un e-NCF fiscal real. El e-NCF real se asigna al "Enviar a DGII" (emitir-ecf).
+  const encf = `BOR-${fr.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
   // Fecha límite de pago para crédito
   let fechaLimitePago: string | null = null;
@@ -93,10 +148,14 @@ export async function generarFacturaDeRecurrente(
     fechaLimitePago = limite.toISOString().slice(0, 10);
   }
 
-  const codigo     = await generarCodigoFactura(db, fr.teamId);
+  const codigo     = await generarCodigoFactura(db, { teamId: fr.teamId, userId: null, tipoEcf: fr.tipoEcf });
   const estadoPago = calcularEstadoPago({
     estado: 'BORRADOR', tipoPago: fr.tipoPago, montoTotal, totalPagado: 0,
   });
+
+  // Fecha de emisión = el período (mediodía local para evitar desfase TZ).
+  const [py, pm, pd] = periodo.split('-').map(Number);
+  const fechaEmision = new Date(py, pm - 1, pd, 12, 0, 0);
 
   // Insertar documento
   const [inserted] = await db
@@ -116,51 +175,51 @@ export async function generarFacturaDeRecurrente(
       lineasJson,
       notas: fr.notas ?? `Factura recurrente: ${fr.nombre}`,
       origenRecurrenteId: fr.id,
+      periodoRecurrente: periodo,
+      moraPorcentaje: fr.moraPorcentaje ?? null,
+      moraDiasGracia: fr.moraDiasGracia ?? null,
+      fechaEmision,
     })
     .returning({ id: ecfDocuments.id });
 
-  // Avanzar secuencia
-  await db
-    .update(sequences)
-    .set({ secuenciaActual: seq[0].secuenciaActual + BigInt(1), updatedAt: new Date() })
-    .where(eq(sequences.id, seq[0].id));
+  // NB: NO se avanza la secuencia — esto es un borrador. La secuencia se consume
+  // al emitir a DGII (emitir-ecf), que asigna el e-NCF fiscal real.
 
-  // Calcular próxima emisión
-  const [py, pm, pd] = fr.proximaEmision.split('-').map(Number);
-  const nextDate = new Date(py, pm - 1, pd);
+  // ── Recalcular proximaEmision = primer período del schedule aún sin generar ──
+  // Traer todos los períodos ya generados (no anulados) tras la inserción.
+  const generados = await db
+    .select({ periodo: ecfDocuments.periodoRecurrente })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.origenRecurrenteId, fr.id),
+      ne(ecfDocuments.estado, 'ANULADO'),
+    ));
 
-  if (fr.frecuencia === 'semanal') {
-    nextDate.setDate(nextDate.getDate() + 7);
-  } else if (fr.frecuencia === 'quincenal') {
-    nextDate.setDate(nextDate.getDate() + 15);
-  } else {
-    const monthOffset =
-      fr.frecuencia === 'mensual'    ? 1  :
-      fr.frecuencia === 'trimestral' ? 3  :
-      fr.frecuencia === 'anual'      ? 12 : 1;
+  const generadosSet = new Set(
+    generados.map((g) => g.periodo).filter((p): p is string => !!p),
+  );
 
-    const targetMonth    = nextDate.getMonth() + monthOffset;
-    const targetYear     = nextDate.getFullYear() + Math.floor(targetMonth / 12);
-    const normalizedMonth = ((targetMonth % 12) + 12) % 12;
-    const lastDayTarget  = new Date(targetYear, normalizedMonth + 1, 0).getDate();
-    const desiredDay     = fr.diaCobro ?? nextDate.getDate();
-    const clampedDay     = Math.min(desiredDay, lastDayTarget);
-    nextDate.setFullYear(targetYear, normalizedMonth, clampedDay);
+  // Recorrer el schedule desde fechaInicio hasta fechaFin (cap defensivo) y
+  // tomar la primera fecha sin factura.
+  const MAX_PASOS = 600; // cap defensivo (p.ej. semanal ~11 años)
+  let proxima: string | null = null;
+  let cursor = fr.fechaInicio;
+  for (let i = 0; i < MAX_PASOS; i++) {
+    if (fr.fechaFin && cursor > fr.fechaFin) break;
+    if (!generadosSet.has(cursor)) {
+      proxima = cursor;
+      break;
+    }
+    cursor = siguientePeriodo(cursor, fr.frecuencia, fr.diaCobro);
+    // Protección extra: si la frecuencia no avanzara, romper.
   }
-
-  const nextStr =
-    `${nextDate.getFullYear()}-` +
-    `${String(nextDate.getMonth() + 1).padStart(2, '0')}-` +
-    `${String(nextDate.getDate()).padStart(2, '0')}`;
-
-  const pastEnd = fr.fechaFin && nextStr > fr.fechaFin;
 
   await db
     .update(facturasRecurrentes)
     .set({
-      proximaEmision:   nextStr,
+      proximaEmision:   proxima ?? fr.proximaEmision,
       facturasEmitidas: fr.facturasEmitidas + 1,
-      estado:           pastEnd ? 'finalizada' : 'activa',
+      estado:           proxima ? 'activa' : 'finalizada',
       updatedAt:        new Date(),
     })
     .where(eq(facturasRecurrentes.id, fr.id));

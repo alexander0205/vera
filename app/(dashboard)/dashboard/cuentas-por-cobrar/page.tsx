@@ -13,6 +13,7 @@ import { PagoMetodos, pagosValidos, type PagoLinea } from '@/components/pagos/Pa
 interface Cuenta {
   id:                   number;
   encf:                 string;
+  codigo:               string | null;
   tipoEcf:              string;
   fechaEmision:         string;
   fechaLimitePago:      string | null;
@@ -23,12 +24,16 @@ interface Cuenta {
   montoTotal:           number;
   totalItbis:           number;
   pagado:               number;
+  // saldo = saldoFactura + moraSaldo (TOTAL combinado a cobrar).
   saldo:                number;
+  // Saldo SOLO de la factura (montoTotal − pagado).
+  saldoFactura:         number;
+  // Saldo combinado de las ND de mora atadas a esta factura.
+  moraSaldo:            number;
+  // Lista de ND de mora con saldo > 0 (para desglose).
+  moraNotas?:           { id: number; codigo: string | null; saldo: number }[];
   vencida:              boolean;
   diasVencido:          number;
-  // Recargo por mora (cobranza — no modifica e-CF emitido)
-  recargoMora:    number;
-  recargoMoraPct: number;
 }
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
@@ -84,12 +89,12 @@ export default function CuentasPorCobrarPage() {
 
   const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
     {
-      id: 'encf',
-      header: 'e-NCF',
+      id: 'codigo',
+      header: 'Código',
       render: c => (
         <div className="flex items-center gap-1.5 flex-wrap">
           <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
-            {c.encf}
+            {c.codigo ?? `Factura #${c.id}`}
           </Link>
           {isHistorica(c) && (
             <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
@@ -145,26 +150,14 @@ export default function CuentasPorCobrarPage() {
       render: c => <span className="text-xs text-emerald-700 whitespace-nowrap">{fmtDOP(c.pagado)}</span>,
     },
     {
-      id: 'recargo',
-      header: 'Recargo mora',
-      align: 'right',
-      visibleAt: 'lg',
-      render: c => c.recargoMora > 0 ? (
-        <div className="text-right">
-          <span className="text-xs font-medium text-orange-600 whitespace-nowrap">{fmtDOP(c.recargoMora)}</span>
-          <p className="text-[10px] text-orange-400">{(c.recargoMoraPct / 100).toFixed(2)}%</p>
-        </div>
-      ) : <span className="text-gray-300 text-xs">—</span>,
-    },
-    {
       id: 'saldo',
       header: 'Saldo',
       align: 'right',
       render: c => (
         <div className="text-right">
           <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>
-          {c.recargoMora > 0 && (
-            <p className="text-[10px] text-orange-500 whitespace-nowrap">inc. recargo mora</p>
+          {c.moraSaldo > 0 && (
+            <p className="text-[11px] text-orange-600 whitespace-nowrap">incl. mora {fmtDOP(c.moraSaldo)}</p>
           )}
         </div>
       ),
@@ -303,17 +296,19 @@ function PagoModal({
   onSuccess: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  // saldo ya incluye recargo por mora (suma al saldo de cobranza). Montos en DOP.
-  const pagadoDOP = cuenta.pagado / 100;            // ya pagado (cents → DOP)
-  const saldoDOP  = cuenta.saldo / 100;             // disponible a abonar
-  const totalDOP  = pagadoDOP + saldoDOP;           // total para Suma/Resto en el repeater
+  // saldo = saldoFactura + moraSaldo (combinado). Montos en DOP.
+  const saldoDOP        = cuenta.saldo / 100;        // combinado, disponible a abonar
+  // El repeater valida contra (total − yaPagado). Con yaPagado=0, el cap es el
+  // saldo combinado factura + mora.
+  const totalDOP  = saldoDOP;
+  const pagadoDOP = 0;
   const [fecha, setFecha]         = useState(today);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
 
   // Una o varias líneas (1 línea = pago normal). AR usa referencia.
   const [lineas, setLineas] = useState<PagoLinea[]>([
-    { metodo: 'transferencia', valor: saldoDOP.toFixed(2), referencia: '' },
+    { metodo: 'transferencia', valor: '', referencia: '' },
   ]);
 
   const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
@@ -349,11 +344,11 @@ function PagoModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Registrar pago</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{cuenta.encf}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{cuenta.codigo ?? `Factura #${cuenta.id}`}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
             <X className="h-4 w-4" />
@@ -363,25 +358,24 @@ function PagoModal({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
             <div className="flex justify-between">
-              <span className="text-gray-500">Total factura (e-CF)</span>
-              <span className="text-gray-700">{fmtDOP(cuenta.montoTotal)}</span>
+              <span className="text-gray-500">Saldo factura</span>
+              <span className="text-gray-700">{fmtDOP(cuenta.saldoFactura)}</span>
             </div>
-            {cuenta.recargoMora > 0 && (
+            {cuenta.moraSaldo > 0 && (
               <div className="flex justify-between">
-                <span className="text-orange-500">
-                  Recargo mora ({(cuenta.recargoMoraPct / 100).toFixed(2)}%)
-                </span>
-                <span className="text-orange-600 font-medium">{fmtDOP(cuenta.recargoMora)}</span>
+                <span className="text-gray-500">Mora</span>
+                <span className="text-orange-600">{fmtDOP(cuenta.moraSaldo)}</span>
               </div>
             )}
-            <div className="flex justify-between">
-              <span className="text-gray-500">Ya pagado</span>
-              <span className="text-emerald-700">{fmtDOP(cuenta.pagado)}</span>
-            </div>
             <div className="flex justify-between border-t border-gray-200 pt-1 mt-1 font-medium">
-              <span className="text-gray-700">Saldo pendiente</span>
+              <span className="text-gray-700">Total a cobrar</span>
               <span className="text-gray-900">{fmtDOP(cuenta.saldo)}</span>
             </div>
+            {cuenta.moraSaldo > 0 && (
+              <p className="text-[11px] text-gray-400 pt-0.5">
+                El pago cubre primero la factura; el resto se aplica a la mora.
+              </p>
+            )}
           </div>
 
           {/* Fecha (compartida) */}

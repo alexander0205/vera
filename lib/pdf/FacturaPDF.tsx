@@ -78,6 +78,15 @@ export interface FacturaPDFData {
   notas?:               string | null;
   /** Beneficiario (dependiente del cliente). Se muestra bajo los datos del comprador. */
   dependienteNombre?:   string | null;
+  /** Historial de pagos recibidos — se lista con su fecha si hay alguno. */
+  pagos?: Array<{
+    metodo:     string;
+    montoDOP:   number;
+    fecha?:     string | null;   // YYYY-MM-DD
+    usuario?:   string;
+    nota?:      string;
+    referencia?: string;
+  }>;
 }
 
 // ─── Monto en letras ──────────────────────────────────────────────────────────
@@ -115,6 +124,21 @@ function numeroALetras(n: number): string {
 
 const fmt = (n: number) =>
   'RD$' + n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const METODO_LABEL_PDF: Record<string, string> = {
+  efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta',
+  tarjeta_credito: 'Tarjeta de crédito', tarjeta_debito: 'Tarjeta de débito',
+  cheque: 'Cheque', deposito: 'Depósito', otro: 'Otro',
+};
+const metodoLabelPDF = (m: string) =>
+  METODO_LABEL_PDF[m] ?? (m ? m.charAt(0).toUpperCase() + m.slice(1) : 'Pago');
+
+/** Fecha YYYY-MM-DD → dd/MM/yyyy (sin desfase de zona). */
+const fmtFechaPDF = (f?: string | null) => {
+  if (!f) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : f;
+};
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
@@ -348,6 +372,25 @@ const S = StyleSheet.create({
     minWidth:   80,
   },
 
+  // ── Bloques TOTALES / PAGO ──
+  bloqueTitulo: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize:   7.5,
+    color:      '#888888',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+    width:      220,
+  },
+  pagoResumen: {
+    marginTop:     8,
+    paddingTop:    6,
+    borderTopWidth: 0.5,
+    borderTopColor: '#cccccc',
+    width:         220,
+  },
+  saldoLabel: { fontFamily: 'Helvetica-Bold', color: '#b91c1c' },
+  saldoValor: { fontFamily: 'Helvetica-Bold', color: '#b91c1c' },
+
   // ── Post-table ──
   postTable: {
     flexDirection:  'row',
@@ -417,6 +460,17 @@ const S = StyleSheet.create({
     marginTop: 4,
     width:     220,
   },
+
+  // ── Pagos recibidos ──
+  pagosBlock:    { marginTop: 12 },
+  pagosTitle:    { fontFamily: 'Helvetica-Bold', fontSize: 8.5, color: '#1a1a1a', marginBottom: 3 },
+  pagosHeadRow:  { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#cccccc', paddingBottom: 2, marginBottom: 1 },
+  pagosRow:      { flexDirection: 'row', paddingVertical: 1.5 },
+  pagosCellHead: { fontFamily: 'Helvetica-Bold', fontSize: 7, color: '#666666' },
+  pagosCell:     { fontSize: 7.5, color: '#333333' },
+  pagosColFecha:  { width: 60 },
+  pagosColMetodo: { flex: 1 },
+  pagosColMonto:  { width: 90, textAlign: 'right' },
 
   // ── Términos / Notas ──
   notasBlock:  { marginTop: 12 },
@@ -571,6 +625,30 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
     }
   }
   const ratesArray = Array.from(ratesMap.entries());
+
+  // ── Totales fiscales (no mezclar con la situación de pago) ──
+  const subtotalGravado = ratesArray.reduce((s, [, v]) => s + v.base, 0);
+  const subtotalExento  = itemsFmt.reduce((s, i) => {
+    const tasa = i.tasaItbis ?? 0;
+    if (tasa > 0) return s;
+    const base = i.cantidadItem * i.precioUnitarioItem;
+    const desc = i.descuentoMonto ?? (i.descuentoPct ? base * i.descuentoPct / 100 : 0);
+    return s + (base - desc);
+  }, 0);
+
+  // ── Situación de pago (separada de los totales fiscales) ──
+  const saldoPendiente = data.saldo ?? data.montoTotal;
+  const montoPagado    = Math.max(0, data.montoTotal - saldoPendiente);
+  const hayPendiente   = saldoPendiente > 0.005;
+  // Condición: Contado/Crédito + "Pago parcial" si abonó algo pero falta saldo.
+  const esParcial      = montoPagado > 0.005 && hayPendiente;
+  const condicionPago  = esParcial
+    ? `${data.tipoPagoNombre} · Pago parcial`
+    : data.tipoPagoNombre;
+  // Formas de pago usadas (distintos métodos del historial).
+  const formasPago = data.pagos && data.pagos.length > 0
+    ? [...new Set(data.pagos.map(p => metodoLabelPDF(p.metodo)))].join(' / ')
+    : null;
 
   return (
     <Document
@@ -731,30 +809,87 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
           <View style={S.postTableLeft} />
 
           <View style={S.postTableRight}>
-            {ratesArray.map(([tasa, { base, itbis }]) => (
-              <React.Fragment key={tasa}>
-                <View style={S.totalesRow}>
-                  <Text style={S.totalesLabel}>Gravado ITBIS {(tasa * 100).toFixed(0)}%:</Text>
-                  <Text style={S.totalesValor}>{fmt(base)}</Text>
-                </View>
-                <View style={S.totalesRow}>
-                  <Text style={S.totalesLabel}>ITBIS {(tasa * 100).toFixed(0)}%:</Text>
-                  <Text style={S.totalesValor}>{fmt(itbis)}</Text>
-                </View>
-              </React.Fragment>
-            ))}
-            {data.totalItbis > 0 && (
+            {/* ── TOTALES (solo fiscal) ── */}
+            <Text style={S.bloqueTitulo}>TOTALES</Text>
+            {subtotalGravado > 0 && (
               <View style={S.totalesRow}>
-                <Text style={S.totalesLabel}>Total ITBIS:</Text>
-                <Text style={S.totalesValor}>{fmt(data.totalItbis)}</Text>
+                <Text style={S.totalesLabel}>Subtotal gravado:</Text>
+                <Text style={S.totalesValor}>{fmt(subtotalGravado)}</Text>
               </View>
             )}
+            {subtotalExento > 0 && (
+              <View style={S.totalesRow}>
+                <Text style={S.totalesLabel}>Subtotal exento:</Text>
+                <Text style={S.totalesValor}>{fmt(subtotalExento)}</Text>
+              </View>
+            )}
+            {ratesArray.map(([tasa, { itbis }]) => (
+              <View style={S.totalesRow} key={tasa}>
+                <Text style={S.totalesLabel}>ITBIS {(tasa * 100).toFixed(0)}%:</Text>
+                <Text style={S.totalesValor}>{fmt(itbis)}</Text>
+              </View>
+            ))}
             <View style={S.montoTotalRow}>
-              <Text style={S.montoTotalLabel}>MONTO TOTAL:</Text>
+              <Text style={S.montoTotalLabel}>Total factura:</Text>
               <Text style={S.montoTotalValor}>{fmt(data.montoTotal)}</Text>
             </View>
+
+            {/* ── PAGO (situación de cobro, separada del total fiscal) ── */}
+            {(hayPendiente || montoPagado > 0.005) && (
+              <View style={S.pagoResumen}>
+                <Text style={S.bloqueTitulo}>PAGO</Text>
+                <View style={S.totalesRow}>
+                  <Text style={S.totalesLabel}>Condición:</Text>
+                  <Text style={S.totalesValor}>{condicionPago}</Text>
+                </View>
+                {formasPago && (
+                  <View style={S.totalesRow}>
+                    <Text style={S.totalesLabel}>Forma de pago:</Text>
+                    <Text style={S.totalesValor}>{formasPago}</Text>
+                  </View>
+                )}
+                <View style={S.totalesRow}>
+                  <Text style={S.totalesLabel}>Monto pagado:</Text>
+                  <Text style={S.totalesValor}>{fmt(montoPagado)}</Text>
+                </View>
+                {hayPendiente && (
+                  <View style={S.totalesRow}>
+                    <Text style={[S.totalesLabel, S.saldoLabel]}>Balance pendiente:</Text>
+                    <Text style={[S.totalesValor, S.saldoValor]}>{fmt(saldoPendiente)}</Text>
+                  </View>
+                )}
+                {hayPendiente && data.fechaVencimientoFactura && (
+                  <View style={S.totalesRow}>
+                    <Text style={S.totalesLabel}>Fecha de vencimiento:</Text>
+                    <Text style={S.totalesValor}>{data.fechaVencimientoFactura}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
+
+        {/* ── Pagos recibidos (historial con fecha) ── */}
+        {data.pagos && data.pagos.length > 0 && (
+          <View style={S.pagosBlock}>
+            <Text style={S.pagosTitle}>PAGOS RECIBIDOS</Text>
+            {/* Encabezado */}
+            <View style={S.pagosHeadRow}>
+              <Text style={[S.pagosCellHead, S.pagosColFecha]}>FECHA</Text>
+              <Text style={[S.pagosCellHead, S.pagosColMetodo]}>MÉTODO</Text>
+              <Text style={[S.pagosCellHead, S.pagosColMonto]}>MONTO</Text>
+            </View>
+            {data.pagos.map((p, i) => (
+              <View key={i} style={S.pagosRow}>
+                <Text style={[S.pagosCell, S.pagosColFecha]}>{fmtFechaPDF(p.fecha)}</Text>
+                <Text style={[S.pagosCell, S.pagosColMetodo]}>
+                  {metodoLabelPDF(p.metodo)}{p.referencia ? ` · ${p.referencia}` : ''}
+                </Text>
+                <Text style={[S.pagosCell, S.pagosColMonto]}>{fmt(p.montoDOP)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* ── Términos y condiciones / Notas (solo si existen) ── */}
         {(data.terminosCondiciones?.trim() || data.notas?.trim()) && (

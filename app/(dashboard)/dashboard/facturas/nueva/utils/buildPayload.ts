@@ -1,5 +1,4 @@
-import type { Cliente, ItemLinea, Plazo, Retencion } from './types';
-import { PLAZOS_BASE } from './types';
+import type { Cliente, ItemLinea, Retencion } from './types';
 import { tasaToFloat } from './calculos';
 import type { PagoLinea } from '@/components/pagos/PagoMetodos';
 
@@ -11,8 +10,8 @@ export interface BuildPayloadInput {
   rncManual: string;
   rncManualNombre: string;
   emailManual: string;
-  customPlazos: Plazo[];
-  plazoId: string;
+  /** Condición de pago DGII: 1=contado, 2=crédito, 3=gratuito, 4=uso. */
+  tipoPago: number;
   fechaLimitePago: string;
   ncfModificado: string;
   /** Código de modificación (1..5) — solo tipos 33, 34. Vacío cuando no aplica. */
@@ -41,7 +40,7 @@ export interface BuildPayloadInput {
 export function buildPayload(input: BuildPayloadInput) {
   const {
     modo, tipoEcf, fechaEmision, clienteSeleccionado, rncManual, rncManualNombre,
-    emailManual, customPlazos, plazoId, fechaLimitePago, ncfModificado, items,
+    emailManual, tipoPago, fechaLimitePago, ncfModificado, items,
     codigoModificacion, fechaNcfModificado, tipoIngresos,
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
     pagoRecibido, pagoLineas = [], pagoFecha,
@@ -100,7 +99,7 @@ export function buildPayload(input: BuildPayloadInput) {
     rncComprador:         rncFinal    || undefined,
     razonSocialComprador: razonFinal  || undefined,
     emailComprador:       emailFinal  || undefined,
-    tipoPago:             ([...PLAZOS_BASE, ...customPlazos].find(p => p.id === plazoId) ?? PLAZOS_BASE[0]).dgiiTipo,
+    tipoPago,
     fechaLimitePago:      fechaLimitePago || undefined,
     ncfModificado:        ncfModificado || undefined,
     codigoModificacion:   (ncfModificado && codigoModificacion) ? Number(codigoModificacion) : undefined,

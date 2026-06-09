@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
   // SÍ se listan aquí como ventas — además de en /dashboard/cuentas-por-cobrar.
   const conditions = [
     eq(ecfDocuments.teamId, teamId),
+    // Las Notas de Débito (tipo 33) tienen su propia pantalla — no se listan aquí.
+    sql`${ecfDocuments.tipoEcf} <> '33'`,
   ];
 
   if (search) {

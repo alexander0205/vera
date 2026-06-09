@@ -160,11 +160,20 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   const isEdit = Boolean(initialPlan);
   const { tipoVisible } = useTiposDisponibles();
 
+  // Plazo de pago por defecto del team (solo aplica al crear, no al editar).
+  // null/undefined → contado; N → crédito a N días.
+  const defaultDias = empresa?.plazoPagoDefaultDias;
   // ── Cabecera ───────────────────────────────────────────────────────────────
   const [tipoEcf, setTipoEcf]           = useState(initialPlan?.tipoEcf ?? '31');
-  const [tipoPago, setTipoPago]         = useState(initialPlan ? String(initialPlan.tipoPago) : '1');
+  const [tipoPago, setTipoPago]         = useState(
+    initialPlan
+      ? String(initialPlan.tipoPago)
+      : (defaultDias != null && defaultDias > 0 ? '2' : '1'),
+  );
   const [diasParaPago, setDiasParaPago] = useState(
-    initialPlan?.diasParaPago != null ? String(initialPlan.diasParaPago) : '5',
+    initialPlan?.diasParaPago != null
+      ? String(initialPlan.diasParaPago)
+      : (defaultDias != null && defaultDias > 0 ? String(defaultDias) : '5'),
   ); // solo aplica si tipoPago=2 (crédito)
   const [frecuencia, setFrecuencia]     = useState(initialPlan?.frecuencia ?? 'mensual');
   const [nombre, setNombre]             = useState(initialPlan?.nombre ?? '');
@@ -751,14 +760,17 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
                   <Label className={`text-xs uppercase tracking-wide ${tipoPago === '2' ? 'text-gray-600' : 'text-gray-300'}`}>
                     Plazo de vencimiento {tipoPago === '2' && <span className="text-red-500">*</span>}
                   </Label>
-                  <Select value={diasParaPago} onValueChange={setDiasParaPago} disabled={tipoPago !== '2'}>
-                    <SelectTrigger className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-300"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['5','15','30','45','60','90'].map(d => (
-                        <SelectItem key={d} value={d}>{d} días</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative mt-1 w-28">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={diasParaPago}
+                      onChange={(e) => setDiasParaPago(e.target.value)}
+                      disabled={tipoPago !== '2'}
+                      className="h-10 pr-10 disabled:bg-gray-50 disabled:text-gray-300"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+                  </div>
                 </div>
               </div>
 

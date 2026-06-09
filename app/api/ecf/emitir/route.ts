@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
         ? ''
         : `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
-      const codigo      = await generarCodigoFactura(db, teamId);
+      const codigo      = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
       const estadoPago  = calcularEstadoPago({
         estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
       });
@@ -627,7 +627,7 @@ export async function POST(request: NextRequest) {
           unidadMedida:       item.unidadMedidaItem,
         })));
 
-    const codigoEmit     = await generarCodigoFactura(db, teamId);
+    const codigoEmit     = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
     const montoCtsEmit   = Math.round(totales.montoTotal * 100);
     const estadoPagoInit = calcularEstadoPago({
       estado: estadoInicial, tipoPago: data.tipoPago ?? 1, montoTotal: montoCtsEmit, totalPagado: 0,

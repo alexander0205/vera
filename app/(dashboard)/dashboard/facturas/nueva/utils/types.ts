@@ -113,6 +113,12 @@ export interface EmpresaPerfil {
   logo:            string | null;
   rnc:             string | null;
   firma:           string | null;
+  // Config de recargo por mora (para avisar términos al elegir crédito)
+  recargoMoraActivo?:     boolean;
+  recargoMoraPorcentaje?: number;  // basis points
+  recargoMoraDiasGracia?: number;
+  // Plazo de pago por defecto. null = de contado; N = crédito a N días.
+  plazoPagoDefaultDias?:  number | null;
 }
 
 export const PLAZOS_BASE: Plazo[] = [

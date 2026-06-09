@@ -35,7 +35,6 @@ import { ModalNuevaLista } from './modals/ModalNuevaLista';
 import { ModalNuevoVendedor } from './modals/ModalNuevoVendedor';
 import { ModalPreviewPDF } from './modals/ModalPreviewPDF';
 import { ModalEditarNCF } from './modals/ModalEditarNCF';
-import { ModalNuevoPlazo } from './modals/ModalNuevoPlazo';
 import { ModalEnviarCorreo } from './modals/ModalEnviarCorreo';
 
 import { useSecuencia } from './hooks/useSecuencia';
@@ -44,10 +43,9 @@ import { useItemsState } from './hooks/useFacturaState';
 
 import { calcularTotales } from './utils/calculos';
 import { buildPayload as buildPayloadFn } from './utils/buildPayload';
-import { PLAZOS_BASE } from './utils/types';
 import { validate as validateEcf } from '@/lib/factura/validator';
 import type {
-  BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Plazo, Producto,
+  BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Producto,
   ResultadoEmision, Retencion,
 } from './utils/types';
 
@@ -120,22 +118,57 @@ export default function NuevaFacturaForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Plazos de pago ─────────────────────────────────────────────────────────
-  const tipoPagoToPlazaId = (tp: number | null): string => {
-    if (!tp || tp === 1) return 'contado';
-    if (tp === 3) return 'gratuito';
-    if (tp === 4) return 'uso';
-    return 'credito-30';
-  };
-  const [plazoId, setPlazoId]               = useState(() => tipoPagoToPlazaId(initialData?.tipoPago ?? null));
-  const [customPlazos, setCustomPlazos]     = useState<Plazo[]>([]);
-  const [showNuevoPlazo, setShowNuevoPlazo] = useState(false);
-  const [npNombre, setNpNombre]             = useState('');
-  const [npDias, setNpDias]                 = useState('');
-  const [npError, setNpError]               = useState<string | null>(null);
+  // ── Condición de pago ──────────────────────────────────────────────────────
+  // DGII: 1=contado, 2=crédito, 3=gratuito, 4=uso/consumo.
+  const [fechaEmision, setFechaEmision] = useState(() => new Date().toISOString().slice(0, 10));
+  // Factura NUEVA → arranca con el default del team (si hay plazo > 0 → crédito).
+  // Editar borrador → respeta el tipoPago guardado.
+  const [condicionPago, setCondicionPago] = useState(() => {
+    if (initialData?.tipoPago != null) return String(initialData.tipoPago);
+    const dias = empresa?.plazoPagoDefaultDias;
+    return dias != null && dias > 0 ? '2' : '1';
+  });
+  // Días para pago (solo aplica si condición = crédito). Al editar un borrador a
+  // crédito con vencimiento guardado, derivamos los días desde la diferencia de fechas.
+  const [diasParaPago, setDiasParaPago] = useState(() => {
+    if (initialData?.tipoPago === 2 && initialData.fechaLimitePago) {
+      const emis = new Date(`${new Date().toISOString().slice(0, 10)}T00:00`);
+      const venc = new Date(`${initialData.fechaLimitePago.slice(0, 10)}T00:00`);
+      // En edición la fecha de emisión arranca en hoy; usamos hoy como base coherente
+      // con el cálculo del effect. Si el borrador trae fechaEmision propia, el effect
+      // recalculará el vencimiento; aquí solo inferimos los días iniciales.
+      const diff = Math.round((venc.getTime() - emis.getTime()) / 86400000);
+      return String(diff >= 1 ? diff : (empresa?.plazoPagoDefaultDias ?? 5));
+    }
+    return String(empresa?.plazoPagoDefaultDias ?? 5);
+  });
+  const [fechaLimitePago, setFechaLimitePago] = useState(() => {
+    if (initialData) return initialData.fechaLimitePago ?? '';
+    const dias = empresa?.plazoPagoDefaultDias;
+    if (dias != null && dias > 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + dias);
+      return d.toISOString().slice(0, 10);
+    }
+    return '';
+  });
 
-  const [fechaEmision, setFechaEmision]       = useState(() => new Date().toISOString().slice(0, 10));
-  const [fechaLimitePago, setFechaLimitePago] = useState(initialData?.fechaLimitePago ?? '');
+  // Deriva el vencimiento: crédito → fechaEmision + N días; cualquier otra
+  // condición → sin vencimiento.
+  useEffect(() => {
+    if (condicionPago === '2') {
+      const n = parseInt(diasParaPago || '0', 10);
+      if (fechaEmision && n > 0) {
+        const d = new Date(`${fechaEmision}T00:00`);
+        d.setDate(d.getDate() + n);
+        setFechaLimitePago(d.toISOString().slice(0, 10));
+      } else {
+        setFechaLimitePago('');
+      }
+    } else {
+      setFechaLimitePago('');
+    }
+  }, [condicionPago, diasParaPago, fechaEmision]);
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
   const [codigoModificacion, setCodigoModificacion] = useState<string>('');
   const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
@@ -251,12 +284,8 @@ export default function NuevaFacturaForm({
   const onPieDeFactura = useCallback((p: string) => setPieFactura(p), []);
   const { secuencia, invalidar: invalidarSecuencia } = useSecuencia(tipoEcf, onPieDeFactura);
 
-  // ── Load plazos personalizados + visibility prefs from localStorage ───────
+  // ── Load visibility prefs from localStorage ───────────────────────────────
   useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('emitedo:plazos') ?? '[]');
-      if (Array.isArray(stored)) setCustomPlazos(stored);
-    } catch {}
     try {
       const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
       if (prefs.almacen)      setShowAlmacen(true);
@@ -445,12 +474,11 @@ export default function NuevaFacturaForm({
     setError(null);
     const r = TIPO_ECF_REGLAS[t];
     if (!r?.permiteItbis) dispatchItems({ type: 'FORCE_EXENTO' });
-    const todosPlazos = [...PLAZOS_BASE, ...customPlazos];
-    const plazoAct    = todosPlazos.find(p => p.id === plazoId) ?? PLAZOS_BASE[0];
-    if (r?.tiposPagoPermitidos && !r.tiposPagoPermitidos.includes(plazoAct.dgiiTipo)) {
-      const primer = PLAZOS_BASE.find(p => r.tiposPagoPermitidos!.includes(p.dgiiTipo));
-      setPlazoId(primer?.id ?? 'contado');
-      setFechaLimitePago('');
+    // Si el nuevo tipo no permite la condición de pago actual, caer a la primera permitida.
+    const cond = parseInt(condicionPago, 10);
+    if (r?.tiposPagoPermitidos && !r.tiposPagoPermitidos.includes(cond)) {
+      const primer = r.tiposPagoPermitidos[0] ?? 1;
+      setCondicionPago(String(primer));
     }
   }
 
@@ -464,7 +492,7 @@ export default function NuevaFacturaForm({
   function resetForm() {
     try { localStorage.removeItem(draftKey); } catch {}
     limpiarCliente(); // also resets dependientesCliente + items beneficiarios
-    setPlazoId('contado'); setFechaEmision(new Date().toISOString().slice(0, 10)); setFechaLimitePago(''); setNcfModificado('');
+    setCondicionPago('1'); setFechaEmision(new Date().toISOString().slice(0, 10)); setFechaLimitePago(''); setNcfModificado('');
     setCodigoModificacion(''); setFechaNcfModificado(''); setTipoIngresos('1');
     dispatchItems({ type: 'RESET' });
     setRetenciones([]);
@@ -483,7 +511,7 @@ export default function NuevaFacturaForm({
   function buildPayload(modo: 'emitir' | 'borrador') {
     return buildPayloadFn({
       modo, tipoEcf, fechaEmision, clienteSeleccionado, rncManual, rncManualNombre, emailManual,
-      customPlazos, plazoId, fechaLimitePago, ncfModificado, items,
+      tipoPago: parseInt(condicionPago, 10), fechaLimitePago, ncfModificado, items,
       codigoModificacion, fechaNcfModificado, tipoIngresos,
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
@@ -492,55 +520,10 @@ export default function NuevaFacturaForm({
     });
   }
 
-  // ─── Plazo de pago ────────────────────────────────────────────────────────
-  function handlePlazoChange(id: string) {
-    if (id === 'nuevo') {
-      setNpNombre(''); setNpDias(''); setNpError(null);
-      setShowNuevoPlazo(true);
-      return;
-    }
-    setPlazoId(id);
-    const plazo = [...PLAZOS_BASE, ...customPlazos].find(p => p.id === id);
-    if (plazo?.dias != null) {
-      const d = new Date(fechaEmision);
-      d.setDate(d.getDate() + plazo.dias);
-      setFechaLimitePago(d.toISOString().slice(0, 10));
-    } else if (!plazo?.esManual) {
-      setFechaLimitePago('');
-    }
-  }
-
-  function handleGuardarNuevoPlazo() {
-    const nombre = npNombre.trim();
-    const dias   = parseInt(npDias);
-    if (!nombre)                               { setNpError('El nombre es obligatorio'); return; }
-    if (isNaN(dias) || dias < 1 || dias > 365) { setNpError('Los días deben ser entre 1 y 365'); return; }
-
-    const id = `custom_${Date.now()}`;
-    const nuevo: Plazo = { id, label: nombre, dgiiTipo: 2, dias, custom: true };
-    const updated = [...customPlazos, nuevo];
-    setCustomPlazos(updated);
-    try { localStorage.setItem('emitedo:plazos', JSON.stringify(updated)); } catch {}
-
-    setPlazoId(id);
-    const d = new Date(fechaEmision);
-    d.setDate(d.getDate() + dias);
-    setFechaLimitePago(d.toISOString().slice(0, 10));
-    setShowNuevoPlazo(false);
-  }
-
   // ── Memoized totales ───────────────────────────────────────────────────────
   const totales = useMemo(() => calcularTotales(items), [items]);
   const totalRetenciones = useMemo(() => retenciones.reduce((s, r) => s + r.monto, 0), [retenciones]);
   const totalNeto = totales.total - totalRetenciones;
-
-  const plazosDisponibles = useMemo(
-    () => [...PLAZOS_BASE, ...customPlazos].filter(
-      p => !regla?.tiposPagoPermitidos || regla.tiposPagoPermitidos.includes(p.dgiiTipo),
-    ),
-    [customPlazos, regla],
-  );
-  const plazoActual = plazosDisponibles.find(p => p.id === plazoId) ?? plazosDisponibles[0];
 
   function validar(): string | null {
     const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
@@ -557,8 +540,8 @@ export default function NuevaFacturaForm({
       return 'Debes indicar la fecha del e-NCF original que se modifica';
     if (tipoEcf === '32' && totales.total >= 250000 && !rncFinal.trim())
       return 'Factura de Consumo ≥ DOP 250,000 requiere RNC o cédula del comprador';
-    if (plazoActual?.dgiiTipo === 2 && !fechaLimitePago)
-      return 'Para tipo de pago Crédito, debes definir fecha límite de pago.';
+    if (condicionPago === '2' && !fechaLimitePago)
+      return 'Para tipo de pago Crédito, debes definir el plazo de vencimiento.';
     if (dependientesCliente.length > 0) {
       const itemsConProducto = items.filter(i => i.nombreItem.trim());
       if (itemsConProducto.some(i => !i.dependienteId))
@@ -651,7 +634,7 @@ export default function NuevaFacturaForm({
         }
         const result = validateEcf(tipoEcf, validationPayload, {
           context: {
-            tipoPago: plazoActual?.dgiiTipo,
+            tipoPago: parseInt(condicionPago, 10),
             ncfModificado: ncfModificado || undefined,
             montoTotal: totales.total,
             rncComprador: payload.rncComprador,
@@ -892,14 +875,12 @@ export default function NuevaFacturaForm({
               <SectionCard number={2} title="Detalles de la factura" icon={Calendar}>
                 <DetallesSection
                   regla={regla} tipoEcf={tipoEcf}
-                  fechaEmision={fechaEmision} setFechaEmision={setFechaEmision}
-                  plazoId={plazoId} onPlazoChange={handlePlazoChange}
-                  plazosDisponibles={plazosDisponibles} plazoActual={plazoActual}
-                  fechaLimitePago={fechaLimitePago} setFechaLimitePago={setFechaLimitePago}
+                  condicionPago={condicionPago} setCondicionPago={setCondicionPago}
+                  diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
+                  fechaLimitePago={fechaLimitePago}
                   ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
                   codigoModificacion={codigoModificacion} setCodigoModificacion={setCodigoModificacion}
                   fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
-                  tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   today={today}
                 />
               </SectionCard>
@@ -1016,14 +997,6 @@ export default function NuevaFacturaForm({
           ncfFechaVenc={ncfFechaVenc} setNcfFechaVenc={setNcfFechaVenc}
           ncfPieFactura={ncfPieFactura} setNcfPieFactura={setNcfPieFactura}
           ncfError={ncfError} ncfSaving={ncfSaving} onSave={handleGuardarNcf}
-        />
-
-        <ModalNuevoPlazo
-          open={showNuevoPlazo}
-          onClose={() => setShowNuevoPlazo(false)}
-          npNombre={npNombre} setNpNombre={setNpNombre}
-          npDias={npDias} setNpDias={setNpDias}
-          npError={npError} onGuardar={handleGuardarNuevoPlazo}
         />
 
         <ModalEnviarCorreo

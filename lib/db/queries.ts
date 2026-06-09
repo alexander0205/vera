@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, count, gte, lte, sql, lt } from 'drizzle-orm';
+import { desc, and, eq, isNull, count, gte, lte, sql, lt, inArray } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
   activityLogs,
@@ -9,7 +9,6 @@ import {
   sequences,
   ecfDocuments,
   pagosRecibidos,
-  recargosMora,
 } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
@@ -499,6 +498,7 @@ export async function getCuentasPorCobrar(
     .select({
       id:                   ecfDocuments.id,
       encf:                 ecfDocuments.encf,
+      codigo:               ecfDocuments.codigo,
       tipoEcf:              ecfDocuments.tipoEcf,
       fechaEmision:         ecfDocuments.fechaEmision,
       fechaLimitePago:      ecfDocuments.fechaLimitePago,
@@ -516,17 +516,22 @@ export async function getCuentasPorCobrar(
         SELECT SUM(monto_centavos) FROM pagos_recibidos
         WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
       ), 0)`,
-      // Recargo por mora (ARQUITECTURA OPCIÓN A): se suma al saldo visible en
-      // cobranza pero NO modifica el e-CF original (XML fiscal inmutable).
-      recargoMora: sql<number>`coalesce((
-        SELECT monto_centavos FROM recargos_mora
-        WHERE recargos_mora.ecf_document_id = ecf_documents.id
-        LIMIT 1
-      ), 0)`,
-      recargoMoraPct: sql<number>`coalesce((
-        SELECT porcentaje_aplicado FROM recargos_mora
-        WHERE recargos_mora.ecf_document_id = ecf_documents.id
-        LIMIT 1
+      // Saldo combinado de las ND de mora atadas a esta factura
+      // (mora_origen_id = factura.id, no anuladas, saldo > 0). Subquery
+      // correlacionada con nombres literales de tabla para evitar el bug de
+      // parámetro de Drizzle (mismo patrón que `pagado` arriba).
+      moraSaldo: sql<number>`coalesce((
+        SELECT SUM(nd.monto_total - coalesce((
+          SELECT SUM(monto_centavos) FROM pagos_recibidos
+          WHERE pagos_recibidos.ecf_document_id = nd.id
+        ), 0))
+        FROM ecf_documents AS nd
+        WHERE nd.mora_origen_id = ecf_documents.id
+          AND nd.estado != 'ANULADO'
+          AND (nd.monto_total - coalesce((
+            SELECT SUM(monto_centavos) FROM pagos_recibidos
+            WHERE pagos_recibidos.ecf_document_id = nd.id
+          ), 0)) > 0
       ), 0)`,
     })
     .from(ecfDocuments)
@@ -539,34 +544,75 @@ export async function getCuentasPorCobrar(
       // cobrables).
       sql`${ecfDocuments.estadoPago} IN ('PENDIENTE', 'PARCIAL')`,
       sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
+      // Las ND de mora ya NO son cuentas propias: se agrupan dentro de su
+      // factura padre. Solo listamos facturas raíz (mora_origen_id IS NULL).
+      sql`${ecfDocuments.moraOrigenId} IS NULL`,
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
     ))
     .orderBy(desc(ecfDocuments.fechaEmision));
 
+  // Lista de ND de mora (id, codigo, saldo>0) por factura padre, para distribuir
+  // el pago en el frontend/desglose. Un solo query agrupado en memoria.
+  const facturaIds = rows.map(r => r.id);
+  const moraNotasPorFactura = new Map<number, { id: number; codigo: string | null; saldo: number }[]>();
+  if (facturaIds.length > 0) {
+    const moraRows = await db
+      .select({
+        id:           ecfDocuments.id,
+        codigo:       ecfDocuments.codigo,
+        moraOrigenId: ecfDocuments.moraOrigenId,
+        montoTotal:   ecfDocuments.montoTotal,
+        pagado: sql<number>`coalesce((
+          SELECT SUM(monto_centavos) FROM pagos_recibidos
+          WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
+        ), 0)`,
+      })
+      .from(ecfDocuments)
+      .where(and(
+        eq(ecfDocuments.teamId, teamId),
+        inArray(ecfDocuments.moraOrigenId, facturaIds),
+        sql`${ecfDocuments.estado} != 'ANULADO'`,
+      ))
+      .orderBy(ecfDocuments.id);
+
+    for (const m of moraRows) {
+      const saldoNd = m.montoTotal - Number(m.pagado);
+      if (saldoNd <= 0 || m.moraOrigenId == null) continue;
+      const arr = moraNotasPorFactura.get(m.moraOrigenId) ?? [];
+      arr.push({ id: m.id, codigo: m.codigo, saldo: saldoNd });
+      moraNotasPorFactura.set(m.moraOrigenId, arr);
+    }
+  }
+
   const enriquecidas = rows
     .map(r => {
-      const pagado      = Number(r.pagado);
-      const recargoMora = Number(r.recargoMora);
-      // saldo incluye recargo por mora (dato de cobranza, no modifica XML fiscal)
-      const saldo = r.montoTotal + recargoMora - pagado;
-      const vencida = !!r.fechaLimitePago && r.fechaLimitePago < hoy && saldo > 0;
+      const pagado = Number(r.pagado);
+      // saldoFactura = montoTotal − pagado (saldo SOLO de la factura).
+      const saldoFactura = r.montoTotal - pagado;
+      const moraSaldo = Number(r.moraSaldo);
+      // saldo = saldoFactura + moraSaldo → TOTAL combinado que se cobra.
+      const saldo = saldoFactura + moraSaldo;
+      const vencida = !!r.fechaLimitePago && r.fechaLimitePago < hoy && saldoFactura > 0;
       const diasVencido = vencida && r.fechaLimitePago
         ? Math.floor((new Date(hoy).getTime() - new Date(r.fechaLimitePago).getTime()) / 86400000)
         : 0;
+      const moraNotas = moraNotasPorFactura.get(r.id) ?? [];
       return {
         ...r,
         pagado,
-        recargoMora,
-        recargoMoraPct: Number(r.recargoMoraPct),
+        saldoFactura,
+        moraSaldo,
         saldo,
+        moraNotas,
         vencida,
         diasVencido,
       };
     })
+    // Mantener filas con saldo combinado > 0 (factura o mora pendiente).
     .filter(r => r.saldo > 0)
     .filter(r => !opts.soloVencidas || r.vencida);
 
-  // Totales agregados
+  // Totales agregados sobre el saldo combinado (factura + mora).
   const totalPendiente = enriquecidas.reduce((s, r) => s + r.saldo, 0);
   const totalVencido   = enriquecidas.filter(r => r.vencida).reduce((s, r) => s + r.saldo, 0);
 
@@ -761,6 +807,168 @@ export async function registrarPagosSplit(input: {
     saldoAnterior: saldo,
     saldoNuevo:    saldo - total,
     montoTotal:    doc.montoTotal,
+  };
+}
+
+/**
+ * Registra un pago contra una factura DISTRIBUYÉNDOLO entre la factura y sus
+ * Notas de Débito de mora atadas (mora_origen_id = factura.id). Soporta pago
+ * dividido (varias líneas/métodos). Regla: se cubre PRIMERO el saldo de la
+ * factura y el sobrante se aplica a las ND de mora en orden de id.
+ *
+ * Cada porción se inserta como su propia fila en `pagos_recibidos`, conservando
+ * el método/referencia/cuenta/fecha de la línea origen. Tras insertar, se
+ * sincroniza el espejo inline (estado_pago) de la factura y de cada ND tocada.
+ *
+ * Si la factura no tiene ND de mora con saldo, todo va a la factura (= flujo
+ * normal).
+ */
+export async function registrarPagoFacturaConMora(input: {
+  teamId:        number;
+  ecfDocumentId: number;
+  fechaPago:     string; // YYYY-MM-DD
+  createdBy?:    number;
+  lineas: Array<{
+    montoCentavos: number;
+    metodo:        string;
+    referencia?:   string | null;
+    cuenta?:       string | null;
+    notas?:        string | null;
+  }>;
+}) {
+  if (input.lineas.length < 1) throw new Error('Debe incluir al menos un método de pago');
+
+  for (const l of input.lineas) {
+    if (l.montoCentavos <= 0) throw new Error('Cada monto debe ser positivo');
+    if (!l.metodo) throw new Error('Cada pago requiere un método');
+  }
+
+  // Factura padre + su saldo
+  const [doc] = await db
+    .select({ id: ecfDocuments.id, montoTotal: ecfDocuments.montoTotal })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.id, input.ecfDocumentId),
+      eq(ecfDocuments.teamId, input.teamId),
+    ))
+    .limit(1);
+  if (!doc) throw new Error('Documento no encontrado');
+
+  const [aggFactura] = await db
+    .select({ pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
+    .from(pagosRecibidos)
+    .where(eq(pagosRecibidos.ecfDocumentId, input.ecfDocumentId));
+  const saldoFactura = doc.montoTotal - Number(aggFactura?.pagado ?? 0);
+
+  // ND de mora atadas con saldo > 0, ordenadas por id
+  const moraDocs = await db
+    .select({
+      id:         ecfDocuments.id,
+      montoTotal: ecfDocuments.montoTotal,
+      pagado: sql<number>`coalesce((
+        SELECT SUM(monto_centavos) FROM pagos_recibidos
+        WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
+      ), 0)`,
+    })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.teamId, input.teamId),
+      eq(ecfDocuments.moraOrigenId, input.ecfDocumentId),
+      sql`${ecfDocuments.estado} != 'ANULADO'`,
+    ))
+    .orderBy(ecfDocuments.id);
+
+  const colaMora = moraDocs
+    .map(m => ({ id: m.id, rem: m.montoTotal - Number(m.pagado) }))
+    .filter(m => m.rem > 0);
+
+  const moraSaldoTotal = colaMora.reduce((s, m) => s + m.rem, 0);
+  const totalLineas    = input.lineas.reduce((s, l) => s + l.montoCentavos, 0);
+  const capacidad      = saldoFactura + moraSaldoTotal;
+
+  if (totalLineas > capacidad) {
+    throw new Error(`Monto excede el saldo (factura + mora) (RD$${(capacidad / 100).toFixed(2)})`);
+  }
+
+  // Distribución: factura primero, luego mora en orden. Cada porción mantiene
+  // el método/referencia/cuenta de su línea origen.
+  type Insert = {
+    ecfDocumentId: number;
+    montoCentavos: number;
+    metodo:        string;
+    referencia:    string | null;
+    cuenta:        string | null;
+    notas:         string | null;
+  };
+  const inserts: Insert[] = [];
+  let remFactura = saldoFactura;
+  let facturaCents = 0;
+  let moraCents = 0;
+
+  for (const linea of input.lineas) {
+    let monto = linea.montoCentavos;
+
+    // 1) Llenar la factura primero
+    const x = Math.min(monto, remFactura);
+    if (x > 0) {
+      inserts.push({
+        ecfDocumentId: input.ecfDocumentId,
+        montoCentavos: x,
+        metodo:        linea.metodo,
+        referencia:    linea.referencia ?? null,
+        cuenta:        linea.cuenta ?? null,
+        notas:         linea.notas ?? null,
+      });
+      remFactura  -= x;
+      monto       -= x;
+      facturaCents += x;
+    }
+
+    // 2) Sobrante → ND de mora en orden
+    for (const nd of colaMora) {
+      if (monto <= 0) break;
+      if (nd.rem <= 0) continue;
+      const y = Math.min(monto, nd.rem);
+      inserts.push({
+        ecfDocumentId: nd.id,
+        montoCentavos: y,
+        metodo:        linea.metodo,
+        referencia:    linea.referencia ?? null,
+        cuenta:        linea.cuenta ?? null,
+        notas:         linea.notas ?? null,
+      });
+      nd.rem    -= y;
+      monto     -= y;
+      moraCents += y;
+    }
+  }
+
+  if (inserts.length > 0) {
+    await db.insert(pagosRecibidos).values(
+      inserts.map(i => ({
+        teamId:        input.teamId,
+        ecfDocumentId: i.ecfDocumentId,
+        montoCentavos: i.montoCentavos,
+        metodo:        i.metodo,
+        referencia:    i.referencia,
+        cuenta:        i.cuenta,
+        fechaPago:     input.fechaPago,
+        notas:         i.notas,
+        createdBy:     input.createdBy ?? null,
+      })),
+    );
+  }
+
+  // Sincronizar espejo/estado_pago de la factura y de cada ND tocada
+  const docsTocados = new Set<number>(inserts.map(i => i.ecfDocumentId));
+  for (const id of docsTocados) {
+    await syncPagoMirror(input.teamId, id);
+  }
+
+  return {
+    saldoNuevo: capacidad - totalLineas,
+    saldado:    capacidad - totalLineas === 0,
+    repartido:  { facturaCents, moraCents },
   };
 }
 

@@ -41,17 +41,23 @@ export async function GET(
     .from(pagosRecibidos)
     .where(eq(pagosRecibidos.ecfDocumentId, docId));
   const sumLedger = Number(pagAgg?.sum ?? 0);
-  // Líneas individuales del ledger — para mostrar el split real en el detalle.
+  // Líneas individuales del ledger — para mostrar el historial real en el detalle.
   const pagoLineasRows = await db
     .select({
+      id:            pagosRecibidos.id,
       metodo:        pagosRecibidos.metodo,
       montoCentavos: pagosRecibidos.montoCentavos,
       cuenta:        pagosRecibidos.cuenta,
       referencia:    pagosRecibidos.referencia,
+      fechaPago:     pagosRecibidos.fechaPago,
+      notas:         pagosRecibidos.notas,
+      usuarioName:   users.name,
+      usuarioEmail:  users.email,
     })
     .from(pagosRecibidos)
+    .leftJoin(users, eq(pagosRecibidos.createdBy, users.id))
     .where(eq(pagosRecibidos.ecfDocumentId, docId))
-    .orderBy(pagosRecibidos.id);
+    .orderBy(pagosRecibidos.fechaPago, pagosRecibidos.id);
   const inlineCts = doc.pagoRecibido === 'true' ? (doc.pagoValorCts ?? 0) : 0;
   // Ledger (pagos_recibidos) = source of truth. Inline solo como fallback para
   // docs legacy aún sin migrar al ledger (evita doble conteo: OR, no suma).
@@ -141,6 +147,33 @@ export async function GET(
         ))
     : [];
 
+  // Si ESTE documento es una ND de mora, traer la factura padre (para mostrar/linkear).
+  let moraOrigen: { id: number; codigo: string | null; encf: string } | null = null;
+  if (doc.moraOrigenId) {
+    const [padre] = await db
+      .select({ id: ecfDocuments.id, codigo: ecfDocuments.codigo, encf: ecfDocuments.encf })
+      .from(ecfDocuments)
+      .where(and(eq(ecfDocuments.id, doc.moraOrigenId), eq(ecfDocuments.teamId, teamId)))
+      .limit(1);
+    moraOrigen = padre ?? null;
+  }
+
+  // Notas de débito de MORA atadas a esta factura (vía mora_origen_id).
+  const notasMoraRows = await db
+    .select({
+      id:         ecfDocuments.id,
+      codigo:     ecfDocuments.codigo,
+      montoTotal: ecfDocuments.montoTotal,
+      estado:     ecfDocuments.estado,
+      estadoPago: ecfDocuments.estadoPago,
+    })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.teamId, teamId),
+      eq(ecfDocuments.moraOrigenId, docId),
+    ))
+    .orderBy(ecfDocuments.id);
+
   return NextResponse.json({
     id: doc.id,
     encf: doc.encf,
@@ -156,6 +189,7 @@ export async function GET(
     fechaFirma: doc.fechaFirma,
     mensajesDgii: doc.mensajesDgii ? JSON.parse(doc.mensajesDgii) : null,
     ncfModificado: doc.ncfModificado,
+    moraOrigenId: doc.moraOrigenId ?? null,
     fechaEmision: doc.fechaEmision.toISOString(),
     fechaLimitePago: doc.fechaLimitePago,
     tipoPago: doc.tipoPago,
@@ -179,12 +213,16 @@ export async function GET(
       valorCts: pagadoCts,
       valorDOP: (pagadoCts / 100).toFixed(2),
       fecha:    doc.pagoFecha,
-      // Líneas reales del ledger (split). Vacío → el detalle usa el espejo inline.
+      // Historial real del ledger (read-only en el detalle). Vacío → sin pagos.
       lineas: pagoLineasRows.map(p => ({
+        id:         p.id,
         metodo:     p.metodo,
         valor:      (p.montoCentavos / 100).toFixed(2),
         cuenta:     p.cuenta ?? undefined,
         referencia: p.referencia ?? undefined,
+        fechaPago:  p.fechaPago,
+        notas:      p.notas ?? undefined,
+        usuario:    p.usuarioName ?? p.usuarioEmail ?? undefined,
       })),
     },
 
@@ -234,5 +272,17 @@ export async function GET(
       montoTotal:   n.montoTotal,
       montoTotalDOP: ((n.montoTotal ?? 0) / 100).toFixed(2),
     })),
+
+    // Notas de débito por mora atadas a esta factura
+    notasMora: notasMoraRows.map(n => ({
+      id:         n.id,
+      codigo:     n.codigo,
+      montoTotal: n.montoTotal,
+      estado:     n.estado,
+      estadoPago: n.estadoPago,
+    })),
+
+    // Si este documento ES una ND de mora → la factura padre
+    moraOrigen,
   });
 }

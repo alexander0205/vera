@@ -4,8 +4,9 @@
     {
       "name": "emitedo-dev",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "PATH=/Users/alexanderferreras/.nvm/versions/node/v20.19.6/bin:$PATH pnpm dev"],
-      "autoPort": true
+      "runtimeArgs": ["-c", "PATH=/Users/alexanderferreras/.nvm/versions/node/v20.19.6/bin:$PATH pnpm dev --port 3001"],
+      "port": 3001,
+      "autoPort": false
     },
     {
       "name": "emitedo-prod",

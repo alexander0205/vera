@@ -469,13 +469,10 @@ export async function GET(
     }
 
     const { id } = await params;
-    const docId = parseInt(id);
-    if (isNaN(docId)) {
-      return new Response('<h1>ID inválido</h1>', {
-        status: 400,
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
+    // Acepta ID numérico (legacy) o código de factura (F-YYYY-NNNNNN), scopeado por team.
+    const esNumerico  = /^\d+$/.test(id);
+    const docIdNum    = esNumerico ? parseInt(id) : null;
+    const codigoParam = esNumerico ? null : decodeURIComponent(id);
 
     // Obtener teamId activo del usuario
     const teamId = await getTeamIdForUser();
@@ -493,7 +490,9 @@ export async function GET(
       .innerJoin(teams, eq(teams.id, ecfDocuments.teamId))
       .where(
         and(
-          eq(ecfDocuments.id, docId),
+          codigoParam != null
+            ? eq(ecfDocuments.codigo, codigoParam)
+            : eq(ecfDocuments.id, docIdNum!),
           eq(ecfDocuments.teamId, teamId)
         )
       )
