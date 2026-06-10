@@ -105,6 +105,7 @@ export async function calcularEsperado(
     })
     .from(cajaMovimientos)
     .where(and(
+      eq(cajaMovimientos.teamId, teamId),
       eq(cajaMovimientos.turnoId, turno.id),
       sql`lower(${cajaMovimientos.metodo}) IN ('efectivo', 'cash')`,
     ))

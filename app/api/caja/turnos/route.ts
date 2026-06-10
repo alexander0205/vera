@@ -15,7 +15,7 @@ import {
 } from '@/lib/caja/core';
 import { db } from '@/lib/db/drizzle';
 import { cajaMovimientos } from '@/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 
 export async function GET() {
   const auth = await requirePermission('caja:ver');
@@ -28,7 +28,7 @@ export async function GET() {
   const [desglose, conciliacion, movimientos] = await Promise.all([
     calcularEsperado(teamId, turno),
     getConciliacion(teamId, turno.id),
-    db.select().from(cajaMovimientos).where(eq(cajaMovimientos.turnoId, turno.id)).orderBy(desc(cajaMovimientos.createdAt)),
+    db.select().from(cajaMovimientos).where(and(eq(cajaMovimientos.teamId, teamId), eq(cajaMovimientos.turnoId, turno.id))).orderBy(desc(cajaMovimientos.createdAt)),
   ]);
 
   return NextResponse.json({ turno, desglose, conciliacion, movimientos });

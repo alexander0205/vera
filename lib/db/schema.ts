@@ -979,9 +979,11 @@ export const cajaTurnos = pgTable('caja_turnos', {
 }, (t) => [
   index('caja_turnos_team_idx').on(t.teamId),
   index('caja_turnos_usuario_estado_idx').on(t.teamId, t.usuarioId, t.estado),
-  // Un solo turno vivo (ABIERTO o CIERRE_SOLICITADO) por usuario a la vez.
+  // Un solo turno vivo (ABIERTO o CIERRE_SOLICITADO) por usuario POR EQUIPO.
+  // Incluye team_id: un cajero que opera en dos empresas no debe quedar bloqueado
+  // por tener un turno abierto en otra. La lógica de app ya es per-team.
   uniqueIndex('caja_turnos_usuario_abierto_uniq')
-    .on(t.usuarioId)
+    .on(t.teamId, t.usuarioId)
     .where(sql`estado IN ('ABIERTO', 'CIERRE_SOLICITADO')`),
 ]);
 

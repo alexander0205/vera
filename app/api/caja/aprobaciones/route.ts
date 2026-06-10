@@ -5,6 +5,8 @@
 
 import { NextResponse } from 'next/server';
 import { and, eq, desc } from 'drizzle-orm';
+// innerJoin: el FK usuario_id → users(id) impide borrar un usuario referenciado,
+// así que el cajero siempre existe; innerJoin evita columnas null en el render.
 import { requirePermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { cajaTurnos, users } from '@/lib/db/schema';
@@ -30,7 +32,7 @@ export async function GET() {
       cierreSolicitadoAt:      cajaTurnos.cierreSolicitadoAt,
     })
     .from(cajaTurnos)
-    .leftJoin(users, eq(cajaTurnos.usuarioId, users.id))
+    .innerJoin(users, eq(cajaTurnos.usuarioId, users.id))
     .where(and(
       eq(cajaTurnos.teamId, teamId),
       eq(cajaTurnos.estado, 'CIERRE_SOLICITADO'),

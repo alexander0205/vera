@@ -69,10 +69,14 @@ export async function GET(
       .where(eq(teams.id, teamId))
       .limit(1),
 
-    // Movimientos del turno
+    // Movimientos del turno (el turno ya se validó del team; el filtro teamId
+    // es defensa en profundidad).
     db.select()
       .from(cajaMovimientos)
-      .where(eq(cajaMovimientos.turnoId, turnoId))
+      .where(and(
+        eq(cajaMovimientos.teamId, teamId),
+        eq(cajaMovimientos.turnoId, turnoId),
+      ))
       .orderBy(cajaMovimientos.createdAt),
 
     // Pagos del turno agrupados por método
