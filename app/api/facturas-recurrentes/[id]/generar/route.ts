@@ -17,13 +17,25 @@ import { generarFacturaDeRecurrente } from '@/lib/cobranza/recurrente';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(_req: NextRequest, { params }: Ctx) {
+export async function POST(req: NextRequest, { params }: Ctx) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
 
   const { id } = await params;
   const numId = parseInt(id);
   if (isNaN(numId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+
+  // Período opcional ('YYYY-MM-DD'): permite generar cualquier fecha del schedule,
+  // no solo la próxima. Si no viene, se usa proximaEmision.
+  let periodo: string | undefined;
+  try {
+    const body = await req.json();
+    if (body && typeof body.periodo === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.periodo)) {
+      periodo = body.periodo;
+    }
+  } catch {
+    // Sin body o body inválido: generar la próxima emisión.
+  }
 
   // Cargar la recurrente verificando que pertenece al team
   const [fr] = await db
@@ -35,12 +47,18 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
 
   // Permitir generar incluso si está pausada/finalizada (es disparo manual para probar)
   // pero no generar si está en un estado inesperado
-  const result = await generarFacturaDeRecurrente(fr);
+  const result = await generarFacturaDeRecurrente(fr, { periodo });
 
   if (!result.ok) {
     if (result.reason === 'no_sequence') {
       return NextResponse.json(
         { error: 'No hay secuencia disponible para el tipo de comprobante configurado en esta factura recurrente.' },
+        { status: 409 },
+      );
+    }
+    if (result.reason === 'already_generated') {
+      return NextResponse.json(
+        { error: 'Ya existe una factura para ese período.' },
         { status: 409 },
       );
     }

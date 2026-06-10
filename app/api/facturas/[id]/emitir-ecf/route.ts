@@ -58,8 +58,8 @@ const RNC_RE = /^\d{9}$|^\d{11}$/;
 async function acquireNextEncf(
   teamId: number,
   tipoEcf: string,
-): Promise<{ encf: string; sequenceId: number } | null> {
-  const rows = await db.execute<{ id: number; numero: string }>(sql`
+): Promise<{ encf: string; sequenceId: number; fechaVencimiento: string | null } | null> {
+  const rows = await db.execute<{ id: number; numero: string; fecha_venc: string | null }>(sql`
     UPDATE sequences
     SET secuencia_actual = secuencia_actual + 1,
         updated_at       = NOW()
@@ -73,14 +73,14 @@ async function acquireNextEncf(
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, (secuencia_actual - 1)::text AS numero
+    RETURNING id, (secuencia_actual - 1)::text AS numero, fecha_vencimiento::date::text AS fecha_venc
   `);
 
-  const row = rows[0] as { id: number; numero: string } | undefined;
+  const row = rows[0] as { id: number; numero: string; fecha_venc: string | null } | undefined;
   if (!row) return null;
 
   const encf = `E${tipoEcf}${row.numero.padStart(10, '0')}`;
-  return { encf, sequenceId: row.id };
+  return { encf, sequenceId: row.id, fechaVencimiento: row.fecha_venc ?? null };
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -346,7 +346,7 @@ export async function POST(
         { status: 422 },
       );
     }
-    const { encf: encfAsignado, sequenceId: sequenceConsumedId } = acquired;
+    const { encf: encfAsignado, sequenceId: sequenceConsumedId, fechaVencimiento: fechaVencimientoSecuencia } = acquired;
     console.log(`[emitir-ecf] eNCF asignado: ${encfAsignado} para doc #${docId}`);
 
     // Build mapper payload
@@ -355,13 +355,14 @@ export async function POST(
       tipoEcf,
       items,
       totales,
-      rncComprador:         doc.rncComprador ?? undefined,
-      razonSocialComprador: doc.razonSocialComprador ?? undefined,
-      emailComprador:       doc.emailComprador ?? undefined,
+      rncComprador:               doc.rncComprador ?? undefined,
+      razonSocialComprador:       doc.razonSocialComprador ?? undefined,
+      emailComprador:             doc.emailComprador ?? undefined,
       tipoPago,
-      fechaLimitePago:      doc.fechaLimitePago ?? undefined,
-      ncfModificado:        doc.ncfModificado ?? undefined,
-      encfOverride:         encfAsignado,
+      fechaLimitePago:            doc.fechaLimitePago ?? undefined,
+      ncfModificado:              doc.ncfModificado ?? undefined,
+      encfOverride:               encfAsignado,
+      fechaVencimientoSecuencia:  fechaVencimientoSecuencia ?? undefined,
     });
 
     // Ambiente DGII: no se envía. ecf-api usa el del contribuyente (contrib.ambiente).

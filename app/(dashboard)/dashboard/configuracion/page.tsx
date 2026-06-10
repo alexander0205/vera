@@ -6,6 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
   Building2, Palette, ImageIcon, PenLine,
   CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet,
 } from 'lucide-react';
@@ -133,9 +136,10 @@ export default function ConfiguracionPage() {
   // Recargo por mora
   const [recargoActivo, setRecargoActivo]               = useState(false);
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
-  const [recargoDiasGracia, setRecargoDiasGracia]       = useState('5');
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
+  // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
+  const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
 
   // Cargar datos actuales
   useEffect(() => {
@@ -157,9 +161,9 @@ export default function ConfiguracionPage() {
         // Recargo por mora — convertir bps → %
         setRecargoActivo(d.recargoMoraActivo ?? false);
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
-        setRecargoDiasGracia(String(d.recargoMoraDiasGracia ?? 5));
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
+        setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
       })
       .finally(() => setLoading(false));
   }, []);
@@ -171,7 +175,6 @@ export default function ConfiguracionPage() {
     try {
       // Convertir % → bps para guardar (ej: "2.50" → 250)
       const pctBps = Math.round(parseFloat(recargoPorcentaje || '0') * 100);
-      const diasGracia = parseInt(recargoDiasGracia || '0', 10);
 
       const res = await fetch('/api/equipo/perfil', {
         method: 'POST',
@@ -183,8 +186,10 @@ export default function ConfiguracionPage() {
           logo, firma,
           recargoMoraActivo:     recargoActivo,
           recargoMoraPorcentaje: pctBps,
-          recargoMoraDiasGracia: diasGracia,
+          // Gracia eliminada del config: la mora aplica al vencer.
+          recargoMoraDiasGracia: 0,
           cajaHabilitada,
+          plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');
@@ -427,7 +432,39 @@ export default function ConfiguracionPage() {
 
       {/* Padrón DGII se sincroniza automáticamente vía cron diario — no UI expuesta */}
 
-      {/* 5. Recargo por mora */}
+      {/* 5. Plazo de pago por defecto */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-teal-600" />
+            Plazo de pago
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Plazo de pago por defecto al crear una factura nueva o recurrente.
+            Puedes cambiarlo en cada factura.
+          </p>
+          <div className="space-y-1.5 md:max-w-xs">
+            <Label>Plazo de pago por defecto</Label>
+            <Select value={plazoDefaultDias || 'contado'} onValueChange={v => setPlazoDefaultDias(v === 'contado' ? '' : v)}>
+              <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contado">De contado</SelectItem>
+                <SelectItem value="8">8 días</SelectItem>
+                <SelectItem value="15">15 días</SelectItem>
+                <SelectItem value="30">30 días</SelectItem>
+                <SelectItem value="60">60 días</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-400">
+              «De contado» no genera fecha de vencimiento.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 6. Recargo por mora */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -466,9 +503,9 @@ export default function ConfiguracionPage() {
             </button>
           </div>
 
-          {/* Porcentaje y días de gracia */}
-          <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity ${recargoActivo ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-            <div className="space-y-1.5">
+          {/* Porcentaje de recargo */}
+          <div className={`transition-opacity ${recargoActivo ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+            <div className="space-y-1.5 md:max-w-xs">
               <Label>Porcentaje de recargo (%)</Label>
               <div className="relative">
                 <Input
@@ -483,24 +520,8 @@ export default function ConfiguracionPage() {
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
               </div>
-              <p className="text-xs text-gray-400">Default: 2.00% (200 basis points)</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Días de gracia</Label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min="0"
-                  max="365"
-                  value={recargoDiasGracia}
-                  onChange={e => setRecargoDiasGracia(e.target.value)}
-                  placeholder="5"
-                  className="pr-14"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
-              </div>
               <p className="text-xs text-gray-400">
-                El recargo se aplica si la factura lleva más de estos días vencida. Default: 5.
+                Se aplica al vencer la factura. Default: 2.00% (200 basis points).
               </p>
             </div>
           </div>

@@ -17,7 +17,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
 import { z } from 'zod';
-import { eq, and, ne, or, isNull, desc } from 'drizzle-orm';
+import { eq, and, ne, or, isNull, inArray, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
@@ -99,9 +99,17 @@ export async function POST(req: NextRequest) {
           ? or(eq(ecfDocuments.trackId, ''), isNull(ecfDocuments.trackId))
           : undefined;
 
-    const whereClause = trackFilter
-      ? and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.tipoEcf, tipoDb), trackFilter)
-      : and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.tipoEcf, tipoDb));
+    const soloAprobados = req.nextUrl.searchParams.get('soloAprobados') === 'true';
+    const aprobadoFilter = soloAprobados
+      ? inArray(ecfDocuments.estado, ['ACEPTADO', 'ACEPTADO_CONDICIONAL'])
+      : undefined;
+
+    const whereClause = and(
+      eq(ecfDocuments.teamId, teamId),
+      eq(ecfDocuments.tipoEcf, tipoDb),
+      trackFilter,
+      aprobadoFilter,
+    );
 
     // ── Buscar el e-CF de prueba más reciente de ese tipo ──
     const [row] = await db

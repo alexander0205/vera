@@ -8,7 +8,7 @@ import { eq, and } from 'drizzle-orm';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, clients, pagosRecibidos } from '@/lib/db/schema';
+import { ecfDocuments, teams, clients, pagosRecibidos, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { sql } from 'drizzle-orm';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
@@ -72,10 +72,12 @@ export async function GET(
     }
 
     const { id } = await params;
-    const docId = parseInt(id);
-    if (isNaN(docId)) {
-      return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
-    }
+    // El parámetro puede ser el ID numérico (legacy) o el código de factura
+    // (F-YYYY-NNNNNN). El código NO es único global, pero el lookup va scopeado
+    // por teamId → sin colisión entre empresas.
+    const esNumerico = /^\d+$/.test(id);
+    const docIdNum   = esNumerico ? parseInt(id) : null;
+    const codigoParam = esNumerico ? null : decodeURIComponent(id);
 
     // Formato de impresión: 'grande' (A4, default) | 'tirilla' (80mm térmica)
     const formatoParam = req.nextUrl.searchParams.get('formato')?.toLowerCase();
@@ -90,14 +92,16 @@ export async function GET(
       return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
     }
 
-    // Obtener documento + team juntos
+    // Obtener documento + team juntos (por ID numérico o por código, scopeado al team)
     const [row] = await db
       .select({ doc: ecfDocuments, team: teams })
       .from(ecfDocuments)
       .innerJoin(teams, eq(teams.id, ecfDocuments.teamId))
       .where(
         and(
-          eq(ecfDocuments.id, docId),
+          codigoParam != null
+            ? eq(ecfDocuments.codigo, codigoParam)
+            : eq(ecfDocuments.id, docIdNum!),
           eq(ecfDocuments.teamId, teamId)
         )
       )
@@ -106,6 +110,9 @@ export async function GET(
     if (!row) {
       return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
     }
+
+    // ID real del doc (para las queries de pagos que siguen)
+    const docId = row.doc.id;
 
     const { doc, team } = row;
 
@@ -119,6 +126,22 @@ export async function GET(
     const inlineCts = doc.pagoRecibido === 'true' ? (doc.pagoValorCts ?? 0) : 0;
     const pagadoCts = sumLedger > 0 ? sumLedger : inlineCts;
     const saldoCts  = Math.max(0, doc.montoTotal - pagadoCts);
+
+    // Pagos del ledger (cada uno con fecha + usuario) para el historial en el PDF.
+    const pagosRows = await db
+      .select({
+        metodo:        pagosRecibidos.metodo,
+        montoCentavos: pagosRecibidos.montoCentavos,
+        fechaPago:     pagosRecibidos.fechaPago,
+        referencia:    pagosRecibidos.referencia,
+        notas:         pagosRecibidos.notas,
+        usuarioName:   users.name,
+        usuarioEmail:  users.email,
+      })
+      .from(pagosRecibidos)
+      .leftJoin(users, eq(pagosRecibidos.createdBy, users.id))
+      .where(eq(pagosRecibidos.ecfDocumentId, docId))
+      .orderBy(pagosRecibidos.fechaPago, pagosRecibidos.id);
 
     // Cargar teléfono del cliente si existe referencia
     let telefonoComprador: string | undefined;
@@ -242,6 +265,14 @@ export async function GET(
       totalItbis:  totalItbisDOP,
       montoTotal:  montoTotalDOP,
       saldo:       saldoCts / 100,  // B2 fix: saldo real (0 si pagada)
+      pagos: pagosRows.map(p => ({
+        metodo:   p.metodo,
+        montoDOP: p.montoCentavos / 100,
+        fecha:    p.fechaPago,
+        usuario:  p.usuarioName ?? p.usuarioEmail ?? undefined,
+        nota:     p.notas ?? undefined,
+        referencia: p.referencia ?? undefined,
+      })),
       qrDataUrl,
       pieFactura:          doc.pieFactura ?? undefined,
       terminosCondiciones: doc.terminosCondiciones ?? undefined,
@@ -255,9 +286,11 @@ export async function GET(
       createElement(Component, { data: pdfData }) as any
     );
 
+    // Nombre del archivo = código de factura (F-YYYY-NNNNNN); fallback al encf.
+    const nombreBase = doc.codigo ?? doc.encf;
     const filename = formato === 'tirilla'
-      ? `factura-${doc.encf}-tirilla.pdf`
-      : `factura-${doc.encf}.pdf`;
+      ? `factura-${nombreBase}-tirilla.pdf`
+      : `factura-${nombreBase}.pdf`;
 
     return new NextResponse(pdfBuffer, {
       status: 200,

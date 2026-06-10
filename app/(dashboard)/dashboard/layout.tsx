@@ -42,6 +42,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
       { href: '/dashboard/notas-credito',        label: 'Notas de crédito' },
+      { href: '/dashboard/notas-debito',         label: 'Notas de débito' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
       { href: '/dashboard/facturas-recurrentes', label: 'Facturas recurrentes' },
     ],

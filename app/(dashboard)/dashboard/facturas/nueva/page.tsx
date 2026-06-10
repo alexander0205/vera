@@ -18,6 +18,12 @@ export interface EmpresaPerfil {
   logo:            string | null;
   rnc:             string | null;
   firma:           string | null;
+  // Config de recargo por mora (para mostrar los términos al elegir crédito)
+  recargoMoraActivo?:     boolean;
+  recargoMoraPorcentaje?: number;  // basis points (200 = 2.00%)
+  recargoMoraDiasGracia?: number;
+  // Plazo de pago por defecto. null = de contado; N = crédito a N días.
+  plazoPagoDefaultDias?:  number | null;
 }
 
 async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
@@ -30,6 +36,10 @@ async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
       logo:            teams.logo,
       rnc:             teams.rnc,
       firma:           teams.firma,
+      recargoMoraActivo:     teams.recargoMoraActivo,
+      recargoMoraPorcentaje: teams.recargoMoraPorcentaje,
+      recargoMoraDiasGracia: teams.recargoMoraDiasGracia,
+      plazoPagoDefaultDias:  teams.plazoPagoDefaultDias,
     })
     .from(teams)
     .where(eq(teams.id, teamId))

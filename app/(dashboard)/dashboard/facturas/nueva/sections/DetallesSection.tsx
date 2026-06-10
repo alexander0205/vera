@@ -7,115 +7,95 @@ import {
 } from '@/components/ui/select';
 import { Info } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
-import { Tooltip } from '@/components/ui/tooltip';
-import { getCampoHint, esCampoRequerido } from '@/lib/factura/validator/ui-helpers';
-import type { Plazo } from '../utils/types';
+
+// Condición de pago DGII: 1=contado, 2=crédito, 3=gratuito, 4=uso/consumo.
+const CONDICIONES_PAGO = [
+  { value: '1', label: 'De contado' },
+  { value: '2', label: 'Crédito' },
+  { value: '3', label: 'Gratuito' },
+  { value: '4', label: 'Uso o consumo' },
+];
+
+/** Formatea YYYY-MM-DD → DD/MM/YYYY */
+function formatFechaCorta(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  if (!y || !m || !d) return '';
+  return `${d}/${m}/${y}`;
+}
 
 interface Props {
   regla: TipoEcfRegla | undefined;
   tipoEcf: string;
-  fechaEmision: string;
-  setFechaEmision: (v: string) => void;
-  plazoId: string;
-  onPlazoChange: (id: string) => void;
-  plazosDisponibles: Plazo[];
-  plazoActual: Plazo | undefined;
+  condicionPago: string;
+  setCondicionPago: (v: string) => void;
+  diasParaPago: string;
+  setDiasParaPago: (v: string) => void;
+  /** Vencimiento derivado (YYYY-MM-DD) — solo para mostrar el info pill. */
   fechaLimitePago: string;
-  setFechaLimitePago: (v: string) => void;
   ncfModificado: string;
   setNcfModificado: (v: string) => void;
   codigoModificacion: string;
   setCodigoModificacion: (v: string) => void;
   fechaNcfModificado: string;
   setFechaNcfModificado: (v: string) => void;
-  tipoIngresos: string;
-  setTipoIngresos: (v: string) => void;
   today: string;
 }
 
 export function DetallesSection({
-  regla, tipoEcf,
-  fechaEmision, setFechaEmision,
-  plazoId, onPlazoChange, plazosDisponibles, plazoActual,
-  fechaLimitePago, setFechaLimitePago,
+  regla,
+  condicionPago, setCondicionPago,
+  diasParaPago, setDiasParaPago,
+  fechaLimitePago,
   ncfModificado, setNcfModificado,
   codigoModificacion, setCodigoModificacion,
   fechaNcfModificado, setFechaNcfModificado,
-  tipoIngresos, setTipoIngresos, today,
+  today,
 }: Props) {
-  const muestraTipoIngresos = ['31', '32', '44', '45', '46'].includes(tipoEcf);
-  const muestraVencimiento  = plazoActual?.esManual || plazoActual?.dias != null;
+  const esCredito = condicionPago === '2';
 
   return (
     <div className="space-y-4">
-      {/* Row 1: Fecha · Plazo · Tipo ingresos */}
+      {/* Fila: Condición de pago · Plazo de vencimiento */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div>
-          <Label className="text-xs text-gray-600 uppercase tracking-wide">Fecha <span className="text-red-500">*</span></Label>
-          <Input
-            className="mt-1 h-10"
-            type="date"
-            value={fechaEmision}
-            onChange={(e) => setFechaEmision(e.target.value)}
-          />
-        </div>
-        <div>
-          <Label className="text-xs text-gray-600 uppercase tracking-wide">Plazo de pago</Label>
-          <Select value={plazoId} onValueChange={onPlazoChange}>
+          <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
+          <Select value={condicionPago} onValueChange={setCondicionPago}>
             <SelectTrigger className="mt-1 h-10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {plazosDisponibles.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+              {CONDICIONES_PAGO.map((c) => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
               ))}
-              <SelectItem value="nuevo" className="text-teal-600 font-medium border-t border-gray-100 mt-1">
-                + Nuevo plazo
-              </SelectItem>
             </SelectContent>
           </Select>
         </div>
-        {muestraTipoIngresos && (
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1">
-              Tipo de ingresos
-              {esCampoRequerido(tipoEcf, 'tipoIngresos') && <span className="text-red-500 ml-0.5" aria-label="campo obligatorio">*</span>}
-              <Tooltip text={getCampoHint(tipoEcf, 'tipoIngresos') || 'DGII · enum 1-6'}>
-                <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
-              </Tooltip>
-            </Label>
-            <Select value={tipoIngresos || '1'} onValueChange={setTipoIngresos}>
-              <SelectTrigger className="mt-1 h-10">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 — Operaciones (Habituales)</SelectItem>
-                <SelectItem value="2">2 — Financieros</SelectItem>
-                <SelectItem value="3">3 — Extraordinarios</SelectItem>
-                <SelectItem value="4">4 — Arrendamientos</SelectItem>
-                <SelectItem value="5">5 — Venta Activos depreciables</SelectItem>
-                <SelectItem value="6">6 — Otros Ingresos</SelectItem>
-              </SelectContent>
-            </Select>
+        <div>
+          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
+            Plazo de vencimiento {esCredito && <span className="text-red-500">*</span>}
+          </Label>
+          <div className="relative mt-1 w-28">
+            <Input
+              type="number"
+              min={1}
+              value={diasParaPago}
+              onChange={(e) => setDiasParaPago(e.target.value)}
+              disabled={!esCredito}
+              className="h-10 pr-10 disabled:bg-gray-50 disabled:text-gray-300"
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Row 2: Vencimiento (condicional) */}
-      {muestraVencimiento && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">
-              Vencimiento {plazoActual?.esManual && <span className="text-red-500">*</span>}
-            </Label>
-            <Input
-              type="date"
-              value={fechaLimitePago}
-              onChange={(e) => setFechaLimitePago(e.target.value)}
-              min={today}
-              className="mt-1 h-10"
-            />
-          </div>
+      {/* Info pill: vencimiento derivado */}
+      {esCredito && fechaLimitePago && (
+        <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+          <Info className="h-4 w-4 text-teal-700 shrink-0" />
+          <p className="text-sm text-teal-900">
+            Vence el <span className="font-semibold">{formatFechaCorta(fechaLimitePago)}</span>.
+          </p>
         </div>
       )}
 

@@ -21,6 +21,10 @@ async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
       logo:            teams.logo,
       rnc:             teams.rnc,
       firma:           teams.firma,
+      recargoMoraActivo:     teams.recargoMoraActivo,
+      recargoMoraPorcentaje: teams.recargoMoraPorcentaje,
+      recargoMoraDiasGracia: teams.recargoMoraDiasGracia,
+      plazoPagoDefaultDias:  teams.plazoPagoDefaultDias,
     })
     .from(teams)
     .where(eq(teams.id, teamId))

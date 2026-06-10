@@ -109,6 +109,7 @@ export default function SecuenciasPage() {
   // Formulario edición
   const [editNombre, setEditNombre]       = useState('');
   const [editHasta, setEditHasta]         = useState('');
+  const [editSiguiente, setEditSiguiente] = useState('');
   const [editVenc, setEditVenc]           = useState('');
   const [editPreferida, setEditPreferida] = useState(false);
   const [editAutomatica, setEditAutomatica] = useState(false);
@@ -139,6 +140,7 @@ export default function SecuenciasPage() {
     setEditTarget(s);
     setEditNombre(s.nombre);
     setEditHasta(s.secuenciaHasta);
+    setEditSiguiente(s.secuenciaActual);
     setEditVenc(s.fechaVencimiento ? s.fechaVencimiento.slice(0, 10) : '');
     setEditPreferida(s.preferida);
     setEditAutomatica(s.numeracionAutomatica);
@@ -165,6 +167,9 @@ export default function SecuenciasPage() {
       };
       if (!esSinNcf && editHasta) {
         payload.hasta = parseInt(editHasta);
+      }
+      if (!esSinNcf && editSiguiente) {
+        payload.siguiente = parseInt(editSiguiente);
       }
       if (editVenc) {
         payload.fechaVencimiento = editVenc;
@@ -539,13 +544,30 @@ export default function SecuenciasPage() {
                   <div className="space-y-1.5">
                     <Label>Número final del rango <span className="text-red-500">*</span></Label>
                     <p className="text-xs text-gray-400">
-                      Actual: <span className="font-mono">{editTarget.secuenciaHasta}</span> — no puede ser menor al siguiente número (<span className="font-mono">{editTarget.secuenciaActual}</span>)
+                      Actual: <span className="font-mono">{editTarget.secuenciaHasta}</span>
                     </p>
                     <Input
                       type="number"
-                      min={editTarget.secuenciaActual}
+                      min={1}
                       value={editHasta}
                       onChange={(e) => setEditHasta(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {/* Siguiente número — permite corregir si se consumió uno por error */}
+                {!esSinNcf && (
+                  <div className="space-y-1.5">
+                    <Label>Siguiente número</Label>
+                    <p className="text-xs text-gray-400">
+                      Actual: <span className="font-mono">{editTarget.secuenciaActual}</span> — próximo e-NCF: <span className="font-mono">{formatEncf(editTarget.tipoEcf, editTarget.secuenciaActual)}</span>
+                    </p>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={Number(editTarget.secuenciaHasta)}
+                      value={editSiguiente}
+                      onChange={(e) => setEditSiguiente(e.target.value)}
                     />
                   </div>
                 )}

@@ -119,6 +119,9 @@ export const teams = pgTable('teams', {
   // Toggle por empresa. Si está activo: aparece el grupo "Caja" en el sidebar,
   // el badge de estado en el header, y no se puede facturar sin turno abierto.
   cajaHabilitada:         boolean('caja_habilitada').notNull().default(false),
+
+  // Plazo de pago por defecto para nuevas facturas. NULL = de contado; N = crédito a N días.
+  plazoPagoDefaultDias:   integer('plazo_pago_default_dias'),
 });
 
 export const teamMembers = pgTable('team_members', {
@@ -248,8 +251,8 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // Identificación
   encf: varchar('encf', { length: 40 }).notNull(),          // E310000000001 (real) o BOR-XXXXXXXX (borrador)
   tipoEcf: varchar('tipo_ecf', { length: 10 }).notNull(),   // "31", "32", ..., "sin-ncf"
-  /** Código humano-legible único por empresa: F-YYYY-NNNNNN. Generado al crear. */
-  codigo: varchar('codigo', { length: 20 }),
+  /** Código global-único e identificable: {TIPO}-{AÑO}-{EMP}{USR}-{RND5}-{SEC}. Generado al crear. */
+  codigo: varchar('codigo', { length: 40 }),
 
   // Estado del ciclo de vida
   estado: varchar('estado', { length: 30 }).notNull().default('BORRADOR'),
@@ -327,6 +330,20 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // (legacy + empresas sin caja habilitada). Se estampa al emitir si el usuario
   // tiene un turno abierto. Permite la conciliación NCF↔efectivo del cierre.
   turnoCajaId: integer('turno_caja_id').references(() => cajaTurnos.id),
+
+  // Si fue generado por una recurrente, la fecha de cobro (período) del schedule
+  // a la que corresponde. Permite el timeline de períodos y detección de duplicados.
+  periodoRecurrente: date('periodo_recurrente'),
+
+  // Si este documento es una Nota de Débito por mora (tipo 33, BORRADOR interno,
+  // no se envía a DGII), apunta al ecf_document padre que la originó. Self-reference
+  // sin .references() para evitar import circular (FK declarada en la migración).
+  moraOrigenId: integer('mora_origen_id'),
+
+  // Override por factura del recargo por mora (crédito + recargo activo).
+  // NULL = usar el default del team (recargoMoraPorcentaje / recargoMoraDiasGracia).
+  moraPorcentaje: integer('mora_porcentaje'),  // basis points (200 = 2%)
+  moraDiasGracia: integer('mora_dias_gracia'), // días de gracia
 
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
@@ -483,6 +500,10 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   items:            text('items').notNull().default('[]'),
   notas:            text('notas'),
   totalEstimado:    integer('total_estimado').notNull().default(0),
+  /** Override de mora por plan (bps; 200=2%). null → usa config global del team. */
+  moraPorcentaje:   integer('mora_porcentaje'),
+  /** Override de días de gracia por plan. null → usa config global del team. */
+  moraDiasGracia:   integer('mora_dias_gracia'),
   facturasEmitidas: integer('facturas_emitidas').notNull().default(0),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
