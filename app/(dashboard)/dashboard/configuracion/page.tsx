@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { mutate } from 'swr';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -195,6 +196,7 @@ export default function ConfiguracionPage() {
       if (!res.ok) throw new Error('Error guardando');
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+      mutate('/api/empresa/list');
     } catch {
       setError('No se pudo guardar. Intenta de nuevo.');
     } finally {
