@@ -458,18 +458,19 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       tipo,
       esRfce: false,
       dto: {
-        tipoComprobante:      tipo,
-        items:                mapItems43(d.items), // misma estructura que 43
-        razonSocialComprador: d.razonSocialComprador,
-        rncComprador:         d.rncComprador,
+        tipoComprobante:           tipo,
+        items:                     mapItems43(d.items), // misma estructura que 43
+        razonSocialComprador:      d.razonSocialComprador,
+        rncComprador:              d.rncComprador,
+        fechaVencimientoSecuencia: normalizeFechaVenc(d.fechaVencimientoSecuencia),
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
-        montoTotal:           d.totales.montoTotal,
-        tipoIngresos:         formatTipoIngresos(d.tipoIngresos), // "01" zero-padded
+        montoTotal:                d.totales.montoTotal,
+        tipoIngresos:              formatTipoIngresos(d.tipoIngresos), // "01" zero-padded
         // Todos los items de tipo 44 son exentos → montoExento = montoTotal
-        montoExento:          d.totales.montoTotal,
-        correoComprador:      d.emailComprador,
-        eNcf:                 d.encfOverride,
+        montoExento:               d.totales.montoTotal,
+        correoComprador:           d.emailComprador,
+        eNcf:                      d.encfOverride,
         ...(fechaLimitePago ? { fechaLimitePago } : {}),
         ...skipRange,
       },
@@ -486,18 +487,19 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       tipo,
       esRfce: false,
       dto: {
-        tipoComprobante:      tipo,
-        items:                mapItemsGeneric(d.items),
+        tipoComprobante:           tipo,
+        items:                     mapItemsGeneric(d.items),
         // ECF46Dto NO tiene rncComprador — usa identificadorExtranjero para el comprador
         // DGII cod=1381: el identificador es obligatorio incluso en pruebas de habilitación
-        identificadorExtranjero: d.rncComprador,
-        razonSocialComprador: d.razonSocialComprador,
+        identificadorExtranjero:   d.rncComprador,
+        razonSocialComprador:      d.razonSocialComprador,
+        fechaVencimientoSecuencia: normalizeFechaVenc(d.fechaVencimientoSecuencia),
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
-        montoTotal:           d.totales.montoTotal,
-        tipoIngresos:         formatTipoIngresos(d.tipoIngresos),
-        correoComprador:      d.emailComprador,
-        eNcf:                 d.encfOverride,
+        montoTotal:                d.totales.montoTotal,
+        tipoIngresos:              formatTipoIngresos(d.tipoIngresos),
+        correoComprador:           d.emailComprador,
+        eNcf:                      d.encfOverride,
         ...(fechaLimitePago ? { fechaLimitePago } : {}),
         ...skipRange,
       },
@@ -516,18 +518,19 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
       tipo,
       esRfce: false,
       dto: {
-        tipoComprobante:      tipo,
-        items:                items47,
-        montoTotal:           d.totales.montoTotal,
+        tipoComprobante:           tipo,
+        items:                     items47,
+        montoTotal:                d.totales.montoTotal,
         // DGII cod=1960: todos los items en tipo 47 son exentos → montoExento = montoTotal
-        montoExento:          d.totales.montoTotal,
+        montoExento:               d.totales.montoTotal,
         // DGII cod=11170: totalISRRetencion = suma exacta del ISR retenido por item.
         // Tasa default 0.27, override vía tasaIsrRetencion (0.10 tratados, 0.15 otros).
-        totalISRRetencion:    Math.round(totalISRRet * 100) / 100,
+        totalISRRetencion:         Math.round(totalISRRet * 100) / 100,
+        fechaVencimientoSecuencia: normalizeFechaVenc(d.fechaVencimientoSecuencia),
         tipoPago,
         ...(fp ? { formasPago: fp } : {}),
-        razonSocialProveedor: d.razonSocialComprador,
-        eNcf:                 d.encfOverride,
+        razonSocialProveedor:      d.razonSocialComprador,
+        eNcf:                      d.encfOverride,
         ...(fechaLimitePago ? { fechaLimitePago } : {}),
         ...skipRange,
       },
@@ -583,6 +586,8 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
   const needsComprador             = ['31', '32', '33', '45'].includes(tipo);
   // tipoIngresos aplica a 31, 32 (≥250K), 45 (no en 33 que es Nota de Débito).
   const needsTipoIngresos          = ['31', '32', '45'].includes(tipo);
+  // fechaVencimientoSecuencia OBLIGATORIA en 31, 33, 45 — NO en 32 (no se vence).
+  const needsFechaVencSeq          = ['31', '33', '45'].includes(tipo);
 
   const ret = sumRetenciones(d.retenciones);
   // En este path tipo 32 SIEMPRE es ≥250K (RFCE maneja <250K arriba) → formato ECF.
@@ -601,6 +606,7 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         : {}
       ),
       ...(needsIndicadorMontoGravado ? { indicadorMontoGravado: 0 } : {}),
+      ...(needsFechaVencSeq ? { fechaVencimientoSecuencia: normalizeFechaVenc(d.fechaVencimientoSecuencia) } : {}),
       tipoPago,
       ...(fp ? { formasPago: fp } : {}),
       montoTotal:           d.totales.montoTotal,

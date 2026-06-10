@@ -119,8 +119,8 @@ const emitirSchema = z.object({
 async function acquireNextEncf(
   teamId: number,
   tipoEcf: string,
-): Promise<{ encf: string; sequenceId: number; numero: string } | null> {
-  const rows = await db.execute<{ id: number; numero: string }>(sql`
+): Promise<{ encf: string; sequenceId: number; numero: string; fechaVencimiento: string | null } | null> {
+  const rows = await db.execute<{ id: number; numero: string; fecha_venc: string | null }>(sql`
     UPDATE sequences
     SET secuencia_actual = secuencia_actual + 1,
         updated_at       = NOW()
@@ -134,14 +134,15 @@ async function acquireNextEncf(
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, (secuencia_actual - 1)::text AS numero
+    RETURNING id, (secuencia_actual - 1)::text AS numero,
+              fecha_vencimiento::date::text AS fecha_venc
   `);
 
-  const row = rows[0] as { id: number; numero: string } | undefined;
+  const row = rows[0] as { id: number; numero: string; fecha_venc: string | null } | undefined;
   if (!row) return null;
 
   const encf = `E${tipoEcf}${row.numero.padStart(10, '0')}`;
-  return { encf, sequenceId: row.id, numero: row.numero };
+  return { encf, sequenceId: row.id, numero: row.numero, fechaVencimiento: row.fecha_venc ?? null };
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -495,6 +496,7 @@ export async function POST(request: NextRequest) {
     // ecf-api recibe el eNCF ya asignado y solo firma + envía a DGII.
     let encfAsignado: string | undefined = data.encfOverride;
     let sequenceConsumedId: number | null = null;
+    let fechaVencimientoSecuencia: string | null = null;
     if (!encfAsignado) {
       const acquired = await acquireNextEncf(teamId, data.tipoEcf);
       if (!acquired) {
@@ -506,28 +508,30 @@ export async function POST(request: NextRequest) {
           { status: 422 },
         );
       }
-      encfAsignado       = acquired.encf;
-      sequenceConsumedId = acquired.sequenceId;
+      encfAsignado              = acquired.encf;
+      sequenceConsumedId        = acquired.sequenceId;
+      fechaVencimientoSecuencia = acquired.fechaVencimiento;
       console.log(`[ecf/emitir] eNCF asignado localmente: ${encfAsignado} (seq.id=${sequenceConsumedId})`);
     }
 
     // Mapear payload al DTO de ecf-api
     const { tipo, esRfce, dto: ecfApiDto } = mapToEcfApiDto({
-      tipoEcf:              data.tipoEcf,
-      items:                data.items,
+      tipoEcf:                   data.tipoEcf,
+      items:                     data.items,
       totales,
-      rncComprador:         data.rncComprador,
-      razonSocialComprador: data.razonSocialComprador,
-      emailComprador:       data.emailComprador,
-      tipoPago:             data.tipoPago,
-      fechaLimitePago:      data.fechaLimitePago,
-      ncfModificado:        data.ncfModificado,
-      codigoModificacion:   data.codigoModificacion,
-      fechaNcfModificado:   data.fechaNcfModificado,
-      tipoIngresos:         data.tipoIngresos,
-      retenciones:          data.retenciones, // tipos 31/32/33/34
-      encfOverride:         encfAsignado,
-      tasaIsrRetencion:     data.tasaIsrRetencion, // tipo 47
+      rncComprador:              data.rncComprador,
+      razonSocialComprador:      data.razonSocialComprador,
+      emailComprador:            data.emailComprador,
+      tipoPago:                  data.tipoPago,
+      fechaLimitePago:           data.fechaLimitePago,
+      ncfModificado:             data.ncfModificado,
+      codigoModificacion:        data.codigoModificacion,
+      fechaNcfModificado:        data.fechaNcfModificado,
+      tipoIngresos:              data.tipoIngresos,
+      retenciones:               data.retenciones, // tipos 31/32/33/34
+      encfOverride:              encfAsignado,
+      tasaIsrRetencion:          data.tasaIsrRetencion, // tipo 47
+      fechaVencimientoSecuencia: fechaVencimientoSecuencia ?? undefined,
       skipRangeValidation,
     });
 
