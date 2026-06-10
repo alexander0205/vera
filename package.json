@@ -1,5 +1,8 @@
 {
   "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": ["@tailwindcss/oxide", "esbuild", "sharp"]
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:prod": "bash scripts/run-prod.sh dev",
