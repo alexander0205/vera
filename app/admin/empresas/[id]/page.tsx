@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
 import Link from 'next/link';
-import { Building2, Mail, Users, Clock, AlertTriangle } from 'lucide-react';
+import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight } from 'lucide-react';
 import { ConfirmButton } from './confirm-button';
 import EcfApiSection from './_ecf-section';
 import { RoleSelect } from './_role-select';
@@ -123,6 +123,21 @@ async function cambiarRolMiembro(formData: FormData) {
     teamId, userId: admin.id, action: ActivityType.UPDATE_ACCOUNT, ipAddress: '',
   });
 
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
+// ─── Server Action: toggle módulo caja ───────────────────────────────────────
+
+async function toggleCajaHabilitada(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId  = parseInt(formData.get('teamId') as string);
+  const habilitar = formData.get('habilitar') === '1';
+  if (isNaN(teamId)) return;
+
+  await db.update(teams).set({ cajaHabilitada: habilitar }).where(eq(teams.id, teamId));
   revalidatePath(`/admin/empresas/${teamId}`);
 }
 
@@ -270,6 +285,39 @@ export default async function EmpresaDetailPage({
           <Item label="Email fact."  value={team.emailFacturacion} />
           <Item label="Plan"         value={team.planName ?? 'Sin plan'} />
           {/* Ambiente DGII se muestra en la sección ecf-api (fuente de verdad). */}
+        </div>
+      </div>
+
+      {/* Módulos del equipo */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <ToggleRight className="w-4 h-4 text-gray-400" />
+          <h2 className="text-sm font-semibold text-gray-700">Módulos</h2>
+        </div>
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="text-sm font-medium text-gray-800">Cuadre de Caja</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Habilita el módulo de apertura, cierre y cuadre de turnos de caja para este equipo.
+            </p>
+          </div>
+          <form action={toggleCajaHabilitada}>
+            <input type="hidden" name="teamId"    value={teamId} />
+            <input type="hidden" name="habilitar" value={team.cajaHabilitada ? '0' : '1'} />
+            <button
+              type="submit"
+              title={team.cajaHabilitada ? 'Deshabilitar caja' : 'Habilitar caja'}
+              className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                team.cajaHabilitada
+                  ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              {team.cajaHabilitada
+                ? <><ToggleRight className="w-4 h-4" /> Habilitada</>
+                : <><ToggleLeft  className="w-4 h-4" /> Deshabilitada</>}
+            </button>
+          </form>
         </div>
       </div>
 

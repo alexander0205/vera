@@ -28,8 +28,10 @@ const schema = z.object({
   firma:             z.string().max(MAX_IMG_SIZE).optional().or(z.literal('')),
   // Recargo por mora (cobranza — no modifica XML fiscal)
   recargoMoraActivo:     z.boolean().optional(),
-  recargoMoraPorcentaje: z.number().int().min(1).max(10000).optional(),  // 1–100% en bps
+  recargoMoraPorcentaje: z.number().int().min(0).max(10000).optional(),  // 0–100% en bps (0 = desactivado)
   recargoMoraDiasGracia: z.number().int().min(0).max(365).optional(),
+  // Módulo cuadre de caja
+  cajaHabilitada:        z.boolean().optional(),
   // Plazo de pago por defecto. null = de contado; N = crédito a N días.
   plazoPagoDefaultDias:  z.number().int().min(1).max(365).nullable().optional(),
 });
@@ -89,6 +91,8 @@ export async function POST(req: NextRequest) {
     ...(data.recargoMoraActivo     !== undefined && { recargoMoraActivo: data.recargoMoraActivo }),
     ...(data.recargoMoraPorcentaje !== undefined && { recargoMoraPorcentaje: data.recargoMoraPorcentaje }),
     ...(data.recargoMoraDiasGracia !== undefined && { recargoMoraDiasGracia: data.recargoMoraDiasGracia }),
+    // Módulo caja
+    ...(data.cajaHabilitada !== undefined && { cajaHabilitada: data.cajaHabilitada }),
     ...(data.plazoPagoDefaultDias  !== undefined && { plazoPagoDefaultDias: data.plazoPagoDefaultDias }),
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
@@ -128,6 +132,8 @@ export async function GET(_req: NextRequest) {
     recargoMoraActivo:     team.recargoMoraActivo,
     recargoMoraPorcentaje: team.recargoMoraPorcentaje,
     recargoMoraDiasGracia: team.recargoMoraDiasGracia,
+    // Módulo caja
+    cajaHabilitada:        team.cajaHabilitada,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
   });
 }

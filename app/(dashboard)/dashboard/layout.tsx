@@ -9,7 +9,7 @@ import {
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart,
+  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -115,6 +115,11 @@ const HREF_PERMISSION: Record<string, Permission> = {
   // Compras — solo owner y admin
   '/dashboard/compras':               'compras:ver',
 
+  // Caja
+  '/dashboard/caja':                  'caja:ver',
+  '/dashboard/caja/aprobaciones':     'caja:aprobar',
+  '/dashboard/caja/historial':        'caja:ver',
+
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/secuencias':            'configuracion:ver',
@@ -133,7 +138,7 @@ function canAccess(role: string | null | undefined, href: string, platformRole?:
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; }
+interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; }
 interface UserInfo { name: string | null; email: string; platformRole?: string | null; }
 
 function getInitials(name: string | null, email: string) {
@@ -525,20 +530,33 @@ function Sidebar({
 
   // Rol del usuario en el team activo — controla qué items se ven.
   const role = activeTeam?.role;
+  const cajaHabilitada = activeTeam?.cajaHabilitada ?? false;
 
   // Todos los items siempre habilitados
   function isEnabled(_href: string): boolean {
     return true;
   }
 
+  // Grupo Caja — solo visible si cajaHabilitada y el rol tiene caja:ver
+  const cajaCandidatos: NavGroup['children'] = [
+    { href: '/dashboard/caja',              label: 'Mi caja' },
+    { href: '/dashboard/caja/aprobaciones', label: 'Aprobaciones' },
+    { href: '/dashboard/caja/historial',    label: 'Historial' },
+  ].filter(c => canAccess(role, c.href));
+
+  const cajaGroup: NavGroup | null = cajaHabilitada && cajaCandidatos.length > 0
+    ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
+    : null;
+
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
   const topItemsVisibles  = TOP_ITEMS.filter(item => canAccess(role, item.href));
-  const groupsVisibles    = GROUPS
+  const staticGroupsVis   = GROUPS
     .map(g => ({ ...g, children: g.children.filter(c => canAccess(role, c.href)) }))
     .filter(g => g.children.length > 0);
+  const groupsVisibles    = cajaGroup ? [cajaGroup, ...staticGroupsVis] : staticGroupsVis;
 
   const defaultOpen = groupsVisibles.reduce((acc, g) => {
     acc[g.id] = g.children.some(c => pathname.startsWith(c.href));

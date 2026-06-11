@@ -48,7 +48,7 @@ export function ModalEditarNCF({
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm text-gray-500">Tipo de NCF</Label>
-            <Input value={`B${tipoEcf}`} readOnly className="bg-gray-50 text-gray-600 font-mono" />
+            <Input value={`E${tipoEcf}`} readOnly className="bg-gray-50 text-gray-600 font-mono" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm">Siguiente número</Label>

@@ -12,11 +12,12 @@ import {
   date,
   boolean,
   index,
+  uniqueIndex,
   uuid,
   jsonb,
   primaryKey,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ─── Auth & Teams (base del starter — no modificar estructura) ────────────────
 
@@ -113,6 +114,12 @@ export const teams = pgTable('teams', {
   recargoMoraActivo:      boolean('recargo_mora_activo').notNull().default(false),
   recargoMoraPorcentaje:  integer('recargo_mora_porcentaje').notNull().default(200),  // basis points; 200 = 2.00%
   recargoMoraDiasGracia:  integer('recargo_mora_dias_gracia').notNull().default(5),
+
+  // ── Módulo Cuadre de Caja ─────────────────────────────────────────────────
+  // Toggle por empresa. Si está activo: aparece el grupo "Caja" en el sidebar,
+  // el badge de estado en el header, y no se puede facturar sin turno abierto.
+  cajaHabilitada:         boolean('caja_habilitada').notNull().default(false),
+
   // Plazo de pago por defecto para nuevas facturas. NULL = de contado; N = crédito a N días.
   plazoPagoDefaultDias:   integer('plazo_pago_default_dias'),
 });
@@ -333,6 +340,11 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // todavía no estén emitidos a la DGII.
   origenRecurrenteId: integer('origen_recurrente_id').references(() => facturasRecurrentes.id),
 
+  // Cuadre de caja: turno en el que se emitió/cobró este documento. Nullable
+  // (legacy + empresas sin caja habilitada). Se estampa al emitir si el usuario
+  // tiene un turno abierto. Permite la conciliación NCF↔efectivo del cierre.
+  turnoCajaId: integer('turno_caja_id').references(() => cajaTurnos.id),
+
   // Si fue generado por una recurrente, la fecha de cobro (período) del schedule
   // a la que corresponde. Permite el timeline de períodos y detección de duplicados.
   periodoRecurrente: date('periodo_recurrente'),
@@ -533,12 +545,17 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   /** Fecha del pago (YYYY-MM-DD), separada de createdAt para registros backdated. */
   fechaPago:       date('fecha_pago').notNull(),
   notas:           text('notas'),
+  /** Cuadre de caja: turno en el que entró el cobro. Nullable (cobros fuera de
+   *  turno o empresas sin caja). El efectivo del cierre suma los pagos con
+   *  metodo='efectivo' de este turno. */
+  turnoCajaId:     integer('turno_caja_id').references(() => cajaTurnos.id),
   /** Usuario que registró el pago. */
   createdBy:       integer('created_by').references(() => users.id),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('pagos_team_doc_idx').on(t.teamId, t.ecfDocumentId),
   index('pagos_team_fecha_idx').on(t.teamId, t.fechaPago),
+  index('pagos_turno_idx').on(t.turnoCajaId),
 ]);
 
 // ─── Relaciones ───────────────────────────────────────────────────────────────
@@ -930,6 +947,110 @@ export const impresoras = pgTable('impresoras', {
   backend:   varchar('backend', { length: 20 }).notNull().default('browser'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('impresoras_team_idx').on(t.teamId)]);
+
+// ─── EmiteDO — Cuadre de Caja (turnos) ───────────────────────────────────────
+//
+// Modelo "una caja por cajero": cada usuario operativo abre y cierra su propio
+// turno. Puede haber varios turnos abiertos en una misma empresa a la vez (uno
+// por cajero). El índice único parcial garantiza un solo turno vivo por usuario.
+//
+// Ciclo de vida (estado):
+//   ABIERTO            → turno operando; se le atan ventas/cobros/movimientos.
+//   CIERRE_SOLICITADO  → el cajero pidió cerrar CON descuadre; espera supervisor.
+//   CERRADO            → cierre finalizado (sin diferencia, o aprobado).
+//   (rechazo)          → el supervisor regresa el turno a ABIERTO para reconteo.
+//
+// Inmutabilidad: el monto de apertura y los movimientos no los edita el cajero.
+// Los descuadres exigen `cierre_obs` (justificación) + aprobación admin/owner.
+export const cajaTurnos = pgTable('caja_turnos', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  /** Cajero dueño del turno. */
+  usuarioId: integer('usuario_id').notNull().references(() => users.id),
+  estado:    varchar('estado', { length: 20 }).notNull().default('ABIERTO'),
+  // ABIERTO | CIERRE_SOLICITADO | CERRADO
+
+  // ── Apertura (bloqueada tras confirmar) ──────────────────────────────────
+  montoAperturaCentavos: integer('monto_apertura_centavos').notNull(),
+  aperturaPor:           integer('apertura_por').notNull().references(() => users.id),
+  aperturaObs:           text('apertura_obs'),
+  aperturaAt:            timestamp('apertura_at').notNull().defaultNow(),
+
+  // ── Cierre (lo solicita el cajero; el esperado lo calcula el sistema) ─────
+  numeroCierre:            varchar('numero_cierre', { length: 20 }), // CC-YYYY-NNNNNN
+  efectivoContadoCentavos: integer('efectivo_contado_centavos'),
+  montoEsperadoCentavos:   integer('monto_esperado_centavos'),
+  /** contado − esperado. > 0 sobrante, < 0 faltante (snapshot al solicitar cierre). */
+  diferenciaCentavos:      integer('diferencia_centavos'),
+  cierreObs:               text('cierre_obs'),
+  cierreSolicitadoAt:      timestamp('cierre_solicitado_at'),
+
+  // ── Aprobación del descuadre (admin/owner) ────────────────────────────────
+  aprobadoPor:    integer('aprobado_por').references(() => users.id),
+  aprobadoAt:     timestamp('aprobado_at'),
+  aprobacionObs:  text('aprobacion_obs'),
+
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('caja_turnos_team_idx').on(t.teamId),
+  index('caja_turnos_usuario_estado_idx').on(t.teamId, t.usuarioId, t.estado),
+  // Un solo turno vivo (ABIERTO o CIERRE_SOLICITADO) por usuario POR EQUIPO.
+  // Incluye team_id: un cajero que opera en dos empresas no debe quedar bloqueado
+  // por tener un turno abierto en otra. La lógica de app ya es per-team.
+  uniqueIndex('caja_turnos_usuario_abierto_uniq')
+    .on(t.teamId, t.usuarioId)
+    .where(sql`estado IN ('ABIERTO', 'CIERRE_SOLICITADO')`),
+]);
+
+// Movimientos de caja que NO son ventas: entradas, salidas, gastos, retiros y
+// ajustes del supervisor. Las ventas/cobros viven en ecf_documents/pagos_recibidos
+// (atados al turno por turno_caja_id) — NO se duplican aquí.
+export const cajaMovimientos = pgTable('caja_movimientos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  turnoId:       integer('turno_id').notNull().references(() => cajaTurnos.id),
+  tipo:          varchar('tipo', { length: 20 }).notNull(),
+  // ENTRADA | SALIDA | GASTO | RETIRO | AJUSTE
+  /** Siempre positivo en centavos; `tipo` define el signo en el cálculo. */
+  montoCentavos: integer('monto_centavos').notNull(),
+  metodo:        varchar('metodo', { length: 30 }).notNull().default('efectivo'),
+  descripcion:   text('descripcion'),
+  /** Requerido para AJUSTE (corrección de supervisor). */
+  motivo:        text('motivo'),
+  /** SISTEMA (flujo normal) | SUPERVISOR (ajuste manual con caja:aprobar). */
+  origen:        varchar('origen', { length: 20 }).notNull().default('SISTEMA'),
+  createdBy:     integer('created_by').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('caja_movimientos_turno_idx').on(t.turnoId),
+]);
+
+// Counter atómico por (team, año) para el número de cierre CC-YYYY-NNNNNN.
+// Mismo patrón que factura_codigo_counter (lib/facturas/codigo.ts).
+export const cajaCierreCounter = pgTable('caja_cierre_counter', {
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  anio:   smallint('anio').notNull(),
+  ultimo: integer('ultimo').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.teamId, t.anio] }),
+]);
+
+export const cajaTurnosRelations = relations(cajaTurnos, ({ one, many }) => ({
+  team:        one(teams, { fields: [cajaTurnos.teamId],    references: [teams.id] }),
+  cajero:      one(users, { fields: [cajaTurnos.usuarioId], references: [users.id] }),
+  movimientos: many(cajaMovimientos),
+}));
+
+export const cajaMovimientosRelations = relations(cajaMovimientos, ({ one }) => ({
+  team:  one(teams,      { fields: [cajaMovimientos.teamId],  references: [teams.id] }),
+  turno: one(cajaTurnos, { fields: [cajaMovimientos.turnoId], references: [cajaTurnos.id] }),
+}));
+
+export type CajaTurno        = typeof cajaTurnos.$inferSelect;
+export type NewCajaTurno     = typeof cajaTurnos.$inferInsert;
+export type CajaMovimiento   = typeof cajaMovimientos.$inferSelect;
+export type NewCajaMovimiento = typeof cajaMovimientos.$inferInsert;
 
 // ─── TypeScript types ─────────────────────────────────────────────────────────
 
