@@ -18,7 +18,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:reset": "npx tsx lib/db/reset.ts",
-    "db:local:setup": "bash scripts/setup-local-db.sh"
+    "db:local:setup": "bash scripts/setup-local-db.sh",
+    "branch:setup": "bash scripts/branch-setup.sh"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.4.0",
