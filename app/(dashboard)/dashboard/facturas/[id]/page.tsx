@@ -15,6 +15,7 @@ import {
   Loader2, AlertTriangle, CheckCircle, Clock,
   Printer, Ticket, ChevronDown, Mail, Copy,
   Package, ChevronUp, Plus, MoreVertical, Send,
+  TrendingDown, TrendingUp,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -1379,6 +1380,29 @@ export default function FacturaDetallePage() {
             </section>
           )}
 
+          {/* Crear nota de crédito / débito — CTA visible en sidebar */}
+          {puedeCrearNota && can('facturas:crear') && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-3">Crear nota</h3>
+              <div className="space-y-2">
+                <Button asChild variant="outline" className="w-full h-9 text-teal-700 border-teal-200 hover:bg-teal-50 justify-start gap-2">
+                  <Link href={`/dashboard/facturas/nueva?tipo=34&padreId=${factura.id}`}>
+                    <TrendingDown className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 text-left text-sm">Nota de crédito</span>
+                    <span className="text-[10px] text-gray-400">Reduce el saldo</span>
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full h-9 text-orange-700 border-orange-200 hover:bg-orange-50 justify-start gap-2">
+                  <Link href={`/dashboard/facturas/nueva?tipo=33&padreId=${factura.id}`}>
+                    <TrendingUp className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 text-left text-sm">Nota de débito</span>
+                    <span className="text-[10px] text-gray-400">Cargo adicional</span>
+                  </Link>
+                </Button>
+              </div>
+            </section>
+          )}
+
           {/* Notas de crédito/débito que modifican esta factura */}
           {factura.ncsAsociadas && factura.ncsAsociadas.length > 0 && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
@@ -1396,10 +1420,10 @@ export default function FacturaDetallePage() {
                         <span className={nc.tipoEcf === '34' ? 'text-teal-700 font-medium' : 'text-orange-700 font-medium'}>
                           {nc.tipoEcf === '34' ? 'Crédito' : 'Débito'}
                         </span>
-                        {nc.codigoModificacion != null && (
+                        {(nc.razonModificacion || nc.codigoModificacion != null) && (
                           <>
                             <span>·</span>
-                            <span>{COD_MODIFICACION_LABEL[nc.codigoModificacion] ?? `Cód. ${nc.codigoModificacion}`}</span>
+                            <span>{nc.razonModificacion?.trim() || (nc.codigoModificacion != null ? COD_MODIFICACION_LABEL[nc.codigoModificacion] ?? `Cód. ${nc.codigoModificacion}` : '')}</span>
                           </>
                         )}
                         <span>·</span>

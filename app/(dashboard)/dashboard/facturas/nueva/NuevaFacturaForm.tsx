@@ -204,6 +204,7 @@ export default function NuevaFacturaForm({
   // vínculo origenDocumentoId. El tipo/categoría ya quedaron en el estado inicial.
   const [padreNota, setPadreNota] = useState<{
     id: number; codigo: string | null; encf: string; estado: string; conEcfReal: boolean;
+    montoTotal?: string; razonSocial?: string; fechaEmision?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -214,7 +215,12 @@ export default function NuevaFacturaForm({
       .then((p) => {
         if (!p?.id) return;
         const conEcfReal = typeof p.encf === 'string' && /^E\d/.test(p.encf);
-        setPadreNota({ id: p.id, codigo: p.codigo ?? null, encf: p.encf ?? '', estado: p.estado, conEcfReal });
+        setPadreNota({
+          id: p.id, codigo: p.codigo ?? null, encf: p.encf ?? '', estado: p.estado, conEcfReal,
+          montoTotal:   p.montos?.montoTotalDOP,
+          razonSocial:  p.comprador?.razonSocial,
+          fechaEmision: p.fechaEmision ? String(p.fechaEmision).slice(0, 10) : undefined,
+        });
         if (conEcfReal) setNcfModificado(p.encf);
         if (p.fechaEmision) setFechaNcfModificado(String(p.fechaEmision).slice(0, 10));
         // Comprador del padre
@@ -941,26 +947,49 @@ export default function NuevaFacturaForm({
 
         {/* Banner: nota creada desde una factura */}
         {padreNota && (tipoEcf === '33' || tipoEcf === '34') && (
-          <div className={`flex items-start gap-3 rounded-xl border p-4 mb-4 ${
-            padreNota.conEcfReal
-              ? 'bg-teal-50 border-teal-200'
-              : 'bg-amber-50 border-amber-200'
+          <div className={`rounded-xl border p-4 mb-4 ${
+            padreNota.conEcfReal ? 'bg-teal-50 border-teal-200' : 'bg-amber-50 border-amber-200'
           }`}>
-            <FileText className={`h-5 w-5 mt-0.5 shrink-0 ${padreNota.conEcfReal ? 'text-teal-600' : 'text-amber-500'}`} />
-            <div className="text-sm">
-              <p className={padreNota.conEcfReal ? 'text-teal-900' : 'text-amber-900'}>
-                Esta {tipoEcf === '34' ? 'nota de crédito' : 'nota de débito'} modifica la factura{' '}
-                <Link href={`/dashboard/facturas/${padreNota.id}`} className="font-semibold font-mono underline">
-                  {padreNota.conEcfReal ? padreNota.encf : (padreNota.codigo ?? `#${padreNota.id}`)}
-                </Link>.
-              </p>
-              {!padreNota.conEcfReal && (
-                <p className="text-amber-800 mt-1">
-                  La factura original no tiene e-CF emitido: esta nota solo puede
-                  guardarse como <strong>borrador</strong>. Podrás enviarla a la DGII
-                  cuando la factura padre sea emitida.
+            <div className="flex items-start gap-3">
+              <FileText className={`h-5 w-5 mt-0.5 shrink-0 ${padreNota.conEcfReal ? 'text-teal-600' : 'text-amber-500'}`} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium ${padreNota.conEcfReal ? 'text-teal-900' : 'text-amber-900'}`}>
+                  {tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
+                  <Link
+                    href={`/dashboard/facturas/${padreNota.id}`}
+                    className="font-mono underline"
+                    target="_blank"
+                  >
+                    {padreNota.conEcfReal ? padreNota.encf : (padreNota.codigo ?? `#${padreNota.id}`)}
+                  </Link>
                 </p>
-              )}
+                <div className={`mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs ${padreNota.conEcfReal ? 'text-teal-700' : 'text-amber-800'}`}>
+                  {padreNota.razonSocial && (
+                    <div>
+                      <span className="opacity-70">Cliente</span>
+                      <p className="font-medium truncate">{padreNota.razonSocial}</p>
+                    </div>
+                  )}
+                  {padreNota.montoTotal && (
+                    <div>
+                      <span className="opacity-70">Monto original</span>
+                      <p className="font-medium">RD$ {padreNota.montoTotal}</p>
+                    </div>
+                  )}
+                  {padreNota.fechaEmision && (
+                    <div>
+                      <span className="opacity-70">Fecha</span>
+                      <p className="font-medium">{padreNota.fechaEmision}</p>
+                    </div>
+                  )}
+                </div>
+                {!padreNota.conEcfReal && (
+                  <p className="text-xs text-amber-800 mt-2">
+                    La factura original no tiene e-CF emitido — esta nota solo puede guardarse como{' '}
+                    <strong>borrador</strong>. Podrás enviarla a la DGII cuando el padre sea emitido.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
