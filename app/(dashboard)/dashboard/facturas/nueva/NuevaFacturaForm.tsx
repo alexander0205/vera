@@ -18,7 +18,7 @@ import { CompactHeader } from './sections/CompactHeader';
 import { SectionCard } from './sections/SectionCard';
 import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
-import { DetallesSection } from './sections/DetallesSection';
+import { DetallesSection, MOTIVOS_NOTA } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
 import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
@@ -186,9 +186,17 @@ export default function NuevaFacturaForm({
     }
   }, [condicionPago, diasParaPago, fechaEmision]);
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
+  const [motivoNota, setMotivoNotaRaw]        = useState<string>('');
   const [codigoModificacion, setCodigoModificacion] = useState<string>('');
   const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
   const [razonModificacion, setRazonModificacion]   = useState<string>('');
+
+  const setMotivoNota = (v: string) => {
+    setMotivoNotaRaw(v);
+    const found = MOTIVOS_NOTA.find((m) => m.value === v);
+    setCodigoModificacion(found ? String(found.codigo) : '');
+    if (v !== 'otro') setRazonModificacion('');
+  };
   const [tipoIngresos, setTipoIngresos]       = useState<string>('1');
 
   // ── Prefill "crear nota desde factura" (?padreId=N) ────────────────────────
@@ -611,8 +619,10 @@ export default function NuevaFacturaForm({
       return `La razón social del ${regla.compradorLabel} es obligatoria`;
     if (regla?.requiereNcfModificado && !ncfModificado.trim())
       return 'Debes indicar el e-NCF original que se modifica';
-    if (regla?.requiereNcfModificado && !codigoModificacion)
-      return 'Debes seleccionar el código de modificación (Anula, Corrige texto, Corrige monto, etc.)';
+    if (regla?.requiereNcfModificado && !motivoNota)
+      return 'Debes seleccionar el motivo de la nota de crédito / débito';
+    if (regla?.requiereNcfModificado && motivoNota === 'otro' && !razonModificacion.trim())
+      return 'Debes especificar el motivo';
     if (regla?.requiereNcfModificado && !fechaNcfModificado)
       return 'Debes indicar la fecha del e-NCF original que se modifica';
     if (tipoEcf === '32' && totales.total >= 250000 && !rncFinal.trim())
@@ -1024,7 +1034,7 @@ export default function NuevaFacturaForm({
                   diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
                   fechaLimitePago={fechaLimitePago}
                   ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
-                  codigoModificacion={codigoModificacion} setCodigoModificacion={setCodigoModificacion}
+                  motivoNota={motivoNota} setMotivoNota={setMotivoNota}
                   fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
                   razonModificacion={razonModificacion} setRazonModificacion={setRazonModificacion}
                   today={today}

@@ -8,6 +8,18 @@ import {
 import { Info } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 
+export const MOTIVOS_NOTA = [
+  { value: 'devolucion',   label: 'Devolución de mercancía',   codigo: 3 },
+  { value: 'error_precio', label: 'Error en precio',           codigo: 3 },
+  { value: 'descuento',    label: 'Descuento no aplicado',     codigo: 3 },
+  { value: 'cancelacion',  label: 'Cancelación parcial',       codigo: 3 },
+  { value: 'anulacion',    label: 'Anulación de la operación', codigo: 1 },
+  { value: 'cargo',        label: 'Cargo adicional',           codigo: 3 },
+  { value: 'otro',         label: 'Otro (especificar)',         codigo: 3 },
+] as const;
+
+export type MotivoNota = typeof MOTIVOS_NOTA[number]['value'];
+
 // Condición de pago DGII: 1=contado, 2=crédito, 3=gratuito, 4=uso/consumo.
 const CONDICIONES_PAGO = [
   { value: '1', label: 'De contado' },
@@ -35,8 +47,8 @@ interface Props {
   fechaLimitePago: string;
   ncfModificado: string;
   setNcfModificado: (v: string) => void;
-  codigoModificacion: string;
-  setCodigoModificacion: (v: string) => void;
+  motivoNota: string;
+  setMotivoNota: (v: string) => void;
   fechaNcfModificado: string;
   setFechaNcfModificado: (v: string) => void;
   razonModificacion?: string;
@@ -50,7 +62,7 @@ export function DetallesSection({
   diasParaPago, setDiasParaPago,
   fechaLimitePago,
   ncfModificado, setNcfModificado,
-  codigoModificacion, setCodigoModificacion,
+  motivoNota, setMotivoNota,
   fechaNcfModificado, setFechaNcfModificado,
   razonModificacion, setRazonModificacion,
   today,
@@ -116,17 +128,15 @@ export function DetallesSection({
             />
           </div>
           <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Código de modificación <span className="text-red-500">*</span></Label>
-            <Select value={codigoModificacion || undefined} onValueChange={setCodigoModificacion}>
+            <Label className="text-xs text-gray-600 uppercase tracking-wide">Motivo <span className="text-red-500">*</span></Label>
+            <Select value={motivoNota || undefined} onValueChange={setMotivoNota}>
               <SelectTrigger className="mt-1 h-10">
                 <SelectValue placeholder="Selecciona el motivo…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">1 — Anula NCF</SelectItem>
-                <SelectItem value="2">2 — Corrige texto</SelectItem>
-                <SelectItem value="3">3 — Corrige monto</SelectItem>
-                <SelectItem value="4">4 — Reemplazo en contingencia</SelectItem>
-                <SelectItem value="5">5 — Referencia a Factura de Consumo</SelectItem>
+                {MOTIVOS_NOTA.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -140,12 +150,12 @@ export function DetallesSection({
               max={today}
             />
           </div>
-          {setRazonModificacion && (
+          {motivoNota === 'otro' && setRazonModificacion && (
             <div className="sm:col-span-2 lg:col-span-3">
-              <Label className="text-xs text-gray-600 uppercase tracking-wide">Razón de la modificación (opcional)</Label>
+              <Label className="text-xs text-gray-600 uppercase tracking-wide">Especifica el motivo <span className="text-red-500">*</span></Label>
               <Input
                 className="mt-1 h-10"
-                placeholder="Ej: devolución de mercancía, descuento acordado…"
+                placeholder="Describe brevemente el motivo de la nota…"
                 value={razonModificacion ?? ''}
                 onChange={(e) => setRazonModificacion(e.target.value)}
                 maxLength={500}
