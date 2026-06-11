@@ -9,8 +9,10 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { ROLE_KEYS } from '@/lib/config/roles';
 
-const ROLES_VALIDOS = ['owner', 'admin', 'contador', 'vendedor', 'member'] as const;
+// Fuente única de roles válidos: lib/config/roles (incluye 'user', faltaba antes).
+const ROLES_VALIDOS = ROLE_KEYS;
 
 async function getCallerTeam(userId: number) {
   const teamId = await getTeamIdForUser();
