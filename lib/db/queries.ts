@@ -835,6 +835,8 @@ export async function registrarPagoFacturaConMora(input: {
   ecfDocumentId: number;
   fechaPago:     string; // YYYY-MM-DD
   createdBy?:    number;
+  /** Cuadre de caja: turno al que se atribuye el cobro (null si no aplica). */
+  turnoCajaId?:  number | null;
   lineas: Array<{
     montoCentavos: number;
     metodo:        string;
@@ -961,6 +963,7 @@ export async function registrarPagoFacturaConMora(input: {
         cuenta:        i.cuenta,
         fechaPago:     input.fechaPago,
         notas:         i.notas,
+        turnoCajaId:   input.turnoCajaId ?? null,
         createdBy:     input.createdBy ?? null,
       })),
     );

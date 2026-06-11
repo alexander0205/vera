@@ -10,18 +10,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit, syncPagoMirror } from '@/lib/db/queries';
+import { getTurnoAbierto } from '@/lib/caja/core';
+import { METODOS_PAGO_SET } from '@/lib/pagos/metodos';
 import { eq, and } from 'drizzle-orm';
 
-const METODOS_VALIDOS = new Set([
-  'efectivo',
-  'transferencia',
-  'tarjeta',
-  'tarjeta_credito',
-  'tarjeta_debito',
-  'cheque',
-  'deposito',
-  'otro',
-]);
+// Fuente única: lib/pagos/metodos.
+const METODOS_VALIDOS = METODOS_PAGO_SET;
 
 interface PagoSplitLinea {
   metodo: string;
@@ -82,6 +76,12 @@ export async function POST(
   let fecha = body.fecha ? String(body.fecha).slice(0, 10) : null;
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) fecha = new Date().toISOString().slice(0, 10);
 
+  // Cuadre de caja: si el cajero tiene un turno ABIERTO, el cobro se atribuye a
+  // él para que el efectivo entre en el esperado del cierre. Solo ABIERTO — un
+  // turno con CIERRE_SOLICITADO ya tiene el esperado congelado.
+  const turno = await getTurnoAbierto(teamId, user.id);
+  const turnoCajaId = turno?.estado === 'ABIERTO' ? turno.id : null;
+
   // ── SPLIT: varias líneas de método en una sola operación ─────────────────────
   if (Array.isArray(body.pagos)) {
     const lineas = body.pagos.map((p) => {
@@ -108,7 +108,7 @@ export async function POST(
       and(eq(pagosRecibidos.teamId, teamId), eq(pagosRecibidos.ecfDocumentId, docId)),
     );
     try {
-      await registrarPagosSplit({ teamId, ecfDocumentId: docId, fechaPago: fecha, createdBy: user.id, pagos: lineas });
+      await registrarPagosSplit({ teamId, ecfDocumentId: docId, fechaPago: fecha, createdBy: user.id, turnoCajaId, pagos: lineas });
     } catch (e) {
       await syncPagoMirror(teamId, docId);
       return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar split' }, { status: 422 });
@@ -152,6 +152,7 @@ export async function POST(
       cuenta,
       fechaPago:     fecha,
       createdBy:     user.id,
+      turnoCajaId,
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error al registrar pago' }, { status: 422 });

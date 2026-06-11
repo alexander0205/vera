@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
+import { labelMetodo } from '@/lib/pagos/metodos';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -125,13 +126,8 @@ function numeroALetras(n: number): string {
 const fmt = (n: number) =>
   'RD$' + n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const METODO_LABEL_PDF: Record<string, string> = {
-  efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta',
-  tarjeta_credito: 'Tarjeta de crédito', tarjeta_debito: 'Tarjeta de débito',
-  cheque: 'Cheque', deposito: 'Depósito', otro: 'Otro',
-};
-const metodoLabelPDF = (m: string) =>
-  METODO_LABEL_PDF[m] ?? (m ? m.charAt(0).toUpperCase() + m.slice(1) : 'Pago');
+// Labels desde la fuente única (lib/pagos/metodos). 'Pago' si viene vacío.
+const metodoLabelPDF = (m: string) => (m ? labelMetodo(m) : 'Pago');
 
 /** Fecha YYYY-MM-DD → dd/MM/yyyy (sin desfase de zona). */
 const fmtFechaPDF = (f?: string | null) => {

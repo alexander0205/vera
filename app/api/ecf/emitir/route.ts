@@ -336,6 +336,12 @@ export async function POST(request: NextRequest) {
       const totales  = calcularTotales(data.items);
       const montoCts = Math.round(totales.montoTotal * 100);
 
+      // Cuadre de caja: si el cajero tiene un turno ABIERTO, el borrador y su
+      // cobro se atribuyen al turno para que el efectivo entre en el esperado
+      // del cierre (los borradores no pasan por el bloqueo de emisión).
+      const turnoBorrador = await getTurnoAbierto(teamId, user.id);
+      const turnoBorradorId = turnoBorrador?.estado === 'ABIERTO' ? turnoBorrador.id : null;
+
       // ── Editar borrador existente (UPDATE) ──────────────────────────────────
       if (data.borradorId) {
         const borradorId = data.borradorId; // narrowed to number
@@ -422,6 +428,7 @@ export async function POST(request: NextRequest) {
           createdBy:            user.id,
           dependienteId:        data.dependienteId ?? null,
           dependienteNombre:    data.dependienteNombre ?? null,
+          turnoCajaId:          turnoBorradorId,
           ...extraFields,
         }).returning(),
         { userId: user.id, teamId },
@@ -438,6 +445,7 @@ export async function POST(request: NextRequest) {
             ecfDocumentId: saved.id,
             fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
             createdBy:     user.id,
+            turnoCajaId:   turnoBorradorId,
             pagos: data.pagos
               .filter(p => p.valor > 0)
               .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
@@ -453,6 +461,7 @@ export async function POST(request: NextRequest) {
             cuenta:        data.pagoCuenta || null,
             fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
             createdBy:     user.id,
+            turnoCajaId:   turnoBorradorId,
           });
         } catch (e) { console.error('[emitir borrador registrarPago]', e); }
       }
