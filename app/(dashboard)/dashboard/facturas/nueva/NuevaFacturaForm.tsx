@@ -233,9 +233,20 @@ export default function NuevaFacturaForm({
             telefono:    p.comprador.telefono ?? null,
           });
         } else {
-          setRncManual(p.comprador?.rnc ?? '');
+          const rnc = p.comprador?.rnc ?? '';
+          setRncManual(rnc);
           setRncManualNombre(p.comprador?.razonSocial ?? '');
           setEmailManual(p.comprador?.email ?? '');
+          // Try to match to a registered client by RNC so the autocomplete prefills
+          if (rnc) {
+            fetch(`/api/clientes?q=${encodeURIComponent(rnc)}`)
+              .then(r => r.json())
+              .then((data) => {
+                const match = (data.clientes as Cliente[] | undefined)?.find(c => c.rnc === rnc);
+                if (match) seleccionarCliente(match);
+              })
+              .catch(() => {});
+          }
         }
         // Copiar líneas del padre (editables: el usuario quita/ajusta lo que aplique)
         if (Array.isArray(p.lineas) && p.lineas.length > 0) {
