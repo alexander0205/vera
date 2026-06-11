@@ -37,6 +37,12 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# tunnel logs
+.cloudflared.err
+.cloudflared.out
+.localtunnel.err
+.localtunnel.out
 next-env.d.ts
 .vscode
 
