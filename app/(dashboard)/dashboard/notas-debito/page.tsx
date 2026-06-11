@@ -23,6 +23,8 @@ export default async function NotasDebitoPage() {
     fechaEmision:         typeof d.fechaEmision === 'string' ? d.fechaEmision : d.fechaEmision.toISOString(),
     ncfModificado:        d.ncfModificado ?? null,
     codigoModificacion:   d.codigoModificacion ?? null,
+    razonModificacion:    d.razonModificacion ?? null,
+    origenDocumentoId:    d.origenDocumentoId ?? null,
     // Padre con e-CF emitido + nota en borrador → puede (no debe) emitirse
     padreEmitido:         padreEmitido.get(d.id) ?? false,
   }));
