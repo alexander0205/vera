@@ -24,7 +24,7 @@ import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
-import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { calcularEstadoPago, recalcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 
@@ -65,7 +65,10 @@ const emitirSchema = z.object({
   ncfModificado:        z.string().optional(),
   codigoModificacion:   z.coerce.number().int().min(1).max(5).optional(),
   fechaNcfModificado:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  razonModificacion:    z.string().optional(),
+  razonModificacion:    z.string().max(500).optional(),
+  // Vínculo por id al documento padre (flujo "crear nota desde factura").
+  // Más robusto que ncfModificado: funciona aunque el padre aún sea borrador.
+  origenDocumentoId:    z.number().int().positive().optional(),
   // Acepta number (1..6) o string ("01".."06" o "1".."6"). Mapper normaliza a XSD "0X".
   tipoIngresos: z.union([
     z.coerce.number().int().min(1).max(6),
@@ -215,6 +218,92 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Resolver documento padre (notas tipos 33/34) ─────────────────────────
+    // Por id (origenDocumentoId — flujo "crear nota desde factura") o por
+    // e-NCF tipeado (ncfModificado). El vínculo por id se persiste siempre.
+    let padreDoc: {
+      id: number; encf: string; tipoEcf: string; estado: string;
+      montoTotal: number; fechaEmision: Date;
+    } | null = null;
+
+    if (data.origenDocumentoId) {
+      const [p] = await db
+        .select({
+          id: ecfDocuments.id, encf: ecfDocuments.encf, tipoEcf: ecfDocuments.tipoEcf,
+          estado: ecfDocuments.estado, montoTotal: ecfDocuments.montoTotal,
+          fechaEmision: ecfDocuments.fechaEmision,
+        })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.id, data.origenDocumentoId), eq(ecfDocuments.teamId, teamId)))
+        .limit(1);
+      if (!p) {
+        return NextResponse.json({ error: 'Documento padre no encontrado' }, { status: 404 });
+      }
+      padreDoc = p;
+    } else if (data.ncfModificado) {
+      const [p] = await db
+        .select({
+          id: ecfDocuments.id, encf: ecfDocuments.encf, tipoEcf: ecfDocuments.tipoEcf,
+          estado: ecfDocuments.estado, montoTotal: ecfDocuments.montoTotal,
+          fechaEmision: ecfDocuments.fechaEmision,
+        })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, data.ncfModificado)))
+        .limit(1);
+      // Puede no existir localmente (NCF emitido fuera de emitedo) — permitido.
+      padreDoc = p ?? null;
+    }
+
+    if (padreDoc) {
+      if (padreDoc.tipoEcf === '33' || padreDoc.tipoEcf === '34') {
+        return NextResponse.json(
+          { error: 'No se puede crear una nota sobre otra nota de crédito/débito.' },
+          { status: 422 },
+        );
+      }
+      if (padreDoc.estado === 'ANULADO') {
+        return NextResponse.json(
+          { error: 'La factura referenciada está anulada. No admite notas.' },
+          { status: 422 },
+        );
+      }
+      // Autocompletar ncfModificado desde el padre cuando tiene e-NCF real.
+      if (!data.ncfModificado && /^E\d/.test(padreDoc.encf)) {
+        data.ncfModificado = padreDoc.encf;
+      }
+      // Validación de montos para Nota de Crédito: nunca acreditar más que el
+      // total de la factura; código 1 (Anula NCF) exige el monto total exacto.
+      if (data.tipoEcf === '34') {
+        const montoNcCts = Math.round(calcularTotales(data.items).montoTotal * 100);
+        if (montoNcCts > padreDoc.montoTotal) {
+          return NextResponse.json(
+            {
+              error: `La nota de crédito (RD$${(montoNcCts / 100).toFixed(2)}) excede el total de la factura referenciada (RD$${(padreDoc.montoTotal / 100).toFixed(2)}).`,
+            },
+            { status: 422 },
+          );
+        }
+        if (data.codigoModificacion === 1 && montoNcCts !== padreDoc.montoTotal) {
+          return NextResponse.json(
+            {
+              error: `Código de modificación 1 (Anula NCF) requiere el monto total exacto de la factura (RD$${(padreDoc.montoTotal / 100).toFixed(2)}). Para una reducción parcial usa el código 3 (Corrige monto).`,
+            },
+            { status: 422 },
+          );
+        }
+      }
+    }
+
+    // Las notas 33/34 solo pueden EMITIRSE a DGII referenciando un e-NCF real.
+    if ((data.tipoEcf === '33' || data.tipoEcf === '34') && data.modo !== 'borrador' && !data.ncfModificado) {
+      return NextResponse.json(
+        {
+          error: 'Las notas de crédito/débito requieren el e-NCF que modifican para emitirse a la DGII. Si la factura original no tiene e-CF, guarda la nota como borrador.',
+        },
+        { status: 400 },
+      );
+    }
+
     // Cross-field: cuando se referencia un NCF que se modifica (tipos 33, 34),
     // codigoModificacion y fechaNcfModificado son obligatorios.
     if (data.ncfModificado && data.modo !== 'borrador') {
@@ -232,31 +321,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Cross-doc: si se referencia un padre (ncfModificado), validar que ese padre
-    // tenga eCF real (no sin-ncf, no borrador). NC con eCF sobre factura sin-eCF
-    // es incoherente — la factura padre debe promoverse primero a eCF via
+    // Cross-doc: si se referencia un padre, validar que ese padre tenga eCF
+    // real (no sin-ncf, no borrador). NC con eCF sobre factura sin-eCF es
+    // incoherente — la factura padre debe promoverse primero a eCF via
     // "Enviar a DGII" antes de poder emitir la NC con eCF.
-    if (data.ncfModificado && data.modo !== 'borrador' && data.tipoEcf !== 'sin-ncf') {
-      const [parent] = await db
-        .select({ tipoEcf: ecfDocuments.tipoEcf, estado: ecfDocuments.estado, encf: ecfDocuments.encf })
-        .from(ecfDocuments)
-        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, data.ncfModificado)))
-        .limit(1);
-
-      if (parent) {
-        const parentSinEcf = parent.tipoEcf === 'sin-ncf'
-          || (parent.encf?.startsWith('BOR-') ?? false);
-        if (parentSinEcf) {
-          return NextResponse.json(
-            {
-              error: 'La factura referenciada no tiene e-CF',
-              mensaje: 'No puedes emitir una NC con e-CF sobre una factura sin e-CF. Primero envía la factura padre a la DGII ("Enviar a DGII" en el detalle), o crea esta NC también sin e-CF (tipoEcf="sin-ncf").',
-              parentEncf: data.ncfModificado,
-              parentTipoEcf: parent.tipoEcf,
-            },
-            { status: 409 },
-          );
-        }
+    if (padreDoc && data.modo !== 'borrador' && data.tipoEcf !== 'sin-ncf') {
+      const parentSinEcf = padreDoc.tipoEcf === 'sin-ncf'
+        || (padreDoc.encf?.startsWith('BOR-') ?? false);
+      if (parentSinEcf) {
+        return NextResponse.json(
+          {
+            error: 'La factura referenciada no tiene e-CF',
+            mensaje: 'No puedes emitir una NC con e-CF sobre una factura sin e-CF. Primero envía la factura padre a la DGII ("Enviar a DGII" en el detalle), o guarda esta nota como borrador.',
+            parentEncf: padreDoc.encf,
+            parentTipoEcf: padreDoc.tipoEcf,
+          },
+          { status: 409 },
+        );
       }
     }
 
@@ -362,17 +443,28 @@ export async function POST(request: NextRequest) {
             montoTotal:           montoCts,
             totalItbis:           Math.round(totales.totalItbis * 100),
             ncfModificado:        data.ncfModificado ?? null,
+            // Vínculo al padre: solo sobreescribir cuando se resolvió uno
+            // (no perder el vínculo si el form no lo reenvía).
+            ...(padreDoc ? { origenDocumentoId: padreDoc.id } : {}),
+            codigoModificacion:   data.codigoModificacion ?? null,
+            razonModificacion:    data.razonModificacion || null,
             lineasJson:           data.lineasJson ?? null,
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,
             dependienteId:        data.dependienteId ?? null,
             dependienteNombre:    data.dependienteNombre ?? null,
+            updatedBy:            user.id,
             updatedAt:            new Date(),
             ...extraFields,
           }).where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
             .returning(),
           { userId: user.id, teamId },
         );
+
+        // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
+        if (data.tipoEcf === '34' && padreDoc) {
+          try { await recalcularEstadoPago(padreDoc.id); } catch (e) { console.error('[emitir NC recalc padre]', e); }
+        }
 
         return NextResponse.json({
           ok:           true,
@@ -413,6 +505,9 @@ export async function POST(request: NextRequest) {
           montoTotal:           Math.round(totales.montoTotal * 100),
           totalItbis:           Math.round(totales.totalItbis * 100),
           ncfModificado:        data.ncfModificado,
+          origenDocumentoId:    padreDoc?.id ?? null,
+          codigoModificacion:   data.codigoModificacion ?? null,
+          razonModificacion:    data.razonModificacion || null,
           fechaEmision:         new Date(),
           lineasJson:           data.lineasJson ?? null,
           tipoPago:             data.tipoPago ?? 1,
@@ -424,6 +519,11 @@ export async function POST(request: NextRequest) {
         }).returning(),
         { userId: user.id, teamId },
       );
+
+      // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
+      if (data.tipoEcf === '34' && padreDoc) {
+        try { await recalcularEstadoPago(padreDoc.id); } catch (e) { console.error('[emitir NC recalc padre]', e); }
+      }
 
       // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
       // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
@@ -652,6 +752,9 @@ export async function POST(request: NextRequest) {
         montoTotal:           Math.round(totales.montoTotal * 100),
         totalItbis:           Math.round(totales.totalItbis * 100),
         ncfModificado:        data.ncfModificado,
+        origenDocumentoId:    padreDoc?.id ?? null,
+        codigoModificacion:   data.codigoModificacion ?? null,
+        razonModificacion:    data.razonModificacion || null,
         fechaEmision:         new Date(resultado.fechaEmision),
         lineasJson:           lineasJsonParaGuardar,
         tipoPago:             data.tipoPago ?? 1,
@@ -691,6 +794,11 @@ export async function POST(request: NextRequest) {
           createdBy:     user.id,
         });
       } catch (e) { console.error('[emitir registrarPago]', e); }
+    }
+
+    // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
+    if (data.tipoEcf === '34' && padreDoc) {
+      try { await recalcularEstadoPago(padreDoc.id); } catch (e) { console.error('[emitir NC recalc padre]', e); }
     }
 
     await logInfo({

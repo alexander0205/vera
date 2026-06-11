@@ -39,6 +39,8 @@ interface Props {
   setCodigoModificacion: (v: string) => void;
   fechaNcfModificado: string;
   setFechaNcfModificado: (v: string) => void;
+  razonModificacion?: string;
+  setRazonModificacion?: (v: string) => void;
   today: string;
 }
 
@@ -50,6 +52,7 @@ export function DetallesSection({
   ncfModificado, setNcfModificado,
   codigoModificacion, setCodigoModificacion,
   fechaNcfModificado, setFechaNcfModificado,
+  razonModificacion, setRazonModificacion,
   today,
 }: Props) {
   const esCredito = condicionPago === '2';
@@ -137,6 +140,18 @@ export function DetallesSection({
               max={today}
             />
           </div>
+          {setRazonModificacion && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Label className="text-xs text-gray-600 uppercase tracking-wide">Razón de la modificación (opcional)</Label>
+              <Input
+                className="mt-1 h-10"
+                placeholder="Ej: devolución de mercancía, descuento acordado…"
+                value={razonModificacion ?? ''}
+                onChange={(e) => setRazonModificacion(e.target.value)}
+                maxLength={500}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

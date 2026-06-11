@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
     tasaItbis,
     tipo,
     activo: 'true',
+    createdBy: user.id,
   }).returning();
 
   return NextResponse.json({ ok: true, producto: { ...created, precioDOP: created.precio / 100 } }, { status: 201 });

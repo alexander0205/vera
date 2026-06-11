@@ -169,6 +169,8 @@ export const clients = pgTable('clients', {
   telefono: varchar('telefono', { length: 20 }),
   direccion: varchar('direccion', { length: 500 }),
   descripcion: text('descripcion'),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -202,6 +204,8 @@ export const products = pgTable('products', {
   tasaItbis: varchar('tasa_itbis', { length: 6 }).notNull().default('0.18'), // '0.18'|'0.16'|'0'|'exento'
   tipo: varchar('tipo', { length: 10 }).notNull().default('servicio'),       // 'bien'|'servicio'
   activo: varchar('activo', { length: 5 }).notNull().default('true'),        // 'true'|'false'
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -281,6 +285,16 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // Referencia para notas débito/crédito (tipos 33, 34)
   ncfModificado: varchar('ncf_modificado', { length: 13 }),
 
+  // Referencia por id al documento padre (NC/ND). Más robusta que ncfModificado:
+  // sobrevive a que el padre borrador (BOR-) sea promovido a e-CF real.
+  // Self-reference sin .references() para evitar import circular (FK en migración 0043).
+  origenDocumentoId: integer('origen_documento_id'),
+
+  // Metadatos de modificación DGII (tipos 33/34): 1=Anula, 2=Corrige texto,
+  // 3=Corrige monto, 4=Reemplazo contingencia, 5=Ref. factura consumo.
+  codigoModificacion: integer('codigo_modificacion'),
+  razonModificacion:  text('razon_modificacion'),
+
   // Campos adicionales del formulario
   notas:               text('notas'),
   terminosCondiciones: text('terminos_condiciones'),
@@ -335,6 +349,8 @@ export const ecfDocuments = pgTable('ecf_documents', {
 
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
+  // Último usuario que editó el documento (anular, editar borrador, emitir)
+  updatedBy: integer('updated_by').references(() => users.id),
 
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),

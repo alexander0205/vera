@@ -125,7 +125,7 @@ export async function aplicarRecargosMoraVencidos(
 
       result.procesados++;
 
-      const res = await generarNotaDebitoMora(factura.id);
+      const res = await generarNotaDebitoMora(factura.id, { origen: 'cron' });
 
       if (res.ok) {
         result.aplicados++;

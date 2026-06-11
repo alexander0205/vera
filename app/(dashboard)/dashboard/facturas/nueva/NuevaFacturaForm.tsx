@@ -1,16 +1,17 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
-  StickyNote, ScrollText, MessageSquare, CreditCard,
+  StickyNote, ScrollText, MessageSquare, CreditCard, Send,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { getCategoriaDeEcf } from '@/lib/ecf/categorias';
 
 import { NavBar, TopBar } from './sections/TopBar';
 import { CompactHeader } from './sections/CompactHeader';
@@ -86,11 +87,26 @@ export default function NuevaFacturaForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Query params: ?tipo=33|34 [&padreId=N] ─────────────────────────────────
+  // tipo → tipo e-CF + categoría iniciales (links "Nueva Nota de Crédito/Débito"
+  // y "crear nota desde factura"). Debe resolverse como ESTADO INICIAL, no en un
+  // effect: cambiar el value de un Radix Select mientras su item seleccionado se
+  // desmonta dispara onValueChange('') y rompe la selección.
+  const searchParams = useSearchParams();
+  const qpTipo    = !initialData && searchParams.get('tipo') && TIPO_ECF_REGLAS[searchParams.get('tipo')!]
+    ? searchParams.get('tipo')!
+    : null;
+  const qpPadreId = !initialData ? searchParams.get('padreId') : null;
+
   // '00' = marcador HISTORICA (sin e-CF real) → en el form equivale a 'sin-ncf'.
   const [tipoEcf, setTipoEcf]         = useState(
-    initialData?.tipoEcf && initialData.tipoEcf !== '00' ? initialData.tipoEcf : 'sin-ncf',
+    initialData?.tipoEcf && initialData.tipoEcf !== '00'
+      ? initialData.tipoEcf
+      : (qpTipo ?? 'sin-ncf'),
   );
-  const [categoriaId, setCategoriaId] = useState('factura-venta');
+  const [categoriaId, setCategoriaId] = useState(
+    qpTipo ? getCategoriaDeEcf(qpTipo).id : 'factura-venta',
+  );
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
@@ -172,7 +188,64 @@ export default function NuevaFacturaForm({
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
   const [codigoModificacion, setCodigoModificacion] = useState<string>('');
   const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
+  const [razonModificacion, setRazonModificacion]   = useState<string>('');
   const [tipoIngresos, setTipoIngresos]       = useState<string>('1');
+
+  // ── Prefill "crear nota desde factura" (?padreId=N) ────────────────────────
+  // Pre-llena NCF modificado, fecha, cliente y líneas del padre; persiste el
+  // vínculo origenDocumentoId. El tipo/categoría ya quedaron en el estado inicial.
+  const [padreNota, setPadreNota] = useState<{
+    id: number; codigo: string | null; encf: string; estado: string; conEcfReal: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (initialData) return; // editar borrador manda sobre los query params
+    if (!qpPadreId) return;
+    fetch(`/api/facturas/${qpPadreId}`)
+      .then(r => r.json())
+      .then((p) => {
+        if (!p?.id) return;
+        const conEcfReal = typeof p.encf === 'string' && /^E\d/.test(p.encf);
+        setPadreNota({ id: p.id, codigo: p.codigo ?? null, encf: p.encf ?? '', estado: p.estado, conEcfReal });
+        if (conEcfReal) setNcfModificado(p.encf);
+        if (p.fechaEmision) setFechaNcfModificado(String(p.fechaEmision).slice(0, 10));
+        // Comprador del padre
+        if (p.comprador?.clienteId) {
+          seleccionarCliente({
+            id:          p.comprador.clienteId,
+            razonSocial: p.comprador.razonSocial ?? '',
+            rnc:         p.comprador.rnc ?? null,
+            email:       p.comprador.email ?? null,
+            telefono:    p.comprador.telefono ?? null,
+          });
+        } else {
+          setRncManual(p.comprador?.rnc ?? '');
+          setRncManualNombre(p.comprador?.razonSocial ?? '');
+          setEmailManual(p.comprador?.email ?? '');
+        }
+        // Copiar líneas del padre (editables: el usuario quita/ajusta lo que aplique)
+        if (Array.isArray(p.lineas) && p.lineas.length > 0) {
+          const its: ItemLinea[] = p.lineas.map((l: Record<string, unknown>, i: number) => ({
+            id:                     i + 1,
+            productoId:             typeof l.productoId === 'number' ? l.productoId : undefined,
+            nombreItem:             String(l.nombreItem ?? ''),
+            referencia:             String(l.referencia ?? ''),
+            descripcionItem:        String(l.descripcionItem ?? ''),
+            cantidadItem:           Number(l.cantidadItem) || 1,
+            precioUnitarioItem:     Number(l.precioUnitarioItem) || 0,
+            descuentoPct:           Number(l.descuentoPct) || 0,
+            tasaItbis:              (['0.18', '0.16', '0', 'exento'].includes(String(l.tasaItbis))
+                                      ? String(l.tasaItbis) : 'exento') as ItemLinea['tasaItbis'],
+            indicadorBienoServicio: String(l.indicadorBienoServicio) === '1' ? '1' : '2',
+            dependienteId:          typeof l.dependienteId === 'number' ? l.dependienteId : null,
+            dependienteNombre:      String(l.dependienteNombre ?? ''),
+          }));
+          dispatchItems({ type: 'SET', items: its });
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Items (useReducer) ─────────────────────────────────────────────────────
   const [items, dispatchItems] = useItemsState(itemsIniciales);
@@ -297,6 +370,8 @@ export default function NuevaFacturaForm({
   // ── Autosave: restore draft on mount (only when no initialData) ───────────
   useEffect(() => {
     if (initialData) { setDraftHydrated(true); return; }
+    // Prefill por query params (nota desde factura) manda sobre el draft local.
+    if (qpTipo || qpPadreId) { setDraftHydrated(true); return; }
     try {
       const saved = localStorage.getItem(draftKey);
       if (saved) {
@@ -512,7 +587,9 @@ export default function NuevaFacturaForm({
     return buildPayloadFn({
       modo, tipoEcf, fechaEmision, clienteSeleccionado, rncManual, rncManualNombre, emailManual,
       tipoPago: parseInt(condicionPago, 10), fechaLimitePago, ncfModificado, items,
-      codigoModificacion, fechaNcfModificado, tipoIngresos,
+      codigoModificacion, fechaNcfModificado, razonModificacion,
+      origenDocumentoId: padreNota?.id ?? null,
+      tipoIngresos,
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
@@ -727,12 +804,22 @@ export default function NuevaFacturaForm({
   // ─── Pantalla de éxito ────────────────────────────────────────────────────
   if (resultado) {
     const esSinEcf = resultado.modo === 'borrador';
+    const esNotaBorrador = esSinEcf && (tipoEcf === '33' || tipoEcf === '34');
     return (
       <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-2xl shadow-md p-5 sm:p-8 text-center">
             <CheckCircle className="h-16 w-16 text-teal-500 mx-auto mb-4" />
-            {esSinEcf ? (
+            {esNotaBorrador ? (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  ¡{tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} guardada!
+                </h2>
+                <p className="text-gray-500 mb-6">
+                  La nota quedó como borrador{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
+                </p>
+              </>
+            ) : esSinEcf ? (
               <>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Factura guardada!</h2>
                 <p className="text-gray-500 mb-6">Tu factura fue guardada correctamente.</p>
@@ -778,6 +865,38 @@ export default function NuevaFacturaForm({
                 </Badge>
               </div>
             </div>
+            {/* Nota en borrador → elección explícita: emitir ahora o dejar borrador.
+                Nunca obligatorio — emitir requiere que la factura padre tenga e-CF. */}
+            {esNotaBorrador && (
+              <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-left mb-6">
+                <p className="text-sm text-teal-900 mb-3">
+                  ¿Deseas enviar esta nota a la DGII ahora? Solo es posible si la
+                  factura original ya tiene e-CF emitido. También puedes dejarla
+                  como borrador y emitirla después desde su detalle.
+                </p>
+                <div className="flex gap-3 flex-wrap">
+                  <Button
+                    className="bg-teal-600 hover:bg-teal-700 text-white"
+                    disabled={padreNota ? !padreNota.conEcfReal : false}
+                    onClick={() => router.push(`/dashboard/facturas/${resultado.documentoId}?emitir=1`)}
+                  >
+                    <Send className="h-4 w-4 mr-1.5" />
+                    Enviar a DGII ahora
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/dashboard/facturas/${resultado.documentoId}`)}
+                  >
+                    Dejar como borrador
+                  </Button>
+                </div>
+                {padreNota && !padreNota.conEcfReal && (
+                  <p className="text-xs text-amber-700 mt-2">
+                    La factura original aún no tiene e-CF — emite primero la factura padre.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex gap-3 justify-center flex-wrap">
               <Button variant="outline" asChild><a href={`/api/pdf/factura/${resultado.documentoId}`} target="_blank" rel="noreferrer">Descargar PDF</a></Button>
               <Button variant="outline" asChild><Link href={`/dashboard/facturas/${resultado.documentoId}`}>Ver detalle</Link></Button>
@@ -807,6 +926,32 @@ export default function NuevaFacturaForm({
           <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
             <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
             <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        {/* Banner: nota creada desde una factura */}
+        {padreNota && (tipoEcf === '33' || tipoEcf === '34') && (
+          <div className={`flex items-start gap-3 rounded-xl border p-4 mb-4 ${
+            padreNota.conEcfReal
+              ? 'bg-teal-50 border-teal-200'
+              : 'bg-amber-50 border-amber-200'
+          }`}>
+            <FileText className={`h-5 w-5 mt-0.5 shrink-0 ${padreNota.conEcfReal ? 'text-teal-600' : 'text-amber-500'}`} />
+            <div className="text-sm">
+              <p className={padreNota.conEcfReal ? 'text-teal-900' : 'text-amber-900'}>
+                Esta {tipoEcf === '34' ? 'nota de crédito' : 'nota de débito'} modifica la factura{' '}
+                <Link href={`/dashboard/facturas/${padreNota.id}`} className="font-semibold font-mono underline">
+                  {padreNota.conEcfReal ? padreNota.encf : (padreNota.codigo ?? `#${padreNota.id}`)}
+                </Link>.
+              </p>
+              {!padreNota.conEcfReal && (
+                <p className="text-amber-800 mt-1">
+                  La factura original no tiene e-CF emitido: esta nota solo puede
+                  guardarse como <strong>borrador</strong>. Podrás enviarla a la DGII
+                  cuando la factura padre sea emitida.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -881,6 +1026,7 @@ export default function NuevaFacturaForm({
                   ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
                   codigoModificacion={codigoModificacion} setCodigoModificacion={setCodigoModificacion}
                   fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
+                  razonModificacion={razonModificacion} setRazonModificacion={setRazonModificacion}
                   today={today}
                 />
               </SectionCard>

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getTeamIdForUser, getEcfDocuments } from '@/lib/db/queries';
+import { resolverPadresEmitidos } from '@/lib/facturas/padres-notas';
 import NotasDebitoClient, { type NotaDebito } from './_page-client';
 
 export default async function NotasDebitoPage() {
@@ -7,19 +8,24 @@ export default async function NotasDebitoPage() {
   if (!teamId) redirect('/sign-in');
 
   const allDocs = await getEcfDocuments(teamId, 500);
-  const docs: NotaDebito[] = allDocs
-    .filter(d => d.tipoEcf === '33')
-    .map(d => ({
-      id:                   d.id,
-      encf:                 d.encf,
-      codigo:               d.codigo ?? null,
-      estado:               d.estado,
-      estadoPago:           d.estadoPago,
-      moraOrigenId:         d.moraOrigenId ?? null,
-      razonSocialComprador: d.razonSocialComprador,
-      montoTotal:           d.montoTotal,
-      fechaEmision:         typeof d.fechaEmision === 'string' ? d.fechaEmision : d.fechaEmision.toISOString(),
-    }));
+  const notas = allDocs.filter(d => d.tipoEcf === '33');
+  const padreEmitido = await resolverPadresEmitidos(teamId, notas);
+
+  const docs: NotaDebito[] = notas.map(d => ({
+    id:                   d.id,
+    encf:                 d.encf,
+    codigo:               d.codigo ?? null,
+    estado:               d.estado,
+    estadoPago:           d.estadoPago,
+    moraOrigenId:         d.moraOrigenId ?? null,
+    razonSocialComprador: d.razonSocialComprador,
+    montoTotal:           d.montoTotal,
+    fechaEmision:         typeof d.fechaEmision === 'string' ? d.fechaEmision : d.fechaEmision.toISOString(),
+    ncfModificado:        d.ncfModificado ?? null,
+    codigoModificacion:   d.codigoModificacion ?? null,
+    // Padre con e-CF emitido + nota en borrador → puede (no debe) emitirse
+    padreEmitido:         padreEmitido.get(d.id) ?? false,
+  }));
 
   return <NotasDebitoClient docs={docs} />;
 }

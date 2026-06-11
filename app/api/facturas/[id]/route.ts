@@ -6,8 +6,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, clients, pagosRecibidos, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, or, ne, inArray, sql } from 'drizzle-orm';
 import { TIPOS_ECF, TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 
 export async function GET(
   _req: NextRequest,
@@ -74,15 +75,18 @@ export async function GET(
     cliente = cl ?? null;
   }
 
-  // Cargar nombre del usuario que creó el documento
+  // Cargar nombres del usuario que creó / editó el documento
   let createdByName: string | null = null;
-  if (doc.createdBy) {
-    const [creator] = await db
-      .select({ name: users.name })
+  let updatedByName: string | null = null;
+  const userIds = [doc.createdBy, doc.updatedBy].filter((v): v is number => v != null);
+  if (userIds.length > 0) {
+    const userRows = await db
+      .select({ id: users.id, name: users.name })
       .from(users)
-      .where(eq(users.id, doc.createdBy))
-      .limit(1);
-    createdByName = creator?.name ?? null;
+      .where(inArray(users.id, userIds));
+    const byId = new Map(userRows.map(u => [u.id, u.name]));
+    createdByName = doc.createdBy ? (byId.get(doc.createdBy) ?? null) : null;
+    updatedByName = doc.updatedBy ? (byId.get(doc.updatedBy) ?? null) : null;
   }
 
   const TIPO_NOMBRE_EXTRA: Record<string, string> = { 'sin-ncf': 'Factura' };
@@ -129,23 +133,38 @@ export async function GET(
     }
   }
 
-  // NCA-20: NCs/débitos que referencian este e-NCF (NC tipo 33, débito tipo 34)
-  const ncsAsociadas = doc.encf
-    ? await db
-        .select({
-          id:           ecfDocuments.id,
-          encf:         ecfDocuments.encf,
-          tipoEcf:      ecfDocuments.tipoEcf,
-          estado:       ecfDocuments.estado,
-          fechaEmision: ecfDocuments.fechaEmision,
-          montoTotal:   ecfDocuments.montoTotal,
-        })
-        .from(ecfDocuments)
-        .where(and(
-          eq(ecfDocuments.teamId, teamId),
-          eq(ecfDocuments.ncfModificado, doc.encf),
-        ))
-    : [];
+  // Notas (NC tipo 34 / ND tipo 33) que modifican este documento. Vinculadas
+  // por origen_documento_id (id, robusto) o por ncf_modificado = encf real.
+  // Excluye las ND de mora (mora_origen_id) — esas tienen su propia sección.
+  const refCond = doc.encf && /^E\d/.test(doc.encf)
+    ? or(eq(ecfDocuments.origenDocumentoId, docId), eq(ecfDocuments.ncfModificado, doc.encf))
+    : eq(ecfDocuments.origenDocumentoId, docId);
+  const ncsAsociadas = await db
+    .select({
+      id:                 ecfDocuments.id,
+      encf:               ecfDocuments.encf,
+      codigo:             ecfDocuments.codigo,
+      tipoEcf:            ecfDocuments.tipoEcf,
+      estado:             ecfDocuments.estado,
+      estadoPago:         ecfDocuments.estadoPago,
+      fechaEmision:       ecfDocuments.fechaEmision,
+      montoTotal:         ecfDocuments.montoTotal,
+      codigoModificacion: ecfDocuments.codigoModificacion,
+      razonModificacion:  ecfDocuments.razonModificacion,
+    })
+    .from(ecfDocuments)
+    .where(and(
+      eq(ecfDocuments.teamId, teamId),
+      refCond,
+      ne(ecfDocuments.id, docId),
+      sql`${ecfDocuments.moraOrigenId} IS DISTINCT FROM ${docId}`,
+    ))
+    .orderBy(ecfDocuments.id);
+
+  // NC aplicadas: reducen el saldo cobrable de esta factura.
+  const ncAplicadoCts = doc.tipoEcf !== '34'
+    ? await getNcAplicadoCts(teamId, docId, doc.encf)
+    : 0;
 
   // Si ESTE documento es una ND de mora, traer la factura padre (para mostrar/linkear).
   let moraOrigen: { id: number; codigo: string | null; encf: string } | null = null;
@@ -156,6 +175,26 @@ export async function GET(
       .where(and(eq(ecfDocuments.id, doc.moraOrigenId), eq(ecfDocuments.teamId, teamId)))
       .limit(1);
     moraOrigen = padre ?? null;
+  }
+
+  // Si ESTE documento es una nota (33/34, no mora), traer su factura padre.
+  let notaOrigen: { id: number; codigo: string | null; encf: string; estado: string } | null = null;
+  if ((doc.tipoEcf === '33' || doc.tipoEcf === '34') && !doc.moraOrigenId) {
+    if (doc.origenDocumentoId) {
+      const [padre] = await db
+        .select({ id: ecfDocuments.id, codigo: ecfDocuments.codigo, encf: ecfDocuments.encf, estado: ecfDocuments.estado })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.id, doc.origenDocumentoId), eq(ecfDocuments.teamId, teamId)))
+        .limit(1);
+      notaOrigen = padre ?? null;
+    } else if (doc.ncfModificado) {
+      const [padre] = await db
+        .select({ id: ecfDocuments.id, codigo: ecfDocuments.codigo, encf: ecfDocuments.encf, estado: ecfDocuments.estado })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, doc.ncfModificado)))
+        .limit(1);
+      notaOrigen = padre ?? null;
+    }
   }
 
   // Notas de débito de MORA atadas a esta factura (vía mora_origen_id).
@@ -189,6 +228,9 @@ export async function GET(
     fechaFirma: doc.fechaFirma,
     mensajesDgii: doc.mensajesDgii ? JSON.parse(doc.mensajesDgii) : null,
     ncfModificado: doc.ncfModificado,
+    origenDocumentoId: doc.origenDocumentoId ?? null,
+    codigoModificacion: doc.codigoModificacion ?? null,
+    razonModificacion: doc.razonModificacion ?? null,
     moraOrigenId: doc.moraOrigenId ?? null,
     fechaEmision: doc.fechaEmision.toISOString(),
     fechaLimitePago: doc.fechaLimitePago,
@@ -196,6 +238,7 @@ export async function GET(
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
     createdByName,
+    updatedByName,
     dependienteNombre: doc.dependienteNombre ?? null,
 
     // Form payload (terminos / notas / pie / comentario)
@@ -249,10 +292,13 @@ export async function GET(
       montoTotal:  doc.montoTotal,   // en centavos
       totalItbis:  doc.totalItbis,   // en centavos
       subtotal:    doc.montoTotal - doc.totalItbis,
+      // NC aplicadas a este documento — reducen el saldo cobrable
+      ncAplicado:    ncAplicadoCts,
       // formateados en DOP
       montoTotalDOP: (doc.montoTotal / 100).toFixed(2),
       totalItbisDOP: (doc.totalItbis / 100).toFixed(2),
       subtotalDOP:   ((doc.montoTotal - doc.totalItbis) / 100).toFixed(2),
+      ncAplicadoDOP: (ncAplicadoCts / 100).toFixed(2),
     },
 
     archivos: {
@@ -262,16 +308,23 @@ export async function GET(
       tieneXmlFirmado:  !!doc.xmlFirmado,
     },
 
-    // NCA-20: NCs (tipo 33) y débitos (tipo 34) que referencian este e-NCF
+    // Notas de crédito (34) / débito (33) que modifican este documento
     ncsAsociadas: ncsAsociadas.map(n => ({
-      id:           n.id,
-      encf:         n.encf,
-      tipoEcf:      n.tipoEcf,
-      estado:       n.estado,
-      fechaEmision: n.fechaEmision?.toISOString?.() ?? n.fechaEmision,
-      montoTotal:   n.montoTotal,
-      montoTotalDOP: ((n.montoTotal ?? 0) / 100).toFixed(2),
+      id:                 n.id,
+      encf:               n.encf,
+      codigo:             n.codigo ?? null,
+      tipoEcf:            n.tipoEcf,
+      estado:             n.estado,
+      estadoPago:         n.estadoPago,
+      fechaEmision:       n.fechaEmision?.toISOString?.() ?? n.fechaEmision,
+      montoTotal:         n.montoTotal,
+      montoTotalDOP:      ((n.montoTotal ?? 0) / 100).toFixed(2),
+      codigoModificacion: n.codigoModificacion ?? null,
+      razonModificacion:  n.razonModificacion ?? null,
     })),
+
+    // Si este documento ES una nota (33/34, no mora) → su factura padre
+    notaOrigen,
 
     // Notas de débito por mora atadas a esta factura
     notasMora: notasMoraRows.map(n => ({

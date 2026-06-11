@@ -17,6 +17,7 @@ import { teams, ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 
 export type GenerarNotaDebitoMoraResult =
   | { ok: true; notaDebitoId: number; montoCentavos: number }
@@ -24,7 +25,7 @@ export type GenerarNotaDebitoMoraResult =
 
 export async function generarNotaDebitoMora(
   ecfDocumentId: number,
-  opts: { createdBy?: number } = {},
+  opts: { createdBy?: number; origen?: 'cron' | 'manual' } = {},
 ): Promise<GenerarNotaDebitoMoraResult> {
   // ── Cargar la factura padre ────────────────────────────────────────────────
   const [padre] = await db
@@ -77,17 +78,28 @@ export async function generarNotaDebitoMora(
       eq(pagosRecibidos.teamId, padre.teamId),
     ));
 
-  const saldoPadre = padre.montoTotal - Number(pagado ?? 0);
+  // NC vinculadas al padre acreditan contra su saldo: la mora solo aplica
+  // sobre lo realmente adeudado.
+  const ncAplicado = await getNcAplicadoCts(padre.teamId, padre.id, padre.encf);
+  const saldoPadre = padre.montoTotal - Number(pagado ?? 0) - ncAplicado;
   if (saldoPadre <= 0) return { ok: false, reason: 'sin_saldo' };
 
-  // ── Idempotencia: ¿ya existe una ND de mora activa para este padre? ────────
+  // ── Idempotencia: mora ÚNICA por factura ───────────────────────────────────
+  // Cron: si ya existió una ND de mora (aunque esté ANULADA), no regenera —
+  // anularla equivale a condonar la mora sin que reaparezca al día siguiente.
+  // Manual: solo bloquea si hay una ACTIVA (permite regenerar tras anular una
+  // mora mal calculada). El índice único parcial (migración 0043) protege
+  // contra carreras a nivel DB.
+  const condicionExistente = opts.origen === 'cron'
+    ? eq(ecfDocuments.moraOrigenId, padre.id)
+    : and(
+        eq(ecfDocuments.moraOrigenId, padre.id),
+        ne(ecfDocuments.estado, 'ANULADO'),
+      );
   const [{ existentes }] = await db
     .select({ existentes: sql<number>`count(*)` })
     .from(ecfDocuments)
-    .where(and(
-      eq(ecfDocuments.moraOrigenId, padre.id),
-      ne(ecfDocuments.estado, 'ANULADO'),
-    ));
+    .where(condicionExistente);
 
   if (Number(existentes) > 0) return { ok: false, reason: 'ya_existe' };
 

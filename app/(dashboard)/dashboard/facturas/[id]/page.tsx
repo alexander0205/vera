@@ -66,12 +66,25 @@ interface Linea {
 interface NcAsociada {
   id: number;
   encf: string | null;
+  codigo: string | null;
   tipoEcf: string;
   estado: string;
+  estadoPago?: string;
   fechaEmision: string;
   montoTotal: number;
   montoTotalDOP: string;
+  codigoModificacion?: number | null;
+  razonModificacion?: string | null;
 }
+
+// Etiquetas DGII del código de modificación (tipos 33/34)
+const COD_MODIFICACION_LABEL: Record<number, string> = {
+  1: 'Anula NCF',
+  2: 'Corrige texto',
+  3: 'Corrige monto',
+  4: 'Reemplazo en contingencia',
+  5: 'Ref. Factura de Consumo',
+};
 
 interface FacturaDetalle {
   id: number;
@@ -87,6 +100,9 @@ interface FacturaDetalle {
   fechaFirma: string | null;
   mensajesDgii: Record<string, unknown> | null;
   ncfModificado: string | null;
+  origenDocumentoId: number | null;
+  codigoModificacion: number | null;
+  razonModificacion: string | null;
   moraOrigenId: number | null;
   fechaEmision: string;
   fechaLimitePago: string | null;
@@ -100,6 +116,7 @@ interface FacturaDetalle {
   ncsAsociadas?: NcAsociada[];
   notasMora?: { id: number; codigo: string | null; montoTotal: number; estado: string; estadoPago: string }[];
   moraOrigen?: { id: number; codigo: string | null; encf: string } | null;
+  notaOrigen?: { id: number; codigo: string | null; encf: string; estado: string } | null;
   emisor: {
     razonSocial: string;
     nombreComercial?: string;
@@ -119,6 +136,7 @@ interface FacturaDetalle {
     montoTotalDOP: string;
     totalItbisDOP: string;
     subtotalDOP: string;
+    ncAplicadoDOP?: string;
   };
   archivos: {
     xmlUrl?: string;
@@ -127,6 +145,7 @@ interface FacturaDetalle {
   };
   pago: PagoData;
   createdByName?: string | null;
+  updatedByName?: string | null;
   dependienteNombre?: string | null;
 }
 
@@ -307,17 +326,38 @@ export default function FacturaDetallePage() {
     if (seqInfo?.numero != null) setNcfNum(String(seqInfo.numero));
   }, [seqInfo?.numero]);
 
-  // Prefill comprador overrides al abrir el modal. Si la factura ya trae RNC,
-  // default a e31 (Crédito Fiscal); si no, e32 (Consumo).
+  // Prefill comprador overrides al abrir el modal. Notas conservan su tipo
+  // (33/34); si la factura ya trae RNC, default a e31; si no, e32 (Consumo).
   useEffect(() => {
     if (showEnviarDgii && factura) {
       setTempRnc(factura.comprador.rnc ?? '');
       setTempRazon(factura.comprador.razonSocial ?? '');
       setEnviandoDgiiError(null);
       setEnviandoDgiiAction(null);
-      setDgiiTipoEcf(factura.comprador.rnc ? '31' : '32');
+      setDgiiTipoEcf(
+        factura.tipoEcf === '33' || factura.tipoEcf === '34'
+          ? factura.tipoEcf
+          : (factura.comprador.rnc ? '31' : '32'),
+      );
     }
   }, [showEnviarDgii, factura]);
+
+  // ?emitir=1 → abrir el modal Enviar a DGII al cargar (flujo post-crear nota:
+  // "¿emitir ahora o dejar borrador?"). Solo una vez y solo si aún es emitible.
+  // window.location en vez de useSearchParams para no requerir Suspense boundary.
+  const [autoEmitirDone, setAutoEmitirDone] = useState(false);
+  useEffect(() => {
+    if (autoEmitirDone || !factura) return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('emitir') !== '1') return;
+    setAutoEmitirDone(true);
+    const emitible = factura.estado !== 'ANULADO'
+      && !['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(factura.estado);
+    if (emitible && factura.lineas.length > 0) {
+      setEnviandoDgiiError(null);
+      setShowEnviarDgii(true);
+    }
+  }, [factura, autoEmitirDone]);
 
   // ─── Validación pre-flight (espejo de la API) ────────────────────────────────
   const dgiiRegla = TIPO_ECF_REGLAS[dgiiTipoEcf];
@@ -339,7 +379,9 @@ export default function FacturaDetallePage() {
     if (dgiiRegla.requiereRazonSocial && !razon) {
       camposFaltantes.push({ campo: 'razonSocialComprador', mensaje: `e${dgiiTipoEcf} requiere razón social del comprador.`, resoluble: true });
     }
-    if (dgiiRegla.requiereNcfModificado && !factura.ncfModificado) {
+    // Con padre vinculado (origenDocumentoId), el servidor deriva el e-NCF del
+    // padre ya emitido — no exigir el campo aquí.
+    if (dgiiRegla.requiereNcfModificado && !factura.ncfModificado && !factura.origenDocumentoId) {
       camposFaltantes.push({ campo: 'ncfModificado', mensaje: `e${dgiiTipoEcf} debe referenciar un e-NCF previo. Edita la factura para añadirlo.`, resoluble: false });
     }
     if (factura.lineas.length === 0) {
@@ -567,8 +609,10 @@ export default function FacturaDetallePage() {
   }, [factura]);
 
   const pagadoDOP = factura ? parseFloat(factura.pago.valorDOP) || 0 : 0;
-  const saldo     = Math.max(0, totales.total - pagadoDOP);
-  const facturaPagada = factura?.pago.recibido && saldo === 0 && pagadoDOP > 0;
+  const ncAplicadoDOP = factura ? parseFloat(factura.montos.ncAplicadoDOP ?? '0') || 0 : 0;
+  // Saldo = total − pagos − notas de crédito aplicadas (nunca negativo)
+  const saldo     = Math.max(0, totales.total - pagadoDOP - ncAplicadoDOP);
+  const facturaPagada = saldo === 0 && (pagadoDOP > 0 || ncAplicadoDOP > 0) && totales.total > 0;
 
   // ─── Render guards ──────────────────────────────────────────────────────────
 
@@ -599,6 +643,9 @@ export default function FacturaDetallePage() {
   // pendiente y NO es ella misma una ND de mora ni está anulada.
   const esNotaMora      = factura.moraOrigenId != null;
   const puedeGenerarMora = !esNotaMora && factura.estado !== 'ANULADO' && saldo > 0 && can('facturas:crear');
+  // Crear NC/ND desde esta factura: solo sobre documentos que no sean notas.
+  const esNota          = factura.tipoEcf === '33' || factura.tipoEcf === '34';
+  const puedeCrearNota  = !esNota && !esNotaMora && factura.estado !== 'ANULADO' && can('facturas:crear');
   // e-CF real = fue emitido a DGII (e-NCF "E..." con datos DGII). HISTORICA
   // (encf ALG-), borrador (BOR-) y sin-ncf NUNCA fueron a DGII → sin estado
   // ni consulta DGII.
@@ -809,6 +856,28 @@ export default function FacturaDetallePage() {
                 <Copy className="h-4 w-4 text-gray-500" />
                 Duplicar
               </DropdownMenuItem>
+              {puedeCrearNota && (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={`/dashboard/facturas/nueva?tipo=34&padreId=${factura.id}`}
+                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Crear nota de crédito
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={`/dashboard/facturas/nueva?tipo=33&padreId=${factura.id}`}
+                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Crear nota de débito
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              )}
               {puedeGenerarMora && (
                 <DropdownMenuItem
                   onSelect={() => { if (!generandoMora) handleGenerarNotaDebitoMora(); }}
@@ -880,6 +949,59 @@ export default function FacturaDetallePage() {
             </TabsList>
 
             <TabsContent value="detalles" className="space-y-4">
+
+          {/* Banner: si es NC/ND, link a la factura que modifica */}
+          {factura.notaOrigen && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
+              <p className="text-sm text-teal-900">
+                {factura.tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
+                <span className="font-semibold font-mono">{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</span>
+                {factura.codigoModificacion != null && (
+                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-teal-200 text-teal-800">
+                    {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
+                  </span>
+                )}
+              </p>
+              <Link
+                href={`/dashboard/facturas/${factura.notaOrigen.id}`}
+                className="text-sm font-medium text-teal-700 hover:text-teal-800 whitespace-nowrap"
+              >
+                Ver factura →
+              </Link>
+            </div>
+          )}
+
+          {/* Banner: nota borrador cuyo padre YA está emitido → recordar emisión */}
+          {esNota && esBorrador && factura.notaOrigen &&
+            ['ACEPTADO', 'ACEPTADO_CONDICIONAL'].includes(factura.notaOrigen.estado) && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm text-amber-900">
+                La factura original ya fue emitida a la DGII. Esta nota sigue como
+                borrador — puedes enviarla cuando quieras (no es obligatorio).
+              </p>
+              {canEmitir && (
+                <button
+                  type="button"
+                  onClick={triggerEnviarDgii}
+                  className="text-sm font-medium text-amber-800 hover:text-amber-900 underline whitespace-nowrap"
+                >
+                  Enviar a DGII →
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Banner: nota cuyo padre NO tiene e-CF → no emitible aún */}
+          {esNota && esBorrador && factura.notaOrigen &&
+            !['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'].includes(factura.notaOrigen.estado) && (
+            <div className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+              <p className="text-sm text-gray-600">
+                La factura original no tiene e-CF emitido. Esta nota no puede enviarse
+                a la DGII hasta que la factura padre sea emitida.
+              </p>
+            </div>
+          )}
 
           {/* Banner: si es ND de mora, link a la factura padre */}
           {factura.moraOrigen && (
@@ -1029,19 +1151,30 @@ export default function FacturaDetallePage() {
           </AccordionSection>
 
           {/* Metadatos del documento */}
-          {factura.createdByName && (
+          {(factura.createdByName || factura.updatedByName) && (
             <SectionCard number={6} title="Información del documento">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-gray-500">Creado por</p>
-                  <p className="font-medium text-gray-900">{factura.createdByName}</p>
-                </div>
+                {factura.createdByName && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Creado por</p>
+                    <p className="font-medium text-gray-900">{factura.createdByName}</p>
+                  </div>
+                )}
+                {factura.updatedByName && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Última edición</p>
+                    <p className="font-medium text-gray-900">
+                      {factura.updatedByName}
+                      <span className="text-xs text-gray-500 font-normal ml-1.5">{fmtDate(factura.updatedAt)}</span>
+                    </p>
+                  </div>
+                )}
               </div>
             </SectionCard>
           )}
 
           {/* Cliente compacto */}
-          <SectionCard number={factura.createdByName ? 7 : 6} title="Datos del comprador">
+          <SectionCard number={(factura.createdByName || factura.updatedByName) ? 7 : 6} title="Datos del comprador">
             {factura.comprador.razonSocial ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <div>
@@ -1167,7 +1300,14 @@ export default function FacturaDetallePage() {
                   <span className="tabular-nums">{fmtDOP(totales.total)}</span>
                 </div>
 
-                <div className={`flex justify-between text-sm mt-3 ${pagadoDOP > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                {ncAplicadoDOP > 0 && (
+                  <div className="flex justify-between text-sm mt-3 text-teal-700">
+                    <span>Notas de crédito</span>
+                    <span className="font-medium tabular-nums">−{fmtDOP(ncAplicadoDOP)}</span>
+                  </div>
+                )}
+
+                <div className={`flex justify-between text-sm ${ncAplicadoDOP > 0 ? 'mt-1.5' : 'mt-3'} ${pagadoDOP > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                   <span>Pagado</span>
                   <span className="font-medium tabular-nums">{fmtDOP(pagadoDOP)}</span>
                 </div>
@@ -1239,28 +1379,38 @@ export default function FacturaDetallePage() {
             </section>
           )}
 
-          {/* NCA-20: NCs/débitos asociados — solo si hay alguno */}
+          {/* Notas de crédito/débito que modifican esta factura */}
           {factura.ncsAsociadas && factura.ncsAsociadas.length > 0 && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
               <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
-                NCs / Débitos asociados ({factura.ncsAsociadas.length})
+                Notas asociadas ({factura.ncsAsociadas.length})
               </h3>
               <ul className="space-y-2 text-xs">
                 {factura.ncsAsociadas.map(nc => (
                   <li key={nc.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 pb-2 last:pb-0">
                     <div className="min-w-0 flex-1">
                       <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-teal-700 hover:underline truncate block">
-                        {nc.encf ?? `Borrador #${nc.id}`}
+                        {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Borrador #${nc.id}`)}
                       </Link>
-                      <div className="text-[10px] text-gray-500 mt-0.5 flex gap-2">
-                        <span>e-{nc.tipoEcf}</span>
+                      <div className="text-[10px] text-gray-500 mt-0.5 flex gap-1.5 flex-wrap items-center">
+                        <span className={nc.tipoEcf === '34' ? 'text-teal-700 font-medium' : 'text-orange-700 font-medium'}>
+                          {nc.tipoEcf === '34' ? 'Crédito' : 'Débito'}
+                        </span>
+                        {nc.codigoModificacion != null && (
+                          <>
+                            <span>·</span>
+                            <span>{COD_MODIFICACION_LABEL[nc.codigoModificacion] ?? `Cód. ${nc.codigoModificacion}`}</span>
+                          </>
+                        )}
                         <span>·</span>
-                        <span>{nc.estado}</span>
+                        <span>{nc.estado === 'BORRADOR' ? 'Sin emitir a DGII' : nc.estado}</span>
                         <span>·</span>
                         <span>{fmtDate(nc.fechaEmision)}</span>
                       </div>
                     </div>
-                    <span className="font-mono text-gray-800 shrink-0">RD$ {nc.montoTotalDOP}</span>
+                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-teal-700' : 'text-gray-800'}`}>
+                      {nc.tipoEcf === '34' ? '−' : ''}RD$ {nc.montoTotalDOP}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -1298,6 +1448,20 @@ export default function FacturaDetallePage() {
                   <div className="flex justify-between gap-3">
                     <dt className="text-gray-500">NCF modificado</dt>
                     <dd className="font-mono text-gray-800 text-right">{factura.ncfModificado}</dd>
+                  </div>
+                )}
+                {factura.codigoModificacion != null && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Motivo</dt>
+                    <dd className="text-gray-800 text-right">
+                      {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
+                    </dd>
+                  </div>
+                )}
+                {factura.razonModificacion && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Razón</dt>
+                    <dd className="text-gray-800 text-right">{factura.razonModificacion}</dd>
                   </div>
                 )}
               </dl>
@@ -1591,7 +1755,10 @@ export default function FacturaDetallePage() {
                 onChange={e => setDgiiTipoEcf(e.target.value)}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
               >
-                {TIPOS_EMIT_DGII.filter(t => tipoVisible(t.value)).map(t => (
+                {/* El tipo propio del documento siempre visible: una nota 33/34
+                    debe poder emitirse aunque aún no exista secuencia (el server
+                    devuelve un error claro indicando crear la secuencia). */}
+                {TIPOS_EMIT_DGII.filter(t => tipoVisible(t.value) || t.value === factura.tipoEcf).map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>

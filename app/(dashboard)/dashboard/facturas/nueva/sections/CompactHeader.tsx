@@ -61,6 +61,8 @@ export function CompactHeader({
           <Select
             value={categoriaId}
             onValueChange={(catId) => {
+              // Radix emite '' cuando el item seleccionado se desmonta — ignorar.
+              if (!catId) return;
               const cat = CATEGORIAS_ECF.find(c => c.id === catId) ?? CATEGORIAS_ECF[0];
               setCategoriaId(catId);
               onChangeTipo(cat.tipos[0].codigo);
@@ -75,7 +77,7 @@ export function CompactHeader({
               ))}
             </SelectContent>
           </Select>
-          <Select value={tipoEcf} onValueChange={onChangeTipo}>
+          <Select value={tipoEcf} onValueChange={(v) => { if (v) onChangeTipo(v); }}>
             <SelectTrigger className="border-0 bg-transparent text-teal-700 font-medium text-xs h-7 px-2 shadow-none focus:ring-0 gap-1 w-auto">
               <SelectValue />
             </SelectTrigger>

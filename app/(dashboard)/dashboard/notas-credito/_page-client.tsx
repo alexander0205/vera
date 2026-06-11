@@ -10,11 +10,24 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 export interface NotaCredito {
   id:                   number;
   encf:                 string;
+  codigo:               string | null;
   estado:               string;
   razonSocialComprador: string | null;
   montoTotal:           number;
   fechaEmision:         string; // ISO
+  ncfModificado:        string | null;
+  codigoModificacion:   number | null;
+  /** Padre con e-CF emitido → nota borrador "puede" enviarse a DGII. */
+  padreEmitido:         boolean;
 }
+
+const COD_MODIFICACION_LABEL: Record<number, string> = {
+  1: 'Anula NCF',
+  2: 'Corrige texto',
+  3: 'Corrige monto',
+  4: 'Reemplazo contingencia',
+  5: 'Ref. consumo',
+};
 
 const ESTADO_BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   ACEPTADO:             { label: 'Aceptado',    variant: 'default' },
@@ -31,7 +44,26 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
       id: 'encf',
       header: 'e-NCF',
       sortable: true,
-      render: d => <span className="font-mono text-sm font-medium">{d.encf}</span>,
+      render: d => (
+        <span className="font-mono text-sm font-medium">
+          {d.encf && !d.encf.startsWith('BOR-') ? d.encf : (d.codigo ?? `#${d.id}`)}
+        </span>
+      ),
+    },
+    {
+      id: 'modifica',
+      header: 'Modifica',
+      visibleAt: 'lg',
+      render: d => d.ncfModificado ? (
+        <div className="flex flex-col">
+          <span className="font-mono text-xs text-gray-700">{d.ncfModificado}</span>
+          {d.codigoModificacion != null && (
+            <span className="text-[10px] text-gray-400">
+              {COD_MODIFICACION_LABEL[d.codigoModificacion] ?? `Cód. ${d.codigoModificacion}`}
+            </span>
+          )}
+        </div>
+      ) : <span className="text-xs text-gray-300">—</span>,
     },
     {
       id: 'comprador',
@@ -53,6 +85,14 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
       header: 'Estado',
       visibleAt: 'md',
       render: d => {
+        // Borrador con padre ya emitido → resaltar que puede enviarse a DGII
+        if (d.estado === 'BORRADOR' && d.padreEmitido) {
+          return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+              Pendiente DGII
+            </span>
+          );
+        }
         const badge = ESTADO_BADGE[d.estado] ?? { label: d.estado, variant: 'outline' as const };
         return <Badge variant={badge.variant}>{badge.label}</Badge>;
       },
