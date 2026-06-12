@@ -15,7 +15,7 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, dependientes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, isNull, gte, desc } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
@@ -393,6 +393,27 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // ── Guard idempotencia: anti doble-submit ───────────────────────────────
+      // Si en los últimos 45s ya existe un borrador idéntico (mismo team, tipo,
+      // comprador y monto), devolver ESE en vez de insertar otro. Cubre el
+      // doble-click / reintento de red en "Guardar". La vista previa ya NO crea
+      // filas (ver /api/pdf/factura/preview), así que esto solo atrapa el submit
+      // real disparado dos veces.
+      const dupDesde = new Date(Date.now() - 45_000);
+      const dupConds = [
+        eq(ecfDocuments.teamId,     teamId),
+        eq(ecfDocuments.tipoEcf,    data.tipoEcf),
+        eq(ecfDocuments.estado,     'BORRADOR'),
+        eq(ecfDocuments.montoTotal, montoCts),
+        gte(ecfDocuments.createdAt, dupDesde),
+        data.clientId
+          ? eq(ecfDocuments.clientId, data.clientId)
+          : isNull(ecfDocuments.clientId),
+      ];
+      if (data.razonSocialComprador) {
+        dupConds.push(eq(ecfDocuments.razonSocialComprador, data.razonSocialComprador));
+      }
+
       // ── Nuevo borrador (INSERT) ─────────────────────────────────────────────
       // sin-ncf: encf vacío (no hay comprobante, no generar BOR-sin-ncf-XXX).
       // Otros borradores (borrador real de tipo e31/e32/etc): prefijo BOR- para
@@ -406,33 +427,66 @@ export async function POST(request: NextRequest) {
         estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
       });
 
-      const [saved] = await withRequestAuditContext(
-        (tx) => tx.insert(ecfDocuments).values({
-          teamId,
-          clientId:             data.clientId ?? null,
-          encf:                 encfBorrador,
-          codigo,
-          tipoEcf:              data.tipoEcf,
-          estado:               'BORRADOR',
-          estadoPago,
-          rncComprador:         data.rncComprador,
-          razonSocialComprador: data.razonSocialComprador,
-          emailComprador:       data.emailComprador,
-          montoTotal:           Math.round(totales.montoTotal * 100),
-          totalItbis:           Math.round(totales.totalItbis * 100),
-          ncfModificado:        data.ncfModificado,
-          fechaEmision:         new Date(),
-          lineasJson:           data.lineasJson ?? null,
-          tipoPago:             data.tipoPago ?? 1,
-          fechaLimitePago:      data.fechaLimitePago ?? null,
-          createdBy:            user.id,
-          dependienteId:        data.dependienteId ?? null,
-          dependienteNombre:    data.dependienteNombre ?? null,
-          turnoCajaId:          turnoBorradorId,
-          ...extraFields,
-        }).returning(),
+      // Lock de aplicación: serializa requests idénticos para que el chequeo de
+      // duplicado + el insert sean atómicos. El 2do request concurrente espera
+      // aquí hasta el commit del 1ro, y entonces su SELECT lo deduplica (cierra
+      // el race check-then-insert que un SELECT suelto no puede evitar).
+      const dupLockKey = `borr:${teamId}:${data.tipoEcf}:${montoCts}:${data.razonSocialComprador ?? ''}:${data.clientId ?? ''}`;
+
+      const outcome = await withRequestAuditContext(
+        async (tx) => {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${dupLockKey}))`);
+
+          const [dup] = await tx
+            .select({ id: ecfDocuments.id, encf: ecfDocuments.encf })
+            .from(ecfDocuments)
+            .where(and(...dupConds))
+            .orderBy(desc(ecfDocuments.id))
+            .limit(1);
+          if (dup) return { deduped: true as const, row: dup };
+
+          const [inserted] = await tx.insert(ecfDocuments).values({
+            teamId,
+            clientId:             data.clientId ?? null,
+            encf:                 encfBorrador,
+            codigo,
+            tipoEcf:              data.tipoEcf,
+            estado:               'BORRADOR',
+            estadoPago,
+            rncComprador:         data.rncComprador,
+            razonSocialComprador: data.razonSocialComprador,
+            emailComprador:       data.emailComprador,
+            montoTotal:           Math.round(totales.montoTotal * 100),
+            totalItbis:           Math.round(totales.totalItbis * 100),
+            ncfModificado:        data.ncfModificado,
+            fechaEmision:         new Date(),
+            lineasJson:           data.lineasJson ?? null,
+            tipoPago:             data.tipoPago ?? 1,
+            fechaLimitePago:      data.fechaLimitePago ?? null,
+            createdBy:            user.id,
+            dependienteId:        data.dependienteId ?? null,
+            dependienteNombre:    data.dependienteNombre ?? null,
+            turnoCajaId:          turnoBorradorId,
+            ...extraFields,
+          }).returning();
+          return { deduped: false as const, row: inserted };
+        },
         { userId: user.id, teamId },
       );
+
+      if (outcome.deduped) {
+        return NextResponse.json({
+          ok:           true,
+          modo:         'borrador',
+          documentoId:  outcome.row.id,
+          encf:         outcome.row.encf,
+          estado:       'BORRADOR',
+          montoTotal:   totales.montoTotal,
+          pagoRecibido: data.pagoRecibido ?? false,
+          deduped:      true,
+        });
+      }
+      const saved = outcome.row;
 
       // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
       // como seed en extraFields; registrarPago lo sincroniza desde el ledger.

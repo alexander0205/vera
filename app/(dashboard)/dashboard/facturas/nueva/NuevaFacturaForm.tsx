@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -255,8 +255,12 @@ export default function NuevaFacturaForm({
   const [draftKey] = useState(() => `emitedo:draft:${initialData?.id ?? 'new'}`);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [vistaPrevia, setVistaPrevia]   = useState(false);
-  const [previewDocId, setPreviewDocId] = useState<number | null>(null);
+  // Vista previa = PDF en blob URL (NO crea factura en DB). Ver /api/pdf/factura/preview.
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  // Guard atómico anti doble-submit: el `loading` (state React) no bloquea clicks
+  // disparados en el mismo tick. Este ref sí, de forma síncrona.
+  const submittingRef = useRef(false);
 
   // ── TOP SECTION: Almacén / Lista / Vendedor ───────────────────────────────
   const [showAlmacen, setShowAlmacen]               = useState(false);
@@ -554,7 +558,12 @@ export default function NuevaFacturaForm({
     return null;
   }
 
-  /** Guarda como borrador y abre el PDF real en el modal de preview */
+  /**
+   * Renderiza el PDF de vista previa SIN crear la factura.
+   * Pega a /api/pdf/factura/preview (stateless) → recibe el PDF como blob →
+   * lo muestra vía object URL en el modal. Antes esto creaba un borrador real,
+   * lo que duplicaba la factura al darle luego a "Guardar".
+   */
   async function handleVistaPrevia() {
     const err = items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null;
     if (err) { setError(err); return; }
@@ -562,17 +571,23 @@ export default function NuevaFacturaForm({
     setLoadingPreview(true);
     setError(null);
     try {
-      const res  = await fetch('/api/ecf/emitir', {
+      const res = await fetch('/api/pdf/factura/preview', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(buildPayload('borrador')),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Error guardando borrador'); return; }
-      setPreviewDocId(data.documentoId);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? 'No se pudo generar la vista previa');
+        return;
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      // Revocar el blob previo para no acumular memoria.
+      setPreviewBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
       setVistaPrevia(true);
     } catch {
-      setError('Error de conexión al guardar el borrador');
+      setError('Error de conexión al generar la vista previa');
     } finally {
       setLoadingPreview(false);
     }
@@ -649,6 +664,12 @@ export default function NuevaFacturaForm({
       }
     }
 
+    // Guard síncrono: si ya hay un submit en vuelo, ignorar este click.
+    // Bloquea el doble-click en el mismo tick (el `loading` se aplica un render
+    // después y no llega a tiempo). Se libera en el finally.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     setLoading(true); setError(null);
     try {
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modoEfectivo)) });
@@ -677,6 +698,7 @@ export default function NuevaFacturaForm({
       setError('Error de conexión. Intenta de nuevo.');
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   }
 
@@ -982,9 +1004,13 @@ export default function NuevaFacturaForm({
         {/* Modals */}
         <ModalPreviewPDF
           open={vistaPrevia}
-          onOpenChange={setVistaPrevia}
+          onOpenChange={(o) => {
+            setVistaPrevia(o);
+            // Al cerrar, revocar el blob para liberar memoria.
+            if (!o) setPreviewBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+          }}
           tipoEcf={tipoEcf}
-          previewDocId={previewDocId}
+          previewUrl={previewBlobUrl}
           loading={loading}
           onEmitir={() => { setVistaPrevia(false); emitir('emitir'); }}
         />
