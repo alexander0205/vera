@@ -853,7 +853,7 @@ export const setPruebas = {
 
   /** ZIP completo (xml/ + pdf/ + manifest.json) de todos los casos. */
   package: (runId: string) =>
-    requestRaw('GET', `/set-pruebas/runs/${runId}/package`),
+    requestRaw('GET', `/set-pruebas/runs/${runId}/package?soloAprobados=true&tipos=31,32,33,34,41,43,44,45,46,47`),
 
   /**
    * Paso 3 (ACECF) — sube Excel de Aprobaciones Comerciales (hoja
