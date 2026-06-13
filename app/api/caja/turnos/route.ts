@@ -12,6 +12,7 @@ import {
   abrirTurno,
   calcularEsperado,
   getConciliacion,
+  getVentasPorMetodo,
 } from '@/lib/caja/core';
 import { db } from '@/lib/db/drizzle';
 import { cajaMovimientos } from '@/lib/db/schema';
@@ -25,13 +26,14 @@ export async function GET() {
   const turno = await getTurnoAbierto(teamId, user.id);
   if (!turno) return NextResponse.json({ turno: null });
 
-  const [desglose, conciliacion, movimientos] = await Promise.all([
+  const [desglose, conciliacion, movimientos, ventasPorMetodo] = await Promise.all([
     calcularEsperado(teamId, turno),
     getConciliacion(teamId, turno.id),
     db.select().from(cajaMovimientos).where(and(eq(cajaMovimientos.teamId, teamId), eq(cajaMovimientos.turnoId, turno.id))).orderBy(desc(cajaMovimientos.createdAt)),
+    getVentasPorMetodo(teamId, turno.id),
   ]);
 
-  return NextResponse.json({ turno, desglose, conciliacion, movimientos });
+  return NextResponse.json({ turno, desglose, conciliacion, movimientos, ventasPorMetodo });
 }
 
 const abrirSchema = z.object({

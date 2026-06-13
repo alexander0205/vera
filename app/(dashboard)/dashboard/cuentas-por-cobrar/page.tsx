@@ -45,16 +45,6 @@ interface Totales {
   countVencidas: number;
 }
 
-// Métodos aceptados por el endpoint de cobranza (enum más restringido que el set de 8).
-const METODOS_AR = [
-  { value: 'efectivo',       label: 'Efectivo' },
-  { value: 'transferencia',  label: 'Transferencia' },
-  { value: 'tarjeta',        label: 'Tarjeta' },
-  { value: 'cheque',         label: 'Cheque' },
-  { value: 'deposito',       label: 'Depósito' },
-  { value: 'otro',           label: 'Otro' },
-];
-
 // ─── Componente principal ──────────────────────────────────────────────────────
 
 export default function CuentasPorCobrarPage() {
@@ -397,7 +387,6 @@ function PagoModal({
             yaPagado={pagadoDOP}
             disabled={guardando}
             showReferencia
-            metodos={METODOS_AR}
           />
 
           {error && (

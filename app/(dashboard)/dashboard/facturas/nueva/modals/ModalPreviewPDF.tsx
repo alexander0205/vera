@@ -8,12 +8,13 @@ import { CheckCircle, Download, Loader2, Printer } from 'lucide-react';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 
 export function ModalPreviewPDF({
-  open, onOpenChange, tipoEcf, previewDocId, loading, onEmitir,
+  open, onOpenChange, tipoEcf, previewUrl, loading, onEmitir,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tipoEcf: string;
-  previewDocId: number | null;
+  /** Object URL (blob) del PDF de vista previa — NO crea factura en DB. */
+  previewUrl: string | null;
   loading: boolean;
   onEmitir: () => void;
 }) {
@@ -30,9 +31,9 @@ export function ModalPreviewPDF({
         </DialogHeader>
 
         <div className="flex-1 min-h-0 bg-gray-100">
-          {previewDocId ? (
+          {previewUrl ? (
             <iframe
-              src={`/api/pdf/factura/${previewDocId}`}
+              src={previewUrl}
               className="w-full h-full border-0"
               title="Vista previa del comprobante"
             />
@@ -49,12 +50,12 @@ export function ModalPreviewPDF({
             ← Volver a editar
           </Button>
           <div className="flex flex-wrap gap-2 justify-end">
-            {previewDocId && (
+            {previewUrl && (
               <>
                 <Button
                   variant="outline" size="sm"
                   className="flex items-center gap-1.5"
-                  onClick={() => window.open(`/api/pdf/factura/${previewDocId}`, '_blank')}
+                  onClick={() => window.open(previewUrl, '_blank')}
                 >
                   <Printer className="h-3.5 w-3.5" />Imprimir
                 </Button>
@@ -63,8 +64,8 @@ export function ModalPreviewPDF({
                   className="flex items-center gap-1.5"
                   onClick={() => {
                     const a = document.createElement('a');
-                    a.href = `/api/pdf/factura/${previewDocId}`;
-                    a.download = `borrador-${previewDocId}.pdf`;
+                    a.href = previewUrl;
+                    a.download = 'vista-previa.pdf';
                     a.click();
                   }}
                 >

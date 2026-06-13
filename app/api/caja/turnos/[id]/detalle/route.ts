@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { labelMetodo } from '@/lib/pagos/metodos';
 import { db } from '@/lib/db/drizzle';
 import {
   cajaTurnos, cajaMovimientos, pagosRecibidos,
@@ -103,22 +104,10 @@ export async function GET(
     .filter(p => ['efectivo', 'cash'].includes((p.metodo ?? '').toLowerCase()))
     .reduce((s, p) => s + Number(p.total), 0);
 
-  // Agrupar métodos en etiquetas legibles
-  const METODO_LABEL: Record<string, string> = {
-    efectivo:      'Efectivo',
-    cash:          'Efectivo',
-    tarjeta:       'Tarjeta',
-    'tarjeta crédito': 'Tarjeta crédito',
-    'tarjeta débito':  'Tarjeta débito',
-    transferencia: 'Transferencia',
-    cheque:        'Cheque',
-    otro:          'Otro',
-  };
-
-  // Consolidar por etiqueta (une 'efectivo' y 'cash')
+  // Consolidar por etiqueta legible (fuente única lib/pagos/metodos; une efectivo/cash)
   const pagosConsolidados = new Map<string, number>();
   for (const p of pagosPorMetodo) {
-    const key = METODO_LABEL[(p.metodo ?? '').toLowerCase()] ?? p.metodo ?? 'Otro';
+    const key = labelMetodo(p.metodo);
     pagosConsolidados.set(key, (pagosConsolidados.get(key) ?? 0) + Number(p.total));
   }
   const pagos = Array.from(pagosConsolidados.entries())

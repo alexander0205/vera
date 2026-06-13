@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, registrarPago, getPagosDocumento } from '@/lib/db/queries';
+import { getTurnoAbierto } from '@/lib/caja/core';
 
 /**
  * Pagos de una factura — usa el ledger `pagos_recibidos` (source of truth).
@@ -26,6 +27,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'ecfDocumentId, monto y fecha son requeridos' }, { status: 400 });
   }
 
+  // Cuadre de caja: atribuir el cobro al turno ABIERTO del cajero (si lo hay).
+  const turno = await getTurnoAbierto(teamId, user.id);
+  const turnoCajaId = turno?.estado === 'ABIERTO' ? turno.id : null;
+
   try {
     const result = await registrarPago({
       teamId,
@@ -36,6 +41,7 @@ export async function POST(req: NextRequest) {
       fechaPago:     String(fecha),
       notas:         notas ?? null,
       createdBy:     user.id,
+      turnoCajaId,
     });
     return NextResponse.json(result.pago, { status: 201 });
   } catch (e) {

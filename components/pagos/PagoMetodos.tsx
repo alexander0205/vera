@@ -8,29 +8,19 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { METODOS_PAGO, type MetodoOption } from '@/lib/pagos/metodos';
+
+// Re-export para compatibilidad con imports existentes. Fuente: lib/pagos/metodos.
+export { METODOS_PAGO } from '@/lib/pagos/metodos';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
 export interface PagoLinea {
-  metodo: string;      // efectivo | transferencia | tarjeta | tarjeta_credito | tarjeta_debito | cheque | deposito | otro
+  metodo: string;      // ver lib/pagos/metodos — fuente única de métodos
   valor: string;       // DOP como string (input controlado)
   cuenta?: string;     // cuenta bancaria (opcional)
   referencia?: string; // opcional
 }
-
-interface MetodoOption { value: string; label: string }
-
-/** Set completo de métodos (8). Algunos endpoints aceptan menos: pasar `metodos`. */
-export const METODOS_PAGO: MetodoOption[] = [
-  { value: 'efectivo',         label: 'Efectivo' },
-  { value: 'transferencia',    label: 'Transferencia' },
-  { value: 'tarjeta',          label: 'Tarjeta' },
-  { value: 'tarjeta_credito',  label: 'Tarjeta de crédito' },
-  { value: 'tarjeta_debito',   label: 'Tarjeta de débito' },
-  { value: 'cheque',           label: 'Cheque' },
-  { value: 'deposito',         label: 'Depósito' },
-  { value: 'otro',             label: 'Otro' },
-];
 
 /** Cuentas bancarias sugeridas (igual que en las pantallas originales). */
 const CUENTAS_BANCARIAS: MetodoOption[] = [

@@ -126,6 +126,40 @@ export async function calcularEsperado(
   return { montoApertura, ventasEfectivo, entradas, salidas, esperado };
 }
 
+export interface VentaPorMetodo {
+  metodo: string;        // normalizado lower-case
+  total:  number;        // centavos
+}
+
+/**
+ * Total vendido (cobrado) en el turno desglosado por método de pago. Incluye
+ * TODOS los métodos (efectivo, tarjeta, transferencia, …), no solo efectivo —
+ * para visibilidad del cajero en el cierre. Solo el efectivo afecta el esperado
+ * en caja; los demás se muestran informativos.
+ */
+export async function getVentasPorMetodo(
+  teamId: number,
+  turnoId: number,
+  executor: typeof db = db,
+): Promise<VentaPorMetodo[]> {
+  const rows = await executor
+    .select({
+      metodo: sql<string>`lower(${pagosRecibidos.metodo})`,
+      total:  sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
+    })
+    .from(pagosRecibidos)
+    .where(and(
+      eq(pagosRecibidos.teamId, teamId),
+      eq(pagosRecibidos.turnoCajaId, turnoId),
+    ))
+    .groupBy(sql`lower(${pagosRecibidos.metodo})`);
+
+  return rows
+    .map(r => ({ metodo: r.metodo ?? 'otro', total: Number(r.total ?? 0) }))
+    .filter(r => r.total > 0)
+    .sort((a, b) => b.total - a.total);
+}
+
 /**
  * Conciliación NCF ↔ efectivo del turno: lista los e-CF emitidos en el turno con
  * su estado, y marca cuáles fueron cobrados en efectivo.

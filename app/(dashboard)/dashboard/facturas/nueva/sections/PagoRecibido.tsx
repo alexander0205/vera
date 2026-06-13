@@ -6,6 +6,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
+import { METODOS_PAGO } from '@/lib/pagos/metodos';
 
 interface Props {
   pagoRecibido: boolean;
@@ -84,11 +85,9 @@ export function PagoRecibido({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="efectivo">Efectivo</SelectItem>
-                <SelectItem value="transferencia">Transferencia bancaria</SelectItem>
-                <SelectItem value="tarjeta_credito">Tarjeta de crédito</SelectItem>
-                <SelectItem value="tarjeta_debito">Tarjeta de débito</SelectItem>
-                <SelectItem value="cheque">Cheque</SelectItem>
+                {METODOS_PAGO.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

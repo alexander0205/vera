@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { METODO_PAGO_LABELS as METODO_LABELS } from '@/lib/pagos/metodos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,11 @@ interface Desglose {
   entradas: number;
   salidas: number;
   esperado: number;
+}
+
+interface VentaPorMetodo {
+  metodo: string;
+  total: number;  // centavos
 }
 
 interface Movimiento {
@@ -202,8 +208,8 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
 
 // ─── Modal de cierre ──────────────────────────────────────────────────────────
 
-function ModalCierre({ turno, desglose, onClose, onCerrado }: {
-  turno: Turno; desglose: Desglose; onClose: () => void; onCerrado: () => void;
+function ModalCierre({ turno, desglose, ventasPorMetodo, onClose, onCerrado }: {
+  turno: Turno; desglose: Desglose; ventasPorMetodo: VentaPorMetodo[]; onClose: () => void; onCerrado: () => void;
 }) {
   const [contado, setContado]   = useState('');
   const [obs, setObs]           = useState('');
@@ -274,6 +280,32 @@ function ModalCierre({ turno, desglose, onClose, onCerrado }: {
             <span className="tabular-nums">{fmtDOP(desglose.esperado)}</span>
           </div>
         </div>
+
+        {/* Ventas del turno por método (informativo — solo efectivo afecta la gaveta) */}
+        {ventasPorMetodo.length > 0 && (
+          <div className="rounded-xl border border-gray-200 p-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-gray-700">Ventas del turno por método</span>
+              <span className="tabular-nums font-semibold text-gray-900">
+                {fmtDOP(ventasPorMetodo.reduce((s, v) => s + v.total, 0))}
+              </span>
+            </div>
+            {ventasPorMetodo.map(v => {
+              const esEfectivo = v.metodo === 'efectivo' || v.metodo === 'cash';
+              return (
+                <div key={v.metodo} className="flex justify-between text-gray-600">
+                  <span className="flex items-center gap-1.5">
+                    {METODO_LABELS[v.metodo] ?? v.metodo}
+                    {!esEfectivo && (
+                      <span className="text-[10px] text-gray-400">(no afecta caja)</span>
+                    )}
+                  </span>
+                  <span className="tabular-nums">{fmtDOP(v.total)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Conteo físico */}
         <div>
@@ -356,6 +388,7 @@ export default function CajaPage() {
   const [turno, setTurno]             = useState<Turno | null>(null);
   const [desglose, setDesglose]       = useState<Desglose | null>(null);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+  const [ventasPorMetodo, setVentasPorMetodo] = useState<VentaPorMetodo[]>([]);
 
   // Apertura form
   const [montoApertura, setMontoApertura] = useState('');
@@ -378,6 +411,7 @@ export default function CajaPage() {
       setTurno(data.turno ?? null);
       setDesglose(data.desglose ?? null);
       setMovimientos(data.movimientos ?? []);
+      setVentasPorMetodo(data.ventasPorMetodo ?? []);
     }
     setLoading(false);
   }, []);
@@ -598,6 +632,34 @@ export default function CajaPage() {
         </div>
       )}
 
+      {/* Ventas del turno por método (efectivo afecta caja; los demás informativos) */}
+      {ventasPorMetodo.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">Ventas del turno por método</h2>
+            <span className="tabular-nums text-sm font-semibold text-gray-900">
+              {fmtDOP(ventasPorMetodo.reduce((s, v) => s + v.total, 0))}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {ventasPorMetodo.map(v => {
+              const esEfectivo = v.metodo === 'efectivo' || v.metodo === 'cash';
+              return (
+                <div key={v.metodo} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-gray-600">
+                    {METODO_LABELS[v.metodo] ?? v.metodo}
+                    {!esEfectivo && <span className="text-[10px] text-gray-400">(no afecta caja)</span>}
+                  </span>
+                  <span className={`tabular-nums ${esEfectivo ? 'text-emerald-700 font-medium' : 'text-gray-600'}`}>
+                    {fmtDOP(v.total)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Acciones */}
       <div className="flex flex-wrap gap-3">
         <button
@@ -671,6 +733,7 @@ export default function CajaPage() {
         <ModalCierre
           turno={turno}
           desglose={desglose}
+          ventasPorMetodo={ventasPorMetodo}
           onClose={() => setShowCierre(false)}
           onCerrado={fetchTurno}
         />
