@@ -15,17 +15,17 @@ const optStr = (max = 500) =>
   z.string().max(max).optional().nullable()
     .transform(v => (typeof v === 'string' && v.trim() === '' ? null : v ?? null));
 
-// RNC dominicano: cédula (11 dígitos) o RNC (9 dígitos).
-// Normaliza a solo dígitos (acepta guiones/espacios del autocomplete de cédula).
+// Documento de identidad: RNC (9 dígitos), cédula (11 dígitos) o pasaporte (alfanumérico 5-20).
+// Normaliza guiones/espacios del autocomplete de cédula.
 const rncSchema = z.preprocess(
-  v => (typeof v === 'string' ? v.replace(/[-\s]/g, '') : v),
+  v => (typeof v === 'string' ? v.replace(/[-\s]/g, '').toUpperCase() : v),
   z.preprocess(
     v => (typeof v === 'string' && v === '' ? null : v),
     z.string()
       .nullable()
       .optional()
-      .refine(v => v == null || /^\d{9}$|^\d{11}$/.test(v), {
-        message: 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)',
+      .refine(v => v == null || /^\d{9}$|^\d{11}$|^(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{5,20}$/.test(v), {
+        message: 'Documento inválido. Ingrese RNC (9 dígitos), cédula (11 dígitos) o pasaporte (letras y números)',
       })
       .transform(v => (v == null ? null : v)),
   ),

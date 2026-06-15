@@ -11,7 +11,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, desc } from 'drizzle-orm';
 import { clienteSchema } from '@/lib/clientes/schema';
 
-// Mismo schema que crear: email vacío → null, RNC/cédula normaliza guiones y valida 9/11 dígitos.
+// Mismo schema que crear: email vacío → null, RNC/cédula/pasaporte normaliza guiones y valida formato.
 const updateSchema = clienteSchema;
 
 type Ctx = { params: Promise<{ id: string }> };

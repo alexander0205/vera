@@ -143,15 +143,14 @@ export function FacturaHeader() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            RNC del comprador <span className="text-gray-400 font-normal">(opcional)</span>
+            RNC / Cédula / Pasaporte <span className="text-gray-400 font-normal">(opcional)</span>
           </label>
           <input
             type="text"
-            inputMode="numeric"
             value={rncComprador}
             onChange={e => setRncComprador(e.target.value)}
             className="w-full px-3 py-2.5 text-base md:text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            placeholder="131988032"
+            placeholder="131988032 o PA123456"
           />
         </div>
         <div>
