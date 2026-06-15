@@ -5,20 +5,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { clients, ecfDocuments } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, desc } from 'drizzle-orm';
+import { clienteSchema } from '@/lib/clientes/schema';
 
-const updateSchema = z.object({
-  razonSocial: z.string().min(1).max(255),
-  rnc:         z.string().max(11).optional().nullable(),
-  email:       z.string().email().optional().nullable(),
-  telefono:    z.string().max(20).optional().nullable(),
-  direccion:   z.string().max(500).optional().nullable(),
-  descripcion: z.string().max(2000).optional().nullable(),
-});
+// Mismo schema que crear: email vacío → null, RNC/cédula normaliza guiones y valida 9/11 dígitos.
+const updateSchema = clienteSchema;
 
 type Ctx = { params: Promise<{ id: string }> };
 
