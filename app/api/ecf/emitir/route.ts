@@ -382,15 +382,17 @@ export async function POST(request: NextRequest) {
           { userId: user.id, teamId },
         );
 
-        // Sincronizar ledger de pagos: borrar filas anteriores y re-insertar con
-        // los datos actualizados. Sin esto, editar el método de pago no se refleja
-        // porque edit/page.tsx lee pagoLineas desde pagosRecibidos, no desde
-        // ecfDocuments.pagoMetodo.
-        await db.delete(pagosRecibidos)
-          .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
-
+        // Sincronizar ledger de pagos al editar borrador.
+        // DELETE + INSERT van juntos dentro de cada rama para que si el INSERT
+        // falla el DELETE no haya ejecutado (evita pérdida de datos en el ledger).
+        // Cuando pagoRecibido=false el usuario quitó el pago → borrar sin re-insertar.
+        // Cuando pagoRecibido=true pero pagoValor=0 no tocamos el ledger; el método
+        // se persiste en ecfDocuments.pagoMetodo (columna inline) y editar/page.tsx
+        // lo recupera desde ahí como fallback.
         if (data.pagos?.length) {
           try {
+            await db.delete(pagosRecibidos)
+              .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
             await registrarPagosSplit({
               teamId,
               ecfDocumentId: borradorId,
@@ -404,6 +406,8 @@ export async function POST(request: NextRequest) {
           } catch (e) { console.error('[editar borrador registrarPagosSplit]', e); }
         } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
           try {
+            await db.delete(pagosRecibidos)
+              .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
             await registrarPago({
               teamId,
               ecfDocumentId: borradorId,
@@ -415,6 +419,10 @@ export async function POST(request: NextRequest) {
               turnoCajaId:   turnoBorradorId,
             });
           } catch (e) { console.error('[editar borrador registrarPago]', e); }
+        } else if (!data.pagoRecibido) {
+          // Usuario desmarcó "pago recibido" → limpiar ledger intencionalmente.
+          await db.delete(pagosRecibidos)
+            .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
         }
 
         return NextResponse.json({
