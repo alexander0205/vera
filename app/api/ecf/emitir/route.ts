@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users, dependientes } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc } from 'drizzle-orm';
@@ -381,6 +381,49 @@ export async function POST(request: NextRequest) {
             .returning(),
           { userId: user.id, teamId },
         );
+
+        // Sincronizar ledger de pagos al editar borrador.
+        // DELETE + INSERT van juntos dentro de cada rama para que si el INSERT
+        // falla el DELETE no haya ejecutado (evita pérdida de datos en el ledger).
+        // Cuando pagoRecibido=false el usuario quitó el pago → borrar sin re-insertar.
+        // Cuando pagoRecibido=true pero pagoValor=0 no tocamos el ledger; el método
+        // se persiste en ecfDocuments.pagoMetodo (columna inline) y editar/page.tsx
+        // lo recupera desde ahí como fallback.
+        if (data.pagos?.length) {
+          try {
+            await db.delete(pagosRecibidos)
+              .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
+            await registrarPagosSplit({
+              teamId,
+              ecfDocumentId: borradorId,
+              fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+              createdBy:     user.id,
+              turnoCajaId:   turnoBorradorId,
+              pagos: data.pagos
+                .filter(p => p.valor > 0)
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+            });
+          } catch (e) { console.error('[editar borrador registrarPagosSplit]', e); }
+        } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+          try {
+            await db.delete(pagosRecibidos)
+              .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
+            await registrarPago({
+              teamId,
+              ecfDocumentId: borradorId,
+              montoCentavos: Math.min(Math.round(data.pagoValor * 100), montoCts),
+              metodo:        data.pagoMetodo || 'otro',
+              cuenta:        data.pagoCuenta || null,
+              fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+              createdBy:     user.id,
+              turnoCajaId:   turnoBorradorId,
+            });
+          } catch (e) { console.error('[editar borrador registrarPago]', e); }
+        } else if (!data.pagoRecibido) {
+          // Usuario desmarcó "pago recibido" → limpiar ledger intencionalmente.
+          await db.delete(pagosRecibidos)
+            .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
+        }
 
         return NextResponse.json({
           ok:           true,
