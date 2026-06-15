@@ -57,7 +57,10 @@ const emitirSchema = z.object({
   modo:                 z.enum(['emitir', 'borrador']).default('emitir'),
   // 'sin-ncf' only allowed in borrador mode (validated below)
   tipoEcf:              z.enum(['31', '32', '33', '34', '41', '43', '44', '45', '46', '47', 'sin-ncf']),
-  rncComprador:         z.string().regex(/^\d{9,11}$/, 'RNC debe tener 9-11 dígitos').optional(),
+  rncComprador:         z.preprocess(
+    v => typeof v === 'string' ? v.trim().toUpperCase() : v,
+    z.string().regex(/^\d{9,11}$|^(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{5,20}$/, 'Documento inválido: RNC (9 dígitos), cédula (11 dígitos) o pasaporte (letras y números)').optional()
+  ),
   razonSocialComprador: z.string().optional(),
   emailComprador:       z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
   tipoPago:             z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).default(1),

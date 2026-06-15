@@ -151,9 +151,9 @@ export default function EditarCotizacionClient({ initialData }: { initialData: I
               />
             </div>
             <div className="space-y-1.5">
-              <Label>RNC / Cédula</Label>
+              <Label>RNC / Cédula / Pasaporte</Label>
               <Input
-                placeholder="130123456"
+                placeholder="130123456 o PA123456"
                 value={rnc}
                 onChange={(e) => setRnc(e.target.value)}
               />
