@@ -17,35 +17,10 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
+import { calcularEstadoPago, type EstadoPago } from '@/lib/facturas/estado-pago-calc';
 
-export type EstadoPago =
-  | 'PENDIENTE'
-  | 'PARCIAL'
-  | 'PAGADA'
-  | 'ANULADA'
-  | 'GRATUITA'
-  | 'USO';
-
-export function calcularEstadoPago(params: {
-  estado:      string;
-  tipoPago:    number | null | undefined;
-  montoTotal:  number;        // centavos
-  totalPagado: number;        // centavos sumados de pagos_recibidos
-  /** Centavos acreditados por Notas de Crédito (tipo 34) vinculadas al doc. */
-  totalNotasCredito?: number;
-}): EstadoPago {
-  if (params.estado === 'ANULADO') return 'ANULADA';
-  if (params.tipoPago === 3)       return 'GRATUITA';
-  if (params.tipoPago === 4)       return 'USO';
-  // Pago real determina el estado para TODOS los tipos (contado y crédito).
-  // No se asume contado=pagado: un contado emitido sin registrar pago tiene
-  // saldo pendiente y debe aparecer en cuentas por cobrar.
-  // Las NC vinculadas acreditan contra el total igual que un pago.
-  const aplicado = params.totalPagado + (params.totalNotasCredito ?? 0);
-  if (params.montoTotal > 0 && aplicado >= params.montoTotal) return 'PAGADA';
-  if (aplicado > 0) return 'PARCIAL';
-  return 'PENDIENTE';
-}
+// Re-export para mantener compat con los imports existentes (queries.ts, etc.).
+export { calcularEstadoPago, type EstadoPago };
 
 /**
  * Recalcula y persiste el estado_pago de un documento.

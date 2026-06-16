@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users, dependientes } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc } from 'drizzle-orm';
@@ -57,7 +57,10 @@ const emitirSchema = z.object({
   modo:                 z.enum(['emitir', 'borrador']).default('emitir'),
   // 'sin-ncf' only allowed in borrador mode (validated below)
   tipoEcf:              z.enum(['31', '32', '33', '34', '41', '43', '44', '45', '46', '47', 'sin-ncf']),
-  rncComprador:         z.string().regex(/^\d{9,11}$/, 'RNC debe tener 9-11 dígitos').optional(),
+  rncComprador:         z.preprocess(
+    v => typeof v === 'string' ? v.trim().toUpperCase() : v,
+    z.string().regex(/^\d{9,11}$|^(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{5,20}$/, 'Documento inválido: RNC (9 dígitos), cédula (11 dígitos) o pasaporte (letras y números)').optional()
+  ),
   razonSocialComprador: z.string().optional(),
   emailComprador:       z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
   tipoPago:             z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).default(1),
@@ -472,6 +475,49 @@ export async function POST(request: NextRequest) {
         // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
         if (data.tipoEcf === '34' && padreDoc) {
           try { await recalcularEstadoPago(padreDoc.id); } catch (e) { console.error('[emitir NC recalc padre]', e); }
+        }
+
+        // Sincronizar ledger de pagos al editar borrador.
+        // DELETE + INSERT van juntos dentro de cada rama para que si el INSERT
+        // falla el DELETE no haya ejecutado (evita pérdida de datos en el ledger).
+        // Cuando pagoRecibido=false el usuario quitó el pago → borrar sin re-insertar.
+        // Cuando pagoRecibido=true pero pagoValor=0 no tocamos el ledger; el método
+        // se persiste en ecfDocuments.pagoMetodo (columna inline) y editar/page.tsx
+        // lo recupera desde ahí como fallback.
+        if (data.pagos?.length) {
+          try {
+            await db.delete(pagosRecibidos)
+              .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
+            await registrarPagosSplit({
+              teamId,
+              ecfDocumentId: borradorId,
+              fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+              createdBy:     user.id,
+              turnoCajaId:   turnoBorradorId,
+              pagos: data.pagos
+                .filter(p => p.valor > 0)
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+            });
+          } catch (e) { console.error('[editar borrador registrarPagosSplit]', e); }
+        } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
+          try {
+            await db.delete(pagosRecibidos)
+              .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
+            await registrarPago({
+              teamId,
+              ecfDocumentId: borradorId,
+              montoCentavos: Math.min(Math.round(data.pagoValor * 100), montoCts),
+              metodo:        data.pagoMetodo || 'otro',
+              cuenta:        data.pagoCuenta || null,
+              fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+              createdBy:     user.id,
+              turnoCajaId:   turnoBorradorId,
+            });
+          } catch (e) { console.error('[editar borrador registrarPago]', e); }
+        } else if (!data.pagoRecibido) {
+          // Usuario desmarcó "pago recibido" → limpiar ledger intencionalmente.
+          await db.delete(pagosRecibidos)
+            .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
         }
 
         return NextResponse.json({

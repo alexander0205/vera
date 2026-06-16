@@ -84,7 +84,7 @@ export function ClienteSection({
           <Label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1">
             {regla?.rncLabel ?? 'RNC o Cédula'}
             {regla?.requiereRncComprador && <span className="text-red-500 ml-0.5" aria-label="campo obligatorio">*</span>}
-            <Tooltip text={getCampoHint(tipoEcf, 'rncComprador') || 'DGII #38 · 9 u 11 dígitos'}>
+            <Tooltip text={getCampoHint(tipoEcf, 'rncComprador') || 'DGII #38 · RNC, cédula o pasaporte'}>
               <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
             </Tooltip>
           </Label>

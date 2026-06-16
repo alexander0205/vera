@@ -184,9 +184,12 @@ export function RncSearch({
     setOpen(false);
   }
 
-  // RNC (9) o cédula (11) válido a partir del texto actual, para "usar de todos modos".
+  // RNC (9), cédula (11) o pasaporte (alfanumérico 5-20) válido, para "usar de todos modos".
   const digitosActuales = soloDigitos(query.trim());
-  const puedeUsarManual = /^\d{9}$|^\d{11}$/.test(digitosActuales);
+  const valorManual     = digitosActuales.toUpperCase(); // normalizado: sin guiones/espacios, uppercase
+  const puedeUsarManual =
+    /^\d{9}$|^\d{11}$/.test(digitosActuales) ||
+    /^(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{5,20}$/.test(valorManual);
 
   // ── Dropdown (portal) ─────────────────────────────────────────────────────
 
@@ -211,8 +214,8 @@ export function RncSearch({
               type="button"
               className="mt-1 mb-2 inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-teal-100 transition-colors"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => usarManual(digitosActuales)}>
-              Usar «{digitosActuales}» de todos modos
+              onClick={() => usarManual(valorManual)}>
+              Usar «{valorManual}» de todos modos
             </button>
           )}
           {showSyncHint && (

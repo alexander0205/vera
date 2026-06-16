@@ -76,12 +76,19 @@ export default async function EditarBorradorPage({
     .where(and(eq(pagosRecibidos.ecfDocumentId, docId), eq(pagosRecibidos.teamId, teamId)))
     .orderBy(asc(pagosRecibidos.id));
 
-  const pagoLineas = pagosRows.map(p => ({
-    metodo:     p.metodo,
-    valor:      (p.montoCentavos / 100).toFixed(2),
-    cuenta:     p.cuenta ?? undefined,
-    referencia: p.referencia ?? undefined,
-  }));
+  // Preferir el ledger (pagosRecibidos) para restaurar el split.
+  // Cuando no hay filas (pago marcado sin valor), caer a las columnas inline
+  // de ecfDocuments para recuperar al menos el método elegido.
+  const pagoLineas = pagosRows.length > 0
+    ? pagosRows.map(p => ({
+        metodo:     p.metodo,
+        valor:      (p.montoCentavos / 100).toFixed(2),
+        cuenta:     p.cuenta ?? undefined,
+        referencia: p.referencia ?? undefined,
+      }))
+    : doc.pagoRecibido === 'true' && doc.pagoMetodo
+      ? [{ metodo: doc.pagoMetodo, valor: '', cuenta: doc.pagoCuenta ?? undefined }]
+      : [];
 
   // Si hay clientId, cargar el teléfono del cliente
   let telefonoComprador: string | null = null;
