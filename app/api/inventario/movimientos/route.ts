@@ -9,15 +9,25 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { inventoryMovements, products, users } from '@/lib/db/schema';
+import { inventoryMovements, products, users, teamMembers } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, desc } from 'drizzle-orm';
+import { userCan } from '@/lib/config/roles';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+
+  const [m] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .limit(1);
+  if (!userCan(user.platformRole, m?.role, 'productos:ver')) {
+    return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
+  }
 
   const params     = new URL(req.url).searchParams;
   const productoId = params.get('productoId') ? parseInt(params.get('productoId')!) : null;
