@@ -49,3 +49,34 @@ export async function requirePermission(perm: Permission): Promise<void> {
     redirect('/dashboard');
   }
 }
+
+/**
+ * Versión no-redirect: devuelve true/false en lugar de redirigir.
+ * Útil cuando la página quiere renderizar un mensaje de error inline
+ * en vez de redirigir silenciosamente al dashboard.
+ *
+ * Uso:
+ *   const canEdit = await hasPermission('facturas:editar');
+ *   if (!canEdit) return <SinPermisosUI />;
+ */
+export async function hasPermission(perm: Permission): Promise<boolean> {
+  const user = await getUser();
+  if (!user) return false;
+
+  const teamId = await getTeamIdForUser();
+  if (!teamId) return false;
+
+  const [u] = await db
+    .select({ platformRole: users.platformRole })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+
+  const [m] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .limit(1);
+
+  return userCan(u?.platformRole, m?.role, perm);
+}

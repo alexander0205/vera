@@ -11,11 +11,12 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
+import { roleHasPermission } from '@/lib/config/roles';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,12 +43,13 @@ const COLORES = [
 // ─── Sub-componente: UploadImagen ─────────────────────────────────────────────
 
 function UploadImagen({
-  label, hint, value, onChange,
+  label, hint, value, onChange, disabled = false,
 }: {
   label: string;
   hint: string;
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -68,17 +70,18 @@ function UploadImagen({
       <p className="text-xs text-gray-500">{hint}</p>
 
       <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => { if (disabled) return; e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => {
+          if (disabled) return;
           e.preventDefault();
           setDragging(false);
           const f = e.dataTransfer.files[0];
           if (f) handleFile(f);
         }}
-        className={`relative border-2 border-dashed rounded-xl transition-colors cursor-pointer
-          ${dragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300 bg-gray-50'}`}
-        onClick={() => inputRef.current?.click()}
+        className={`relative border-2 border-dashed rounded-xl transition-colors
+          ${disabled ? 'cursor-not-allowed opacity-60 bg-gray-50 border-gray-200' : `cursor-pointer ${dragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300 bg-gray-50'}`}`}
+        onClick={() => { if (!disabled) inputRef.current?.click(); }}
         style={{ minHeight: 100 }}
       >
         <input
@@ -119,6 +122,11 @@ export default function ConfiguracionPage() {
   const [saving, setSaving]       = useState(false);
   const [saved, setSaved]         = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  const [role, setRole]           = useState<string | null>(null);
+
+  // Permisos derivados del rol
+  const canManage     = roleHasPermission(role, 'configuracion:gestionar');
+  const canManageTeam = roleHasPermission(role, 'equipo:gestionar');
 
   // Campos
   const [razonSocial, setRazonSocial]           = useState('');
@@ -165,6 +173,7 @@ export default function ConfiguracionPage() {
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
+        setRole(d.role ?? null);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -223,20 +232,29 @@ export default function ConfiguracionPage() {
             Estos datos aparecen en todas tus facturas PDF
           </p>
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-          className="bg-teal-600 hover:bg-teal-700 sm:min-w-[130px] w-full sm:w-auto"
-        >
-          {saving ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
-          ) : saved ? (
-            <><CheckCircle className="h-4 w-4 mr-2" />Guardado</>
-          ) : (
-            'Guardar cambios'
-          )}
-        </Button>
+        {canManage && (
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-teal-600 hover:bg-teal-700 sm:min-w-[130px] w-full sm:w-auto"
+          >
+            {saving ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
+            ) : saved ? (
+              <><CheckCircle className="h-4 w-4 mr-2" />Guardado</>
+            ) : (
+              'Guardar cambios'
+            )}
+          </Button>
+        )}
       </div>
+
+      {!canManage && (
+        <div className="flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 text-sm text-sky-700">
+          <Lock className="h-4 w-4 shrink-0" />
+          Solo lectura — tu rol puede ver la configuración pero no modificarla.
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4">
@@ -256,47 +274,49 @@ export default function ConfiguracionPage() {
           <div className="space-y-1.5">
             <Label>Razón Social</Label>
             <Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)}
-              placeholder="Empresa XYZ SRL" />
+              placeholder="Empresa XYZ SRL" disabled={!canManage} />
           </div>
           <div className="space-y-1.5">
             <Label>Nombre Comercial</Label>
             <Input value={nombreComercial} onChange={e => setNombreComercial(e.target.value)}
-              placeholder="MiTienda (opcional)" />
+              placeholder="MiTienda (opcional)" disabled={!canManage} />
           </div>
           <div className="space-y-1.5">
             <Label>RNC</Label>
             <Input value={rnc} onChange={e => setRnc(e.target.value)}
-              placeholder="130123456" maxLength={11} />
+              placeholder="130123456" maxLength={11} disabled={!canManage} />
           </div>
           <div className="space-y-1.5">
             <Label>Teléfono</Label>
             <Input value={telefono} onChange={e => setTelefono(formatTelefonoDO(e.target.value))}
               inputMode="tel"
-              placeholder="(809) 000-0000" />
+              placeholder="(809) 000-0000" disabled={!canManage} />
           </div>
           <div className="space-y-1.5 md:col-span-2">
             <Label>Dirección</Label>
             <Input value={direccion} onChange={e => setDireccion(e.target.value)}
-              placeholder="Calle y número" />
+              placeholder="Calle y número" disabled={!canManage} />
           </div>
           {/* Provincia / Municipio en cascada */}
-          <ProvinciaMunicipioSelect
-            provincia={provincia}
-            municipio={municipio}
-            onProvinciaChange={setProvincia}
-            onMunicipioChange={setMunicipio}
-            className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4"
-          />
+          <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>
+            <ProvinciaMunicipioSelect
+              provincia={provincia}
+              municipio={municipio}
+              onProvinciaChange={setProvincia}
+              onMunicipioChange={setMunicipio}
+              className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4"
+            />
+          </div>
           <div className="space-y-1.5">
             <Label>Email de facturación</Label>
             <Input type="email" value={emailFacturacion}
               onChange={e => setEmailFacturacion(e.target.value)}
-              placeholder="facturacion@empresa.com" />
+              placeholder="facturacion@empresa.com" disabled={!canManage} />
           </div>
           <div className="space-y-1.5">
             <Label>Sitio web</Label>
             <Input value={sitioWeb} onChange={e => setSitioWeb(e.target.value)}
-              placeholder="www.miempresa.com" />
+              placeholder="www.miempresa.com" disabled={!canManage} />
           </div>
         </CardContent>
       </Card>
@@ -315,6 +335,7 @@ export default function ConfiguracionPage() {
             hint="Aparece en la esquina superior izquierda de cada factura. Fondo transparente recomendado."
             value={logo}
             onChange={setLogo}
+            disabled={!canManage}
           />
         </CardContent>
       </Card>
@@ -333,6 +354,7 @@ export default function ConfiguracionPage() {
             hint="Aparece en el pie de cada factura. Usa fondo blanco o transparente."
             value={firma}
             onChange={setFirma}
+            disabled={!canManage}
           />
         </CardContent>
       </Card>
@@ -351,13 +373,14 @@ export default function ConfiguracionPage() {
           </p>
 
           {/* Paleta rápida */}
-          <div className="flex flex-wrap gap-2">
+          <div className={`flex flex-wrap gap-2 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>
             {COLORES.map(c => (
               <button
                 key={c.value}
                 type="button"
                 onClick={() => setColorPrimario(c.value)}
                 title={c.label}
+                disabled={!canManage}
                 className={`w-9 h-9 rounded-full border-2 transition-all ${
                   colorPrimario === c.value
                     ? 'border-gray-900 scale-110 shadow-md'
@@ -374,7 +397,8 @@ export default function ConfiguracionPage() {
               type="color"
               value={colorPrimario}
               onChange={e => setColorPrimario(e.target.value)}
-              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"
+              disabled={!canManage}
+              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <Input
               value={colorPrimario}
@@ -382,6 +406,7 @@ export default function ConfiguracionPage() {
               placeholder="#1e40af"
               className="w-32 font-mono"
               maxLength={7}
+              disabled={!canManage}
             />
             <div
               className="flex-1 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-white text-sm font-medium"
@@ -434,8 +459,8 @@ export default function ConfiguracionPage() {
 
       {/* Padrón DGII se sincroniza automáticamente vía cron diario — no UI expuesta */}
 
-      {/* 5. Plazo de pago por defecto */}
-      <Card>
+      {/* 5. Plazo de pago por defecto — solo roles con configuracion:gestionar */}
+      {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-teal-600" />
@@ -464,10 +489,10 @@ export default function ConfiguracionPage() {
             </p>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
-      {/* 6. Recargo por mora */}
-      <Card>
+      {/* 6. Recargo por mora — solo roles con configuracion:gestionar */}
+      {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-teal-600" />
@@ -535,10 +560,10 @@ export default function ConfiguracionPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
-      {/* 6. Módulo de caja */}
-      <Card>
+      {/* 6. Módulo de caja — solo roles con configuracion:gestionar */}
+      {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Wallet className="h-4 w-4 text-teal-600" />
@@ -585,29 +610,31 @@ export default function ConfiguracionPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
-      {/* Equipo y permisos — solo el owner ve esta pantalla (gate en layout.tsx) */}
-      <EquipoCard />
+      {/* Equipo y permisos — solo roles con equipo:gestionar */}
+      {canManageTeam && <EquipoCard />}
 
       </div>
 
-      {/* Botón guardar final — barra sticky inferior */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-          className="bg-teal-600 hover:bg-teal-700 min-w-[160px]"
-        >
-          {saving ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
-          ) : saved ? (
-            <><CheckCircle className="h-4 w-4 mr-2" />¡Guardado!</>
-          ) : (
-            'Guardar cambios'
-          )}
-        </Button>
-      </div>
+      {/* Botón guardar final — barra sticky inferior (solo si puede editar) */}
+      {canManage && (
+        <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-teal-600 hover:bg-teal-700 min-w-[160px]"
+          >
+            {saving ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
+            ) : saved ? (
+              <><CheckCircle className="h-4 w-4 mr-2" />¡Guardado!</>
+            ) : (
+              'Guardar cambios'
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

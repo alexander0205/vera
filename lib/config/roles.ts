@@ -54,7 +54,7 @@ export type Permission =
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
-export type RoleKey = 'owner' | 'admin' | 'user' | 'contador' | 'vendedor' | 'member';
+export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'contador' | 'vendedor' | 'member';
 // Nota: contador/vendedor/member quedan como compat con datos legacy.
 // Roles activos para nuevas invitaciones: owner | admin | user.
 
@@ -133,6 +133,24 @@ export const ROLES: RoleDef[] = [
       'caja:ver', 'caja:operar',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
+  },
+  {
+    key:         'lector',
+    label:       'Lector',
+    description: 'Solo lectura: puede ver facturas, caja e informes, sin crear ni operar.',
+    invitable:   true,
+    permissions: [
+      'facturas:ver', 'facturas:exportar',
+      'clientes:ver',
+      'productos:ver',
+      'cotizaciones:ver',
+      'reportes:ver',
+      'equipo:ver',
+      'configuracion:ver',
+      'compras:ver',
+      'caja:ver',
+    ],
+    ui: { color: 'text-sky-600 bg-sky-50 border-sky-200', icon: 'Eye' },
   },
   // ── Roles legacy (DB rows existentes) — mismos permisos que 'user' por compat
   {

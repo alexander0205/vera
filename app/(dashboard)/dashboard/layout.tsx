@@ -100,9 +100,11 @@ const HREF_PERMISSION: Record<string, Permission> = {
 
   // Ingresos
   '/dashboard/facturas':              'facturas:ver',
+  '/dashboard/facturas/nueva':        'facturas:crear',
   '/dashboard/cuentas-por-cobrar':    'facturas:ver',
   '/dashboard/notas-credito':         'facturas:ver',
   '/dashboard/cotizaciones':          'cotizaciones:ver',
+  '/dashboard/cotizaciones/nueva':    'cotizaciones:gestionar',
   '/dashboard/facturas-recurrentes':  'facturas:ver',
 
   // Inventario
@@ -116,7 +118,7 @@ const HREF_PERMISSION: Record<string, Permission> = {
   '/dashboard/compras':               'compras:ver',
 
   // Caja
-  '/dashboard/caja':                  'caja:ver',
+  '/dashboard/caja':                  'caja:operar',
   '/dashboard/caja/aprobaciones':     'caja:aprobar',
   '/dashboard/caja/historial':        'caja:ver',
 
@@ -608,17 +610,19 @@ function Sidebar({
           </div>
         )}
 
-        {/* Nueva Factura */}
-        <Link
-          href="/dashboard/facturas/nueva"
-          onClick={hasPlan ? onClose : e => e.preventDefault()}
-          className={`flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-white/15 text-white text-sm font-medium transition-colors ${
-            hasPlan ? 'hover:bg-white/25' : 'opacity-40 cursor-not-allowed'
-          }`}
-        >
-          <Plus className="h-4 w-4 shrink-0" />
-          Nueva Factura
-        </Link>
+        {/* Nueva Factura — solo roles con facturas:crear */}
+        {canAccess(role, '/dashboard/facturas/nueva') && (
+          <Link
+            href="/dashboard/facturas/nueva"
+            onClick={hasPlan ? onClose : e => e.preventDefault()}
+            className={`flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-white/15 text-white text-sm font-medium transition-colors ${
+              hasPlan ? 'hover:bg-white/25' : 'opacity-40 cursor-not-allowed'
+            }`}
+          >
+            <Plus className="h-4 w-4 shrink-0" />
+            Nueva Factura
+          </Link>
+        )}
 
         {/* Search trigger */}
         <button
@@ -697,7 +701,7 @@ function Sidebar({
                         >
                           {child.label}
                         </Link>
-                        {child.plusHref && enabled && (
+                        {child.plusHref && enabled && canAccess(role, child.plusHref) && (
                           <Link
                             href={child.plusHref}
                             onClick={onClose}

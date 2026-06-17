@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { categorias } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, asc } from 'drizzle-orm';
 
 export async function GET() {
@@ -14,8 +15,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { nombre, descripcion } = await req.json();
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
   const [row] = await db.insert(categorias).values({

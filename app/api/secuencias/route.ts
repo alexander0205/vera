@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { sequences } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 
@@ -85,11 +86,9 @@ export async function GET() {
 // ─── POST ─────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const body = await req.json();
   const parsed = registrarSchema.safeParse(body);

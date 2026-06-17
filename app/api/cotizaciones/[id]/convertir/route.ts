@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { cotizaciones, ecfDocuments } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { and, eq, desc } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
@@ -16,8 +16,9 @@ import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(_req: NextRequest, { params }: Ctx) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('cotizaciones:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const cotId = parseInt(id);
