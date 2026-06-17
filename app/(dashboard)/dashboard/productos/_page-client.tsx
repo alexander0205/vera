@@ -13,20 +13,28 @@ import {
 import { Badge } from '@/components/ui/badge';
 import {
   Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload,
+  PackagePlus,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
 
 interface Producto {
-  id: number;
-  nombre: string;
-  descripcion: string | null;
-  referencia: string | null;
-  precio: number;       // centavos
-  precioDOP: number;    // DOP
-  tasaItbis: string;
-  tipo: string;
-  activo: string;
+  id:                   number;
+  nombre:               string;
+  descripcion:          string | null;
+  referencia:           string | null;
+  precio:               number;
+  precioDOP:            number;
+  costo:                number;
+  costoDOP:             number;
+  tasaItbis:            string;
+  tipo:                 string;
+  activo:               string;
+  unidadMedida:         string;
+  stockActual:          number;
+  stockMinimo:          number;
+  controlaInventario:   boolean;
+  permiteVentaSinStock: boolean;
 }
 
 const TASA_LABELS: Record<string, string> = {
@@ -56,6 +64,8 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
 const EMPTY_FORM = {
   nombre: '', descripcion: '', referencia: '',
   precio: '', tasaItbis: 'exento', tipo: 'servicio', unidad: 'Unidad',
+  costo: '', stockActual: '', stockMinimo: '',
+  controlaInventario: false, permiteVentaSinStock: true,
 };
 
 export default function ProductosPage() {
@@ -106,13 +116,18 @@ export default function ProductosPage() {
   function abrirEdicion(p: Producto) {
     setEditTarget(p);
     setForm({
-      nombre:      p.nombre,
-      descripcion: p.descripcion ?? '',
-      referencia:  p.referencia  ?? '',
-      precio:      p.precioDOP.toString(),
-      tasaItbis:   p.tasaItbis,
-      tipo:        p.tipo,
-      unidad:      'Unidad',
+      nombre:               p.nombre,
+      descripcion:          p.descripcion ?? '',
+      referencia:           p.referencia  ?? '',
+      precio:               p.precioDOP.toString(),
+      tasaItbis:            p.tasaItbis,
+      tipo:                 p.tipo,
+      unidad:               p.unidadMedida ?? 'Unidad',
+      costo:                p.costoDOP?.toString() ?? '',
+      stockActual:          p.stockActual?.toString() ?? '',
+      stockMinimo:          p.stockMinimo?.toString() ?? '',
+      controlaInventario:   p.controlaInventario   ?? false,
+      permiteVentaSinStock: p.permiteVentaSinStock ?? true,
     });
     setOpError(null);
     setShowForm(true);
@@ -128,10 +143,22 @@ export default function ProductosPage() {
     try {
       const url    = editTarget ? `/api/productos/${editTarget.id}` : '/api/productos';
       const method = editTarget ? 'PUT' : 'POST';
+      const costo      = parseFloat(form.costo) || 0;
+      const stockActual = parseInt(form.stockActual) || 0;
+      const stockMinimo = parseInt(form.stockMinimo) || 0;
       const res    = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, precio }),
+        body: JSON.stringify({
+          ...form,
+          precio,
+          unidadMedida:         form.unidad,
+          costo,
+          stockActual,
+          stockMinimo,
+          controlaInventario:   form.controlaInventario,
+          permiteVentaSinStock: form.permiteVentaSinStock,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando');
@@ -192,6 +219,31 @@ export default function ProductosPage() {
       ),
     },
     {
+      id: 'stock',
+      header: 'Stock',
+      visibleAt: 'md',
+      render: p => {
+        if (p.tipo !== 'bien' || !p.controlaInventario) {
+          return <span className="text-xs text-gray-400 italic">No aplica</span>;
+        }
+        const agotado    = p.stockActual <= 0;
+        const bajominimo = !agotado && p.stockActual <= p.stockMinimo;
+        return (
+          <div className="flex items-center gap-2">
+            <span className={`font-medium text-sm ${agotado ? 'text-red-600' : bajominimo ? 'text-amber-600' : 'text-green-700'}`}>
+              {p.stockActual}
+            </span>
+            {agotado && (
+              <Badge className="bg-red-50 text-red-700 border-red-200 text-xs">Agotado</Badge>
+            )}
+            {bajominimo && (
+              <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-xs">Bajo mínimo</Badge>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       id: 'precio',
       header: 'Precio (DOP)',
       align: 'right',
@@ -212,8 +264,11 @@ export default function ProductosPage() {
   ], []);
 
   const rowActions = (p: Producto): RowAction[] => [
-    { icon: Pencil, title: 'Editar',   onClick: () => abrirEdicion(p) },
-    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(p); setOpError(null); }, variant: 'danger' },
+    { icon: Pencil, title: 'Editar', onClick: () => abrirEdicion(p) },
+    ...(p.tipo === 'bien' && p.controlaInventario
+      ? [{ icon: PackagePlus, title: 'Ver movimientos', onClick: () => { window.location.href = `/dashboard/inventario?productoId=${p.id}`; } }]
+      : []),
+    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(p); setOpError(null); }, variant: 'danger' as const },
   ];
 
   return (
@@ -360,6 +415,62 @@ export default function ProductosPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Costo — solo para bienes */}
+            {form.tipo === 'bien' && (
+              <div className="space-y-1.5">
+                <Label>Costo de compra (DOP)</Label>
+                <Input type="number" min={0} step={0.01} placeholder="0.00"
+                  value={form.costo} onChange={(e) => setForm((f) => ({ ...f, costo: e.target.value }))} />
+                <p className="text-xs text-gray-400">Usado para calcular margen y costo de ventas. No aparece en la factura.</p>
+              </div>
+            )}
+
+            {/* Control de inventario — solo para bienes */}
+            {form.tipo === 'bien' && (
+              <div className="space-y-3 border border-dashed border-teal-200 rounded-lg p-4 bg-teal-50/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Controlar inventario</p>
+                    <p className="text-xs text-gray-400 mt-0.5">El stock se descuenta automáticamente al emitir facturas</p>
+                  </div>
+                  <button type="button"
+                    onClick={() => setForm(f => ({ ...f, controlaInventario: !f.controlaInventario }))}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.controlaInventario ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+
+                {form.controlaInventario && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Stock actual</Label>
+                        <Input type="number" min={0} step={1} placeholder="0"
+                          value={form.stockActual} onChange={(e) => setForm((f) => ({ ...f, stockActual: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Stock mínimo</Label>
+                        <Input type="number" min={0} step={1} placeholder="0"
+                          value={form.stockMinimo} onChange={(e) => setForm((f) => ({ ...f, stockMinimo: e.target.value }))} />
+                        <p className="text-xs text-gray-400">Alerta si el stock baja de este número</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-700">Permitir venta sin stock</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Si está desactivado, se bloqueará la factura cuando el stock sea 0</p>
+                      </div>
+                      <button type="button"
+                        onClick={() => setForm(f => ({ ...f, permiteVentaSinStock: !f.permiteVentaSinStock }))}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.permiteVentaSinStock ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Formulario avanzado */}
             <div>

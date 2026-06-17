@@ -209,6 +209,13 @@ export const products = pgTable('products', {
   tasaItbis: varchar('tasa_itbis', { length: 6 }).notNull().default('0.18'), // '0.18'|'0.16'|'0'|'exento'
   tipo: varchar('tipo', { length: 10 }).notNull().default('servicio'),       // 'bien'|'servicio'
   activo: varchar('activo', { length: 5 }).notNull().default('true'),        // 'true'|'false'
+  // ── Inventario ──────────────────────────────────────────────────────────────
+  unidadMedida: varchar('unidad_medida', { length: 50 }).notNull().default('Unidad'),
+  costo: integer('costo').notNull().default(0),                   // costo de compra en centavos
+  stockActual: integer('stock_actual').notNull().default(0),      // unidades disponibles
+  stockMinimo: integer('stock_minimo').notNull().default(0),      // umbral alerta bajo mínimo
+  controlaInventario: boolean('controla_inventario').notNull().default(false),
+  permiteVentaSinStock: boolean('permite_venta_sin_stock').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -697,6 +704,28 @@ export const vendedores = pgTable('vendedores', {
   activo:         varchar('activo', { length: 5 }).notNull().default('true'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
+
+// ─── EmiteDO — Inventario: Movimientos ───────────────────────────────────────
+
+export const inventoryMovements = pgTable('inventory_movements', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  productoId:      integer('producto_id').notNull().references(() => products.id),
+  // VENTA | ENTRADA | AJUSTE_SALIDA | AJUSTE_ENTRADA | DEVOLUCION | STOCK_INICIAL
+  tipo:            varchar('tipo', { length: 20 }).notNull(),
+  cantidad:        integer('cantidad').notNull(),   // siempre positivo
+  esEntrada:       boolean('es_entrada').notNull(), // true = suma, false = resta
+  stockAntes:      integer('stock_antes').notNull(),
+  stockDespues:    integer('stock_despues').notNull(),
+  referenciaId:    integer('referencia_id').references(() => ecfDocuments.id),
+  referenciaEncf:  varchar('referencia_encf', { length: 40 }),
+  motivo:          text('motivo'),
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('inv_mov_team_idx').on(t.teamId),
+  index('inv_mov_producto_idx').on(t.teamId, t.productoId),
+]);
 
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 

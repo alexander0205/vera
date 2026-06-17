@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos } from '@/lib/db/schema';
+import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc } from 'drizzle-orm';
@@ -43,6 +44,8 @@ const itemSchema = z.object({
   // Beneficiario por línea — metadato, no va al XML DGII
   dependienteId:          z.number().int().positive().optional().nullable(),
   dependienteNombre:      z.string().max(255).optional(),
+  // Control de inventario — metadato, no va al XML DGII
+  productoId:             z.number().int().positive().optional().nullable(),
 });
 
 const retencionSchema = z.object({
@@ -148,6 +151,9 @@ async function acquireNextEncf(
   const encf = `E${tipoEcf}${row.numero.padStart(10, '0')}`;
   return { encf, sequenceId: row.id, numero: row.numero, fechaVencimiento: row.fecha_venc ?? null };
 }
+
+// ─── Descuento de inventario post-emisión ─────────────────────────────────────
+
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -746,6 +752,7 @@ export async function POST(request: NextRequest) {
     // Guardar en BD local (auditoría + PDFs + webhooks)
     const lineasJsonParaGuardar = data.lineasJson
       ?? JSON.stringify(data.items.map(item => ({
+          productoId:         item.productoId ?? null,
           nombreItem:         item.nombreItem,
           descripcionItem:    item.descripcionItem,
           cantidadItem:       item.cantidadItem,
@@ -754,6 +761,7 @@ export async function POST(request: NextRequest) {
           tasaItbis:          item.tasaItbis ?? 0,
           subtotalConItbis:   item.precioUnitarioItem * item.cantidadItem * (1 + (item.tasaItbis ?? 0)),
           unidadMedida:       item.unidadMedidaItem,
+          indicadorBienoServicio: item.indicadorBienoServicio ?? 2,
         })));
 
     const codigoEmit     = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
@@ -840,6 +848,17 @@ export async function POST(request: NextRequest) {
       ip:       getIp(request),
       meta:     { tipoEcf: data.tipoEcf, trackId, montoTotal: totales.montoTotal, via: 'ecf-api' },
     });
+
+    // ── Descuento automático de inventario ───────────────────────────────────
+    // Fire-and-forget: si falla, el e-CF ya fue emitido y guardado.
+    // Solo afecta bienes (indicadorBienoServicio === 1) con productoId conocido.
+    descontarInventario(
+      teamId,
+      user.id,
+      saved.id,
+      encf,
+      data.items,
+    ).catch((e) => console.error('[ecf/emitir] stock decrement failed', e));
 
     import('@/lib/webhooks').then(({ dispatchWebhook }) =>
       dispatchWebhook(teamId, 'ecf.emitido', {

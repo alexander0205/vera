@@ -12,13 +12,18 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 
 const updateSchema = z.object({
-  nombre:      z.string().min(1).max(255),
-  descripcion: z.string().max(1000).optional().nullable(),
-  referencia:  z.string().max(100).optional().nullable(),
-  precio:      z.number().min(0),
-  tasaItbis:   z.enum(['0.18', '0.16', '0', 'exento']),
-  tipo:        z.enum(['bien', 'servicio']),
-  activo:      z.boolean().optional(),
+  nombre:               z.string().min(1).max(255),
+  descripcion:          z.string().max(1000).optional().nullable(),
+  referencia:           z.string().max(100).optional().nullable(),
+  precio:               z.number().min(0),
+  tasaItbis:            z.enum(['0.18', '0.16', '0', 'exento']),
+  tipo:                 z.enum(['bien', 'servicio']),
+  activo:               z.boolean().optional(),
+  unidadMedida:         z.string().max(50).optional(),
+  costo:                z.number().min(0).optional(),
+  stockMinimo:          z.number().int().min(0).optional(),
+  controlaInventario:   z.boolean().optional(),
+  permiteVentaSinStock: z.boolean().optional(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -37,7 +42,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!prod) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
 
-  return NextResponse.json({ producto: { ...prod, precioDOP: prod.precio / 100 } });
+  return NextResponse.json({ producto: { ...prod, precioDOP: prod.precio / 100, costoDOP: prod.costo / 100 } });
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
@@ -58,20 +63,28 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!existing) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
 
-  const { nombre, descripcion, referencia, precio, tasaItbis, tipo, activo } = parsed.data;
+  const {
+    nombre, descripcion, referencia, precio, tasaItbis, tipo, activo,
+    unidadMedida, costo, stockMinimo, controlaInventario, permiteVentaSinStock,
+  } = parsed.data;
 
   const [updated] = await db.update(products).set({
     nombre,
-    descripcion:  descripcion || null,
-    referencia:   referencia  || null,
-    precio:       Math.round(precio * 100),
+    descripcion:          descripcion || null,
+    referencia:           referencia  || null,
+    precio:               Math.round(precio * 100),
     tasaItbis,
     tipo,
-    activo:     activo === false ? 'false' : 'true',
-    updatedAt:  new Date(),
+    activo:               activo === false ? 'false' : 'true',
+    ...(unidadMedida         !== undefined && { unidadMedida }),
+    ...(costo                !== undefined && { costo: Math.round(costo * 100) }),
+    ...(stockMinimo          !== undefined && { stockMinimo }),
+    ...(controlaInventario   !== undefined && { controlaInventario }),
+    ...(permiteVentaSinStock !== undefined && { permiteVentaSinStock }),
+    updatedAt: new Date(),
   }).where(eq(products.id, prodId)).returning();
 
-  return NextResponse.json({ ok: true, producto: { ...updated, precioDOP: updated.precio / 100 } });
+  return NextResponse.json({ ok: true, producto: { ...updated, precioDOP: updated.precio / 100, costoDOP: updated.costo / 100 } });
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {

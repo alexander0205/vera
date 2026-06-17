@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users } from '@/lib/db/schema';
+import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
@@ -239,6 +240,7 @@ export async function POST(
 
     // Parse items from lineasJson
     let items: Array<{
+      productoId?: number | null;
       nombreItem: string;
       descripcionItem?: string;
       cantidadItem: number;
@@ -266,6 +268,7 @@ export async function POST(
             const descuentoMonto = descPct > 0 ? base * (descPct / 100) : undefined;
 
             return {
+              productoId:             i.productoId ? Number(i.productoId) : null,
               nombreItem:             String(i.nombreItem),
               descripcionItem:        i.descripcionItem ? String(i.descripcionItem) : undefined,
               cantidadItem:           Number(i.cantidadItem) || 1,
@@ -447,6 +450,10 @@ export async function POST(
         .where(eq(ecfDocuments.id, docId)),
       { userId: user.id, teamId },
     );
+
+    // Descuento automático de inventario — fire-and-forget
+    descontarInventario(teamId, user.id, docId, encfFinal, items)
+      .catch((e) => console.error('[emitir-ecf] stock decrement failed', e));
 
     await logInfo({
       teamId,
