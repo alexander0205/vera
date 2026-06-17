@@ -53,6 +53,7 @@ const GROUPS: NavGroup[] = [
     icon: Package,
     children: [
       { href: '/dashboard/productos',      label: 'Productos y servicios', plusHref: '/dashboard/productos' },
+      { href: '/dashboard/inventario',     label: 'Movimientos de stock' },
       { href: '/dashboard/categorias',     label: 'Categorías' },
       { href: '/dashboard/almacenes',      label: 'Almacenes' },
       { href: '/dashboard/listas-precios', label: 'Listas de precios' },
