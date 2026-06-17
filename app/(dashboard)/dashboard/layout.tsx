@@ -124,7 +124,7 @@ const HREF_PERMISSION: Record<string, Permission> = {
 
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
-  '/dashboard/secuencias':            'configuracion:ver',
+  '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
   '/dashboard/api-keys':              'configuracion:gestionar',

@@ -376,6 +376,7 @@ export default function FacturaDetallePage() {
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
   const { can } = usePermissions();
   const { tipoVisible } = useTiposDisponibles();
+  const canCreate = can('facturas:crear');
   const canEdit   = can('facturas:editar');
   const canAnular = can('facturas:anular');
   const canEmitir = can('facturas:emitir-dgii');
@@ -795,20 +796,24 @@ export default function FacturaDetallePage() {
                   </a>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                onSelect={() => setShowEmail(true)}
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <Mail className="h-4 w-4 text-gray-500" />
-                Enviar por correo
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => openProximamente('Duplicar factura')}
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <Copy className="h-4 w-4 text-gray-500" />
-                Duplicar
-              </DropdownMenuItem>
+              {canCreate && (
+                <DropdownMenuItem
+                  onSelect={() => setShowEmail(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Mail className="h-4 w-4 text-gray-500" />
+                  Enviar por correo
+                </DropdownMenuItem>
+              )}
+              {canCreate && (
+                <DropdownMenuItem
+                  onSelect={() => openProximamente('Duplicar factura')}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Copy className="h-4 w-4 text-gray-500" />
+                  Duplicar
+                </DropdownMenuItem>
+              )}
               {puedeGenerarMora && (
                 <DropdownMenuItem
                   onSelect={() => { if (!generandoMora) handleGenerarNotaDebitoMora(); }}

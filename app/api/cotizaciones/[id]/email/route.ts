@@ -4,7 +4,7 @@
  * Patrón idéntico a /api/facturas/[id]/email/route.ts.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { cotizaciones } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
@@ -14,17 +14,15 @@ import { rateLimit } from '@/lib/rate-limit';
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  const auth = await requirePermission('cotizaciones:gestionar');
+  if (!auth.ok) return auth.response;
+  const { user, teamId } = auth;
 
   // Rate limit: 20/min por usuario
   const rl = rateLimit(`cot-email:${user.id}`, 20, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Demasiados envíos. Espera 1 minuto.' }, { status: 429 });
   }
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin empresa activa' }, { status: 400 });
 
   const { id } = await params;
   const cotId = parseInt(id);

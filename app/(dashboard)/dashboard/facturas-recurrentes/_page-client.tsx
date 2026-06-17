@@ -58,7 +58,7 @@ function estadoBadge(estado: string) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function FacturasRecurrentesPage() {
+export default function FacturasRecurrentesPage({ canOperate = true }: { canOperate?: boolean }) {
   const [facturas, setFacturas]         = useState<FacturaRecurrente[]>([]);
   const [loading, setLoading]           = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<FacturaRecurrente | null>(null);
@@ -205,7 +205,7 @@ export default function FacturasRecurrentesPage() {
       { icon: Eye, title: 'Ver', href: `/dashboard/facturas-recurrentes/${f.id}` },
       { icon: Pencil, title: 'Editar', href: `/dashboard/facturas-recurrentes/${f.id}/editar` },
     ];
-    if (f.estado !== 'finalizada') {
+    if (canOperate && f.estado !== 'finalizada') {
       const isToggling = toggling === f.id;
       actions.push({
         icon:  isToggling ? Loader2 : (f.estado === 'activa' ? PauseCircle : PlayCircle),
@@ -213,17 +213,18 @@ export default function FacturasRecurrentesPage() {
         onClick: () => handleToggleEstado(f),
       });
     }
-    // Acción "Generar ahora": disparo manual para probar sin esperar el cron
-    const isGenerando = generando === f.id;
-    actions.push({
-      icon:    isGenerando ? Loader2 : Zap,
-      title:   'Generar ahora',
-      onClick: () => handleGenerarAhora(f),
-    });
-    actions.push({
-      icon: Trash2, title: 'Eliminar', variant: 'danger',
-      onClick: () => { setDeleteTarget(f); setOpError(null); },
-    });
+    if (canOperate) {
+      const isGenerando = generando === f.id;
+      actions.push({
+        icon:    isGenerando ? Loader2 : Zap,
+        title:   'Generar ahora',
+        onClick: () => handleGenerarAhora(f),
+      });
+      actions.push({
+        icon: Trash2, title: 'Eliminar', variant: 'danger',
+        onClick: () => { setDeleteTarget(f); setOpError(null); },
+      });
+    }
     return actions;
   };
 
@@ -241,22 +242,22 @@ export default function FacturasRecurrentesPage() {
           icon: RefreshCw,
           title: 'Sin facturas recurrentes',
           hint: 'Configura una factura recurrente para automatizar tu facturación',
-          cta: (
+          cta: canOperate ? (
             <Link href="/dashboard/facturas-recurrentes/nueva">
               <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
                 <Plus className="h-4 w-4 mr-1" /> Nueva factura recurrente
               </Button>
             </Link>
-          ),
+          ) : undefined,
         }}
-        headerActions={
+        headerActions={canOperate ? (
           <Link href="/dashboard/facturas-recurrentes/nueva">
             <Button className="bg-teal-600 hover:bg-teal-700">
               <Plus className="h-4 w-4 mr-2" />
               Nueva factura recurrente
             </Button>
           </Link>
-        }
+        ) : undefined}
       />
 
       {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
