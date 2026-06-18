@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { ShoppingCart, FileText, Plus } from 'lucide-react';
+import { ShoppingCart, FileText, Plus, PackagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
-import { fmtFechaCorta } from '@/lib/utils/format';
+import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
+import type { CompraLocal } from '@/lib/db/schema';
 import ModalRegistrarCompra from './_modal-registrar-compra';
 
 // ─── Estado badge ─────────────────────────────────────────────────────────────
@@ -48,7 +50,7 @@ function fmtMonto(item: RecepcionEcfDto): string {
   return `RD$${v.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// ─── API response shape ───────────────────────────────────────────────────────
+// ─── API response shapes ──────────────────────────────────────────────────────
 
 interface ComprasResponse {
   items?: RecepcionEcfDto[];
@@ -56,9 +58,14 @@ interface ComprasResponse {
   error?: string;
 }
 
+interface ComprasLocalesResponse {
+  compras?: CompraLocal[];
+  error?: string;
+}
+
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
-// ─── Columns ──────────────────────────────────────────────────────────────────
+// ─── Columns: e-CF recibidas ────────────────────────────────────────────────────
 
 const columns: DataTableColumn<RecepcionEcfDto>[] = [
   {
@@ -130,6 +137,50 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
   },
 ];
 
+// ─── Columns: compras registradas (locales) ──────────────────────────────────
+
+const columnsLocales: DataTableColumn<CompraLocal>[] = [
+  {
+    id: 'fecha',
+    header: 'Fecha',
+    render: c => (
+      <span className="text-xs text-gray-700 tabular-nums whitespace-nowrap">
+        {fmtFechaCorta(c.fecha)}
+      </span>
+    ),
+  },
+  {
+    id: 'proveedor',
+    header: 'Proveedor',
+    render: c => (
+      <div className="min-w-0">
+        <div className="text-sm text-gray-900 truncate">{c.proveedorNombre ?? '—'}</div>
+        {c.proveedorRnc && (
+          <div className="font-mono text-[11px] text-gray-400">{c.proveedorRnc}</div>
+        )}
+      </div>
+    ),
+  },
+  {
+    id: 'referencia',
+    header: 'e-NCF',
+    visibleAt: 'md',
+    render: c => (
+      <span className="font-mono text-xs text-gray-600">{c.referenciaEncf ?? '—'}</span>
+    ),
+  },
+  {
+    id: 'monto',
+    header: 'Monto',
+    align: 'right',
+    render: c => (
+      <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
+        {fmtDOP(c.montoTotal)}
+      </span>
+    ),
+  },
+];
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function ComprasPage() {
@@ -142,8 +193,16 @@ export default function ComprasPage() {
     { revalidateOnFocus: false },
   );
 
-  const loading = permLoading || swrLoading;
-  const items   = data?.items ?? [];
+  const { data: locales, isLoading: localesLoading, mutate: mutateLocales } =
+    useSWR<ComprasLocalesResponse>(
+      !permLoading && can('compras:ver') ? '/api/compras/local' : null,
+      fetcher,
+      { revalidateOnFocus: false },
+    );
+
+  const loading        = permLoading || swrLoading;
+  const items          = data?.items ?? [];
+  const comprasLocales = locales?.compras ?? [];
 
   // ── Estados especiales ──
   if (!permLoading && !can('compras:ver')) {
@@ -170,9 +229,9 @@ export default function ComprasPage() {
             <ShoppingCart className="h-5 w-5 text-teal-600" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900 leading-tight">Facturas recibidas</h1>
+            <h1 className="text-lg font-bold text-gray-900 leading-tight">Compras</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              e-CF que otros contribuyentes te han emitido y que la DGII reportó a tu empresa.
+              e-CF recibidas de tus proveedores y compras que registras manualmente.
             </p>
           </div>
         </div>
@@ -186,7 +245,7 @@ export default function ComprasPage() {
       <ModalRegistrarCompra
         open={showModal}
         onClose={() => setShowModal(false)}
-        onSuccess={() => {}}
+        onSuccess={() => mutateLocales()}
       />
 
       {data?.error && (
@@ -195,19 +254,47 @@ export default function ComprasPage() {
         </div>
       )}
 
-      <DataTable<RecepcionEcfDto>
-        data={items}
-        loading={loading}
-        columns={columns}
-        title="Compras"
-        emptyState={{
-          icon:  data?.sinContribuyente ? ShoppingCart : FileText,
-          title: data?.sinContribuyente
-            ? 'Tu empresa aún no está registrada para recibir e-CF'
-            : 'No has recibido facturas todavía',
-          hint: emptyHint,
-        }}
-      />
+      <Tabs defaultValue="recibidas">
+        <TabsList>
+          <TabsTrigger value="recibidas">Facturas recibidas</TabsTrigger>
+          <TabsTrigger value="registradas">
+            Compras registradas
+            {comprasLocales.length > 0 && (
+              <span className="ml-1.5 text-[11px] text-gray-400">({comprasLocales.length})</span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="recibidas">
+          <DataTable<RecepcionEcfDto>
+            data={items}
+            loading={loading}
+            columns={columns}
+            title="e-CF recibidas"
+            emptyState={{
+              icon:  data?.sinContribuyente ? ShoppingCart : FileText,
+              title: data?.sinContribuyente
+                ? 'Tu empresa aún no está registrada para recibir e-CF'
+                : 'No has recibido facturas todavía',
+              hint: emptyHint,
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="registradas">
+          <DataTable<CompraLocal>
+            data={comprasLocales}
+            loading={permLoading || localesLoading}
+            columns={columnsLocales}
+            title="Compras registradas"
+            emptyState={{
+              icon:  PackagePlus,
+              title: 'No has registrado compras manuales',
+              hint:  'Usa "Nueva compra" para registrar entradas de inventario y actualizar tu stock.',
+            }}
+          />
+        </TabsContent>
+      </Tabs>
     </section>
   );
 }

@@ -48,3 +48,10 @@ scripts/db-seed/*.dump
 output/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+
+# tunnel logs (cloudflared / localtunnel runtime output)
+.cloudflared.*
+.localtunnel.*
+
+# debug script ad-hoc (query roles por email — no genérico, no parte del producto)
+scripts/check-user-role.ts
