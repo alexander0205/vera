@@ -110,6 +110,11 @@ const emitirSchema = z.object({
 
   // Edición de borrador existente — hacer UPDATE en lugar de INSERT
   borradorId: z.number().int().positive().optional(),
+
+  // Metadatos de venta — persisten en ecf_documents, no van al XML DGII
+  almacenId:      z.number().int().positive().optional().nullable(),
+  vendedorId:     z.number().int().positive().optional().nullable(),
+  listaPreciosId: z.number().int().positive().optional().nullable(),
 });
 
 // ─── Adquirir próximo eNCF de secuencia local ────────────────────────────────
@@ -325,6 +330,9 @@ export async function POST(request: NextRequest) {
     }
 
     const extraFields = {
+      almacenId:      data.almacenId      ?? null,
+      vendedorId:     data.vendedorId     ?? null,
+      listaPreciosId: data.listaPreciosId ?? null,
       notas:               data.notas          || null,
       terminosCondiciones: data.terminosCondiciones || null,
       pieFactura:          data.pieFactura      || null,

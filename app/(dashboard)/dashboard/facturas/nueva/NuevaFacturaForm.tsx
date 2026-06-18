@@ -267,11 +267,11 @@ export default function NuevaFacturaForm({
   const [showListaPrecios, setShowListaPrecios]     = useState(false);
   const [showVendedor, setShowVendedor]             = useState(false);
 
-  const [almacenId, setAlmacenId]                   = useState<number | null>(null);
+  const [almacenId, setAlmacenId]                   = useState<number | null>(initialData?.almacenId ?? null);
   const [almacenNombre, setAlmacenNombre]           = useState('');
-  const [listaPreciosId, setListaPreciosId]         = useState<number | null>(null);
+  const [listaPreciosId, setListaPreciosId]         = useState<number | null>(initialData?.listaPreciosId ?? null);
   const [listaPreciosNombre, setListaPreciosNombre] = useState('');
-  const [vendedorId, setVendedorId]                 = useState<number | null>(null);
+  const [vendedorId, setVendedorId]                 = useState<number | null>(initialData?.vendedorId ?? null);
   const [vendedorNombre, setVendedorNombre]         = useState('');
 
   const {

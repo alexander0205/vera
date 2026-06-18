@@ -352,6 +352,11 @@ export const ecfDocuments = pgTable('ecf_documents', {
   moraPorcentaje: integer('mora_porcentaje'),  // basis points (200 = 2%)
   moraDiasGracia: integer('mora_dias_gracia'), // días de gracia
 
+  // Metadatos de venta: almacén, vendedor y lista de precios usada al emitir
+  almacenId:      integer('almacen_id').references(() => almacenes.id),
+  vendedorId:     integer('vendedor_id').references(() => vendedores.id),
+  listaPreciosId: integer('lista_precios_id').references(() => listasPrecios.id),
+
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
 

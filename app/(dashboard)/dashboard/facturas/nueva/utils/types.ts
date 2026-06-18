@@ -38,6 +38,10 @@ export interface BorradorInicial {
   lineasJson:           string | null; // JSON string de ItemLinea[]
   dependienteId:        number | null;
   dependienteNombre:    string | null;
+  // Metadatos de venta — para restaurar al editar un borrador
+  almacenId?:           number | null;
+  vendedorId?:          number | null;
+  listaPreciosId?:      number | null;
   // Pago — para restaurar el split al editar un borrador.
   pagoRecibido?:        boolean;
   pagoFecha?:           string | null;
