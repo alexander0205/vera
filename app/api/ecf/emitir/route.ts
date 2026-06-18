@@ -898,6 +898,7 @@ export async function POST(request: NextRequest) {
       saved.id,
       encf,
       data.items,
+      data.almacenId ?? null,
     ).catch((e) => console.error('[ecf/emitir] stock decrement failed', e));
 
     import('@/lib/webhooks').then(({ dispatchWebhook }) =>

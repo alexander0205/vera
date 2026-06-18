@@ -89,6 +89,7 @@ export async function POST(
       pagoRecibido:  ecfDocuments.pagoRecibido,
       pagoValorCts:  ecfDocuments.pagoValorCts,
       lineasJson:    ecfDocuments.lineasJson,
+      almacenId:     ecfDocuments.almacenId,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
@@ -172,7 +173,7 @@ export async function POST(
         cantidadItem:           i.cantidadItem           ? Number(i.cantidadItem) : 1,
         indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 : 2 as 1 | 2,
       }));
-      restaurarInventario(teamId, user.id, docId, doc.encf, items)
+      restaurarInventario(teamId, user.id, docId, doc.encf, items, doc.almacenId ?? null)
         .catch((e) => console.error('[anular] stock restore failed', e));
     } catch {
       // lineasJson malformado — no bloquear la anulación

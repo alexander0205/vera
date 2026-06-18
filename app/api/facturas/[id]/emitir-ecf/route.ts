@@ -482,7 +482,7 @@ export async function POST(
     );
 
     // Descuento automático de inventario — fire-and-forget
-    descontarInventario(teamId, user.id, docId, encfFinal, items)
+    descontarInventario(teamId, user.id, docId, encfFinal, items, doc.almacenId ?? null)
       .catch((e) => console.error('[emitir-ecf] stock decrement failed', e));
 
     await logInfo({

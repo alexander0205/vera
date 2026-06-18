@@ -22,6 +22,7 @@ export async function descontarInventario(
   ecfDocumentId: number,
   encf:          string,
   items:         ItemParaDescuento[],
+  almacenId?:    number | null,
 ): Promise<void> {
   const bienesConId = items.filter(
     (i) => i.indicadorBienoServicio === 1 && i.productoId && i.productoId > 0,
@@ -61,6 +62,20 @@ export async function descontarInventario(
           referenciaEncf: encf,
           createdBy:      userId,
         });
+
+        if (almacenId) {
+          await tx.execute(sql`
+            INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
+            VALUES (${teamId}, ${productoId}, ${almacenId},
+              GREATEST(0, COALESCE((
+                SELECT stock_actual FROM product_almacen_stock
+                WHERE product_id = ${productoId} AND almacen_id = ${almacenId}
+              ), 0) - ${cantidadInt})
+            )
+            ON CONFLICT (product_id, almacen_id)
+            DO UPDATE SET stock_actual = GREATEST(0, product_almacen_stock.stock_actual - ${cantidadInt})
+          `);
+        }
       });
     } catch (e) {
       console.error(`[descontarInventario] producto=${productoId}`, e);

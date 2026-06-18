@@ -17,6 +17,7 @@ const ajusteSchema = z.object({
   tipo:        z.enum(['ENTRADA', 'AJUSTE_SALIDA', 'AJUSTE_ENTRADA', 'STOCK_INICIAL']),
   cantidad:    z.number().int().positive('La cantidad debe ser mayor a 0'),
   motivo:      z.string().max(500).optional().nullable(),
+  almacenId:   z.number().int().positive().optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   const parsed = ajusteSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
-  const { productoId, tipo, cantidad, motivo } = parsed.data;
+  const { productoId, tipo, cantidad, motivo, almacenId } = parsed.data;
 
   const esEntrada = tipo === 'ENTRADA' || tipo === 'AJUSTE_ENTRADA' || tipo === 'STOCK_INICIAL';
 
@@ -72,6 +73,21 @@ export async function POST(req: NextRequest) {
       motivo:    motivo || null,
       createdBy: user.id,
     }).returning();
+
+    if (almacenId) {
+      const delta = esEntrada ? cantidad : -cantidad;
+      await tx.execute(sql`
+        INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
+        VALUES (${teamId}, ${productoId}, ${almacenId},
+          GREATEST(0, COALESCE((
+            SELECT stock_actual FROM product_almacen_stock
+            WHERE product_id = ${productoId} AND almacen_id = ${almacenId}
+          ), 0) + ${delta})
+        )
+        ON CONFLICT (product_id, almacen_id)
+        DO UPDATE SET stock_actual = GREATEST(0, product_almacen_stock.stock_actual + ${delta})
+      `);
+    }
 
     return { ok: true, movimiento: mov, stockActual: stockDespues };
   });

@@ -732,6 +732,19 @@ export const inventoryMovements = pgTable('inventory_movements', {
   index('inv_mov_producto_idx').on(t.teamId, t.productoId),
 ]);
 
+// ─── EmiteDO — Inventario: Stock por almacén ─────────────────────────────────
+
+export const productAlmacenStock = pgTable('product_almacen_stock', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  productId:   integer('product_id').notNull().references(() => products.id),
+  almacenId:   integer('almacen_id').notNull().references(() => almacenes.id),
+  stockActual: integer('stock_actual').notNull().default(0),
+}, (t) => [
+  index('pas_team_idx').on(t.teamId),
+  index('pas_almacen_idx').on(t.almacenId),
+]);
+
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 
 export const listasPrecios = pgTable('listas_precios', {
