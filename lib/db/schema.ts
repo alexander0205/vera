@@ -745,6 +745,33 @@ export const productAlmacenStock = pgTable('product_almacen_stock', {
   index('pas_almacen_idx').on(t.almacenId),
 ]);
 
+// ─── EmiteDO — Compras locales ────────────────────────────────────────────────
+
+export const comprasLocales = pgTable('compras_locales', {
+  id:               serial('id').primaryKey(),
+  teamId:           integer('team_id').notNull().references(() => teams.id),
+  proveedorRnc:     varchar('proveedor_rnc',    { length: 20 }),
+  proveedorNombre:  varchar('proveedor_nombre', { length: 255 }),
+  fecha:            date('fecha').notNull().defaultNow(),
+  referenciaEncf:   varchar('referencia_encf',  { length: 40 }),
+  notas:            text('notas'),
+  montoTotal:       integer('monto_total').notNull().default(0),
+  createdBy:        integer('created_by').references(() => users.id),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+});
+
+export const comprasLocalesItems = pgTable('compras_locales_items', {
+  id:            serial('id').primaryKey(),
+  compraId:      integer('compra_id').notNull().references(() => comprasLocales.id),
+  productoId:    integer('producto_id').notNull().references(() => products.id),
+  almacenId:     integer('almacen_id').references(() => almacenes.id),
+  cantidad:      integer('cantidad').notNull(),
+  costoUnitario: integer('costo_unitario').notNull().default(0),
+});
+
+export type CompraLocal     = typeof comprasLocales.$inferSelect;
+export type CompraLocalItem = typeof comprasLocalesItems.$inferSelect;
+
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 
 export const listasPrecios = pgTable('listas_precios', {

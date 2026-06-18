@@ -1,12 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { ShoppingCart, FileText } from 'lucide-react';
+import { ShoppingCart, FileText, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
+import ModalRegistrarCompra from './_modal-registrar-compra';
 
 // ─── Estado badge ─────────────────────────────────────────────────────────────
 
@@ -131,6 +134,7 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
 
 export default function ComprasPage() {
   const { can, isLoading: permLoading } = usePermissions();
+  const [showModal, setShowModal] = useState(false);
 
   const { data, isLoading: swrLoading } = useSWR<ComprasResponse>(
     !permLoading && can('compras:ver') ? '/api/compras' : null,
@@ -160,17 +164,30 @@ export default function ComprasPage() {
   return (
     <section className="p-4 sm:p-6 space-y-4">
       {/* Header tipo Alegra */}
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-          <ShoppingCart className="h-5 w-5 text-teal-600" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+            <ShoppingCart className="h-5 w-5 text-teal-600" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-gray-900 leading-tight">Facturas recibidas</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              e-CF que otros contribuyentes te han emitido y que la DGII reportó a tu empresa.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-bold text-gray-900 leading-tight">Facturas recibidas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            e-CF que otros contribuyentes te han emitido y que la DGII reportó a tu empresa.
-          </p>
-        </div>
+        {can('productos:gestionar') && (
+          <Button size="sm" onClick={() => setShowModal(true)}>
+            <Plus className="h-4 w-4 mr-1.5" /> Nueva compra
+          </Button>
+        )}
       </div>
+
+      <ModalRegistrarCompra
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onSuccess={() => {}}
+      />
 
       {data?.error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
