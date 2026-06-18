@@ -14,10 +14,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, products } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
@@ -296,6 +296,36 @@ export async function POST(
     }
 
     const totales = calcularTotales(items);
+
+    // ── Bloqueo stock agotado ─────────────────────────────────────────────────
+    const bienesIds = items
+      .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
+      .map(i => i.productoId as number);
+
+    if (bienesIds.length > 0) {
+      const prods = await db
+        .select({
+          id:                   products.id,
+          nombre:               products.nombre,
+          stockActual:          products.stockActual,
+          controlaInventario:   products.controlaInventario,
+          permiteVentaSinStock: products.permiteVentaSinStock,
+        })
+        .from(products)
+        .where(and(eq(products.teamId, teamId), inArray(products.id, bienesIds)));
+
+      const bloqueados = prods.filter(
+        p => p.controlaInventario && p.stockActual === 0 && !p.permiteVentaSinStock,
+      );
+
+      if (bloqueados.length > 0) {
+        const nombres = bloqueados.map(p => `"${p.nombre}"`).join(', ');
+        return NextResponse.json(
+          { error: `No se puede emitir: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.` },
+          { status: 422 },
+        );
+      }
+    }
 
     // DGII: e32 (Factura de Consumo) >= DOP 250,000 exige RNC + razón social.
     if (tipoEcf === '32' && totales.montoTotal >= 250_000 && (!rncFinal || !razonFinal)) {

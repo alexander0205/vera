@@ -12,11 +12,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
-import { eq, and, sql, isNull, gte, desc } from 'drizzle-orm';
+import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
@@ -602,6 +602,38 @@ export async function POST(request: NextRequest) {
     // ── MODO EMITIR via ecf-api ────────────────────────────────────────────────
 
     const totales = calcularTotales(data.items);
+
+    // ── Bloqueo stock agotado ─────────────────────────────────────────────────
+    // Solo bienes con productoId. Si permiteVentaSinStock=false y stock=0 → 422.
+    // Se verifica antes de consumir secuencia para no quemar un eNCF en vano.
+    const bienesIds = data.items
+      .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
+      .map(i => i.productoId as number);
+
+    if (bienesIds.length > 0) {
+      const prods = await db
+        .select({
+          id:                   products.id,
+          nombre:               products.nombre,
+          stockActual:          products.stockActual,
+          controlaInventario:   products.controlaInventario,
+          permiteVentaSinStock: products.permiteVentaSinStock,
+        })
+        .from(products)
+        .where(and(eq(products.teamId, teamId), inArray(products.id, bienesIds)));
+
+      const bloqueados = prods.filter(
+        p => p.controlaInventario && p.stockActual === 0 && !p.permiteVentaSinStock,
+      );
+
+      if (bloqueados.length > 0) {
+        const nombres = bloqueados.map(p => `"${p.nombre}"`).join(', ');
+        return NextResponse.json(
+          { error: `No se puede emitir: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.` },
+          { status: 422 },
+        );
+      }
+    }
 
     // ── Cuadre de caja ────────────────────────────────────────────────────────
     // Si la empresa tiene el módulo habilitado, no se puede facturar sin un turno
