@@ -65,7 +65,7 @@ const GROUPS: NavGroup[] = [
     label: 'Compras',
     icon: ShoppingCart,
     children: [
-      { href: '/dashboard/compras', label: 'Facturas recibidas' },
+      { href: '/dashboard/compras', label: 'Compras' },
     ],
   },
   {
@@ -94,7 +94,7 @@ const TOP_ITEMS: NavItem[] = [
 // Mapeo href → permiso requerido. Si el usuario no tiene el permiso, el item
 // se omite del sidebar. Items sin entrada aquí son visibles para todos.
 
-const HREF_PERMISSION: Record<string, Permission> = {
+const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Top items
   '/dashboard/clientes':              'clientes:ver',
   '/dashboard/reportes':              'reportes:ver',
@@ -113,8 +113,8 @@ const HREF_PERMISSION: Record<string, Permission> = {
   '/dashboard/listas-precios':        'productos:ver',
   '/dashboard/vendedores':            'productos:ver',
 
-  // Compras — solo owner y admin
-  '/dashboard/compras':               'compras:ver',
+  // Compras — owner/admin (e-CF de proveedores) o productos:gestionar (compras manuales)
+  '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
 
   // Caja
   '/dashboard/caja':                  'caja:ver',
@@ -134,7 +134,8 @@ const HREF_PERMISSION: Record<string, Permission> = {
 function canAccess(role: string | null | undefined, href: string, platformRole?: string | null): boolean {
   const perm = HREF_PERMISSION[href];
   if (!perm) return true; // sin gate explícito → visible para todos
-  return userCan(platformRole, role, perm);
+  const perms = Array.isArray(perm) ? perm : [perm];
+  return perms.some(p => userCan(platformRole, role, p));
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
