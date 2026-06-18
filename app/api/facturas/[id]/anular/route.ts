@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos, teamMembers, users } from '@/lib/db/schema';
+import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -87,6 +88,7 @@ export async function POST(
       tipoEcf:       ecfDocuments.tipoEcf,
       pagoRecibido:  ecfDocuments.pagoRecibido,
       pagoValorCts:  ecfDocuments.pagoValorCts,
+      lineasJson:    ecfDocuments.lineasJson,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
@@ -159,6 +161,23 @@ export async function POST(
       updatedAt:     new Date(),
     })
     .where(eq(ecfDocuments.id, docId));
+
+  // Restaurar stock si fue un documento emitido (no borrador).
+  // Borrador nunca decrementó stock → no hay nada que restaurar.
+  if (doc.estado !== 'BORRADOR' && doc.lineasJson) {
+    try {
+      const lineas = JSON.parse(doc.lineasJson) as Array<Record<string, unknown>>;
+      const items = lineas.map(i => ({
+        productoId:             i.productoId             ? Number(i.productoId)   : null,
+        cantidadItem:           i.cantidadItem           ? Number(i.cantidadItem) : 1,
+        indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 : 2 as 1 | 2,
+      }));
+      restaurarInventario(teamId, user.id, docId, doc.encf, items)
+        .catch((e) => console.error('[anular] stock restore failed', e));
+    } catch {
+      // lineasJson malformado — no bloquear la anulación
+    }
+  }
 
   return NextResponse.json({
     ok: true,
