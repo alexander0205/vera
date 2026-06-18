@@ -1,10 +1,11 @@
-import { requirePermission } from '@/lib/auth/page-guard';
+import { requirePermissionAny } from '@/lib/auth/page-guard';
 
 /**
- * Server-side gate: solo owner y admin (compras:ver) pueden acceder
- * a cualquier página bajo /dashboard/compras. Redirige a /dashboard si no.
+ * Server-side gate: compras:ver (ver e-CF de proveedores) O
+ * productos:gestionar (registrar/ver compras manuales sin ver e-CF).
+ * Redirige a /dashboard si no tiene ninguno de los dos.
  */
 export default async function ComprasLayout({ children }: { children: React.ReactNode }) {
-  await requirePermission('compras:ver');
+  await requirePermissionAny(['compras:ver', 'productos:gestionar']);
   return <>{children}</>;
 }

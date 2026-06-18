@@ -125,7 +125,7 @@ export async function GET() {
     .from(teamMembers)
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
-  if (!userCan(user.platformRole, m?.role, 'compras:ver')) {
+  if (!userCan(user.platformRole, m?.role, 'productos:ver')) {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
   }
 

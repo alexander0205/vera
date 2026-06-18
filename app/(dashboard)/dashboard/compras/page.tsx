@@ -187,15 +187,19 @@ export default function ComprasPage() {
   const { can, isLoading: permLoading } = usePermissions();
   const [showModal, setShowModal] = useState(false);
 
+  const canVerRecibidas = can('compras:ver');
+  const canRegistrar    = can('productos:gestionar');
+  const canVerLocales   = canRegistrar || can('productos:ver');
+
   const { data, isLoading: swrLoading } = useSWR<ComprasResponse>(
-    !permLoading && can('compras:ver') ? '/api/compras' : null,
+    !permLoading && canVerRecibidas ? '/api/compras' : null,
     fetcher,
     { revalidateOnFocus: false },
   );
 
   const { data: locales, isLoading: localesLoading, mutate: mutateLocales } =
     useSWR<ComprasLocalesResponse>(
-      !permLoading && can('compras:ver') ? '/api/compras/local' : null,
+      !permLoading && canVerLocales ? '/api/compras/local' : null,
       fetcher,
       { revalidateOnFocus: false },
     );
@@ -205,7 +209,7 @@ export default function ComprasPage() {
   const comprasLocales = locales?.compras ?? [];
 
   // ── Estados especiales ──
-  if (!permLoading && !can('compras:ver')) {
+  if (!permLoading && !canVerRecibidas && !canVerLocales) {
     return (
       <section className="p-4 sm:p-6">
         <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
@@ -235,7 +239,7 @@ export default function ComprasPage() {
             </p>
           </div>
         </div>
-        {can('productos:gestionar') && (
+        {canRegistrar && (
           <Button size="sm" onClick={() => setShowModal(true)}>
             <Plus className="h-4 w-4 mr-1.5" /> Nueva compra
           </Button>
@@ -254,33 +258,40 @@ export default function ComprasPage() {
         </div>
       )}
 
-      <Tabs defaultValue="recibidas">
+      <Tabs defaultValue={canVerRecibidas ? 'recibidas' : 'registradas'}>
         <TabsList>
-          <TabsTrigger value="recibidas">Facturas recibidas</TabsTrigger>
-          <TabsTrigger value="registradas">
-            Compras registradas
-            {comprasLocales.length > 0 && (
-              <span className="ml-1.5 text-[11px] text-gray-400">({comprasLocales.length})</span>
-            )}
-          </TabsTrigger>
+          {canVerRecibidas && (
+            <TabsTrigger value="recibidas">Facturas recibidas</TabsTrigger>
+          )}
+          {canVerLocales && (
+            <TabsTrigger value="registradas">
+              Compras registradas
+              {comprasLocales.length > 0 && (
+                <span className="ml-1.5 text-[11px] text-gray-400">({comprasLocales.length})</span>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="recibidas">
-          <DataTable<RecepcionEcfDto>
-            data={items}
-            loading={loading}
-            columns={columns}
-            title="e-CF recibidas"
-            emptyState={{
-              icon:  data?.sinContribuyente ? ShoppingCart : FileText,
-              title: data?.sinContribuyente
-                ? 'Tu empresa aún no está registrada para recibir e-CF'
-                : 'No has recibido facturas todavía',
-              hint: emptyHint,
-            }}
-          />
-        </TabsContent>
+        {canVerRecibidas && (
+          <TabsContent value="recibidas">
+            <DataTable<RecepcionEcfDto>
+              data={items}
+              loading={loading}
+              columns={columns}
+              title="e-CF recibidas"
+              emptyState={{
+                icon:  data?.sinContribuyente ? ShoppingCart : FileText,
+                title: data?.sinContribuyente
+                  ? 'Tu empresa aún no está registrada para recibir e-CF'
+                  : 'No has recibido facturas todavía',
+                hint: emptyHint,
+              }}
+            />
+          </TabsContent>
+        )}
 
+        {canVerLocales && (
         <TabsContent value="registradas">
           <DataTable<CompraLocal>
             data={comprasLocales}
@@ -294,6 +305,7 @@ export default function ComprasPage() {
             }}
           />
         </TabsContent>
+        )}
       </Tabs>
     </section>
   );

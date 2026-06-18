@@ -49,3 +49,32 @@ export async function requirePermission(perm: Permission): Promise<void> {
     redirect('/dashboard');
   }
 }
+
+/**
+ * Como requirePermission, pero pasa si el user tiene AL MENOS UNO de los
+ * permisos dados. Útil cuando una misma ruta sirve a casos de uso distintos
+ * con permisos distintos (ej: /dashboard/compras sirve tanto a quien ve
+ * e-CF de proveedores como a quien solo registra entradas de inventario).
+ */
+export async function requirePermissionAny(perms: Permission[]): Promise<void> {
+  const user = await getUser();
+  if (!user) redirect('/sign-in');
+
+  const teamId = await getTeamIdForUser();
+  if (!teamId) redirect('/dashboard/empresas');
+
+  const [u] = await db
+    .select({ platformRole: users.platformRole })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+
+  const [m] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .limit(1);
+
+  const ok = perms.some(perm => userCan(u?.platformRole, m?.role, perm));
+  if (!ok) redirect('/dashboard');
+}
