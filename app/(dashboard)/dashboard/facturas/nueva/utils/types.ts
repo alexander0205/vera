@@ -16,6 +16,11 @@ export interface Producto {
   tasaItbis:   string;
   tipo:        string;
   referencia:  string | null;
+  // Inventario
+  stockActual:          number;
+  stockMinimo:          number;
+  controlaInventario:   boolean;
+  permiteVentaSinStock: boolean;
 }
 
 /** Datos de un borrador guardado para pre-rellenar el form */

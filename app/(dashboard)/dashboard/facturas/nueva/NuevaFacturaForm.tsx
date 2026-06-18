@@ -427,6 +427,16 @@ export default function NuevaFacturaForm({
         unidadMedida: (p as Producto & { unidad?: string }).unidad ?? '',
       },
     });
+
+    if (p.controlaInventario) {
+      if (p.stockActual === 0 && !p.permiteVentaSinStock) {
+        toast.error(`"${p.nombre}" está agotado y no permite venta sin stock.`, { duration: 7000 });
+      } else if (p.stockActual === 0) {
+        toast.warning(`"${p.nombre}" está agotado. Stock actual: 0 unidades.`, { duration: 6000 });
+      } else if (p.stockActual <= p.stockMinimo) {
+        toast.warning(`Stock bajo en "${p.nombre}": ${p.stockActual} unidades (mínimo: ${p.stockMinimo}).`, { duration: 6000 });
+      }
+    }
   }
 
   /**
