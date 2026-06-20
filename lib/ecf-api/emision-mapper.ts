@@ -134,6 +134,16 @@ function mapTipoPago(tp: number): 1 | 2 | 3 {
   return 3; // 3=gratuito, 4=uso propio → gratuito
 }
 
+// Zona horaria de República Dominicana (UTC-4, sin DST). TODA fecha que va a la
+// DGII se formatea en RD para no enviar el día errado (off-by-one en server UTC).
+const TZ_RD = 'America/Santo_Domingo';
+
+/** Date → dd-MM-yyyy en hora RD (no server-local). */
+function ddMmYyyyEnRD(d: Date): string {
+  const [yyyy, mm, dd] = d.toLocaleDateString('en-CA', { timeZone: TZ_RD }).split('-');
+  return `${dd}-${mm}-${yyyy}`;
+}
+
 // Normaliza fecha a dd-MM-yyyy (formato ecf-api).
 // Acepta:
 //   - dd-MM-yyyy (pass-through)
@@ -144,28 +154,23 @@ function toddMMyyyy(d: string | Date): string {
   if (typeof d === 'string') {
     // Ya está en dd-MM-yyyy
     if (/^\d{2}-\d{2}-\d{4}$/.test(d)) return d;
-    // ISO YYYY-MM-DD
+    // ISO YYYY-MM-DD (fecha pura, sin TZ) → reordenar tal cual, sin parsear.
     if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
       const [y, m, dd] = d.split('-');
       return `${dd}-${m}-${y}`;
     }
-    // Full ISO timestamp u otro formato parseable
+    // ISO timestamp completo → fecha en hora RD (no server-local).
     const dt = new Date(d);
     if (isNaN(dt.getTime())) throw new Error(`Invalid date: ${d}`);
-    return toddMMyyyy(dt);
+    return ddMmYyyyEnRD(dt);
   }
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  return `${dd}-${mm}-${yyyy}`;
+  // Date → dd-MM-yyyy en hora RD.
+  return ddMmYyyyEnRD(d);
 }
 
 /** Fecha de hoy en dd-MM-yyyy */
 function todayDdMmYyyy(): string {
-  const now = new Date();
-  const dd   = String(now.getDate()).padStart(2, '0');
-  const mm   = String(now.getMonth() + 1).padStart(2, '0');
-  return `${dd}-${mm}-${now.getFullYear()}`;
+  return ddMmYyyyEnRD(new Date());
 }
 
 /**
@@ -556,6 +561,10 @@ export function mapToEcfApiDto(d: EmitedoEmisionData): {
         rncComprador:          d.rncComprador,
         razonSocialComprador:  d.razonSocialComprador,
         indicadorMontoGravado: 0,
+        // DGII exige TipoIngresos en la NC tipo 34 (rechazo 181 al omitirlo). Debe
+        // coincidir con el de la factura original; default "01" (Operaciones) si el
+        // form no lo reenvía — cubre el 95% (venta normal del giro).
+        tipoIngresos:          formatTipoIngresos(d.tipoIngresos),
         // EmitirEcf34Dto NO tiene montoGravadoTotal — solo totalITBIS1/2 y montoExento
         totalITBIS1:           d.totales.itbis1   || undefined,
         totalITBIS2:           d.totales.itbis2   || undefined,

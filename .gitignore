@@ -48,3 +48,4 @@ scripts/db-seed/*.dump
 output/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+.claire/

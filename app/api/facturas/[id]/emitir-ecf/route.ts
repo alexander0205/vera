@@ -228,19 +228,19 @@ export async function POST(
     // Cross-doc: si es NC/débito (33/34) con padre referenciado, el padre debe
     // tener eCF real. Bloquear "Enviar a DGII" si padre sigue sin-eCF.
     // Resuelve por origenDocumentoId (vínculo por id) o por encf (legacy).
-    let parentDoc: { id: number; tipoEcf: string; encf: string; fechaEmision: Date } | null = null;
+    let parentDoc: { id: number; tipoEcf: string; encf: string; fechaEmision: Date; ecfApiEmisionId: string | null } | null = null;
     let ncfModFinal = doc.ncfModificado;
     if (tipoEcf === '33' || tipoEcf === '34') {
       if (doc.origenDocumentoId) {
         const [p] = await db
-          .select({ id: ecfDocuments.id, tipoEcf: ecfDocuments.tipoEcf, encf: ecfDocuments.encf, fechaEmision: ecfDocuments.fechaEmision })
+          .select({ id: ecfDocuments.id, tipoEcf: ecfDocuments.tipoEcf, encf: ecfDocuments.encf, fechaEmision: ecfDocuments.fechaEmision, ecfApiEmisionId: ecfDocuments.ecfApiEmisionId })
           .from(ecfDocuments)
           .where(and(eq(ecfDocuments.id, doc.origenDocumentoId), eq(ecfDocuments.teamId, teamId)))
           .limit(1);
         parentDoc = p ?? null;
       } else if (doc.ncfModificado) {
         const [p] = await db
-          .select({ id: ecfDocuments.id, tipoEcf: ecfDocuments.tipoEcf, encf: ecfDocuments.encf, fechaEmision: ecfDocuments.fechaEmision })
+          .select({ id: ecfDocuments.id, tipoEcf: ecfDocuments.tipoEcf, encf: ecfDocuments.encf, fechaEmision: ecfDocuments.fechaEmision, ecfApiEmisionId: ecfDocuments.ecfApiEmisionId })
           .from(ecfDocuments)
           .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, doc.ncfModificado)))
           .limit(1);
@@ -273,8 +273,29 @@ export async function POST(
     const codModFinal = codModBody
       ?? doc.codigoModificacion
       ?? (doc.moraOrigenId != null ? 3 : undefined); // ND de mora = 3 (corrige monto)
-    const fechaNcfModFinal = fechaNcfBody
-      ?? (parentDoc ? parentDoc.fechaEmision.toISOString().slice(0, 10) : undefined);
+    // FechaNCFModificado = la fecha-CALENDARIO de emisión del padre tal cual la tiene
+    // la DGII (si no coincide → rechazo cod=634). Las fechas se guardan/manejan como
+    // UTC-medianoche (el provider devuelve p.ej. "2026-06-15T00:00:00.000Z"), así que
+    // la fecha-calendario son los componentes **UTC**. El bug histórico formateaba en
+    // hora RD (UTC-4) → 2026-06-15T00:00Z se veía 14-06 → mandábamos el día anterior.
+    const fechaCalendario = (d: Date) =>
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    let fechaNcfModFinal = fechaNcfBody
+      ?? (parentDoc ? fechaCalendario(parentDoc.fechaEmision) : undefined);
+    // Fuente AUTORITATIVA de la fecha del padre: la FechaEmision que el provider/DGII
+    // tiene registrada (vía su emisionId). Nuestra fecha local puede estar corrida ±1
+    // día por TZ y causar el rechazo "FechaNCFModificado no coincide con la fecha de
+    // emisión del comprobante a modificar". Si la consulta falla, se queda con la
+    // derivación local de arriba.
+    if (!fechaNcfBody && (tipoEcf === '33' || tipoEcf === '34') && parentDoc?.ecfApiEmisionId) {
+      try {
+        const est = await emision.consultarEstado(parentDoc.ecfApiEmisionId);
+        const raw = String(est?.fechaEmision ?? '');
+        const iso = raw.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(iso))      fechaNcfModFinal = iso;        // ISO YYYY-MM-DD[...]
+        else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) fechaNcfModFinal = raw;        // dd-MM-yyyy
+      } catch { /* fallback a la fecha local derivada arriba */ }
+    }
 
     if ((tipoEcf === '33' || tipoEcf === '34') && ncfModFinal) {
       if (codModFinal === undefined || !fechaNcfModFinal) {
@@ -391,19 +412,35 @@ export async function POST(
       );
     }
 
-    // Acquire next eNCF
-    const acquired = await acquireNextEncf(teamId, tipoEcf);
-    if (!acquired) {
-      return NextResponse.json(
-        {
-          error: `No hay secuencias disponibles para tipo ${tipoEcf}. ` +
-                 `Verifica que tengas un rango activo y no vencido en /dashboard/secuencias.`,
-        },
-        { status: 422 },
-      );
+    // Reintento con el MISMO e-NCF: SOLO si el doc trae un e-NCF que nunca llegó al
+    // provider (reservado pero sin enviar — p.ej. timeout antes de la respuesta).
+    // Si ya se envió (ecfApiEmisionId presente), ese e-NCF quedó QUEMADO en el provider:
+    // aunque la DGII lo RECHAZARA, "cada eNcf solo puede emitirse una vez"
+    // (ECFA_NCF_DUPLICADO). En ese caso hay que adquirir uno NUEVO de la secuencia.
+    let encfAsignado: string;
+    let sequenceConsumedId: number | null;
+    let fechaVencimientoSecuencia: string | null;
+    if (/^E\d{10,12}$/.test(doc.encf ?? '') && !doc.ecfApiEmisionId) {
+      encfAsignado = doc.encf!;
+      sequenceConsumedId = null;
+      fechaVencimientoSecuencia = null;
+      console.log(`[emitir-ecf] reintento con MISMO eNCF: ${encfAsignado} para doc #${docId}`);
+    } else {
+      const acquired = await acquireNextEncf(teamId, tipoEcf);
+      if (!acquired) {
+        return NextResponse.json(
+          {
+            error: `No hay secuencias disponibles para tipo ${tipoEcf}. ` +
+                   `Verifica que tengas un rango activo y no vencido en /dashboard/secuencias.`,
+          },
+          { status: 422 },
+        );
+      }
+      encfAsignado = acquired.encf;
+      sequenceConsumedId = acquired.sequenceId;
+      fechaVencimientoSecuencia = acquired.fechaVencimiento;
+      console.log(`[emitir-ecf] eNCF asignado: ${encfAsignado} para doc #${docId}`);
     }
-    const { encf: encfAsignado, sequenceId: sequenceConsumedId, fechaVencimiento: fechaVencimientoSecuencia } = acquired;
-    console.log(`[emitir-ecf] eNCF asignado: ${encfAsignado} para doc #${docId}`);
 
     // Build mapper payload
     const tipoPago = (doc.tipoPago ?? 1) as 1 | 2 | 3 | 4;
@@ -520,7 +557,7 @@ export async function POST(
 
     logAudit({
       teamId, userId: user.id, actor: user.email,
-      action:   'ECF_SEND',
+      action:   estadoFinal === 'RECHAZADO' ? 'ECF_RECHAZADO' : 'ECF_SEND',
       resource: encfFinal,
       ip:       getIp(request),
       meta:     { tipoEcf, trackId, montoTotal: totales.montoTotal, via: 'emitir-ecf', docId },

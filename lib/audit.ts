@@ -28,6 +28,8 @@ export type AuditAction =
   | 'CERT_DELETE'
   | 'ECF_SIGN'
   | 'ECF_SEND'
+  | 'ECF_RECHAZADO'
+  | 'ECF_RESET'
   | 'ECF_VOID'
   | 'DGII_AUTH'
   | 'DGII_AUTH_FAIL'

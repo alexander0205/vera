@@ -211,6 +211,7 @@ export const products = pgTable('products', {
   tasaItbis: varchar('tasa_itbis', { length: 6 }).notNull().default('0.18'), // '0.18'|'0.16'|'0'|'exento'
   tipo: varchar('tipo', { length: 10 }).notNull().default('servicio'),       // 'bien'|'servicio'
   activo: varchar('activo', { length: 5 }).notNull().default('true'),        // 'true'|'false'
+  esMora: boolean('es_mora').notNull().default(false),                        // servicio de sistema: línea de las ND de mora (1 por team)
   createdBy: integer('created_by').references(() => users.id),
   updatedBy: integer('updated_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -301,6 +302,13 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // 3=Corrige monto, 4=Reemplazo contingencia, 5=Ref. factura consumo.
   codigoModificacion: integer('codigo_modificacion'),
   razonModificacion:  text('razon_modificacion'),
+
+  // Saldo a favor del cliente generado por esta Nota de Crédito (tipo 34), capado
+  // a lo PAGADO de la factura origen al momento de crearla.
+  //   NULL     → NC del modelo viejo: reduce el saldo cobrable de su factura.
+  //   NOT NULL → NC del modelo nuevo: NO toca la factura; genera crédito del
+  //              cliente (saldo a favor) para pagar otras facturas.
+  creditoGeneradoCents: integer('credito_generado_cents'),
 
   // Campos adicionales del formulario
   notas:               text('notas'),

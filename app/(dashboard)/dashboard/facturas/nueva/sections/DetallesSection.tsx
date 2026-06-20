@@ -28,6 +28,20 @@ const CONDICIONES_PAGO = [
   { value: '4', label: 'Uso o consumo' },
 ];
 
+// TipoIngresos DGII (campo 607): clasificación del origen del ingreso.
+// El 95% es 01 (venta normal del giro) — default. En una Nota de Crédito/Débito
+// debe coincidir con el tipo de la factura original que se corrige.
+const TIPOS_INGRESO = [
+  { value: '1', label: '01 · Operaciones (giro del negocio)' },
+  { value: '2', label: '02 · Financieros' },
+  { value: '3', label: '03 · Extraordinarios' },
+  { value: '4', label: '04 · Arrendamientos' },
+  { value: '5', label: '05 · Venta de activo depreciable' },
+  { value: '6', label: '06 · Otros' },
+];
+// Tipos donde TipoIngresos NO aplica (campo prohibido en IdDoc): Compras, Gastos, Pagos Exterior.
+const SIN_TIPO_INGRESO = ['41', '43', '47'];
+
 /** Formatea YYYY-MM-DD → DD/MM/YYYY */
 function formatFechaCorta(iso: string): string {
   if (!iso) return '';
@@ -43,31 +57,22 @@ interface Props {
   setCondicionPago: (v: string) => void;
   diasParaPago: string;
   setDiasParaPago: (v: string) => void;
+  tipoIngresos: string;
+  setTipoIngresos: (v: string) => void;
   /** Vencimiento derivado (YYYY-MM-DD) — solo para mostrar el info pill. */
   fechaLimitePago: string;
-  ncfModificado: string;
-  setNcfModificado: (v: string) => void;
-  motivoNota: string;
-  setMotivoNota: (v: string) => void;
-  fechaNcfModificado: string;
-  setFechaNcfModificado: (v: string) => void;
-  razonModificacion?: string;
-  setRazonModificacion?: (v: string) => void;
-  today: string;
 }
 
 export function DetallesSection({
   regla,
+  tipoEcf,
   condicionPago, setCondicionPago,
   diasParaPago, setDiasParaPago,
+  tipoIngresos, setTipoIngresos,
   fechaLimitePago,
-  ncfModificado, setNcfModificado,
-  motivoNota, setMotivoNota,
-  fechaNcfModificado, setFechaNcfModificado,
-  razonModificacion, setRazonModificacion,
-  today,
 }: Props) {
   const esCredito = condicionPago === '2';
+  const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf);
 
   return (
     <div className="space-y-4">
@@ -102,6 +107,22 @@ export function DetallesSection({
             <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
           </div>
         </div>
+
+        {muestraTipoIngresos && (
+          <div>
+            <Label className="text-xs text-gray-600 uppercase tracking-wide">Tipo de ingresos</Label>
+            <Select value={tipoIngresos} onValueChange={setTipoIngresos}>
+              <SelectTrigger className="mt-1 h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS_INGRESO.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* Info pill: vencimiento derivado */}
@@ -114,56 +135,6 @@ export function DetallesSection({
         </div>
       )}
 
-      {/* Modificación de NCF (tipos 33, 34) */}
-      {regla?.requiereNcfModificado && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-3 border-t border-gray-100">
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">e-NCF que se modifica <span className="text-red-500">*</span></Label>
-            <Input
-              className="mt-1 h-10"
-              placeholder="E310000000001"
-              value={ncfModificado}
-              onChange={(e) => setNcfModificado(e.target.value.toUpperCase())}
-              maxLength={13}
-            />
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Motivo <span className="text-red-500">*</span></Label>
-            <Select value={motivoNota || undefined} onValueChange={setMotivoNota}>
-              <SelectTrigger className="mt-1 h-10">
-                <SelectValue placeholder="Selecciona el motivo…" />
-              </SelectTrigger>
-              <SelectContent>
-                {MOTIVOS_NOTA.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Fecha del e-NCF original <span className="text-red-500">*</span></Label>
-            <Input
-              className="mt-1 h-10"
-              type="date"
-              value={fechaNcfModificado}
-              onChange={(e) => setFechaNcfModificado(e.target.value)}
-              max={today}
-            />
-          </div>
-          {motivoNota === 'otro' && setRazonModificacion && (
-            <div className="sm:col-span-2 lg:col-span-3">
-              <Label className="text-xs text-gray-600 uppercase tracking-wide">Especifica el motivo <span className="text-red-500">*</span></Label>
-              <Input
-                className="mt-1 h-10"
-                placeholder="Describe brevemente el motivo de la nota…"
-                value={razonModificacion ?? ''}
-                onChange={(e) => setRazonModificacion(e.target.value)}
-                maxLength={500}
-              />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

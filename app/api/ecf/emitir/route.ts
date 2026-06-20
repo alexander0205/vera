@@ -299,6 +299,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Saldo a favor del cliente generado por una Nota de Crédito (modelo nuevo):
+    // capado a lo PAGADO de la factura origen (no se acredita más de lo que el
+    // cliente realmente pagó). Sin padre en el sistema (factura externa) → no hay
+    // forma de capar, se acredita el total. NULL para no-NC: no genera crédito y la
+    // factura conserva su comportamiento de saldo.
+    let creditoGeneradoCents: number | null = null;
+    if (data.tipoEcf === '34') {
+      const montoNcCts = Math.round(calcularTotales(data.items).montoTotal * 100);
+      if (padreDoc) {
+        const [pg] = await db
+          .select({ pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
+          .from(pagosRecibidos)
+          .where(eq(pagosRecibidos.ecfDocumentId, padreDoc.id));
+        creditoGeneradoCents = Math.min(montoNcCts, Number(pg?.pagado ?? 0));
+      } else {
+        creditoGeneradoCents = montoNcCts;
+      }
+    }
+
     // Las notas 33/34 solo pueden EMITIRSE a DGII referenciando un e-NCF real.
     if ((data.tipoEcf === '33' || data.tipoEcf === '34') && data.modo !== 'borrador' && !data.ncfModificado) {
       return NextResponse.json(
@@ -459,6 +478,7 @@ export async function POST(request: NextRequest) {
             ...(padreDoc ? { origenDocumentoId: padreDoc.id } : {}),
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
+            creditoGeneradoCents,
             lineasJson:           data.lineasJson ?? null,
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,
@@ -600,6 +620,7 @@ export async function POST(request: NextRequest) {
             origenDocumentoId:    padreDoc?.id ?? null,
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
+            creditoGeneradoCents,
             fechaEmision:         new Date(),
             lineasJson:           data.lineasJson ?? null,
             tipoPago:             data.tipoPago ?? 1,

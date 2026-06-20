@@ -24,7 +24,14 @@ export const NC_APLICADO_SUBQUERY = `coalesce((
   SELECT SUM(nc.monto_total) FROM ecf_documents nc
   WHERE nc.team_id = ecf_documents.team_id
     AND nc.tipo_ecf = '34'
+    -- Solo NCs del MODELO VIEJO reducen el saldo de la factura. Las NCs nuevas
+    -- (credito_generado_cents IS NOT NULL) generan saldo a favor del cliente y NO
+    -- tocan la factura.
+    AND nc.credito_generado_cents IS NULL
     AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+    -- Código 2 (Corrige texto) NO tiene efecto monetario → no reduce el saldo.
+    -- Códigos 1 (Anula), 3 (Corrige monto), devolución/descuento y sin-código sí.
+    AND nc.codigo_modificacion IS DISTINCT FROM 2
     AND (
       nc.origen_documento_id = ecf_documents.id
       OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf)
@@ -43,11 +50,41 @@ export async function getNcAplicadoCts(
     FROM ecf_documents
     WHERE team_id = ${teamId}
       AND tipo_ecf = '34'
+      -- Solo NCs del modelo viejo reducen la factura (ver NC_APLICADO_SUBQUERY).
+      AND credito_generado_cents IS NULL
       AND estado NOT IN ('ANULADO', 'RECHAZADO')
+      AND codigo_modificacion IS DISTINCT FROM 2
       AND (
         origen_documento_id = ${docId}
         OR (${encfReal}::text IS NOT NULL AND ncf_modificado = ${encfReal})
       )
   `);
   return Number(rows[0]?.total ?? 0);
+}
+
+/**
+ * Saldo a favor (crédito) disponible de un cliente, en centavos.
+ *   = Σ credito_generado_cents de sus NCs nuevas (no anuladas/rechazadas)
+ *     − Σ pagos con método 'saldo_favor' aplicados a sus facturas.
+ * Nunca negativo.
+ */
+export async function getSaldoFavorCliente(teamId: number, clientId: number): Promise<number> {
+  const rows = await db.execute<{ saldo: string }>(sql`
+    SELECT (
+      coalesce((
+        SELECT SUM(credito_generado_cents) FROM ecf_documents
+        WHERE team_id = ${teamId} AND client_id = ${clientId}
+          AND tipo_ecf = '34' AND credito_generado_cents IS NOT NULL
+          AND estado NOT IN ('ANULADO', 'RECHAZADO')
+      ), 0)
+      -
+      coalesce((
+        SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
+        JOIN ecf_documents f ON f.id = pr.ecf_document_id
+        WHERE f.team_id = ${teamId} AND f.client_id = ${clientId}
+          AND pr.metodo = 'saldo_favor'
+      ), 0)
+    )::text AS saldo
+  `);
+  return Math.max(0, Number(rows[0]?.saldo ?? 0));
 }

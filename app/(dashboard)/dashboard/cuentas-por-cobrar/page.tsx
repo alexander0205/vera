@@ -12,6 +12,7 @@ import { PagoMetodos, pagosValidos, type PagoLinea } from '@/components/pagos/Pa
 
 interface Cuenta {
   id:                   number;
+  clientId:             number | null;
   encf:                 string;
   codigo:               string | null;
   tipoEcf:              string;
@@ -51,20 +52,18 @@ export default function CuentasPorCobrarPage() {
   const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({ tipo: 'todas' });
+  // Filtros 100% client-side sobre el dataset cargado (AR es acotado).
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({
+    cliente: '', tipoDoc: '', estado: '', agrupar: '',
+  });
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
-
-  const filtro = (filterValues.tipo as 'todas' | 'vencidas') || 'todas';
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const url = filtro === 'vencidas'
-        ? '/api/cuentas-por-cobrar?soloVencidas=true'
-        : '/api/cuentas-por-cobrar';
-      const res = await fetch(url);
+      const res = await fetch('/api/cuentas-por-cobrar');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error cargando');
       setData(json);
@@ -73,9 +72,38 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setLoading(false);
     }
-  }, [filtro]);
+  }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  const agrupar = filterValues.agrupar === 'cliente';
+
+  // ── Filtrado client-side: cliente (texto), tipo de documento, vencimiento ──
+  const cuentasFiltradas = useMemo(() => {
+    let rows = data?.cuentas ?? [];
+    const q = (filterValues.cliente ?? '').trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(c =>
+        (c.razonSocialComprador ?? 'consumidor final').toLowerCase().includes(q) ||
+        (c.rncComprador ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (filterValues.tipoDoc === 'factura')      rows = rows.filter(c => c.saldoFactura > 0);
+    else if (filterValues.tipoDoc === 'nota-debito') rows = rows.filter(c => c.moraSaldo > 0);
+
+    if (filterValues.estado === 'vencidas')   rows = rows.filter(c => c.vencida);
+    else if (filterValues.estado === 'al-dia') rows = rows.filter(c => !c.vencida);
+
+    return rows;
+  }, [data, filterValues.cliente, filterValues.tipoDoc, filterValues.estado]);
+
+  // Totales reactivos al filtro (las tarjetas reflejan lo que se ve en la tabla).
+  const totales: Totales = useMemo(() => ({
+    pendiente:     cuentasFiltradas.reduce((s, c) => s + c.saldo, 0),
+    vencido:       cuentasFiltradas.filter(c => c.vencida).reduce((s, c) => s + c.saldo, 0),
+    count:         cuentasFiltradas.length,
+    countVencidas: cuentasFiltradas.filter(c => c.vencida).length,
+  }), [cuentasFiltradas]);
 
   const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
     {
@@ -180,62 +208,99 @@ export default function CuentasPorCobrarPage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — reflejan el filtro activo */}
       {data && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             icon={<DollarSign className="h-5 w-5" />}
-            label="Pendiente total"
-            value={fmtDOP(data.totales.pendiente)}
+            label="Pendiente"
+            value={fmtDOP(totales.pendiente)}
             color="text-gray-900"
           />
           <StatCard
             icon={<AlertTriangle className="h-5 w-5" />}
             label="Vencido"
-            value={fmtDOP(data.totales.vencido)}
+            value={fmtDOP(totales.vencido)}
             color="text-red-600"
           />
           <StatCard
             icon={<Wallet className="h-5 w-5" />}
-            label="Facturas activas"
-            value={data.totales.count.toString()}
+            label="Cuentas"
+            value={totales.count.toString()}
             color="text-gray-900"
           />
           <StatCard
             icon={<Clock className="h-5 w-5" />}
-            label="Facturas vencidas"
-            value={data.totales.countVencidas.toString()}
-            color={data.totales.countVencidas > 0 ? 'text-red-600' : 'text-gray-900'}
+            label="Vencidas"
+            value={totales.countVencidas.toString()}
+            color={totales.countVencidas > 0 ? 'text-red-600' : 'text-gray-900'}
           />
         </div>
       )}
 
-      {/* Tabla con filtro tipo */}
+      {/* Tabla reutilizable con filtros + agrupación */}
       <DataTable<Cuenta>
-        data={data?.cuentas ?? []}
+        data={cuentasFiltradas}
         loading={loading}
         error={error}
         columns={columns}
         filters={[
+          { type: 'search', id: 'cliente', placeholder: 'Buscar cliente o RNC…' },
           {
             type: 'select',
-            id: 'tipo',
-            label: 'Filtro',
+            id: 'tipoDoc',
+            label: 'Tipo',
+            placeholder: 'Todos los tipos',
             options: [
-              { value: 'todas',    label: 'Todas' },
-              { value: 'vencidas', label: 'Vencidas' },
+              { value: 'factura',     label: 'Facturas' },
+              { value: 'nota-debito', label: 'Notas de débito (mora)' },
             ],
-            placeholder: 'Todas',
+          },
+          {
+            type: 'select',
+            id: 'estado',
+            label: 'Estado',
+            placeholder: 'Vencidas y al día',
+            options: [
+              { value: 'vencidas', label: 'Solo vencidas' },
+              { value: 'al-dia',   label: 'Solo al día' },
+            ],
+          },
+          {
+            type: 'select',
+            id: 'agrupar',
+            label: 'Agrupar',
+            placeholder: 'Sin agrupar',
+            options: [
+              { value: 'cliente', label: 'Agrupar por cliente' },
+            ],
           },
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
         rowActions={rowActions}
+        groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
+        renderGroupHeader={agrupar ? ((key, rows) => {
+          const tot  = rows.reduce((s, c) => s + c.saldo, 0);
+          const venc = rows.filter(c => c.vencida).length;
+          return (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-800">
+                {key}
+                <span className="text-gray-400 font-normal"> · {rows.length} cuenta{rows.length !== 1 ? 's' : ''}</span>
+                {venc > 0 && (
+                  <span className="text-red-600 font-normal"> · {venc} vencida{venc !== 1 ? 's' : ''}</span>
+                )}
+              </span>
+              <span className="text-xs font-bold text-gray-900 whitespace-nowrap">{fmtDOP(tot)}</span>
+            </div>
+          );
+        }) : undefined}
         emptyState={{
           icon: CheckCircle,
           title: 'Sin cuentas por cobrar',
-          hint: filtro === 'vencidas'
-            ? 'Ninguna factura está vencida actualmente.'
+          hint: (filterValues.cliente || filterValues.tipoDoc || filterValues.estado)
+            ? 'Ninguna cuenta coincide con los filtros.'
             : 'Todas las facturas a crédito están saldadas.',
         }}
       />
@@ -296,12 +361,28 @@ function PagoModal({
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
 
+  // Saldo a favor del cliente (crédito generado por Notas de Crédito). Solo se
+  // puede aplicar si cubre el saldo COMPLETO de esta factura (crédito ≥ factura).
+  const [creditoCents, setCreditoCents] = useState<number | null>(null);
+  const [usarCredito, setUsarCredito]   = useState(false);
+  const puedeUsarCredito = creditoCents != null && creditoCents >= cuenta.saldo && cuenta.saldo > 0;
+
+  useEffect(() => {
+    if (!cuenta.clientId) { setCreditoCents(0); return; }
+    let vivo = true;
+    fetch(`/api/clientes/${cuenta.clientId}/saldo-favor`)
+      .then(r => r.json())
+      .then(j => { if (vivo) setCreditoCents(j.saldoCents ?? 0); })
+      .catch(() => { if (vivo) setCreditoCents(0); });
+    return () => { vivo = false; };
+  }, [cuenta.clientId]);
+
   // Una o varias líneas (1 línea = pago normal). AR usa referencia.
   const [lineas, setLineas] = useState<PagoLinea[]>([
     { metodo: 'transferencia', valor: '', referencia: '' },
   ]);
 
-  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
+  const valido = usarCredito ? puedeUsarCredito : pagosValidos(lineas, totalDOP, pagadoDOP);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -309,13 +390,15 @@ function PagoModal({
     setGuardando(true);
     setError(null);
     try {
-      const pagos = lineas
-        .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
-        .map(l => ({
-          montoDOP:   parseFloat(l.valor),
-          metodo:     l.metodo,
-          referencia: l.referencia?.trim() || undefined,
-        }));
+      const pagos = usarCredito
+        ? [{ montoDOP: cuenta.saldo / 100, metodo: 'saldo_favor' }]
+        : lineas
+            .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
+            .map(l => ({
+              montoDOP:   parseFloat(l.valor),
+              metodo:     l.metodo,
+              referencia: l.referencia?.trim() || undefined,
+            }));
 
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
         method:  'POST',
@@ -380,14 +463,45 @@ function PagoModal({
             />
           </div>
 
-          <PagoMetodos
-            lineas={lineas}
-            onChange={setLineas}
-            total={totalDOP}
-            yaPagado={pagadoDOP}
-            disabled={guardando}
-            showReferencia
-          />
+          {/* Saldo a favor del cliente (crédito de Notas de Crédito) */}
+          {creditoCents != null && creditoCents > 0 && (
+            <div className={`rounded-lg border p-3 ${usarCredito ? 'border-teal-300 bg-teal-50' : 'border-gray-200 bg-white'}`}>
+              <label className={`flex items-start gap-2 ${puedeUsarCredito ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                <input
+                  type="checkbox"
+                  checked={usarCredito}
+                  disabled={!puedeUsarCredito || guardando}
+                  onChange={e => setUsarCredito(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
+                />
+                <span className="text-sm">
+                  <span className="font-medium text-gray-800">Pagar con saldo a favor</span>
+                  <span className="text-gray-500"> — disponible {fmtDOP(creditoCents)}</span>
+                  {!puedeUsarCredito && (
+                    <span className="block text-[11px] text-amber-600 mt-0.5">
+                      El crédito debe cubrir el total de la factura ({fmtDOP(cuenta.saldo)}) para aplicarlo.
+                    </span>
+                  )}
+                  {usarCredito && (
+                    <span className="block text-[11px] text-teal-700 mt-0.5">
+                      Se aplicarán {fmtDOP(cuenta.saldo)} del saldo a favor; la factura quedará saldada.
+                    </span>
+                  )}
+                </span>
+              </label>
+            </div>
+          )}
+
+          {!usarCredito && (
+            <PagoMetodos
+              lineas={lineas}
+              onChange={setLineas}
+              total={totalDOP}
+              yaPagado={pagadoDOP}
+              disabled={guardando}
+              showReferencia
+            />
+          )}
 
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">

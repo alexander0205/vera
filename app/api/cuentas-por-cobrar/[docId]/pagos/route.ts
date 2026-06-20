@@ -13,10 +13,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getUser, getTeamIdForUser, getPagosDocumento, registrarPagoFacturaConMora } from '@/lib/db/queries';
+import { getSaldoFavorCliente } from '@/lib/facturas/notas-credito';
 import { getTurnoAbierto } from '@/lib/caja/core';
-import { METODO_PAGO_VALUES } from '@/lib/pagos/metodos';
+import { METODO_PAGO_VALUES_VALIDOS, METODO_SALDO_FAVOR } from '@/lib/pagos/metodos';
 import { db } from '@/lib/db/drizzle';
-import { teamMembers } from '@/lib/db/schema';
+import { teamMembers, ecfDocuments } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCan } from '@/lib/config/roles';
 import { logAudit, getIp } from '@/lib/audit';
@@ -24,7 +25,7 @@ import { logAudit, getIp } from '@/lib/audit';
 const schema = z.object({
   montoCentavos: z.number().int().positive().optional(),
   montoDOP:      z.number().positive().optional(),
-  metodo:        z.enum(METODO_PAGO_VALUES),
+  metodo:        z.enum(METODO_PAGO_VALUES_VALIDOS),
   referencia:    z.string().max(100).optional(),
   cuenta:        z.string().max(100).optional(),
   fechaPago:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -37,7 +38,7 @@ const schema = z.object({
 const splitLineaSchema = z.object({
   montoCentavos: z.number().int().positive().optional(),
   montoDOP:      z.number().positive().optional(),
-  metodo:        z.enum(METODO_PAGO_VALUES),
+  metodo:        z.enum(METODO_PAGO_VALUES_VALIDOS),
   referencia:    z.string().max(100).optional(),
   cuenta:        z.string().max(100).optional(),
   notas:         z.string().max(500).optional(),
@@ -141,6 +142,33 @@ export async function POST(
     }
 
     const totalCentavos = lineas.reduce((s, l) => s + l.montoCentavos, 0);
+
+    // ── Saldo a favor: validar que el cliente tenga crédito suficiente ──────────
+    // Aplicar saldo a favor consume el crédito del cliente (generado por NCs). No
+    // puede exceder el disponible. El cliente se toma de la factura que se cobra.
+    const saldoFavorCts = lineas
+      .filter(l => l.metodo === METODO_SALDO_FAVOR)
+      .reduce((s, l) => s + l.montoCentavos, 0);
+    if (saldoFavorCts > 0) {
+      const [doc] = await db
+        .select({ clientId: ecfDocuments.clientId })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.id, docIdNum), eq(ecfDocuments.teamId, teamId)))
+        .limit(1);
+      if (!doc?.clientId) {
+        return NextResponse.json(
+          { error: 'La factura no tiene cliente asociado; no se puede aplicar saldo a favor.' },
+          { status: 422 },
+        );
+      }
+      const disponible = await getSaldoFavorCliente(teamId, doc.clientId);
+      if (saldoFavorCts > disponible) {
+        return NextResponse.json(
+          { error: `Saldo a favor insuficiente. Disponible: RD$${(disponible / 100).toFixed(2)}.` },
+          { status: 422 },
+        );
+      }
+    }
 
     // Cuadre de caja: atribuir el cobro al turno ABIERTO del cajero (si lo hay).
     const turno = await getTurnoAbierto(teamId, user.id);

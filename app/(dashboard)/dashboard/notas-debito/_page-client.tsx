@@ -242,7 +242,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
   ];
 
   const rowActions = (d: NotaDebito): RowAction[] => [
-    { icon: FileText, title: 'Ver detalle',   href: `/dashboard/facturas/${d.id}` },
+    { icon: FileText, title: 'Ver detalle',   href: `/dashboard/notas-debito/${d.id}` },
     { icon: Download, title: 'Descargar PDF', href: `/api/pdf/factura/${d.codigo ?? d.id}` },
   ];
 
@@ -263,7 +263,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
         columns={columns}
         title="Notas de Débito"
         description="Comprobantes tipo 33 — e-CF Nota de Débito (incluye recargos por mora)"
-        rowHref={d => `/dashboard/facturas/${d.id}`}
+        rowHref={d => `/dashboard/notas-debito/${d.id}`}
         rowActions={rowActions}
         filters={[
           { type: 'search',    id: 'q',      placeholder: 'Buscar por cliente, código, motivo…' },
@@ -280,7 +280,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
             : 'Las notas de débito se usan para cargos adicionales sobre una factura (ej. mora)',
           cta: filtered.length === 0 && docs.length > 0 ? undefined : (
             <Button asChild size="sm" className="bg-teal-600 hover:bg-teal-700">
-              <Link href="/dashboard/facturas/nueva?tipo=33">
+              <Link href="/dashboard/notas-debito/nueva">
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva Nota de Débito
               </Link>
@@ -296,7 +296,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
               </Button>
             )}
             <Button asChild className="bg-teal-600 hover:bg-teal-700 rounded-lg">
-              <Link href="/dashboard/facturas/nueva?tipo=33">
+              <Link href="/dashboard/notas-debito/nueva">
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva Nota de Débito
               </Link>

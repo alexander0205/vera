@@ -216,7 +216,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
   ];
 
   const rowActions = (d: NotaCredito): RowAction[] => [
-    { icon: FileText, title: 'Ver detalle',   href: `/dashboard/facturas/${d.id}` },
+    { icon: FileText, title: 'Ver detalle',   href: `/dashboard/notas-credito/${d.id}` },
     { icon: Download, title: 'Descargar PDF', href: `/api/pdf/factura/${d.id}` },
   ];
 
@@ -237,7 +237,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
         columns={columns}
         title="Notas de Crédito"
         description="Comprobantes tipo 34 — e-CF Nota de Crédito"
-        rowHref={d => `/dashboard/facturas/${d.id}`}
+        rowHref={d => `/dashboard/notas-credito/${d.id}`}
         rowActions={rowActions}
         filters={[
           { type: 'search',    id: 'q',     placeholder: 'Buscar por comprador, e-NCF, motivo…' },
@@ -254,7 +254,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
             : 'Las notas de crédito se usan para revertir o reducir facturas previas',
           cta: filtered.length === 0 && docs.length > 0 ? undefined : (
             <Button asChild size="sm" className="bg-teal-600 hover:bg-teal-700">
-              <Link href="/dashboard/facturas/nueva?tipo=34">
+              <Link href="/dashboard/notas-credito/nueva">
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva Nota de Crédito
               </Link>
@@ -270,7 +270,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
               </Button>
             )}
             <Button asChild className="bg-teal-600 hover:bg-teal-700 rounded-lg">
-              <Link href="/dashboard/facturas/nueva?tipo=34">
+              <Link href="/dashboard/notas-credito/nueva">
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva Nota de Crédito
               </Link>

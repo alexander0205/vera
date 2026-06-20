@@ -16,6 +16,12 @@ interface Props {
   setCategoriaId: (v: string) => void;
   tipoEcf: string;
   onChangeTipo: (t: string) => void;
+  /** Oculta el dropdown de categoría (pantalla con categoría fija por ruta). */
+  ocultarCategoria?: boolean;
+  /** Muestra el código del tipo (e34/e33). Se oculta si la nota no tendrá e-CF real. */
+  mostrarCodigoTipo?: boolean;
+  /** Fuerza "Sin comprobante fiscal" en el bloque NCF (nota sobre factura sin e-CF). */
+  sinComprobante?: boolean;
   secuencia: SecuenciaInfo | null;
   fechaEmision: string;
   onEditarNcf: () => void;
@@ -28,8 +34,12 @@ interface Props {
  */
 export function CompactHeader({
   empresa, categoriaId, setCategoriaId, tipoEcf, onChangeTipo,
+  ocultarCategoria, mostrarCodigoTipo = true, sinComprobante = false,
   secuencia, fechaEmision, onEditarNcf,
 }: Props) {
+  // "Sin comprobante" efectivo: la secuencia es sin-ncf, o es una nota sobre una
+  // factura sin e-CF (nunca tendrá e-NCF real).
+  const sinNcfEfectivo = sinComprobante || !!secuencia?.sinNcf;
   const { tipoVisible } = useTiposDisponibles();
   const categoriaActual = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
   // Filtrar por secuencias disponibles (e31/e32/sin-ncf siempre). Fallback a la
@@ -56,48 +66,59 @@ export function CompactHeader({
         {/* Logo + company */}
         <EmpresaBlock empresa={empresa} />
 
-        {/* Tipos selector — compact, two stacked dropdowns */}
+        {/* Tipos selector — categoría (oculta si fija por ruta) + subtipo. El
+            subtipo solo se muestra cuando la categoría tiene más de un tipo;
+            con un solo tipo (NC/ND/Compras) se rotula el documento fijo. */}
         <div className="flex items-center gap-1 min-w-0">
-          <Select
-            value={categoriaId}
-            onValueChange={(catId) => {
-              // Radix emite '' cuando el item seleccionado se desmonta — ignorar.
-              if (!catId) return;
-              const cat = CATEGORIAS_ECF.find(c => c.id === catId) ?? CATEGORIAS_ECF[0];
-              setCategoriaId(catId);
-              onChangeTipo(cat.tipos[0].codigo);
-            }}
-          >
-            <SelectTrigger className="border-0 bg-transparent text-gray-700 hover:text-gray-900 text-sm font-medium h-8 px-2 shadow-none focus:ring-0 gap-1 w-auto">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIAS_ECF.map(cat => (
-                <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={tipoEcf} onValueChange={(v) => { if (v) onChangeTipo(v); }}>
-            <SelectTrigger className="border-0 bg-transparent text-teal-700 font-medium text-xs h-7 px-2 shadow-none focus:ring-0 gap-1 w-auto">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {tiposCategoria.map(t => (
-                <SelectItem key={t.codigo} value={t.codigo}>{t.etiqueta}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!ocultarCategoria && (
+            <Select
+              value={categoriaId}
+              onValueChange={(catId) => {
+                // Radix emite '' cuando el item seleccionado se desmonta — ignorar.
+                if (!catId) return;
+                const cat = CATEGORIAS_ECF.find(c => c.id === catId) ?? CATEGORIAS_ECF[0];
+                setCategoriaId(catId);
+                onChangeTipo(cat.tipos[0].codigo);
+              }}
+            >
+              <SelectTrigger className="border-0 bg-transparent text-gray-700 hover:text-gray-900 text-sm font-medium h-8 px-2 shadow-none focus:ring-0 gap-1 w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORIAS_ECF.map(cat => (
+                  <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {ocultarCategoria && (
+            <span className="text-sm font-semibold text-gray-800 px-1">{categoriaActual.label}</span>
+          )}
+          {tiposCategoria.length > 1 ? (
+            <Select value={tipoEcf} onValueChange={(v) => { if (v) onChangeTipo(v); }}>
+              <SelectTrigger className="border-0 bg-transparent text-teal-700 font-medium text-xs h-7 px-2 shadow-none focus:ring-0 gap-1 w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {tiposCategoria.map(t => (
+                  <SelectItem key={t.codigo} value={t.codigo}>{t.etiqueta}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : mostrarCodigoTipo ? (
+            <span className="text-teal-700 font-medium text-xs px-2">{tiposCategoria[0]?.etiqueta}</span>
+          ) : null}
         </div>
 
         {/* NCF block */}
         <div className="flex items-center gap-2 min-w-0">
-          {!secuencia?.sinNcf && (
+          {!sinNcfEfectivo && (
             <span className="text-[11px] uppercase font-medium text-gray-500 tracking-wide">NCF</span>
           )}
-          {secuencia === null ? (
-            <span className="font-mono text-sm text-gray-300 animate-pulse">Cargando…</span>
-          ) : secuencia.sinNcf ? (
+          {sinNcfEfectivo ? (
             <span className="text-[11px] text-gray-600 bg-gray-100 border border-gray-200 rounded px-2 py-0.5 font-medium">Sin comprobante fiscal</span>
+          ) : secuencia === null ? (
+            <span className="font-mono text-sm text-gray-300 animate-pulse">Cargando…</span>
           ) : secuencia.encf ? (
             <span className="font-mono text-sm font-bold text-gray-900 break-all">{secuencia.encf}</span>
           ) : secuencia.sinSecuencia ? (
@@ -109,7 +130,7 @@ export function CompactHeader({
           ) : (
             <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Sin disponibles</span>
           )}
-          {!secuencia?.sinNcf && (
+          {!sinNcfEfectivo && (
             <button
               type="button"
               onClick={onEditarNcf}

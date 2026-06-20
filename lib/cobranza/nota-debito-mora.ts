@@ -13,7 +13,7 @@
  */
 
 import { db } from '@/lib/db/drizzle';
-import { teams, ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
+import { teams, ecfDocuments, pagosRecibidos, products } from '@/lib/db/schema';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
@@ -107,6 +107,11 @@ export async function generarNotaDebitoMora(
   const montoMora = Math.round((saldoPadre * pct) / 10000);
   if (montoMora <= 0) return { ok: false, reason: 'mora_cero' };
 
+  // ── Servicio "Interés por mora" del catálogo (find-or-create, reutilizable) ─
+  // La línea de la ND referencia este producto en vez de texto suelto. El % de
+  // mora NO vive aquí: sigue en teams.recargo_mora_porcentaje (fuente única).
+  const moraProductoId = await getOrCreateMoraProducto(padre.teamId, opts.createdBy ?? null);
+
   // ── Insertar la ND tipo 33 (BORRADOR, exenta de ITBIS) ─────────────────────
   const codigo = await generarCodigoFactura(db, { teamId: padre.teamId, userId: opts?.createdBy ?? null, tipoEcf: '33' });
   const encf = `BOR-33-${Date.now().toString(36).toUpperCase().slice(-8)}`;
@@ -138,6 +143,7 @@ export async function generarNotaDebitoMora(
       moraOrigenId:         padre.id,
       notas:                `Nota de débito por mora — ${padre.codigo ?? padre.encf}`,
       lineasJson:           JSON.stringify([{
+        productoId:              moraProductoId,
         nombreItem:              'Interés por mora',
         cantidadItem:            1,
         precioUnitarioItem:      montoMora / 100,
@@ -149,4 +155,45 @@ export async function generarNotaDebitoMora(
     .returning({ id: ecfDocuments.id });
 
   return { ok: true, notaDebitoId: nd.id, montoCentavos: montoMora };
+}
+
+/**
+ * Devuelve el id del servicio "Interés por mora" del team, creándolo si falta.
+ * Servicio de sistema (es_mora=true), exento de ITBIS, sin precio fijo (el monto
+ * es dinámico por factura). Único por team — el índice parcial protege carreras.
+ */
+async function getOrCreateMoraProducto(teamId: number, createdBy: number | null): Promise<number> {
+  const [existing] = await db
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.teamId, teamId), eq(products.esMora, true)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  try {
+    const [creado] = await db
+      .insert(products)
+      .values({
+        teamId,
+        nombre:      'Interés por mora',
+        descripcion: 'Recargo automático por pago tardío. El % se configura en Mi empresa.',
+        tipo:        'servicio',
+        tasaItbis:   'exento',
+        precio:      0,            // monto dinámico por factura; sin precio fijo de catálogo
+        esMora:      true,
+        activo:      'true',
+        createdBy,
+      })
+      .returning({ id: products.id });
+    return creado.id;
+  } catch {
+    // Carrera: otro proceso lo creó (índice único parcial) → re-seleccionar.
+    const [row] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.teamId, teamId), eq(products.esMora, true)))
+      .limit(1);
+    if (!row) throw new Error('No se pudo obtener el servicio de mora');
+    return row.id;
+  }
 }

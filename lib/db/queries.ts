@@ -543,7 +543,12 @@ export async function getCuentasPorCobrar(
         SELECT SUM(nc.monto_total) FROM ecf_documents nc
         WHERE nc.team_id = ecf_documents.team_id
           AND nc.tipo_ecf = '34'
+          -- Solo NCs del modelo viejo reducen la factura; las nuevas generan
+          -- saldo a favor del cliente (credito_generado_cents IS NOT NULL).
+          AND nc.credito_generado_cents IS NULL
           AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+          -- Código 2 (Corrige texto) no afecta el saldo (sin efecto monetario).
+          AND nc.codigo_modificacion IS DISTINCT FROM 2
           AND (
             nc.origen_documento_id = ecf_documents.id
             OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf)

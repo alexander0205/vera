@@ -7,7 +7,7 @@ import { Loader2, Plus, Search } from 'lucide-react';
 
 export function Autocomplete<T extends { id: number }>({
   placeholder, onSearch, renderOption, onSelect, value, onClear, onCreate, createLabel,
-  onFreeText, freeTextLabel,
+  onFreeText, freeTextLabel, dropdownMinWidth,
 }: {
   placeholder: string;
   onSearch: (q: string) => Promise<T[]>;
@@ -21,6 +21,9 @@ export function Autocomplete<T extends { id: number }>({
   onFreeText?: (text: string) => void;
   /** Etiqueta del botón "usar texto libre" cuando no hay match. */
   freeTextLabel?: string;
+  /** Ancho mínimo (px) del dropdown. Si supera el ancho del input, el panel se
+   *  ensancha más allá de la celda (útil para opciones tipo tabla). */
+  dropdownMinWidth?: number;
 }) {
   const [query, setQuery]       = useState('');
   const [results, setResults]   = useState<T[]>([]);
@@ -141,6 +144,15 @@ export function Autocomplete<T extends { id: number }>({
     }
   }
 
+  // Ancho del panel: por defecto = ancho del input; si se pide dropdownMinWidth
+  // mayor, el panel se ensancha (limitado al viewport) y se ajusta el left para
+  // que no se desborde por el borde derecho.
+  const vw      = typeof window !== 'undefined' ? window.innerWidth : (dropRect?.width ?? 0);
+  const dropW   = dropRect
+    ? Math.min(Math.max(dropRect.width, dropdownMinWidth ?? 0), vw - 16)
+    : 0;
+  const dropLeft = dropRect ? Math.max(8, Math.min(dropRect.left, vw - dropW - 8)) : 0;
+
   const dropdown = open && dropRect ? (
     <div
       ref={dropRef}
@@ -149,8 +161,8 @@ export function Autocomplete<T extends { id: number }>({
       style={{
         position: 'fixed',
         top:   dropRect.bottom + 4,
-        left:  dropRect.left,
-        width: dropRect.width,
+        left:  dropLeft,
+        width: dropW,
         zIndex: 9999,
         pointerEvents: 'auto',
       }}

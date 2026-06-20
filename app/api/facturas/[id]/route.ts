@@ -231,6 +231,7 @@ export async function GET(
     origenDocumentoId: doc.origenDocumentoId ?? null,
     codigoModificacion: doc.codigoModificacion ?? null,
     razonModificacion: doc.razonModificacion ?? null,
+    creditoGeneradoCents: doc.creditoGeneradoCents ?? null,
     moraOrigenId: doc.moraOrigenId ?? null,
     fechaEmision: doc.fechaEmision.toISOString(),
     fechaLimitePago: doc.fechaLimitePago,

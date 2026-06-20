@@ -62,6 +62,15 @@ function fmtFecha(iso: string | null): string {
   return new Date(iso).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+/** Timestamp UTC → YYYY-MM-DD en hora LOCAL, para inputs date. Evita el off-by-one
+ *  de `iso.slice(0,10)` (que toma la parte UTC) vs lo que muestra fmtFecha (local). */
+function toLocalDateInput(ts: string | null): string {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ─── Badge de estado ──────────────────────────────────────────────────────────
 
 function EstadoBadge({ estado }: { estado: Secuencia['estado'] }) {
@@ -141,7 +150,7 @@ export default function SecuenciasPage() {
     setEditNombre(s.nombre);
     setEditHasta(s.secuenciaHasta);
     setEditSiguiente(s.secuenciaActual);
-    setEditVenc(s.fechaVencimiento ? s.fechaVencimiento.slice(0, 10) : '');
+    setEditVenc(toLocalDateInput(s.fechaVencimiento));
     setEditPreferida(s.preferida);
     setEditAutomatica(s.numeracionAutomatica);
     setEditSucursal(s.sucursal ?? '');
