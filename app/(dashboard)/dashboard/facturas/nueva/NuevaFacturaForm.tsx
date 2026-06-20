@@ -456,6 +456,12 @@ export default function NuevaFacturaForm({
   // Guard atómico anti doble-submit: el `loading` (state React) no bloquea clicks
   // disparados en el mismo tick. Este ref sí, de forma síncrona.
   const submittingRef = useRef(false);
+  // ── Tracking anti-duplicados ────────────────────────────────────────────────
+  // fid = id único por MONTAJE del form (distingue 2 pestañas / re-montajes).
+  // submitSeq = nº de submit dentro de este montaje (distingue doble-click/retry).
+  // Se manda en cada submit como `_traza` y se loguea server-side junto al docId.
+  const formInstanceId = useRef('f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)).current;
+  const submitSeqRef   = useRef(0);
 
   // ── TOP SECTION: Almacén / Lista / Vendedor ───────────────────────────────
   const [showAlmacen, setShowAlmacen]               = useState(false);
@@ -821,6 +827,17 @@ export default function NuevaFacturaForm({
   }
 
   async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
+    // Traza anti-duplicados: identifica el botón y la secuencia de clicks de este
+    // montaje. Se loguea aquí (consola) y se manda al server (`_traza`) para ligar
+    // cada submit con el documento creado y diagnosticar las facturas duplicadas.
+    const traza = {
+      fid:   formInstanceId,
+      seq:   ++submitSeqRef.current,
+      boton: opts?.andThen ? `${modo}+${opts.andThen}` : modo,
+      ts:    Date.now(),
+    };
+    console.log('[factura-submit]', traza, 'submitting=', submittingRef.current, 'loading=', loading);
+
     // Sin eCF seleccionado → siempre guardar como borrador (no se emite a DGII)
     // sin-ncf (factura sin comprobante) o nota sobre factura de origen sin-ncf
     // (no hay e-NCF que referenciar) → solo borrador, nunca se emite a la DGII.
@@ -924,7 +941,7 @@ export default function NuevaFacturaForm({
 
     setLoading(true); setError(null);
     try {
-      const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modoEfectivo)) });
+      const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...buildPayload(modoEfectivo), _traza: traza }) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
       try { localStorage.removeItem(draftKey); } catch {}

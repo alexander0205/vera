@@ -31,6 +31,7 @@ export type AuditAction =
   | 'ECF_RECHAZADO'
   | 'ECF_RESET'
   | 'ECF_VOID'
+  | 'FACTURA_TRAZA'
   | 'DGII_AUTH'
   | 'DGII_AUTH_FAIL'
   | 'HABILITACION_SIGN'

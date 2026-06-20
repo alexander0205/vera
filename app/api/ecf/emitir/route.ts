@@ -110,6 +110,15 @@ const emitirSchema = z.object({
 
   // Edición de borrador existente — hacer UPDATE en lugar de INSERT
   borradorId: z.number().int().positive().optional(),
+
+  // Traza anti-duplicados (tracking): identifica el botón + secuencia de clicks
+  // del montaje del form que disparó este submit. Solo para diagnóstico.
+  _traza: z.object({
+    fid:   z.string().max(40).optional(),
+    seq:   z.number().int().optional(),
+    boton: z.string().max(40).optional(),
+    ts:    z.number().optional(),
+  }).optional(),
 });
 
 // ─── Adquirir próximo eNCF de secuencia local ────────────────────────────────
@@ -636,6 +645,26 @@ export async function POST(request: NextRequest) {
         { userId: user.id, teamId },
       );
 
+      // Tracking anti-duplicados: liga la traza del form (fid/seq/botón) con el
+      // documento creado o deduplicado. Para diagnosticar facturas duplicadas:
+      // dos FACTURA_TRAZA con mismo docId distinto = creó duplicado; mismo fid →
+      // misma pestaña (doble-submit que el dedup no atrapó); fid distinto → 2
+      // pestañas / re-montaje.
+      logAudit({
+        teamId, userId: user.id, actor: user.email,
+        action:   'FACTURA_TRAZA',
+        resource: `doc:${outcome.row.id}`,
+        ip:       getIp(request),
+        meta: {
+          ...(data._traza ?? {}),
+          modo:    'borrador',
+          tipo:    data.tipoEcf,
+          montoCts,
+          deduped: outcome.deduped,
+          docId:   outcome.row.id,
+        },
+      });
+
       if (outcome.deduped) {
         return NextResponse.json({
           ok:           true,
@@ -967,7 +996,7 @@ export async function POST(request: NextRequest) {
       action:   'ECF_SEND',
       resource: encf,
       ip:       getIp(request),
-      meta:     { tipoEcf: data.tipoEcf, trackId, montoTotal: totales.montoTotal, via: 'ecf-api' },
+      meta:     { tipoEcf: data.tipoEcf, trackId, montoTotal: totales.montoTotal, via: 'ecf-api', traza: data._traza ?? null, docId: saved.id },
     });
 
     import('@/lib/webhooks').then(({ dispatchWebhook }) =>
