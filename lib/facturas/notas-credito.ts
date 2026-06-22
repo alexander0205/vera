@@ -65,7 +65,8 @@ export async function getNcAplicadoCts(
 /**
  * Saldo a favor (crédito) disponible de un cliente, en centavos.
  *   = Σ credito_generado_cents de sus NCs nuevas (no anuladas/rechazadas)
- *     − Σ pagos con método 'saldo_favor' aplicados a sus facturas.
+ *     − Σ pagos con método 'saldo_favor' o 'nota_credito' aplicados a sus facturas.
+ * Incluye el sobrante de NCs usadas como voucher (NC > factura → resto queda aquí).
  * Nunca negativo.
  */
 export async function getSaldoFavorCliente(teamId: number, clientId: number): Promise<number> {
@@ -82,9 +83,32 @@ export async function getSaldoFavorCliente(teamId: number, clientId: number): Pr
         SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
         JOIN ecf_documents f ON f.id = pr.ecf_document_id
         WHERE f.team_id = ${teamId} AND f.client_id = ${clientId}
-          AND pr.metodo = 'saldo_favor'
+          AND pr.metodo IN ('saldo_favor', 'nota_credito')
       ), 0)
     )::text AS saldo
   `);
   return Math.max(0, Number(rows[0]?.saldo ?? 0));
+}
+
+/**
+ * Notas de Crédito de un cliente disponibles para usar como pago (voucher):
+ * tienen crédito (>0), no anuladas/rechazadas, y NO se han usado todavía
+ * (ningún pago las referencia). Cada NC se usa una sola vez.
+ */
+export async function getNotasCreditoDisponibles(
+  teamId: number,
+  clientId: number,
+): Promise<{ id: number; codigo: string | null; encf: string | null; montoCents: number }[]> {
+  const rows = await db.execute<{ id: number; codigo: string | null; encf: string | null; credito: string }>(sql`
+    SELECT nc.id, nc.codigo, nc.encf, nc.credito_generado_cents::text AS credito
+    FROM ecf_documents nc
+    WHERE nc.team_id = ${teamId} AND nc.client_id = ${clientId}
+      AND nc.tipo_ecf = '34'
+      AND nc.credito_generado_cents IS NOT NULL AND nc.credito_generado_cents > 0
+      AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+      AND NOT EXISTS (SELECT 1 FROM pagos_recibidos p WHERE p.nota_credito_id = nc.id)
+    ORDER BY nc.id DESC
+  `);
+  return (rows as unknown as { id: number; codigo: string | null; encf: string | null; credito: string }[])
+    .map(r => ({ id: Number(r.id), codigo: r.codigo, encf: r.encf, montoCents: Number(r.credito) }));
 }

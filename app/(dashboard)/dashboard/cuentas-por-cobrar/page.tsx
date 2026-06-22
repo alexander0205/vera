@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { PagoMetodos, pagosValidos, type PagoLinea } from '@/components/pagos/PagoMetodos';
+import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 
 interface Cuenta {
   id:                   number;
@@ -365,15 +365,20 @@ function PagoModal({
   // puede aplicar si cubre el saldo COMPLETO de esta factura (crédito ≥ factura).
   const [creditoCents, setCreditoCents] = useState<number | null>(null);
   const [usarCredito, setUsarCredito]   = useState(false);
+  const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
   const puedeUsarCredito = creditoCents != null && creditoCents >= cuenta.saldo && cuenta.saldo > 0;
 
   useEffect(() => {
-    if (!cuenta.clientId) { setCreditoCents(0); return; }
+    if (!cuenta.clientId) { setCreditoCents(0); setNotasCredito([]); return; }
     let vivo = true;
     fetch(`/api/clientes/${cuenta.clientId}/saldo-favor`)
       .then(r => r.json())
       .then(j => { if (vivo) setCreditoCents(j.saldoCents ?? 0); })
       .catch(() => { if (vivo) setCreditoCents(0); });
+    fetch(`/api/clientes/${cuenta.clientId}/notas-credito-disponibles`)
+      .then(r => r.json())
+      .then(j => { if (vivo) setNotasCredito(Array.isArray(j.notas) ? j.notas : []); })
+      .catch(() => { if (vivo) setNotasCredito([]); });
     return () => { vivo = false; };
   }, [cuenta.clientId]);
 
@@ -395,9 +400,10 @@ function PagoModal({
         : lineas
             .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
             .map(l => ({
-              montoDOP:   parseFloat(l.valor),
-              metodo:     l.metodo,
-              referencia: l.referencia?.trim() || undefined,
+              montoDOP:      parseFloat(l.valor),
+              metodo:        l.metodo,
+              referencia:    l.referencia?.trim() || undefined,
+              notaCreditoId: l.notaCreditoId ?? undefined,
             }));
 
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
@@ -500,6 +506,7 @@ function PagoModal({
               yaPagado={pagadoDOP}
               disabled={guardando}
               showReferencia
+              notasCredito={notasCredito}
             />
           )}
 

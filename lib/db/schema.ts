@@ -544,8 +544,10 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   ecfDocumentId:   integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
   /** Monto en centavos (DOP). */
   montoCentavos:   integer('monto_centavos').notNull(),
-  /** Método: efectivo, transferencia, tarjeta, cheque, otro. */
+  /** Método: efectivo, transferencia, tarjeta, cheque, otro, saldo_favor, nota_credito. */
   metodo:          varchar('metodo', { length: 30 }).notNull(),
+  /** NC consumida cuando metodo='nota_credito' (voucher por código, uso único). */
+  notaCreditoId:   integer('nota_credito_id'),
   /** Identificador opcional: número de cheque, últimos 4 de tarjeta, etc. */
   referencia:      varchar('referencia', { length: 100 }),
   /** Cuenta bancaria/caja a la que entró (free-text). */

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { METODOS_PAGO, type MetodoOption } from '@/lib/pagos/metodos';
+import { METODOS_PAGO, METODO_NOTA_CREDITO, METODO_PAGO_LABELS, type MetodoOption } from '@/lib/pagos/metodos';
 
 // Re-export para compatibilidad con imports existentes. Fuente: lib/pagos/metodos.
 export { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -20,6 +20,14 @@ export interface PagoLinea {
   valor: string;       // DOP como string (input controlado)
   cuenta?: string;     // cuenta bancaria (opcional)
   referencia?: string; // opcional
+  notaCreditoId?: number | null; // NC consumida si metodo='nota_credito'
+}
+
+/** NC del cliente usable como pago (voucher por código). */
+export interface NotaCreditoDisponible {
+  id: number;
+  codigo: string | null;
+  montoCents: number;
 }
 
 /** Cuentas bancarias sugeridas (igual que en las pantallas originales). */
@@ -41,6 +49,8 @@ interface PagoMetodosProps {
   showReferencia?: boolean; // mostrar campo referencia por línea. Default false.
   /** Restringe las opciones de método (algunos endpoints aceptan menos de 8). */
   metodos?: MetodoOption[];
+  /** NCs disponibles del cliente. Si hay, se ofrece el método 'Nota de crédito'. */
+  notasCredito?: NotaCreditoDisponible[];
 }
 
 // ─── Helpers exportados ───────────────────────────────────────────────────────
@@ -77,7 +87,13 @@ export function PagoMetodos({
   showCuenta = false,
   showReferencia = false,
   metodos = METODOS_PAGO,
+  notasCredito,
 }: PagoMetodosProps) {
+  const hayNc = !!notasCredito && notasCredito.length > 0;
+  // Ofrecer 'Nota de crédito' como método solo si el cliente tiene NCs disponibles.
+  const metodosUI: MetodoOption[] = hayNc
+    ? [...metodos, { value: METODO_NOTA_CREDITO, label: METODO_PAGO_LABELS[METODO_NOTA_CREDITO] }]
+    : metodos;
   const disponible = Math.max(0, total - yaPagado);
   const suma       = sumaPagos(lineas);
   const restoCents = Math.round(disponible * 100) - Math.round(suma * 100);
@@ -128,12 +144,16 @@ export function PagoMetodos({
               <Label className="text-[10px] text-gray-500 uppercase">Método</Label>
               <Select
                 value={l.metodo}
-                onValueChange={(v) => setLinea(i, { metodo: v })}
+                onValueChange={(v) => setLinea(i, {
+                  metodo: v,
+                  // Al cambiar de/hacia 'nota_credito' limpiar la NC y el monto.
+                  ...(v === METODO_NOTA_CREDITO ? { valor: '', notaCreditoId: null } : { notaCreditoId: null }),
+                })}
                 disabled={disabled}
               >
                 <SelectTrigger className="mt-1 h-9 text-sm w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {metodos.map(m => (
+                  {metodosUI.map(m => (
                     <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -154,8 +174,40 @@ export function PagoMetodos({
             )}
           </div>
 
+          {/* Selector de Nota de crédito (voucher por código) */}
+          {l.metodo === METODO_NOTA_CREDITO && (
+            <div className="min-w-0">
+              <Label className="text-[10px] text-gray-500 uppercase">Nota de crédito</Label>
+              <Select
+                value={l.notaCreditoId ? String(l.notaCreditoId) : ''}
+                onValueChange={(v) => {
+                  const nc = notasCredito?.find(n => String(n.id) === v);
+                  if (!nc) return;
+                  // Aplicar el monto de la NC, capado a lo que falta cubrir (otras líneas
+                  // ya cuentan). El sobrante (NC > factura) queda como saldo a favor.
+                  const otrasCents = Math.round(suma * 100) - Math.round((parseFloat(l.valor || '0') || 0) * 100);
+                  const capCents   = Math.max(0, Math.round(disponible * 100) - otrasCents);
+                  const aplicar    = Math.min(nc.montoCents, capCents);
+                  setLinea(i, { notaCreditoId: nc.id, valor: (aplicar / 100).toFixed(2) });
+                }}
+                disabled={disabled}
+              >
+                <SelectTrigger className="mt-1 h-9 text-sm w-full">
+                  <SelectValue placeholder="Elige una nota de crédito…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(notasCredito ?? []).map(n => (
+                    <SelectItem key={n.id} value={String(n.id)}>
+                      {(n.codigo ?? `NC #${n.id}`)} — RD${fmt(n.montoCents / 100)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Fila 2: monto + cuenta (cuenta solo si se reveló) */}
-          <div className={`grid gap-2 ${showCuenta && cuentaVisible(i, l) ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-2 ${showCuenta && cuentaVisible(i, l) && l.metodo !== METODO_NOTA_CREDITO ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div className="min-w-0">
               <Label className="text-[10px] text-gray-500 uppercase">Monto</Label>
               <div className="relative mt-1">
@@ -166,7 +218,7 @@ export function PagoMetodos({
                   placeholder="0.00"
                   value={l.valor}
                   onChange={(e) => setLinea(i, { valor: e.target.value })}
-                  disabled={disabled}
+                  disabled={disabled || l.metodo === METODO_NOTA_CREDITO}
                 />
               </div>
             </div>

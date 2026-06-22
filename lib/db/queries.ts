@@ -887,6 +887,8 @@ export async function registrarPagoFacturaConMora(input: {
     referencia?:   string | null;
     cuenta?:       string | null;
     notas?:        string | null;
+    /** NC consumida (metodo='nota_credito'). Voucher de uso único. */
+    notaCreditoId?: number | null;
   }>;
 }) {
   if (input.lineas.length < 1) throw new Error('Debe incluir al menos un método de pago');
@@ -963,6 +965,7 @@ export async function registrarPagoFacturaConMora(input: {
     referencia:    string | null;
     cuenta:        string | null;
     notas:         string | null;
+    notaCreditoId: number | null;
   };
   const inserts: Insert[] = [];
   let remFactura = saldoFactura;
@@ -971,6 +974,9 @@ export async function registrarPagoFacturaConMora(input: {
 
   for (const linea of input.lineas) {
     let monto = linea.montoCentavos;
+    // La NC se referencia en UN solo pago (índice único nota_credito_id). El resto
+    // del split lleva null aunque conserve el método 'nota_credito'.
+    let ncId: number | null = linea.notaCreditoId ?? null;
 
     // 1) Llenar la factura primero
     const x = Math.min(monto, remFactura);
@@ -982,7 +988,9 @@ export async function registrarPagoFacturaConMora(input: {
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
         notas:         linea.notas ?? null,
+        notaCreditoId: ncId,
       });
+      ncId = null;
       remFactura  -= x;
       monto       -= x;
       facturaCents += x;
@@ -1000,7 +1008,9 @@ export async function registrarPagoFacturaConMora(input: {
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
         notas:         linea.notas ?? null,
+        notaCreditoId: ncId,
       });
+      ncId = null;
       nd.rem    -= y;
       monto     -= y;
       moraCents += y;
@@ -1014,6 +1024,7 @@ export async function registrarPagoFacturaConMora(input: {
         ecfDocumentId: i.ecfDocumentId,
         montoCentavos: i.montoCentavos,
         metodo:        i.metodo,
+        notaCreditoId: i.notaCreditoId,
         referencia:    i.referencia,
         cuenta:        i.cuenta,
         fechaPago:     input.fechaPago,
