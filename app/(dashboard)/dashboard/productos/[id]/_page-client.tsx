@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
@@ -37,6 +37,19 @@ interface VentaProducto {
   precioUnitario:      number | null;
   subtotal:            number | null;
   montoTotalFactura:   number;
+}
+
+interface CompraProducto {
+  itemId:         number;
+  compraId:       number;
+  fecha:          string;
+  proveedor:      string;
+  proveedorRnc:   string | null;
+  referenciaEncf: string | null;
+  registradoPor:  string;
+  cantidad:       number;
+  costoUnitario:  number;   // centavos
+  subtotal:       number;   // centavos
 }
 
 const TASA_LABELS: Record<string, string> = {
@@ -120,6 +133,55 @@ const columnsVentas: DataTableColumn<VentaProducto>[] = [
   },
 ];
 
+const columnsCompras: DataTableColumn<CompraProducto>[] = [
+  {
+    id: 'fecha',
+    header: 'Fecha',
+    render: c => <span className="text-xs text-gray-600 tabular-nums whitespace-nowrap">{fmtFechaCorta(c.fecha)}</span>,
+  },
+  {
+    id: 'proveedor',
+    header: 'Proveedor',
+    render: c => (
+      <div className="min-w-0">
+        <div className="text-sm text-gray-900 truncate">{c.proveedor}</div>
+        {c.proveedorRnc && <div className="font-mono text-[11px] text-gray-400">{c.proveedorRnc}</div>}
+      </div>
+    ),
+  },
+  {
+    id: 'referencia',
+    header: 'e-NCF',
+    visibleAt: 'md',
+    render: c => <span className="font-mono text-xs text-gray-600">{c.referenciaEncf ?? '—'}</span>,
+  },
+  {
+    id: 'registradoPor',
+    header: 'Registrado por',
+    visibleAt: 'lg',
+    render: c => <span className="text-xs text-gray-600">{c.registradoPor}</span>,
+  },
+  {
+    id: 'cantidad',
+    header: 'Cant.',
+    align: 'right',
+    render: c => <span className="text-sm tabular-nums text-gray-700">{c.cantidad}</span>,
+  },
+  {
+    id: 'costoUnitario',
+    header: 'Costo unit.',
+    align: 'right',
+    visibleAt: 'md',
+    render: c => <span className="text-sm tabular-nums text-gray-700">{fmtDOP(c.costoUnitario)}</span>,
+  },
+  {
+    id: 'subtotal',
+    header: 'Subtotal',
+    align: 'right',
+    render: c => <span className="text-sm font-bold text-gray-900 tabular-nums whitespace-nowrap">{fmtDOP(c.subtotal)}</span>,
+  },
+];
+
 export default function ProductoDetalleClient({ productoId }: { productoId: number }) {
   const { data: prodData, isLoading: loadingProd } = useSWR<{ producto?: Producto; error?: string }>(
     `/api/productos/${productoId}`, fetcher,
@@ -127,9 +189,13 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
   const { data: ventasData, isLoading: loadingVentas } = useSWR<{ ventas?: VentaProducto[]; error?: string }>(
     `/api/productos/${productoId}/ventas`, fetcher,
   );
+  const { data: comprasData, isLoading: loadingCompras } = useSWR<{ compras?: CompraProducto[]; error?: string }>(
+    `/api/productos/${productoId}/compras`, fetcher,
+  );
 
   const producto = prodData?.producto;
   const ventas    = ventasData?.ventas ?? [];
+  const compras   = comprasData?.compras ?? [];
 
   const resumen = useMemo(() => {
     const unidades   = ventas.reduce((acc, v) => acc + v.cantidad, 0);
@@ -137,6 +203,13 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
     const ultimaVenta  = ventas[0]?.fecha ?? null;
     return { unidades, totalVendido, ultimaVenta };
   }, [ventas]);
+
+  const resumenCompras = useMemo(() => {
+    const unidades     = compras.reduce((acc, c) => acc + c.cantidad, 0);
+    const totalComprado = compras.reduce((acc, c) => acc + c.subtotal, 0);
+    const ultimaCompra  = compras[0]?.fecha ?? null;
+    return { unidades, totalComprado, ultimaCompra };
+  }, [compras]);
 
   if (!loadingProd && !producto) {
     return (
@@ -203,6 +276,10 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
             Historial de ventas
             {ventas.length > 0 && <span className="ml-1.5 text-[11px] text-gray-400">({ventas.length})</span>}
           </TabsTrigger>
+          <TabsTrigger value="compras">
+            Historial de compras
+            {compras.length > 0 && <span className="ml-1.5 text-[11px] text-gray-400">({compras.length})</span>}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="detalle">
@@ -239,6 +316,51 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
               icon:  ShoppingBag,
               title: 'Sin ventas registradas todavía',
               hint:  'Aquí aparecerán las facturas guardadas o emitidas que incluyan este producto.',
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="compras">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                <ShoppingCart className="h-4.5 w-4.5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Total comprado</p>
+                <p className="text-sm font-bold text-gray-900">{fmtDOP(resumenCompras.totalComprado)}</p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+                <Truck className="h-4.5 w-4.5 text-violet-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Unidades compradas</p>
+                <p className="text-sm font-bold text-gray-900">{resumenCompras.unidades}</p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                <CalendarClock className="h-4.5 w-4.5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Última compra</p>
+                <p className="text-sm font-bold text-gray-900">{resumenCompras.ultimaCompra ? fmtFechaCorta(resumenCompras.ultimaCompra) : '—'}</p>
+              </div>
+            </div>
+          </div>
+
+          <DataTable<CompraProducto>
+            data={compras}
+            loading={loadingCompras}
+            columns={columnsCompras}
+            rowId={c => c.itemId}
+            title="Compras con este producto"
+            emptyState={{
+              icon:  ShoppingCart,
+              title: 'Sin compras registradas todavía',
+              hint:  'Aquí aparecerán las compras manuales que registres incluyendo este producto.',
             }}
           />
         </TabsContent>
