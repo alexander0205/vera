@@ -135,6 +135,15 @@ const columnsVentas: DataTableColumn<VentaProducto>[] = [
 
 const columnsCompras: DataTableColumn<CompraProducto>[] = [
   {
+    id: 'compra',
+    header: 'Compra',
+    render: c => (
+      <Link href={`/dashboard/compras/local/${c.compraId}`} className="font-mono text-xs text-teal-700 hover:underline font-semibold whitespace-nowrap">
+        #{c.compraId}
+      </Link>
+    ),
+  },
+  {
     id: 'fecha',
     header: 'Fecha',
     render: c => <span className="text-xs text-gray-600 tabular-nums whitespace-nowrap">{fmtFechaCorta(c.fecha)}</span>,
