@@ -297,6 +297,7 @@ export default function ComprasPage() {
             data={comprasLocales}
             loading={permLoading || localesLoading}
             columns={columnsLocales}
+            rowHref={c => `/dashboard/compras/local/${c.id}`}
             title="Compras registradas"
             emptyState={{
               icon:  PackagePlus,
