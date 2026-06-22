@@ -277,6 +277,7 @@ export default function ProductosPage() {
         data={productos}
         loading={loading}
         columns={columns}
+        rowHref={p => `/dashboard/productos/${p.id}`}
         title="Productos y Servicios"
         description="Catálogo de ítems para tus facturas"
         filters={[

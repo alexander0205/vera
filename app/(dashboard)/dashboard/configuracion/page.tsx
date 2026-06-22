@@ -593,7 +593,7 @@ export default function ConfiguracionPage() {
       </div>
 
       {/* Botón guardar final — barra sticky inferior */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
         <Button
           onClick={handleSave}
           disabled={saving}
