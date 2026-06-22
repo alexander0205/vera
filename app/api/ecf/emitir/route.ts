@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
+import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
@@ -157,8 +158,37 @@ async function acquireNextEncf(
   return { encf, sequenceId: row.id, numero: row.numero, fechaVencimiento: row.fecha_venc ?? null };
 }
 
-// ─── Descuento de inventario post-emisión ─────────────────────────────────────
+// ─── Bloqueo por stock agotado ────────────────────────────────────────────────
+// Compartido entre modo emitir y modo borrador — ahora que el borrador también
+// descuenta stock al guardarse, debe pasar por el mismo chequeo.
+async function validarStockAgotado(
+  teamId: number,
+  items: Array<{ indicadorBienoServicio?: 1 | 2; productoId?: number | null }>,
+): Promise<string | null> {
+  const bienesIds = items
+    .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
+    .map(i => i.productoId as number);
+  if (bienesIds.length === 0) return null;
 
+  const prods = await db
+    .select({
+      id:                   products.id,
+      nombre:               products.nombre,
+      stockActual:          products.stockActual,
+      controlaInventario:   products.controlaInventario,
+      permiteVentaSinStock: products.permiteVentaSinStock,
+    })
+    .from(products)
+    .where(and(eq(products.teamId, teamId), inArray(products.id, bienesIds)));
+
+  const bloqueados = prods.filter(
+    p => p.controlaInventario && p.stockActual === 0 && !p.permiteVentaSinStock,
+  );
+  if (bloqueados.length === 0) return null;
+
+  const nombres = bloqueados.map(p => `"${p.nombre}"`).join(', ');
+  return `No se puede guardar: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.`;
+}
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -363,13 +393,44 @@ export async function POST(request: NextRequest) {
       if (data.borradorId) {
         const borradorId = data.borradorId; // narrowed to number
         const [existing] = await db
-          .select({ id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo, estado: ecfDocuments.estado })
+          .select({
+            id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo,
+            estado: ecfDocuments.estado, lineasJson: ecfDocuments.lineasJson,
+            stockDescontado: ecfDocuments.stockDescontado, almacenId: ecfDocuments.almacenId,
+          })
           .from(ecfDocuments)
           .where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
           .limit(1);
 
         if (!existing || !['BORRADOR', 'HISTORICA'].includes(existing.estado)) {
           return NextResponse.json({ error: 'Borrador no encontrado o ya emitido' }, { status: 404 });
+        }
+
+        // Descuento solo aplica a "Guardar factura" (tipoEcf='sin-ncf', factura
+        // local definitiva). "Guardar como borrador" (tipoEcf real, encf=BOR-xxx)
+        // es un borrador editable pendiente de emitir — no toca stock todavía.
+        const esFacturaDefinitiva = data.tipoEcf === 'sin-ncf';
+
+        // El borrador puede haber descontado stock al guardarse la primera vez
+        // (porque era sin-ncf). Si cambian las líneas, o si deja de ser
+        // sin-ncf, hay que restaurar lo viejo antes de seguir.
+        if (existing.stockDescontado && existing.lineasJson) {
+          try {
+            const lineasViejas = JSON.parse(existing.lineasJson) as Array<Record<string, unknown>>;
+            const itemsViejos = lineasViejas.map(i => ({
+              productoId:             i.productoId ? Number(i.productoId) : null,
+              cantidadItem:           Number(i.cantidadItem) || 0,
+              indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 as const : 2 as const,
+            }));
+            await restaurarInventario(teamId, user.id, borradorId, existing.encf, itemsViejos, existing.almacenId ?? null);
+          } catch (e) { console.error('[editar borrador] restaurar stock viejo falló', e); }
+        }
+
+        if (esFacturaDefinitiva) {
+          const errorAgotado = await validarStockAgotado(teamId, data.items);
+          if (errorAgotado) {
+            return NextResponse.json({ error: errorAgotado }, { status: 422 });
+          }
         }
 
         const estadoPago = calcularEstadoPago({
@@ -392,12 +453,18 @@ export async function POST(request: NextRequest) {
             fechaLimitePago:      data.fechaLimitePago ?? null,
             dependienteId:        data.dependienteId ?? null,
             dependienteNombre:    data.dependienteNombre ?? null,
+            stockDescontado:      esFacturaDefinitiva,
             updatedAt:            new Date(),
             ...extraFields,
           }).where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
             .returning(),
           { userId: user.id, teamId },
         );
+
+        if (esFacturaDefinitiva) {
+          await descontarInventario(teamId, user.id, saved.id, saved.encf, data.items, data.almacenId ?? null)
+            .catch((e) => console.error('[editar borrador] descuento stock falló', e));
+        }
 
         // Sincronizar ledger de pagos al editar borrador.
         // DELETE + INSERT van juntos dentro de cada rama para que si el INSERT
@@ -482,6 +549,17 @@ export async function POST(request: NextRequest) {
         ? ''
         : `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
+      // Descuento solo aplica a "Guardar factura" (tipoEcf='sin-ncf'). Un
+      // borrador de tipo real (BOR-xxx, pendiente de emitir) no toca stock.
+      const esFacturaDefinitivaNueva = data.tipoEcf === 'sin-ncf';
+
+      if (esFacturaDefinitivaNueva) {
+        const errorAgotadoNuevo = await validarStockAgotado(teamId, data.items);
+        if (errorAgotadoNuevo) {
+          return NextResponse.json({ error: errorAgotadoNuevo }, { status: 422 });
+        }
+      }
+
       const codigo      = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
       const estadoPago  = calcularEstadoPago({
         estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
@@ -527,6 +605,7 @@ export async function POST(request: NextRequest) {
             dependienteId:        data.dependienteId ?? null,
             dependienteNombre:    data.dependienteNombre ?? null,
             turnoCajaId:          turnoBorradorId,
+            stockDescontado:      esFacturaDefinitivaNueva,
             ...extraFields,
           }).returning();
           return { deduped: false as const, row: inserted };
@@ -547,6 +626,13 @@ export async function POST(request: NextRequest) {
         });
       }
       const saved = outcome.row;
+
+      // Descuento de stock al guardar la factura definitiva (sin-ncf). El
+      // borrador real (tipo e31/e32/etc, BOR-xxx) no descuenta hasta emitirse.
+      if (esFacturaDefinitivaNueva) {
+        await descontarInventario(teamId, user.id, saved.id, saved.encf, data.items, data.almacenId ?? null)
+          .catch((e) => console.error('[borrador nuevo] descuento stock falló', e));
+      }
 
       // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
       // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
@@ -837,6 +923,7 @@ export async function POST(request: NextRequest) {
         createdBy:            user.id,
         dependienteId:        data.dependienteId ?? null,
         dependienteNombre:    data.dependienteNombre ?? null,
+        stockDescontado:      true,
         ...extraFields,
       }).returning(),
       { userId: user.id, teamId },

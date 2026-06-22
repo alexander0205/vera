@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users, products } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, products, inventoryMovements } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql, inArray } from 'drizzle-orm';
@@ -298,32 +298,37 @@ export async function POST(
     const totales = calcularTotales(items);
 
     // ── Bloqueo stock agotado ─────────────────────────────────────────────────
-    const bienesIds = items
-      .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
-      .map(i => i.productoId as number);
+    // Si el borrador ya descontó stock al guardarse, ese stock ya está
+    // "reservado" por este mismo documento — re-chequear aquí lo bloquearía
+    // incorrectamente (se vería agotado por su propio descuento).
+    if (!doc.stockDescontado) {
+      const bienesIds = items
+        .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
+        .map(i => i.productoId as number);
 
-    if (bienesIds.length > 0) {
-      const prods = await db
-        .select({
-          id:                   products.id,
-          nombre:               products.nombre,
-          stockActual:          products.stockActual,
-          controlaInventario:   products.controlaInventario,
-          permiteVentaSinStock: products.permiteVentaSinStock,
-        })
-        .from(products)
-        .where(and(eq(products.teamId, teamId), inArray(products.id, bienesIds)));
+      if (bienesIds.length > 0) {
+        const prods = await db
+          .select({
+            id:                   products.id,
+            nombre:               products.nombre,
+            stockActual:          products.stockActual,
+            controlaInventario:   products.controlaInventario,
+            permiteVentaSinStock: products.permiteVentaSinStock,
+          })
+          .from(products)
+          .where(and(eq(products.teamId, teamId), inArray(products.id, bienesIds)));
 
-      const bloqueados = prods.filter(
-        p => p.controlaInventario && p.stockActual === 0 && !p.permiteVentaSinStock,
-      );
-
-      if (bloqueados.length > 0) {
-        const nombres = bloqueados.map(p => `"${p.nombre}"`).join(', ');
-        return NextResponse.json(
-          { error: `No se puede emitir: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.` },
-          { status: 422 },
+        const bloqueados = prods.filter(
+          p => p.controlaInventario && p.stockActual === 0 && !p.permiteVentaSinStock,
         );
+
+        if (bloqueados.length > 0) {
+          const nombres = bloqueados.map(p => `"${p.nombre}"`).join(', ');
+          return NextResponse.json(
+            { error: `No se puede emitir: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.` },
+            { status: 422 },
+          );
+        }
       }
     }
 
@@ -475,15 +480,25 @@ export async function POST(
           urlVerificacion: resultado.urlVerificacion ?? resultado.qrCodeData ?? null,
           ecfApiEmisionId: resultado.id,
           fechaEmision:    new Date(resultado.fechaEmision),
+          stockDescontado: true,
           updatedAt:       new Date(),
         })
         .where(eq(ecfDocuments.id, docId)),
       { userId: user.id, teamId },
     );
 
-    // Descuento automático de inventario — fire-and-forget
-    descontarInventario(teamId, user.id, docId, encfFinal, items, doc.almacenId ?? null)
-      .catch((e) => console.error('[emitir-ecf] stock decrement failed', e));
+    // Descuento automático de inventario — fire-and-forget.
+    // Si el borrador ya había descontado al guardarse, no descontar de nuevo:
+    // solo actualizar la referencia del movimiento al e-NCF final (BOR-xxx → Exx...).
+    if (doc.stockDescontado) {
+      db.update(inventoryMovements)
+        .set({ referenciaEncf: encfFinal })
+        .where(and(eq(inventoryMovements.teamId, teamId), eq(inventoryMovements.referenciaId, docId), eq(inventoryMovements.tipo, 'VENTA')))
+        .catch((e) => console.error('[emitir-ecf] actualizar referenciaEncf falló', e));
+    } else {
+      descontarInventario(teamId, user.id, docId, encfFinal, items, doc.almacenId ?? null)
+        .catch((e) => console.error('[emitir-ecf] stock decrement failed', e));
+    }
 
     await logInfo({
       teamId,

@@ -90,6 +90,7 @@ export async function POST(
       pagoValorCts:  ecfDocuments.pagoValorCts,
       lineasJson:    ecfDocuments.lineasJson,
       almacenId:     ecfDocuments.almacenId,
+      stockDescontado: ecfDocuments.stockDescontado,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
@@ -159,13 +160,15 @@ export async function POST(
       estado:        'ANULADO',
       estadoPago:    'ANULADA',
       tipoAnulacion,
+      stockDescontado: false,
       updatedAt:     new Date(),
     })
     .where(eq(ecfDocuments.id, docId));
 
-  // Restaurar stock si fue un documento emitido (no borrador).
-  // Borrador nunca decrementó stock → no hay nada que restaurar.
-  if (doc.estado !== 'BORRADOR' && doc.lineasJson) {
+  // Restaurar stock solo si este documento llegó a descontarlo. Ya no se basa
+  // en `estado` porque ahora un BORRADOR también puede haber descontado stock
+  // al guardarse (ver /api/ecf/emitir).
+  if (doc.stockDescontado && doc.lineasJson) {
     try {
       const lineas = JSON.parse(doc.lineasJson) as Array<Record<string, unknown>>;
       const items = lineas.map(i => ({

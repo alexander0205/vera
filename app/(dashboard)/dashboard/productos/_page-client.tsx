@@ -432,7 +432,7 @@ export default function ProductosPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-800">Controlar inventario</p>
-                    <p className="text-xs text-gray-400 mt-0.5">El stock se descuenta automáticamente al emitir facturas</p>
+                    <p className="text-xs text-gray-400 mt-0.5">El stock se descuenta automáticamente al guardar o emitir facturas</p>
                   </div>
                   <button type="button"
                     onClick={() => setForm(f => ({ ...f, controlaInventario: !f.controlaInventario }))}

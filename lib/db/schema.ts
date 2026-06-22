@@ -357,6 +357,12 @@ export const ecfDocuments = pgTable('ecf_documents', {
   vendedorId:     integer('vendedor_id').references(() => vendedores.id),
   listaPreciosId: integer('lista_precios_id').references(() => listasPrecios.id),
 
+  // true = ya se descontó stock para este documento (al guardar borrador o al
+  // emitir). Evita doble descuento al promover un borrador a e-CF, y le dice a
+  // /anular si debe restaurar stock (reemplaza el chequeo viejo por `estado`,
+  // que ya no sirve porque BORRADOR también puede tener stock descontado).
+  stockDescontado: boolean('stock_descontado').notNull().default(false),
+
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
 
