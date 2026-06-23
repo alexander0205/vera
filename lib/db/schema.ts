@@ -471,6 +471,63 @@ export const categorias = pgTable('categorias', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// ─── EmiteDO — Maestros (listas custom de atributos) ─────────────────────────
+// Un maestro es una lista (Marca, Color…) con valores manuales. Se engancha a
+// productos/servicios como labels. aplicaA: 'bien'|'servicio'|'ambos'|'manual'.
+// multiple: false = un valor por producto; true = varios.
+export const maestros = pgTable('maestros', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  nombre: varchar('nombre', { length: 100 }).notNull(),
+  descripcion: text('descripcion'),
+  aplicaA: varchar('aplica_a', { length: 10 }).notNull().default('manual'),
+  multiple: boolean('multiple').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [index('maestros_team_idx').on(t.teamId)]);
+
+export const maestroValores = pgTable('maestro_valores', {
+  id: serial('id').primaryKey(),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  valor: varchar('valor', { length: 150 }).notNull(),
+  orden: integer('orden').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('maestro_valores_maestro_idx').on(t.maestroId)]);
+
+export const productoMaestroValores = pgTable('producto_maestro_valores', {
+  id: serial('id').primaryKey(),
+  productId: integer('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  valorId: integer('valor_id').notNull().references(() => maestroValores.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('producto_maestro_valores_product_idx').on(t.productId),
+  index('producto_maestro_valores_maestro_idx').on(t.maestroId),
+  uniqueIndex('producto_maestro_valores_uniq').on(t.productId, t.valorId),
+]);
+
+export const maestrosRelations = relations(maestros, ({ one, many }) => ({
+  team: one(teams, { fields: [maestros.teamId], references: [teams.id] }),
+  valores: many(maestroValores),
+}));
+
+export const maestroValoresRelations = relations(maestroValores, ({ one }) => ({
+  maestro: one(maestros, { fields: [maestroValores.maestroId], references: [maestros.id] }),
+}));
+
+export const productoMaestroValoresRelations = relations(productoMaestroValores, ({ one }) => ({
+  product: one(products, { fields: [productoMaestroValores.productId], references: [products.id] }),
+  maestro: one(maestros, { fields: [productoMaestroValores.maestroId], references: [maestros.id] }),
+  valor: one(maestroValores, { fields: [productoMaestroValores.valorId], references: [maestroValores.id] }),
+}));
+
+export type Maestro = typeof maestros.$inferSelect;
+export type NewMaestro = typeof maestros.$inferInsert;
+export type MaestroValor = typeof maestroValores.$inferSelect;
+export type NewMaestroValor = typeof maestroValores.$inferInsert;
+export type ProductoMaestroValor = typeof productoMaestroValores.$inferSelect;
+export type NewProductoMaestroValor = typeof productoMaestroValores.$inferInsert;
+
 // ─── EmiteDO — Cotizaciones ───────────────────────────────────────────────────
 export const cotizaciones = pgTable('cotizaciones', {
   id: serial('id').primaryKey(),

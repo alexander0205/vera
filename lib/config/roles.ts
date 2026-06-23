@@ -34,6 +34,8 @@ export type Permission =
   // Productos
   | 'productos:ver'
   | 'productos:gestionar'
+  // Maestros (listas custom de atributos) — solo admin/owner
+  | 'maestros:gestionar'
   // Cotizaciones
   | 'cotizaciones:ver'
   | 'cotizaciones:gestionar'
@@ -94,6 +96,7 @@ export const ROLES: RoleDef[] = [
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
       'compras:ver',
+      'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'suscripcion:gestionar',
     ],
@@ -113,6 +116,7 @@ export const ROLES: RoleDef[] = [
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
       'compras:ver',
+      'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },

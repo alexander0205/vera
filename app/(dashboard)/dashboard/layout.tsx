@@ -74,6 +74,7 @@ const GROUPS: NavGroup[] = [
     icon: Settings,
     children: [
       { href: '/dashboard/configuracion', label: 'Mi empresa' },
+      { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
       { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
@@ -123,6 +124,8 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
+  '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
+
   '/dashboard/secuencias':            'configuracion:ver',
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',

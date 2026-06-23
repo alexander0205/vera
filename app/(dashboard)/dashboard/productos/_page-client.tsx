@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
+import MaestrosProductoSection from './MaestrosProductoSection';
 
 interface Producto {
   id:                   number;
@@ -496,6 +497,9 @@ export default function ProductosPage() {
                 </div>
               )}
             </div>
+
+            {/* Atributos (maestros) — solo al editar un producto existente */}
+            {editTarget && <MaestrosProductoSection productId={editTarget.id} />}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowForm(false); setShowAvanzado(false); }} disabled={saving}>Cancelar</Button>
