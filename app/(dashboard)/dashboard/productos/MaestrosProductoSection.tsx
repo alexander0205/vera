@@ -105,8 +105,11 @@ export default function MaestrosProductoSection({ productId }: { productId: numb
     () => maestros.filter(m => m.auto || extra.has(m.id)),
     [maestros, extra],
   );
+  // Solo los maestros 'manual' son agregables a mano. Los de scope automático
+  // (bien/servicio/ambos) aparecen solos cuando el tipo coincide y NO deben
+  // poder añadirse a un tipo que no les toca (ej. un maestro de bienes en un servicio).
   const agregables = useMemo(
-    () => maestros.filter(m => !m.auto && !extra.has(m.id)),
+    () => maestros.filter(m => m.aplicaA === 'manual' && !extra.has(m.id)),
     [maestros, extra],
   );
 

@@ -10,6 +10,7 @@ import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Autocomplete } from '../components/Autocomplete';
+import { LineaMaestros } from './LineaMaestros';
 import { calcularMontoItem } from '../utils/calculos';
 import { TASA_ITBIS } from '../utils/types';
 import type { ItemLinea, Producto } from '../utils/types';
@@ -118,6 +119,7 @@ export function ItemsTable({
                   </div>
                 )}
               />
+              <LineaMaestros productoId={item.productoId} />
             </div>
 
             {showReferencia && (
@@ -366,6 +368,7 @@ export function ItemsTable({
                       </div>
                     )}
                   />
+                  <LineaMaestros productoId={item.productoId} />
                 </td>
                 {showReferencia && (
                   <td className="px-2 py-2">
