@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck } from 'lucide-react';
+import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
@@ -50,6 +50,18 @@ interface CompraProducto {
   cantidad:       number;
   costoUnitario:  number;   // centavos
   subtotal:       number;   // centavos
+}
+
+interface MaestroValor { id: number; valor: string; }
+interface MaestroAplicable {
+  id:       number;
+  nombre:   string;
+  multiple: boolean;
+  valores:  MaestroValor[];
+}
+interface MaestrosResponse {
+  maestros?:     MaestroAplicable[];
+  asignaciones?: { maestroId: number; valorId: number }[];
 }
 
 const TASA_LABELS: Record<string, string> = {
@@ -201,6 +213,9 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
   const { data: comprasData, isLoading: loadingCompras } = useSWR<{ compras?: CompraProducto[]; error?: string }>(
     `/api/productos/${productoId}/compras`, fetcher,
   );
+  const { data: maestrosData } = useSWR<MaestrosResponse>(
+    `/api/productos/${productoId}/maestros`, fetcher,
+  );
 
   const producto = prodData?.producto;
   const ventas    = ventasData?.ventas ?? [];
@@ -212,6 +227,21 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
     const ultimaVenta  = ventas[0]?.fecha ?? null;
     return { unidades, totalVendido, ultimaVenta };
   }, [ventas]);
+
+  // Atributos (maestros) asignados — solo lectura, agrupados por maestro.
+  const atributos = useMemo(() => {
+    const ms  = maestrosData?.maestros ?? [];
+    const asg = maestrosData?.asignaciones ?? [];
+    return ms
+      .map(m => {
+        const valores = asg
+          .filter(a => a.maestroId === m.id)
+          .map(a => m.valores.find(v => v.id === a.valorId)?.valor)
+          .filter((v): v is string => !!v);
+        return { id: m.id, nombre: m.nombre, valores };
+      })
+      .filter(m => m.valores.length > 0);
+  }, [maestrosData]);
 
   const resumenCompras = useMemo(() => {
     const unidades     = compras.reduce((acc, c) => acc + c.cantidad, 0);
@@ -312,6 +342,30 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
               </div>
             )}
           </div>
+
+          {/* Atributos asignados (maestros) — solo lectura */}
+          {atributos.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-5 mt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Tags className="h-4 w-4 text-gray-400" />
+                <h3 className="text-sm font-semibold text-gray-700">Atributos</h3>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {atributos.map(a => (
+                  <div key={a.id}>
+                    <p className="text-xs text-gray-500">{a.nombre}</p>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {a.valores.map(v => (
+                        <span key={v} className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs px-2 py-0.5">
+                          {v}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="ventas">
