@@ -19,6 +19,7 @@ import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
 import { DetallesSection } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
+import { ClasificacionFactura, type ClasifAsig } from './sections/ClasificacionFactura';
 import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
@@ -92,6 +93,9 @@ export default function NuevaFacturaForm({
   );
   const [categoriaId, setCategoriaId] = useState('factura-venta');
   const regla = TIPO_ECF_REGLAS[tipoEcf];
+
+  // ── Clasificación por maestros (Plan A) ─────────────────────────────────────
+  const [clasificacion, setClasificacion] = useState<ClasifAsig[]>([]);
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
@@ -686,6 +690,16 @@ export default function NuevaFacturaForm({
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
       try { localStorage.removeItem(draftKey); } catch {}
+      // Persistir clasificación por maestros (Plan A) — metadata no fiscal.
+      if (data.documentoId) {
+        try {
+          await fetch(`/api/facturas/${data.documentoId}/maestros`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asignaciones: clasificacion }),
+          });
+        } catch {}
+      }
       if (opts?.andThen === 'nueva') {
         resetForm();
         return;
@@ -915,6 +929,13 @@ export default function NuevaFacturaForm({
                   fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
                   today={today}
                 />
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <ClasificacionFactura
+                    docId={initialData?.id}
+                    value={clasificacion}
+                    onChange={setClasificacion}
+                  />
+                </div>
               </SectionCard>
 
               <SectionCard

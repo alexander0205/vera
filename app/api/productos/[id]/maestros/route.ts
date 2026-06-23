@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { products, maestros, maestroValores, productoMaestroValores } from '@/lib/db/schema';
+import { products, maestros, maestroValores, productoMaestroValores, maestroTargets } from '@/lib/db/schema';
 import { getPermisoContext, ctxCan } from '@/lib/auth/permiso';
 import { eq, and, inArray, asc } from 'drizzle-orm';
 
@@ -37,7 +37,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const product = await loadProduct(ctx.teamId, id);
   if (!product) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
-  const ms = await db.select().from(maestros)
+  // Solo maestros que aplican a productos (target='producto').
+  const ms = await db.select({
+    id: maestros.id, teamId: maestros.teamId, nombre: maestros.nombre,
+    descripcion: maestros.descripcion, aplicaA: maestros.aplicaA,
+    multiple: maestros.multiple, createdAt: maestros.createdAt, updatedAt: maestros.updatedAt,
+  }).from(maestros)
+    .innerJoin(maestroTargets, and(
+      eq(maestroTargets.maestroId, maestros.id),
+      eq(maestroTargets.entidad, 'producto'),
+    ))
     .where(eq(maestros.teamId, ctx.teamId)).orderBy(asc(maestros.nombre));
 
   const ids = ms.map(m => m.id);

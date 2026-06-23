@@ -101,6 +101,16 @@ export default function FacturasPage() {
   const [emailModal, setEmailModal] = useState<{ id: number; email: string } | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // Maestros de factura (Plan A) → filtros dinámicos por valor.
+  const [facturaMaestros, setFacturaMaestros] = useState<
+    { id: number; nombre: string; valores: { id: number; valor: string }[] }[]
+  >([]);
+  useEffect(() => {
+    fetch('/api/facturas/maestros')
+      .then(r => r.json())
+      .then(d => setFacturaMaestros(d.maestros ?? []))
+      .catch(() => {});
+  }, []);
   const limit = 50;
 
   // Reset page on filter change
@@ -117,6 +127,10 @@ export default function FacturasPage() {
       ...(filterValues.fecha_hasta && { hasta: filterValues.fecha_hasta }),
       ...(filterValues.conNcs === '1' && { conNcs: '1' }),
     });
+    // Filtros dinámicos por maestro (claves 'm_<maestroId>' → valorId).
+    for (const [k, v] of Object.entries(filterValues)) {
+      if (k.startsWith('m_') && v) sp.append('maestroValorId', v);
+    }
     const res = await fetch(`/api/facturas?${sp}`).catch(() => null);
     if (res?.ok) {
       const data = await res.json();
@@ -388,6 +402,18 @@ export default function FacturasPage() {
               { value: '1', label: 'Con NCs asociadas' },
             ],
           },
+          // Filtros dinámicos por maestro de factura (Plan A).
+          ...facturaMaestros
+            .filter(m => m.valores.length > 0)
+            .map(m => ({
+              type: 'select' as const,
+              id: `m_${m.id}`,
+              label: m.nombre,
+              options: [
+                { value: '', label: `${m.nombre}: todos` },
+                ...m.valores.map(v => ({ value: String(v.id), label: v.valor })),
+              ],
+            })),
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}

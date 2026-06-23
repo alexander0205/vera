@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 
 type AplicaA = 'bien' | 'servicio' | 'ambos' | 'manual';
+type Entidad = 'producto' | 'factura';
 
 interface MaestroValor {
   id: number;
@@ -35,6 +36,7 @@ interface Maestro {
   descripcion: string | null;
   aplicaA: AplicaA;
   multiple: boolean;
+  targets: Entidad[];
   valores: MaestroValor[];
   createdAt: string;
 }
@@ -46,7 +48,15 @@ const APLICA_LABEL: Record<AplicaA, string> = {
   manual:   'Manual (por producto)',
 };
 
-const EMPTY_FORM = { nombre: '', descripcion: '', aplicaA: 'manual' as AplicaA, multiple: false };
+const TARGET_LABEL: Record<Entidad, string> = {
+  producto: 'Productos',
+  factura:  'Facturas',
+};
+
+const EMPTY_FORM = {
+  nombre: '', descripcion: '', aplicaA: 'manual' as AplicaA, multiple: false,
+  targets: ['producto'] as Entidad[],
+};
 
 export default function MaestrosPage() {
   const [maestros, setMaestros]         = useState<Maestro[]>([]);
@@ -87,14 +97,26 @@ export default function MaestrosPage() {
 
   function abrirEdicion(m: Maestro) {
     setEditTarget(m);
-    setForm({ nombre: m.nombre, descripcion: m.descripcion ?? '', aplicaA: m.aplicaA, multiple: m.multiple });
+    setForm({
+      nombre: m.nombre, descripcion: m.descripcion ?? '', aplicaA: m.aplicaA, multiple: m.multiple,
+      targets: m.targets?.length ? m.targets : ['producto'],
+    });
     setNuevoValor('');
     setOpError(null);
     setShowForm(true);
   }
 
+  function toggleTarget(t: Entidad) {
+    setForm((f) => {
+      const has = f.targets.includes(t);
+      const next = has ? f.targets.filter(x => x !== t) : [...f.targets, t];
+      return { ...f, targets: next };
+    });
+  }
+
   async function handleGuardar() {
     if (!form.nombre.trim()) { setOpError('El nombre es obligatorio'); return; }
+    if (form.targets.length === 0) { setOpError('Selecciona al menos dónde aplica (Productos o Facturas)'); return; }
     setSaving(true);
     setOpError(null);
     try {
@@ -234,7 +256,16 @@ export default function MaestrosPage() {
                 {maestros.map((m) => (
                   <TableRow key={m.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => abrirEdicion(m)}>
                     <TableCell className="font-medium text-gray-900">{m.nombre}</TableCell>
-                    <TableCell><Badge variant="outline">{APLICA_LABEL[m.aplicaA]}</Badge></TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {(m.targets ?? []).map((t) => (
+                          <Badge key={t} variant="outline">{TARGET_LABEL[t]}</Badge>
+                        ))}
+                        {m.targets?.includes('producto') && (
+                          <span className="text-[11px] text-gray-400">· {APLICA_LABEL[m.aplicaA]}</span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={m.multiple ? 'secondary' : 'outline'}>
                         {m.multiple ? 'Múltiple' : 'Único'}
@@ -286,10 +317,35 @@ export default function MaestrosPage() {
                 onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
               />
             </div>
+            {/* Dónde aplica el maestro */}
+            <div className="space-y-1.5">
+              <Label>Aplica a</Label>
+              <div className="flex gap-2">
+                {(['producto', 'factura'] as Entidad[]).map((t) => (
+                  <label key={t} className="flex items-center gap-2 h-10 px-3 border rounded-md cursor-pointer flex-1">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-teal-600"
+                      checked={form.targets.includes(t)}
+                      onChange={() => toggleTarget(t)}
+                    />
+                    <span className="text-sm text-gray-700">{TARGET_LABEL[t]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
+              {/* aplicaA solo aplica del lado producto */}
               <div className="space-y-1.5">
-                <Label>Aplica a</Label>
-                <Select value={form.aplicaA} onValueChange={(v) => setForm((f) => ({ ...f, aplicaA: v as AplicaA }))}>
+                <Label className={form.targets.includes('producto') ? '' : 'text-gray-300'}>
+                  En productos, mostrar en
+                </Label>
+                <Select
+                  value={form.aplicaA}
+                  onValueChange={(v) => setForm((f) => ({ ...f, aplicaA: v as AplicaA }))}
+                  disabled={!form.targets.includes('producto')}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="manual">Manual (por producto)</SelectItem>

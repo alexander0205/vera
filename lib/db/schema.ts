@@ -506,9 +506,42 @@ export const productoMaestroValores = pgTable('producto_maestro_valores', {
   uniqueIndex('producto_maestro_valores_uniq').on(t.productId, t.valorId),
 ]);
 
+// A qué entidades aplica un maestro: 'producto' | 'factura' (extensible).
+export const maestroTargets = pgTable('maestro_targets', {
+  id: serial('id').primaryKey(),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  entidad: varchar('entidad', { length: 20 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [uniqueIndex('maestro_targets_uniq').on(t.maestroId, t.entidad)]);
+
+// Clasificación de la factura (cabecera) con valores de maestros target='factura'.
+export const facturaMaestroValores = pgTable('factura_maestro_valores', {
+  id: serial('id').primaryKey(),
+  ecfDocumentId: integer('ecf_document_id').notNull().references(() => ecfDocuments.id, { onDelete: 'cascade' }),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  valorId: integer('valor_id').notNull().references(() => maestroValores.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('factura_maestro_valores_doc_idx').on(t.ecfDocumentId),
+  index('factura_maestro_valores_maestro_idx').on(t.maestroId),
+  index('factura_maestro_valores_valor_idx').on(t.valorId),
+  uniqueIndex('factura_maestro_valores_uniq').on(t.ecfDocumentId, t.valorId),
+]);
+
 export const maestrosRelations = relations(maestros, ({ one, many }) => ({
   team: one(teams, { fields: [maestros.teamId], references: [teams.id] }),
   valores: many(maestroValores),
+  targets: many(maestroTargets),
+}));
+
+export const maestroTargetsRelations = relations(maestroTargets, ({ one }) => ({
+  maestro: one(maestros, { fields: [maestroTargets.maestroId], references: [maestros.id] }),
+}));
+
+export const facturaMaestroValoresRelations = relations(facturaMaestroValores, ({ one }) => ({
+  ecfDocument: one(ecfDocuments, { fields: [facturaMaestroValores.ecfDocumentId], references: [ecfDocuments.id] }),
+  maestro: one(maestros, { fields: [facturaMaestroValores.maestroId], references: [maestros.id] }),
+  valor: one(maestroValores, { fields: [facturaMaestroValores.valorId], references: [maestroValores.id] }),
 }));
 
 export const maestroValoresRelations = relations(maestroValores, ({ one }) => ({
@@ -527,6 +560,10 @@ export type MaestroValor = typeof maestroValores.$inferSelect;
 export type NewMaestroValor = typeof maestroValores.$inferInsert;
 export type ProductoMaestroValor = typeof productoMaestroValores.$inferSelect;
 export type NewProductoMaestroValor = typeof productoMaestroValores.$inferInsert;
+export type MaestroTarget = typeof maestroTargets.$inferSelect;
+export type NewMaestroTarget = typeof maestroTargets.$inferInsert;
+export type FacturaMaestroValor = typeof facturaMaestroValores.$inferSelect;
+export type NewFacturaMaestroValor = typeof facturaMaestroValores.$inferInsert;
 
 // ─── EmiteDO — Cotizaciones ───────────────────────────────────────────────────
 export const cotizaciones = pgTable('cotizaciones', {

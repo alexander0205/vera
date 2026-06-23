@@ -50,6 +50,17 @@ export async function GET(req: NextRequest) {
     conditions.push(lte(ecfDocuments.createdAt, new Date(hasta + 'T23:59:59')));
   }
 
+  // Filtro por clasificación de maestro (Plan A): facturas etiquetadas con
+  // estos valores. Varios valores = AND (cada uno debe estar presente).
+  const maestroValorIds = sp.getAll('maestroValorId').map(v => parseInt(v, 10)).filter(Number.isFinite);
+  for (const vid of maestroValorIds) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM factura_maestro_valores fmv
+      WHERE fmv.ecf_document_id = ecf_documents.id
+        AND fmv.valor_id = ${vid}
+    )`);
+  }
+
   // NCA-22: solo facturas con NCs/débitos referenciándolas
   if (conNcs) {
     conditions.push(sql`EXISTS (
