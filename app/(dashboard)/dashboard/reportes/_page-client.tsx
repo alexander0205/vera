@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight } from 'lucide-react';
+import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, Tags } from 'lucide-react';
 
 type ReporteId = '606' | '607' | '608' | '609';
 
@@ -105,6 +105,24 @@ export default function ReportesPage() {
               </div>
               <p className="text-xs text-gray-500">
                 Visión detallada de ventas y devoluciones. Filtros por fecha, gráfica y exportable a CSV.
+              </p>
+            </div>
+          </Link>
+
+          <Link
+            href="/dashboard/reportes/maestros"
+            className="bg-white border border-gray-200 hover:border-teal-300 hover:shadow-sm rounded-xl p-4 flex items-start gap-3 group transition-all"
+          >
+            <div className="h-10 w-10 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+              <Tags className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-semibold text-gray-900">Ventas por clasificación</p>
+                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-teal-600 transition-colors" />
+              </div>
+              <p className="text-xs text-gray-500">
+                Totales de venta agrupados por los valores de un maestro de factura (campaña, canal…).
               </p>
             </div>
           </Link>
