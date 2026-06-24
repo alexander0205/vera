@@ -13,6 +13,7 @@ import { getTeamIdForUser } from '@/lib/db/queries';
 import EditarBorradorClient from './_editar-client';
 import type { EmpresaPerfil } from '../../nueva/page';
 import { requirePermission } from '@/lib/auth/page-guard';
+import { edicionPermitida } from '@/lib/facturas/edicion';
 
 export default async function EditarBorradorPage({
   params,
@@ -55,9 +56,9 @@ export default async function EditarBorradorPage({
   ]);
 
   if (!row) notFound();
-  // Editables: documentos sin e-CF real (borrador, histórica de Alegra).
-  // Los ya emitidos a DGII / anulados no se editan.
-  if (!['BORRADOR', 'HISTORICA'].includes(row.doc.estado)) {
+  // Hotfix: edición deshabilitada para todos los roles (incl. borradores).
+  // Bloqueo server-side del acceso directo por URL. Revertir vía edicionPermitida.
+  if (!edicionPermitida(row.doc.estado)) {
     redirect(`/dashboard/facturas`);
   }
 

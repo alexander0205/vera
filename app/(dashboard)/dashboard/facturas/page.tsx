@@ -10,6 +10,7 @@ import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, diasVencido } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
+import { edicionPermitida } from '@/lib/facturas/edicion';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -349,11 +350,12 @@ export default function FacturasPage() {
   const rowActions = (doc: Doc): RowAction[] => {
     // "Ver" inline (👁) antes de los 3 puntos — abre el detalle.
     const ver: RowAction = { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${doc.id}`, primary: true };
+    // Hotfix: edición deshabilitada para todos (incl. borradores). El borrador
+    // solo ofrece "Ver"; la opción de "Continuar edición" se elimina.
     if (doc.estado === 'BORRADOR') {
-      return [
-        ver,
-        { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
-      ];
+      return edicionPermitida(doc.estado)
+        ? [ver, { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` }]
+        : [ver];
     }
     return [
       ver,

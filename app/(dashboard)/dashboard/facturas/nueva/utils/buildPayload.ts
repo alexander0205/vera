@@ -53,14 +53,21 @@ export function buildPayload(input: BuildPayloadInput) {
   // pagoMetodo/pagoCuenta/pagoValor (vía registrarPago).
   const lineasValidas = pagoLineas
     .map(l => ({
-      metodo: l.metodo,
-      valor:  parseFloat(l.valor || '0') || 0,
-      cuenta: l.cuenta?.trim() || '',
+      metodo:     l.metodo,
+      valor:      parseFloat(l.valor || '0') || 0,
+      cuenta:     l.cuenta?.trim() || '',
+      referencia: l.referencia?.trim() || '',
     }))
     .filter(l => l.valor > 0);
   const usarSplit = pagoRecibido && lineasValidas.length > 1;
+  // Preservar cuenta/referencia por método en el split (antes se descartaban).
   const pagosArray = usarSplit
-    ? lineasValidas.map(l => ({ metodo: l.metodo, valor: l.valor }))
+    ? lineasValidas.map(l => ({
+        metodo: l.metodo,
+        valor:  l.valor,
+        ...(l.cuenta     ? { cuenta:     l.cuenta }     : {}),
+        ...(l.referencia ? { referencia: l.referencia } : {}),
+      }))
     : [];
   // En modo single tomamos la primera línea válida (o la primera si ninguna tiene valor).
   const single = lineasValidas[0] ?? {

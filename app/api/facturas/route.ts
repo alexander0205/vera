@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, users } from '@/lib/db/schema';
-import { and, eq, gte, lte, desc, like, count, or, sql } from 'drizzle-orm';
+import { and, eq, ne, gte, lte, desc, like, count, or, sql } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -40,6 +40,10 @@ export async function GET(req: NextRequest) {
 
   if (estado && estado !== 'todos') {
     conditions.push(eq(ecfDocuments.estado, estado));
+  } else {
+    // Hotfix: las facturas ANULADAS quedan ocultas del historial por defecto.
+    // Solo aparecen cuando el usuario filtra explícitamente estado=ANULADO.
+    conditions.push(ne(ecfDocuments.estado, 'ANULADO'));
   }
 
   if (desde) {

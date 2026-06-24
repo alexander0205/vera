@@ -34,6 +34,7 @@ import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { edicionPermitida } from '@/lib/facturas/edicion';
 
 // Opciones del dropdown "Tipo de comprobante" del modal Enviar a DGII.
 const TIPOS_EMIT_DGII: { value: string; label: string }[] = [
@@ -376,7 +377,9 @@ export default function FacturaDetallePage() {
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
   const { can } = usePermissions();
   const { tipoVisible } = useTiposDisponibles();
-  const canEdit   = can('facturas:editar');
+  // Hotfix: edición deshabilitada para todos (incl. borradores). edicionPermitida
+  // gobierna todos los gates de UI de editar. Revertir en lib/facturas/edicion.ts.
+  const canEdit   = can('facturas:editar') && (factura ? edicionPermitida(factura.estado) : false);
   const canAnular = can('facturas:anular');
   const canEmitir = can('facturas:emitir-dgii');
 

@@ -89,7 +89,12 @@ const emitirSchema = z.object({
   pagoFecha:    z.string().optional(),
   // Pago dividido (split): varios métodos en una sola operación. Cuando viene,
   // tiene prioridad sobre el pago single y se registra vía registrarPagosSplit.
-  pagos:        z.array(z.object({ metodo: z.string(), valor: z.number().min(0) })).optional(),
+  pagos:        z.array(z.object({
+    metodo:     z.string(),
+    valor:      z.number().min(0),
+    cuenta:     z.string().optional(),
+    referencia: z.string().optional(),
+  })).optional(),
 
   clientId:   z.number().int().positive().optional(),
   lineasJson: z.string().optional(),
@@ -392,6 +397,9 @@ export async function POST(request: NextRequest) {
         // Cuando pagoRecibido=true pero pagoValor=0 no tocamos el ledger; el método
         // se persiste en ecfDocuments.pagoMetodo (columna inline) y editar/page.tsx
         // lo recupera desde ahí como fallback.
+        // Hotfix: el fallo al registrar el pago ya NO se silencia — se reporta
+        // como `pagoWarning` en la respuesta para que el front avise al usuario.
+        let pagoWarning: string | undefined;
         if (data.pagos?.length) {
           try {
             await db.delete(pagosRecibidos)
@@ -404,9 +412,13 @@ export async function POST(request: NextRequest) {
               turnoCajaId:   turnoBorradorId,
               pagos: data.pagos
                 .filter(p => p.valor > 0)
-                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta ?? null, referencia: p.referencia ?? null })),
             });
-          } catch (e) { console.error('[editar borrador registrarPagosSplit]', e); }
+          } catch (e) {
+            console.error('[editar borrador registrarPagosSplit]', e);
+            pagoWarning = e instanceof Error ? e.message : 'No se pudo registrar el pago';
+            await logError({ source: '/api/ecf/emitir', message: `[editar borrador split] ${pagoWarning}` }).catch(() => {});
+          }
         } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
           try {
             await db.delete(pagosRecibidos)
@@ -421,7 +433,11 @@ export async function POST(request: NextRequest) {
               createdBy:     user.id,
               turnoCajaId:   turnoBorradorId,
             });
-          } catch (e) { console.error('[editar borrador registrarPago]', e); }
+          } catch (e) {
+            console.error('[editar borrador registrarPago]', e);
+            pagoWarning = e instanceof Error ? e.message : 'No se pudo registrar el pago';
+            await logError({ source: '/api/ecf/emitir', message: `[editar borrador pago] ${pagoWarning}` }).catch(() => {});
+          }
         } else if (!data.pagoRecibido) {
           // Usuario desmarcó "pago recibido" → limpiar ledger intencionalmente.
           await db.delete(pagosRecibidos)
@@ -436,6 +452,7 @@ export async function POST(request: NextRequest) {
           estado:       'BORRADOR',
           montoTotal:   totales.montoTotal,
           pagoRecibido: data.pagoRecibido ?? false,
+          ...(pagoWarning ? { pagoWarning } : {}),
         });
       }
 
@@ -538,6 +555,8 @@ export async function POST(request: NextRequest) {
       // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
       // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
       // recalcula estado_pago). Si no, flujo single existente.
+      // Hotfix: fallo de pago NO silenciado → `pagoWarning` en la respuesta.
+      let pagoWarning: string | undefined;
       if (data.pagos?.length) {
         try {
           await registrarPagosSplit({
@@ -548,9 +567,13 @@ export async function POST(request: NextRequest) {
             turnoCajaId:   turnoBorradorId,
             pagos: data.pagos
               .filter(p => p.valor > 0)
-              .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+              .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta ?? null, referencia: p.referencia ?? null })),
           });
-        } catch (e) { console.error('[emitir borrador registrarPagosSplit]', e); }
+        } catch (e) {
+          console.error('[emitir borrador registrarPagosSplit]', e);
+          pagoWarning = e instanceof Error ? e.message : 'No se pudo registrar el pago';
+          await logError({ source: '/api/ecf/emitir', message: `[emitir borrador split] ${pagoWarning}` }).catch(() => {});
+        }
       } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
         try {
           await registrarPago({
@@ -563,7 +586,11 @@ export async function POST(request: NextRequest) {
             createdBy:     user.id,
             turnoCajaId:   turnoBorradorId,
           });
-        } catch (e) { console.error('[emitir borrador registrarPago]', e); }
+        } catch (e) {
+          console.error('[emitir borrador registrarPago]', e);
+          pagoWarning = e instanceof Error ? e.message : 'No se pudo registrar el pago';
+          await logError({ source: '/api/ecf/emitir', message: `[emitir borrador pago] ${pagoWarning}` }).catch(() => {});
+        }
       }
 
       // Split: la suma de los métodos (clamped al total) es el pago reportado.
@@ -577,6 +604,7 @@ export async function POST(request: NextRequest) {
         encf:         saved.encf,
         estado:       'BORRADOR',
         montoTotal:   totales.montoTotal,
+        ...(pagoWarning ? { pagoWarning } : {}),
         pagoRecibido: sumaSplit != null ? true : (data.pagoRecibido ?? false),
         pagoMetodo:   sumaSplit != null ? 'split' : (data.pagoRecibido ? (data.pagoMetodo ?? 'efectivo') : null),
         pagoValor:    sumaSplit != null
@@ -797,6 +825,8 @@ export async function POST(request: NextRequest) {
     // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
     // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
     // recalcula estado_pago). Si no, flujo single existente.
+    // Hotfix: fallo de pago NO silenciado → `pagoWarning` en la respuesta.
+    let pagoWarning: string | undefined;
     if (data.pagos?.length) {
       try {
         await registrarPagosSplit({
@@ -807,9 +837,13 @@ export async function POST(request: NextRequest) {
           turnoCajaId:   turnoCaja?.id ?? null,
           pagos: data.pagos
             .filter(p => p.valor > 0)
-            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+            .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo, cuenta: p.cuenta ?? null, referencia: p.referencia ?? null })),
         });
-      } catch (e) { console.error('[emitir registrarPagosSplit]', e); }
+      } catch (e) {
+        console.error('[emitir registrarPagosSplit]', e);
+        pagoWarning = e instanceof Error ? e.message : 'No se pudo registrar el pago';
+        await logError({ source: '/api/ecf/emitir', message: `[emitir split] ${pagoWarning}` }).catch(() => {});
+      }
     } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
       try {
         await registrarPago({
@@ -822,7 +856,11 @@ export async function POST(request: NextRequest) {
           turnoCajaId:   turnoCaja?.id ?? null,
           createdBy:     user.id,
         });
-      } catch (e) { console.error('[emitir registrarPago]', e); }
+      } catch (e) {
+        console.error('[emitir registrarPago]', e);
+        pagoWarning = e instanceof Error ? e.message : 'No se pudo registrar el pago';
+        await logError({ source: '/api/ecf/emitir', message: `[emitir pago] ${pagoWarning}` }).catch(() => {});
+      }
     }
 
     await logInfo({
@@ -857,6 +895,7 @@ export async function POST(request: NextRequest) {
       codigoSeguridad: resultado.codigoSeguridad,
       montoTotal:      totales.montoTotal,
       documentoId:     saved.id,
+      ...(pagoWarning ? { pagoWarning } : {}),
     });
 
   } catch (err: unknown) {

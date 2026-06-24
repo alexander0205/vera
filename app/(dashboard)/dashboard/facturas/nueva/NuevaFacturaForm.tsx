@@ -675,6 +675,11 @@ export default function NuevaFacturaForm({
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modoEfectivo)) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
+      // El backend ya no silencia los fallos de pago: si el documento se guardó
+      // pero el pago no se registró, lo avisamos en vez de perderlo en silencio.
+      if (data.pagoWarning) {
+        toast.warning(`Documento guardado, pero el pago no se registró: ${data.pagoWarning}`);
+      }
       try { localStorage.removeItem(draftKey); } catch {}
       if (opts?.andThen === 'nueva') {
         resetForm();
