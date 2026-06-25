@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
     telefono:    telefono    || null,
     direccion:   direccion   || null,
     descripcion: descripcion || null,
+    createdBy:   user.id,
   }).returning();
 
   return NextResponse.json({ ok: true, cliente: created }, { status: 201 });

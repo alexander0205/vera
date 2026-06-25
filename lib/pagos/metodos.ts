@@ -22,6 +22,27 @@ export const METODO_PAGO_VALUES = [
 
 export type MetodoPago = (typeof METODO_PAGO_VALUES)[number];
 
+/**
+ * Método interno: aplicar el saldo a favor del cliente (generado por Notas de
+ * Crédito) a otra factura. NO se ofrece en el dropdown de pago cash; se aplica
+ * desde un flujo aparte. NO cuenta como efectivo en caja.
+ */
+export const METODO_SALDO_FAVOR = 'saldo_favor' as const;
+
+/**
+ * Método: pagar con una Nota de Crédito específica (voucher por código). Se ofrece
+ * en el repeater cuando hay cliente; al elegirlo se selecciona la NC y se aplica su
+ * monto (uso único). Distinto de saldo_favor (crédito agregado del cliente).
+ */
+export const METODO_NOTA_CREDITO = 'nota_credito' as const;
+
+/** Todos los métodos ACEPTADOS por el backend (ofrecidos + internos). */
+export const METODO_PAGO_VALUES_VALIDOS = [
+  ...METODO_PAGO_VALUES,
+  METODO_SALDO_FAVOR,
+  METODO_NOTA_CREDITO,
+] as const;
+
 export interface MetodoOption { value: string; label: string }
 
 /** Labels de TODOS los métodos (incl. históricos no ofrecidos + alias). MOSTRAR. */
@@ -35,6 +56,8 @@ export const METODO_PAGO_LABELS: Record<string, string> = {
   cheque:          'Cheque',
   deposito:        'Depósito',
   otro:            'Otro',
+  saldo_favor:     'Saldo a favor',
+  nota_credito:    'Nota de crédito',
 };
 
 /** Opciones para dropdowns — solo los métodos ofrecidos, en orden canónico. */

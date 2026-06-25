@@ -7,7 +7,7 @@
  */
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
-import type { EmpresaPerfil } from './page';
+import type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 const NuevaFacturaForm = dynamic(() => import('./NuevaFacturaForm'), {
   ssr: false,
@@ -18,6 +18,13 @@ const NuevaFacturaForm = dynamic(() => import('./NuevaFacturaForm'), {
   ),
 });
 
-export default function NuevaFacturaFormClient({ initialPerfil }: { initialPerfil: EmpresaPerfil | null }) {
-  return <NuevaFacturaForm initialPerfil={initialPerfil} />;
+export default function NuevaFacturaFormClient({
+  initialPerfil,
+  categoriaFija,
+}: {
+  initialPerfil: EmpresaPerfil | null;
+  /** Fija la categoría de documento (factura-venta, nota-credito, nota-debito, compras, gastos). */
+  categoriaFija?: string;
+}) {
+  return <NuevaFacturaForm initialPerfil={initialPerfil} categoriaFija={categoriaFija} />;
 }

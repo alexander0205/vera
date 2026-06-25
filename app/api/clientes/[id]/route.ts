@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
   const { razonSocial, rnc, email, telefono, direccion, descripcion } = parsed.data;
   const [updated] = await db.update(clients)
-    .set({ razonSocial, rnc: rnc || null, email: email || null, telefono: telefono || null, direccion: direccion || null, descripcion: descripcion ?? null, updatedAt: new Date() })
+    .set({ razonSocial, rnc: rnc || null, email: email || null, telefono: telefono || null, direccion: direccion || null, descripcion: descripcion ?? null, updatedBy: user.id, updatedAt: new Date() })
     .where(eq(clients.id, clientId))
     .returning();
 

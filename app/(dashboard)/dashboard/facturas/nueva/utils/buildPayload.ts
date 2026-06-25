@@ -18,6 +18,10 @@ export interface BuildPayloadInput {
   codigoModificacion?: string;
   /** Fecha del NCF original que se modifica (YYYY-MM-DD) — solo tipos 33, 34. */
   fechaNcfModificado?: string;
+  /** Razón de la modificación (texto libre, opcional) — solo tipos 33, 34. */
+  razonModificacion?: string;
+  /** Id del documento padre (flujo "crear nota desde factura") — tipos 33, 34. */
+  origenDocumentoId?: number | null;
   /** Tipo de ingresos (1..6) — tipos 31, 32, 44, 45, 46. Default '1'. */
   tipoIngresos?: string;
   items: ItemLinea[];
@@ -41,7 +45,7 @@ export function buildPayload(input: BuildPayloadInput) {
   const {
     modo, tipoEcf, fechaEmision, clienteSeleccionado, rncManual, rncManualNombre,
     emailManual, tipoPago, fechaLimitePago, ncfModificado, items,
-    codigoModificacion, fechaNcfModificado, tipoIngresos,
+    codigoModificacion, fechaNcfModificado, razonModificacion, origenDocumentoId, tipoIngresos,
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
     pagoRecibido, pagoLineas = [], pagoFecha,
     almacenId, listaPreciosId, vendedorId, borradorId,
@@ -104,6 +108,8 @@ export function buildPayload(input: BuildPayloadInput) {
     ncfModificado:        ncfModificado || undefined,
     codigoModificacion:   (ncfModificado && codigoModificacion) ? Number(codigoModificacion) : undefined,
     fechaNcfModificado:   (ncfModificado && fechaNcfModificado) ? fechaNcfModificado : undefined,
+    razonModificacion:    razonModificacion?.trim() || undefined,
+    origenDocumentoId:    origenDocumentoId ?? undefined,
     tipoIngresos:         tipoIngresos ? Number(tipoIngresos) : undefined,
     items: items
       .filter(i => i.nombreItem.trim() && i.cantidadItem > 0 && i.precioUnitarioItem > 0)

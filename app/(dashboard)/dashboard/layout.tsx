@@ -41,8 +41,8 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
-      { href: '/dashboard/notas-credito',        label: 'Notas de crédito' },
-      { href: '/dashboard/notas-debito',         label: 'Notas de débito' },
+      { href: '/dashboard/notas-credito',        label: 'Notas de crédito',     plusHref: '/dashboard/notas-credito/nueva' },
+      { href: '/dashboard/notas-debito',         label: 'Notas de débito',      plusHref: '/dashboard/notas-debito/nueva' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
       { href: '/dashboard/facturas-recurrentes', label: 'Facturas recurrentes' },
     ],
@@ -64,7 +64,8 @@ const GROUPS: NavGroup[] = [
     label: 'Compras',
     icon: ShoppingCart,
     children: [
-      { href: '/dashboard/compras', label: 'Facturas recibidas' },
+      { href: '/dashboard/compras',      label: 'Facturas recibidas', plusHref: '/dashboard/compras/nueva' },
+      { href: '/dashboard/gastos/nueva', label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
     ],
   },
   {

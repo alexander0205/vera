@@ -337,9 +337,9 @@ export default function FacturasPage() {
           <Link
             href={`/dashboard/facturas/${doc.id}`}
             className={`font-mono text-xs font-semibold hover:underline leading-tight block whitespace-nowrap ${color}`}
-            title={`${doc.encf || 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
+            title={`${doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
           >
-            {compacto ?? (doc.encf || '—')}
+            {compacto ?? (doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : '—')}
           </Link>
         );
       },

@@ -16,6 +16,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
+import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 import { calcularEstadoPago, type EstadoPago } from '@/lib/facturas/estado-pago-calc';
 
 // Re-export para mantener compat con los imports existentes (queries.ts, etc.).
@@ -32,6 +33,8 @@ export async function recalcularEstadoPago(ecfDocumentId: number): Promise<Estad
       tipoPago:   ecfDocuments.tipoPago,
       montoTotal: ecfDocuments.montoTotal,
       teamId:     ecfDocuments.teamId,
+      encf:       ecfDocuments.encf,
+      tipoEcf:    ecfDocuments.tipoEcf,
     })
     .from(ecfDocuments)
     .where(eq(ecfDocuments.id, ecfDocumentId))
@@ -47,11 +50,17 @@ export async function recalcularEstadoPago(ecfDocumentId: number): Promise<Estad
       eq(pagosRecibidos.teamId, doc.teamId),
     ));
 
+  // NC aplicadas reducen el saldo (no aplica a las propias NC tipo 34)
+  const ncAplicado = doc.tipoEcf === '34'
+    ? 0
+    : await getNcAplicadoCts(doc.teamId, ecfDocumentId, doc.encf);
+
   const nuevo = calcularEstadoPago({
-    estado:      doc.estado,
-    tipoPago:    doc.tipoPago,
-    montoTotal:  doc.montoTotal,
-    totalPagado: Number(total ?? 0),
+    estado:            doc.estado,
+    tipoPago:          doc.tipoPago,
+    montoTotal:        doc.montoTotal,
+    totalPagado:       Number(total ?? 0),
+    totalNotasCredito: ncAplicado,
   });
 
   await db.update(ecfDocuments)

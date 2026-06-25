@@ -14,6 +14,7 @@ import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 
 export async function getUser() {
   const sessionCookie = (await cookies()).get('session');
@@ -535,6 +536,24 @@ export async function getCuentasPorCobrar(
             WHERE pagos_recibidos.ecf_document_id = nd.id
           ), 0)) > 0
       ), 0)`,
+      // Crédito aplicado por Notas de Crédito (tipo 34) vinculadas a esta
+      // factura (por origen_documento_id o por ncf_modificado = encf real).
+      // Reduce el saldo cobrable. Mismo patrón de subquery correlacionada.
+      ncAplicado: sql<number>`coalesce((
+        SELECT SUM(nc.monto_total) FROM ecf_documents nc
+        WHERE nc.team_id = ecf_documents.team_id
+          AND nc.tipo_ecf = '34'
+          -- Solo NCs del modelo viejo reducen la factura; las nuevas generan
+          -- saldo a favor del cliente (credito_generado_cents IS NOT NULL).
+          AND nc.credito_generado_cents IS NULL
+          AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+          -- Código 2 (Corrige texto) no afecta el saldo (sin efecto monetario).
+          AND nc.codigo_modificacion IS DISTINCT FROM 2
+          AND (
+            nc.origen_documento_id = ecf_documents.id
+            OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf)
+          )
+      ), 0)`,
     })
     .from(ecfDocuments)
     .where(and(
@@ -549,6 +568,9 @@ export async function getCuentasPorCobrar(
       // Las ND de mora ya NO son cuentas propias: se agrupan dentro de su
       // factura padre. Solo listamos facturas raíz (mora_origen_id IS NULL).
       sql`${ecfDocuments.moraOrigenId} IS NULL`,
+      // Las Notas de Crédito (tipo 34) no son cuentas por cobrar: acreditan
+      // contra su factura padre (restadas vía ncAplicado).
+      sql`${ecfDocuments.tipoEcf} != '34'`,
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
     ))
     .orderBy(desc(ecfDocuments.fechaEmision));
@@ -589,8 +611,11 @@ export async function getCuentasPorCobrar(
   const enriquecidas = rows
     .map(r => {
       const pagado = Number(r.pagado);
-      // saldoFactura = montoTotal − pagado (saldo SOLO de la factura).
-      const saldoFactura = r.montoTotal - pagado;
+      const ncAplicado = Number(r.ncAplicado);
+      // saldoFactura = montoTotal − pagado − NC aplicadas (saldo SOLO de la
+      // factura, nunca negativo: NC sobre factura ya pagada = crédito a favor
+      // del cliente, no deuda negativa en AR).
+      const saldoFactura = Math.max(0, r.montoTotal - pagado - ncAplicado);
       const moraSaldo = Number(r.moraSaldo);
       // saldo = saldoFactura + moraSaldo → TOTAL combinado que se cobra.
       const saldo = saldoFactura + moraSaldo;
@@ -602,6 +627,7 @@ export async function getCuentasPorCobrar(
       return {
         ...r,
         pagado,
+        ncAplicado,
         saldoFactura,
         moraSaldo,
         saldo,
@@ -673,13 +699,23 @@ export async function syncPagoMirror(teamId: number, ecfDocumentId: number) {
       estado:     ecfDocuments.estado,
       tipoPago:   ecfDocuments.tipoPago,
       montoTotal: ecfDocuments.montoTotal,
+      encf:       ecfDocuments.encf,
+      tipoEcf:    ecfDocuments.tipoEcf,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
     .limit(1);
 
+  // NC vinculadas acreditan contra el total (no aplica a las propias NC)
+  const ncAplicado = doc && doc.tipoEcf !== '34'
+    ? await getNcAplicadoCts(teamId, ecfDocumentId, doc.encf)
+    : 0;
+
   const estadoPago = doc
-    ? calcularEstadoPago({ estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal, totalPagado: sum })
+    ? calcularEstadoPago({
+        estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal,
+        totalPagado: sum, totalNotasCredito: ncAplicado,
+      })
     : 'PENDIENTE';
 
   await db.update(ecfDocuments).set({
@@ -759,7 +795,12 @@ export async function registrarPagosSplit(input: {
 
   // Validar doc pertenece al team
   const [doc] = await db
-    .select({ id: ecfDocuments.id, montoTotal: ecfDocuments.montoTotal })
+    .select({
+      id:         ecfDocuments.id,
+      montoTotal: ecfDocuments.montoTotal,
+      encf:       ecfDocuments.encf,
+      tipoEcf:    ecfDocuments.tipoEcf,
+    })
     .from(ecfDocuments)
     .where(and(
       eq(ecfDocuments.id, input.ecfDocumentId),
@@ -769,7 +810,7 @@ export async function registrarPagosSplit(input: {
 
   if (!doc) throw new Error('Documento no encontrado');
 
-  // Calcular saldo actual
+  // Calcular saldo actual (pagos + NC aplicadas)
   const [agg] = await db
     .select({
       pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
@@ -777,8 +818,11 @@ export async function registrarPagosSplit(input: {
     .from(pagosRecibidos)
     .where(eq(pagosRecibidos.ecfDocumentId, input.ecfDocumentId));
 
-  const yaPagado = Number(agg?.pagado ?? 0);
-  const saldo    = doc.montoTotal - yaPagado;
+  const yaPagado   = Number(agg?.pagado ?? 0);
+  const ncAplicado = doc.tipoEcf !== '34'
+    ? await getNcAplicadoCts(input.teamId, input.ecfDocumentId, doc.encf)
+    : 0;
+  const saldo      = Math.max(0, doc.montoTotal - yaPagado - ncAplicado);
 
   let total = 0;
   for (const p of input.pagos) {
@@ -843,6 +887,8 @@ export async function registrarPagoFacturaConMora(input: {
     referencia?:   string | null;
     cuenta?:       string | null;
     notas?:        string | null;
+    /** NC consumida (metodo='nota_credito'). Voucher de uso único. */
+    notaCreditoId?: number | null;
   }>;
 }) {
   if (input.lineas.length < 1) throw new Error('Debe incluir al menos un método de pago');
@@ -854,7 +900,12 @@ export async function registrarPagoFacturaConMora(input: {
 
   // Factura padre + su saldo
   const [doc] = await db
-    .select({ id: ecfDocuments.id, montoTotal: ecfDocuments.montoTotal })
+    .select({
+      id:         ecfDocuments.id,
+      montoTotal: ecfDocuments.montoTotal,
+      encf:       ecfDocuments.encf,
+      tipoEcf:    ecfDocuments.tipoEcf,
+    })
     .from(ecfDocuments)
     .where(and(
       eq(ecfDocuments.id, input.ecfDocumentId),
@@ -867,7 +918,13 @@ export async function registrarPagoFacturaConMora(input: {
     .select({ pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
     .from(pagosRecibidos)
     .where(eq(pagosRecibidos.ecfDocumentId, input.ecfDocumentId));
-  const saldoFactura = doc.montoTotal - Number(aggFactura?.pagado ?? 0);
+  const ncAplicadoFactura = doc.tipoEcf !== '34'
+    ? await getNcAplicadoCts(input.teamId, input.ecfDocumentId, doc.encf)
+    : 0;
+  const saldoFactura = Math.max(
+    0,
+    doc.montoTotal - Number(aggFactura?.pagado ?? 0) - ncAplicadoFactura,
+  );
 
   // ND de mora atadas con saldo > 0, ordenadas por id
   const moraDocs = await db
@@ -908,6 +965,7 @@ export async function registrarPagoFacturaConMora(input: {
     referencia:    string | null;
     cuenta:        string | null;
     notas:         string | null;
+    notaCreditoId: number | null;
   };
   const inserts: Insert[] = [];
   let remFactura = saldoFactura;
@@ -916,6 +974,9 @@ export async function registrarPagoFacturaConMora(input: {
 
   for (const linea of input.lineas) {
     let monto = linea.montoCentavos;
+    // NC de uso parcial: todas las porciones de una línea 'nota_credito' llevan el
+    // mismo nota_credito_id → el "usado" de la NC = suma de sus pagos.
+    const ncId: number | null = linea.notaCreditoId ?? null;
 
     // 1) Llenar la factura primero
     const x = Math.min(monto, remFactura);
@@ -927,6 +988,7 @@ export async function registrarPagoFacturaConMora(input: {
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
         notas:         linea.notas ?? null,
+        notaCreditoId: ncId,
       });
       remFactura  -= x;
       monto       -= x;
@@ -945,6 +1007,7 @@ export async function registrarPagoFacturaConMora(input: {
         referencia:    linea.referencia ?? null,
         cuenta:        linea.cuenta ?? null,
         notas:         linea.notas ?? null,
+        notaCreditoId: ncId,
       });
       nd.rem    -= y;
       monto     -= y;
@@ -959,6 +1022,7 @@ export async function registrarPagoFacturaConMora(input: {
         ecfDocumentId: i.ecfDocumentId,
         montoCentavos: i.montoCentavos,
         metodo:        i.metodo,
+        notaCreditoId: i.notaCreditoId,
         referencia:    i.referencia,
         cuenta:        i.cuenta,
         fechaPago:     input.fechaPago,

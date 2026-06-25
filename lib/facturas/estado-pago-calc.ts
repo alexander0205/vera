@@ -20,6 +20,8 @@ export function calcularEstadoPago(params: {
   tipoPago:    number | null | undefined;
   montoTotal:  number;        // centavos
   totalPagado: number;        // centavos sumados de pagos_recibidos
+  /** Centavos acreditados por Notas de Crédito (tipo 34) vinculadas al doc. */
+  totalNotasCredito?: number;
 }): EstadoPago {
   if (params.estado === 'ANULADO') return 'ANULADA';
   if (params.tipoPago === 3)       return 'GRATUITA';
@@ -27,7 +29,9 @@ export function calcularEstadoPago(params: {
   // Pago real determina el estado para TODOS los tipos (contado y crédito).
   // No se asume contado=pagado: un contado emitido sin registrar pago tiene
   // saldo pendiente y debe aparecer en cuentas por cobrar.
-  if (params.montoTotal > 0 && params.totalPagado >= params.montoTotal) return 'PAGADA';
-  if (params.totalPagado > 0) return 'PARCIAL';
+  // Las NC vinculadas acreditan contra el total igual que un pago.
+  const aplicado = params.totalPagado + (params.totalNotasCredito ?? 0);
+  if (params.montoTotal > 0 && aplicado >= params.montoTotal) return 'PAGADA';
+  if (aplicado > 0) return 'PARCIAL';
   return 'PENDIENTE';
 }
