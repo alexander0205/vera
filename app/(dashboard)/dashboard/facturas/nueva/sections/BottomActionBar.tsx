@@ -11,6 +11,8 @@ interface Props {
   onCancelar?: () => void;
   primaryLabel?: string;
   loadingPrimaryLabel?: string;
+  /** Color del botón primario por tipo de doc (factura teal / NC ámbar / ND azul). */
+  primaryBtnClass?: string;
   // Full invoice mode (optional — omit for simple mode)
   loadingPreview?: boolean;
   onVistaPrevia?: () => void;
@@ -21,11 +23,11 @@ export function BottomActionBar({
   items, loading, onCancelar,
   primaryLabel = 'Guardar',
   loadingPrimaryLabel = 'Emitiendo…',
+  primaryBtnClass = 'bg-teal-600 hover:bg-teal-700 border-teal-700',
   loadingPreview, onVistaPrevia, onEmitir,
 }: Props) {
   const [showGuardarMenu, setShowGuardarMenu] = useState(false);
   const guardarMenuRef = useRef<HTMLDivElement>(null);
-  const disableEmitir  = items.every((i) => !i.nombreItem.trim());
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -62,7 +64,7 @@ export function BottomActionBar({
             <Button
               type="button"
               variant="outline"
-              disabled={loading || disableEmitir}
+              disabled={loading}
               className="text-gray-700 border-gray-300 hover:bg-gray-50 h-11 sm:h-9 w-full sm:w-auto"
               onClick={() => onEmitir('emitir', { andThen: 'nueva' })}>
               Guardar y crear nueva
@@ -71,8 +73,8 @@ export function BottomActionBar({
             <div ref={guardarMenuRef} className="relative flex w-full sm:w-auto">
               <Button
                 type="submit"
-                disabled={loading || disableEmitir}
-                className="bg-teal-600 hover:bg-teal-700 text-white rounded-r-none flex-1 sm:flex-none sm:min-w-[140px] border-r border-teal-700 h-11 sm:h-9"
+                disabled={loading}
+                className={`${primaryBtnClass} text-white rounded-r-none flex-1 sm:flex-none sm:min-w-[140px] border-r h-11 sm:h-9`}
               >
                 {loading
                   ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{loadingPrimaryLabel}</>
@@ -83,7 +85,7 @@ export function BottomActionBar({
                 disabled={loading}
                 onClick={() => setShowGuardarMenu(v => !v)}
                 aria-label="Más opciones para guardar"
-                className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-md rounded-l-none px-3 sm:px-2.5 flex items-center justify-center border-l border-teal-700 transition-colors h-11 sm:h-9"
+                className={`${primaryBtnClass} disabled:opacity-50 text-white rounded-md rounded-l-none px-3 sm:px-2.5 flex items-center justify-center border-l transition-colors h-11 sm:h-9`}
               >
                 <ChevronDown className="h-4 w-4" />
               </button>
@@ -118,8 +120,8 @@ export function BottomActionBar({
         ) : (
           <Button
             type="submit"
-            disabled={loading || disableEmitir}
-            className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto sm:min-w-[140px]"
+            disabled={loading}
+            className={`${primaryBtnClass} text-white h-11 sm:h-9 w-full sm:w-auto sm:min-w-[140px]`}
           >
             {loading
               ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{loadingPrimaryLabel}</>

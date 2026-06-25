@@ -68,6 +68,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     tasaItbis,
     tipo,
     activo:     activo === false ? 'false' : 'true',
+    updatedBy:  user.id,
     updatedAt:  new Date(),
   }).where(eq(products.id, prodId)).returning();
 

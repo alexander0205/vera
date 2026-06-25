@@ -129,6 +129,17 @@ export function EntityHistory({ docId, encf, className = '' }: Props) {
       if (m.montoTotal) parts.push(`RD$ ${Number(m.montoTotal).toFixed(2)}`);
       if (m.trackId)    parts.push(`track ${String(m.trackId).slice(0, 12)}…`);
       if (m.via)        parts.push(`vía ${m.via}`);
+      // Motivo del rechazo DGII (o cualquier mensaje guardado en el evento).
+      if (m.mensajes) {
+        const raw = Array.isArray(m.mensajes)
+          ? m.mensajes
+          : (typeof m.mensajes === 'object' ? Object.values(m.mensajes as Record<string, unknown>) : [m.mensajes]);
+        const first = raw
+          .map((x) => typeof x === 'string' ? x : (x && typeof x === 'object' ? String((x as Record<string, unknown>).valor ?? (x as Record<string, unknown>).mensaje ?? '') : ''))
+          .filter(Boolean)[0];
+        if (first) parts.push(String(first).slice(0, 100));
+      }
+      if (m.motivo)     parts.push(String(m.motivo).slice(0, 80));
       return parts.length ? parts.join(' · ') : null;
     } catch {
       return null;

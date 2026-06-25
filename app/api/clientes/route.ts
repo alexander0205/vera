@@ -4,45 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { clients } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, ilike, or, and } from 'drizzle-orm';
-
-// Helper para transformar cadenas vacías a null
-const optStr = (max = 500) =>
-  z.string().max(max).optional().nullable()
-    .transform(v => (typeof v === 'string' && v.trim() === '' ? null : v ?? null));
-
-// RNC dominicano: cédula (11 dígitos) o RNC (9 dígitos).
-// Normaliza a solo dígitos (acepta guiones/espacios del autocomplete de cédula).
-const rncSchema = z.preprocess(
-  v => (typeof v === 'string' ? v.replace(/[-\s]/g, '') : v),
-  z.preprocess(
-    v => (typeof v === 'string' && v === '' ? null : v),
-    z.string()
-      .nullable()
-      .optional()
-      .refine(v => v == null || /^\d{9}$|^\d{11}$/.test(v), {
-        message: 'RNC debe tener 9 dígitos (empresa) u 11 dígitos (cédula)',
-      })
-      .transform(v => (v == null ? null : v)),
-  ),
-);
-
-const clienteSchema = z.object({
-  razonSocial: z.string().min(1, 'El nombre es obligatorio').max(255).transform(v => v.trim()),
-  rnc:         rncSchema,
-  // email: vacío o null → null; con valor debe ser email válido
-  email: z.preprocess(
-    v => (typeof v === 'string' && v.trim() === '' ? null : v),
-    z.string().email('Correo electrónico inválido').nullable().optional()
-  ),
-  telefono:    optStr(30),
-  direccion:   optStr(500),
-  descripcion: optStr(2000),
-});
+import { clienteSchema } from '@/lib/clientes/schema';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -111,6 +77,7 @@ export async function POST(req: NextRequest) {
     telefono:    telefono    || null,
     direccion:   direccion   || null,
     descripcion: descripcion || null,
+    createdBy:   user.id,
   }).returning();
 
   return NextResponse.json({ ok: true, cliente: created }, { status: 201 });

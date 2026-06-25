@@ -101,7 +101,7 @@ export async function PATCH(
   }
 
   if (parsed.data.fechaVencimiento) {
-    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59');
+    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59Z');
   }
 
   if (parsed.data.nombre !== undefined) {
@@ -181,7 +181,7 @@ export async function PUT(
   }
 
   if (parsed.data.fechaVencimiento) {
-    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59');
+    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59Z');
   }
 
   if (parsed.data.nombre !== undefined) {

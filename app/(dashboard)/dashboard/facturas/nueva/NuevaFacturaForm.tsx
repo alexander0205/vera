@@ -1,28 +1,31 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
-  StickyNote, ScrollText, MessageSquare, CreditCard,
+  StickyNote, ScrollText, MessageSquare, CreditCard, Send,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
 
 import { NavBar, TopBar } from './sections/TopBar';
 import { CompactHeader } from './sections/CompactHeader';
+import { FacturaOrigenSection, type FacturaResumen } from './sections/FacturaOrigenSection';
 import { SectionCard } from './sections/SectionCard';
 import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
-import { DetallesSection } from './sections/DetallesSection';
+import { DetallesSection, MOTIVOS_NOTA } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
 import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
 import type { PagoLinea } from '@/components/pagos/PagoMetodos';
+import { sumaPagos } from '@/components/pagos/PagoMetodos';
 import { Terminos, Notas } from './sections/TerminosNotas';
 import { PieFactura } from './sections/PieFactura';
 import { Comentarios } from './sections/Comentarios';
@@ -55,9 +58,12 @@ export type { BorradorInicial, EmpresaPerfil };
 export default function NuevaFacturaForm({
   initialPerfil,
   initialData,
+  categoriaFija,
 }: {
   initialPerfil: EmpresaPerfil | null;
   initialData?:  BorradorInicial | null;
+  /** Fija la categoría de documento por ruta → oculta el selector de categoría. */
+  categoriaFija?: string;
 }) {
   const router  = useRouter();
   const empresa = initialPerfil;
@@ -86,11 +92,75 @@ export default function NuevaFacturaForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Query params: ?tipo=33|34 [&padreId=N] ─────────────────────────────────
+  // tipo → tipo e-CF + categoría iniciales (links "Nueva Nota de Crédito/Débito"
+  // y "crear nota desde factura"). Debe resolverse como ESTADO INICIAL, no en un
+  // effect: cambiar el value de un Radix Select mientras su item seleccionado se
+  // desmonta dispara onValueChange('') y rompe la selección.
+  const searchParams = useSearchParams();
+  const qpTipo    = !initialData && searchParams.get('tipo') && TIPO_ECF_REGLAS[searchParams.get('tipo')!]
+    ? searchParams.get('tipo')!
+    : null;
+  const qpPadreId = !initialData ? searchParams.get('padreId') : null;
+
+  // Categoría fija por ruta (factura/NC/ND/compras/gastos). Si está presente,
+  // oculta el selector de categoría y el tipo arranca en el de esa categoría.
+  const catFijaObj = categoriaFija ? CATEGORIAS_ECF.find(c => c.id === categoriaFija) : null;
+  const tipoDefaultCatFija = catFijaObj
+    ? (catFijaObj.id === 'factura-venta' ? 'sin-ncf' : catFijaObj.tipos[0].codigo)
+    : null;
+
   // '00' = marcador HISTORICA (sin e-CF real) → en el form equivale a 'sin-ncf'.
   const [tipoEcf, setTipoEcf]         = useState(
-    initialData?.tipoEcf && initialData.tipoEcf !== '00' ? initialData.tipoEcf : 'sin-ncf',
+    initialData?.tipoEcf && initialData.tipoEcf !== '00'
+      ? initialData.tipoEcf
+      : (qpTipo ?? tipoDefaultCatFija ?? 'sin-ncf'),
   );
-  const [categoriaId, setCategoriaId] = useState('factura-venta');
+  const [categoriaId, setCategoriaId] = useState(
+    categoriaFija
+      ?? (initialData?.tipoEcf && initialData.tipoEcf !== '00'
+            ? getCategoriaDeEcf(initialData.tipoEcf).id
+            : qpTipo
+              ? getCategoriaDeEcf(qpTipo).id
+              : 'factura-venta'),
+  );
+
+  // Ocultar el selector de categoría: con categoría fija por ruta, o al editar
+  // un borrador (no se cambia el tipo de un documento ya creado).
+  const ocultarCategoria = !!categoriaFija || !!initialData;
+
+  // Título de la pantalla según la categoría de documento.
+  const tituloDoc = ({
+    'nota-credito': { nuevo: 'Nueva nota de crédito', editar: 'Editar nota de crédito' },
+    'nota-debito':  { nuevo: 'Nueva nota de débito',  editar: 'Editar nota de débito' },
+    'compras':      { nuevo: 'Nueva compra',          editar: 'Editar compra' },
+    'gastos':       { nuevo: 'Nuevo gasto',           editar: 'Editar gasto' },
+  } as Record<string, { nuevo: string; editar: string }>)[categoriaId]
+    ?? { nuevo: 'Nueva factura', editar: 'Editar factura' };
+
+  // Acento + nomenclatura por tipo de documento (factura / NC / ND).
+  // Distingue la pantalla con el color del botón primario y la etiqueta del total.
+  // Clases Tailwind LITERALES — sin interpolar el color — para que el JIT las incluya.
+  const docAccent = ({
+    'nota-credito': {
+      noun: 'nota de crédito', totalLabel: 'Total a acreditar',
+      primaryBtnClass: 'bg-amber-600 hover:bg-amber-700 border-amber-700',
+    },
+    'nota-debito': {
+      noun: 'nota de débito', totalLabel: 'Total a debitar',
+      primaryBtnClass: 'bg-blue-600 hover:bg-blue-700 border-blue-700',
+    },
+  } as Record<string, { noun: string; totalLabel: string; primaryBtnClass: string }>)[categoriaId]
+    ?? { noun: 'factura', totalLabel: 'Total',
+         primaryBtnClass: 'bg-teal-600 hover:bg-teal-700 border-teal-700' };
+
+  // Base de ruta del detalle/listado según el tipo — para que al crear una NC/ND
+  // se aterrice en su vista propia (no en la de factura).
+  const detalleBase =
+    categoriaId === 'nota-credito' ? '/dashboard/notas-credito'
+    : categoriaId === 'nota-debito' ? '/dashboard/notas-debito'
+    : '/dashboard/facturas';
+
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
@@ -170,9 +240,134 @@ export default function NuevaFacturaForm({
     }
   }, [condicionPago, diasParaPago, fechaEmision]);
   const [ncfModificado, setNcfModificado]     = useState(initialData?.ncfModificado ?? '');
+  const [motivoNota, setMotivoNotaRaw]        = useState<string>('');
   const [codigoModificacion, setCodigoModificacion] = useState<string>('');
   const [fechaNcfModificado, setFechaNcfModificado] = useState<string>('');
+
+  // e-NCF modificado con formato válido (E + 10-12 dígitos). Permite emitir una
+  // NC/ND aunque la factura de origen no tenga e-CF en el sistema (p. ej. emitida
+  // fuera de emitedo): el usuario escribe el e-NCF real y se confía en él.
+  const ncfModificadoValido = /^E\d{10,12}$/.test(ncfModificado.trim());
+  const [razonModificacion, setRazonModificacion]   = useState<string>('');
+
+  const setMotivoNota = (v: string) => {
+    setMotivoNotaRaw(v);
+    const found = MOTIVOS_NOTA.find((m) => m.value === v);
+    setCodigoModificacion(found ? String(found.codigo) : '');
+    if (v !== 'otro') setRazonModificacion('');
+  };
   const [tipoIngresos, setTipoIngresos]       = useState<string>('1');
+
+  // ── Prefill "crear nota desde factura" (?padreId=N) ────────────────────────
+  // Pre-llena NCF modificado, fecha, cliente y líneas del padre; persiste el
+  // vínculo origenDocumentoId. El tipo/categoría ya quedaron en el estado inicial.
+  const [padreNota, setPadreNota] = useState<{
+    id: number; codigo: string | null; encf: string; estado: string; conEcfReal: boolean;
+    tipoEcf?: string;
+    montoTotal?: string; razonSocial?: string; fechaEmision?: string;
+  } | null>(null);
+
+  // Factura de origen sin-ncf (sin comprobante fiscal): no tiene e-NCF ni lo
+  // tendrá → la nota es interna (borrador), sin referencia DGII (no se pide e-NCF).
+  const esPadreSinNcf = padreNota?.tipoEcf === 'sin-ncf';
+
+  // Aplica una factura padre (payload de /api/facturas/:id) al formulario:
+  // e-NCF modificado, fecha, cliente y líneas. Reutilizado por el prefill via
+  // ?padreId y por el selector de factura de origen en NC/ND.
+  function aplicarPadre(p: {
+    id?: number; codigo?: string | null; encf?: string; estado?: string; tipoEcf?: string;
+    fechaEmision?: string | null;
+    montos?: { montoTotalDOP?: string };
+    comprador?: { clienteId?: number; razonSocial?: string | null; rnc?: string | null; email?: string | null; telefono?: string | null };
+    lineas?: Array<Record<string, unknown>>;
+  }) {
+    if (!p?.id) return;
+    const conEcfReal = typeof p.encf === 'string' && /^E\d/.test(p.encf);
+    setPadreNota({
+      id: p.id, codigo: p.codigo ?? null, encf: p.encf ?? '', estado: p.estado ?? '', conEcfReal,
+      tipoEcf:      p.tipoEcf,
+      montoTotal:   p.montos?.montoTotalDOP,
+      razonSocial:  p.comprador?.razonSocial ?? undefined,
+      fechaEmision: p.fechaEmision ? String(p.fechaEmision).slice(0, 10) : undefined,
+    });
+    if (conEcfReal && p.encf) setNcfModificado(p.encf);
+    if (p.fechaEmision) setFechaNcfModificado(String(p.fechaEmision).slice(0, 10));
+    // Comprador del padre
+    if (p.comprador?.clienteId) {
+      seleccionarCliente({
+        id:          p.comprador.clienteId,
+        razonSocial: p.comprador.razonSocial ?? '',
+        rnc:         p.comprador.rnc ?? null,
+        email:       p.comprador.email ?? null,
+        telefono:    p.comprador.telefono ?? null,
+      });
+    } else {
+      const rnc = p.comprador?.rnc ?? '';
+      setRncManual(rnc);
+      setRncManualNombre(p.comprador?.razonSocial ?? '');
+      setEmailManual(p.comprador?.email ?? '');
+      // Try to match to a registered client by RNC so the autocomplete prefills
+      if (rnc) {
+        fetch(`/api/clientes?q=${encodeURIComponent(rnc)}`)
+          .then(r => r.json())
+          .then((data) => {
+            const match = (data.clientes as Cliente[] | undefined)?.find(c => c.rnc === rnc);
+            if (match) seleccionarCliente(match);
+          })
+          .catch(() => {});
+      }
+    }
+    // Copiar líneas del padre — SOLO en NC (devolución/descuento sobre esos ítems).
+    // En ND (tipo 33) es un cargo nuevo (mora, interés, flete) → NO se copian; el
+    // usuario agrega el cargo manualmente. El cliente sí se carga (arriba).
+    if (tipoEcf !== '33' && Array.isArray(p.lineas) && p.lineas.length > 0) {
+      const its: ItemLinea[] = p.lineas.map((l: Record<string, unknown>, i: number) => ({
+        id:                     i + 1,
+        productoId:             typeof l.productoId === 'number' ? l.productoId : undefined,
+        nombreItem:             String(l.nombreItem ?? ''),
+        referencia:             String(l.referencia ?? ''),
+        descripcionItem:        String(l.descripcionItem ?? ''),
+        cantidadItem:           Number(l.cantidadItem) || 1,
+        precioUnitarioItem:     Number(l.precioUnitarioItem) || 0,
+        descuentoPct:           Number(l.descuentoPct) || 0,
+        tasaItbis:              (['0.18', '0.16', '0', 'exento'].includes(String(l.tasaItbis))
+                                  ? String(l.tasaItbis) : 'exento') as ItemLinea['tasaItbis'],
+        indicadorBienoServicio: String(l.indicadorBienoServicio) === '1' ? '1' : '2',
+        dependienteId:          typeof l.dependienteId === 'number' ? l.dependienteId : null,
+        dependienteNombre:      String(l.dependienteNombre ?? ''),
+      }));
+      dispatchItems({ type: 'SET', items: its });
+    }
+  }
+
+  // Carga la factura padre por id (fetch + aplicarPadre).
+  function cargarPadre(padreId: number) {
+    fetch(`/api/facturas/${padreId}`)
+      .then(r => r.json())
+      .then(aplicarPadre)
+      .catch(() => {});
+  }
+
+  // Limpia el vínculo con la factura de origen (mantiene cliente/líneas editables).
+  function limpiarPadre() {
+    setPadreNota(null);
+    setNcfModificado('');
+    setFechaNcfModificado('');
+  }
+
+  // Busca facturas candidatas como origen de una NC/ND (excluye notas 33/34).
+  async function buscarFacturas(q: string): Promise<FacturaResumen[]> {
+    const res  = await fetch(`/api/facturas?search=${encodeURIComponent(q)}&limit=20`);
+    const data = await res.json();
+    return ((data.docs ?? []) as FacturaResumen[]).filter(d => d.tipoEcf !== '33' && d.tipoEcf !== '34');
+  }
+
+  useEffect(() => {
+    if (initialData) return; // editar borrador manda sobre los query params
+    if (!qpPadreId) return;
+    cargarPadre(Number(qpPadreId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Items (useReducer) ─────────────────────────────────────────────────────
   const [items, dispatchItems] = useItemsState(itemsIniciales);
@@ -261,6 +456,12 @@ export default function NuevaFacturaForm({
   // Guard atómico anti doble-submit: el `loading` (state React) no bloquea clicks
   // disparados en el mismo tick. Este ref sí, de forma síncrona.
   const submittingRef = useRef(false);
+  // ── Tracking anti-duplicados ────────────────────────────────────────────────
+  // fid = id único por MONTAJE del form (distingue 2 pestañas / re-montajes).
+  // submitSeq = nº de submit dentro de este montaje (distingue doble-click/retry).
+  // Se manda en cada submit como `_traza` y se loguea server-side junto al docId.
+  const formInstanceId = useRef('f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)).current;
+  const submitSeqRef   = useRef(0);
 
   // ── TOP SECTION: Almacén / Lista / Vendedor ───────────────────────────────
   const [showAlmacen, setShowAlmacen]               = useState(false);
@@ -301,6 +502,8 @@ export default function NuevaFacturaForm({
   // ── Autosave: restore draft on mount (only when no initialData) ───────────
   useEffect(() => {
     if (initialData) { setDraftHydrated(true); return; }
+    // Prefill por query params (nota desde factura) manda sobre el draft local.
+    if (qpTipo || qpPadreId) { setDraftHydrated(true); return; }
     try {
       const saved = localStorage.getItem(draftKey);
       if (saved) {
@@ -516,7 +719,9 @@ export default function NuevaFacturaForm({
     return buildPayloadFn({
       modo, tipoEcf, fechaEmision, clienteSeleccionado, rncManual, rncManualNombre, emailManual,
       tipoPago: parseInt(condicionPago, 10), fechaLimitePago, ncfModificado, items,
-      codigoModificacion, fechaNcfModificado, tipoIngresos,
+      codigoModificacion, fechaNcfModificado, razonModificacion,
+      origenDocumentoId: padreNota?.id ?? null,
+      tipoIngresos,
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
@@ -529,6 +734,16 @@ export default function NuevaFacturaForm({
   const totalRetenciones = useMemo(() => retenciones.reduce((s, r) => s + r.monto, 0), [retenciones]);
   const totalNeto = totales.total - totalRetenciones;
 
+  // Motivo (código de modificación) obligatorio para notas 33/34 — también al
+  // guardar como borrador: la DGII lo exige y evita notas incompletas que luego
+  // se traban al emitir.
+  function validarMotivoNota(): string | null {
+    if (!regla?.requiereNcfModificado) return null;
+    if (!motivoNota) return 'Debes seleccionar el motivo de la nota de crédito / débito';
+    if (motivoNota === 'otro' && !razonModificacion.trim()) return 'Debes especificar el motivo';
+    return null;
+  }
+
   function validar(): string | null {
     const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
     const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
@@ -538,8 +753,8 @@ export default function NuevaFacturaForm({
       return `La razón social del ${regla.compradorLabel} es obligatoria`;
     if (regla?.requiereNcfModificado && !ncfModificado.trim())
       return 'Debes indicar el e-NCF original que se modifica';
-    if (regla?.requiereNcfModificado && !codigoModificacion)
-      return 'Debes seleccionar el código de modificación (Anula, Corrige texto, Corrige monto, etc.)';
+    const motivoErr = validarMotivoNota();
+    if (motivoErr) return motivoErr;
     if (regla?.requiereNcfModificado && !fechaNcfModificado)
       return 'Debes indicar la fecha del e-NCF original que se modifica';
     if (tipoEcf === '32' && totales.total >= 250000 && !rncFinal.trim())
@@ -556,6 +771,24 @@ export default function NuevaFacturaForm({
     if (items.filter(i => i.nombreItem.trim()).every(i => i.precioUnitarioItem <= 0))
       return 'Los ítems deben tener un precio mayor a 0';
     return null;
+  }
+
+  // Regla cuentas por cobrar: una factura de VENTA que quedaría pendiente de cobro
+  // (contado sin pago o crédito) debe identificar a quién cobrarle. Sin cliente
+  // (nombre/RNC/cédula) y sin el pago completo registrado, sería una cuenta huérfana
+  // en Cuentas por Cobrar (nadie de quién cobrar). Se desbloquea agregando el cliente
+  // o registrando el pago total. No aplica a NC/ND, compras/gastos, ni gratuito/uso.
+  function validarClienteOPago(): string | null {
+    const TIPOS_VENTA = ['31', '32', '45', '46', '47', 'sin-ncf'];
+    if (!TIPOS_VENTA.includes(tipoEcf)) return null;
+    if (condicionPago === '3' || condicionPago === '4') return null; // gratuito / uso: no es por cobrar
+    const rncFinal   = (clienteSeleccionado?.rnc ?? rncManual).trim();
+    const razonFinal = (clienteSeleccionado?.razonSocial ?? rncManualNombre).trim();
+    if (rncFinal || razonFinal) return null;                          // ya hay a quién cobrarle
+    const pagado = pagoRecibido ? sumaPagos(pagoLineas) : 0;
+    const pagoCompleto = totalNeto > 0 && Math.round(pagado * 100) >= Math.round(totalNeto * 100);
+    if (pagoCompleto) return null;                                    // se cobró completo
+    return 'Falta a quién cobrarle: agrega el nombre, RNC o cédula del cliente, o registra el pago completo. Una factura sin cliente no puede quedar pendiente de cobro.';
   }
 
   /**
@@ -594,11 +827,34 @@ export default function NuevaFacturaForm({
   }
 
   async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
-    // Sin eCF seleccionado → siempre guardar como borrador (no se emite a DGII)
-    const modoEfectivo: 'emitir' | 'borrador' = tipoEcf === 'sin-ncf' ? 'borrador' : modo;
+    // Traza anti-duplicados: identifica el botón y la secuencia de clicks de este
+    // montaje. Se loguea aquí (consola) y se manda al server (`_traza`) para ligar
+    // cada submit con el documento creado y diagnosticar las facturas duplicadas.
+    const traza = {
+      fid:   formInstanceId,
+      seq:   ++submitSeqRef.current,
+      boton: opts?.andThen ? `${modo}+${opts.andThen}` : modo,
+      ts:    Date.now(),
+    };
+    console.log('[factura-submit]', traza, 'submitting=', submittingRef.current, 'loading=', loading);
 
-    const err = modoEfectivo === 'borrador' ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : null) : validar();
+    // Sin eCF seleccionado → siempre guardar como borrador (no se emite a DGII)
+    // sin-ncf (factura sin comprobante) o nota sobre factura de origen sin-ncf
+    // (no hay e-NCF que referenciar) → solo borrador, nunca se emite a la DGII.
+    const modoEfectivo: 'emitir' | 'borrador' = (tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'borrador' : modo;
+
+    const err = modoEfectivo === 'borrador'
+      ? (items.every(i => !i.nombreItem.trim()) ? 'Agrega al menos un ítem' : validarMotivoNota())
+      : validar();
     if (err) { setError(err); return; }
+
+    // Bloqueo cliente-o-pago al crear la factura definitiva: emitir a DGII o
+    // guardar una factura sin-ncf (ambas crean una cuenta cobrable). Los borradores
+    // en progreso de tipos con e-CF quedan permitidos.
+    if (modoEfectivo === 'emitir' || tipoEcf === 'sin-ncf') {
+      const clienteErr = validarClienteOPago();
+      if (clienteErr) { setError(clienteErr); return; }
+    }
 
     if (modoEfectivo === 'emitir') {
       try {
@@ -626,12 +882,25 @@ export default function NuevaFacturaForm({
         // pero buildPayload emite 'fechaNcfModificado' (Ncf). Renombrar para
         // que el validator no marque required-missing en NC tipo 33/34.
         const fechaNcfMod = (payload as { fechaNcfModificado?: string }).fechaNcfModificado;
+        // indicadorNotaCredito (tipo 34) es REQUIRED para el validator: 0 = NC dentro
+        // de 30 días de la factura original, 1 = después. Mismo cálculo que el mapper
+        // server-side (computeIndicadorNotaCredito); el server recomputa el valor real
+        // al emitir, esto solo evita el falso "campo requerido" en la validación client.
+        const computeIndicadorNC = (f?: string): 0 | 1 => {
+          if (!f) return 0;
+          let iso = f;
+          if (/^\d{2}-\d{2}-\d{4}$/.test(f)) { const [dd, mm, yyyy] = f.split('-'); iso = `${yyyy}-${mm}-${dd}`; }
+          const orig = new Date(iso);
+          if (Number.isNaN(orig.getTime())) return 0;
+          return Math.floor((Date.now() - orig.getTime()) / 86_400_000) > 30 ? 1 : 0;
+        };
         const validationPayload: Record<string, unknown> = {
           ...payload,
           montoTotal: totales.total,
           items: itemsAugmented,
           ...(hayItemsGravados ? { indicadorMontoGravado: 0 } : {}),
           ...(fechaNcfMod ? { fechaNCFModificado: fechaNcfMod } : {}),
+          ...(tipoEcf === '34' ? { indicadorNotaCredito: computeIndicadorNC(fechaNcfMod) } : {}),
           // Renombrar campos para tipo 41 (Compras) — usa rncProveedor en lugar de rncComprador
           ...(tipoEcf === '41' ? {
             rncProveedor:         payload.rncComprador,
@@ -672,7 +941,7 @@ export default function NuevaFacturaForm({
 
     setLoading(true); setError(null);
     try {
-      const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(buildPayload(modoEfectivo)) });
+      const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...buildPayload(modoEfectivo), _traza: traza }) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
       try { localStorage.removeItem(draftKey); } catch {}
@@ -724,7 +993,10 @@ export default function NuevaFacturaForm({
 
   // ─── Guardar NCF modal ────────────────────────────────────────────────────
   async function handleGuardarNcf() {
-    if (!secuencia?.id) return;
+    if (!secuencia?.id) {
+      setNcfError('No hay una secuencia configurada para este tipo de comprobante. Créala primero en Secuencias.');
+      return;
+    }
     setNcfSaving(true);
     try {
       const body: Record<string, unknown> = {};
@@ -749,12 +1021,22 @@ export default function NuevaFacturaForm({
   // ─── Pantalla de éxito ────────────────────────────────────────────────────
   if (resultado) {
     const esSinEcf = resultado.modo === 'borrador';
+    const esNotaBorrador = esSinEcf && (tipoEcf === '33' || tipoEcf === '34');
     return (
       <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-2xl shadow-md p-5 sm:p-8 text-center">
             <CheckCircle className="h-16 w-16 text-teal-500 mx-auto mb-4" />
-            {esSinEcf ? (
+            {esNotaBorrador ? (
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  ¡{tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} guardada!
+                </h2>
+                <p className="text-gray-500 mb-6">
+                  La nota quedó como borrador{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
+                </p>
+              </>
+            ) : esSinEcf ? (
               <>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Factura guardada!</h2>
                 <p className="text-gray-500 mb-6">Tu factura fue guardada correctamente.</p>
@@ -800,11 +1082,43 @@ export default function NuevaFacturaForm({
                 </Badge>
               </div>
             </div>
+            {/* Nota en borrador → elección explícita: emitir ahora o dejar borrador.
+                Nunca obligatorio — emitir requiere que la factura padre tenga e-CF. */}
+            {esNotaBorrador && (
+              <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-left mb-6">
+                <p className="text-sm text-teal-900 mb-3">
+                  ¿Deseas enviar esta nota a la DGII ahora? Solo es posible si la
+                  factura original ya tiene e-CF emitido. También puedes dejarla
+                  como borrador y emitirla después desde su detalle.
+                </p>
+                <div className="flex gap-3 flex-wrap">
+                  <Button
+                    className="bg-teal-600 hover:bg-teal-700 text-white"
+                    disabled={padreNota ? (!padreNota.conEcfReal && !ncfModificadoValido) : false}
+                    onClick={() => router.push(`${detalleBase}/${resultado.documentoId}?emitir=1`)}
+                  >
+                    <Send className="h-4 w-4 mr-1.5" />
+                    Enviar a DGII ahora
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`${detalleBase}/${resultado.documentoId}`)}
+                  >
+                    Dejar como borrador
+                  </Button>
+                </div>
+                {padreNota && !padreNota.conEcfReal && !ncfModificadoValido && (
+                  <p className="text-xs text-amber-700 mt-2">
+                    Escribe el e-NCF original en la nota para poder enviarla a la DGII, o emite primero la factura padre.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex gap-3 justify-center flex-wrap">
               <Button variant="outline" asChild><a href={`/api/pdf/factura/${resultado.documentoId}`} target="_blank" rel="noreferrer">Descargar PDF</a></Button>
-              <Button variant="outline" asChild><Link href={`/dashboard/facturas/${resultado.documentoId}`}>Ver detalle</Link></Button>
-              <Button variant="outline" onClick={() => { try { localStorage.removeItem(draftKey); } catch {} setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Nueva factura</Button>
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => router.push('/dashboard/facturas')}>Ver todas</Button>
+              <Button variant="outline" asChild><Link href={`${detalleBase}/${resultado.documentoId}`}>Ver detalle</Link></Button>
+              <Button variant="outline" onClick={() => { try { localStorage.removeItem(draftKey); } catch {} setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Nueva {docAccent.noun}</Button>
+              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => router.push(detalleBase)}>Ver todas</Button>
             </div>
           </div>
         </div>
@@ -818,7 +1132,7 @@ export default function NuevaFacturaForm({
       <a href="#main-content" className="skip-link">Saltar al contenido</a>
       <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
         <NavBar
-          title={initialData ? 'Editar factura' : 'Nueva factura'}
+          title={initialData ? tituloDoc.editar : tituloDoc.nuevo}
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
           showListaPrecios={showListaPrecios}   setShowListaPrecios={setShowListaPrecios}
           showVendedor={showVendedor}           setShowVendedor={setShowVendedor}
@@ -867,6 +1181,11 @@ export default function NuevaFacturaForm({
                 empresa={empresa}
                 categoriaId={categoriaId} setCategoriaId={setCategoriaId}
                 tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
+                ocultarCategoria={ocultarCategoria}
+                mostrarCodigoTipo={!(padreNota && !padreNota.conEcfReal && !ncfModificadoValido)}
+                // Nota sobre factura sin e-CF → nunca tendrá e-NCF real: mostrar "Sin
+                // comprobante fiscal" en vez de un próximo e-NCF que no se va a usar.
+                sinComprobante={esPadreSinNcf}
                 secuencia={secuencia}
                 fechaEmision={fechaEmision}
                 onEditarNcf={() => {
@@ -877,6 +1196,23 @@ export default function NuevaFacturaForm({
                   setShowEditarNcf(true);
                 }}
               />
+
+              {(tipoEcf === '33' || tipoEcf === '34') && (
+                <FacturaOrigenSection
+                  tipoEcf={tipoEcf}
+                  padreSeleccionado={padreNota}
+                  conEcfReal={padreNota?.conEcfReal ?? false}
+                  esPadreSinNcf={esPadreSinNcf}
+                  buscarFacturas={buscarFacturas}
+                  onSelect={(f) => cargarPadre(f.id)}
+                  onClear={limpiarPadre}
+                  ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
+                  motivoNota={motivoNota} setMotivoNota={setMotivoNota}
+                  fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
+                  razonModificacion={razonModificacion} setRazonModificacion={setRazonModificacion}
+                  today={today}
+                />
+              )}
 
               <SectionCard number={1} title="Datos del cliente" icon={User}>
                 <ClienteSection
@@ -899,11 +1235,8 @@ export default function NuevaFacturaForm({
                   regla={regla} tipoEcf={tipoEcf}
                   condicionPago={condicionPago} setCondicionPago={setCondicionPago}
                   diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
+                  tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
-                  ncfModificado={ncfModificado} setNcfModificado={setNcfModificado}
-                  codigoModificacion={codigoModificacion} setCodigoModificacion={setCodigoModificacion}
-                  fechaNcfModificado={fechaNcfModificado} setFechaNcfModificado={setFechaNcfModificado}
-                  today={today}
                 />
               </SectionCard>
 
@@ -959,7 +1292,7 @@ export default function NuevaFacturaForm({
                 number={6} title="Pie de factura" icon={FileText}
                 defaultOpen={pieFactura.trim().length > 0}
               >
-                <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} />
+                <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} label={docAccent.noun === 'factura' ? 'Pie de factura' : 'Pie del documento'} />
               </AccordionSection>
 
               <AccordionSection
@@ -978,7 +1311,11 @@ export default function NuevaFacturaForm({
               totales={totales}
               retenciones={retenciones}
               totalNeto={totalNeto}
+              totalLabel={docAccent.totalLabel}
               items={items}
+              // Una Nota de Crédito acredita al cliente — no se cobra ningún pago al
+              // crearla. Ocultar el card "Pago".
+              showPago={tipoEcf !== '34'}
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
@@ -990,8 +1327,9 @@ export default function NuevaFacturaForm({
             items={items}
             loading={loading}
             loadingPreview={loadingPreview}
-            primaryLabel={tipoEcf === 'sin-ncf' ? 'Guardar factura' : 'Emitir e-CF'}
-            loadingPrimaryLabel={tipoEcf === 'sin-ncf' ? 'Guardando…' : 'Emitiendo…'}
+            primaryBtnClass={docAccent.primaryBtnClass}
+            primaryLabel={tipoEcf === 'sin-ncf' ? 'Guardar factura' : esPadreSinNcf ? 'Guardar borrador' : 'Emitir e-CF'}
+            loadingPrimaryLabel={(tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}
             onCancelar={() => {

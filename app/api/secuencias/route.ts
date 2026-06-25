@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    fechaVenc = new Date(fechaVencimiento + 'T23:59:59');
+    fechaVenc = new Date(fechaVencimiento + 'T23:59:59Z');
     if (fechaVenc <= new Date()) {
       return NextResponse.json(
         { error: 'La fecha de vencimiento debe ser futura' },
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
     }
   } else if (fechaVencimiento) {
     // Si vino fecha aunque no se requiera, la guardamos igual
-    fechaVenc = new Date(fechaVencimiento + 'T23:59:59');
+    fechaVenc = new Date(fechaVencimiento + 'T23:59:59Z');
   }
 
   const hastaFinal = esSinNcf ? BigInt(desde) : BigInt(hasta!);

@@ -9,6 +9,7 @@ import { DataTable, type DataTableColumn, type RowAction } from '@/components/da
 import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, diasVencido } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -288,11 +289,15 @@ export default function FacturasPage() {
       header: 'Cobro',
       visibleAt: 'lg',
       align: 'center',
-      // Usa estado_pago persistido (recalculado al emitir/pagar/anular).
-      // Fallback al cálculo inline para registros sin migrar.
+      // Deriva el estado EN VIVO desde `pagado` (suma del ledger + fallback
+      // inline), con la misma fn que el detalle. Antes leía la columna
+      // estado_pago persistida y podía quedar stale (listado "Pendiente" vs
+      // detalle "Pagada") si algún path no la recalculaba.
       render: doc => {
-        const ep      = doc.estadoPago;
         const pagado  = doc.pagado ?? 0;
+        const ep      = calcularEstadoPago({
+          estado: doc.estado, tipoPago: doc.tipoPago, montoTotal: doc.montoTotal, totalPagado: pagado,
+        });
         const saldo   = doc.montoTotal - pagado;
         const esCred  = doc.tipoPago === 2;
         const dias    = diasVencido(doc.fechaLimitePago);
@@ -332,9 +337,9 @@ export default function FacturasPage() {
           <Link
             href={`/dashboard/facturas/${doc.id}`}
             className={`font-mono text-xs font-semibold hover:underline leading-tight block whitespace-nowrap ${color}`}
-            title={`${doc.encf || 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
+            title={`${doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
           >
-            {compacto ?? (doc.encf || '—')}
+            {compacto ?? (doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : '—')}
           </Link>
         );
       },

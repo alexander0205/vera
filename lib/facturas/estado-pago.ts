@@ -16,31 +16,11 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
+import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
+import { calcularEstadoPago, type EstadoPago } from '@/lib/facturas/estado-pago-calc';
 
-export type EstadoPago =
-  | 'PENDIENTE'
-  | 'PARCIAL'
-  | 'PAGADA'
-  | 'ANULADA'
-  | 'GRATUITA'
-  | 'USO';
-
-export function calcularEstadoPago(params: {
-  estado:      string;
-  tipoPago:    number | null | undefined;
-  montoTotal:  number;        // centavos
-  totalPagado: number;        // centavos sumados de pagos_recibidos
-}): EstadoPago {
-  if (params.estado === 'ANULADO') return 'ANULADA';
-  if (params.tipoPago === 3)       return 'GRATUITA';
-  if (params.tipoPago === 4)       return 'USO';
-  // Pago real determina el estado para TODOS los tipos (contado y crédito).
-  // No se asume contado=pagado: un contado emitido sin registrar pago tiene
-  // saldo pendiente y debe aparecer en cuentas por cobrar.
-  if (params.montoTotal > 0 && params.totalPagado >= params.montoTotal) return 'PAGADA';
-  if (params.totalPagado > 0) return 'PARCIAL';
-  return 'PENDIENTE';
-}
+// Re-export para mantener compat con los imports existentes (queries.ts, etc.).
+export { calcularEstadoPago, type EstadoPago };
 
 /**
  * Recalcula y persiste el estado_pago de un documento.
@@ -53,6 +33,8 @@ export async function recalcularEstadoPago(ecfDocumentId: number): Promise<Estad
       tipoPago:   ecfDocuments.tipoPago,
       montoTotal: ecfDocuments.montoTotal,
       teamId:     ecfDocuments.teamId,
+      encf:       ecfDocuments.encf,
+      tipoEcf:    ecfDocuments.tipoEcf,
     })
     .from(ecfDocuments)
     .where(eq(ecfDocuments.id, ecfDocumentId))
@@ -68,11 +50,17 @@ export async function recalcularEstadoPago(ecfDocumentId: number): Promise<Estad
       eq(pagosRecibidos.teamId, doc.teamId),
     ));
 
+  // NC aplicadas reducen el saldo (no aplica a las propias NC tipo 34)
+  const ncAplicado = doc.tipoEcf === '34'
+    ? 0
+    : await getNcAplicadoCts(doc.teamId, ecfDocumentId, doc.encf);
+
   const nuevo = calcularEstadoPago({
-    estado:      doc.estado,
-    tipoPago:    doc.tipoPago,
-    montoTotal:  doc.montoTotal,
-    totalPagado: Number(total ?? 0),
+    estado:            doc.estado,
+    tipoPago:          doc.tipoPago,
+    montoTotal:        doc.montoTotal,
+    totalPagado:       Number(total ?? 0),
+    totalNotasCredito: ncAplicado,
   });
 
   await db.update(ecfDocuments)
