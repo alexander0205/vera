@@ -240,6 +240,20 @@ function totalesItbis(t: EcfTotales) {
 
 // ─── Mappers de items por tipo ────────────────────────────────────────────────
 
+/**
+ * Sub-descuento DGII: cuando un item trae descuentoMonto el XSD exige declarar el
+ * sub-descuento. Monto fijo → tipoSubDescuento "$" y montoSubDescuento = descuentoMonto.
+ * Sin descuento (undefined / 0) → objeto vacío: no se emiten campos.
+ * (Porcentaje sería "%" + subDescuentoPorcentaje, no usado por ahora.)
+ */
+function subDescuentoFields(descuentoMonto?: number) {
+  if (!descuentoMonto || descuentoMonto <= 0) return {};
+  return {
+    tipoSubDescuento:  '$',
+    montoSubDescuento: descuentoMonto,
+  };
+}
+
 /** Items genéricos para tipos 31, 32, 33, 34, 44, 45, 46 */
 function mapItemsGeneric(items: EmitedoItem[]) {
   return items.map(item => ({
@@ -251,6 +265,7 @@ function mapItemsGeneric(items: EmitedoItem[]) {
     montoItem:              item.cantidadItem * item.precioUnitarioItem - (item.descuentoMonto ?? 0),
     descripcionItem:        item.descripcionItem,
     descuentoMonto:         item.descuentoMonto,
+    ...subDescuentoFields(item.descuentoMonto),
   }));
 }
 
@@ -278,6 +293,7 @@ function mapItems41(items: EmitedoItem[]) {
       montoItem,
       descripcionItem:        item.descripcionItem,
       descuentoMonto:         item.descuentoMonto,
+      ...subDescuentoFields(item.descuentoMonto),
       retencion: {
         indicadorAgenteRetencionoPercepcion: 1, // 1=Retención
         // DGII cod=260/272: ambos campos obligatorios en tipo 41
