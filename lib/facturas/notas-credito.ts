@@ -98,17 +98,32 @@ export async function getSaldoFavorCliente(teamId: number, clientId: number): Pr
 export async function getNotasCreditoDisponibles(
   teamId: number,
   clientId: number,
-): Promise<{ id: number; codigo: string | null; encf: string | null; montoCents: number }[]> {
-  const rows = await db.execute<{ id: number; codigo: string | null; encf: string | null; credito: string }>(sql`
-    SELECT nc.id, nc.codigo, nc.encf, nc.credito_generado_cents::text AS credito
-    FROM ecf_documents nc
-    WHERE nc.team_id = ${teamId} AND nc.client_id = ${clientId}
-      AND nc.tipo_ecf = '34'
-      AND nc.credito_generado_cents IS NOT NULL AND nc.credito_generado_cents > 0
-      AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
-      AND NOT EXISTS (SELECT 1 FROM pagos_recibidos p WHERE p.nota_credito_id = nc.id)
-    ORDER BY nc.id DESC
+): Promise<{ id: number; codigo: string | null; encf: string | null; facturaCodigo: string | null; montoCents: number }[]> {
+  // facturaCodigo = código de la factura de origen (por id), o el e-NCF que modifica
+  // si la factura no está en el sistema. Permite buscar la NC por su código o por
+  // el de la factura de donde salió.
+  // Saldo restante = credito_generado − Σ pagos que ya consumieron esta NC.
+  // Uso PARCIAL: la NC sigue disponible (por su restante) hasta agotarla.
+  const rows = await db.execute<{ id: number; codigo: string | null; encf: string | null; factura_codigo: string | null; credito: string }>(sql`
+    SELECT t.id, t.codigo, t.encf, t.factura_codigo, t.remaining::text AS credito
+    FROM (
+      SELECT nc.id, nc.codigo, nc.encf,
+        coalesce(
+          (SELECT p2.codigo FROM ecf_documents p2 WHERE p2.id = nc.origen_documento_id),
+          nc.ncf_modificado
+        ) AS factura_codigo,
+        (nc.credito_generado_cents - coalesce(
+          (SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr WHERE pr.nota_credito_id = nc.id), 0
+        )) AS remaining
+      FROM ecf_documents nc
+      WHERE nc.team_id = ${teamId} AND nc.client_id = ${clientId}
+        AND nc.tipo_ecf = '34'
+        AND nc.credito_generado_cents IS NOT NULL AND nc.credito_generado_cents > 0
+        AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+    ) t
+    WHERE t.remaining > 0
+    ORDER BY t.id DESC
   `);
-  return (rows as unknown as { id: number; codigo: string | null; encf: string | null; credito: string }[])
-    .map(r => ({ id: Number(r.id), codigo: r.codigo, encf: r.encf, montoCents: Number(r.credito) }));
+  return (rows as unknown as { id: number; codigo: string | null; encf: string | null; factura_codigo: string | null; credito: string }[])
+    .map(r => ({ id: Number(r.id), codigo: r.codigo, encf: r.encf, facturaCodigo: r.factura_codigo, montoCents: Number(r.credito) }));
 }

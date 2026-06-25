@@ -974,9 +974,9 @@ export async function registrarPagoFacturaConMora(input: {
 
   for (const linea of input.lineas) {
     let monto = linea.montoCentavos;
-    // La NC se referencia en UN solo pago (índice único nota_credito_id). El resto
-    // del split lleva null aunque conserve el método 'nota_credito'.
-    let ncId: number | null = linea.notaCreditoId ?? null;
+    // NC de uso parcial: todas las porciones de una línea 'nota_credito' llevan el
+    // mismo nota_credito_id → el "usado" de la NC = suma de sus pagos.
+    const ncId: number | null = linea.notaCreditoId ?? null;
 
     // 1) Llenar la factura primero
     const x = Math.min(monto, remFactura);
@@ -990,7 +990,6 @@ export async function registrarPagoFacturaConMora(input: {
         notas:         linea.notas ?? null,
         notaCreditoId: ncId,
       });
-      ncId = null;
       remFactura  -= x;
       monto       -= x;
       facturaCents += x;
@@ -1010,7 +1009,6 @@ export async function registrarPagoFacturaConMora(input: {
         notas:         linea.notas ?? null,
         notaCreditoId: ncId,
       });
-      ncId = null;
       nd.rem    -= y;
       monto     -= y;
       moraCents += y;

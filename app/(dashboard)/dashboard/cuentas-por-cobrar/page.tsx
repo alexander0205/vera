@@ -361,20 +361,12 @@ function PagoModal({
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
 
-  // Saldo a favor del cliente (crédito generado por Notas de Crédito). Solo se
-  // puede aplicar si cubre el saldo COMPLETO de esta factura (crédito ≥ factura).
-  const [creditoCents, setCreditoCents] = useState<number | null>(null);
-  const [usarCredito, setUsarCredito]   = useState(false);
+  // Notas de crédito del cliente usables como pago (voucher por código, uso parcial).
   const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
-  const puedeUsarCredito = creditoCents != null && creditoCents >= cuenta.saldo && cuenta.saldo > 0;
 
   useEffect(() => {
-    if (!cuenta.clientId) { setCreditoCents(0); setNotasCredito([]); return; }
+    if (!cuenta.clientId) { setNotasCredito([]); return; }
     let vivo = true;
-    fetch(`/api/clientes/${cuenta.clientId}/saldo-favor`)
-      .then(r => r.json())
-      .then(j => { if (vivo) setCreditoCents(j.saldoCents ?? 0); })
-      .catch(() => { if (vivo) setCreditoCents(0); });
     fetch(`/api/clientes/${cuenta.clientId}/notas-credito-disponibles`)
       .then(r => r.json())
       .then(j => { if (vivo) setNotasCredito(Array.isArray(j.notas) ? j.notas : []); })
@@ -387,7 +379,7 @@ function PagoModal({
     { metodo: 'transferencia', valor: '', referencia: '' },
   ]);
 
-  const valido = usarCredito ? puedeUsarCredito : pagosValidos(lineas, totalDOP, pagadoDOP);
+  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -395,16 +387,14 @@ function PagoModal({
     setGuardando(true);
     setError(null);
     try {
-      const pagos = usarCredito
-        ? [{ montoDOP: cuenta.saldo / 100, metodo: 'saldo_favor' }]
-        : lineas
-            .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
-            .map(l => ({
-              montoDOP:      parseFloat(l.valor),
-              metodo:        l.metodo,
-              referencia:    l.referencia?.trim() || undefined,
-              notaCreditoId: l.notaCreditoId ?? undefined,
-            }));
+      const pagos = lineas
+        .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
+        .map(l => ({
+          montoDOP:      parseFloat(l.valor),
+          metodo:        l.metodo,
+          referencia:    l.referencia?.trim() || undefined,
+          notaCreditoId: l.notaCreditoId ?? undefined,
+        }));
 
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
         method:  'POST',
@@ -469,46 +459,15 @@ function PagoModal({
             />
           </div>
 
-          {/* Saldo a favor del cliente (crédito de Notas de Crédito) */}
-          {creditoCents != null && creditoCents > 0 && (
-            <div className={`rounded-lg border p-3 ${usarCredito ? 'border-teal-300 bg-teal-50' : 'border-gray-200 bg-white'}`}>
-              <label className={`flex items-start gap-2 ${puedeUsarCredito ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
-                <input
-                  type="checkbox"
-                  checked={usarCredito}
-                  disabled={!puedeUsarCredito || guardando}
-                  onChange={e => setUsarCredito(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
-                />
-                <span className="text-sm">
-                  <span className="font-medium text-gray-800">Pagar con saldo a favor</span>
-                  <span className="text-gray-500"> — disponible {fmtDOP(creditoCents)}</span>
-                  {!puedeUsarCredito && (
-                    <span className="block text-[11px] text-amber-600 mt-0.5">
-                      El crédito debe cubrir el total de la factura ({fmtDOP(cuenta.saldo)}) para aplicarlo.
-                    </span>
-                  )}
-                  {usarCredito && (
-                    <span className="block text-[11px] text-teal-700 mt-0.5">
-                      Se aplicarán {fmtDOP(cuenta.saldo)} del saldo a favor; la factura quedará saldada.
-                    </span>
-                  )}
-                </span>
-              </label>
-            </div>
-          )}
-
-          {!usarCredito && (
-            <PagoMetodos
-              lineas={lineas}
-              onChange={setLineas}
-              total={totalDOP}
-              yaPagado={pagadoDOP}
-              disabled={guardando}
-              showReferencia
-              notasCredito={notasCredito}
-            />
-          )}
+          <PagoMetodos
+            lineas={lineas}
+            onChange={setLineas}
+            total={totalDOP}
+            yaPagado={pagadoDOP}
+            disabled={guardando}
+            showReferencia
+            notasCredito={notasCredito}
+          />
 
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">

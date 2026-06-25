@@ -27,6 +27,8 @@ export interface PagoLinea {
 export interface NotaCreditoDisponible {
   id: number;
   codigo: string | null;
+  /** Código (o e-NCF) de la factura de origen — para buscar por él. */
+  facturaCodigo?: string | null;
   montoCents: number;
 }
 
@@ -174,15 +176,16 @@ export function PagoMetodos({
             )}
           </div>
 
-          {/* Selector de Nota de crédito (voucher por código) */}
+          {/* Selector de Nota de crédito — buscable por código de NC o de factura */}
           {l.metodo === METODO_NOTA_CREDITO && (
             <div className="min-w-0">
               <Label className="text-[10px] text-gray-500 uppercase">Nota de crédito</Label>
-              <Select
-                value={l.notaCreditoId ? String(l.notaCreditoId) : ''}
-                onValueChange={(v) => {
-                  const nc = notasCredito?.find(n => String(n.id) === v);
-                  if (!nc) return;
+              <NotaCreditoPicker
+                notas={notasCredito ?? []}
+                valueId={l.notaCreditoId ?? null}
+                disabled={disabled}
+                fmt={fmt}
+                onSelect={(nc) => {
                   // Aplicar el monto de la NC, capado a lo que falta cubrir (otras líneas
                   // ya cuentan). El sobrante (NC > factura) queda como saldo a favor.
                   const otrasCents = Math.round(suma * 100) - Math.round((parseFloat(l.valor || '0') || 0) * 100);
@@ -190,19 +193,7 @@ export function PagoMetodos({
                   const aplicar    = Math.min(nc.montoCents, capCents);
                   setLinea(i, { notaCreditoId: nc.id, valor: (aplicar / 100).toFixed(2) });
                 }}
-                disabled={disabled}
-              >
-                <SelectTrigger className="mt-1 h-9 text-sm w-full">
-                  <SelectValue placeholder="Elige una nota de crédito…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(notasCredito ?? []).map(n => (
-                    <SelectItem key={n.id} value={String(n.id)}>
-                      {(n.codigo ?? `NC #${n.id}`)} — RD${fmt(n.montoCents / 100)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
           )}
 
@@ -309,6 +300,67 @@ export function PagoMetodos({
         <span>Suma: <strong>RD$ {fmt(suma)}</strong></span>
         <span>{excede ? 'Excede el total' : `Resto: RD$ ${fmt(resto)}`}</span>
       </div>
+    </div>
+  );
+}
+
+// ─── Picker buscable de Nota de Crédito ───────────────────────────────────────
+// Combobox simple: escribe el código de la NC o el de su factura de origen para
+// filtrar. Lista local (las NCs ya vienen cargadas), sin fetch.
+function NotaCreditoPicker({
+  notas, valueId, onSelect, disabled, fmt,
+}: {
+  notas: NotaCreditoDisponible[];
+  valueId: number | null;
+  onSelect: (nc: NotaCreditoDisponible) => void;
+  disabled?: boolean;
+  fmt: (n: number) => string;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen]   = useState(false);
+  const sel = notas.find(n => n.id === valueId) ?? null;
+  const q   = query.trim().toLowerCase();
+  const filtradas = q
+    ? notas.filter(n =>
+        (n.codigo ?? '').toLowerCase().includes(q) ||
+        (n.facturaCodigo ?? '').toLowerCase().includes(q))
+    : notas;
+  const labelSel = sel
+    ? `${sel.codigo ?? `NC #${sel.id}`}${sel.facturaCodigo ? ` · ${sel.facturaCodigo}` : ''} — RD$${fmt(sel.montoCents / 100)}`
+    : '';
+
+  return (
+    <div className="relative mt-1">
+      <Input
+        type="text"
+        className="h-9 text-sm w-full"
+        placeholder="Buscar por código de NC o de factura…"
+        value={open ? query : labelSel}
+        disabled={disabled}
+        onFocus={() => { setOpen(true); setQuery(''); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          {filtradas.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-gray-400">Sin notas de crédito que coincidan</div>
+          ) : filtradas.map(n => (
+            <button
+              key={n.id}
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-teal-50 flex justify-between gap-2"
+              onMouseDown={(e) => { e.preventDefault(); onSelect(n); setOpen(false); setQuery(''); }}
+            >
+              <span className="min-w-0">
+                <span className="font-medium">{n.codigo ?? `NC #${n.id}`}</span>
+                {n.facturaCodigo && <span className="text-gray-500"> · factura {n.facturaCodigo}</span>}
+              </span>
+              <span className="text-gray-700 whitespace-nowrap">RD${fmt(n.montoCents / 100)}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

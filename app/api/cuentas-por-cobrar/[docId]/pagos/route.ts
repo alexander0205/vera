@@ -207,23 +207,14 @@ export async function POST(
             { status: 422 },
           );
         }
+        // nc.montoCents = saldo RESTANTE de la NC (uso parcial). El monto aplicado
+        // no puede exceder ese restante.
         if (l.montoCentavos > nc.montoCents) {
           return NextResponse.json(
-            { error: `El monto excede el crédito de la nota ${nc.codigo ?? nc.id} (RD$${(nc.montoCents / 100).toFixed(2)}).` },
+            { error: `El monto excede el saldo de la nota ${nc.codigo ?? nc.id} (RD$${(nc.montoCents / 100).toFixed(2)}).` },
             { status: 422 },
           );
         }
-      }
-      // Tope global: lo aplicado por NC no puede exceder el crédito REAL disponible
-      // del cliente (descuenta lo ya gastado por saldo_favor / otras NCs). Evita
-      // doble-gasto del mismo crédito por las dos vías.
-      const notaCreditoCts = lineasNc.reduce((s, l) => s + l.montoCentavos, 0);
-      const disponibleCredito = await getSaldoFavorCliente(teamId, doc.clientId);
-      if (notaCreditoCts > disponibleCredito) {
-        return NextResponse.json(
-          { error: `Crédito insuficiente. Disponible: RD$${(disponibleCredito / 100).toFixed(2)}.` },
-          { status: 422 },
-        );
       }
     }
 
