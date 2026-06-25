@@ -139,6 +139,9 @@ export default function ConfiguracionPage() {
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
+  // Módulo punto de venta (POS)
+  const [posHabilitado, setPosHabilitado]               = useState(false);
+  const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
   // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
 
@@ -164,6 +167,9 @@ export default function ConfiguracionPage() {
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
+        // Módulo POS
+        setPosHabilitado(d.posHabilitado ?? false);
+        setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
       })
       .finally(() => setLoading(false));
@@ -190,6 +196,8 @@ export default function ConfiguracionPage() {
           // Gracia eliminada del config: la mora aplica al vencer.
           recargoMoraDiasGracia: 0,
           cajaHabilitada,
+          posHabilitado,
+          posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
         }),
       });
@@ -582,6 +590,57 @@ export default function ConfiguracionPage() {
               <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
               debe abrir su turno antes de emitir. Los cierres con descuadre requieren aprobación
               de un admin u owner.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Módulo Punto de Venta (POS) ─────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Punto de venta (POS)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Habilita la pantalla de venta rápida full-screen para cafeterías, tiendas o cualquier
+            negocio de mostrador. Cada caja se configura como una "terminal" con su almacén fijo.
+          </p>
+
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Activar punto de venta</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Habilita el acceso a <code>/pos</code> y la gestión de terminales.
+              </p>
+            </div>
+            <button
+              type="button" role="switch" aria-checked={posHabilitado}
+              onClick={() => setPosHabilitado(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                posHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          {posHabilitado && (
+            <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Capa escolar (monedero del estudiante)</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Solo para colegios: saldo prepago por estudiante con cargo al acudiente.
+                </p>
+              </div>
+              <button
+                type="button" role="switch" aria-checked={posEscolarHabilitado}
+                onClick={() => setPosEscolarHabilitado(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                  posEscolarHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posEscolarHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
             </div>
           )}
         </CardContent>

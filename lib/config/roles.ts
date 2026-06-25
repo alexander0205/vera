@@ -53,6 +53,9 @@ export type Permission =
   | 'caja:ver'       // ver estado de caja, turnos e historial
   | 'caja:operar'    // abrir turno, registrar movimientos, solicitar cierre (cajero)
   | 'caja:aprobar'   // aprobar/rechazar cierres con descuadre, ajustes (supervisor)
+  // Punto de venta (POS)
+  | 'pos:vender'     // abrir terminal, vender y cobrar en el POS (cajero)
+  | 'pos:configurar' // crear/editar terminales y config del POS (admin/owner)
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
@@ -98,6 +101,7 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
+      'pos:vender', 'pos:configurar',
       'suscripcion:gestionar',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
@@ -118,6 +122,7 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
+      'pos:vender', 'pos:configurar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -135,6 +140,7 @@ export const ROLES: RoleDef[] = [
       'reportes:ver',
       'equipo:ver',
       'caja:ver', 'caja:operar',
+      'pos:vender',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
   },

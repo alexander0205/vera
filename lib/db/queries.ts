@@ -222,6 +222,7 @@ export async function getUserTeams() {
         role: sql<string>`'admin'`.as('role'),
         logo: teams.logo,
         cajaHabilitada: teams.cajaHabilitada,
+        posHabilitado: teams.posHabilitado,
       })
       .from(teams)
       .orderBy(teams.createdAt);
@@ -240,6 +241,7 @@ export async function getUserTeams() {
       role: teamMembers.role,
       logo: teams.logo,
       cajaHabilitada: teams.cajaHabilitada,
+      posHabilitado: teams.posHabilitado,
     })
     .from(teamMembers)
     .innerJoin(teams, eq(teamMembers.teamId, teams.id))

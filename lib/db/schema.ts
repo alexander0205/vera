@@ -120,6 +120,12 @@ export const teams = pgTable('teams', {
   // el badge de estado en el header, y no se puede facturar sin turno abierto.
   cajaHabilitada:         boolean('caja_habilitada').notNull().default(false),
 
+  // ── Módulo Punto de Venta (POS) ───────────────────────────────────────────
+  // Toggle por empresa. Si está activo: aparece el POS full-screen y sus terminales.
+  posHabilitado:          boolean('pos_habilitado').notNull().default(false),
+  // Capa escolar (monedero del estudiante): exclusiva de colegios. Solo aplica con posHabilitado.
+  posEscolarHabilitado:   boolean('pos_escolar_habilitado').notNull().default(false),
+
   // Plazo de pago por defecto para nuevas facturas. NULL = de contado; N = crédito a N días.
   plazoPagoDefaultDias:   integer('plazo_pago_default_dias'),
 });
@@ -216,6 +222,8 @@ export const products = pgTable('products', {
   stockMinimo: integer('stock_minimo').notNull().default(0),      // umbral alerta bajo mínimo
   controlaInventario: boolean('controla_inventario').notNull().default(false),
   permiteVentaSinStock: boolean('permite_venta_sin_stock').notNull().default(true),
+  // POS: si aparece en la grilla del punto de venta (excluye servicios/no vendibles en mostrador).
+  visiblePos: boolean('visible_pos').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1106,6 +1114,38 @@ export const impresoras = pgTable('impresoras', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('impresoras_team_idx').on(t.teamId)]);
 
+// ─── POS — Terminales (puntos de venta) ──────────────────────────────────────
+// Cada caja física es una entidad con config FIJA: almacén del que vende y
+// descuenta stock, impresora, lista de precios y tipo de comprobante por
+// defecto. El cajero no elige nada al abrir turno: ya viene pegado a la terminal.
+export const posTerminales = pgTable('pos_terminales', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  nombre:         varchar('nombre', { length: 100 }).notNull(),
+  /** Almacén FIJO del que esta caja vende y descuenta stock. */
+  almacenId:      integer('almacen_id').notNull().references(() => almacenes.id),
+  /** Config fija opcional (si null, el POS usa el default del equipo). */
+  impresoraId:    integer('impresora_id').references(() => impresoras.id),
+  listaPreciosId: integer('lista_precios_id').references(() => listasPrecios.id),
+  /** Tipo de comprobante por defecto al cobrar: 'sin-ncf' (ticket) o un e-CF. */
+  tipoEcf:        varchar('tipo_ecf', { length: 10 }).notNull().default('sin-ncf'),
+  activo:         boolean('activo').notNull().default(true),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('pos_terminales_team_idx').on(t.teamId),
+  index('pos_terminales_almacen_idx').on(t.almacenId),
+]);
+
+export const posTerminalesRelations = relations(posTerminales, ({ one }) => ({
+  team:         one(teams,         { fields: [posTerminales.teamId],         references: [teams.id] }),
+  almacen:      one(almacenes,     { fields: [posTerminales.almacenId],      references: [almacenes.id] }),
+  impresora:    one(impresoras,    { fields: [posTerminales.impresoraId],    references: [impresoras.id] }),
+  listaPrecios: one(listasPrecios, { fields: [posTerminales.listaPreciosId], references: [listasPrecios.id] }),
+}));
+
+export type PosTerminal    = typeof posTerminales.$inferSelect;
+export type NewPosTerminal = typeof posTerminales.$inferInsert;
+
 // ─── EmiteDO — Cuadre de Caja (turnos) ───────────────────────────────────────
 //
 // Modelo "una caja por cajero": cada usuario operativo abre y cierra su propio
@@ -1125,6 +1165,8 @@ export const cajaTurnos = pgTable('caja_turnos', {
   teamId:    integer('team_id').notNull().references(() => teams.id),
   /** Cajero dueño del turno. */
   usuarioId: integer('usuario_id').notNull().references(() => users.id),
+  /** Terminal POS en la que se abrió el turno (define almacén/lista/impresora). Nullable: turnos de caja fuera del POS. */
+  terminalId: integer('terminal_id').references(() => posTerminales.id),
   estado:    varchar('estado', { length: 20 }).notNull().default('ABIERTO'),
   // ABIERTO | CIERRE_SOLICITADO | CERRADO
 

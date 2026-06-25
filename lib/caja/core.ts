@@ -197,6 +197,8 @@ export async function abrirTurno(input: {
   aperturaPor: number;
   montoAperturaCentavos: number;
   aperturaObs?: string | null;
+  /** Terminal POS en la que se abre (define almacén/lista/impresora). Nullable: caja fuera del POS. */
+  terminalId?: number | null;
 }): Promise<CajaTurno> {
   if (input.montoAperturaCentavos < 0) {
     throw new Error('El monto de apertura no puede ser negativo');
@@ -217,6 +219,7 @@ export async function abrirTurno(input: {
         montoAperturaCentavos: input.montoAperturaCentavos,
         aperturaPor:           input.aperturaPor,
         aperturaObs:           input.aperturaObs ?? null,
+        terminalId:            input.terminalId ?? null,
       })
       .returning();
     return turno;

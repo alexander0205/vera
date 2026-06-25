@@ -40,7 +40,12 @@ export type AuditAction =
   | 'CAJA_AJUSTE'
   | 'CAJA_CIERRE_SOLICITADO'
   | 'CAJA_CIERRE_APROBADO'
-  | 'CAJA_CIERRE_RECHAZADO';
+  | 'CAJA_CIERRE_RECHAZADO'
+  // Punto de venta (POS)
+  | 'POS_TERMINAL_CREAR'
+  | 'POS_TERMINAL_EDITAR'
+  | 'POS_TERMINAL_DESACTIVAR'
+  | 'POS_VENTA';
 
 export interface AuditParams {
   teamId:    number;

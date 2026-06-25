@@ -9,7 +9,7 @@ import {
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet,
+  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -122,6 +122,10 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/caja/aprobaciones':     'caja:aprobar',
   '/dashboard/caja/historial':        'caja:ver',
 
+  // Punto de venta (POS)
+  '/pos':                             'pos:vender',
+  '/dashboard/pos-terminales':        'pos:configurar',
+
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
@@ -143,7 +147,7 @@ function canAccess(role: string | null | undefined, href: string, platformRole?:
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; }
+interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; }
 interface UserInfo { name: string | null; email: string; platformRole?: string | null; }
 
 function getInitials(name: string | null, email: string) {
@@ -553,6 +557,17 @@ function Sidebar({
     ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
     : null;
 
+  // Grupo Punto de venta — solo visible si posHabilitado y el rol tiene acceso.
+  const posHabilitado = activeTeam?.posHabilitado ?? false;
+  const posCandidatos: NavGroup['children'] = [
+    { href: '/pos',                      label: 'Abrir punto de venta' },
+    { href: '/dashboard/pos-terminales', label: 'Terminales' },
+  ].filter(c => canAccess(role, c.href));
+
+  const posGroup: NavGroup | null = posHabilitado && posCandidatos.length > 0
+    ? { id: 'pos', label: 'Punto de venta', icon: Store, children: posCandidatos }
+    : null;
+
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
@@ -561,7 +576,7 @@ function Sidebar({
   const staticGroupsVis   = GROUPS
     .map(g => ({ ...g, children: g.children.filter(c => canAccess(role, c.href)) }))
     .filter(g => g.children.length > 0);
-  const groupsVisibles    = cajaGroup ? [cajaGroup, ...staticGroupsVis] : staticGroupsVis;
+  const groupsVisibles    = [posGroup, cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
 
   const defaultOpen = groupsVisibles.reduce((acc, g) => {
     acc[g.id] = g.children.some(c => pathname.startsWith(c.href));
