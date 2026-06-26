@@ -18,7 +18,8 @@ import { db } from '@/lib/db/drizzle';
 import { users, teamMembers } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { userCan, type Permission } from '@/lib/config/roles';
+import { type Permission } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 
 /**
  * Verifica el permiso. Si falla:
@@ -45,7 +46,7 @@ export async function requirePermission(perm: Permission): Promise<void> {
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  if (!userCan(u?.platformRole, m?.role, perm)) {
+  if (!(await userCanForTeam(teamId, u?.platformRole, m?.role, perm))) {
     redirect('/dashboard');
   }
 }
@@ -78,5 +79,5 @@ export async function hasPermission(perm: Permission): Promise<boolean> {
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  return userCan(u?.platformRole, m?.role, perm);
+  return userCanForTeam(teamId, u?.platformRole, m?.role, perm);
 }

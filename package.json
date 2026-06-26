@@ -1,9 +1,13 @@
 {
   "private": true,
+  "version": "1.0.0",
   "pnpm": {
     "onlyBuiltDependencies": ["@tailwindcss/oxide", "esbuild", "sharp"]
   },
   "scripts": {
+    "release:patch": "npm version patch -m \"chore(release): v%s\"",
+    "release:minor": "npm version minor -m \"chore(release): v%s\"",
+    "release:major": "npm version major -m \"chore(release): v%s\"",
     "dev": "next dev --turbopack",
     "dev:prod": "bash scripts/run-prod.sh dev",
     "start:prod": "bash scripts/run-prod.sh start",

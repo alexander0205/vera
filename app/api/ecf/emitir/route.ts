@@ -16,7 +16,7 @@ import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos }
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc } from 'drizzle-orm';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
       db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
     ]);
-    if (!userCan(u?.platformRole, m?.role, 'facturas:crear')) {
+    if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso para crear facturas' }, { status: 403 });
     }
 

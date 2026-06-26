@@ -19,7 +19,7 @@ import { METODO_PAGO_VALUES_VALIDOS, METODO_SALDO_FAVOR, METODO_NOTA_CREDITO } f
 import { db } from '@/lib/db/drizzle';
 import { teamMembers, ecfDocuments } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 import { logAudit, getIp } from '@/lib/audit';
 
 const schema = z.object({
@@ -89,7 +89,7 @@ export async function POST(
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1);
 
-    if (!userCan(user.platformRole, member?.role, 'facturas:crear')) {
+    if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso para registrar pagos' }, { status: 403 });
     }
 

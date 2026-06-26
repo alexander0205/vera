@@ -3,6 +3,7 @@ import { getUser } from '@/lib/db/queries';
 import { setActiveTeam } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers } from '@/lib/db/schema';
+import { seedSystemRoles } from '@/lib/auth/permissions';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -42,6 +43,8 @@ export async function POST(req: NextRequest) {
     teamId: team.id,
     role: 'owner',
   });
+
+  await seedSystemRoles(team.id);
 
   // Cambiar la empresa activa a la nueva
   await setActiveTeam(team.id);

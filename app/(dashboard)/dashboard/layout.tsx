@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import useSWR from 'swr';
@@ -14,6 +14,7 @@ import {
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
       { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
+      { href: '/dashboard/equipo/permisos', label: 'Roles y permisos' },
       { href: '/dashboard/api-keys',      label: 'API Keys' },
       { href: '/dashboard/webhooks',      label: 'Webhooks' },
       { href: '/dashboard/impresoras',    label: 'Impresoras' },
@@ -128,15 +130,24 @@ const HREF_PERMISSION: Record<string, Permission> = {
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
+  '/dashboard/equipo/permisos':       'equipo:gestionar',
   '/dashboard/api-keys':              'configuracion:gestionar',
   '/dashboard/webhooks':              'configuracion:gestionar',
   '/dashboard/impresoras':            'configuracion:ver',
 };
 
-function canAccess(role: string | null | undefined, href: string, platformRole?: string | null): boolean {
+// Gating del sidebar por PERMISOS EFECTIVOS (con overrides por empresa, vía
+// /api/user). Mientras cargan los permisos se cae al catálogo estático del rol
+// para evitar parpadeo. `perms` es null durante la carga.
+function canAccessHref(
+  href: string,
+  perms: Set<string> | null,
+  role: string | null | undefined,
+): boolean {
   const perm = HREF_PERMISSION[href];
   if (!perm) return true; // sin gate explícito → visible para todos
-  return userCan(platformRole, role, perm);
+  if (!perms) return userCan(undefined, role, perm); // fallback mientras carga
+  return perms.has(perm);
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -535,6 +546,18 @@ function Sidebar({
   const role = activeTeam?.role;
   const cajaHabilitada = activeTeam?.cajaHabilitada ?? false;
 
+  // Permisos efectivos (con overrides por empresa). null mientras carga →
+  // canAccessHref usa el fallback estático del rol.
+  const { permissions, isLoading: permsLoading } = usePermissions();
+  const permSet = useMemo(
+    () => (permsLoading ? null : new Set<string>(permissions)),
+    [permsLoading, permissions],
+  );
+  const can = useCallback(
+    (href: string) => canAccessHref(href, permSet, role),
+    [permSet, role],
+  );
+
   // Todos los items siempre habilitados
   function isEnabled(_href: string): boolean {
     return true;
@@ -545,7 +568,7 @@ function Sidebar({
     { href: '/dashboard/caja',              label: 'Mi caja' },
     { href: '/dashboard/caja/aprobaciones', label: 'Aprobaciones' },
     { href: '/dashboard/caja/historial',    label: 'Historial' },
-  ].filter(c => canAccess(role, c.href));
+  ].filter(c => can(c.href));
 
   const cajaGroup: NavGroup | null = cajaHabilitada && cajaCandidatos.length > 0
     ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
@@ -555,9 +578,9 @@ function Sidebar({
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
-  const topItemsVisibles  = TOP_ITEMS.filter(item => canAccess(role, item.href));
+  const topItemsVisibles  = TOP_ITEMS.filter(item => can(item.href));
   const staticGroupsVis   = GROUPS
-    .map(g => ({ ...g, children: g.children.filter(c => canAccess(role, c.href)) }))
+    .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
     .filter(g => g.children.length > 0);
   const groupsVisibles    = cajaGroup ? [cajaGroup, ...staticGroupsVis] : staticGroupsVis;
 
@@ -612,7 +635,7 @@ function Sidebar({
         )}
 
         {/* Nueva Factura — solo roles con facturas:crear */}
-        {canAccess(role, '/dashboard/facturas/nueva') && (
+        {can('/dashboard/facturas/nueva') && (
           <Link
             href="/dashboard/facturas/nueva"
             onClick={hasPlan ? onClose : e => e.preventDefault()}
@@ -702,7 +725,7 @@ function Sidebar({
                         >
                           {child.label}
                         </Link>
-                        {child.plusHref && enabled && canAccess(role, child.plusHref) && (
+                        {child.plusHref && enabled && can(child.plusHref) && (
                           <Link
                             href={child.plusHref}
                             onClick={onClose}
@@ -721,6 +744,12 @@ function Sidebar({
           );
         })}
       </nav>
+
+      <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
+        <span className="text-[11px] text-gray-400">
+          EmiteDO v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
+        </span>
+      </div>
     </div>
   );
 }

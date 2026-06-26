@@ -11,11 +11,11 @@ import { eq, and, count } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
 import { planUserLimit } from '@/lib/plans';
-import { INVITABLE_ROLE_KEYS } from '@/lib/config/roles';
+import { listTeamRoles } from '@/lib/auth/permissions';
 
 const inviteSchema = z.object({
   email: z.string().email('Correo electrónico inválido'),
-  role: z.enum(INVITABLE_ROLE_KEYS),
+  role: z.string().min(1, 'Rol requerido'),
 });
 
 export async function POST(req: NextRequest) {
@@ -71,6 +71,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { email, role } = parsed.data;
+
+    // El rol debe existir en el team y no ser owner (owner no es asignable).
+    const teamRolesList = await listTeamRoles(teamId);
+    if (role === 'owner' || !teamRolesList.some(r => r.key === role)) {
+      return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+    }
 
     // Verificar que no sea ya miembro
     const existing = await db

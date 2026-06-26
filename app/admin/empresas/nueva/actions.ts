@@ -6,6 +6,7 @@ import { db } from '@/lib/db/drizzle';
 import { teams, sequences, invitations, users, teamMembers } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
+import { seedSystemRoles } from '@/lib/auth/permissions';
 import { eq, and } from 'drizzle-orm';
 
 export async function crearEmpresa(formData: FormData) {
@@ -41,6 +42,9 @@ export async function crearEmpresa(formData: FormData) {
     planName:           planKey || null,
     subscriptionStatus: 'admin',
   }).returning();
+
+  // Sembrar roles de sistema (owner/admin/vendedor/auditor) + permisos default
+  await seedSystemRoles(team.id);
 
   // Crear 10 secuencias e-NCF
   const venc = new Date('2027-12-31');
