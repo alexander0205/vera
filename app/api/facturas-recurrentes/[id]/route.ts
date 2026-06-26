@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { facturasRecurrentes, ecfDocuments, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and, ne, desc, sql } from 'drizzle-orm';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -179,8 +180,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('facturas:crear');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const numId = parseInt(id);
@@ -250,8 +252,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('facturas:crear');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const numId = parseInt(id);

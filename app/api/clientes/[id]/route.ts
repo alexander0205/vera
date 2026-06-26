@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { clients, ecfDocuments } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and, desc } from 'drizzle-orm';
 import { clienteSchema } from '@/lib/clientes/schema';
 
@@ -47,10 +48,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('clientes:gestionar');
+  if (!auth.ok) return auth.response;
+  const { user, teamId } = auth;
 
   const { id } = await params;
   const clientId = parseInt(id);
@@ -74,10 +74,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('clientes:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const clientId = parseInt(id);

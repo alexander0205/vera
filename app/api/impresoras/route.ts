@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { impresoras } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, asc } from 'drizzle-orm';
 
 export async function GET() {
@@ -22,8 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const body = await req.json();
 

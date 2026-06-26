@@ -17,7 +17,7 @@ import { ecfDocuments, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 import { logAudit, getIp } from '@/lib/audit';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 
@@ -40,7 +40,7 @@ export async function POST(
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
-  if (!userCan(u?.platformRole, m?.role, 'facturas:anular')) {
+  if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:anular')) {
     return NextResponse.json({ error: 'Sin permiso para cancelar envíos' }, { status: 403 });
   }
 

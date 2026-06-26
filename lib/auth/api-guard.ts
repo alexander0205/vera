@@ -15,7 +15,8 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { userCan, type Permission } from '@/lib/config/roles';
+import { type Permission } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 
 type SessionUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 
@@ -48,7 +49,7 @@ export async function requirePermission(permission: Permission): Promise<AuthOk 
     .limit(1);
   const teamRole = m?.role ?? null;
 
-  if (!userCan(user.platformRole, teamRole, permission)) {
+  if (!(await userCanForTeam(teamId, user.platformRole, teamRole, permission))) {
     return { ok: false, response: NextResponse.json({ error: 'Sin permiso' }, { status: 403 }) };
   }
 

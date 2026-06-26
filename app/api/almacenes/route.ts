@@ -4,6 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { almacenes } from '@/lib/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 
 const schema = z.object({
   nombre:      z.string().min(1, 'El nombre es obligatorio').max(255),
@@ -27,10 +28,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUser();
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    const teamId = await getTeamIdForUser();
-    if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+    const auth = await requirePermission('productos:gestionar');
+    if (!auth.ok) return auth.response;
+    const { teamId } = auth;
 
     const body = await req.json();
     const parsed = schema.safeParse(body);

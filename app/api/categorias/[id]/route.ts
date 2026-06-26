@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { categorias } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   const { nombre, descripcion } = await req.json();
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
@@ -19,8 +20,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   await db.delete(categorias).where(
     and(eq(categorias.id, parseInt(id)), eq(categorias.teamId, teamId))

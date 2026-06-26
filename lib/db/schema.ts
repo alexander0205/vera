@@ -136,6 +136,37 @@ export const teamMembers = pgTable('team_members', {
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
 });
 
+// ── Roles por empresa (permisos editables) ──────────────────────────────────
+// Cada team tiene sus propios roles: los 4 de sistema (owner/admin/user/lector)
+// sembrados + los custom que cree. teamMembers.role guarda la `key`.
+// Permisos efectivos se resuelven en lib/auth/permissions.ts (owner siempre full).
+export const teamRoles = pgTable('team_roles', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  key: varchar('key', { length: 50 }).notNull(),
+  label: varchar('label', { length: 60 }).notNull(),
+  description: varchar('description', { length: 255 }),
+  icon: varchar('icon', { length: 40 }),
+  color: varchar('color', { length: 120 }),
+  isSystem: boolean('is_system').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  teamKeyUnique: uniqueIndex('team_roles_team_key_idx').on(t.teamId, t.key),
+}));
+
+export const teamRolePermissions = pgTable('team_role_permissions', {
+  id: serial('id').primaryKey(),
+  teamRoleId: integer('team_role_id')
+    .notNull()
+    .references(() => teamRoles.id, { onDelete: 'cascade' }),
+  permission: varchar('permission', { length: 50 }).notNull(),
+}, (t) => ({
+  rolePermUnique: uniqueIndex('team_role_perm_idx').on(t.teamRoleId, t.permission),
+}));
+
 export const activityLogs = pgTable('activity_logs', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
@@ -608,6 +639,21 @@ export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
   team: one(teams, {
     fields: [teamMembers.teamId],
     references: [teams.id],
+  }),
+}));
+
+export const teamRolesRelations = relations(teamRoles, ({ one, many }) => ({
+  team: one(teams, {
+    fields: [teamRoles.teamId],
+    references: [teams.id],
+  }),
+  permissions: many(teamRolePermissions),
+}));
+
+export const teamRolePermissionsRelations = relations(teamRolePermissions, ({ one }) => ({
+  role: one(teamRoles, {
+    fields: [teamRolePermissions.teamRoleId],
+    references: [teamRoles.id],
   }),
 }));
 

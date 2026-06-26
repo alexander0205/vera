@@ -8,7 +8,8 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { userCan, type Permission } from '@/lib/config/roles';
+import { type Permission } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 import type { ImportMode } from './csv';
 
 export class ImportError extends Error {
@@ -32,7 +33,7 @@ export async function requireImport(permission: Permission) {
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  if (!userCan(user.platformRole, member?.role, permission)) {
+  if (!await userCanForTeam(teamId, user.platformRole, member?.role, permission)) {
     throw new ImportError(403, 'Sin permiso');
   }
   return { user, teamId };
