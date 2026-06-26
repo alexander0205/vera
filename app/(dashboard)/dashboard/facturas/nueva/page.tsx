@@ -2,52 +2,21 @@
  * Server component — carga el perfil de la empresa activa en el servidor.
  * Esto garantiza que al cambiar de empresa (router.refresh), los datos
  * del emisor en el formulario de nueva factura se actualicen correctamente.
+ *
+ * Pantalla de FACTURA DE VENTA. La categoría queda fija; el usuario solo elige
+ * el subtipo (e31/e32/e44/e45/e46/Sin NCF). NC, ND, Compras y Gastos tienen sus
+ * propias rutas/pantallas.
  */
 import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
-import { getTeamIdForUser } from '@/lib/db/queries';
-import { db } from '@/lib/db/drizzle';
-import { teams } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { getEmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 import NuevaFacturaFormClient from './_nueva-factura-client';
 import { hasPermission } from '@/lib/auth/page-guard';
 import { ShieldX } from 'lucide-react';
 import Link from 'next/link';
 
-export interface EmpresaPerfil {
-  razonSocial:     string | null;
-  nombreComercial: string | null;
-  logo:            string | null;
-  rnc:             string | null;
-  firma:           string | null;
-  // Config de recargo por mora (para mostrar los términos al elegir crédito)
-  recargoMoraActivo?:     boolean;
-  recargoMoraPorcentaje?: number;  // basis points (200 = 2.00%)
-  recargoMoraDiasGracia?: number;
-  // Plazo de pago por defecto. null = de contado; N = crédito a N días.
-  plazoPagoDefaultDias?:  number | null;
-}
-
-async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return null;
-  const [team] = await db
-    .select({
-      razonSocial:     teams.razonSocial,
-      nombreComercial: teams.nombreComercial,
-      logo:            teams.logo,
-      rnc:             teams.rnc,
-      firma:           teams.firma,
-      recargoMoraActivo:     teams.recargoMoraActivo,
-      recargoMoraPorcentaje: teams.recargoMoraPorcentaje,
-      recargoMoraDiasGracia: teams.recargoMoraDiasGracia,
-      plazoPagoDefaultDias:  teams.plazoPagoDefaultDias,
-    })
-    .from(teams)
-    .where(eq(teams.id, teamId))
-    .limit(1);
-  return team ?? null;
-}
+// Re-export para consumidores existentes (editar, wrapper cliente).
+export type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
 
 export default async function NuevaFacturaPage() {
   const canCreate = await hasPermission('facturas:crear');
@@ -80,7 +49,7 @@ export default async function NuevaFacturaPage() {
         <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
       </div>
     }>
-      <NuevaFacturaFormClient initialPerfil={perfil} />
+      <NuevaFacturaFormClient initialPerfil={perfil} categoriaFija="factura-venta" />
     </Suspense>
   );
 }

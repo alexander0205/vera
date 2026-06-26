@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requirePermission('productos:gestionar');
   if (!auth.ok) return auth.response;
-  const { teamId } = auth;
+  const { user, teamId } = auth;
 
   const body = await req.json();
   const parsed = productoSchema.safeParse(body);
@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
     tasaItbis,
     tipo,
     activo: 'true',
+    createdBy: user.id,
   }).returning();
 
   return NextResponse.json({ ok: true, producto: { ...created, precioDOP: created.precio / 100 } }, { status: 201 });

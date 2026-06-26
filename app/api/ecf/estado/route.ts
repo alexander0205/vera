@@ -14,6 +14,7 @@ import { ecfDocuments, teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
+import { logAudit } from '@/lib/audit';
 
 // ecf-api estado → emitedo estado
 const MAPA_ESTADOS: Record<string, string> = {
@@ -83,6 +84,16 @@ export async function GET(req: NextRequest) {
         updatedAt:    new Date(),
       })
       .where(eq(ecfDocuments.id, docId));
+  }
+
+  // Evento de auditoría: rechazo DGII (con el motivo) → aparece en la Historia.
+  if (estadoNuevo === 'RECHAZADO' && doc.estado !== 'RECHAZADO') {
+    logAudit({
+      teamId, userId: user.id, actor: user.email,
+      action:   'ECF_RECHAZADO',
+      resource: doc.encf,
+      meta:     { mensajes: resultado.mensajesDgii ?? null, via: 'consultar', docId },
+    });
   }
 
   return NextResponse.json({

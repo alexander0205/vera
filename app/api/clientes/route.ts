@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requirePermission('clientes:gestionar');
   if (!auth.ok) return auth.response;
-  const { teamId } = auth;
+  const { user, teamId } = auth;
 
   const body = await req.json();
   const parsed = clienteSchema.safeParse(body);
@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
     telefono:    telefono    || null,
     direccion:   direccion   || null,
     descripcion: descripcion || null,
+    createdBy:   user.id,
   }).returning();
 
   return NextResponse.json({ ok: true, cliente: created }, { status: 201 });

@@ -20,6 +20,32 @@ interface DependienteOpt {
   apellido: string;
 }
 
+/** Ancho del dropdown de productos — más ancho que la celda para layout tipo tabla. */
+const PRODUCTO_DROPDOWN_W = 460;
+
+/** Fila del dropdown de productos: código (referencia) · nombre + descripción · precio/ITBIS. */
+function renderProductoOption(p: Producto) {
+  return (
+    <div className="grid grid-cols-[5rem_1fr] items-start gap-x-3 gap-y-0.5">
+      <span
+        className="font-mono text-xs text-gray-500 truncate pt-0.5"
+        title={p.referencia ?? undefined}
+      >
+        {p.referencia || '—'}
+      </span>
+      <p className="min-w-0 font-medium truncate">{p.nombre}</p>
+      {p.descripcion && (
+        <p
+          className="col-span-2 min-w-0 truncate text-xs text-gray-500"
+          title={p.descripcion}
+        >
+          {p.descripcion}
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   items: ItemLinea[];
   regla: TipoEcfRegla | undefined;
@@ -109,14 +135,8 @@ export function ItemsTable({
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                 onCreate={() => onOpenNuevoProducto(idx)}
                 createLabel="Nuevo producto"
-                renderOption={(p) => (
-                  <div>
-                    <p className="font-medium">{p.nombre}</p>
-                    <p className="text-xs text-gray-600">
-                      DOP {p.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })} · {p.tasaItbis === 'exento' ? 'Exento' : `ITBIS ${parseFloat(p.tasaItbis) * 100}%`}
-                    </p>
-                  </div>
-                )}
+                dropdownMinWidth={PRODUCTO_DROPDOWN_W}
+                renderOption={renderProductoOption}
               />
             </div>
 
@@ -357,14 +377,8 @@ export function ItemsTable({
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                     onCreate={() => onOpenNuevoProducto(idx)}
                     createLabel="Nuevo producto"
-                    renderOption={(p) => (
-                      <div>
-                        <p className="font-medium">{p.nombre}</p>
-                        <p className="text-xs text-gray-600">
-                          DOP {p.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })} · {p.tasaItbis === 'exento' ? 'Exento' : `ITBIS ${parseFloat(p.tasaItbis) * 100}%`}
-                        </p>
-                      </div>
-                    )}
+                    dropdownMinWidth={PRODUCTO_DROPDOWN_W}
+                    renderOption={renderProductoOption}
                   />
                 </td>
                 {showReferencia && (

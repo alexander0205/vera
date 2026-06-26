@@ -44,7 +44,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 export async function PUT(req: NextRequest, { params }: Ctx) {
   const auth = await requirePermission('productos:gestionar');
   if (!auth.ok) return auth.response;
-  const { teamId } = auth;
+  const { user, teamId } = auth;
 
   const { id } = await params;
   const prodId = parseInt(id);
@@ -68,6 +68,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     tasaItbis,
     tipo,
     activo:     activo === false ? 'false' : 'true',
+    updatedBy:  user.id,
     updatedAt:  new Date(),
   }).where(eq(products.id, prodId)).returning();
 

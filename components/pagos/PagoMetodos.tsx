@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { METODOS_PAGO, type MetodoOption } from '@/lib/pagos/metodos';
+import { METODOS_PAGO, METODO_NOTA_CREDITO, METODO_PAGO_LABELS, type MetodoOption } from '@/lib/pagos/metodos';
 
 // Re-export para compatibilidad con imports existentes. Fuente: lib/pagos/metodos.
 export { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -20,6 +20,16 @@ export interface PagoLinea {
   valor: string;       // DOP como string (input controlado)
   cuenta?: string;     // cuenta bancaria (opcional)
   referencia?: string; // opcional
+  notaCreditoId?: number | null; // NC consumida si metodo='nota_credito'
+}
+
+/** NC del cliente usable como pago (voucher por código). */
+export interface NotaCreditoDisponible {
+  id: number;
+  codigo: string | null;
+  /** Código (o e-NCF) de la factura de origen — para buscar por él. */
+  facturaCodigo?: string | null;
+  montoCents: number;
 }
 
 /** Cuentas bancarias sugeridas (igual que en las pantallas originales). */
@@ -41,6 +51,8 @@ interface PagoMetodosProps {
   showReferencia?: boolean; // mostrar campo referencia por línea. Default false.
   /** Restringe las opciones de método (algunos endpoints aceptan menos de 8). */
   metodos?: MetodoOption[];
+  /** NCs disponibles del cliente. Si hay, se ofrece el método 'Nota de crédito'. */
+  notasCredito?: NotaCreditoDisponible[];
 }
 
 // ─── Helpers exportados ───────────────────────────────────────────────────────
@@ -77,7 +89,13 @@ export function PagoMetodos({
   showCuenta = false,
   showReferencia = false,
   metodos = METODOS_PAGO,
+  notasCredito,
 }: PagoMetodosProps) {
+  const hayNc = !!notasCredito && notasCredito.length > 0;
+  // Ofrecer 'Nota de crédito' como método solo si el cliente tiene NCs disponibles.
+  const metodosUI: MetodoOption[] = hayNc
+    ? [...metodos, { value: METODO_NOTA_CREDITO, label: METODO_PAGO_LABELS[METODO_NOTA_CREDITO] }]
+    : metodos;
   const disponible = Math.max(0, total - yaPagado);
   const suma       = sumaPagos(lineas);
   const restoCents = Math.round(disponible * 100) - Math.round(suma * 100);
@@ -128,12 +146,16 @@ export function PagoMetodos({
               <Label className="text-[10px] text-gray-500 uppercase">Método</Label>
               <Select
                 value={l.metodo}
-                onValueChange={(v) => setLinea(i, { metodo: v })}
+                onValueChange={(v) => setLinea(i, {
+                  metodo: v,
+                  // Al cambiar de/hacia 'nota_credito' limpiar la NC y el monto.
+                  ...(v === METODO_NOTA_CREDITO ? { valor: '', notaCreditoId: null } : { notaCreditoId: null }),
+                })}
                 disabled={disabled}
               >
                 <SelectTrigger className="mt-1 h-9 text-sm w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {metodos.map(m => (
+                  {metodosUI.map(m => (
                     <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -154,8 +176,29 @@ export function PagoMetodos({
             )}
           </div>
 
+          {/* Selector de Nota de crédito — buscable por código de NC o de factura */}
+          {l.metodo === METODO_NOTA_CREDITO && (
+            <div className="min-w-0">
+              <Label className="text-[10px] text-gray-500 uppercase">Nota de crédito</Label>
+              <NotaCreditoPicker
+                notas={notasCredito ?? []}
+                valueId={l.notaCreditoId ?? null}
+                disabled={disabled}
+                fmt={fmt}
+                onSelect={(nc) => {
+                  // Aplicar el monto de la NC, capado a lo que falta cubrir (otras líneas
+                  // ya cuentan). El sobrante (NC > factura) queda como saldo a favor.
+                  const otrasCents = Math.round(suma * 100) - Math.round((parseFloat(l.valor || '0') || 0) * 100);
+                  const capCents   = Math.max(0, Math.round(disponible * 100) - otrasCents);
+                  const aplicar    = Math.min(nc.montoCents, capCents);
+                  setLinea(i, { notaCreditoId: nc.id, valor: (aplicar / 100).toFixed(2) });
+                }}
+              />
+            </div>
+          )}
+
           {/* Fila 2: monto + cuenta (cuenta solo si se reveló) */}
-          <div className={`grid gap-2 ${showCuenta && cuentaVisible(i, l) ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-2 ${showCuenta && cuentaVisible(i, l) && l.metodo !== METODO_NOTA_CREDITO ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div className="min-w-0">
               <Label className="text-[10px] text-gray-500 uppercase">Monto</Label>
               <div className="relative mt-1">
@@ -166,7 +209,7 @@ export function PagoMetodos({
                   placeholder="0.00"
                   value={l.valor}
                   onChange={(e) => setLinea(i, { valor: e.target.value })}
-                  disabled={disabled}
+                  disabled={disabled || l.metodo === METODO_NOTA_CREDITO}
                 />
               </div>
             </div>
@@ -257,6 +300,67 @@ export function PagoMetodos({
         <span>Suma: <strong>RD$ {fmt(suma)}</strong></span>
         <span>{excede ? 'Excede el total' : `Resto: RD$ ${fmt(resto)}`}</span>
       </div>
+    </div>
+  );
+}
+
+// ─── Picker buscable de Nota de Crédito ───────────────────────────────────────
+// Combobox simple: escribe el código de la NC o el de su factura de origen para
+// filtrar. Lista local (las NCs ya vienen cargadas), sin fetch.
+function NotaCreditoPicker({
+  notas, valueId, onSelect, disabled, fmt,
+}: {
+  notas: NotaCreditoDisponible[];
+  valueId: number | null;
+  onSelect: (nc: NotaCreditoDisponible) => void;
+  disabled?: boolean;
+  fmt: (n: number) => string;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen]   = useState(false);
+  const sel = notas.find(n => n.id === valueId) ?? null;
+  const q   = query.trim().toLowerCase();
+  const filtradas = q
+    ? notas.filter(n =>
+        (n.codigo ?? '').toLowerCase().includes(q) ||
+        (n.facturaCodigo ?? '').toLowerCase().includes(q))
+    : notas;
+  const labelSel = sel
+    ? `${sel.codigo ?? `NC #${sel.id}`}${sel.facturaCodigo ? ` · ${sel.facturaCodigo}` : ''} — RD$${fmt(sel.montoCents / 100)}`
+    : '';
+
+  return (
+    <div className="relative mt-1">
+      <Input
+        type="text"
+        className="h-9 text-sm w-full"
+        placeholder="Buscar por código de NC o de factura…"
+        value={open ? query : labelSel}
+        disabled={disabled}
+        onFocus={() => { setOpen(true); setQuery(''); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          {filtradas.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-gray-400">Sin notas de crédito que coincidan</div>
+          ) : filtradas.map(n => (
+            <button
+              key={n.id}
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-teal-50 flex justify-between gap-2"
+              onMouseDown={(e) => { e.preventDefault(); onSelect(n); setOpen(false); setQuery(''); }}
+            >
+              <span className="min-w-0">
+                <span className="font-medium">{n.codigo ?? `NC #${n.id}`}</span>
+                {n.facturaCodigo && <span className="text-gray-500"> · factura {n.facturaCodigo}</span>}
+              </span>
+              <span className="text-gray-700 whitespace-nowrap">RD${fmt(n.montoCents / 100)}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

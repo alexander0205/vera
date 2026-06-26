@@ -23,6 +23,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { userCan } from '@/lib/config/roles';
+import { recalcularEstadoPago } from '@/lib/facturas/estado-pago';
 
 const ESTADOS_ANULABLES = ['BORRADOR', 'EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'];
 
@@ -81,12 +82,14 @@ export async function POST(
 
   const [doc] = await db
     .select({
-      id:            ecfDocuments.id,
-      estado:        ecfDocuments.estado,
-      encf:          ecfDocuments.encf,
-      tipoEcf:       ecfDocuments.tipoEcf,
-      pagoRecibido:  ecfDocuments.pagoRecibido,
-      pagoValorCts:  ecfDocuments.pagoValorCts,
+      id:                ecfDocuments.id,
+      estado:            ecfDocuments.estado,
+      encf:              ecfDocuments.encf,
+      tipoEcf:           ecfDocuments.tipoEcf,
+      pagoRecibido:      ecfDocuments.pagoRecibido,
+      pagoValorCts:      ecfDocuments.pagoValorCts,
+      ncfModificado:     ecfDocuments.ncfModificado,
+      origenDocumentoId: ecfDocuments.origenDocumentoId,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
@@ -156,9 +159,27 @@ export async function POST(
       estado:        'ANULADO',
       estadoPago:    'ANULADA',
       tipoAnulacion,
+      updatedBy:     user.id,
       updatedAt:     new Date(),
     })
     .where(eq(ecfDocuments.id, docId));
+
+  // Si se anula una Nota de Crédito, el crédito deja de aplicar al padre →
+  // recalcular su estado de pago (vuelve a deber el monto acreditado).
+  if (doc.tipoEcf === '34') {
+    let padreId: number | null = doc.origenDocumentoId ?? null;
+    if (!padreId && doc.ncfModificado) {
+      const [p] = await db
+        .select({ id: ecfDocuments.id })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, doc.ncfModificado)))
+        .limit(1);
+      padreId = p?.id ?? null;
+    }
+    if (padreId) {
+      try { await recalcularEstadoPago(padreId); } catch (e) { console.error('[anular NC recalc padre]', e); }
+    }
+  }
 
   return NextResponse.json({
     ok: true,
