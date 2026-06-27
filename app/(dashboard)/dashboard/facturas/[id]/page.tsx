@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
+import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -107,6 +108,7 @@ interface FacturaDetalle {
   creditoGeneradoCents: number | null;
   moraOrigenId: number | null;
   fechaEmision: string;
+  createdAt?: string;
   fechaLimitePago: string | null;
   tipoPago: number | null;
   updatedAt: string;
@@ -242,7 +244,9 @@ function EstadoDgiiCard({
           )}
           <div className="flex justify-between gap-2">
             <span className="text-gray-500">Fecha emisión:</span>
-            <span className="text-gray-900">{fmtDate(factura.fechaEmision)}</span>
+            <span className="text-gray-900">
+              {factura.createdAt ? fmtFechaHora(factura.createdAt) : fmtFechaCorta(factura.fechaEmision)}
+            </span>
           </div>
           {factura.fechaFirma && (
             <div className="flex justify-between gap-2">
