@@ -26,6 +26,39 @@ export function fmtFechaCorta(iso: string | Date | null | undefined): string {
   return `${d}/${m}/${y}`;
 }
 
+const TZ_RD = 'America/Santo_Domingo';
+
+/** Hora de un timestamp (created_at, etc.) en zona RD. Ej: "8:03 p. m.". */
+export function fmtHora(iso: string | Date | null | undefined): string {
+  if (!iso) return '';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('es-DO', {
+    timeZone: TZ_RD, hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+/** Fecha (sin hora) de un timestamp en zona RD. Ej: "26/06/2026". */
+export function fmtFechaRD(iso: string | Date | null | undefined): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-DO', {
+    timeZone: TZ_RD, day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+}
+
+/** Fecha + hora en zona RD. Ej: "26/06/2026 8:03 p. m.". */
+export function fmtFechaHora(iso: string | Date | null | undefined): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (isNaN(d.getTime())) return '—';
+  const fecha = d.toLocaleDateString('es-DO', {
+    timeZone: TZ_RD, day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+  return `${fecha} ${fmtHora(d)}`;
+}
+
 /** Formato monto centavos → RD$X,XXX.XX */
 export function fmtDOP(centavos: number): string {
   return `RD$${(centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
