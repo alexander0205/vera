@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText, Upload, Eye,
+  Plus, Download, Mail, Ban, FileText, Upload, Eye, Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
@@ -363,16 +363,22 @@ export default function FacturasPage() {
   const rowActions = (doc: Doc): RowAction[] => {
     // "Ver" inline (👁) antes de los 3 puntos — abre el detalle.
     const ver: RowAction = { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${doc.id}`, primary: true };
+    // Recibo POS: solo para ventas sin-ncf (ticket de mostrador). Reabre el recibo 80mm.
+    const recibo: RowAction[] = doc.tipoEcf === 'sin-ncf'
+      ? [{ icon: Printer, title: 'Reimprimir recibo', onClick: () => window.open(`/pos-ticket/${doc.id}`, '_blank', 'width=420,height=680') }]
+      : [];
     if (doc.estado === 'BORRADOR') {
       return [
         ver,
         { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
+        ...recibo,
       ];
     }
     return [
       ver,
       { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.codigo ?? doc.id}` },
       { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
+      ...recibo,
     ];
   };
 
