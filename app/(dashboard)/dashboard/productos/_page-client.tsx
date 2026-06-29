@@ -24,6 +24,7 @@ interface Producto {
   nombre:               string;
   descripcion:          string | null;
   referencia:           string | null;
+  codigoBarras:         string | null;
   precio:               number;
   precioDOP:            number;
   costo:                number;
@@ -63,7 +64,7 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
 ];
 
 const EMPTY_FORM = {
-  nombre: '', descripcion: '', referencia: '',
+  nombre: '', descripcion: '', referencia: '', codigoBarras: '',
   precio: '', tasaItbis: 'exento', tipo: 'servicio', unidad: 'Unidad',
   costo: '', stockActual: '', stockMinimo: '',
   controlaInventario: false, permiteVentaSinStock: true,
@@ -120,6 +121,7 @@ export default function ProductosPage() {
       nombre:               p.nombre,
       descripcion:          p.descripcion ?? '',
       referencia:           p.referencia  ?? '',
+      codigoBarras:         p.codigoBarras ?? '',
       precio:               p.precioDOP.toString(),
       tasaItbis:            p.tasaItbis,
       tipo:                 p.tipo,
@@ -488,6 +490,11 @@ export default function ProductosPage() {
                     <Label>Referencia / SKU</Label>
                     <Input placeholder="SERV-001" value={form.referencia}
                       onChange={(e) => setForm((f) => ({ ...f, referencia: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Código de barras (POS)</Label>
+                    <Input placeholder="Escanea o escribe el EAN/UPC" value={form.codigoBarras}
+                      onChange={(e) => setForm((f) => ({ ...f, codigoBarras: e.target.value }))} />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Descripción</Label>

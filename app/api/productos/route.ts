@@ -14,6 +14,7 @@ const productoSchema = z.object({
   nombre:               z.string().min(1, 'El nombre es obligatorio').max(255),
   descripcion:          z.string().max(1000).optional().nullable(),
   referencia:           z.string().max(100).optional().nullable(),
+  codigoBarras:         z.string().max(64).optional().nullable(),
   precio:               z.number().min(0, 'El precio no puede ser negativo'),
   tasaItbis:            z.enum(['0.18', '0.16', '0', 'exento']).default('0.18'),
   tipo:                 z.enum(['bien', 'servicio']).default('servicio'),
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
   const {
-    nombre, descripcion, referencia, precio, tasaItbis, tipo,
+    nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
   } = parsed.data;
 
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
     nombre,
     descripcion:          descripcion  || null,
     referencia:           referencia   || null,
+    codigoBarras:         codigoBarras || null,
     precio:               Math.round(precio * 100),
     tasaItbis,
     tipo,

@@ -15,6 +15,7 @@ export interface ProductoPos {
   id:                   number;
   nombre:               string;
   referencia:           string | null;
+  codigoBarras:         string | null;
   precio:               number;   // centavos (precio base; lista de precios se aplica en checkout)
   tasaItbis:            string;
   tipo:                 string;   // 'bien' | 'servicio'
@@ -30,6 +31,7 @@ export async function getCatalogoPos(teamId: number, almacenId: number): Promise
       id:                   products.id,
       nombre:               products.nombre,
       referencia:           products.referencia,
+      codigoBarras:         products.codigoBarras,
       precio:               products.precio,
       tasaItbis:            products.tasaItbis,
       tipo:                 products.tipo,

@@ -251,6 +251,7 @@ export const products = pgTable('products', {
   nombre: varchar('nombre', { length: 255 }).notNull(),
   descripcion: text('descripcion'),
   referencia: varchar('referencia', { length: 100 }),  // SKU / código interno
+  codigoBarras: varchar('codigo_barras', { length: 64 }),  // EAN/UPC para lector POS
   precio: integer('precio').notNull().default(0),       // en centavos
   tasaItbis: varchar('tasa_itbis', { length: 6 }).notNull().default('0.18'), // '0.18'|'0.16'|'0'|'exento'
   tipo: varchar('tipo', { length: 10 }).notNull().default('servicio'),       // 'bien'|'servicio'

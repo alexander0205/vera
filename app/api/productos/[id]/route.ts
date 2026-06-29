@@ -15,6 +15,7 @@ const updateSchema = z.object({
   nombre:               z.string().min(1).max(255),
   descripcion:          z.string().max(1000).optional().nullable(),
   referencia:           z.string().max(100).optional().nullable(),
+  codigoBarras:         z.string().max(64).optional().nullable(),
   precio:               z.number().min(0),
   tasaItbis:            z.enum(['0.18', '0.16', '0', 'exento']),
   tipo:                 z.enum(['bien', 'servicio']),
@@ -61,7 +62,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
   const {
-    nombre, descripcion, referencia, precio, tasaItbis, tipo, activo,
+    nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo, activo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
   } = parsed.data;
 
@@ -81,6 +82,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       nombre,
       descripcion:          descripcion || null,
       referencia:           referencia  || null,
+      codigoBarras:         codigoBarras || null,
       precio:               Math.round(precio * 100),
       tasaItbis,
       tipo,

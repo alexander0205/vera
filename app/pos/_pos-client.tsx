@@ -25,6 +25,7 @@ interface ProductoPos {
   id:                   number;
   nombre:               string;
   referencia:           string | null;
+  codigoBarras:         string | null;
   precio:               number;  // centavos (BASE, sin ITBIS)
   tasaItbis:            string;  // '0.18' | '0.16' | '0' | 'exento'
   tipo:                 string;  // 'bien' | 'servicio'
@@ -249,6 +250,18 @@ function Venta({
     });
   }
 
+  /** Escaneo (lector USB) o Enter: match exacto por código de barras o referencia. */
+  function escanear() {
+    const code = busqueda.trim();
+    if (!code) return;
+    const lc = code.toLowerCase();
+    let p = productos.find((x) => x.codigoBarras && x.codigoBarras.toLowerCase() === lc)
+         ?? productos.find((x) => x.referencia && x.referencia.toLowerCase() === lc);
+    if (!p && filtrados.length === 1) p = filtrados[0];   // único resultado de la búsqueda
+    if (p) { agregar(p); setBusqueda(''); }
+    else toast.error(`Sin producto para "${code}"`);
+  }
+
   function cambiarQty(id: number, delta: number) {
     setCarrito((prev) =>
       prev
@@ -364,7 +377,9 @@ function Venta({
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por nombre o referencia…"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); escanear(); } }}
+            placeholder="Buscar o escanear (nombre, referencia o código de barras)…"
+            autoFocus
             className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
           />
           {cargando ? (
