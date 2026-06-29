@@ -45,6 +45,7 @@ export type AuditAction =
   | 'POS_TERMINAL_CREAR'
   | 'POS_TERMINAL_EDITAR'
   | 'POS_TERMINAL_DESACTIVAR'
+  | 'POS_ASIGNACION'
   | 'POS_VENTA';
 
 export interface AuditParams {

@@ -49,9 +49,10 @@ export async function getCatalogoPos(teamId: number, almacenId: number): Promise
       eq(products.teamId, teamId),
       eq(products.activo, 'true'),
       eq(products.visiblePos, true),
-      // Item sin control de inventario → siempre visible.
-      // Item con control → solo si tiene fila de stock en ESTE almacén (separación por POS).
-      sql`(${products.controlaInventario} = false OR ${productAlmacenStock.id} IS NOT NULL)`,
+      // Separación ESTRICTA por punto de venta: el producto aparece solo si está
+      // asignado al almacén de la terminal (tiene fila en product_almacen_stock).
+      // Aplica por igual a bienes con o sin control de inventario.
+      sql`${productAlmacenStock.id} IS NOT NULL`,
     ))
     .orderBy(asc(products.nombre));
 

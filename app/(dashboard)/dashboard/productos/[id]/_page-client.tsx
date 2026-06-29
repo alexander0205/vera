@@ -7,6 +7,7 @@ import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCar
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
+import AlmacenesPosSection from './_almacenes-pos';
 
 interface Producto {
   id:                   number;
@@ -23,6 +24,7 @@ interface Producto {
   stockMinimo:          number;
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
+  visiblePos:           boolean;
 }
 
 interface VentaProducto {
@@ -203,7 +205,7 @@ const columnsCompras: DataTableColumn<CompraProducto>[] = [
   },
 ];
 
-export default function ProductoDetalleClient({ productoId }: { productoId: number }) {
+export default function ProductoDetalleClient({ productoId, posHabilitado = false }: { productoId: number; posHabilitado?: boolean }) {
   const { data: prodData, isLoading: loadingProd } = useSWR<{ producto?: Producto; error?: string }>(
     `/api/productos/${productoId}`, fetcher,
   );
@@ -307,6 +309,10 @@ export default function ProductoDetalleClient({ productoId }: { productoId: numb
           </div>
         </div>
       </div>
+
+      {posHabilitado && producto && (
+        <AlmacenesPosSection productoId={productoId} visiblePos={producto.visiblePos} />
+      )}
 
       <Tabs defaultValue="detalle">
         <TabsList>
