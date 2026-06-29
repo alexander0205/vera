@@ -42,6 +42,7 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
+      { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
       { href: '/dashboard/notas-credito',        label: 'Notas de crédito',     plusHref: '/dashboard/notas-credito/nueva' },
       { href: '/dashboard/notas-debito',         label: 'Notas de débito',      plusHref: '/dashboard/notas-debito/nueva' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
@@ -105,6 +106,7 @@ const HREF_PERMISSION: Record<string, Permission> = {
   '/dashboard/facturas':              'facturas:ver',
   '/dashboard/facturas/nueva':        'facturas:crear',
   '/dashboard/cuentas-por-cobrar':    'facturas:ver',
+  '/dashboard/pagos':                 'pagos:ver',
   '/dashboard/notas-credito':         'facturas:ver',
   '/dashboard/cotizaciones':          'cotizaciones:ver',
   '/dashboard/cotizaciones/nueva':    'cotizaciones:gestionar',

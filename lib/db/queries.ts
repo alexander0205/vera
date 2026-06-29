@@ -655,6 +655,81 @@ export async function getCuentasPorCobrar(
   };
 }
 
+/**
+ * Listado AVANZADO de todos los pagos recibidos del team (módulo de Pagos).
+ *
+ * Aplana el ledger `pagos_recibidos` con datos del documento (código, NCF,
+ * cliente) y del usuario que lo registró. Soporta filtros server-side por
+ * rango de fecha y método; el resto del filtrado (búsqueda libre) se hace
+ * client-side sobre el dataset cargado.
+ *
+ * Retorna: filas + totales (monto total, conteo) + desglose por método.
+ */
+export async function getPagosListado(
+  teamId: number,
+  opts: { desde?: string; hasta?: string; metodo?: string } = {},
+) {
+  const filtros = [eq(pagosRecibidos.teamId, teamId)];
+  if (opts.desde)  filtros.push(gte(pagosRecibidos.fechaPago, opts.desde));
+  if (opts.hasta)  filtros.push(lte(pagosRecibidos.fechaPago, opts.hasta));
+  if (opts.metodo) filtros.push(eq(pagosRecibidos.metodo, opts.metodo));
+
+  const rows = await db
+    .select({
+      id:           pagosRecibidos.id,
+      montoCentavos: pagosRecibidos.montoCentavos,
+      metodo:       pagosRecibidos.metodo,
+      referencia:   pagosRecibidos.referencia,
+      cuenta:       pagosRecibidos.cuenta,
+      fechaPago:    pagosRecibidos.fechaPago,
+      notas:        pagosRecibidos.notas,
+      createdAt:    pagosRecibidos.createdAt,
+      turnoCajaId:  pagosRecibidos.turnoCajaId,
+      notaCreditoId: pagosRecibidos.notaCreditoId,
+      // Documento al que se aplicó el pago.
+      docId:        ecfDocuments.id,
+      docCodigo:    ecfDocuments.codigo,
+      docEncf:      ecfDocuments.encf,
+      docTipoEcf:   ecfDocuments.tipoEcf,
+      docMontoTotal: ecfDocuments.montoTotal,
+      clientId:     ecfDocuments.clientId,
+      cliente:      ecfDocuments.razonSocialComprador,
+      rncComprador: ecfDocuments.rncComprador,
+      // Usuario que registró el pago.
+      registradoPor: users.name,
+      registradoPorEmail: users.email,
+    })
+    .from(pagosRecibidos)
+    .leftJoin(ecfDocuments, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
+    .leftJoin(users, eq(pagosRecibidos.createdBy, users.id))
+    .where(and(...filtros))
+    .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id));
+
+  const pagos = rows.map(r => ({
+    ...r,
+    monto: Number(r.montoCentavos),
+  }));
+
+  // Totales + desglose por método (sobre el dataset filtrado server-side).
+  const total = pagos.reduce((s, p) => s + p.monto, 0);
+  const porMetodo: Record<string, { monto: number; count: number }> = {};
+  for (const p of pagos) {
+    const k = (p.metodo ?? 'otro').toLowerCase();
+    porMetodo[k] = porMetodo[k] ?? { monto: 0, count: 0 };
+    porMetodo[k].monto += p.monto;
+    porMetodo[k].count += 1;
+  }
+
+  return {
+    pagos,
+    totales: {
+      monto: total,
+      count: pagos.length,
+      porMetodo,
+    },
+  };
+}
+
 /** Lista pagos de un documento específico. */
 export async function getPagosDocumento(teamId: number, ecfDocumentId: number) {
   return db
