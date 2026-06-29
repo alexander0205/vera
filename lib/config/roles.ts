@@ -28,6 +28,8 @@ export type Permission =
   | 'facturas:anular'
   | 'facturas:exportar'
   | 'facturas:emitir-dgii'
+  // Pagos recibidos (módulo de cobros)
+  | 'pagos:ver'
   // Clientes
   | 'clientes:ver'
   | 'clientes:gestionar'
@@ -101,6 +103,7 @@ export const ROLES: RoleDef[] = [
     invitable:   false,
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii',
+      'pagos:ver',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -120,6 +123,7 @@ export const ROLES: RoleDef[] = [
     invitable:   true,
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii',
+      'pagos:ver',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -191,6 +195,9 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'facturas:anular',      label: 'Anular' },
     { key: 'facturas:exportar',    label: 'Exportar (PDF/CSV/XML)' },
     { key: 'facturas:emitir-dgii', label: 'Emitir a DGII (e-CF)' },
+  ]},
+  { module: 'Pagos', icon: 'Wallet', permissions: [
+    { key: 'pagos:ver', label: 'Ver pagos recibidos' },
   ]},
   { module: 'Clientes', icon: 'Users', permissions: [
     { key: 'clientes:ver',       label: 'Ver clientes' },
