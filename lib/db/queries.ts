@@ -691,6 +691,8 @@ export async function getPagosListado(
       docCodigo:    ecfDocuments.codigo,
       docEncf:      ecfDocuments.encf,
       docTipoEcf:   ecfDocuments.tipoEcf,
+      docEstado:    ecfDocuments.estado,
+      docTrackId:   ecfDocuments.trackId,
       docMontoTotal: ecfDocuments.montoTotal,
       clientId:     ecfDocuments.clientId,
       cliente:      ecfDocuments.razonSocialComprador,
@@ -705,10 +707,25 @@ export async function getPagosListado(
     .where(and(...filtros))
     .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id));
 
-  const pagos = rows.map(r => ({
-    ...r,
-    monto: Number(r.montoCentavos),
-  }));
+  // Trazabilidad: cuántos pagos tiene cada factura (para "Pago 2 de 3").
+  const pagosPorDoc = new Map<number, number>();
+  for (const r of rows) {
+    if (r.docId != null) pagosPorDoc.set(r.docId, (pagosPorDoc.get(r.docId) ?? 0) + 1);
+  }
+
+  const pagos = rows.map(r => {
+    // Enviado a DGII: la DGII devuelve trackId al recibir el e-CF, o el doc
+    // quedó en un estado de envío. Excluye sin-ncf/históricas/borradores.
+    const enviadoDgii =
+      r.docTrackId != null ||
+      ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(r.docEstado ?? '');
+    return {
+      ...r,
+      monto: Number(r.montoCentavos),
+      enviadoDgii,
+      pagosDelDoc: r.docId != null ? (pagosPorDoc.get(r.docId) ?? 1) : 1,
+    };
+  });
 
   // Totales + desglose por método (sobre el dataset filtrado server-side).
   const total = pagos.reduce((s, p) => s + p.monto, 0);

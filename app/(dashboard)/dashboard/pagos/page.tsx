@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   DollarSign, Wallet, TrendingUp, Calculator, X, Loader2,
-  AlertTriangle, Trash2, FileText, Download, Banknote,
+  AlertTriangle, Trash2, FileText, Download, Banknote, Send,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, fmtFechaHora } from '@/lib/utils/format';
@@ -26,7 +26,11 @@ interface Pago {
   docCodigo:     string | null;
   docEncf:       string | null;
   docTipoEcf:    string | null;
+  docEstado:     string | null;
+  docTrackId:    string | null;
   docMontoTotal: number | null;
+  enviadoDgii:   boolean;
+  pagosDelDoc:   number;
   clientId:      number | null;
   cliente:       string | null;
   rncComprador:  string | null;
@@ -79,7 +83,7 @@ export default function PagosPage() {
   const [rango, setRango]   = useState<RangoKey>('30d');
 
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    q: '', metodo: '', agrupar: '',
+    q: '', metodo: '', dgii: '', agrupar: '',
   });
   const [pagoEliminar, setPagoEliminar] = useState<Pago | null>(null);
 
@@ -128,8 +132,10 @@ export default function PagosPage() {
     if (filterValues.metodo) {
       rows = rows.filter(p => (p.metodo ?? 'otro').toLowerCase() === filterValues.metodo);
     }
+    if (filterValues.dgii === 'enviado')    rows = rows.filter(p => p.enviadoDgii);
+    else if (filterValues.dgii === 'no')    rows = rows.filter(p => !p.enviadoDgii);
     return rows;
-  }, [pagos, filterValues.q, filterValues.metodo]);
+  }, [pagos, filterValues.q, filterValues.metodo, filterValues.dgii]);
 
   // Totales reactivos al filtro (las tarjetas reflejan lo que se ve).
   const totales: Totales = useMemo(() => {
@@ -158,7 +164,7 @@ export default function PagosPage() {
   );
 
   function exportarCSV() {
-    const header = ['Fecha', 'Documento', 'NCF', 'Cliente', 'RNC', 'Método', 'Referencia', 'Registrado por', 'Monto'];
+    const header = ['Fecha', 'Documento', 'NCF', 'Cliente', 'RNC', 'Método', 'DGII', 'Referencia', 'Registrado por', 'Monto'];
     const escape = (v: string | number | null) => {
       const s = String(v ?? '');
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -170,6 +176,7 @@ export default function PagosPage() {
       p.cliente ?? 'Consumidor Final',
       p.rncComprador ?? '',
       labelMetodo(p.metodo),
+      p.enviadoDgii ? 'Enviado' : 'No enviado',
       p.referencia ?? '',
       p.registradoPor ?? p.registradoPorEmail ?? '',
       (p.monto / 100).toFixed(2),
@@ -201,10 +208,33 @@ export default function PagosPage() {
       id: 'documento',
       header: 'Documento',
       render: p => p.docId ? (
-        <Link href={`/dashboard/facturas/${p.docId}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
-          {p.docCodigo ?? p.docEncf ?? `#${p.docId}`}
-        </Link>
+        <div className="min-w-0">
+          <Link href={`/dashboard/facturas/${p.docId}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
+            {p.docCodigo ?? p.docEncf ?? `#${p.docId}`}
+          </Link>
+          {p.pagosDelDoc > 1 && (
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              {p.pagosDelDoc} pagos en esta factura
+            </p>
+          )}
+        </div>
       ) : <span className="text-gray-400 text-xs">—</span>,
+    },
+    {
+      id: 'dgii',
+      header: 'DGII',
+      align: 'center',
+      sortable: true,
+      sortAccessor: p => (p.enviadoDgii ? 1 : 0),
+      render: p => p.enviadoDgii ? (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-sky-50 text-sky-700 border-sky-200" title={p.docTrackId ? `TrackID: ${p.docTrackId}` : p.docEstado ?? ''}>
+          <Send className="h-3 w-3" /> Enviado
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200" title={p.docEstado ?? 'Sin enviar'}>
+          No enviado
+        </span>
+      ),
     },
     {
       id: 'cliente',
@@ -358,10 +388,21 @@ export default function PagosPage() {
           },
           {
             type: 'select',
+            id: 'dgii',
+            label: 'DGII',
+            placeholder: 'Enviados y no enviados',
+            options: [
+              { value: 'enviado', label: 'Enviados a DGII' },
+              { value: 'no',      label: 'No enviados a DGII' },
+            ],
+          },
+          {
+            type: 'select',
             id: 'agrupar',
             label: 'Agrupar',
             placeholder: 'Sin agrupar',
             options: [
+              { value: 'factura', label: 'Por factura' },
               { value: 'metodo',  label: 'Por método' },
               { value: 'cliente', label: 'Por cliente' },
               { value: 'fecha',   label: 'Por fecha' },
@@ -372,6 +413,7 @@ export default function PagosPage() {
         onFilterChange={setFilterValues}
         rowActions={rowActions}
         groupBy={
+          agrupar === 'factura' ? (p => p.docCodigo ?? p.docEncf ?? (p.docId ? `#${p.docId}` : 'Sin documento')) :
           agrupar === 'metodo'  ? (p => labelMetodo(p.metodo)) :
           agrupar === 'cliente' ? (p => p.cliente ?? 'Consumidor Final') :
           agrupar === 'fecha'   ? (p => fmtFechaCorta(p.fechaPago)) :
@@ -392,7 +434,7 @@ export default function PagosPage() {
         emptyState={{
           icon: Wallet,
           title: 'Sin pagos registrados',
-          hint: (filterValues.q || filterValues.metodo)
+          hint: (filterValues.q || filterValues.metodo || filterValues.dgii)
             ? 'Ningún pago coincide con los filtros.'
             : 'No hay pagos en el rango seleccionado. Registra cobros desde Cuentas por cobrar o al emitir facturas.',
         }}
