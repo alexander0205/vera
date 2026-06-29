@@ -68,6 +68,9 @@ function totalesCarrito(items: LineaCarrito[]) {
   }
   return { subtotal, itbis, total: subtotal + itbis };
 }
+function abrirTicket(id: number) {
+  window.open(`/pos-ticket/${id}`, '_blank', 'width=420,height=680');
+}
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
@@ -276,6 +279,13 @@ function Venta({
       productoId:             c.id,
     }));
 
+    // Persistir las líneas (detalle de venta + ticket). Forma compatible con ItemLinea[].
+    const lineasJson = JSON.stringify(carrito.map((c, i) => ({
+      id: i + 1, productoId: c.id, nombreItem: c.nombre, referencia: c.referencia ?? '',
+      descripcionItem: '', cantidadItem: c.qty, precioUnitarioItem: c.precio / 100,
+      descuentoPct: 0, tasaItbis: c.tasaItbis, indicadorBienoServicio: c.tipo === 'bien' ? '1' : '2',
+    })));
+
     const payload = {
       modo:                 'borrador',
       tipoEcf:              terminal?.tipoEcf ?? 'sin-ncf',
@@ -284,6 +294,7 @@ function Venta({
       dependienteNombre:    esMonedero ? estudiante!.nombre : undefined,
       tipoPago:             1,
       items,
+      lineasJson,
       pagoRecibido:         true,
       pagos:                [{ metodo, valor: totales.total / 100 }],
       almacenId:            terminal?.almacenId ?? null,
@@ -305,19 +316,21 @@ function Venta({
       }
       toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(r.saldoCentavos)}`);
       await refrescarEstudiante(estudiante.dependienteId);
+      if (r.documentoId) abrirTicket(r.documentoId);
     } else {
       const res = await fetch('/api/ecf/emitir', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       setCobrando(false);
+      const venta = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        toast.error(e.error ?? 'No se pudo completar la venta');
+        toast.error(venta.error ?? 'No se pudo completar la venta');
         return;
       }
       const cambio = recibidoCentavos - totales.total;
       toast.success(cambio > 0 ? `Venta cobrada. Cambio: ${fmt(cambio)}` : 'Venta cobrada');
+      if (venta.documentoId) abrirTicket(venta.documentoId);
     }
 
     setCarrito([]);
