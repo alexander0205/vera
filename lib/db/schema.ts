@@ -201,6 +201,46 @@ export const dependientes = pgTable('dependientes', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('dependientes_client_idx').on(t.clientId)]);
 
+// ─── POS — Monedero escolar del estudiante (Fase 2) ──────────────────────────
+// Saldo prepago por estudiante (un dependiente). El acudiente recarga; el
+// estudiante consume en el POS. Exclusivo de colegios (pos_escolar_habilitado).
+export const monederoEstudiante = pgTable('monedero_estudiante', {
+  id:                    serial('id').primaryKey(),
+  teamId:                integer('team_id').notNull().references(() => teams.id),
+  dependienteId:         integer('dependiente_id').notNull().references(() => dependientes.id),
+  saldoCentavos:         integer('saldo_centavos').notNull().default(0),
+  /** NULL = sin límite diario. */
+  limiteDiarioCentavos:  integer('limite_diario_centavos'),
+  activo:                boolean('activo').notNull().default(true),
+  createdAt:             timestamp('created_at').notNull().defaultNow(),
+  updatedAt:             timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('monedero_dependiente_uniq').on(t.dependienteId),
+  index('monedero_team_idx').on(t.teamId),
+]);
+
+export const monederoMovimientos = pgTable('monedero_movimientos', {
+  id:               serial('id').primaryKey(),
+  teamId:           integer('team_id').notNull().references(() => teams.id),
+  monederoId:       integer('monedero_id').notNull().references(() => monederoEstudiante.id),
+  // RECARGA | CONSUMO | AJUSTE | REVERSA
+  tipo:             varchar('tipo', { length: 20 }).notNull(),
+  montoCentavos:    integer('monto_centavos').notNull(),
+  esEntrada:        boolean('es_entrada').notNull(),
+  saldoAntes:       integer('saldo_antes').notNull(),
+  saldoDespues:     integer('saldo_despues').notNull(),
+  referenciaEcfId:  integer('referencia_ecf_id').references(() => ecfDocuments.id),
+  motivo:           text('motivo'),
+  createdBy:        integer('created_by').references(() => users.id),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('monedero_mov_monedero_idx').on(t.monederoId),
+  index('monedero_mov_team_fecha_idx').on(t.teamId, t.createdAt),
+]);
+
+export type MonederoEstudiante  = typeof monederoEstudiante.$inferSelect;
+export type MonederoMovimiento  = typeof monederoMovimientos.$inferSelect;
+
 // ─── EmiteDO — Productos y Servicios ─────────────────────────────────────────
 
 export const products = pgTable('products', {

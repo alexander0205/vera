@@ -46,7 +46,10 @@ export type AuditAction =
   | 'POS_TERMINAL_EDITAR'
   | 'POS_TERMINAL_DESACTIVAR'
   | 'POS_ASIGNACION'
-  | 'POS_VENTA';
+  | 'POS_VENTA'
+  | 'MONEDERO_RECARGA'
+  | 'MONEDERO_CONSUMO'
+  | 'MONEDERO_LIMITE';
 
 export interface AuditParams {
   teamId:    number;

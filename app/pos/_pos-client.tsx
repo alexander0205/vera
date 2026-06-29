@@ -36,6 +36,17 @@ interface LineaCarrito extends ProductoPos { qty: number; }
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
+type MetodoCobro = Metodo | 'cuenta-estudiante';
+
+interface MonederoView {
+  id:                    number;
+  dependienteId:         number;
+  nombre:                string;
+  saldoCentavos:         number;
+  limiteDiarioCentavos:  number | null;
+  gastadoHoyCentavos:    number;
+  disponibleHoyCentavos: number | null;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -183,6 +194,12 @@ function Venta({
   const [busqueda, setBusqueda] = useState('');
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [cobrando, setCobrando] = useState(false);
+  const [estudiante, setEstudiante] = useState<MonederoView | null>(null);
+
+  const refrescarEstudiante = useCallback(async (dependienteId: number) => {
+    const res = await fetch(`/api/pos/monedero?dependienteId=${dependienteId}`);
+    if (res.ok) setEstudiante((await res.json()).monedero);
+  }, []);
 
   const cargarCatalogo = useCallback(async () => {
     if (!turno.terminalId) { setCargando(false); return; }
@@ -237,7 +254,18 @@ function Venta({
     );
   }
 
-  async function cobrar(metodo: Metodo, recibidoCentavos: number) {
+  async function cobrar(metodo: MetodoCobro, recibidoCentavos: number) {
+    const esMonedero = metodo === 'cuenta-estudiante';
+
+    // Pre-chequeo del monedero (el servidor lo re-valida atómicamente).
+    if (esMonedero) {
+      if (!estudiante) { toast.error('Selecciona un estudiante'); return; }
+      if (estudiante.saldoCentavos < totales.total) { toast.error('Saldo insuficiente en el monedero'); return; }
+      if (estudiante.disponibleHoyCentavos != null && totales.total > estudiante.disponibleHoyCentavos) {
+        toast.error('La venta excede el límite diario del estudiante'); return;
+      }
+    }
+
     setCobrando(true);
     const items = carrito.map((c) => ({
       nombreItem:             c.nombre,
@@ -251,7 +279,9 @@ function Venta({
     const payload = {
       modo:                 'borrador',
       tipoEcf:              terminal?.tipoEcf ?? 'sin-ncf',
-      razonSocialComprador: 'Consumidor Final',
+      razonSocialComprador: esMonedero ? estudiante!.nombre : 'Consumidor Final',
+      dependienteId:        esMonedero ? estudiante!.dependienteId : undefined,
+      dependienteNombre:    esMonedero ? estudiante!.nombre : undefined,
       tipoPago:             1,
       items,
       pagoRecibido:         true,
@@ -264,15 +294,36 @@ function Venta({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    setCobrando(false);
 
     if (!res.ok) {
+      setCobrando(false);
       const e = await res.json().catch(() => ({}));
       toast.error(e.error ?? 'No se pudo completar la venta');
       return;
     }
-    const cambio = recibidoCentavos - totales.total;
-    toast.success(cambio > 0 ? `Venta cobrada. Cambio: ${fmt(cambio)}` : 'Venta cobrada');
+    const venta = await res.json();
+
+    // Cobro con monedero: descontar del saldo, enlazado a la venta.
+    if (esMonedero && estudiante) {
+      const cons = await fetch('/api/pos/monedero/consumir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monederoId: estudiante.id, monto: totales.total / 100, ecfDocumentId: venta.documentoId ?? null }),
+      });
+      setCobrando(false);
+      if (!cons.ok) {
+        const e = await cons.json().catch(() => ({}));
+        toast.error(`Venta registrada pero no se pudo descontar el saldo: ${e.error ?? 'error'}. Revisa el monedero.`);
+      } else {
+        const { saldoCentavos } = await cons.json();
+        toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(saldoCentavos)}`);
+      }
+      await refrescarEstudiante(estudiante.dependienteId);
+    } else {
+      setCobrando(false);
+      const cambio = recibidoCentavos - totales.total;
+      toast.success(cambio > 0 ? `Venta cobrada. Cambio: ${fmt(cambio)}` : 'Venta cobrada');
+    }
+
     setCarrito([]);
     cargarCatalogo();   // refresca stock
   }
@@ -346,6 +397,9 @@ function Venta({
           cambiarQty={cambiarQty}
           cobrando={cobrando}
           onCobrar={cobrar}
+          escolar={escolarHabilitado}
+          estudiante={estudiante}
+          onSelectEstudiante={setEstudiante}
         />
       </div>
     </div>
@@ -355,18 +409,22 @@ function Venta({
 // ─── Panel de carrito + cobro ────────────────────────────────────────────────
 
 function CarritoPanel({
-  carrito, totales, cambiarQty, cobrando, onCobrar,
+  carrito, totales, cambiarQty, cobrando, onCobrar, escolar, estudiante, onSelectEstudiante,
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number };
   cambiarQty: (id: number, delta: number) => void;
   cobrando: boolean;
-  onCobrar: (metodo: Metodo, recibidoCentavos: number) => void;
+  onCobrar: (metodo: MetodoCobro, recibidoCentavos: number) => void;
+  escolar: boolean;
+  estudiante: MonederoView | null;
+  onSelectEstudiante: (e: MonederoView | null) => void;
 }) {
   const [abrirCobro, setAbrirCobro] = useState(false);
 
   return (
     <div className="flex flex-col rounded-xl border border-gray-200 bg-white p-3">
+      {escolar && <EstudiantePicker estudiante={estudiante} onSelect={onSelectEstudiante} />}
       <div className="mb-2 text-[11px] text-gray-400">Carrito ({carrito.length})</div>
       <div className="flex-1 overflow-auto">
         {carrito.length === 0 ? (
@@ -405,6 +463,7 @@ function CarritoPanel({
         <CobroModal
           total={totales.total}
           cobrando={cobrando}
+          estudiante={estudiante}
           onClose={() => setAbrirCobro(false)}
           onConfirm={(m, recibido) => { onCobrar(m, recibido); setAbrirCobro(false); }}
         />
@@ -413,22 +472,104 @@ function CarritoPanel({
   );
 }
 
+// ─── Selector de estudiante (capa escolar) ───────────────────────────────────
+
+function EstudiantePicker({ estudiante, onSelect }: {
+  estudiante: MonederoView | null;
+  onSelect: (e: MonederoView | null) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [resultados, setResultados] = useState<{ dependienteId: number; nombre: string; saldoCentavos: number }[]>([]);
+
+  useEffect(() => {
+    if (q.trim().length < 2) { setResultados([]); return; }
+    let cancel = false;
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/pos/estudiantes?q=${encodeURIComponent(q)}`);
+      if (res.ok && !cancel) setResultados((await res.json()).estudiantes ?? []);
+    }, 250);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [q]);
+
+  async function elegir(dependienteId: number) {
+    const res = await fetch(`/api/pos/monedero?dependienteId=${dependienteId}`);
+    if (res.ok) { onSelect((await res.json()).monedero); setQ(''); setResultados([]); }
+    else toast.error('No se pudo cargar el monedero');
+  }
+
+  const [gestion, setGestion] = useState(false);
+
+  if (estudiante) {
+    const limiteTxt = estudiante.limiteDiarioCentavos == null
+      ? 'sin límite'
+      : `${fmt(estudiante.gastadoHoyCentavos)} / ${fmt(estudiante.limiteDiarioCentavos)} hoy`;
+    return (
+      <>
+        <div className="mb-2 rounded-lg bg-blue-50 px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-blue-800">{estudiante.nombre}</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setGestion(true)} className="text-xs text-blue-700 underline">saldo</button>
+              <button onClick={() => onSelect(null)} className="text-xs text-blue-700">quitar</button>
+            </div>
+          </div>
+          <div className="mt-0.5 flex justify-between text-[11px] text-blue-700">
+            <span>Saldo: {fmt(estudiante.saldoCentavos)}</span>
+            <span>{limiteTxt}</span>
+          </div>
+        </div>
+        {gestion && (
+          <MonederoModal estudiante={estudiante} onClose={() => setGestion(false)} onUpdated={onSelect} />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="relative mb-2">
+      <input
+        value={q} onChange={(e) => setQ(e.target.value)}
+        placeholder="Estudiante (opcional)…"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+      />
+      {resultados.length > 0 && (
+        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow">
+          {resultados.map((r) => (
+            <button key={r.dependienteId} onClick={() => elegir(r.dependienteId)}
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50">
+              <span>{r.nombre}</span>
+              <span className="text-xs text-gray-400">{fmt(r.saldoCentavos)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
 
 function CobroModal({
-  total, cobrando, onClose, onConfirm,
+  total, cobrando, estudiante, onClose, onConfirm,
 }: {
   total: number;
   cobrando: boolean;
+  estudiante: MonederoView | null;
   onClose: () => void;
-  onConfirm: (metodo: Metodo, recibidoCentavos: number) => void;
+  onConfirm: (metodo: MetodoCobro, recibidoCentavos: number) => void;
 }) {
-  const [metodo, setMetodo] = useState<Metodo>('efectivo');
+  const [metodo, setMetodo] = useState<MetodoCobro>('efectivo');
   const [recibido, setRecibido] = useState('');
 
   const recibidoCentavos = Math.round((Number(recibido) || 0) * 100);
   const cambio = metodo === 'efectivo' ? recibidoCentavos - total : 0;
   const faltaEfectivo = metodo === 'efectivo' && recibidoCentavos < total;
+
+  // Validación del monedero al seleccionar "Cuenta estudiante".
+  const saldoCorto   = metodo === 'cuenta-estudiante' && !!estudiante && estudiante.saldoCentavos < total;
+  const excedeLimite = metodo === 'cuenta-estudiante' && !!estudiante
+    && estudiante.disponibleHoyCentavos != null && total > estudiante.disponibleHoyCentavos;
+  const monederoBloqueado = metodo === 'cuenta-estudiante' && (saldoCorto || excedeLimite);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
@@ -457,6 +598,24 @@ function CobroModal({
           ))}
         </div>
 
+        {estudiante && (
+          <button
+            onClick={() => setMetodo('cuenta-estudiante')}
+            className={`mb-3 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+              metodo === 'cuenta-estudiante' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+            }`}
+          >
+            <span>Cuenta de {estudiante.nombre}</span>
+            <span className="text-xs">saldo {fmt(estudiante.saldoCentavos)}</span>
+          </button>
+        )}
+
+        {monederoBloqueado && (
+          <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+            {saldoCorto ? 'Saldo insuficiente en el monedero.' : 'Excede el límite diario del estudiante.'}
+          </div>
+        )}
+
         {metodo === 'efectivo' && (
           <>
             <label className="mb-1 block text-xs text-gray-500">Efectivo recibido</label>
@@ -478,12 +637,85 @@ function CobroModal({
         )}
 
         <button
-          disabled={cobrando || faltaEfectivo}
+          disabled={cobrando || faltaEfectivo || monederoBloqueado}
           onClick={() => onConfirm(metodo, metodo === 'efectivo' ? recibidoCentavos : total)}
           className="w-full rounded-lg bg-green-600 py-3 font-medium text-white disabled:opacity-50"
         >
-          {cobrando ? 'Procesando…' : faltaEfectivo ? 'Efectivo insuficiente' : 'Confirmar venta'}
+          {cobrando ? 'Procesando…'
+            : faltaEfectivo ? 'Efectivo insuficiente'
+            : monederoBloqueado ? (saldoCorto ? 'Saldo insuficiente' : 'Excede límite diario')
+            : 'Confirmar venta'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Gestión de saldo del estudiante (recarga + límite) ──────────────────────
+
+function MonederoModal({ estudiante, onClose, onUpdated }: {
+  estudiante: MonederoView;
+  onClose: () => void;
+  onUpdated: (e: MonederoView) => void;
+}) {
+  const [monto, setMonto] = useState('');
+  const [limite, setLimite] = useState(estudiante.limiteDiarioCentavos != null ? String(estudiante.limiteDiarioCentavos / 100) : '');
+  const [busy, setBusy] = useState(false);
+
+  async function recargar() {
+    const m = Number(monto);
+    if (!m || m <= 0) { toast.error('Monto inválido'); return; }
+    setBusy(true);
+    const res = await fetch('/api/pos/monedero/recarga', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dependienteId: estudiante.dependienteId, monto: m }),
+    });
+    setBusy(false);
+    if (!res.ok) { toast.error((await res.json().catch(() => ({}))).error ?? 'Error al recargar'); return; }
+    const { monedero } = await res.json();
+    toast.success(`Recargado. Saldo: ${fmt(monedero.saldoCentavos)}`);
+    onUpdated(monedero); setMonto('');
+  }
+
+  async function guardarLimite() {
+    setBusy(true);
+    const res = await fetch('/api/pos/monedero', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dependienteId: estudiante.dependienteId, limiteDiario: limite.trim() === '' ? null : Number(limite) }),
+    });
+    setBusy(false);
+    if (!res.ok) { toast.error((await res.json().catch(() => ({}))).error ?? 'Sin permiso o error'); return; }
+    const { monedero } = await res.json();
+    toast.success('Límite actualizado');
+    onUpdated(monedero);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Saldo de {estudiante.nombre}</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+
+        <div className="mb-4 rounded-lg bg-gray-50 p-3 text-center">
+          <div className="text-xs text-gray-500">Saldo actual</div>
+          <div className="text-2xl font-medium">{fmt(estudiante.saldoCentavos)}</div>
+        </div>
+
+        <label className="mb-1 block text-xs text-gray-500">Recargar (RD$)</label>
+        <div className="mb-2 flex gap-2">
+          <input type="number" min="0" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)}
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="0.00" />
+          <button onClick={recargar} disabled={busy} className="rounded-lg bg-green-600 px-4 text-sm font-medium text-white disabled:opacity-60">Recargar</button>
+        </div>
+
+        <label className="mb-1 mt-4 block text-xs text-gray-500">Límite diario (RD$, vacío = sin límite)</label>
+        <div className="flex gap-2">
+          <input type="number" min="0" step="0.01" value={limite} onChange={(e) => setLimite(e.target.value)}
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="sin límite" />
+          <button onClick={guardarLimite} disabled={busy} className="rounded-lg border border-gray-300 px-4 text-sm">Guardar</button>
+        </div>
       </div>
     </div>
   );
