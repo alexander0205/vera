@@ -289,37 +289,33 @@ function Venta({
       almacenId:            terminal?.almacenId ?? null,
     };
 
-    const res = await fetch('/api/ecf/emitir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      setCobrando(false);
-      const e = await res.json().catch(() => ({}));
-      toast.error(e.error ?? 'No se pudo completar la venta');
-      return;
-    }
-    const venta = await res.json();
-
-    // Cobro con monedero: descontar del saldo, enlazado a la venta.
+    // Cobro con monedero: saga atómica server-side (descuenta → emite → revierte
+    // si falla). Una sola llamada; el saldo nunca queda descuadrado.
     if (esMonedero && estudiante) {
-      const cons = await fetch('/api/pos/monedero/consumir', {
+      const res = await fetch('/api/pos/venta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monederoId: estudiante.id, monto: totales.total / 100, ecfDocumentId: venta.documentoId ?? null }),
+        body: JSON.stringify({ monederoId: estudiante.id, emitPayload: payload }),
       });
       setCobrando(false);
-      if (!cons.ok) {
-        const e = await cons.json().catch(() => ({}));
-        toast.error(`Venta registrada pero no se pudo descontar el saldo: ${e.error ?? 'error'}. Revisa el monedero.`);
-      } else {
-        const { saldoCentavos } = await cons.json();
-        toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(saldoCentavos)}`);
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(r.error ?? 'No se pudo completar la venta');
+        await refrescarEstudiante(estudiante.dependienteId);  // refleja la reversa
+        return;
       }
+      toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(r.saldoCentavos)}`);
       await refrescarEstudiante(estudiante.dependienteId);
     } else {
+      const res = await fetch('/api/ecf/emitir', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       setCobrando(false);
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        toast.error(e.error ?? 'No se pudo completar la venta');
+        return;
+      }
       const cambio = recibidoCentavos - totales.total;
       toast.success(cambio > 0 ? `Venta cobrada. Cambio: ${fmt(cambio)}` : 'Venta cobrada');
     }

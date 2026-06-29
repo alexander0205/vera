@@ -136,7 +136,7 @@ export async function recargar(input: {
 /** Consume del saldo (cobro POS). Valida saldo y límite diario. */
 export async function consumir(input: {
   teamId: number; monederoId: number; montoCentavos: number; ecfDocumentId?: number | null; createdBy: number;
-}): Promise<{ saldoCentavos: number }> {
+}): Promise<{ saldoCentavos: number; movimientoId: number }> {
   if (input.montoCentavos <= 0) throw new Error('El monto a consumir debe ser positivo');
 
   return db.transaction(async (tx) => {
@@ -162,13 +162,46 @@ export async function consumir(input: {
       .set({ saldoCentavos: saldoDespues, updatedAt: new Date() })
       .where(eq(monederoEstudiante.id, m.id));
 
-    await tx.insert(monederoMovimientos).values({
+    const [mov] = await tx.insert(monederoMovimientos).values({
       teamId: input.teamId, monederoId: m.id, tipo: 'CONSUMO',
       montoCentavos: input.montoCentavos, esEntrada: false,
       saldoAntes, saldoDespues, referenciaEcfId: input.ecfDocumentId ?? null, createdBy: input.createdBy,
+    }).returning({ id: monederoMovimientos.id });
+    return { saldoCentavos: saldoDespues, movimientoId: mov.id };
+  });
+}
+
+/** Reversa un consumo (refund) — usado como compensación si la venta falla. */
+export async function reversar(input: {
+  teamId: number; monederoId: number; montoCentavos: number; createdBy: number; motivo?: string | null;
+}): Promise<{ saldoCentavos: number }> {
+  return db.transaction(async (tx) => {
+    const [m] = await tx.select().from(monederoEstudiante)
+      .where(and(eq(monederoEstudiante.id, input.monederoId), eq(monederoEstudiante.teamId, input.teamId)))
+      .for('update').limit(1);
+    if (!m) throw new Error('Monedero no encontrado');
+
+    const saldoAntes = m.saldoCentavos;
+    const saldoDespues = saldoAntes + input.montoCentavos;
+
+    await tx.update(monederoEstudiante)
+      .set({ saldoCentavos: saldoDespues, updatedAt: new Date() })
+      .where(eq(monederoEstudiante.id, m.id));
+
+    await tx.insert(monederoMovimientos).values({
+      teamId: input.teamId, monederoId: m.id, tipo: 'REVERSA',
+      montoCentavos: input.montoCentavos, esEntrada: true,
+      saldoAntes, saldoDespues, motivo: input.motivo ?? 'Reversa por venta fallida', createdBy: input.createdBy,
     });
     return { saldoCentavos: saldoDespues };
   });
+}
+
+/** Enlaza un movimiento de consumo con la venta una vez creada. */
+export async function actualizarReferenciaConsumo(teamId: number, movimientoId: number, ecfDocumentId: number): Promise<void> {
+  await db.update(monederoMovimientos)
+    .set({ referenciaEcfId: ecfDocumentId })
+    .where(and(eq(monederoMovimientos.id, movimientoId), eq(monederoMovimientos.teamId, teamId)));
 }
 
 /** Fija (o quita con null) el límite diario. */
