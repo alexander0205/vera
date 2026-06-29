@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, LogOut } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
@@ -365,6 +365,13 @@ function Venta({
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-green-50 px-3 py-1 text-xs text-green-700">Turno abierto</span>
+          <button
+            onClick={() => window.open(`/pos-reporte/${turno.id}`, '_blank', 'width=420,height=680')}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+            title="Corte X del turno"
+          >
+            <FileText className="h-4 w-4" /> Reporte X
+          </button>
           <Link href="/dashboard/caja" className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50" title="Ir a cierre de caja">
             <LogOut className="h-4 w-4" /> Cerrar turno
           </Link>
