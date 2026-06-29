@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText, Star } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
@@ -31,6 +31,7 @@ interface ProductoPos {
   tipo:                 string;  // 'bien' | 'servicio'
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
+  favorito:             boolean;
   stockAlmacen:         number | null;
 }
 interface LineaCarrito extends ProductoPos { qty: number; }
@@ -262,6 +263,18 @@ function Venta({
     else toast.error(`Sin producto para "${code}"`);
   }
 
+  async function toggleFavorito(p: ProductoPos) {
+    const favorito = !p.favorito;
+    setProductos((prev) => prev
+      .map((x) => (x.id === p.id ? { ...x, favorito } : x))
+      .sort((a, b) => (Number(b.favorito) - Number(a.favorito)) || a.nombre.localeCompare(b.nombre)));
+    const res = await fetch('/api/pos/favorito', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: p.id, favorito }),
+    });
+    if (!res.ok) { toast.error('No se pudo cambiar favorito'); cargarCatalogo(); }
+  }
+
   function cambiarQty(id: number, delta: number) {
     setCarrito((prev) =>
       prev
@@ -402,11 +415,19 @@ function Venta({
                     key={p.id}
                     disabled={agotado}
                     onClick={() => agregar(p)}
-                    className={`flex min-h-[92px] flex-col justify-between rounded-lg border border-gray-200 bg-white p-2.5 text-left ${
+                    className={`relative flex min-h-[92px] flex-col justify-between rounded-lg border border-gray-200 bg-white p-2.5 text-left ${
                       agotado ? 'opacity-50' : 'hover:border-blue-400'
                     }`}
                   >
-                    <div>
+                    <span
+                      role="button"
+                      title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
+                      onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
+                      className="absolute right-1.5 top-1.5"
+                    >
+                      <Star className={`h-4 w-4 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`} />
+                    </span>
+                    <div className="pr-5">
                       <div className="text-sm font-medium leading-tight">{p.nombre}</div>
                       <div className="text-[11px] text-gray-400">
                         {p.referencia ? p.referencia + ' · ' : ''}

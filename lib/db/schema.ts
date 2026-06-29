@@ -265,6 +265,8 @@ export const products = pgTable('products', {
   permiteVentaSinStock: boolean('permite_venta_sin_stock').notNull().default(true),
   // POS: si aparece en la grilla del punto de venta (excluye servicios/no vendibles en mostrador).
   visiblePos: boolean('visible_pos').notNull().default(true),
+  // POS: favorito → se muestra primero en la grilla.
+  posFavorito: boolean('pos_favorito').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

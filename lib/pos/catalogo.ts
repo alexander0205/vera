@@ -7,7 +7,7 @@
  * Excluye lo no vendible en mostrador vía products.visible_pos.
  */
 
-import { and, eq, asc, sql } from 'drizzle-orm';
+import { and, eq, asc, desc, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { products, productAlmacenStock } from '@/lib/db/schema';
 
@@ -21,6 +21,7 @@ export interface ProductoPos {
   tipo:                 string;   // 'bien' | 'servicio'
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
+  favorito:             boolean;
   /** Stock en el almacén de la terminal. null si el producto no controla inventario. */
   stockAlmacen:         number | null;
 }
@@ -37,6 +38,7 @@ export async function getCatalogoPos(teamId: number, almacenId: number): Promise
       tipo:                 products.tipo,
       controlaInventario:   products.controlaInventario,
       permiteVentaSinStock: products.permiteVentaSinStock,
+      favorito:             products.posFavorito,
       stockAlmacen:         productAlmacenStock.stockActual,
     })
     .from(products)
@@ -56,7 +58,7 @@ export async function getCatalogoPos(teamId: number, almacenId: number): Promise
       // Aplica por igual a bienes con o sin control de inventario.
       sql`${productAlmacenStock.id} IS NOT NULL`,
     ))
-    .orderBy(asc(products.nombre));
+    .orderBy(desc(products.posFavorito), asc(products.nombre));
 
   return rows.map((r) => ({
     ...r,
