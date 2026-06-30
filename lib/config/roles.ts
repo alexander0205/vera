@@ -216,6 +216,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   { module: 'Productos', icon: 'Package', permissions: [
     { key: 'productos:ver',       label: 'Ver productos' },
     { key: 'productos:gestionar', label: 'Crear / editar / eliminar' },
+    { key: 'maestros:gestionar',  label: 'Gestionar maestros (atributos)' },
   ]},
   { module: 'Cotizaciones', icon: 'FileSpreadsheet', permissions: [
     { key: 'cotizaciones:ver',       label: 'Ver cotizaciones' },
@@ -231,6 +232,10 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'caja:ver',     label: 'Ver caja e historial' },
     { key: 'caja:operar',  label: 'Abrir turno / registrar movimientos' },
     { key: 'caja:aprobar', label: 'Aprobar cierres y descuadres' },
+  ]},
+  { module: 'Punto de venta', icon: 'Store', permissions: [
+    { key: 'pos:vender',     label: 'Vender y cobrar (cajero)' },
+    { key: 'pos:configurar', label: 'Configurar terminales del POS' },
   ]},
   { module: 'Equipo', icon: 'UserCog', permissions: [
     { key: 'equipo:ver',       label: 'Ver equipo' },
