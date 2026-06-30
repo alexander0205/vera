@@ -13,10 +13,11 @@
  */
 
 import { db } from '@/lib/db/drizzle';
-import { teams, ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
+import { teams, ecfDocuments, pagosRecibidos, products } from '@/lib/db/schema';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 
 export type GenerarNotaDebitoMoraResult =
   | { ok: true; notaDebitoId: number; montoCentavos: number }
@@ -24,7 +25,7 @@ export type GenerarNotaDebitoMoraResult =
 
 export async function generarNotaDebitoMora(
   ecfDocumentId: number,
-  opts: { createdBy?: number } = {},
+  opts: { createdBy?: number; origen?: 'cron' | 'manual' } = {},
 ): Promise<GenerarNotaDebitoMoraResult> {
   // ── Cargar la factura padre ────────────────────────────────────────────────
   const [padre] = await db
@@ -77,23 +78,39 @@ export async function generarNotaDebitoMora(
       eq(pagosRecibidos.teamId, padre.teamId),
     ));
 
-  const saldoPadre = padre.montoTotal - Number(pagado ?? 0);
+  // NC vinculadas al padre acreditan contra su saldo: la mora solo aplica
+  // sobre lo realmente adeudado.
+  const ncAplicado = await getNcAplicadoCts(padre.teamId, padre.id, padre.encf);
+  const saldoPadre = padre.montoTotal - Number(pagado ?? 0) - ncAplicado;
   if (saldoPadre <= 0) return { ok: false, reason: 'sin_saldo' };
 
-  // ── Idempotencia: ¿ya existe una ND de mora activa para este padre? ────────
+  // ── Idempotencia: mora ÚNICA por factura ───────────────────────────────────
+  // Cron: si ya existió una ND de mora (aunque esté ANULADA), no regenera —
+  // anularla equivale a condonar la mora sin que reaparezca al día siguiente.
+  // Manual: solo bloquea si hay una ACTIVA (permite regenerar tras anular una
+  // mora mal calculada). El índice único parcial (migración 0043) protege
+  // contra carreras a nivel DB.
+  const condicionExistente = opts.origen === 'cron'
+    ? eq(ecfDocuments.moraOrigenId, padre.id)
+    : and(
+        eq(ecfDocuments.moraOrigenId, padre.id),
+        ne(ecfDocuments.estado, 'ANULADO'),
+      );
   const [{ existentes }] = await db
     .select({ existentes: sql<number>`count(*)` })
     .from(ecfDocuments)
-    .where(and(
-      eq(ecfDocuments.moraOrigenId, padre.id),
-      ne(ecfDocuments.estado, 'ANULADO'),
-    ));
+    .where(condicionExistente);
 
   if (Number(existentes) > 0) return { ok: false, reason: 'ya_existe' };
 
   // ── Monto de la mora ───────────────────────────────────────────────────────
   const montoMora = Math.round((saldoPadre * pct) / 10000);
   if (montoMora <= 0) return { ok: false, reason: 'mora_cero' };
+
+  // ── Servicio "Interés por mora" del catálogo (find-or-create, reutilizable) ─
+  // La línea de la ND referencia este producto en vez de texto suelto. El % de
+  // mora NO vive aquí: sigue en teams.recargo_mora_porcentaje (fuente única).
+  const moraProductoId = await getOrCreateMoraProducto(padre.teamId, opts.createdBy ?? null);
 
   // ── Insertar la ND tipo 33 (BORRADOR, exenta de ITBIS) ─────────────────────
   const codigo = await generarCodigoFactura(db, { teamId: padre.teamId, userId: opts?.createdBy ?? null, tipoEcf: '33' });
@@ -126,6 +143,7 @@ export async function generarNotaDebitoMora(
       moraOrigenId:         padre.id,
       notas:                `Nota de débito por mora — ${padre.codigo ?? padre.encf}`,
       lineasJson:           JSON.stringify([{
+        productoId:              moraProductoId,
         nombreItem:              'Interés por mora',
         cantidadItem:            1,
         precioUnitarioItem:      montoMora / 100,
@@ -137,4 +155,45 @@ export async function generarNotaDebitoMora(
     .returning({ id: ecfDocuments.id });
 
   return { ok: true, notaDebitoId: nd.id, montoCentavos: montoMora };
+}
+
+/**
+ * Devuelve el id del servicio "Interés por mora" del team, creándolo si falta.
+ * Servicio de sistema (es_mora=true), exento de ITBIS, sin precio fijo (el monto
+ * es dinámico por factura). Único por team — el índice parcial protege carreras.
+ */
+async function getOrCreateMoraProducto(teamId: number, createdBy: number | null): Promise<number> {
+  const [existing] = await db
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.teamId, teamId), eq(products.esMora, true)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  try {
+    const [creado] = await db
+      .insert(products)
+      .values({
+        teamId,
+        nombre:      'Interés por mora',
+        descripcion: 'Recargo automático por pago tardío. El % se configura en Mi empresa.',
+        tipo:        'servicio',
+        tasaItbis:   'exento',
+        precio:      0,            // monto dinámico por factura; sin precio fijo de catálogo
+        esMora:      true,
+        activo:      'true',
+        createdBy,
+      })
+      .returning({ id: products.id });
+    return creado.id;
+  } catch {
+    // Carrera: otro proceso lo creó (índice único parcial) → re-seleccionar.
+    const [row] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.teamId, teamId), eq(products.esMora, true)))
+      .limit(1);
+    if (!row) throw new Error('No se pudo obtener el servicio de mora');
+    return row.id;
+  }
 }

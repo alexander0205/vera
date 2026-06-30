@@ -2,7 +2,8 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { users, teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getRole, ROLES, type Permission } from '@/lib/config/roles';
+import { ALL_PERMISSIONS, type Permission } from '@/lib/config/roles';
+import { getEffectivePermissions } from '@/lib/auth/permissions';
 
 export async function GET() {
   const user = await getUser();
@@ -23,12 +24,12 @@ export async function GET() {
     teamRole = m?.role ?? null;
   }
 
-  // platformRole='admin' → acceso total (espejo de userCan). Para el resto, los
-  // permisos salen del catálogo del rol del team.
+  // platformRole='admin' → acceso total (espejo de userCanForTeam). Para el
+  // resto, permisos efectivos del rol en el team (con overrides por empresa).
   const permissions: Permission[] =
     user.platformRole === 'admin'
-      ? Array.from(new Set(ROLES.flatMap(r => r.permissions)))
-      : (getRole(teamRole)?.permissions ?? []);
+      ? [...ALL_PERMISSIONS]
+      : (teamId ? await getEffectivePermissions(teamId, teamRole) : []);
 
   return Response.json({ ...safe, teamRole, permissions });
 }

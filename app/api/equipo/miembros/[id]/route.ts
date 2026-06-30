@@ -9,10 +9,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { ROLE_KEYS } from '@/lib/config/roles';
-
-// Fuente única de roles válidos: lib/config/roles (incluye 'user', faltaba antes).
-const ROLES_VALIDOS = ROLE_KEYS;
+import { listTeamRoles } from '@/lib/auth/permissions';
 
 async function getCallerTeam(userId: number) {
   const teamId = await getTeamIdForUser();
@@ -43,8 +40,14 @@ export async function PATCH(
   if (isNaN(memberId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const body = await req.json();
-  const parsed = z.object({ role: z.enum(ROLES_VALIDOS) }).safeParse(body);
+  const parsed = z.object({ role: z.string().min(1) }).safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+
+  // El rol debe existir en el team y no ser owner (no asignable).
+  const teamRolesList = await listTeamRoles(caller.teamId);
+  if (parsed.data.role === 'owner' || !teamRolesList.some(r => r.key === parsed.data.role)) {
+    return NextResponse.json({ error: 'Rol inválido' }, { status: 400 });
+  }
 
   // Verificar que el miembro pertenece al mismo equipo
   const [target] = await db

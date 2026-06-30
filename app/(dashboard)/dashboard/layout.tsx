@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import useSWR from 'swr';
@@ -14,6 +14,7 @@ import {
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,8 +42,9 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
-      { href: '/dashboard/notas-credito',        label: 'Notas de crédito' },
-      { href: '/dashboard/notas-debito',         label: 'Notas de débito' },
+      { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
+      { href: '/dashboard/notas-credito',        label: 'Notas de crédito',     plusHref: '/dashboard/notas-credito/nueva' },
+      { href: '/dashboard/notas-debito',         label: 'Notas de débito',      plusHref: '/dashboard/notas-debito/nueva' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
       { href: '/dashboard/facturas-recurrentes', label: 'Facturas recurrentes' },
     ],
@@ -65,7 +67,8 @@ const GROUPS: NavGroup[] = [
     label: 'Compras',
     icon: ShoppingCart,
     children: [
-      { href: '/dashboard/compras', label: 'Compras' },
+      { href: '/dashboard/compras',      label: 'Facturas recibidas', plusHref: '/dashboard/compras/nueva' },
+      { href: '/dashboard/gastos/nueva', label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
     ],
   },
   {
@@ -78,6 +81,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
       { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
+      { href: '/dashboard/equipo/permisos', label: 'Roles y permisos' },
       { href: '/dashboard/api-keys',      label: 'API Keys' },
       { href: '/dashboard/webhooks',      label: 'Webhooks' },
       { href: '/dashboard/impresoras',    label: 'Impresoras' },
@@ -102,9 +106,12 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   // Ingresos
   '/dashboard/facturas':              'facturas:ver',
+  '/dashboard/facturas/nueva':        'facturas:crear',
   '/dashboard/cuentas-por-cobrar':    'facturas:ver',
+  '/dashboard/pagos':                 'pagos:ver',
   '/dashboard/notas-credito':         'facturas:ver',
   '/dashboard/cotizaciones':          'cotizaciones:ver',
+  '/dashboard/cotizaciones/nueva':    'cotizaciones:gestionar',
   '/dashboard/facturas-recurrentes':  'facturas:ver',
 
   // Inventario
@@ -118,7 +125,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
 
   // Caja
-  '/dashboard/caja':                  'caja:ver',
+  '/dashboard/caja':                  'caja:operar',
   '/dashboard/caja/aprobaciones':     'caja:aprobar',
   '/dashboard/caja/historial':        'caja:ver',
 
@@ -126,19 +133,29 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
 
-  '/dashboard/secuencias':            'configuracion:ver',
+  '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
+  '/dashboard/equipo/permisos':       'equipo:gestionar',
   '/dashboard/api-keys':              'configuracion:gestionar',
   '/dashboard/webhooks':              'configuracion:gestionar',
   '/dashboard/impresoras':            'configuracion:ver',
 };
 
-function canAccess(role: string | null | undefined, href: string, platformRole?: string | null): boolean {
+// Gating del sidebar por PERMISOS EFECTIVOS (con overrides por empresa, vía
+// /api/user). Mientras cargan los permisos se cae al catálogo estático del rol
+// para evitar parpadeo. `perms` es null durante la carga.
+function canAccessHref(
+  href: string,
+  perms: Set<string> | null,
+  role: string | null | undefined,
+): boolean {
   const perm = HREF_PERMISSION[href];
   if (!perm) return true; // sin gate explícito → visible para todos
-  const perms = Array.isArray(perm) ? perm : [perm];
-  return perms.some(p => userCan(platformRole, role, p));
+  const needed = Array.isArray(perm) ? perm : [perm];
+  // fallback mientras cargan los permisos efectivos: catálogo estático del rol
+  if (!perms) return needed.some(p => userCan(undefined, role, p));
+  return needed.some(p => perms.has(p));
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -537,6 +554,18 @@ function Sidebar({
   const role = activeTeam?.role;
   const cajaHabilitada = activeTeam?.cajaHabilitada ?? false;
 
+  // Permisos efectivos (con overrides por empresa). null mientras carga →
+  // canAccessHref usa el fallback estático del rol.
+  const { permissions, isLoading: permsLoading } = usePermissions();
+  const permSet = useMemo(
+    () => (permsLoading ? null : new Set<string>(permissions)),
+    [permsLoading, permissions],
+  );
+  const can = useCallback(
+    (href: string) => canAccessHref(href, permSet, role),
+    [permSet, role],
+  );
+
   // Todos los items siempre habilitados
   function isEnabled(_href: string): boolean {
     return true;
@@ -547,7 +576,7 @@ function Sidebar({
     { href: '/dashboard/caja',              label: 'Mi caja' },
     { href: '/dashboard/caja/aprobaciones', label: 'Aprobaciones' },
     { href: '/dashboard/caja/historial',    label: 'Historial' },
-  ].filter(c => canAccess(role, c.href));
+  ].filter(c => can(c.href));
 
   const cajaGroup: NavGroup | null = cajaHabilitada && cajaCandidatos.length > 0
     ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
@@ -557,9 +586,9 @@ function Sidebar({
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
-  const topItemsVisibles  = TOP_ITEMS.filter(item => canAccess(role, item.href));
+  const topItemsVisibles  = TOP_ITEMS.filter(item => can(item.href));
   const staticGroupsVis   = GROUPS
-    .map(g => ({ ...g, children: g.children.filter(c => canAccess(role, c.href)) }))
+    .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
     .filter(g => g.children.length > 0);
   const groupsVisibles    = cajaGroup ? [cajaGroup, ...staticGroupsVis] : staticGroupsVis;
 
@@ -613,17 +642,19 @@ function Sidebar({
           </div>
         )}
 
-        {/* Nueva Factura */}
-        <Link
-          href="/dashboard/facturas/nueva"
-          onClick={hasPlan ? onClose : e => e.preventDefault()}
-          className={`flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-white/15 text-white text-sm font-medium transition-colors ${
-            hasPlan ? 'hover:bg-white/25' : 'opacity-40 cursor-not-allowed'
-          }`}
-        >
-          <Plus className="h-4 w-4 shrink-0" />
-          Nueva Factura
-        </Link>
+        {/* Nueva Factura — solo roles con facturas:crear */}
+        {can('/dashboard/facturas/nueva') && (
+          <Link
+            href="/dashboard/facturas/nueva"
+            onClick={hasPlan ? onClose : e => e.preventDefault()}
+            className={`flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-white/15 text-white text-sm font-medium transition-colors ${
+              hasPlan ? 'hover:bg-white/25' : 'opacity-40 cursor-not-allowed'
+            }`}
+          >
+            <Plus className="h-4 w-4 shrink-0" />
+            Nueva Factura
+          </Link>
+        )}
 
         {/* Search trigger */}
         <button
@@ -702,7 +733,7 @@ function Sidebar({
                         >
                           {child.label}
                         </Link>
-                        {child.plusHref && enabled && (
+                        {child.plusHref && enabled && can(child.plusHref) && (
                           <Link
                             href={child.plusHref}
                             onClick={onClose}
@@ -721,6 +752,12 @@ function Sidebar({
           );
         })}
       </nav>
+
+      <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
+        <span className="text-[11px] text-gray-400">
+          EmiteDO v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
+        </span>
+      </div>
     </div>
   );
 }

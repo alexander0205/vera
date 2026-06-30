@@ -1,0 +1,101 @@
+name: Neon Branch Preview
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, reopened, synchronize, closed]
+
+jobs:
+  create-branch:
+    if: github.event.action != 'closed'
+    name: Create Neon branch
+    runs-on: ubuntu-latest
+    outputs:
+      db_url: ${{ steps.create.outputs.db_url }}
+    steps:
+      - name: Create Neon branch
+        id: create
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          SAFE_NAME="${BRANCH_NAME//\//-}"
+
+          # Create branch (ignore error if already exists)
+          RESPONSE=$(curl -s -X POST \
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
+            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\":{\"name\":\"$SAFE_NAME\",\"parent_id\":\"${{ secrets.NEON_DEVELOP_BRANCH_ID }}\"},\"endpoints\":[{\"type\":\"read_write\"}]}")
+
+          # Get connection string
+          BRANCH_ID=$(echo "$RESPONSE" | jq -r '.branch.id // empty')
+
+          if [ -z "$BRANCH_ID" ]; then
+            # Branch may already exist, fetch it
+            BRANCH_ID=$(curl -s \
+              "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
+              -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" | \
+              jq -r --arg name "$SAFE_NAME" '.branches[] | select(.name==$name) | .id')
+          fi
+
+          # Get endpoint host
+          ENDPOINT_HOST=$(curl -s \
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/endpoints" \
+            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" | \
+            jq -r --arg bid "$BRANCH_ID" '.endpoints[] | select(.branch_id==$bid) | .host' | head -1)
+
+          DB_URL="postgresql://neondb_owner:${{ secrets.NEON_DB_PASSWORD }}@${ENDPOINT_HOST}/neondb?sslmode=require"
+          echo "db_url=$DB_URL" >> $GITHUB_OUTPUT
+          echo "branch_id=$BRANCH_ID" >> $GITHUB_OUTPUT
+
+      - name: Set Vercel POSTGRES_URL for preview branch
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          # Remove existing env var for this branch (ignore error)
+          curl -s -X DELETE \
+            "https://api.vercel.com/v9/projects/${{ secrets.VERCEL_PROJECT_ID }}/env?gitBranch=$(python3 -c 'import urllib.parse; print(urllib.parse.quote(\"'$BRANCH_NAME'\")')" \
+            -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" || true
+
+          # Add new env var
+          curl -s -X POST \
+            "https://api.vercel.com/v10/projects/${{ secrets.VERCEL_PROJECT_ID }}/env" \
+            -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"key\":\"POSTGRES_URL\",\"value\":\"${{ steps.create.outputs.db_url }}\",\"type\":\"encrypted\",\"target\":[\"preview\"],\"gitBranch\":\"$BRANCH_NAME\"}"
+
+  delete-branch:
+    if: github.event.action == 'closed'
+    name: Delete Neon branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Neon branch
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          SAFE_NAME="${BRANCH_NAME//\//-}"
+
+          BRANCH_ID=$(curl -s \
+            "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches" \
+            -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}" | \
+            jq -r --arg name "$SAFE_NAME" '.branches[] | select(.name==$name) | .id')
+
+          if [ -n "$BRANCH_ID" ]; then
+            curl -s -X DELETE \
+              "https://console.neon.tech/api/v2/projects/${{ secrets.NEON_PROJECT_ID }}/branches/$BRANCH_ID" \
+              -H "Authorization: Bearer ${{ secrets.NEON_API_KEY }}"
+            echo "Deleted Neon branch: $SAFE_NAME"
+          fi
+
+      - name: Remove Vercel POSTGRES_URL for preview branch
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          # List envs and find the one for this branch
+          ENV_ID=$(curl -s \
+            "https://api.vercel.com/v9/projects/${{ secrets.VERCEL_PROJECT_ID }}/env" \
+            -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" | \
+            jq -r --arg branch "$BRANCH_NAME" '.envs[] | select(.key=="POSTGRES_URL" and .gitBranch==$branch) | .id')
+
+          if [ -n "$ENV_ID" ]; then
+            curl -s -X DELETE \
+              "https://api.vercel.com/v9/projects/${{ secrets.VERCEL_PROJECT_ID }}/env/$ENV_ID" \
+              -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}"
+            echo "Removed Vercel env for branch: $BRANCH_NAME"
+          fi

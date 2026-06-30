@@ -122,6 +122,14 @@ export interface DataTableProps<T> {
   headerActions?: React.ReactNode;
   title?:         string;
   description?:   string;
+  /**
+   * Agrupa las filas por la clave devuelta. Cuando se activa, se desactiva la
+   * paginación interna (se muestran todos los grupos) y se inserta una fila de
+   * encabezado por grupo. El sort sigue aplicando dentro de cada grupo.
+   */
+  groupBy?:       (row: T) => string;
+  /** Render del encabezado de cada grupo (clave, sus filas y el colSpan total). */
+  renderGroupHeader?: (groupKey: string, rows: T[], colSpan: number) => React.ReactNode;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -158,6 +166,8 @@ export function DataTable<T>({
   headerActions,
   title,
   description,
+  groupBy,
+  renderGroupHeader,
 }: DataTableProps<T>) {
   // Estado interno de filtros si no se controla externamente.
   const [internalFilters, setInternalFilters] = useState<Record<string, string>>({});
@@ -251,6 +261,75 @@ export function DataTable<T>({
   const hasFilters = filters.length > 0;
   const hasBulk    = bulkActions.length > 0;
   const cols = columns.length + (hasBulk ? 1 : 0) + (rowActions ? 1 : 0);
+
+  // Agrupación opcional: parte el dataset (ya ordenado) en grupos por clave,
+  // preservando el orden de primera aparición. Cada clave aparece una sola vez
+  // con todas sus filas. Desactiva la paginación interna.
+  const groups = useMemo(() => {
+    if (!groupBy) return null;
+    const m = new Map<string, T[]>();
+    for (const r of sortedData) {
+      const k = groupBy(r);
+      const arr = m.get(k);
+      if (arr) arr.push(r); else m.set(k, [r]);
+    }
+    return Array.from(m.entries());
+  }, [sortedData, groupBy]);
+  const grouped = !!groups;
+
+  const renderRow = (row: T) => {
+    const id = rowId(row);
+    const isSelected = selectedIds.has(id);
+    const href = rowHref?.(row);
+    return (
+      <tr
+        key={String(id)}
+        className={`transition-colors ${isSelected ? 'bg-teal-50/50' : 'hover:bg-gray-50'} ${href ? 'cursor-pointer' : ''}`}
+        onClick={href ? (e) => {
+          // No navegar si click vino de checkbox/botón/link interno
+          const target = e.target as HTMLElement;
+          if (target.closest('input,button,a')) return;
+          window.location.href = href;
+        } : undefined}
+      >
+        {hasBulk && (
+          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => toggleOne(id)}
+              className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+            />
+          </td>
+        )}
+        {columns.map(col => {
+          const breakpoint = col.visibleAt ? BREAKPOINT_CLASS[col.visibleAt] : '';
+          const content = col.render ? col.render(row) : ((row as Record<string, unknown>)[col.id] as React.ReactNode);
+          return (
+            <td
+              key={col.id}
+              className={`px-3 py-3 ${alignClass(col.align)} ${breakpoint}`}
+            >
+              {content}
+            </td>
+          );
+        })}
+        {rowActions && (() => {
+          const acts = rowActions(row);
+          const primary = acts.filter(a => a.primary);
+          const rest    = acts.filter(a => !a.primary);
+          return (
+            <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-end gap-0.5">
+                {primary.map((a, i) => <RowActionInline key={i} action={a} />)}
+                <RowActionsMenu actions={rest} />
+              </div>
+            </td>
+          );
+        })()}
+      </tr>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -421,59 +500,24 @@ export function DataTable<T>({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {pageData.map(row => {
-                  const id = rowId(row);
-                  const isSelected = selectedIds.has(id);
-                  const href = rowHref?.(row);
-                  return (
-                    <tr
-                      key={String(id)}
-                      className={`transition-colors ${isSelected ? 'bg-teal-50/50' : 'hover:bg-gray-50'} ${href ? 'cursor-pointer' : ''}`}
-                      onClick={href ? (e) => {
-                        // No navegar si click vino de checkbox/botón/link interno
-                        const target = e.target as HTMLElement;
-                        if (target.closest('input,button,a')) return;
-                        window.location.href = href;
-                      } : undefined}
-                    >
-                      {hasBulk && (
-                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleOne(id)}
-                            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                          />
-                        </td>
-                      )}
-                      {columns.map(col => {
-                        const breakpoint = col.visibleAt ? BREAKPOINT_CLASS[col.visibleAt] : '';
-                        const content = col.render ? col.render(row) : ((row as Record<string, unknown>)[col.id] as React.ReactNode);
-                        return (
-                          <td
-                            key={col.id}
-                            className={`px-3 py-3 ${alignClass(col.align)} ${breakpoint}`}
-                          >
-                            {content}
+                {grouped
+                  ? groups!.map(([key, rows]) => (
+                      <React.Fragment key={`grp-${key}`}>
+                        <tr className="bg-gray-100/70 border-y border-gray-200">
+                          <td colSpan={cols} className="px-3 py-2">
+                            {renderGroupHeader
+                              ? renderGroupHeader(key, rows, cols)
+                              : (
+                                <span className="text-xs font-semibold text-gray-700">
+                                  {key} <span className="text-gray-400 font-normal">· {rows.length}</span>
+                                </span>
+                              )}
                           </td>
-                        );
-                      })}
-                      {rowActions && (() => {
-                        const acts = rowActions(row);
-                        const primary = acts.filter(a => a.primary);
-                        const rest    = acts.filter(a => !a.primary);
-                        return (
-                          <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-0.5">
-                              {primary.map((a, i) => <RowActionInline key={i} action={a} />)}
-                              <RowActionsMenu actions={rest} />
-                            </div>
-                          </td>
-                        );
-                      })()}
-                    </tr>
-                  );
-                })}
+                        </tr>
+                        {rows.map(renderRow)}
+                      </React.Fragment>
+                    ))
+                  : pageData.map(renderRow)}
               </tbody>
             </table>
           </div>
@@ -484,7 +528,7 @@ export function DataTable<T>({
       {!loading && !error && sortedData.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-3 py-2.5 border-t border-gray-100 bg-gray-50/40">
           <div className="flex items-center gap-3">
-            {!serverPaginated && (
+            {!serverPaginated && !grouped && (
               <select
                 value={clientPageSize}
                 onChange={e => { setClientPageSize(Number(e.target.value)); setClientPage(1); }}
@@ -495,10 +539,12 @@ export function DataTable<T>({
               </select>
             )}
             <p className="text-sm text-gray-500">
-              Mostrando {rangeFrom.toLocaleString()}–{rangeTo.toLocaleString()} de {pageView.total.toLocaleString()}
+              {grouped
+                ? `${sortedData.length.toLocaleString()} fila(s) en ${groups!.length.toLocaleString()} grupo(s)`
+                : `Mostrando ${rangeFrom.toLocaleString()}–${rangeTo.toLocaleString()} de ${pageView.total.toLocaleString()}`}
             </p>
           </div>
-          {pageView.totalPages > 1 && (
+          {!grouped && pageView.totalPages > 1 && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => pageView.onChange(Math.max(1, pageView.page - 1))}

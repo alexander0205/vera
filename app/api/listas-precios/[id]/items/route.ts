@@ -8,6 +8,7 @@ import { db } from '@/lib/db/drizzle';
 import { listasPrecios, listasPrecios_items, products } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 
 async function verifyOwnership(listId: number, teamId: number) {
   const [row] = await db.select({ id: listasPrecios.id }).from(listasPrecios)
@@ -43,10 +44,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await getUser();
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    const teamId = await getTeamIdForUser();
-    if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+    const auth = await requirePermission('productos:gestionar');
+    if (!auth.ok) return auth.response;
+    const { teamId } = auth;
 
     const { id } = await params;
     const listId = parseInt(id);

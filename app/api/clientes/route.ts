@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { clients } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, ilike, or, and } from 'drizzle-orm';
 import { clienteSchema } from '@/lib/clientes/schema';
 
@@ -37,10 +38,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('clientes:gestionar');
+  if (!auth.ok) return auth.response;
+  const { user, teamId } = auth;
 
   const body = await req.json();
   const parsed = clienteSchema.safeParse(body);
@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
     telefono:    telefono    || null,
     direccion:   direccion   || null,
     descripcion: descripcion || null,
+    createdBy:   user.id,
   }).returning();
 
   return NextResponse.json({ ok: true, cliente: created }, { status: 201 });

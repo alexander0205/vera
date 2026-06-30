@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { eq, and, desc } from 'drizzle-orm';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 import { logAudit, getIp } from '@/lib/audit';
 import { registrarMovimiento, type TipoMovimiento } from '@/lib/caja/core';
 import { db } from '@/lib/db/drizzle';
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   // AJUSTE es operación de supervisor.
   const esAjuste = data.tipo === 'AJUSTE';
-  if (esAjuste && !userCan(user.platformRole, teamRole, 'caja:aprobar')) {
+  if (esAjuste && !(await userCanForTeam(teamId, user.platformRole, teamRole, 'caja:aprobar'))) {
     return NextResponse.json({ error: 'Solo un supervisor puede registrar ajustes' }, { status: 403 });
   }
 

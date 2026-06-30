@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { outboundWebhooks } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   const body = await req.json();
   await db.update(outboundWebhooks)
@@ -16,8 +18,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   await db.delete(outboundWebhooks)
     .where(and(eq(outboundWebhooks.id, Number(id)), eq(outboundWebhooks.teamId, teamId)));

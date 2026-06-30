@@ -10,7 +10,7 @@ import { db } from '@/lib/db/drizzle';
 import { sequences, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, ne } from 'drizzle-orm';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 
 const updateSchema = z.object({
   hasta:            z.number().int().positive().optional(),
@@ -54,7 +54,7 @@ export async function PATCH(
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
-  if (!userCan(u?.platformRole, m?.role, 'facturas:emitir-dgii')) {
+  if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:emitir-dgii')) {
     return NextResponse.json({ error: 'Sin permiso para ajustar secuencias' }, { status: 403 });
   }
 
@@ -101,7 +101,7 @@ export async function PATCH(
   }
 
   if (parsed.data.fechaVencimiento) {
-    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59');
+    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59Z');
   }
 
   if (parsed.data.nombre !== undefined) {
@@ -138,7 +138,7 @@ export async function PUT(
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
-  if (!userCan(u?.platformRole, m?.role, 'configuracion:gestionar')) {
+  if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'configuracion:gestionar')) {
     return NextResponse.json({ error: 'Sin permiso para gestionar secuencias' }, { status: 403 });
   }
 
@@ -181,7 +181,7 @@ export async function PUT(
   }
 
   if (parsed.data.fechaVencimiento) {
-    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59');
+    updates.fechaVencimiento = new Date(parsed.data.fechaVencimiento + 'T23:59:59Z');
   }
 
   if (parsed.data.nombre !== undefined) {
@@ -239,7 +239,7 @@ export async function DELETE(
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
-  if (!userCan(u?.platformRole, m?.role, 'configuracion:gestionar')) {
+  if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'configuracion:gestionar')) {
     return NextResponse.json({ error: 'Sin permiso para eliminar secuencias' }, { status: 403 });
   }
 

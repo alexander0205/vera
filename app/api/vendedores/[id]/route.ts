@@ -3,13 +3,12 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { vendedores } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const venId = parseInt(id);
@@ -40,10 +39,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const venId = parseInt(id);
@@ -53,7 +51,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     .where(and(eq(vendedores.id, venId), eq(vendedores.teamId, teamId))).limit(1);
   if (!target) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
-  // Soft delete (desactivar)
   await db.update(vendedores).set({ activo: 'false' }).where(eq(vendedores.id, venId));
   return NextResponse.json({ ok: true });
 }
