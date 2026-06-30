@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { roleHasPermission } from '@/lib/config/roles';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -143,6 +144,7 @@ export default function FacturaRecurrenteDetallePage() {
   const [error, setError]     = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
   const [generandoPeriodo, setGenerandoPeriodo] = useState<string | null>(null);
+  const [canOperate, setCanOperate] = useState(true);
   const didLoad = useRef(false);
 
   const cargar = useCallback(async () => {
@@ -162,7 +164,14 @@ export default function FacturaRecurrenteDetallePage() {
   }, [id]);
 
   useEffect(() => {
-    if (!didLoad.current) { didLoad.current = true; cargar(); }
+    if (!didLoad.current) {
+      didLoad.current = true;
+      cargar();
+      fetch('/api/equipo/perfil')
+        .then(r => r.json())
+        .then(d => { if (d.role) setCanOperate(roleHasPermission(d.role, 'facturas:crear')); })
+        .catch(() => {});
+    }
   }, [cargar]);
 
   // Genera una factura. Si se pasa `periodo`, genera ESE período del schedule;
@@ -245,16 +254,20 @@ export default function FacturaRecurrenteDetallePage() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Link href={`/dashboard/facturas-recurrentes/${fr.id}/editar`}>
-              <Button variant="outline">
-                <Pencil className="h-4 w-4 mr-2" /> Editar
+            {canOperate && (
+              <Link href={`/dashboard/facturas-recurrentes/${fr.id}/editar`}>
+                <Button variant="outline">
+                  <Pencil className="h-4 w-4 mr-2" /> Editar
+                </Button>
+              </Link>
+            )}
+            {canOperate && (
+              <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => handleGenerar()} disabled={generando}>
+                {generando
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generando…</>
+                  : <><Zap className="h-4 w-4 mr-2" /> Generar ahora</>}
               </Button>
-            </Link>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => handleGenerar()} disabled={generando}>
-              {generando
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generando…</>
-                : <><Zap className="h-4 w-4 mr-2" /> Generar ahora</>}
-            </Button>
+            )}
           </div>
         </div>
 
@@ -327,16 +340,18 @@ export default function FacturaRecurrenteDetallePage() {
                   ) : (
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-sm text-gray-400 whitespace-nowrap">{fmtDOP(p.montoEstimado)}</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={rowGenerando}
-                        onClick={() => handleGenerar(p.fecha)}
-                      >
-                        {rowGenerando
-                          ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generando…</>
-                          : <><Zap className="h-3.5 w-3.5 mr-1.5" /> Generar</>}
-                      </Button>
+                      {canOperate && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={rowGenerando}
+                          onClick={() => handleGenerar(p.fecha)}
+                        >
+                          {rowGenerando
+                            ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generando…</>
+                            : <><Zap className="h-3.5 w-3.5 mr-1.5" /> Generar</>}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>

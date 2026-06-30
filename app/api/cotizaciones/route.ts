@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { cotizaciones } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, desc } from 'drizzle-orm';
 
 // GET /api/cotizaciones?q=...
@@ -35,8 +36,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/cotizaciones
 export async function POST(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('cotizaciones:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const body = await req.json();
 

@@ -13,6 +13,8 @@ interface Props {
   totales: { bruto: number; subtotal: number; descuento: number; itbis: number; total: number };
   retenciones: Retencion[];
   totalNeto: number;
+  /** Etiqueta del total. Default "Total"; en NC/ND → "Total a acreditar/debitar". */
+  totalLabel?: string;
   items: ItemLinea[];
   /** Si false, oculta el card "Pago" entero. Útil para facturas recurrentes
    *  (plantillas que no registran pago directo). Default true. */
@@ -36,7 +38,7 @@ const fmt = (n: number) =>
  * Pago tiene su propio toggle + método/fecha/cuenta/valor.
  */
 export function ResumenSidebar({
-  totales, retenciones, totalNeto, items,
+  totales, retenciones, totalNeto, totalLabel = 'Total', items,
   showPago = true,
   pagoRecibido = false, setPagoRecibido,
   pagoFecha = '', setPagoFecha,
@@ -117,7 +119,7 @@ export function ResumenSidebar({
 
             {/* Total bold */}
             <div className="flex justify-between text-base font-bold text-gray-900 border-t-2 border-gray-200 pt-3 mt-3">
-              <span>Total</span>
+              <span>{totalLabel}</span>
               <span className="tabular-nums">{fmt(totalNeto)}</span>
             </div>
 

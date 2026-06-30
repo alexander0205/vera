@@ -17,6 +17,7 @@ import {
   invitations
 } from '@/lib/db/schema';
 import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
+import { seedSystemRoles } from '@/lib/auth/permissions';
 import { redirect } from 'next/navigation';
 import { cookies, headers } from 'next/headers';
 import { createCheckoutSession } from '@/lib/payments/stripe';
@@ -253,6 +254,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     teamId = createdTeam.id;
     userRole = 'owner';
 
+    await seedSystemRoles(teamId);
     await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
   }
 

@@ -24,9 +24,9 @@ import {
 import {
   Users, UserPlus, Mail, Trash2, Shield, Loader2,
   Crown, BookOpen, ShoppingBag, User, Clock, Copy, CheckCheck,
-  AlertTriangle,
+  AlertTriangle, Eye, UserCog,
 } from 'lucide-react';
-import { ROLES as ROLE_DEFS, INVITABLE_ROLES } from '@/lib/config/roles';
+import { ROLES as ROLE_DEFS } from '@/lib/config/roles';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -52,15 +52,17 @@ interface TeamData {
   isOwner: boolean;
   members: Member[];
   invitations: Invitation[];
+  roles: RoleOpt[];
   userLimit: number; // -1 = ilimitado
 }
 
 // ─── Roles ────────────────────────────────────────────────────────────────────
 
 const ROLE_ICON_MAP: Record<string, React.ElementType> = {
-  Crown, Shield, BookOpen, ShoppingBag, User,
+  Crown, Shield, BookOpen, ShoppingBag, User, Eye, UserCog,
 };
 
+// Config estática de los roles de sistema (fallback si aún no llegan los del team).
 const ROLES = Object.fromEntries(
   ROLE_DEFS.map(r => [r.key, {
     label:       r.label,
@@ -70,8 +72,34 @@ const ROLES = Object.fromEntries(
   }])
 ) as Record<string, { label: string; descripcion: string; icon: React.ElementType; color: string }>;
 
-function RoleBadge({ role }: { role: string }) {
-  const cfg = ROLES[role] ?? ROLES.member;
+// Rol del team (sistema o custom) tal como llega de /api/equipo/miembros.
+interface RoleOpt {
+  key: string;
+  label: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  isSystem: boolean;
+}
+
+interface RoleCfg { label: string; descripcion: string; icon: React.ElementType; color: string }
+
+// Resuelve la config visual de un rol: primero el catálogo dinámico del team,
+// luego el estático, y por último un fallback genérico.
+function resolveRoleCfg(roleKey: string, dynamic?: RoleOpt[]): RoleCfg {
+  const d = dynamic?.find(r => r.key === roleKey);
+  if (d) {
+    return {
+      label:       d.label,
+      descripcion: d.description ?? '',
+      icon:        ROLE_ICON_MAP[d.icon ?? ''] ?? UserCog,
+      color:       d.color ?? 'text-gray-600 bg-gray-50 border-gray-200',
+    };
+  }
+  return ROLES[roleKey] ?? ROLES.user;
+}
+
+function RoleBadge({ cfg }: { cfg: RoleCfg }) {
   const Icon = cfg.icon;
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.color}`}>
@@ -337,7 +365,7 @@ export default function EquipoPage() {
                         {m.name ?? m.email}
                         {isSelf && <span className="text-gray-400 font-normal ml-1">(tú)</span>}
                       </p>
-                      <RoleBadge role={m.role} />
+                      <RoleBadge cfg={resolveRoleCfg(m.role, data?.roles)} />
                     </div>
                     <p className="text-xs text-gray-500 truncate">{m.email}</p>
                     <p className="text-xs text-gray-400">Miembro desde {formatFecha(m.joinedAt)}</p>
@@ -358,9 +386,9 @@ export default function EquipoPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {Object.entries(ROLES).map(([key, cfg]) => (
-                                <SelectItem key={key} value={key} className="text-xs">
-                                  {cfg.label}
+                              {(data?.roles ?? []).filter(r => r.key !== 'owner').map(r => (
+                                <SelectItem key={r.key} value={r.key} className="text-xs">
+                                  {r.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -410,7 +438,7 @@ export default function EquipoPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{inv.email}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <RoleBadge role={inv.role} />
+                      <RoleBadge cfg={resolveRoleCfg(inv.role, data?.roles)} />
                       <span className="text-xs text-gray-400">Invitado el {formatFecha(inv.invitedAt)}</span>
                     </div>
                   </div>
@@ -501,24 +529,22 @@ export default function EquipoPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(ROLES)
-                      .filter(([k]) => INVITABLE_ROLES.some(r => r.key === k))
-                      .map(([key, cfg]) => {
-                        const Icon = cfg.icon;
-                        return (
-                          <SelectItem key={key} value={key}>
-                            <div className="flex items-center gap-2">
-                              <Icon className="h-3.5 w-3.5" />
-                              <span>{cfg.label}</span>
-                            </div>
-                          </SelectItem>
-                        );
-                      })
-                    }
+                    {(data?.roles ?? []).filter(r => r.key !== 'owner').map(r => {
+                      const cfg = resolveRoleCfg(r.key, data?.roles);
+                      const Icon = cfg.icon;
+                      return (
+                        <SelectItem key={r.key} value={r.key}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-3.5 w-3.5" />
+                            <span>{cfg.label}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
-                {invRole && ROLES[invRole] && (
-                  <p className="text-xs text-gray-500">{ROLES[invRole].descripcion}</p>
+                {invRole && (
+                  <p className="text-xs text-gray-500">{resolveRoleCfg(invRole, data?.roles).descripcion}</p>
                 )}
               </div>
 

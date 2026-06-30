@@ -1,7 +1,11 @@
 import type { NextConfig } from 'next';
+import { readFileSync } from 'fs';
 import { validateEnv } from './lib/env';
 
 validateEnv();
+
+// Versión del sistema (package.json) — expuesta al cliente para mostrar en el nav.
+const appVersion = JSON.parse(readFileSync('./package.json', 'utf8')).version ?? '0.0.0';
 
 const securityHeaders = [
   {
@@ -36,6 +40,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     // Fijar el root para evitar warning de múltiples lockfiles
     root: __dirname,
+  },
+  env: {
+    NEXT_PUBLIC_APP_VERSION: appVersion,
   },
   async headers() {
     return [

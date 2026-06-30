@@ -9,6 +9,7 @@ import { teamMembers, users, invitations, teams } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { planUserLimit } from '@/lib/plans';
+import { listTeamRoles } from '@/lib/auth/permissions';
 
 export async function GET() {
   const user = await getUser();
@@ -59,11 +60,18 @@ export async function GET() {
     .from(invitations)
     .where(and(eq(invitations.teamId, teamId), eq(invitations.status, 'pending')));
 
+  // Roles del team (sistema + custom) — para badges y dropdowns dinámicos.
+  const roles = (await listTeamRoles(teamId)).map(r => ({
+    key: r.key, label: r.label, description: r.description,
+    icon: r.icon, color: r.color, isSystem: r.isSystem,
+  }));
+
   return NextResponse.json({
     myUserId:   user.id,
     isOwner:    myMember.role === 'owner',
     members,
     invitations: pendingInvites,
+    roles,
     userLimit,   // -1 = ilimitado, >0 = límite del plan
   });
 }

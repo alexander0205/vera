@@ -3,7 +3,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { users, teams, teamMembers } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 import { recepciones } from '@/lib/ecf-api/client';
 
 export async function GET(
@@ -30,7 +30,7 @@ export async function GET(
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  if (!userCan(u?.platformRole, m?.role, 'compras:ver')) {
+  if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'compras:ver')) {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
   }
 

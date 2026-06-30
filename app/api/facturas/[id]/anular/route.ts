@@ -23,7 +23,8 @@ import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
+import { recalcularEstadoPago } from '@/lib/facturas/estado-pago';
 
 const ESTADOS_ANULABLES = ['BORRADOR', 'EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'];
 
@@ -57,7 +58,7 @@ export async function POST(
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
-  if (!userCan(u?.platformRole, m?.role, 'facturas:anular')) {
+  if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:anular')) {
     return NextResponse.json({ error: 'Sin permiso para anular facturas' }, { status: 403 });
   }
 
@@ -82,15 +83,17 @@ export async function POST(
 
   const [doc] = await db
     .select({
-      id:            ecfDocuments.id,
-      estado:        ecfDocuments.estado,
-      encf:          ecfDocuments.encf,
-      tipoEcf:       ecfDocuments.tipoEcf,
-      pagoRecibido:  ecfDocuments.pagoRecibido,
-      pagoValorCts:  ecfDocuments.pagoValorCts,
-      lineasJson:    ecfDocuments.lineasJson,
-      almacenId:     ecfDocuments.almacenId,
-      stockDescontado: ecfDocuments.stockDescontado,
+      id:                ecfDocuments.id,
+      estado:            ecfDocuments.estado,
+      encf:              ecfDocuments.encf,
+      tipoEcf:           ecfDocuments.tipoEcf,
+      pagoRecibido:      ecfDocuments.pagoRecibido,
+      pagoValorCts:      ecfDocuments.pagoValorCts,
+      lineasJson:        ecfDocuments.lineasJson,
+      almacenId:         ecfDocuments.almacenId,
+      stockDescontado:   ecfDocuments.stockDescontado,
+      ncfModificado:     ecfDocuments.ncfModificado,
+      origenDocumentoId: ecfDocuments.origenDocumentoId,
     })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
@@ -161,6 +164,7 @@ export async function POST(
       estadoPago:    'ANULADA',
       tipoAnulacion,
       stockDescontado: false,
+      updatedBy:     user.id,
       updatedAt:     new Date(),
     })
     .where(eq(ecfDocuments.id, docId));
@@ -180,6 +184,23 @@ export async function POST(
         .catch((e) => console.error('[anular] stock restore failed', e));
     } catch {
       // lineasJson malformado — no bloquear la anulación
+    }
+  }
+
+  // Si se anula una Nota de Crédito, el crédito deja de aplicar al padre →
+  // recalcular su estado de pago (vuelve a deber el monto acreditado).
+  if (doc.tipoEcf === '34') {
+    let padreId: number | null = doc.origenDocumentoId ?? null;
+    if (!padreId && doc.ncfModificado) {
+      const [p] = await db
+        .select({ id: ecfDocuments.id })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), eq(ecfDocuments.encf, doc.ncfModificado)))
+        .limit(1);
+      padreId = p?.id ?? null;
+    }
+    if (padreId) {
+      try { await recalcularEstadoPago(padreId); } catch (e) { console.error('[anular NC recalc padre]', e); }
     }
   }
 

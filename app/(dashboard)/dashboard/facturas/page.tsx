@@ -7,7 +7,7 @@ import {
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
-import { fmtDOP, fmtFechaCorta, diasVencido } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, fmtFechaRD, fmtHora, diasVencido } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
@@ -231,11 +231,14 @@ export default function FacturasPage() {
       header: 'Emisión',
       visibleAt: 'md',
       sortable: true,
-      sortAccessor: doc => doc.fechaEmision,
+      sortAccessor: doc => doc.createdAt,
       render: doc => (
-        <span className="text-xs text-gray-600 whitespace-nowrap tabular-nums">
-          {fmtFechaCorta(doc.fechaEmision)}
-        </span>
+        <div className="whitespace-nowrap tabular-nums leading-tight">
+          <span className="text-xs text-gray-600">{fmtFechaRD(doc.createdAt)}</span>
+          {doc.createdAt && (
+            <span className="block text-[11px] text-gray-400">{fmtHora(doc.createdAt)}</span>
+          )}
+        </div>
       ),
     },
     {
@@ -351,9 +354,9 @@ export default function FacturasPage() {
           <Link
             href={`/dashboard/facturas/${doc.id}`}
             className={`font-mono text-xs font-semibold hover:underline leading-tight block whitespace-nowrap ${color}`}
-            title={`${doc.encf || 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
+            title={`${doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
           >
-            {compacto ?? (doc.encf || '—')}
+            {compacto ?? (doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : '—')}
           </Link>
         );
       },

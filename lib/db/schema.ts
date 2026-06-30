@@ -142,6 +142,37 @@ export const teamMembers = pgTable('team_members', {
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
 });
 
+// ── Roles por empresa (permisos editables) ──────────────────────────────────
+// Cada team tiene sus propios roles: los 4 de sistema (owner/admin/user/lector)
+// sembrados + los custom que cree. teamMembers.role guarda la `key`.
+// Permisos efectivos se resuelven en lib/auth/permissions.ts (owner siempre full).
+export const teamRoles = pgTable('team_roles', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  key: varchar('key', { length: 50 }).notNull(),
+  label: varchar('label', { length: 60 }).notNull(),
+  description: varchar('description', { length: 255 }),
+  icon: varchar('icon', { length: 40 }),
+  color: varchar('color', { length: 120 }),
+  isSystem: boolean('is_system').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  teamKeyUnique: uniqueIndex('team_roles_team_key_idx').on(t.teamId, t.key),
+}));
+
+export const teamRolePermissions = pgTable('team_role_permissions', {
+  id: serial('id').primaryKey(),
+  teamRoleId: integer('team_role_id')
+    .notNull()
+    .references(() => teamRoles.id, { onDelete: 'cascade' }),
+  permission: varchar('permission', { length: 50 }).notNull(),
+}, (t) => ({
+  rolePermUnique: uniqueIndex('team_role_perm_idx').on(t.teamRoleId, t.permission),
+}));
+
 export const activityLogs = pgTable('activity_logs', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
@@ -182,6 +213,8 @@ export const clients = pgTable('clients', {
   telefono: varchar('telefono', { length: 20 }),
   direccion: varchar('direccion', { length: 500 }),
   descripcion: text('descripcion'),
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -267,6 +300,9 @@ export const products = pgTable('products', {
   visiblePos: boolean('visible_pos').notNull().default(true),
   // POS: favorito → se muestra primero en la grilla.
   posFavorito: boolean('pos_favorito').notNull().default(false),
+  esMora: boolean('es_mora').notNull().default(false),                        // servicio de sistema: línea de las ND de mora (1 por team)
+  createdBy: integer('created_by').references(() => users.id),
+  updatedBy: integer('updated_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -346,6 +382,23 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // Referencia para notas débito/crédito (tipos 33, 34)
   ncfModificado: varchar('ncf_modificado', { length: 13 }),
 
+  // Referencia por id al documento padre (NC/ND). Más robusta que ncfModificado:
+  // sobrevive a que el padre borrador (BOR-) sea promovido a e-CF real.
+  // Self-reference sin .references() para evitar import circular (FK en migración 0043).
+  origenDocumentoId: integer('origen_documento_id'),
+
+  // Metadatos de modificación DGII (tipos 33/34): 1=Anula, 2=Corrige texto,
+  // 3=Corrige monto, 4=Reemplazo contingencia, 5=Ref. factura consumo.
+  codigoModificacion: integer('codigo_modificacion'),
+  razonModificacion:  text('razon_modificacion'),
+
+  // Saldo a favor del cliente generado por esta Nota de Crédito (tipo 34), capado
+  // a lo PAGADO de la factura origen al momento de crearla.
+  //   NULL     → NC del modelo viejo: reduce el saldo cobrable de su factura.
+  //   NOT NULL → NC del modelo nuevo: NO toca la factura; genera crédito del
+  //              cliente (saldo a favor) para pagar otras facturas.
+  creditoGeneradoCents: integer('credito_generado_cents'),
+
   // Campos adicionales del formulario
   notas:               text('notas'),
   terminosCondiciones: text('terminos_condiciones'),
@@ -416,6 +469,8 @@ export const ecfDocuments = pgTable('ecf_documents', {
 
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
+  // Último usuario que editó el documento (anular, editar borrador, emitir)
+  updatedBy: integer('updated_by').references(() => users.id),
 
   fechaEmision: timestamp('fecha_emision').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -683,8 +738,10 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   ecfDocumentId:   integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
   /** Monto en centavos (DOP). */
   montoCentavos:   integer('monto_centavos').notNull(),
-  /** Método: efectivo, transferencia, tarjeta, cheque, otro. */
+  /** Método: efectivo, transferencia, tarjeta, cheque, otro, saldo_favor, nota_credito. */
   metodo:          varchar('metodo', { length: 30 }).notNull(),
+  /** NC consumida cuando metodo='nota_credito' (voucher por código, uso único). */
+  notaCreditoId:   integer('nota_credito_id'),
   /** Identificador opcional: número de cheque, últimos 4 de tarjeta, etc. */
   referencia:      varchar('referencia', { length: 100 }),
   /** Cuenta bancaria/caja a la que entró (free-text). */
@@ -745,6 +802,21 @@ export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
   team: one(teams, {
     fields: [teamMembers.teamId],
     references: [teams.id],
+  }),
+}));
+
+export const teamRolesRelations = relations(teamRoles, ({ one, many }) => ({
+  team: one(teams, {
+    fields: [teamRoles.teamId],
+    references: [teams.id],
+  }),
+  permissions: many(teamRolePermissions),
+}));
+
+export const teamRolePermissionsRelations = relations(teamRolePermissions, ({ one }) => ({
+  role: one(teamRoles, {
+    fields: [teamRolePermissions.teamRoleId],
+    references: [teamRoles.id],
   }),
 }));
 

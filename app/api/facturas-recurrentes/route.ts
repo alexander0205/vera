@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { facturasRecurrentes, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, desc, and } from 'drizzle-orm';
 
 // GET /api/facturas-recurrentes?page=1&limit=50
@@ -52,8 +53,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/facturas-recurrentes
 export async function POST(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requirePermission('facturas:crear');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const body = await req.json();
 

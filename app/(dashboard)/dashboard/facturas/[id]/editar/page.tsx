@@ -5,23 +5,46 @@
  */
 import { notFound, redirect } from 'next/navigation';
 import { Suspense } from 'react';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, ShieldX } from 'lucide-react';
+import Link from 'next/link';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, clients, pagosRecibidos } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import EditarBorradorClient from './_editar-client';
 import type { EmpresaPerfil } from '../../nueva/page';
-import { requirePermission } from '@/lib/auth/page-guard';
+import { hasPermission } from '@/lib/auth/page-guard';
 
 export default async function EditarBorradorPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // Gate: solo roles con facturas:editar (bloquea al rol `user`, que debe pedir
-  // al admin). HISTORICA importadas también quedan bloqueadas para `user`.
-  await requirePermission('facturas:editar');
+  // Gate: solo roles con facturas:editar (bloquea al rol `user` y `lector`).
+  // Usamos hasPermission en lugar de requirePermission para mostrar un mensaje
+  // inline en vez de redirigir silenciosamente al dashboard.
+  const canEdit = await hasPermission('facturas:editar');
+  if (!canEdit) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-5 p-6 text-center">
+        <div className="h-14 w-14 rounded-full bg-red-50 flex items-center justify-center">
+          <ShieldX className="h-7 w-7 text-red-500" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Sin permisos para editar</h2>
+          <p className="text-sm text-gray-500 mt-1 max-w-sm">
+            Tu rol no tiene acceso para editar facturas. Contacta al administrador si necesitas realizar cambios.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/facturas"
+          className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+        >
+          Volver a facturas
+        </Link>
+      </div>
+    );
+  }
 
   const { id } = await params;
   const docId  = parseInt(id);

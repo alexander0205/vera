@@ -11,7 +11,7 @@ import { getUser, getTeamIdForUser, getCuentasPorCobrar } from '@/lib/db/queries
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  if (!userCan(user.platformRole, member?.role, 'facturas:ver')) {
+  if (!await userCanForTeam(teamId, user.platformRole, member?.role, 'facturas:ver')) {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
   }
 

@@ -3,7 +3,7 @@ import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users } from '@/lib/db/schema';
 import { and, eq, gte, lte, desc, sql } from 'drizzle-orm';
-import { userCan } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 
 const TIPO_LABELS: Record<string, string> = {
   '31': 'Factura de Crédito Fiscal', '32': 'Factura de Consumo', '33': 'Nota de Débito',
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
   ]);
-  if (!userCan(u?.platformRole, m?.role, 'facturas:exportar')) {
+  if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:exportar')) {
     return new Response('Sin permiso para exportar facturas', { status: 403 });
   }
 

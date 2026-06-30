@@ -4,6 +4,7 @@ import { db } from '@/lib/db/drizzle';
 import { listasPrecios, listasPrecios_items, products } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 
 // GET /api/listas-precios/[id] — detalle con items
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -38,10 +39,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // PATCH /api/listas-precios/[id]
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const listId = parseInt(id);
@@ -82,10 +82,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 // DELETE /api/listas-precios/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const listId = parseInt(id);

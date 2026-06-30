@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
@@ -7,17 +7,15 @@ import { sendInvoiceEmail } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  const auth = await requirePermission('facturas:crear');
+  if (!auth.ok) return auth.response;
+  const { user, teamId } = auth;
 
   // Rate limit por user — 20/min — evita uso como SMTP relay
   const rl = rateLimit(`fact-email:${user.id}`, 20, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Demasiados envíos. Espera 1 minuto.' }, { status: 429 });
   }
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin empresa activa' }, { status: 400 });
 
   const { id } = await params;
   const doc = await db

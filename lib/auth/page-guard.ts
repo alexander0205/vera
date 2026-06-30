@@ -19,6 +19,7 @@ import { users, teamMembers } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { userCan, type Permission } from '@/lib/config/roles';
+import { userCanForTeam } from '@/lib/auth/permissions';
 
 /**
  * Verifica el permiso. Si falla:
@@ -45,7 +46,7 @@ export async function requirePermission(perm: Permission): Promise<void> {
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
 
-  if (!userCan(u?.platformRole, m?.role, perm)) {
+  if (!(await userCanForTeam(teamId, u?.platformRole, m?.role, perm))) {
     redirect('/dashboard');
   }
 }
@@ -77,4 +78,35 @@ export async function requirePermissionAny(perms: Permission[]): Promise<void> {
 
   const ok = perms.some(perm => userCan(u?.platformRole, m?.role, perm));
   if (!ok) redirect('/dashboard');
+}
+
+/**
+ * Versión no-redirect: devuelve true/false en lugar de redirigir.
+ * Útil cuando la página quiere renderizar un mensaje de error inline
+ * en vez de redirigir silenciosamente al dashboard.
+ *
+ * Uso:
+ *   const canEdit = await hasPermission('facturas:editar');
+ *   if (!canEdit) return <SinPermisosUI />;
+ */
+export async function hasPermission(perm: Permission): Promise<boolean> {
+  const user = await getUser();
+  if (!user) return false;
+
+  const teamId = await getTeamIdForUser();
+  if (!teamId) return false;
+
+  const [u] = await db
+    .select({ platformRole: users.platformRole })
+    .from(users)
+    .where(eq(users.id, user.id))
+    .limit(1);
+
+  const [m] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .limit(1);
+
+  return userCanForTeam(teamId, u?.platformRole, m?.role, perm);
 }

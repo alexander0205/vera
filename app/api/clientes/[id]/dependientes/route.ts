@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { clients, dependientes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -46,10 +47,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 }
 
 export async function POST(req: NextRequest, { params }: Ctx) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('clientes:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
 
   const { id } = await params;
   const clientId = parseInt(id);

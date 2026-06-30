@@ -1,13 +1,32 @@
+/**
+ * Aplica lib/db/migrations/0053_inventario_stock.sql
+ * Uso: pnpm tsx scripts/apply-migration-0053.ts
+ */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import postgres from 'postgres';
 import dotenv from 'dotenv';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+
 dotenv.config({ path: '.env.local' });
 dotenv.config();
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require', max: 1 });
+
+const url = process.env.POSTGRES_URL;
+if (!url) { console.error('POSTGRES_URL no definido'); process.exit(1); }
+
+const sqlPath = path.join(process.cwd(), 'lib/db/migrations/0053_inventario_stock.sql');
+const sqlText = readFileSync(sqlPath, 'utf8');
+
+const sql = postgres(url, { ssl: 'require', max: 1 });
+
 (async () => {
-  const sqlText = readFileSync(join(process.cwd(), 'lib/db/migrations/0053_pos_monedero_escolar.sql'), 'utf-8');
-  await sql.unsafe(sqlText);
-  console.log('✓ Migración 0053 aplicada.');
-  await sql.end();
+  console.log('Aplicando 0053_inventario_stock.sql ...');
+  try {
+    await sql.unsafe(sqlText);
+    console.log('✓ Migración aplicada exitosamente.');
+  } catch (e) {
+    console.error('✗ Error:', e);
+    process.exit(1);
+  } finally {
+    await sql.end();
+  }
 })();

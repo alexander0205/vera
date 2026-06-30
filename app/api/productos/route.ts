@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { products } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, ilike, or, and } from 'drizzle-orm';
 
 const productoSchema = z.object({
@@ -73,10 +74,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  const auth = await requirePermission('productos:gestionar');
+  if (!auth.ok) return auth.response;
+  const { user, teamId } = auth;
 
   const body = await req.json();
   const parsed = productoSchema.safeParse(body);
@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
     tasaItbis,
     tipo,
     activo:               'true',
+    createdBy:            user.id,
     unidadMedida:         unidadMedida ?? 'Unidad',
     costo:                Math.round((costo ?? 0) * 100),
     stockActual:          stockActual ?? 0,

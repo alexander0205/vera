@@ -113,11 +113,12 @@ export async function GET(_req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const [team] = await db
-    .select()
-    .from(teams)
-    .where(eq(teams.id, teamId))
-    .limit(1);
+  const [[team], [member]] = await Promise.all([
+    db.select().from(teams).where(eq(teams.id, teamId)).limit(1),
+    db.select({ role: teamMembers.role }).from(teamMembers)
+      .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+      .limit(1),
+  ]);
 
   return NextResponse.json({
     razonSocial:       team.razonSocial,
@@ -144,5 +145,7 @@ export async function GET(_req: NextRequest) {
     posHabilitado:         team.posHabilitado,
     posEscolarHabilitado:  team.posEscolarHabilitado,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
+    // Rol del usuario en este team (para gating en el cliente)
+    role:              member?.role ?? null,
   });
 }
