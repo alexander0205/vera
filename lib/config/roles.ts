@@ -210,6 +210,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   { module: 'Productos', icon: 'Package', permissions: [
     { key: 'productos:ver',       label: 'Ver productos' },
     { key: 'productos:gestionar', label: 'Crear / editar / eliminar' },
+    { key: 'maestros:gestionar',  label: 'Gestionar maestros (atributos)' },
   ]},
   { module: 'Cotizaciones', icon: 'FileSpreadsheet', permissions: [
     { key: 'cotizaciones:ver',       label: 'Ver cotizaciones' },
