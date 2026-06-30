@@ -21,6 +21,6 @@ export async function GET(req: NextRequest) {
   const terminal = await getTerminal(teamId, terminalId);
   if (!terminal) return NextResponse.json({ error: 'Terminal no encontrada' }, { status: 404 });
 
-  const productos = await getCatalogoPos(teamId, terminal.almacenId);
+  const productos = await getCatalogoPos(teamId, terminal.almacenId, terminal.listaPreciosId);
   return NextResponse.json({ terminal, productos });
 }

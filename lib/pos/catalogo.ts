@@ -9,14 +9,14 @@
 
 import { and, eq, asc, desc, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { products, productAlmacenStock } from '@/lib/db/schema';
+import { products, productAlmacenStock, listasPrecios_items } from '@/lib/db/schema';
 
 export interface ProductoPos {
   id:                   number;
   nombre:               string;
   referencia:           string | null;
   codigoBarras:         string | null;
-  precio:               number;   // centavos (precio base; lista de precios se aplica en checkout)
+  precio:               number;   // centavos efectivos para la terminal
   tasaItbis:            string;
   tipo:                 string;   // 'bien' | 'servicio'
   controlaInventario:   boolean;
@@ -26,7 +26,11 @@ export interface ProductoPos {
   stockAlmacen:         number | null;
 }
 
-export async function getCatalogoPos(teamId: number, almacenId: number): Promise<ProductoPos[]> {
+export async function getCatalogoPos(
+  teamId: number,
+  almacenId: number,
+  listaPreciosId?: number | null,
+): Promise<ProductoPos[]> {
   const rows = await db
     .select({
       id:                   products.id,
@@ -34,6 +38,7 @@ export async function getCatalogoPos(teamId: number, almacenId: number): Promise
       referencia:           products.referencia,
       codigoBarras:         products.codigoBarras,
       precio:               products.precio,
+      precioLista:          listasPrecios_items.precio,
       tasaItbis:            products.tasaItbis,
       tipo:                 products.tipo,
       controlaInventario:   products.controlaInventario,
@@ -49,19 +54,34 @@ export async function getCatalogoPos(teamId: number, almacenId: number): Promise
         eq(productAlmacenStock.almacenId, almacenId),
       ),
     )
+    .leftJoin(
+      listasPrecios_items,
+      and(
+        eq(listasPrecios_items.productoId, products.id),
+        listaPreciosId
+          ? eq(listasPrecios_items.listaPreciosId, listaPreciosId)
+          : sql`false`,
+      ),
+    )
     .where(and(
       eq(products.teamId, teamId),
       eq(products.activo, 'true'),
       eq(products.visiblePos, true),
-      // Separación ESTRICTA por punto de venta: el producto aparece solo si está
-      // asignado al almacén de la terminal (tiene fila en product_almacen_stock).
-      // Aplica por igual a bienes con o sin control de inventario.
-      sql`${productAlmacenStock.id} IS NOT NULL`,
+      sql`(${products.controlaInventario} = false OR ${productAlmacenStock.id} IS NOT NULL)`,
     ))
     .orderBy(desc(products.posFavorito), asc(products.nombre));
 
   return rows.map((r) => ({
-    ...r,
+    id: r.id,
+    nombre: r.nombre,
+    referencia: r.referencia,
+    codigoBarras: r.codigoBarras,
+    precio: r.precioLista ?? r.precio,
+    tasaItbis: r.tasaItbis,
+    tipo: r.tipo,
+    controlaInventario: r.controlaInventario,
+    permiteVentaSinStock: r.permiteVentaSinStock,
+    favorito: r.favorito,
     stockAlmacen: r.controlaInventario ? Number(r.stockAlmacen ?? 0) : null,
   }));
 }

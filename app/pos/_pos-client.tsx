@@ -13,6 +13,7 @@ interface TerminalProp {
   nombre:         string;
   almacenId:      number;
   almacenNombre:  string | null;
+  listaPreciosId: number | null;
   listaNombre:    string | null;
   tipoEcf:        string;
 }
@@ -26,7 +27,7 @@ interface ProductoPos {
   nombre:               string;
   referencia:           string | null;
   codigoBarras:         string | null;
-  precio:               number;  // centavos (BASE, sin ITBIS)
+  precio:               number;  // centavos efectivos para la terminal
   tasaItbis:            string;  // '0.18' | '0.16' | '0' | 'exento'
   tipo:                 string;  // 'bien' | 'servicio'
   controlaInventario:   boolean;
