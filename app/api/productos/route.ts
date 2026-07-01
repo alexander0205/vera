@@ -25,6 +25,8 @@ const productoSchema = z.object({
   stockMinimo:          z.number().int().min(0).optional(),
   controlaInventario:   z.boolean().optional(),
   permiteVentaSinStock: z.boolean().optional(),
+  categoriaId:          z.number().int().positive().optional().nullable(),
+  imagen:               z.string().max(1_500_000).optional().nullable(),
 });
 
 export async function GET(req: NextRequest) {
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
+    categoriaId, imagen,
   } = parsed.data;
 
   const [created] = await db.insert(products).values({
@@ -102,6 +105,8 @@ export async function POST(req: NextRequest) {
     costo:                Math.round((costo ?? 0) * 100),
     stockActual:          stockActual ?? 0,
     stockMinimo:          stockMinimo ?? 0,
+    categoriaId:          categoriaId ?? null,
+    imagen:               imagen ?? null,
     controlaInventario:   tipo === 'bien' ? (controlaInventario ?? false) : false,
     permiteVentaSinStock: permiteVentaSinStock ?? true,
   }).returning();

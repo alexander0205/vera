@@ -225,15 +225,6 @@ export default function TerminalesClient({
               {almacenes.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
             </select>
 
-            <label className="block text-xs text-gray-500">Lista de precios (opcional)</label>
-            <select
-              value={form.listaPreciosId} onChange={(e) => setForm({ ...form, listaPreciosId: Number(e.target.value) })}
-              className="mb-3 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-            >
-              <option value={0}>Precio base</option>
-              {listas.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-            </select>
-
             <label className="block text-xs text-gray-500">Impresora (opcional)</label>
             <select
               value={form.impresoraId} onChange={(e) => setForm({ ...form, impresoraId: Number(e.target.value) })}

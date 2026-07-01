@@ -27,6 +27,8 @@ const updateSchema = z.object({
   stockMinimo:          z.number().int().min(0).optional(),
   controlaInventario:   z.boolean().optional(),
   permiteVentaSinStock: z.boolean().optional(),
+  categoriaId:          z.number().int().positive().optional().nullable(),
+  imagen:               z.string().max(1_500_000).optional().nullable(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -64,6 +66,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo, activo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
+    categoriaId, imagen,
   } = parsed.data;
 
   // Transacción: lock del producto, escribe campos, y si stockActual cambió
@@ -94,6 +97,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(stockMinimo          !== undefined && { stockMinimo }),
       ...(controlaInventario   !== undefined && { controlaInventario }),
       ...(permiteVentaSinStock !== undefined && { permiteVentaSinStock }),
+      ...(categoriaId          !== undefined && { categoriaId }),
+      ...(imagen               !== undefined && { imagen }),
       updatedAt: new Date(),
     }).where(eq(products.id, prodId)).returning();
 

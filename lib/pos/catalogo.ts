@@ -9,7 +9,7 @@
 
 import { and, eq, asc, desc, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { products, productAlmacenStock, listasPrecios_items } from '@/lib/db/schema';
+import { products, productAlmacenStock, listasPrecios_items, categorias } from '@/lib/db/schema';
 
 export interface ProductoPos {
   id:                   number;
@@ -24,6 +24,9 @@ export interface ProductoPos {
   favorito:             boolean;
   /** Stock en el almacén de la terminal. null si el producto no controla inventario. */
   stockAlmacen:         number | null;
+  categoriaId:          number | null;
+  categoriaNombre:      string | null;
+  imagen:               string | null;
 }
 
 export async function getCatalogoPos(
@@ -45,6 +48,9 @@ export async function getCatalogoPos(
       permiteVentaSinStock: products.permiteVentaSinStock,
       favorito:             products.posFavorito,
       stockAlmacen:         productAlmacenStock.stockActual,
+      categoriaId:          products.categoriaId,
+      categoriaNombre:      categorias.nombre,
+      imagen:               products.imagen,
     })
     .from(products)
     .leftJoin(
@@ -63,6 +69,7 @@ export async function getCatalogoPos(
           : sql`false`,
       ),
     )
+    .leftJoin(categorias, eq(categorias.id, products.categoriaId))
     .where(and(
       eq(products.teamId, teamId),
       eq(products.activo, 'true'),
@@ -83,5 +90,8 @@ export async function getCatalogoPos(
     permiteVentaSinStock: r.permiteVentaSinStock,
     favorito: r.favorito,
     stockAlmacen: r.controlaInventario ? Number(r.stockAlmacen ?? 0) : null,
+    categoriaId: r.categoriaId,
+    categoriaNombre: r.categoriaNombre,
+    imagen: r.imagen,
   }));
 }

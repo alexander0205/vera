@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText, Star } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText, Star, Package, Plus, Camera, X, Percent } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
@@ -34,8 +34,14 @@ interface ProductoPos {
   permiteVentaSinStock: boolean;
   favorito:             boolean;
   stockAlmacen:         number | null;
+  categoriaId:          number | null;
+  categoriaNombre:      string | null;
+  imagen:               string | null;
 }
 interface LineaCarrito extends ProductoPos { qty: number; }
+
+interface ListaPrecio { id: number; nombre: string; }
+interface ClienteView { id: number; razonSocial: string; rnc: string | null; email: string | null; }
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
@@ -61,15 +67,27 @@ function tasaFloat(t: string): number {
 function fmt(centavos: number): string {
   return 'RD$ ' + (centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-/** base + ITBIS encima (espejo de calcularTotales del motor de facturas). */
-function totalesCarrito(items: LineaCarrito[]) {
-  let subtotal = 0, itbis = 0;
+interface DescuentoAplicado { pct: number; ids: Set<number>; }
+
+/** Descuento (centavos) que aplica a una línea del carrito, 0 si no está seleccionada. */
+function descuentoLinea(it: LineaCarrito, descuento: DescuentoAplicado | null): number {
+  if (!descuento || !descuento.ids.has(it.id)) return 0;
+  return Math.round(it.precio * it.qty * descuento.pct / 100);
+}
+
+/** base + ITBIS encima (espejo de calcularTotales del motor de facturas). Descuento
+ *  global reduce la base imponible de las líneas seleccionadas antes del ITBIS. */
+function totalesCarrito(items: LineaCarrito[], descuento: DescuentoAplicado | null = null) {
+  let subtotal = 0, itbis = 0, descuentoTotal = 0;
   for (const it of items) {
-    const base = it.precio * it.qty;
+    const baseSinDescuento = it.precio * it.qty;
+    const desc = descuentoLinea(it, descuento);
+    const base = baseSinDescuento - desc;
+    descuentoTotal += desc;
     subtotal += base;
     itbis += Math.round(base * tasaFloat(it.tasaItbis));
   }
-  return { subtotal, itbis, total: subtotal + itbis };
+  return { subtotal, itbis, total: subtotal + itbis, descuentoTotal };
 }
 function abrirTicket(id: number) {
   window.open(`/pos-ticket/${id}`, '_blank', 'width=420,height=680');
@@ -198,9 +216,19 @@ function Venta({
   const [productos, setProductos] = useState<ProductoPos[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
+  const [categoriaActiva, setCategoriaActiva] = useState<number | 'todas'>('todas');
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [cobrando, setCobrando] = useState(false);
   const [estudiante, setEstudiante] = useState<MonederoView | null>(null);
+  const [listas, setListas] = useState<ListaPrecio[]>([]);
+  const [listaPreciosId, setListaPreciosId] = useState<number | 'general'>('general');
+  const [cliente, setCliente] = useState<ClienteView | null>(null);
+  const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
+  const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
+
+  useEffect(() => {
+    fetch('/api/listas-precios').then((r) => r.json()).then((d) => setListas(d.listasPrecios ?? []));
+  }, []);
 
   const refrescarEstudiante = useCallback(async (dependienteId: number) => {
     const res = await fetch(`/api/pos/monedero?dependienteId=${dependienteId}`);
@@ -210,7 +238,9 @@ function Venta({
   const cargarCatalogo = useCallback(async () => {
     if (!turno.terminalId) { setCargando(false); return; }
     setCargando(true);
-    const res = await fetch(`/api/pos/catalogo?terminalId=${turno.terminalId}`);
+    const params = new URLSearchParams({ terminalId: String(turno.terminalId) });
+    if (listaPreciosId !== 'general') params.set('listaPreciosId', String(listaPreciosId));
+    const res = await fetch(`/api/pos/catalogo?${params}`);
     if (res.ok) {
       const data = await res.json();
       setProductos(data.productos ?? []);
@@ -218,19 +248,29 @@ function Venta({
       toast.error('No se pudo cargar el catálogo');
     }
     setCargando(false);
-  }, [turno.terminalId]);
+  }, [turno.terminalId, listaPreciosId]);
 
   useEffect(() => { cargarCatalogo(); }, [cargarCatalogo]);
 
+  /** Categorías presentes en el catálogo de esta terminal, en orden de aparición. */
+  const categorias = useMemo(() => {
+    const vistas = new Map<number, string>();
+    for (const p of productos) {
+      if (p.categoriaId != null && !vistas.has(p.categoriaId)) vistas.set(p.categoriaId, p.categoriaNombre ?? '');
+    }
+    return [...vistas.entries()].map(([id, nombre]) => ({ id, nombre }));
+  }, [productos]);
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return productos;
-    return productos.filter(
-      (p) => p.nombre.toLowerCase().includes(q) || (p.referencia ?? '').toLowerCase().includes(q),
-    );
-  }, [productos, busqueda]);
+    return productos.filter((p) => {
+      if (categoriaActiva !== 'todas' && p.categoriaId !== categoriaActiva) return false;
+      if (!q) return true;
+      return p.nombre.toLowerCase().includes(q) || (p.referencia ?? '').toLowerCase().includes(q);
+    });
+  }, [productos, busqueda, categoriaActiva]);
 
-  const totales = useMemo(() => totalesCarrito(carrito), [carrito]);
+  const totales = useMemo(() => totalesCarrito(carrito, descuentoAplicado), [carrito, descuentoAplicado]);
 
   function qtyEnCarrito(id: number) {
     return carrito.find((c) => c.id === id)?.qty ?? 0;
@@ -297,26 +337,33 @@ function Venta({
     }
 
     setCobrando(true);
-    const items = carrito.map((c) => ({
-      nombreItem:             c.nombre,
-      cantidadItem:           c.qty,
-      precioUnitarioItem:     c.precio / 100,         // base en pesos
-      tasaItbis:              tasaFloat(c.tasaItbis) as 0 | 0.16 | 0.18,
-      indicadorBienoServicio: (c.tipo === 'bien' ? 1 : 2) as 1 | 2,
-      productoId:             c.id,
-    }));
+    const items = carrito.map((c) => {
+      const descCentavos = descuentoLinea(c, descuentoAplicado);
+      return {
+        nombreItem:             c.nombre,
+        cantidadItem:           c.qty,
+        precioUnitarioItem:     c.precio / 100,         // base en pesos
+        descuentoMonto:         descCentavos > 0 ? descCentavos / 100 : undefined,
+        tasaItbis:              tasaFloat(c.tasaItbis) as 0 | 0.16 | 0.18,
+        indicadorBienoServicio: (c.tipo === 'bien' ? 1 : 2) as 1 | 2,
+        productoId:             c.id,
+      };
+    });
 
     // Persistir las líneas (detalle de venta + ticket). Forma compatible con ItemLinea[].
     const lineasJson = JSON.stringify(carrito.map((c, i) => ({
       id: i + 1, productoId: c.id, nombreItem: c.nombre, referencia: c.referencia ?? '',
       descripcionItem: '', cantidadItem: c.qty, precioUnitarioItem: c.precio / 100,
-      descuentoPct: 0, tasaItbis: c.tasaItbis, indicadorBienoServicio: c.tipo === 'bien' ? '1' : '2',
+      descuentoPct: (descuentoAplicado?.ids.has(c.id) ? descuentoAplicado.pct : 0),
+      tasaItbis: c.tasaItbis, indicadorBienoServicio: c.tipo === 'bien' ? '1' : '2',
     })));
 
     const payload = {
       modo:                 'borrador',
       tipoEcf:              terminal?.tipoEcf ?? 'sin-ncf',
-      razonSocialComprador: esMonedero ? estudiante!.nombre : 'Consumidor Final',
+      razonSocialComprador: esMonedero ? estudiante!.nombre : (cliente?.razonSocial ?? 'Consumidor Final'),
+      rncComprador:         esMonedero ? undefined : (cliente?.rnc ?? undefined),
+      emailComprador:       esMonedero ? undefined : (cliente?.email ?? undefined),
       dependienteId:        esMonedero ? estudiante!.dependienteId : undefined,
       dependienteNombre:    esMonedero ? estudiante!.nombre : undefined,
       tipoPago:             1,
@@ -361,81 +408,134 @@ function Venta({
     }
 
     setCarrito([]);
+    setDescuentoAplicado(null);
     cargarCatalogo();   // refresca stock
   }
 
+  const [carritoMovilAbierto, setCarritoMovilAbierto] = useState(false);
+
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50" title="Volver al panel">
-            <ArrowLeft className="h-4 w-4" /> Panel
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2.5 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <Link href="/dashboard" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50" title="Volver al panel">
+            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Panel</span>
           </Link>
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <span>{terminal?.nombre ?? 'Punto de venta'}</span>
-            <span className="text-gray-400">·</span>
-            <span className="text-gray-500">{terminal?.almacenNombre ?? ''}</span>
+          <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+            <span className="truncate">{terminal?.nombre ?? 'Punto de venta'}</span>
+            <span className="hidden text-gray-400 sm:inline">·</span>
+            <span className="hidden truncate text-gray-500 sm:inline">{terminal?.almacenNombre ?? ''}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-green-50 px-3 py-1 text-xs text-green-700">Turno abierto</span>
+        <input
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); escanear(); } }}
+          placeholder="Buscar o escanear (nombre, referencia o código de barras)…"
+          autoFocus
+          className="order-last w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 sm:order-none sm:mx-3 sm:max-w-xs md:max-w-sm"
+        />
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="hidden rounded-full bg-green-50 px-3 py-1 text-xs text-green-700 sm:inline">Turno abierto</span>
           <button
             onClick={() => window.open(`/pos-reporte/${turno.id}`, '_blank', 'width=420,height=680')}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
             title="Corte X del turno"
           >
-            <FileText className="h-4 w-4" /> Reporte X
+            <FileText className="h-4 w-4" /> <span className="hidden sm:inline">Reporte X</span>
           </button>
           <Link href="/dashboard/caja" className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50" title="Ir a cierre de caja">
-            <LogOut className="h-4 w-4" /> Cerrar turno
+            <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Cerrar turno</span>
           </Link>
         </div>
       </header>
 
-      <div className="grid flex-1 grid-cols-[1.55fr_1fr] gap-3 p-3">
+      <div className="grid flex-1 grid-cols-1 gap-3 p-3 pb-24 md:grid-cols-[1.55fr_1fr] md:pb-3">
         {/* Grilla */}
         <div className="flex flex-col">
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); escanear(); } }}
-            placeholder="Buscar o escanear (nombre, referencia o código de barras)…"
-            autoFocus
-            className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-          />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {categorias.length > 0 && (
+                <>
+                  <button
+                    onClick={() => setCategoriaActiva('todas')}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                      categoriaActiva === 'todas' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  {categorias.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setCategoriaActiva(c.id)}
+                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                        categoriaActiva === c.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {c.nombre}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => setNuevoProductoAbierto(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              <Plus className="h-3.5 w-3.5" /> Nuevo producto
+            </button>
+          </div>
           {cargando ? (
             <p className="text-sm text-gray-500">Cargando catálogo…</p>
           ) : filtrados.length === 0 ? (
             <p className="text-sm text-gray-500">Sin productos para esta terminal.</p>
           ) : (
-            <div className="grid grid-cols-3 gap-2 overflow-auto">
+            <div className="grid grid-cols-2 gap-2 overflow-auto sm:grid-cols-3 lg:grid-cols-4">
               {filtrados.map((p) => {
                 const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
+                const qty = qtyEnCarrito(p.id);
                 return (
                   <button
                     key={p.id}
                     disabled={agotado}
                     onClick={() => agregar(p)}
-                    className={`relative flex min-h-[92px] flex-col justify-between rounded-lg border border-gray-200 bg-white p-2.5 text-left ${
-                      agotado ? 'opacity-50' : 'hover:border-blue-400'
-                    }`}
+                    className={`relative flex flex-col overflow-hidden rounded-lg border bg-white text-left active:scale-[0.98] ${
+                      qty > 0 ? 'border-blue-400 ring-1 ring-blue-400' : 'border-gray-200'
+                    } ${agotado ? 'opacity-50' : 'hover:border-blue-400'}`}
                   >
-                    <span
-                      role="button"
-                      title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
-                      onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
-                      className="absolute right-1.5 top-1.5"
-                    >
-                      <Star className={`h-4 w-4 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`} />
-                    </span>
-                    <div className="pr-5">
-                      <div className="text-sm font-medium leading-tight">{p.nombre}</div>
-                      <div className="text-[11px] text-gray-400">
-                        {p.referencia ? p.referencia + ' · ' : ''}
-                        {p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : ''}
-                      </div>
+                    <div className="relative aspect-square w-full bg-gray-50">
+                      {p.imagen ? (
+                        <img src={p.imagen} alt={p.nombre} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-gray-300">
+                          <Package className="h-8 w-8" />
+                        </div>
+                      )}
+                      {qty > 0 && (
+                        <span className="absolute left-1 top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[11px] font-medium text-white">
+                          {qty}
+                        </span>
+                      )}
+                      <span
+                        role="button"
+                        title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
+                        onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
+                        className="absolute right-1 top-1 rounded-full bg-white/80 p-1"
+                      >
+                        <Star className={`h-4 w-4 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
+                      </span>
                     </div>
-                    <div className="text-sm font-medium">{fmt(p.precio)}</div>
+                    <div className="flex flex-1 flex-col justify-between p-2.5">
+                      <div>
+                        <div className="text-sm font-medium leading-tight">{p.nombre}</div>
+                        <div className="text-[11px] text-gray-400">
+                          {p.referencia ? p.referencia + ' · ' : ''}
+                          {p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : ''}
+                        </div>
+                      </div>
+                      <div className="text-sm font-medium">{fmt(p.precio)}</div>
+                    </div>
                   </button>
                 );
               })}
@@ -443,18 +543,72 @@ function Venta({
           )}
         </div>
 
-        {/* Carrito */}
-        <CarritoPanel
-          carrito={carrito}
-          totales={totales}
-          cambiarQty={cambiarQty}
-          cobrando={cobrando}
-          onCobrar={cobrar}
-          escolar={escolarHabilitado}
-          estudiante={estudiante}
-          onSelectEstudiante={setEstudiante}
-        />
+        {/* Carrito — panel fijo en escritorio, hoja deslizable en móvil */}
+        <div className="hidden md:flex md:w-full">
+          <CarritoPanel
+            carrito={carrito}
+            totales={totales}
+            cambiarQty={cambiarQty}
+            cobrando={cobrando}
+            onCobrar={cobrar}
+            escolar={escolarHabilitado}
+            estudiante={estudiante}
+            onSelectEstudiante={setEstudiante}
+            listas={listas}
+            listaPreciosId={listaPreciosId}
+            onSelectLista={setListaPreciosId}
+            cliente={cliente}
+            onSelectCliente={setCliente}
+            descuentoAplicado={descuentoAplicado}
+            onAplicarDescuento={setDescuentoAplicado}
+          />
+        </div>
       </div>
+
+      {/* Barra flotante móvil: total + abrir carrito */}
+      <button
+        onClick={() => setCarritoMovilAbierto(true)}
+        disabled={carrito.length === 0}
+        className="fixed inset-x-3 bottom-3 z-30 flex items-center justify-between rounded-xl bg-blue-600 px-4 py-3.5 text-white shadow-lg disabled:opacity-50 md:hidden"
+      >
+        <span className="text-sm font-medium">{carrito.length} {carrito.length === 1 ? 'artículo' : 'artículos'}</span>
+        <span className="font-medium">Ver carrito · {fmt(totales.total)}</span>
+      </button>
+
+      {carritoMovilAbierto && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-black/45 md:hidden" onClick={() => setCarritoMovilAbierto(false)}>
+          <div className="mt-auto max-h-[85vh] rounded-t-2xl bg-white p-3" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-500">Tu carrito</span>
+              <button onClick={() => setCarritoMovilAbierto(false)} className="p-2 text-gray-400">✕</button>
+            </div>
+            <CarritoPanel
+              carrito={carrito}
+              totales={totales}
+              cambiarQty={cambiarQty}
+              cobrando={cobrando}
+              onCobrar={cobrar}
+              escolar={escolarHabilitado}
+              estudiante={estudiante}
+              onSelectEstudiante={setEstudiante}
+              listas={listas}
+              listaPreciosId={listaPreciosId}
+              onSelectLista={setListaPreciosId}
+              cliente={cliente}
+              onSelectCliente={setCliente}
+              descuentoAplicado={descuentoAplicado}
+              onAplicarDescuento={setDescuentoAplicado}
+            />
+          </div>
+        </div>
+      )}
+
+      {nuevoProductoAbierto && (
+        <NuevoProductoModal
+          onClose={() => setNuevoProductoAbierto(false)}
+          onCreated={() => { setNuevoProductoAbierto(false); cargarCatalogo(); }}
+        />
+      )}
     </div>
   );
 }
@@ -463,44 +617,104 @@ function Venta({
 
 function CarritoPanel({
   carrito, totales, cambiarQty, cobrando, onCobrar, escolar, estudiante, onSelectEstudiante,
+  listas, listaPreciosId, onSelectLista, cliente, onSelectCliente,
+  descuentoAplicado, onAplicarDescuento,
 }: {
   carrito: LineaCarrito[];
-  totales: { subtotal: number; itbis: number; total: number };
+  totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
   cambiarQty: (id: number, delta: number) => void;
   cobrando: boolean;
   onCobrar: (metodo: MetodoCobro, recibidoCentavos: number) => void;
   escolar: boolean;
   estudiante: MonederoView | null;
   onSelectEstudiante: (e: MonederoView | null) => void;
+  listas: ListaPrecio[];
+  listaPreciosId: number | 'general';
+  onSelectLista: (id: number | 'general') => void;
+  cliente: ClienteView | null;
+  onSelectCliente: (c: ClienteView | null) => void;
+  descuentoAplicado: DescuentoAplicado | null;
+  onAplicarDescuento: (d: DescuentoAplicado | null) => void;
 }) {
   const [abrirCobro, setAbrirCobro] = useState(false);
+  const [panelDescuento, setPanelDescuento] = useState(false);
+
+  if (panelDescuento) {
+    return (
+      <DescuentosPanel
+        carrito={carrito}
+        aplicado={descuentoAplicado}
+        onAplicar={(d) => { onAplicarDescuento(d); setPanelDescuento(false); }}
+        onClose={() => setPanelDescuento(false)}
+      />
+    );
+  }
 
   return (
-    <div className="flex flex-col rounded-xl border border-gray-200 bg-white p-3">
+    <div className="flex w-full flex-col rounded-xl border border-gray-200 bg-white p-3">
+      <div className="mb-3 space-y-2">
+        <div>
+          <label className="mb-1 block text-[11px] text-gray-400">Lista de precio</label>
+          <select
+            value={listaPreciosId}
+            onChange={(e) => onSelectLista(e.target.value === 'general' ? 'general' : Number(e.target.value))}
+            className="w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="general">General (precio base)</option>
+            {listas.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+          </select>
+        </div>
+        <ClientePicker cliente={cliente} onSelect={onSelectCliente} />
+      </div>
       {escolar && <EstudiantePicker estudiante={estudiante} onSelect={onSelectEstudiante} />}
-      <div className="mb-2 text-[11px] text-gray-400">Carrito ({carrito.length})</div>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] text-gray-400">Carrito ({carrito.length})</span>
+        <button
+          onClick={() => setPanelDescuento(true)}
+          disabled={carrito.length === 0}
+          title="Descuentos globales"
+          className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+        >
+          <Percent className="h-3 w-3" /> Descuento
+        </button>
+      </div>
       <div className="flex-1 overflow-auto">
         {carrito.length === 0 ? (
           <p className="py-8 text-center text-sm text-gray-400">Toca productos para agregarlos</p>
         ) : (
-          carrito.map((c) => (
-            <div key={c.id} className="flex items-center justify-between border-b border-gray-100 py-2">
-              <div className="leading-tight">
-                <div className="text-sm">{c.nombre}</div>
-                <div className="text-[11px] text-gray-400">{fmt(c.precio)} c/u</div>
+          carrito.map((c) => {
+            const desc = descuentoLinea(c, descuentoAplicado);
+            return (
+              <div key={c.id} className="flex items-center justify-between border-b border-gray-100 py-2">
+                <div className="leading-tight">
+                  <div className="text-sm">{c.nombre}</div>
+                  <div className="text-[11px] text-gray-400">
+                    {fmt(c.precio)} c/u
+                    {desc > 0 && <span className="ml-1 text-emerald-600">−{descuentoAplicado!.pct}%</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => cambiarQty(c.id, -1)} className="h-8 w-8 rounded border border-gray-200 text-gray-600 active:bg-gray-50">−</button>
+                  <span className="w-5 text-center text-sm">{c.qty}</span>
+                  <button onClick={() => cambiarQty(c.id, 1)} className="h-8 w-8 rounded border border-gray-200 text-gray-600 active:bg-gray-50">+</button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => cambiarQty(c.id, -1)} className="h-6 w-6 rounded border border-gray-200 text-gray-600">−</button>
-                <span className="w-5 text-center text-sm">{c.qty}</span>
-                <button onClick={() => cambiarQty(c.id, 1)} className="h-6 w-6 rounded border border-gray-200 text-gray-600">+</button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
       <div className="mt-3 border-t border-gray-100 pt-3">
-        <div className="mb-0.5 flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>{fmt(totales.subtotal)}</span></div>
+        {descuentoAplicado && (
+          <div className="mb-2 flex items-center justify-between rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700">
+            <span>Descuento {descuentoAplicado.pct}% ({descuentoAplicado.ids.size} {descuentoAplicado.ids.size === 1 ? 'ítem' : 'ítems'})</span>
+            <button onClick={() => onAplicarDescuento(null)} className="font-medium underline">quitar</button>
+          </div>
+        )}
+        <div className="mb-0.5 flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>{fmt(totales.subtotal + totales.descuentoTotal)}</span></div>
+        {totales.descuentoTotal > 0 && (
+          <div className="mb-0.5 flex justify-between text-xs text-emerald-600"><span>Descuento</span><span>−{fmt(totales.descuentoTotal)}</span></div>
+        )}
         <div className="mb-2 flex justify-between text-xs text-gray-500"><span>ITBIS</span><span>{fmt(totales.itbis)}</span></div>
         <div className="mb-3 flex justify-between text-lg font-medium"><span>Total</span><span>{fmt(totales.total)}</span></div>
         <button
@@ -521,6 +735,249 @@ function CarritoPanel({
           onConfirm={(m, recibido) => { onCobrar(m, recibido); setAbrirCobro(false); }}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Descuentos globales ─────────────────────────────────────────────────────
+
+function DescuentosPanel({ carrito, aplicado, onAplicar, onClose }: {
+  carrito: LineaCarrito[];
+  aplicado: DescuentoAplicado | null;
+  onAplicar: (d: DescuentoAplicado | null) => void;
+  onClose: () => void;
+}) {
+  const [pct, setPct] = useState(aplicado ? String(aplicado.pct) : '');
+  const [seleccion, setSeleccion] = useState<Set<number>>(aplicado?.ids ?? new Set(carrito.map((c) => c.id)));
+
+  function toggle(id: number) {
+    setSeleccion((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleTodos() {
+    setSeleccion((prev) => (prev.size === carrito.length ? new Set() : new Set(carrito.map((c) => c.id))));
+  }
+
+  const pctNum = Number(pct);
+  const puedeAplicar = pctNum > 0 && pctNum <= 100 && seleccion.size > 0;
+
+  return (
+    <div className="flex w-full flex-col rounded-xl border border-gray-200 bg-white p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-base font-medium">Descuentos globales</span>
+        <button onClick={onClose} className="text-gray-400">✕</button>
+      </div>
+      <p className="mb-3 text-xs text-gray-500">Añade descuentos a los ítems de esta venta de forma rápida.</p>
+
+      <label className="mb-1 block text-xs text-gray-500">Porcentaje</label>
+      <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
+        <input
+          type="number" min="0" max="100" step="1" value={pct}
+          onChange={(e) => setPct(e.target.value)}
+          placeholder="0"
+          className="w-full bg-transparent py-2 text-sm outline-none"
+        />
+        <span className="text-gray-400">%</span>
+      </div>
+
+      <div className="mb-2 flex items-center justify-between border-b border-gray-100 pb-2 text-xs text-gray-500">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={seleccion.size === carrito.length && carrito.length > 0} onChange={toggleTodos} />
+          Seleccionar todo
+        </label>
+        <span>{carrito.length} productos</span>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {carrito.map((c) => (
+          <label key={c.id} className="flex cursor-pointer items-center justify-between border-b border-gray-50 py-2">
+            <span className="flex items-center gap-2">
+              <input type="checkbox" checked={seleccion.has(c.id)} onChange={() => toggle(c.id)} />
+              <span className="text-sm">{c.nombre}</span>
+            </span>
+            <span className="text-right text-xs text-gray-500">
+              <div>{fmt(c.precio * c.qty)}</div>
+              <div className="text-emerald-600">
+                {seleccion.has(c.id) && pctNum > 0 ? `−${fmt(Math.round(c.precio * c.qty * pctNum / 100))}` : '--'}
+              </div>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <button
+        disabled={!puedeAplicar}
+        onClick={() => onAplicar({ pct: pctNum, ids: seleccion })}
+        className="mt-3 w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-40"
+      >
+        Aplicar descuento
+      </button>
+    </div>
+  );
+}
+
+// ─── Selector de cliente (opcional; default Consumidor Final) ───────────────
+
+function ClientePicker({ cliente, onSelect }: {
+  cliente: ClienteView | null;
+  onSelect: (c: ClienteView | null) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [todos, setTodos] = useState<ClienteView[]>([]);
+  const [abierto, setAbierto] = useState(false);
+  const [nuevoAbierto, setNuevoAbierto] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const cargarClientes = useCallback(() => {
+    fetch('/api/clientes').then((r) => r.json()).then((d) => setTodos(d.clientes ?? []));
+  }, []);
+
+  // Carga la lista completa una sola vez — el dropdown se abre con todos los
+  // clientes disponibles (no hace falta escribir nada), y se filtra al tipear.
+  useEffect(() => { cargarClientes(); }, [cargarClientes]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setAbierto(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const filtrados = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    if (!qq) return todos;
+    return todos.filter((c) =>
+      c.razonSocial.toLowerCase().includes(qq) || (c.rnc ?? '').toLowerCase().includes(qq));
+  }, [todos, q]);
+
+  if (cliente) {
+    return (
+      <div className="mb-2 rounded-lg bg-gray-50 px-3 py-2">
+        <div className="flex items-center justify-between">
+          <span className="truncate text-sm font-medium text-gray-800">{cliente.razonSocial}</span>
+          <button onClick={() => onSelect(null)} className="shrink-0 text-xs text-blue-700">quitar</button>
+        </div>
+        {cliente.rnc && <div className="text-[11px] text-gray-400">RNC: {cliente.rnc}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative mb-2" ref={wrapperRef}>
+      <label className="mb-1 block text-[11px] text-gray-400">Cliente</label>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onFocus={() => setAbierto(true)}
+        onClick={() => setAbierto(true)}
+        placeholder="Consumidor Final (elige o busca)…"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+      />
+      {abierto && (
+        <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow">
+          <button onClick={() => { onSelect(null); setQ(''); setAbierto(false); }}
+            className="flex w-full items-center px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50">
+            Consumidor Final
+          </button>
+          {filtrados.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-gray-400">Sin clientes registrados</p>
+          ) : (
+            filtrados.map((r) => (
+              <button key={r.id} onClick={() => { onSelect(r); setQ(''); setAbierto(false); }}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50">
+                <span className="truncate">{r.razonSocial}</span>
+                <span className="text-xs text-gray-400">{r.rnc ?? ''}</span>
+              </button>
+            ))
+          )}
+          <button
+            onClick={() => { setAbierto(false); setNuevoAbierto(true); }}
+            className="flex w-full items-center gap-1.5 border-t border-gray-100 px-3 py-2 text-left text-sm font-medium text-blue-600 hover:bg-blue-50"
+          >
+            <Plus className="h-3.5 w-3.5" /> Nuevo cliente
+          </button>
+        </div>
+      )}
+      {nuevoAbierto && (
+        <NuevoClienteModal
+          nombreInicial={q}
+          onClose={() => setNuevoAbierto(false)}
+          onCreated={(c) => { setNuevoAbierto(false); setQ(''); cargarClientes(); onSelect(c); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NuevoClienteModal({ nombreInicial, onClose, onCreated }: {
+  nombreInicial: string;
+  onClose: () => void;
+  onCreated: (c: ClienteView) => void;
+}) {
+  const [razonSocial, setRazonSocial] = useState(nombreInicial);
+  const [rnc, setRnc] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [email, setEmail] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar() {
+    if (!razonSocial.trim()) { toast.error('El nombre es obligatorio'); return; }
+    setGuardando(true);
+    const res = await fetch('/api/clientes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ razonSocial, rnc: rnc || null, telefono: telefono || null, email: email || null }),
+    });
+    setGuardando(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(data.error ?? 'No se pudo crear el cliente'); return; }
+    toast.success('Cliente creado');
+    onCreated(data.cliente);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Nuevo cliente</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+
+        <label className="mb-1 block text-xs text-gray-500">Nombre / Razón social</label>
+        <input value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} autoFocus
+          placeholder="Nombre del cliente"
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+
+        <label className="mb-1 block text-xs text-gray-500">RNC / Cédula (opcional)</label>
+        <input value={rnc} onChange={(e) => setRnc(e.target.value)}
+          placeholder="000-0000000-0"
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">Teléfono (opcional)</label>
+            <input value={telefono} onChange={(e) => setTelefono(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">Email (opcional)</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+          </div>
+        </div>
+
+        <button
+          disabled={guardando}
+          onClick={guardar}
+          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-50"
+        >
+          {guardando ? 'Creando…' : 'Crear y seleccionar'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -769,6 +1226,101 @@ function MonederoModal({ estudiante, onClose, onUpdated }: {
             className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="sin límite" />
           <button onClick={guardarLimite} disabled={busy} className="rounded-lg border border-gray-300 px-4 text-sm">Guardar</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Crear producto rápido desde el POS ──────────────────────────────────────
+
+const IMG_MAX_BYTES = 800_000;
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function NuevoProductoModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [nombre, setNombre] = useState('');
+  const [precio, setPrecio] = useState('');
+  const [tasaItbis, setTasaItbis] = useState('0.18');
+  const [imagen, setImagen] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  async function handleImagen(file: File) {
+    if (!file.type.startsWith('image/')) { toast.error('Solo se aceptan imágenes'); return; }
+    if (file.size > IMG_MAX_BYTES) { toast.error('Imagen demasiado grande (máx 800 KB)'); return; }
+    setImagen(await fileToBase64(file));
+  }
+
+  async function guardar() {
+    const p = Number(precio);
+    if (!nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
+    if (!precio || isNaN(p) || p < 0) { toast.error('Precio inválido'); return; }
+    setGuardando(true);
+    const res = await fetch('/api/productos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, precio: p, tasaItbis, tipo: 'bien', imagen: imagen || null }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      toast.error(e.error ?? 'No se pudo crear el producto');
+      return;
+    }
+    toast.success('Producto creado');
+    onCreated();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Nuevo producto</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+
+        <label className="relative mx-auto mb-3 flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400">
+          <input type="file" accept="image/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImagen(f); }} />
+          {imagen ? <img src={imagen} alt="" className="h-full w-full object-cover" /> : <Camera className="h-6 w-6" />}
+        </label>
+
+        <label className="mb-1 block text-xs text-gray-500">Nombre</label>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus
+          placeholder="Ej. Café con leche"
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">Precio (DOP)</label>
+            <input type="number" min="0" step="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">ITBIS</label>
+            <select value={tasaItbis} onChange={(e) => setTasaItbis(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500">
+              <option value="0.18">18%</option>
+              <option value="0.16">16%</option>
+              <option value="0">0%</option>
+              <option value="exento">Exento</option>
+            </select>
+          </div>
+        </div>
+
+        <button
+          disabled={guardando}
+          onClick={guardar}
+          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-50"
+        >
+          {guardando ? 'Creando…' : 'Crear y agregar al catálogo'}
+        </button>
       </div>
     </div>
   );

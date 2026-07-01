@@ -301,6 +301,8 @@ export const products = pgTable('products', {
   // POS: favorito → se muestra primero en la grilla.
   posFavorito: boolean('pos_favorito').notNull().default(false),
   esMora: boolean('es_mora').notNull().default(false),                        // servicio de sistema: línea de las ND de mora (1 por team)
+  categoriaId: integer('categoria_id').references(() => categorias.id),
+  imagen: text('imagen'),  // data URL base64 (mismo patrón que teams.logo), tope ~800KB en el cliente
   createdBy: integer('created_by').references(() => users.id),
   updatedBy: integer('updated_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -849,6 +851,10 @@ export const productsRelations = relations(products, ({ one }) => ({
   team: one(teams, {
     fields: [products.teamId],
     references: [teams.id],
+  }),
+  categoria: one(categorias, {
+    fields: [products.categoriaId],
+    references: [categorias.id],
   }),
 }));
 

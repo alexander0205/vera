@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags } from 'lucide-react';
+import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags, Camera } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
@@ -25,6 +25,7 @@ interface Producto {
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
   visiblePos:           boolean;
+  imagen:               string | null;
 }
 
 interface VentaProducto {
@@ -64,6 +65,17 @@ interface MaestroAplicable {
 interface MaestrosResponse {
   maestros?:     MaestroAplicable[];
   asignaciones?: { maestroId: number; valorId: number }[];
+}
+
+const IMG_MAX_BYTES = 800_000; // ~800KB, mismo tope que el resto de imágenes de la app
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 const TASA_LABELS: Record<string, string> = {
@@ -206,9 +218,10 @@ const columnsCompras: DataTableColumn<CompraProducto>[] = [
 ];
 
 export default function ProductoDetalleClient({ productoId, posHabilitado = false }: { productoId: number; posHabilitado?: boolean }) {
-  const { data: prodData, isLoading: loadingProd } = useSWR<{ producto?: Producto; error?: string }>(
+  const { data: prodData, isLoading: loadingProd, mutate: mutateProd } = useSWR<{ producto?: Producto; error?: string }>(
     `/api/productos/${productoId}`, fetcher,
   );
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
   const { data: ventasData, isLoading: loadingVentas } = useSWR<{ ventas?: VentaProducto[]; error?: string }>(
     `/api/productos/${productoId}/ventas`, fetcher,
   );
@@ -222,6 +235,45 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
   const producto = prodData?.producto;
   const ventas    = ventasData?.ventas ?? [];
   const compras   = comprasData?.compras ?? [];
+
+  async function handleImagenFile(file: File) {
+    if (!producto) return;
+    if (!file.type.startsWith('image/')) { alert('Solo se aceptan imágenes'); return; }
+    if (file.size > IMG_MAX_BYTES) { alert('Imagen demasiado grande (máx 800 KB)'); return; }
+    setSubiendoImagen(true);
+    const imagen = await fileToBase64(file);
+    await guardarImagen(imagen);
+  }
+
+  async function guardarImagen(imagen: string | null) {
+    if (!producto) return;
+    setSubiendoImagen(true);
+    try {
+      const res = await fetch(`/api/productos/${productoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: producto.nombre,
+          descripcion: producto.descripcion,
+          referencia: producto.referencia,
+          precio: producto.precioDOP,
+          tasaItbis: producto.tasaItbis,
+          tipo: producto.tipo,
+          unidadMedida: producto.unidadMedida,
+          costo: producto.costoDOP,
+          stockActual: producto.stockActual,
+          stockMinimo: producto.stockMinimo,
+          controlaInventario: producto.controlaInventario,
+          permiteVentaSinStock: producto.permiteVentaSinStock,
+          imagen,
+        }),
+      });
+      if (res.ok) await mutateProd();
+      else alert('No se pudo guardar la imagen');
+    } finally {
+      setSubiendoImagen(false);
+    }
+  }
 
   const resumen = useMemo(() => {
     const unidades   = ventas.reduce((acc, v) => acc + v.cantidad, 0);
@@ -269,9 +321,19 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
       </Link>
 
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-          <Package className="h-5 w-5 text-teal-600" />
-        </div>
+        <label
+          title={producto?.imagen ? 'Cambiar imagen' : 'Agregar imagen'}
+          className="group relative h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-teal-50"
+        >
+          <input type="file" accept="image/*" className="hidden" disabled={subiendoImagen}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImagenFile(f); e.target.value = ''; }} />
+          {producto?.imagen
+            ? <img src={producto.imagen} alt={producto.nombre} className="h-full w-full object-cover" />
+            : <div className="flex h-full w-full items-center justify-center"><Package className="h-6 w-6 text-teal-600" /></div>}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
+            {subiendoImagen ? <span className="text-[10px]">…</span> : <Camera className="h-4 w-4" />}
+          </div>
+        </label>
         <div>
           <h1 className="text-lg font-bold text-gray-900 leading-tight">{producto?.nombre ?? '—'}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{producto?.referencia ? `Ref. ${producto.referencia}` : 'Sin referencia'}</p>

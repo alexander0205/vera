@@ -21,6 +21,11 @@ export async function GET(req: NextRequest) {
   const terminal = await getTerminal(teamId, terminalId);
   if (!terminal) return NextResponse.json({ error: 'Terminal no encontrada' }, { status: 404 });
 
-  const productos = await getCatalogoPos(teamId, terminal.almacenId, terminal.listaPreciosId);
+  // La lista de precios se elige en el POS al momento de vender (no en la config
+  // de la terminal). Query param gana sobre el valor legado de la terminal.
+  const listaParam = req.nextUrl.searchParams.get('listaPreciosId');
+  const listaPreciosId = listaParam ? Number(listaParam) : terminal.listaPreciosId;
+
+  const productos = await getCatalogoPos(teamId, terminal.almacenId, listaPreciosId);
   return NextResponse.json({ terminal, productos });
 }
