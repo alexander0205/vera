@@ -226,6 +226,20 @@ function Venta({
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
   const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
 
+  // El botón "Nuevo producto" vive SIEMPRE en la misma fila que los chips de
+  // categoría (a su misma altura, alineado a la derecha). Cuando el botón con
+  // texto + todos los chips no caben en el ancho de la fila colapsa al ícono "+"
+  // para que los chips quepan sin recortarse (se veía como colisión). Se decide
+  // por medición real —no por breakpoints— porque el ancho disponible depende
+  // del split de dos columnas (md) y de cuántas categorías haya, así que el
+  // umbral no es monótono respecto al viewport.
+  const filaCategoriasRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
+  // 'pill' = botón con texto en línea; 'compacto' = botón "+" en línea con los
+  // chips; 'abajo' = botón "+" en su propia fila debajo (cuando ni el "+" en
+  // línea deja espacio a los chips sin recortarlos feo — móviles angostos).
+  const [dispNuevo, setDispNuevo] = useState<'pill' | 'compacto' | 'abajo'>('pill');
+
   useEffect(() => {
     fetch('/api/listas-precios').then((r) => r.json()).then((d) => setListas(d.listasPrecios ?? []));
   }, []);
@@ -260,6 +274,26 @@ function Venta({
     }
     return [...vistas.entries()].map(([id, nombre]) => ({ id, nombre }));
   }, [productos]);
+
+  useEffect(() => {
+    const fila = filaCategoriasRef.current;
+    if (!fila) return;
+    const ANCHO_PILL = 160; // ancho aprox del botón con el texto "Nuevo producto"
+    const ANCHO_COMPACTO = 40; // círculo "+" (h-10 w-10)
+    const GAP = 8; // gap-2 entre el scroller de chips y el botón
+    const TOL = 12; // recorte tolerable de chips antes de bajar el botón a otra fila
+    const medir = () => {
+      const anchoChips = chipsRef.current?.scrollWidth ?? 0;
+      const disponible = fila.clientWidth;
+      if (anchoChips + GAP + ANCHO_PILL <= disponible) setDispNuevo('pill');
+      else if (anchoChips + GAP + ANCHO_COMPACTO <= disponible + TOL) setDispNuevo('compacto');
+      else setDispNuevo('abajo');
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(fila);
+    return () => ro.disconnect();
+  }, [categorias]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -415,11 +449,11 @@ function Venta({
   const [carritoMovilAbierto, setCarritoMovilAbierto] = useState(false);
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2.5 sm:px-4">
+    <div className="flex h-screen flex-col overflow-hidden">
+      <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 sm:px-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <Link href="/dashboard" className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50" title="Volver al panel">
-            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Panel</span>
+          <Link href="/dashboard" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2" title="Volver al panel">
+            <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Panel</span>
           </Link>
           <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
             <span className="truncate">{terminal?.nombre ?? 'Punto de venta'}</span>
@@ -433,57 +467,72 @@ function Venta({
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); escanear(); } }}
           placeholder="Buscar o escanear (nombre, referencia o código de barras)…"
           autoFocus
-          className="order-last w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 sm:order-none sm:mx-3 sm:max-w-xs md:max-w-sm"
+          className="order-last h-11 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 sm:order-none sm:mx-3 sm:h-10 sm:max-w-xs md:max-w-sm"
         />
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <span className="hidden rounded-full bg-green-50 px-3 py-1 text-xs text-green-700 sm:inline">Turno abierto</span>
+          <span className="hidden rounded-full bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 sm:inline">Turno abierto</span>
           <button
             onClick={() => window.open(`/pos-reporte/${turno.id}`, '_blank', 'width=420,height=680')}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
             title="Corte X del turno"
           >
-            <FileText className="h-4 w-4" /> <span className="hidden sm:inline">Reporte X</span>
+            <FileText className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Reporte X</span>
           </button>
-          <Link href="/dashboard/caja" className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-50" title="Ir a cierre de caja">
-            <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Cerrar turno</span>
+          <Link href="/dashboard/caja" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2" title="Ir a cierre de caja">
+            <LogOut className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Cerrar turno</span>
           </Link>
         </div>
       </header>
 
-      <div className="grid flex-1 grid-cols-1 gap-3 p-3 pb-24 md:grid-cols-[1.55fr_1fr] md:pb-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 md:grid-cols-[1.55fr_1fr]">
         {/* Grilla */}
-        <div className="flex flex-col">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {categorias.length > 0 && (
-                <>
-                  <button
-                    onClick={() => setCategoriaActiva('todas')}
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${
-                      categoriaActiva === 'todas' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                    }`}
-                  >
-                    Todas
-                  </button>
-                  {categorias.map((c) => (
+        <div className="flex min-h-0 flex-col">
+          <div
+            ref={filaCategoriasRef}
+            className={`mb-3 flex shrink-0 ${dispNuevo === 'abajo' ? 'flex-col gap-3' : 'items-center gap-2'}`}
+          >
+            {/* Chips scrolleables + botón "Nuevo producto". El wrapper interno
+                (chipsRef) mide el ancho natural de los chips para decidir la
+                disposición del botón: 'pill' con texto en línea, 'compacto' como
+                ícono "+" en línea, o 'abajo' en su propia fila cuando ni el "+"
+                cabría sin recortar los chips (móviles angostos). En 'abajo' hay
+                gap-3 vertical para que no se confunda al tocar una categoría. */}
+            <div className={`flex min-w-0 overflow-x-auto pb-1 ${dispNuevo === 'abajo' ? 'w-full' : 'flex-1'}`}>
+              <div ref={chipsRef} className="flex gap-2">
+                {categorias.length > 0 && (
+                  <>
                     <button
-                      key={c.id}
-                      onClick={() => setCategoriaActiva(c.id)}
-                      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium ${
-                        categoriaActiva === c.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                      onClick={() => setCategoriaActiva('todas')}
+                      className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium ${
+                        categoriaActiva === 'todas' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
                       }`}
                     >
-                      {c.nombre}
+                      Todas
                     </button>
-                  ))}
-                </>
-              )}
+                    {categorias.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => setCategoriaActiva(c.id)}
+                        className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium ${
+                          categoriaActiva === c.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        {c.nombre}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setNuevoProductoAbierto(true)}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              title="Nuevo producto"
+              className={`flex shrink-0 items-center justify-center gap-1.5 bg-blue-600 text-white hover:bg-blue-700 ${
+                dispNuevo === 'pill' ? 'rounded-lg px-4 py-2' : 'h-10 w-10 rounded-full'
+              } ${dispNuevo === 'abajo' ? 'self-end' : ''}`}
             >
-              <Plus className="h-3.5 w-3.5" /> Nuevo producto
+              <Plus className={dispNuevo === 'pill' ? 'h-4 w-4' : 'h-5 w-5'} />
+              {dispNuevo === 'pill' && <span className="text-sm font-medium">Nuevo producto</span>}
             </button>
           </div>
           {cargando ? (
@@ -491,7 +540,7 @@ function Venta({
           ) : filtrados.length === 0 ? (
             <p className="text-sm text-gray-500">Sin productos para esta terminal.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-2 overflow-auto sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid flex-1 grid-cols-2 content-start gap-3 overflow-auto pb-24 sm:grid-cols-3 md:pb-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtrados.map((p) => {
                 const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
                 const qty = qtyEnCarrito(p.id);
@@ -500,7 +549,7 @@ function Venta({
                     key={p.id}
                     disabled={agotado}
                     onClick={() => agregar(p)}
-                    className={`relative flex flex-col overflow-hidden rounded-lg border bg-white text-left active:scale-[0.98] ${
+                    className={`relative flex flex-col overflow-hidden rounded-xl border bg-white text-left active:scale-[0.97] ${
                       qty > 0 ? 'border-blue-400 ring-1 ring-blue-400' : 'border-gray-200'
                     } ${agotado ? 'opacity-50' : 'hover:border-blue-400'}`}
                   >
@@ -509,11 +558,11 @@ function Venta({
                         <img src={p.imagen} alt={p.nombre} className="h-full w-full object-cover" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-gray-300">
-                          <Package className="h-8 w-8" />
+                          <Package className="h-10 w-10" />
                         </div>
                       )}
                       {qty > 0 && (
-                        <span className="absolute left-1 top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[11px] font-medium text-white">
+                        <span className="absolute left-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-semibold text-white">
                           {qty}
                         </span>
                       )}
@@ -521,20 +570,20 @@ function Venta({
                         role="button"
                         title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
                         onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
-                        className="absolute right-1 top-1 rounded-full bg-white/80 p-1"
+                        className="absolute right-0.5 top-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-white/80"
                       >
-                        <Star className={`h-4 w-4 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
+                        <Star className={`h-5 w-5 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
                       </span>
                     </div>
-                    <div className="flex flex-1 flex-col justify-between p-2.5">
+                    <div className="flex flex-1 flex-col justify-between p-3">
                       <div>
-                        <div className="text-sm font-medium leading-tight">{p.nombre}</div>
-                        <div className="text-[11px] text-gray-400">
+                        <div className="text-sm font-semibold leading-tight sm:text-base">{p.nombre}</div>
+                        <div className="mt-0.5 text-xs text-gray-400">
                           {p.referencia ? p.referencia + ' · ' : ''}
                           {p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : ''}
                         </div>
                       </div>
-                      <div className="text-sm font-medium">{fmt(p.precio)}</div>
+                      <div className="mt-1 text-base font-semibold text-gray-900">{fmt(p.precio)}</div>
                     </div>
                   </button>
                 );
@@ -654,11 +703,11 @@ function CarritoPanel({
     <div className="flex w-full flex-col rounded-xl border border-gray-200 bg-white p-3">
       <div className="mb-3 space-y-2">
         <div>
-          <label className="mb-1 block text-[11px] text-gray-400">Lista de precio</label>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Lista de precio</label>
           <select
             value={listaPreciosId}
             onChange={(e) => onSelectLista(e.target.value === 'general' ? 'general' : Number(e.target.value))}
-            className="w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm outline-none focus:border-blue-500"
+            className="h-11 w-full rounded-lg border border-gray-300 px-2.5 text-sm outline-none focus:border-blue-500"
           >
             <option value="general">General (precio base)</option>
             {listas.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
@@ -668,14 +717,14 @@ function CarritoPanel({
       </div>
       {escolar && <EstudiantePicker estudiante={estudiante} onSelect={onSelectEstudiante} />}
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] text-gray-400">Carrito ({carrito.length})</span>
+        <span className="text-xs font-medium text-gray-500">Carrito ({carrito.length})</span>
         <button
           onClick={() => setPanelDescuento(true)}
           disabled={carrito.length === 0}
           title="Descuentos globales"
-          className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+          className="flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-40"
         >
-          <Percent className="h-3 w-3" /> Descuento
+          <Percent className="h-3.5 w-3.5" /> Descuento
         </button>
       </div>
       <div className="flex-1 overflow-auto">
@@ -685,18 +734,18 @@ function CarritoPanel({
           carrito.map((c) => {
             const desc = descuentoLinea(c, descuentoAplicado);
             return (
-              <div key={c.id} className="flex items-center justify-between border-b border-gray-100 py-2">
-                <div className="leading-tight">
-                  <div className="text-sm">{c.nombre}</div>
-                  <div className="text-[11px] text-gray-400">
+              <div key={c.id} className="flex items-center justify-between gap-2 border-b border-gray-100 py-2.5">
+                <div className="min-w-0 leading-tight">
+                  <div className="truncate text-sm font-medium">{c.nombre}</div>
+                  <div className="text-xs text-gray-400">
                     {fmt(c.precio)} c/u
                     {desc > 0 && <span className="ml-1 text-emerald-600">−{descuentoAplicado!.pct}%</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => cambiarQty(c.id, -1)} className="h-8 w-8 rounded border border-gray-200 text-gray-600 active:bg-gray-50">−</button>
-                  <span className="w-5 text-center text-sm">{c.qty}</span>
-                  <button onClick={() => cambiarQty(c.id, 1)} className="h-8 w-8 rounded border border-gray-200 text-gray-600 active:bg-gray-50">+</button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button onClick={() => cambiarQty(c.id, -1)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-lg text-gray-600 active:bg-gray-50">−</button>
+                  <span className="w-6 text-center text-sm font-medium">{c.qty}</span>
+                  <button onClick={() => cambiarQty(c.id, 1)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-lg text-gray-600 active:bg-gray-50">+</button>
                 </div>
               </div>
             );
@@ -869,14 +918,14 @@ function ClientePicker({ cliente, onSelect }: {
 
   return (
     <div className="relative mb-2" ref={wrapperRef}>
-      <label className="mb-1 block text-[11px] text-gray-400">Cliente</label>
+      <label className="mb-1 block text-xs font-medium text-gray-500">Cliente</label>
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => setAbierto(true)}
         onClick={() => setAbierto(true)}
         placeholder="Consumidor Final (elige o busca)…"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+        className="h-11 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
       />
       {abierto && (
         <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow">
