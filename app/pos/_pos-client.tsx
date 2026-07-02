@@ -222,6 +222,7 @@ function Venta({
   const [estudiante, setEstudiante] = useState<MonederoView | null>(null);
   const [listas, setListas] = useState<ListaPrecio[]>([]);
   const [listaPreciosId, setListaPreciosId] = useState<number | 'general'>('general');
+  const [tipoEcf, setTipoEcf] = useState<string>(terminal?.tipoEcf ?? 'sin-ncf');
   const [cliente, setCliente] = useState<ClienteView | null>(null);
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
   const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
@@ -394,7 +395,7 @@ function Venta({
 
     const payload = {
       modo:                 'borrador',
-      tipoEcf:              terminal?.tipoEcf ?? 'sin-ncf',
+      tipoEcf,
       razonSocialComprador: esMonedero ? estudiante!.nombre : (cliente?.razonSocial ?? 'Consumidor Final'),
       rncComprador:         esMonedero ? undefined : (cliente?.rnc ?? undefined),
       emailComprador:       esMonedero ? undefined : (cliente?.email ?? undefined),
@@ -606,6 +607,8 @@ function Venta({
             listas={listas}
             listaPreciosId={listaPreciosId}
             onSelectLista={setListaPreciosId}
+            tipoEcf={tipoEcf}
+            onSelectTipoEcf={setTipoEcf}
             cliente={cliente}
             onSelectCliente={setCliente}
             descuentoAplicado={descuentoAplicado}
@@ -666,7 +669,7 @@ function Venta({
 
 function CarritoPanel({
   carrito, totales, cambiarQty, cobrando, onCobrar, escolar, estudiante, onSelectEstudiante,
-  listas, listaPreciosId, onSelectLista, cliente, onSelectCliente,
+  listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
   descuentoAplicado, onAplicarDescuento,
 }: {
   carrito: LineaCarrito[];
@@ -680,6 +683,8 @@ function CarritoPanel({
   listas: ListaPrecio[];
   listaPreciosId: number | 'general';
   onSelectLista: (id: number | 'general') => void;
+  tipoEcf: string;
+  onSelectTipoEcf: (t: string) => void;
   cliente: ClienteView | null;
   onSelectCliente: (c: ClienteView | null) => void;
   descuentoAplicado: DescuentoAplicado | null;
@@ -702,16 +707,30 @@ function CarritoPanel({
   return (
     <div className="flex w-full flex-col rounded-xl border border-gray-200 bg-white p-3">
       <div className="mb-3 space-y-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">Lista de precio</label>
-          <select
-            value={listaPreciosId}
-            onChange={(e) => onSelectLista(e.target.value === 'general' ? 'general' : Number(e.target.value))}
-            className="h-11 w-full rounded-lg border border-gray-300 px-2.5 text-sm outline-none focus:border-blue-500"
-          >
-            <option value="general">General (precio base)</option>
-            {listas.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-          </select>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Lista de precio</label>
+            <select
+              value={listaPreciosId}
+              onChange={(e) => onSelectLista(e.target.value === 'general' ? 'general' : Number(e.target.value))}
+              className="h-11 w-full rounded-lg border border-gray-300 px-2.5 text-sm outline-none focus:border-blue-500"
+            >
+              <option value="general">General (precio base)</option>
+              {listas.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Numeración</label>
+            <select
+              value={tipoEcf}
+              onChange={(e) => onSelectTipoEcf(e.target.value)}
+              className="h-11 w-full rounded-lg border border-gray-300 px-2.5 text-sm outline-none focus:border-blue-500"
+            >
+              <option value="sin-ncf">Ticket (sin NCF)</option>
+              <option value="32">Consumo (e32)</option>
+              <option value="31">Crédito fiscal (e31)</option>
+            </select>
+          </div>
         </div>
         <ClientePicker cliente={cliente} onSelect={onSelectCliente} />
       </div>
