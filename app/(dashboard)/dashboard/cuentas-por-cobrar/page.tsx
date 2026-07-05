@@ -360,6 +360,9 @@ function PagoModal({
   const [fecha, setFecha]         = useState(today);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  // Cuando el pago se bloquea por método que obliga DGII sobre factura no emitida,
+  // el backend devuelve el link al detalle para emitirla primero.
+  const [emitirUrl, setEmitirUrl] = useState<string | null>(null);
 
   // Notas de crédito del cliente usables como pago (voucher por código, uso parcial).
   const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
@@ -386,6 +389,7 @@ function PagoModal({
     if (!valido) return;
     setGuardando(true);
     setError(null);
+    setEmitirUrl(null);
     try {
       const pagos = lineas
         .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
@@ -402,7 +406,10 @@ function PagoModal({
         body: JSON.stringify({ fechaPago: fecha, pagos }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Error al registrar pago');
+      if (!res.ok) {
+        setEmitirUrl(typeof json.emitirUrl === 'string' ? json.emitirUrl : null);
+        throw new Error(json.error ?? 'Error al registrar pago');
+      }
       onSuccess();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
@@ -472,7 +479,17 @@ function PagoModal({
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-700">{error}</p>
+              <div className="text-xs text-red-700 space-y-1.5">
+                <p>{error}</p>
+                {emitirUrl && (
+                  <Link
+                    href={emitirUrl}
+                    className="inline-flex items-center gap-1 font-semibold text-red-800 underline underline-offset-2 hover:text-red-900"
+                  >
+                    Ir a emitir la factura →
+                  </Link>
+                )}
+              </div>
             </div>
           )}
 

@@ -11,12 +11,13 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { roleHasPermission } from '@/lib/config/roles';
+import { METODOS_PAGO } from '@/lib/pagos/metodos';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,8 @@ export default function ConfiguracionPage() {
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
   // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
+  // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
+  const [metodosObligaDgii, setMetodosObligaDgii]      = useState<string[]>([]);
 
   // Cargar datos actuales
   useEffect(() => {
@@ -173,6 +176,7 @@ export default function ConfiguracionPage() {
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
+        setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
         setRole(d.role ?? null);
       })
       .finally(() => setLoading(false));
@@ -200,6 +204,7 @@ export default function ConfiguracionPage() {
           recargoMoraDiasGracia: 0,
           cajaHabilitada,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
+          metodosObligaDgii,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');
@@ -488,6 +493,65 @@ export default function ConfiguracionPage() {
               «De contado» no genera fecha de vencimiento.
             </p>
           </div>
+        </CardContent>
+      </Card>}
+
+      {/* 5b. Métodos que obligan emisión a la DGII — solo configuracion:gestionar */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-teal-600" />
+            Métodos que obligan facturar a la DGII
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Cuando una factura registra un cobro con alguno de estos métodos, no se
+            podrá guardar como borrador: habrá que emitirla a la DGII. Útil, por
+            ejemplo, para que toda venta con tarjeta quede fiscalizada.
+          </p>
+
+          <div className="space-y-2">
+            {METODOS_PAGO.map(m => {
+              const activo = metodosObligaDgii.includes(m.value);
+              return (
+                <div
+                  key={m.value}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3"
+                >
+                  <p className="text-sm font-medium text-gray-800">{m.label}</p>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={activo}
+                    aria-label={`Obligar DGII para ${m.label}`}
+                    onClick={() => setMetodosObligaDgii(prev =>
+                      prev.includes(m.value)
+                        ? prev.filter(v => v !== m.value)
+                        : [...prev, m.value],
+                    )}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                      activo ? 'bg-teal-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        activo ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {metodosObligaDgii.length > 0 && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
+              <strong>Activo:</strong> las facturas cobradas con{' '}
+              {metodosObligaDgii.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
+              no se podrán guardar como borrador — se deben emitir a la DGII.
+            </div>
+          )}
         </CardContent>
       </Card>}
 

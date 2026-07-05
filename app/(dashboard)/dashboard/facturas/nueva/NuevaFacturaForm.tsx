@@ -943,7 +943,20 @@ export default function NuevaFacturaForm({
     try {
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...buildPayload(modoEfectivo), _traza: traza }) });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
+      if (!res.ok) {
+        setError(data.error ?? 'Error al guardar');
+        // El método de pago obliga tipo fiscal (ej. tarjeta con «Sin NCF»): llevar
+        // al usuario al selector de tipo y resaltarlo para que lo cambie.
+        if (data.requiereTipoFiscal) {
+          const el = document.getElementById('tipo-comprobante-anchor');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-2', 'ring-red-500', 'ring-offset-2');
+            setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2'), 4000);
+          }
+        }
+        return;
+      }
       try { localStorage.removeItem(draftKey); } catch {}
       if (opts?.andThen === 'nueva') {
         resetForm();
