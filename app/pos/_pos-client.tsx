@@ -646,6 +646,8 @@ function Venta({
               listas={listas}
               listaPreciosId={listaPreciosId}
               onSelectLista={setListaPreciosId}
+              tipoEcf={tipoEcf}
+              onSelectTipoEcf={setTipoEcf}
               cliente={cliente}
               onSelectCliente={setCliente}
               descuentoAplicado={descuentoAplicado}
