@@ -490,12 +490,22 @@ export async function POST(request: NextRequest) {
 
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
+      // Cuadre de caja: si el cajero tiene un turno ABIERTO, el borrador y su
+      // cobro se atribuyen al turno para que el efectivo entre en el esperado
+      // del cierre (los borradores no pasan por el bloqueo de emisión).
+      const turnoBorrador = await getTurnoAbierto(teamId, user.id);
+      const turnoBorradorId = turnoBorrador?.estado === 'ABIERTO' ? turnoBorrador.id : null;
+
       // Config empresa: si la factura registra un pago con un método marcado como
       // "obliga DGII", no se puede guardar como borrador — debe emitirse a la DGII.
+      // Excepción: ventas de POS con turno de caja abierto. El cajero ya cobró en
+      // el momento (efectivo/tarjeta físico) y el ticket sin-ncf/borrador ES la
+      // venta final — el POS no tiene un paso "Emitir" posterior al que remitir
+      // al cajero, así que bloquear aquí dejaría el cobro sin forma de completarse.
       const metodosObliga = new Set(
         ((team.metodosObligaDgii as string[] | null) ?? []).map(m => m.trim().toLowerCase()),
       );
-      if (metodosObliga.size > 0) {
+      if (metodosObliga.size > 0 && !turnoBorradorId) {
         const metodosUsados = (data.pagos?.length
           ? data.pagos.map(p => p.metodo)
           : (data.pagoMetodo ? [data.pagoMetodo] : []))
@@ -522,12 +532,6 @@ export async function POST(request: NextRequest) {
 
       const totales  = calcularTotales(data.items);
       const montoCts = Math.round(totales.montoTotal * 100);
-
-      // Cuadre de caja: si el cajero tiene un turno ABIERTO, el borrador y su
-      // cobro se atribuyen al turno para que el efectivo entre en el esperado
-      // del cierre (los borradores no pasan por el bloqueo de emisión).
-      const turnoBorrador = await getTurnoAbierto(teamId, user.id);
-      const turnoBorradorId = turnoBorrador?.estado === 'ABIERTO' ? turnoBorrador.id : null;
 
       // ── Editar borrador existente (UPDATE) ──────────────────────────────────
       if (data.borradorId) {
