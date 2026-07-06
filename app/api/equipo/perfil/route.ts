@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { METODO_PAGO_VALUES } from '@/lib/pagos/metodos';
 
 const MAX_IMG_SIZE = 1_000_000; // 1 MB en base64
 
@@ -34,6 +35,8 @@ const schema = z.object({
   cajaHabilitada:        z.boolean().optional(),
   // Plazo de pago por defecto. null = de contado; N = crédito a N días.
   plazoPagoDefaultDias:  z.number().int().min(1).max(365).nullable().optional(),
+  // Métodos de pago que obligan emisión a la DGII (no permiten borrador).
+  metodosObligaDgii:     z.array(z.enum(METODO_PAGO_VALUES)).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -94,6 +97,7 @@ export async function POST(req: NextRequest) {
     // Módulo caja
     ...(data.cajaHabilitada !== undefined && { cajaHabilitada: data.cajaHabilitada }),
     ...(data.plazoPagoDefaultDias  !== undefined && { plazoPagoDefaultDias: data.plazoPagoDefaultDias }),
+    ...(data.metodosObligaDgii     !== undefined && { metodosObligaDgii: data.metodosObligaDgii }),
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
@@ -136,6 +140,8 @@ export async function GET(_req: NextRequest) {
     // Módulo caja
     cajaHabilitada:        team.cajaHabilitada,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
+    // Métodos que obligan emisión a la DGII (bloquean borrador)
+    metodosObligaDgii:     (team.metodosObligaDgii as string[] | null) ?? [],
     // Rol del usuario en este team (para gating en el cliente)
     role:              member?.role ?? null,
   });
