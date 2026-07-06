@@ -10,10 +10,10 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require', max: 1 });
 
 (async () => {
   const sqlText = readFileSync(
-    join(process.cwd(), 'lib/db/migrations/0055_product_almacen_stock.sql'),
+    join(process.cwd(), 'lib/db/migrations/0057_stock_descontado.sql'),
     'utf-8',
   );
   await sql.unsafe(sqlText);
-  console.log('✓ Migración 0055 aplicada exitosamente.');
+  console.log('✓ Migración 0057 aplicada exitosamente.');
   await sql.end();
 })();
