@@ -30,6 +30,7 @@ import { calcularEstadoPago, recalcularEstadoPago } from '@/lib/facturas/estado-
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 import { getTurnoAbierto } from '@/lib/caja/core';
+import { labelMetodo } from '@/lib/pagos/metodos';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -489,6 +490,36 @@ export async function POST(request: NextRequest) {
 
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
+      // Config empresa: si la factura registra un pago con un método marcado como
+      // "obliga DGII", no se puede guardar como borrador — debe emitirse a la DGII.
+      const metodosObliga = new Set(
+        ((team.metodosObligaDgii as string[] | null) ?? []).map(m => m.trim().toLowerCase()),
+      );
+      if (metodosObliga.size > 0) {
+        const metodosUsados = (data.pagos?.length
+          ? data.pagos.map(p => p.metodo)
+          : (data.pagoMetodo ? [data.pagoMetodo] : []))
+          .map(m => m.trim().toLowerCase());
+        const bloqueado = metodosUsados.find(m => metodosObliga.has(m));
+        if (bloqueado) {
+          // 'sin-ncf' nunca va a la DGII (solo existe como borrador). Si el método
+          // obliga DGII, hay que cambiar el tipo de comprobante a uno fiscal ANTES
+          // de emitir — decir "usa Emitir" sería engañoso porque no está disponible.
+          const requiereTipoFiscal = data.tipoEcf === 'sin-ncf';
+          const metodoLbl = labelMetodo(bloqueado);
+          return NextResponse.json(
+            {
+              error: requiereTipoFiscal
+                ? `El método de pago «${metodoLbl}» obliga a facturar a la DGII. Cambia el tipo de comprobante de «Sin NCF» a uno fiscal (Crédito Fiscal, Consumo, etc.) y emite la factura.`
+                : `El método de pago «${metodoLbl}» requiere emitir la factura a la DGII — no se puede guardar como borrador. Usa "Emitir" para enviarla.`,
+              metodoObligaDgii: bloqueado,
+              requiereTipoFiscal,
+            },
+            { status: 422 },
+          );
+        }
+      }
+
       const totales  = calcularTotales(data.items);
       const montoCts = Math.round(totales.montoTotal * 100);
 

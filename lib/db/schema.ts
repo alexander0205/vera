@@ -128,6 +128,13 @@ export const teams = pgTable('teams', {
 
   // Plazo de pago por defecto para nuevas facturas. NULL = de contado; N = crédito a N días.
   plazoPagoDefaultDias:   integer('plazo_pago_default_dias'),
+
+  // ── Métodos de pago que OBLIGAN emisión a la DGII ─────────────────────────
+  // Array de valores de METODO_PAGO_VALUES (lib/pagos/metodos.ts). Si una
+  // factura registra un pago con alguno de estos métodos, NO se puede guardar
+  // como borrador: hay que emitirla a la DGII. Vacío = sin restricción.
+  // Ej: ["tarjeta"] → toda venta con tarjeta va obligatoriamente a la DGII.
+  metodosObligaDgii:      jsonb('metodos_obliga_dgii').notNull().default([]),
 });
 
 export const teamMembers = pgTable('team_members', {
