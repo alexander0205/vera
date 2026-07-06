@@ -18,16 +18,6 @@ interface Terminal {
   activo: boolean;
 }
 
-interface ProductoAsig {
-  id: number;
-  nombre: string;
-  referencia: string | null;
-  controlaInventario: boolean;
-  visiblePos: boolean;
-  asignado: boolean;
-  stockActual: number;
-}
-
 const EMPTY = { nombre: '', almacenId: 0, impresoraId: 0, listaPreciosId: 0, tipoEcf: 'sin-ncf' };
 
 export default function TerminalesClient({
@@ -107,48 +97,6 @@ export default function TerminalesClient({
     toast.success('Terminal desactivada');
   }
 
-  // ── Asignación de productos al almacén de la terminal ──────────────────────
-  const [asignT, setAsignT] = useState<Terminal | null>(null);
-  const [prodsAsig, setProdsAsig] = useState<ProductoAsig[]>([]);
-  const [sel, setSel] = useState<Set<number>>(new Set());
-  const [busq, setBusq] = useState('');
-  const [cargAsig, setCargAsig] = useState(false);
-  const [guardAsig, setGuardAsig] = useState(false);
-
-  async function abrirAsignacion(t: Terminal) {
-    setAsignT(t); setBusq(''); setCargAsig(true);
-    const res = await fetch(`/api/pos/asignaciones?almacenId=${t.almacenId}`);
-    if (res.ok) {
-      const data = await res.json();
-      const ps: ProductoAsig[] = data.productos ?? [];
-      setProdsAsig(ps);
-      setSel(new Set(ps.filter((p) => p.asignado).map((p) => p.id)));
-    } else { toast.error('No se pudo cargar'); }
-    setCargAsig(false);
-  }
-
-  function toggleSel(id: number) {
-    setSel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
-
-  async function guardarAsignacion() {
-    if (!asignT) return;
-    setGuardAsig(true);
-    const res = await fetch('/api/pos/asignaciones', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ almacenId: asignT.almacenId, productIds: [...sel] }),
-    });
-    setGuardAsig(false);
-    if (!res.ok) { toast.error('No se pudo guardar'); return; }
-    const r = await res.json();
-    if (r.noRemovibles?.length) {
-      toast.warning(`Guardado. No se quitaron (tienen stock): ${r.noRemovibles.join(', ')}`);
-    } else {
-      toast.success('Productos del punto de venta actualizados');
-    }
-    setAsignT(null);
-  }
-
   return (
     <div className="mx-auto max-w-4xl p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -195,7 +143,6 @@ export default function TerminalesClient({
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-right">
-                  <button onClick={() => abrirAsignacion(t)} className="mr-3 text-gray-700">Productos</button>
                   <button onClick={() => editar(t)} className="mr-3 text-blue-600">Editar</button>
                   {t.activo && <button onClick={() => desactivar(t.id)} className="text-red-600">Desactivar</button>}
                 </td>
@@ -249,42 +196,6 @@ export default function TerminalesClient({
               <button onClick={guardar} disabled={guardando} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
                 {guardando ? 'Guardando…' : 'Guardar'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {asignT && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={() => setAsignT(null)}>
-          <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-medium">Productos de {asignT.nombre}</h2>
-            <p className="mb-3 text-xs text-gray-500">Marca los productos que se venden en este punto de venta (almacén {asignT.almacenNombre ?? asignT.almacenId}).</p>
-
-            <input
-              value={busq} onChange={(e) => setBusq(e.target.value)} placeholder="Buscar producto…"
-              className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-            />
-
-            <div className="flex-1 overflow-auto rounded-lg border border-gray-100">
-              {cargAsig ? (
-                <p className="p-4 text-sm text-gray-500">Cargando…</p>
-              ) : prodsAsig.filter((p) => p.nombre.toLowerCase().includes(busq.toLowerCase())).map((p) => (
-                <label key={p.id} className="flex cursor-pointer items-center gap-3 border-b border-gray-50 px-3 py-2 text-sm hover:bg-gray-50">
-                  <input type="checkbox" checked={sel.has(p.id)} onChange={() => toggleSel(p.id)} />
-                  <span className="flex-1">{p.nombre}{p.referencia ? <span className="text-gray-400"> · {p.referencia}</span> : null}</span>
-                  {p.controlaInventario && <span className="text-xs text-gray-400">stock {p.stockActual}</span>}
-                </label>
-              ))}
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-gray-500">{sel.size} seleccionados</span>
-              <div className="flex gap-2">
-                <button onClick={() => setAsignT(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Cancelar</button>
-                <button onClick={guardarAsignacion} disabled={guardAsig} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
-                  {guardAsig ? 'Guardando…' : 'Guardar'}
-                </button>
-              </div>
             </div>
           </div>
         </div>
