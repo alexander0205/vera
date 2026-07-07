@@ -1,0 +1,37 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db/drizzle';
+import {
+  adminEscolarCargos,
+  adminEscolarConceptosPago,
+} from '@/lib/db/schema';
+import { getTeamIdForUser } from '@/lib/db/queries';
+import { eq, and, desc } from 'drizzle-orm';
+
+/** Cargos de un estudiante (más reciente primero). */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const teamId = await getTeamIdForUser();
+  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const { id } = await params;
+  const rows = await db
+    .select({
+      id: adminEscolarCargos.id,
+      conceptoId: adminEscolarCargos.conceptoId,
+      concepto: adminEscolarConceptosPago.nombre,
+      matriculaId: adminEscolarCargos.matriculaId,
+      periodoId: adminEscolarCargos.periodoId,
+      mes: adminEscolarCargos.mes,
+      anio: adminEscolarCargos.anio,
+      montoCentavos: adminEscolarCargos.montoCentavos,
+      saldoCentavos: adminEscolarCargos.saldoCentavos,
+      fechaVencimiento: adminEscolarCargos.fechaVencimiento,
+      estado: adminEscolarCargos.estado,
+    })
+    .from(adminEscolarCargos)
+    .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .where(and(
+      eq(adminEscolarCargos.teamId, teamId),
+      eq(adminEscolarCargos.estudianteId, parseInt(id)),
+    ))
+    .orderBy(desc(adminEscolarCargos.anio), desc(adminEscolarCargos.mes), desc(adminEscolarCargos.id));
+  return NextResponse.json({ cargos: rows });
+}
