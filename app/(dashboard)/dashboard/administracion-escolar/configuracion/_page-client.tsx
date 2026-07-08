@@ -16,7 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  CalendarDays, GraduationCap, BookOpen, Receipt, Plus, Pencil, Loader2, Settings,
+  CalendarDays, GraduationCap, BookOpen, Receipt, Plus, Pencil, Loader2, Settings, Search, X,
 } from 'lucide-react';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
@@ -24,7 +24,11 @@ import {
 interface Periodo  { id: number; nombre: string; fechaInicio: string | null; fechaFin: string | null; activo: boolean; }
 interface Curso    { id: number; nombre: string; nivel: string | null; orden: number; activo: boolean; }
 interface Materia  { id: number; nombre: string; activo: boolean; }
-interface Concepto { id: number; nombre: string; tipo: string; recurrente: boolean; activo: boolean; }
+interface Concepto {
+  id: number; nombre: string; tipo: string; recurrente: boolean; activo: boolean;
+  productId: number | null; productNombre: string | null;
+}
+interface Producto { id: number; nombre: string; precioDOP: number; tipo: string; }
 
 type EntityKind = 'periodo' | 'curso' | 'materia' | 'concepto';
 
@@ -85,6 +89,12 @@ export default function ConfiguracionEscolarClient() {
   const [saving, setSaving]       = useState(false);
   const [opError, setOpError]     = useState<string | null>(null);
 
+  // Producto/servicio opcional vinculado al concepto (evita duplicar catálogo).
+  const [productoSel, setProductoSel] = useState<Producto | null>(null);
+  const [productoQuery, setProductoQuery] = useState('');
+  const [productoResultados, setProductoResultados] = useState<Producto[]>([]);
+  const [buscandoProducto, setBuscandoProducto] = useState(false);
+
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
@@ -105,11 +115,30 @@ export default function ConfiguracionEscolarClient() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Búsqueda de productos con debounce (solo dentro del form de concepto).
+  useEffect(() => {
+    if (!open || kind !== 'concepto' || productoSel) { setProductoResultados([]); return; }
+    const q = productoQuery.trim();
+    if (!q) { setProductoResultados([]); return; }
+    setBuscandoProducto(true);
+    const t = setTimeout(async () => {
+      try {
+        const data = await fetch(`/api/productos?q=${encodeURIComponent(q)}`).then((r) => r.json());
+        setProductoResultados(data.productos ?? []);
+      } finally {
+        setBuscandoProducto(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [productoQuery, open, kind, productoSel]);
+
   function abrirNuevo(k: EntityKind) {
     setKind(k);
     setEditId(null);
     setForm(EMPTY_FORM);
     setOpError(null);
+    setProductoSel(null);
+    setProductoQuery('');
     setOpen(true);
   }
 
@@ -129,6 +158,13 @@ export default function ConfiguracionEscolarClient() {
       tipo: (data as Concepto).tipo ?? 'otro',
       recurrente: (data as Concepto).recurrente ?? false,
     });
+    const concepto = data as Concepto;
+    setProductoSel(
+      concepto.productId
+        ? { id: concepto.productId, nombre: concepto.productNombre ?? `#${concepto.productId}`, precioDOP: 0, tipo: '' }
+        : null,
+    );
+    setProductoQuery('');
   }
 
   function cerrar() { setOpen(false); }
@@ -143,7 +179,7 @@ export default function ConfiguracionEscolarClient() {
       case 'materia':
         return { nombre: form.nombre, activo: form.activo };
       case 'concepto':
-        return { nombre: form.nombre, tipo: form.tipo, recurrente: form.recurrente, activo: form.activo };
+        return { nombre: form.nombre, tipo: form.tipo, recurrente: form.recurrente, activo: form.activo, productId: productoSel?.id ?? null };
       default:
         return {};
     }
@@ -248,8 +284,11 @@ export default function ConfiguracionEscolarClient() {
                 {conceptos.length === 0 && <EmptyRow text="Sin conceptos" />}
                 {conceptos.map((k) => (
                   <ListRow key={k.id} onEdit={() => abrirEdicion('concepto', k)}>
-                    <span className="font-medium text-gray-900">{k.nombre}</span>
-                    <span className="text-sm text-gray-500">{TIPO_LABEL[k.tipo] ?? k.tipo}</span>
+                    <span className="font-medium text-gray-900 truncate">
+                      {k.nombre}
+                      {k.productNombre && <span className="text-xs text-teal-600 font-normal ml-1.5">· {k.productNombre}</span>}
+                    </span>
+                    <span className="text-sm text-gray-500 shrink-0">{TIPO_LABEL[k.tipo] ?? k.tipo}</span>
                   </ListRow>
                 ))}
                 <AddButton onClick={() => abrirNuevo('concepto')} label="Nuevo concepto" />
@@ -370,6 +409,41 @@ export default function ConfiguracionEscolarClient() {
                     ))}
                   </SelectContent>
                 </Select>
+
+                <div className="space-y-1.5">
+                  <Label>Producto/servicio (opcional)</Label>
+                  <p className="text-xs text-gray-400 -mt-1">
+                    Si la factura se genera desde este concepto, hereda nombre e ITBIS del producto en vez de crear uno nuevo.
+                  </p>
+                  {productoSel ? (
+                    <div className="flex items-center justify-between gap-2 border border-teal-200 bg-teal-50 rounded-lg px-3 py-2">
+                      <span className="text-sm font-medium text-teal-800 truncate">{productoSel.nombre}</span>
+                      <button onClick={() => setProductoSel(null)} className="text-teal-600 hover:text-teal-800 shrink-0">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input className="pl-8" placeholder="Buscar producto o servicio…"
+                        value={productoQuery} onChange={(e) => setProductoQuery(e.target.value)} />
+                      {(buscandoProducto || productoResultados.length > 0) && (
+                        <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
+                          {buscandoProducto ? (
+                            <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
+                          ) : productoResultados.map((p) => (
+                            <button key={p.id}
+                              onClick={() => { setProductoSel(p); setProductoQuery(''); setProductoResultados([]); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
+                              <p className="font-medium text-gray-900">{p.nombre}</p>
+                              <p className="text-xs text-gray-400 capitalize">{p.tipo} · RD${p.precioDOP.toFixed(2)}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
