@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Receipt, Link2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2, AlertTriangle } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
@@ -74,6 +74,13 @@ interface TutorVinculo {
   relacion: string;
   responsablePago: boolean;
 }
+interface Factura {
+  id: number;
+  encf: string;
+  estado: string;
+  montoTotal: number;
+  createdAt: string;
+}
 
 const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -95,6 +102,8 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [estudiante, setEstudiante] = useState<Estudiante | null>(null);
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
   const [cargos, setCargos]         = useState<Cargo[]>([]);
+  const [facturasTutor, setFacturasTutor] = useState<Factura[]>([]);
+  const [facturasLoading, setFacturasLoading] = useState(false);
   const [pagos, setPagos]           = useState<Pago[]>([]);
   const [tutores, setTutores]       = useState<TutorVinculo[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -129,6 +138,20 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Facturas del tutor responsable — depende de `tutores`, que ya vive antes
+  // de los early return de abajo (no puede ir después: violaría rules-of-hooks).
+  const responsableClientId = tutores.find((t) => t.responsablePago)?.clientId ?? null;
+  useEffect(() => {
+    if (!responsableClientId) { setFacturasTutor([]); return; }
+    let cancel = false;
+    setFacturasLoading(true);
+    fetch(`/api/facturas?clientId=${responsableClientId}&limit=50`)
+      .then((r) => r.json())
+      .then((data) => { if (!cancel) setFacturasTutor(data.docs ?? []); })
+      .finally(() => { if (!cancel) setFacturasLoading(false); });
+    return () => { cancel = true; };
+  }, [responsableClientId]);
+
   if (loading) {
     return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>;
   }
@@ -146,6 +169,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const otrosTutores = tutores.filter((t) => !t.responsablePago);
   const cargosPendientes = cargos.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado));
   const vencidos = cargosPendientes.filter((c) => c.estado === 'vencido').length;
+  const cargosVinculadosIds = new Set(cargos.map((c) => c.ecfDocumentId).filter((x): x is number => x !== null));
 
   return (
     <section className="p-6 space-y-5">
@@ -265,6 +289,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
             <TabsList variant="line" className="w-full justify-start border-b border-gray-200 rounded-none px-0">
               <TabsTrigger value="deudas">Deudas</TabsTrigger>
               <TabsTrigger value="pagos">Pagos</TabsTrigger>
+              <TabsTrigger value="facturas">Facturas</TabsTrigger>
               <TabsTrigger value="matriculas">Matrículas</TabsTrigger>
               <TabsTrigger value="tutores">Tutores</TabsTrigger>
               <TabsTrigger value="historial">Historial</TabsTrigger>
@@ -324,6 +349,34 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                     p.concepto ? `${p.concepto}${p.mes ? ` ${MESES[p.mes]}` : ''}` : 'Sin cargo',
                     <span key="m" className="capitalize">{p.metodo ?? '—'}</span>,
                     fmtDOP(p.montoCentavos),
+                  ])} />
+              )}
+            </TabsContent>
+
+            {/* Facturas del tutor — solo lectura, informativo. La deuda real
+                sigue viviendo en los cargos; esto es un reflejo del cliente
+                vinculado al tutor responsable. */}
+            <TabsContent value="facturas" className="pt-4">
+              <h2 className="text-base font-semibold text-gray-900 mb-2">Facturas del tutor</h2>
+              {!responsable?.clientId ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>El tutor responsable no está vinculado a un contacto. Vincúlalo en la pestaña Tutores para ver sus facturas aquí.</span>
+                </div>
+              ) : facturasLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div>
+              ) : facturasTutor.length === 0 ? (
+                <EmptyBox text={`Sin facturas registradas para ${responsable.clienteRazonSocial}`} />
+              ) : (
+                <SimpleTable head={['NCF', 'Fecha', 'Monto', 'Estado', 'Cargo']}
+                  rows={facturasTutor.map((f) => [
+                    f.encf,
+                    fmtFechaCorta(f.createdAt),
+                    fmtDOP(f.montoTotal),
+                    <Badge key="e" variant="outline" className="text-xs">{f.estado}</Badge>,
+                    cargosVinculadosIds.has(f.id)
+                      ? <Badge key="c" className="bg-teal-50 text-teal-700 border-teal-200">Cubre cargo</Badge>
+                      : <span key="c" className="text-gray-300">—</span>,
                   ])} />
               )}
             </TabsContent>
