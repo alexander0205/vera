@@ -10,6 +10,7 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
+import { VincularDependienteDialog } from '@/components/administracion-escolar/VincularDependienteDialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
@@ -22,6 +23,8 @@ interface Estudiante {
   estado: string;
   fechaNacimiento: string | null;
   deudaCentavos: number;
+  dependienteId: number | null;
+  dependiente: { nombre: string; apellido: string; clienteId: number; clienteRazonSocial: string } | null;
 }
 interface Matricula {
   id: number;
@@ -93,6 +96,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [notFound, setNotFound]     = useState(false);
   const [pagoOpen, setPagoOpen]     = useState(false);
   const [editOpen, setEditOpen]     = useState(false);
+  const [vincularOpen, setVincularOpen] = useState(false);
 
   // No pone `loading` en true en recargas posteriores: si lo hiciera, el early
   // return de abajo desmontaría <Tabs> en cada refresh (registrar pago, editar,
@@ -190,6 +194,30 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               <Row label="Período" value={matriculaActiva?.periodo ?? '—'} strong />
               <Row label="Curso" value={matriculaActiva?.curso ?? '—'} strong />
               <Row label="Estado" value={matriculaActiva?.estado ?? '—'} strong capitalize />
+            </div>
+
+            {/* Contacto vinculado (dependiente de Contactos) */}
+            <div className="border-t border-gray-100 pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-900">Contacto vinculado</p>
+                {puedeGestionar && (
+                  <button className="text-xs text-teal-600 hover:underline" onClick={() => setVincularOpen(true)}>
+                    {estudiante.dependiente ? 'Cambiar' : 'Vincular'}
+                  </button>
+                )}
+              </div>
+              {estudiante.dependiente ? (
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <p className="font-semibold text-gray-900">
+                    {estudiante.dependiente.nombre} {estudiante.dependiente.apellido}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Cliente: {estudiante.dependiente.clienteRazonSocial}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Sin vincular a Contactos</p>
+              )}
             </div>
 
             {/* Tutor de pago */}
@@ -354,6 +382,13 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         estudiante={estudiante}
         open={editOpen}
         onClose={() => setEditOpen(false)}
+        onSaved={cargar}
+      />
+
+      <VincularDependienteDialog
+        estudianteId={estudiante.id}
+        open={vincularOpen}
+        onClose={() => setVincularOpen(false)}
         onSaved={cargar}
       />
     </section>
