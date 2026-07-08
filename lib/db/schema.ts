@@ -1580,6 +1580,10 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
   /** inscripcion | mensualidad | uniforme | actividad | otro */
   tipo:       varchar('tipo', { length: 20 }).notNull().default('otro'),
   recurrente: boolean('recurrente').notNull().default(false),
+  /** Enlace opcional al catálogo de productos/servicios. Si viene, la factura
+   *  generada desde el cargo hereda nombre/ITBIS del producto — evita duplicar
+   *  catálogo. El monto sigue viniendo del cargo, no del producto. */
+  productId:  integer('product_id').references(() => products.id),
   activo:     boolean('activo').notNull().default(true),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
@@ -1604,6 +1608,10 @@ export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
   fechaVencimiento: date('fecha_vencimiento'),
   /** pendiente | parcial | pagado | vencido | anulado */
   estado:           varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  /** Enlace OPCIONAL a la factura (e-CF) que cubre este cargo. El cargo sigue
+   *  siendo la fuente de verdad de la deuda (saldoCentavos); la factura es el
+   *  documento fiscal/cobrable. Muchos cargos → una factura. */
+  ecfDocumentId:    integer('ecf_document_id').references(() => ecfDocuments.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
