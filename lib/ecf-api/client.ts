@@ -5,7 +5,10 @@
  * Tipos sincronizados con ecf-api.json (OpenAPI spec).
  */
 
-const BASE_URL = process.env.ECF_API_URL!;
+// Normaliza: quita slash(es) final(es) para evitar `//` al concatenar paths
+// (que empiezan con `/`). Un ECF_API_URL con slash final producía URLs como
+// `host//contribuyentes/...` → 404 `Cannot GET //contribuyentes/...`.
+const BASE_URL = process.env.ECF_API_URL!.replace(/\/+$/, '');
 const API_KEY  = process.env.ECF_API_KEY!;
 
 // ─── Helpers HTTP ────────────────────────────────────────────────────────────

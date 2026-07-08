@@ -35,10 +35,15 @@ export interface TeamRoleWithPerms {
   permissions: Permission[];
 }
 
-/** Lista los roles del team con sus permisos. [] si aún no hay roles sembrados. */
+/** Lista los roles del team con sus permisos. Si faltan roles de sistema, los siembra. */
 export const listTeamRoles = cache(async (teamId: number): Promise<TeamRoleWithPerms[]> => {
-  const roles = await db.select().from(teamRoles).where(eq(teamRoles.teamId, teamId));
-  if (roles.length === 0) return [];
+  let roles = await db.select().from(teamRoles).where(eq(teamRoles.teamId, teamId));
+  const have = new Set(roles.map(r => r.key));
+  const missingSystemRole = ROLES.some(r => !have.has(r.key));
+  if (missingSystemRole) {
+    await seedSystemRoles(teamId);
+    roles = await db.select().from(teamRoles).where(eq(teamRoles.teamId, teamId));
+  }
 
   const ids = roles.map(r => r.id);
   const perms = await db

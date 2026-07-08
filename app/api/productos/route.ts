@@ -12,12 +12,21 @@ import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, ilike, or, and } from 'drizzle-orm';
 
 const productoSchema = z.object({
-  nombre:      z.string().min(1, 'El nombre es obligatorio').max(255),
-  descripcion: z.string().max(1000).optional().nullable(),
-  referencia:  z.string().max(100).optional().nullable(),
-  precio:      z.number().min(0, 'El precio no puede ser negativo'),  // en DOP (lo convertimos a centavos)
-  tasaItbis:   z.enum(['0.18', '0.16', '0', 'exento']).default('0.18'),
-  tipo:        z.enum(['bien', 'servicio']).default('servicio'),
+  nombre:               z.string().min(1, 'El nombre es obligatorio').max(255),
+  descripcion:          z.string().max(1000).optional().nullable(),
+  referencia:           z.string().max(100).optional().nullable(),
+  codigoBarras:         z.string().max(64).optional().nullable(),
+  precio:               z.number().min(0, 'El precio no puede ser negativo'),
+  tasaItbis:            z.enum(['0.18', '0.16', '0', 'exento']).default('0.18'),
+  tipo:                 z.enum(['bien', 'servicio']).default('servicio'),
+  unidadMedida:         z.string().max(50).optional(),
+  costo:                z.number().min(0).optional(),
+  stockActual:          z.number().int().min(0).optional(),
+  stockMinimo:          z.number().int().min(0).optional(),
+  controlaInventario:   z.boolean().optional(),
+  permiteVentaSinStock: z.boolean().optional(),
+  categoriaId:          z.number().int().positive().optional().nullable(),
+  imagen:               z.string().max(1_500_000).optional().nullable(),
 });
 
 export async function GET(req: NextRequest) {
@@ -57,10 +66,10 @@ export async function GET(req: NextRequest) {
     .where(whereCondition)
     .orderBy(products.nombre);
 
-  // Convertir precio de centavos a DOP para el cliente
   const result = rows.map((p) => ({
     ...p,
     precioDOP: p.precio / 100,
+    costoDOP:  p.costo  / 100,
   }));
 
   return NextResponse.json({ productos: result });
@@ -75,19 +84,32 @@ export async function POST(req: NextRequest) {
   const parsed = productoSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
 
-  const { nombre, descripcion, referencia, precio, tasaItbis, tipo } = parsed.data;
+  const {
+    nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,
+    unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
+    categoriaId, imagen,
+  } = parsed.data;
 
   const [created] = await db.insert(products).values({
     teamId,
     nombre,
-    descripcion:  descripcion  || null,
-    referencia:   referencia   || null,
-    precio:       Math.round(precio * 100),  // guardar en centavos
+    descripcion:          descripcion  || null,
+    referencia:           referencia   || null,
+    codigoBarras:         codigoBarras || null,
+    precio:               Math.round(precio * 100),
     tasaItbis,
     tipo,
-    activo: 'true',
-    createdBy: user.id,
+    activo:               'true',
+    createdBy:            user.id,
+    unidadMedida:         unidadMedida ?? 'Unidad',
+    costo:                Math.round((costo ?? 0) * 100),
+    stockActual:          stockActual ?? 0,
+    stockMinimo:          stockMinimo ?? 0,
+    categoriaId:          categoriaId ?? null,
+    imagen:               imagen ?? null,
+    controlaInventario:   tipo === 'bien' ? (controlaInventario ?? false) : false,
+    permiteVentaSinStock: permiteVentaSinStock ?? true,
   }).returning();
 
-  return NextResponse.json({ ok: true, producto: { ...created, precioDOP: created.precio / 100 } }, { status: 201 });
+  return NextResponse.json({ ok: true, producto: { ...created, precioDOP: created.precio / 100, costoDOP: created.costo / 100 } }, { status: 201 });
 }

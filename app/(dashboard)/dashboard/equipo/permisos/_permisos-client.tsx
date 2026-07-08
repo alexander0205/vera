@@ -98,7 +98,7 @@ function RolesList({ roles, onSelect, onCreate }: {
   onCreate: () => void;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="p-4 sm:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Roles y permisos</h1>
@@ -214,7 +214,7 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="p-4 sm:p-6 space-y-4">
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
         <ArrowLeft className="h-4 w-4" /> Volver a roles
       </button>

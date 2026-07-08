@@ -120,6 +120,12 @@ export const teams = pgTable('teams', {
   // el badge de estado en el header, y no se puede facturar sin turno abierto.
   cajaHabilitada:         boolean('caja_habilitada').notNull().default(false),
 
+  // ── Módulo Punto de Venta (POS) ───────────────────────────────────────────
+  // Toggle por empresa. Si está activo: aparece el POS full-screen y sus terminales.
+  posHabilitado:          boolean('pos_habilitado').notNull().default(false),
+  // Capa escolar (monedero del estudiante): exclusiva de colegios. Solo aplica con posHabilitado.
+  posEscolarHabilitado:   boolean('pos_escolar_habilitado').notNull().default(false),
+
   // Plazo de pago por defecto para nuevas facturas. NULL = de contado; N = crédito a N días.
   plazoPagoDefaultDias:   integer('plazo_pago_default_dias'),
 
@@ -235,6 +241,46 @@ export const dependientes = pgTable('dependientes', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('dependientes_client_idx').on(t.clientId)]);
 
+// ─── POS — Monedero escolar del estudiante (Fase 2) ──────────────────────────
+// Saldo prepago por estudiante (un dependiente). El acudiente recarga; el
+// estudiante consume en el POS. Exclusivo de colegios (pos_escolar_habilitado).
+export const monederoEstudiante = pgTable('monedero_estudiante', {
+  id:                    serial('id').primaryKey(),
+  teamId:                integer('team_id').notNull().references(() => teams.id),
+  dependienteId:         integer('dependiente_id').notNull().references(() => dependientes.id),
+  saldoCentavos:         integer('saldo_centavos').notNull().default(0),
+  /** NULL = sin límite diario. */
+  limiteDiarioCentavos:  integer('limite_diario_centavos'),
+  activo:                boolean('activo').notNull().default(true),
+  createdAt:             timestamp('created_at').notNull().defaultNow(),
+  updatedAt:             timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('monedero_dependiente_uniq').on(t.dependienteId),
+  index('monedero_team_idx').on(t.teamId),
+]);
+
+export const monederoMovimientos = pgTable('monedero_movimientos', {
+  id:               serial('id').primaryKey(),
+  teamId:           integer('team_id').notNull().references(() => teams.id),
+  monederoId:       integer('monedero_id').notNull().references(() => monederoEstudiante.id),
+  // RECARGA | CONSUMO | AJUSTE | REVERSA
+  tipo:             varchar('tipo', { length: 20 }).notNull(),
+  montoCentavos:    integer('monto_centavos').notNull(),
+  esEntrada:        boolean('es_entrada').notNull(),
+  saldoAntes:       integer('saldo_antes').notNull(),
+  saldoDespues:     integer('saldo_despues').notNull(),
+  referenciaEcfId:  integer('referencia_ecf_id').references(() => ecfDocuments.id),
+  motivo:           text('motivo'),
+  createdBy:        integer('created_by').references(() => users.id),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('monedero_mov_monedero_idx').on(t.monederoId),
+  index('monedero_mov_team_fecha_idx').on(t.teamId, t.createdAt),
+]);
+
+export type MonederoEstudiante  = typeof monederoEstudiante.$inferSelect;
+export type MonederoMovimiento  = typeof monederoMovimientos.$inferSelect;
+
 // ─── EmiteDO — Productos y Servicios ─────────────────────────────────────────
 
 export const products = pgTable('products', {
@@ -245,11 +291,25 @@ export const products = pgTable('products', {
   nombre: varchar('nombre', { length: 255 }).notNull(),
   descripcion: text('descripcion'),
   referencia: varchar('referencia', { length: 100 }),  // SKU / código interno
+  codigoBarras: varchar('codigo_barras', { length: 64 }),  // EAN/UPC para lector POS
   precio: integer('precio').notNull().default(0),       // en centavos
   tasaItbis: varchar('tasa_itbis', { length: 6 }).notNull().default('0.18'), // '0.18'|'0.16'|'0'|'exento'
   tipo: varchar('tipo', { length: 10 }).notNull().default('servicio'),       // 'bien'|'servicio'
   activo: varchar('activo', { length: 5 }).notNull().default('true'),        // 'true'|'false'
+  // ── Inventario ──────────────────────────────────────────────────────────────
+  unidadMedida: varchar('unidad_medida', { length: 50 }).notNull().default('Unidad'),
+  costo: integer('costo').notNull().default(0),                   // costo de compra en centavos
+  stockActual: integer('stock_actual').notNull().default(0),      // unidades disponibles
+  stockMinimo: integer('stock_minimo').notNull().default(0),      // umbral alerta bajo mínimo
+  controlaInventario: boolean('controla_inventario').notNull().default(false),
+  permiteVentaSinStock: boolean('permite_venta_sin_stock').notNull().default(true),
+  // POS: si aparece en la grilla del punto de venta (excluye servicios/no vendibles en mostrador).
+  visiblePos: boolean('visible_pos').notNull().default(true),
+  // POS: favorito → se muestra primero en la grilla.
+  posFavorito: boolean('pos_favorito').notNull().default(false),
   esMora: boolean('es_mora').notNull().default(false),                        // servicio de sistema: línea de las ND de mora (1 por team)
+  categoriaId: integer('categoria_id').references(() => categorias.id),
+  imagen: text('imagen'),  // data URL base64 (mismo patrón que teams.logo), tope ~800KB en el cliente
   createdBy: integer('created_by').references(() => users.id),
   updatedBy: integer('updated_by').references(() => users.id),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -405,6 +465,17 @@ export const ecfDocuments = pgTable('ecf_documents', {
   moraPorcentaje: integer('mora_porcentaje'),  // basis points (200 = 2%)
   moraDiasGracia: integer('mora_dias_gracia'), // días de gracia
 
+  // Metadatos de venta: almacén, vendedor y lista de precios usada al emitir
+  almacenId:      integer('almacen_id').references(() => almacenes.id),
+  vendedorId:     integer('vendedor_id').references(() => vendedores.id),
+  listaPreciosId: integer('lista_precios_id').references(() => listasPrecios.id),
+
+  // true = ya se descontó stock para este documento (al guardar borrador o al
+  // emitir). Evita doble descuento al promover un borrador a e-CF, y le dice a
+  // /anular si debe restaurar stock (reemplaza el chequeo viejo por `estado`,
+  // que ya no sirve porque BORRADOR también puede tener stock descontado).
+  stockDescontado: boolean('stock_descontado').notNull().default(false),
+
   // Usuario que creó el documento (nullable para registros legacy)
   createdBy: integer('created_by').references(() => users.id),
   // Último usuario que editó el documento (anular, editar borrador, emitir)
@@ -514,6 +585,100 @@ export const categorias = pgTable('categorias', {
   descripcion: text('descripcion'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ─── EmiteDO — Maestros (listas custom de atributos) ─────────────────────────
+// Un maestro es una lista (Marca, Color…) con valores manuales. Se engancha a
+// productos/servicios como labels. aplicaA: 'bien'|'servicio'|'ambos'|'manual'.
+// multiple: false = un valor por producto; true = varios.
+export const maestros = pgTable('maestros', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  nombre: varchar('nombre', { length: 100 }).notNull(),
+  descripcion: text('descripcion'),
+  aplicaA: varchar('aplica_a', { length: 10 }).notNull().default('manual'),
+  multiple: boolean('multiple').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [index('maestros_team_idx').on(t.teamId)]);
+
+export const maestroValores = pgTable('maestro_valores', {
+  id: serial('id').primaryKey(),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  valor: varchar('valor', { length: 150 }).notNull(),
+  orden: integer('orden').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('maestro_valores_maestro_idx').on(t.maestroId)]);
+
+export const productoMaestroValores = pgTable('producto_maestro_valores', {
+  id: serial('id').primaryKey(),
+  productId: integer('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  valorId: integer('valor_id').notNull().references(() => maestroValores.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('producto_maestro_valores_product_idx').on(t.productId),
+  index('producto_maestro_valores_maestro_idx').on(t.maestroId),
+  uniqueIndex('producto_maestro_valores_uniq').on(t.productId, t.valorId),
+]);
+
+// A qué entidades aplica un maestro: 'producto' | 'factura' (extensible).
+export const maestroTargets = pgTable('maestro_targets', {
+  id: serial('id').primaryKey(),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  entidad: varchar('entidad', { length: 20 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [uniqueIndex('maestro_targets_uniq').on(t.maestroId, t.entidad)]);
+
+// Clasificación de la factura (cabecera) con valores de maestros target='factura'.
+export const facturaMaestroValores = pgTable('factura_maestro_valores', {
+  id: serial('id').primaryKey(),
+  ecfDocumentId: integer('ecf_document_id').notNull().references(() => ecfDocuments.id, { onDelete: 'cascade' }),
+  maestroId: integer('maestro_id').notNull().references(() => maestros.id, { onDelete: 'cascade' }),
+  valorId: integer('valor_id').notNull().references(() => maestroValores.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('factura_maestro_valores_doc_idx').on(t.ecfDocumentId),
+  index('factura_maestro_valores_maestro_idx').on(t.maestroId),
+  index('factura_maestro_valores_valor_idx').on(t.valorId),
+  uniqueIndex('factura_maestro_valores_uniq').on(t.ecfDocumentId, t.valorId),
+]);
+
+export const maestrosRelations = relations(maestros, ({ one, many }) => ({
+  team: one(teams, { fields: [maestros.teamId], references: [teams.id] }),
+  valores: many(maestroValores),
+  targets: many(maestroTargets),
+}));
+
+export const maestroTargetsRelations = relations(maestroTargets, ({ one }) => ({
+  maestro: one(maestros, { fields: [maestroTargets.maestroId], references: [maestros.id] }),
+}));
+
+export const facturaMaestroValoresRelations = relations(facturaMaestroValores, ({ one }) => ({
+  ecfDocument: one(ecfDocuments, { fields: [facturaMaestroValores.ecfDocumentId], references: [ecfDocuments.id] }),
+  maestro: one(maestros, { fields: [facturaMaestroValores.maestroId], references: [maestros.id] }),
+  valor: one(maestroValores, { fields: [facturaMaestroValores.valorId], references: [maestroValores.id] }),
+}));
+
+export const maestroValoresRelations = relations(maestroValores, ({ one }) => ({
+  maestro: one(maestros, { fields: [maestroValores.maestroId], references: [maestros.id] }),
+}));
+
+export const productoMaestroValoresRelations = relations(productoMaestroValores, ({ one }) => ({
+  product: one(products, { fields: [productoMaestroValores.productId], references: [products.id] }),
+  maestro: one(maestros, { fields: [productoMaestroValores.maestroId], references: [maestros.id] }),
+  valor: one(maestroValores, { fields: [productoMaestroValores.valorId], references: [maestroValores.id] }),
+}));
+
+export type Maestro = typeof maestros.$inferSelect;
+export type NewMaestro = typeof maestros.$inferInsert;
+export type MaestroValor = typeof maestroValores.$inferSelect;
+export type NewMaestroValor = typeof maestroValores.$inferInsert;
+export type ProductoMaestroValor = typeof productoMaestroValores.$inferSelect;
+export type NewProductoMaestroValor = typeof productoMaestroValores.$inferInsert;
+export type MaestroTarget = typeof maestroTargets.$inferSelect;
+export type NewMaestroTarget = typeof maestroTargets.$inferInsert;
+export type FacturaMaestroValor = typeof facturaMaestroValores.$inferSelect;
+export type NewFacturaMaestroValor = typeof facturaMaestroValores.$inferInsert;
 
 // ─── EmiteDO — Cotizaciones ───────────────────────────────────────────────────
 export const cotizaciones = pgTable('cotizaciones', {
@@ -694,6 +859,10 @@ export const productsRelations = relations(products, ({ one }) => ({
     fields: [products.teamId],
     references: [teams.id],
   }),
+  categoria: one(categorias, {
+    fields: [products.categoriaId],
+    references: [categorias.id],
+  }),
 }));
 
 export const sequencesRelations = relations(sequences, ({ one }) => ({
@@ -776,6 +945,68 @@ export const vendedores = pgTable('vendedores', {
   activo:         varchar('activo', { length: 5 }).notNull().default('true'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
+
+// ─── EmiteDO — Inventario: Movimientos ───────────────────────────────────────
+
+export const inventoryMovements = pgTable('inventory_movements', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  productoId:      integer('producto_id').notNull().references(() => products.id),
+  // VENTA | ENTRADA | AJUSTE_SALIDA | AJUSTE_ENTRADA | DEVOLUCION | STOCK_INICIAL
+  tipo:            varchar('tipo', { length: 20 }).notNull(),
+  cantidad:        integer('cantidad').notNull(),   // siempre positivo
+  esEntrada:       boolean('es_entrada').notNull(), // true = suma, false = resta
+  stockAntes:      integer('stock_antes').notNull(),
+  stockDespues:    integer('stock_despues').notNull(),
+  referenciaId:    integer('referencia_id').references(() => ecfDocuments.id),
+  referenciaEncf:  varchar('referencia_encf', { length: 40 }),
+  motivo:          text('motivo'),
+  createdBy:       integer('created_by').references(() => users.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('inv_mov_team_idx').on(t.teamId),
+  index('inv_mov_producto_idx').on(t.teamId, t.productoId),
+]);
+
+// ─── EmiteDO — Inventario: Stock por almacén ─────────────────────────────────
+
+export const productAlmacenStock = pgTable('product_almacen_stock', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  productId:   integer('product_id').notNull().references(() => products.id),
+  almacenId:   integer('almacen_id').notNull().references(() => almacenes.id),
+  stockActual: integer('stock_actual').notNull().default(0),
+}, (t) => [
+  index('pas_team_idx').on(t.teamId),
+  index('pas_almacen_idx').on(t.almacenId),
+]);
+
+// ─── EmiteDO — Compras locales ────────────────────────────────────────────────
+
+export const comprasLocales = pgTable('compras_locales', {
+  id:               serial('id').primaryKey(),
+  teamId:           integer('team_id').notNull().references(() => teams.id),
+  proveedorRnc:     varchar('proveedor_rnc',    { length: 20 }),
+  proveedorNombre:  varchar('proveedor_nombre', { length: 255 }),
+  fecha:            date('fecha').notNull().defaultNow(),
+  referenciaEncf:   varchar('referencia_encf',  { length: 40 }),
+  notas:            text('notas'),
+  montoTotal:       integer('monto_total').notNull().default(0),
+  createdBy:        integer('created_by').references(() => users.id),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+});
+
+export const comprasLocalesItems = pgTable('compras_locales_items', {
+  id:            serial('id').primaryKey(),
+  compraId:      integer('compra_id').notNull().references(() => comprasLocales.id),
+  productoId:    integer('producto_id').notNull().references(() => products.id),
+  almacenId:     integer('almacen_id').references(() => almacenes.id),
+  cantidad:      integer('cantidad').notNull(),
+  costoUnitario: integer('costo_unitario').notNull().default(0),
+});
+
+export type CompraLocal     = typeof comprasLocales.$inferSelect;
+export type CompraLocalItem = typeof comprasLocalesItems.$inferSelect;
 
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 
@@ -1011,6 +1242,110 @@ export const impresoras = pgTable('impresoras', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [index('impresoras_team_idx').on(t.teamId)]);
 
+// ─── POS — Terminales (puntos de venta) ──────────────────────────────────────
+// Cada caja física es una entidad con config FIJA: almacén del que vende y
+// descuenta stock, impresora, lista de precios y tipo de comprobante por
+// defecto. El cajero no elige nada al abrir turno: ya viene pegado a la terminal.
+export const posTerminales = pgTable('pos_terminales', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  nombre:         varchar('nombre', { length: 100 }).notNull(),
+  /** Almacén FIJO del que esta caja vende y descuenta stock. */
+  almacenId:      integer('almacen_id').notNull().references(() => almacenes.id),
+  /** Config fija opcional (si null, el POS usa el default del equipo). */
+  impresoraId:    integer('impresora_id').references(() => impresoras.id),
+  listaPreciosId: integer('lista_precios_id').references(() => listasPrecios.id),
+  /** Tipo de comprobante por defecto al cobrar: 'sin-ncf' (ticket) o un e-CF. */
+  tipoEcf:        varchar('tipo_ecf', { length: 10 }).notNull().default('sin-ncf'),
+  /** Capacidad restaurante: si true, la terminal opera con mesas/comandas. */
+  mesas:          boolean('mesas').notNull().default(false),
+  activo:         boolean('activo').notNull().default(true),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('pos_terminales_team_idx').on(t.teamId),
+  index('pos_terminales_almacen_idx').on(t.almacenId),
+]);
+
+export const posTerminalesRelations = relations(posTerminales, ({ one }) => ({
+  team:         one(teams,         { fields: [posTerminales.teamId],         references: [teams.id] }),
+  almacen:      one(almacenes,     { fields: [posTerminales.almacenId],      references: [almacenes.id] }),
+  impresora:    one(impresoras,    { fields: [posTerminales.impresoraId],    references: [impresoras.id] }),
+  listaPrecios: one(listasPrecios, { fields: [posTerminales.listaPreciosId], references: [listasPrecios.id] }),
+}));
+
+export type PosTerminal    = typeof posTerminales.$inferSelect;
+export type NewPosTerminal = typeof posTerminales.$inferInsert;
+
+// ─── POS — Modo Restaurante (mesas + comandas + meseros) ─────────────────────
+//
+// Capacidad componible: una terminal con `mesas=true` opera con salón. Las
+// cuentas (comandas) viven server-side porque varios meseros las tocan desde la
+// misma pantalla compartida. Al cobrar, la comanda se convierte en un e-CF.
+
+export const posMeseros = pgTable('pos_meseros', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  nombre:    varchar('nombre', { length: 80 }).notNull(),
+  /** PIN corto para identificarse en la pantalla compartida. */
+  pin:       varchar('pin', { length: 6 }).notNull(),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('pos_meseros_team_idx').on(t.teamId),
+]);
+
+export const mesas = pgTable('mesas', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  terminalId: integer('terminal_id').notNull().references(() => posTerminales.id),
+  nombre:     varchar('nombre', { length: 40 }).notNull(),
+  zona:       varchar('zona', { length: 40 }),
+  activo:     boolean('activo').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('mesas_team_idx').on(t.teamId),
+  index('mesas_terminal_idx').on(t.terminalId),
+]);
+
+export const comandas = pgTable('comandas', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  terminalId:    integer('terminal_id').notNull().references(() => posTerminales.id),
+  mesaId:        integer('mesa_id').notNull().references(() => mesas.id),
+  meseroId:      integer('mesero_id').references(() => posMeseros.id),
+  turnoId:       integer('turno_id').references(() => cajaTurnos.id),
+  /** 'abierta' | 'cobrada' | 'cancelada' */
+  estado:        varchar('estado', { length: 12 }).notNull().default('abierta'),
+  ecfDocumentId: integer('ecf_document_id').references(() => ecfDocuments.id),
+  totalCentavos: integer('total_centavos').notNull().default(0),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('comandas_team_idx').on(t.teamId),
+  index('comandas_mesa_idx').on(t.mesaId),
+]);
+
+export const comandaItems = pgTable('comanda_items', {
+  id:            serial('id').primaryKey(),
+  comandaId:     integer('comanda_id').notNull().references(() => comandas.id, { onDelete: 'cascade' }),
+  productoId:    integer('producto_id').references(() => products.id),
+  nombre:        varchar('nombre', { length: 200 }).notNull(),
+  precioCentavos: integer('precio_centavos').notNull(),
+  qty:           integer('qty').notNull().default(1),
+  tasaItbis:     varchar('tasa_itbis', { length: 10 }).notNull().default('0.18'),
+  tipo:          varchar('tipo', { length: 10 }).notNull().default('bien'),
+  descuentoPct:  integer('descuento_pct').notNull().default(0),
+  notas:         varchar('notas', { length: 200 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('comanda_items_comanda_idx').on(t.comandaId),
+]);
+
+export type PosMesero   = typeof posMeseros.$inferSelect;
+export type Mesa        = typeof mesas.$inferSelect;
+export type Comanda     = typeof comandas.$inferSelect;
+export type ComandaItem = typeof comandaItems.$inferSelect;
+
 // ─── EmiteDO — Cuadre de Caja (turnos) ───────────────────────────────────────
 //
 // Modelo "una caja por cajero": cada usuario operativo abre y cierra su propio
@@ -1030,6 +1365,8 @@ export const cajaTurnos = pgTable('caja_turnos', {
   teamId:    integer('team_id').notNull().references(() => teams.id),
   /** Cajero dueño del turno. */
   usuarioId: integer('usuario_id').notNull().references(() => users.id),
+  /** Terminal POS en la que se abrió el turno (define almacén/lista/impresora). Nullable: turnos de caja fuera del POS. */
+  terminalId: integer('terminal_id').references(() => posTerminales.id),
   estado:    varchar('estado', { length: 20 }).notNull().default('ABIERTO'),
   // ABIERTO | CIERRE_SOLICITADO | CERRADO
 

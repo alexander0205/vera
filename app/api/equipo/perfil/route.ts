@@ -33,6 +33,9 @@ const schema = z.object({
   recargoMoraDiasGracia: z.number().int().min(0).max(365).optional(),
   // Módulo cuadre de caja
   cajaHabilitada:        z.boolean().optional(),
+  // Módulo punto de venta (POS)
+  posHabilitado:         z.boolean().optional(),
+  posEscolarHabilitado:  z.boolean().optional(),
   // Plazo de pago por defecto. null = de contado; N = crédito a N días.
   plazoPagoDefaultDias:  z.number().int().min(1).max(365).nullable().optional(),
   // Métodos de pago que obligan emisión a la DGII (no permiten borrador).
@@ -96,6 +99,9 @@ export async function POST(req: NextRequest) {
     ...(data.recargoMoraDiasGracia !== undefined && { recargoMoraDiasGracia: data.recargoMoraDiasGracia }),
     // Módulo caja
     ...(data.cajaHabilitada !== undefined && { cajaHabilitada: data.cajaHabilitada }),
+    // Módulo POS
+    ...(data.posHabilitado        !== undefined && { posHabilitado: data.posHabilitado }),
+    ...(data.posEscolarHabilitado !== undefined && { posEscolarHabilitado: data.posEscolarHabilitado }),
     ...(data.plazoPagoDefaultDias  !== undefined && { plazoPagoDefaultDias: data.plazoPagoDefaultDias }),
     ...(data.metodosObligaDgii     !== undefined && { metodosObligaDgii: data.metodosObligaDgii }),
     updatedAt: new Date(),
@@ -139,6 +145,9 @@ export async function GET(_req: NextRequest) {
     recargoMoraDiasGracia: team.recargoMoraDiasGracia,
     // Módulo caja
     cajaHabilitada:        team.cajaHabilitada,
+    // Módulo POS
+    posHabilitado:         team.posHabilitado,
+    posEscolarHabilitado:  team.posEscolarHabilitado,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)
     metodosObligaDgii:     (team.metodosObligaDgii as string[] | null) ?? [],

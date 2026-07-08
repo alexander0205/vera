@@ -9,7 +9,7 @@ import {
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet,
+  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -55,6 +55,7 @@ const GROUPS: NavGroup[] = [
     icon: Package,
     children: [
       { href: '/dashboard/productos',      label: 'Productos y servicios', plusHref: '/dashboard/productos' },
+      { href: '/dashboard/inventario',     label: 'Movimientos de stock' },
       { href: '/dashboard/categorias',     label: 'Categorías' },
       { href: '/dashboard/almacenes',      label: 'Almacenes' },
       { href: '/dashboard/listas-precios', label: 'Listas de precios' },
@@ -76,6 +77,7 @@ const GROUPS: NavGroup[] = [
     icon: Settings,
     children: [
       { href: '/dashboard/configuracion', label: 'Mi empresa' },
+      { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
       { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
@@ -97,7 +99,7 @@ const TOP_ITEMS: NavItem[] = [
 // Mapeo href → permiso requerido. Si el usuario no tiene el permiso, el item
 // se omite del sidebar. Items sin entrada aquí son visibles para todos.
 
-const HREF_PERMISSION: Record<string, Permission> = {
+const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Top items
   '/dashboard/clientes':              'clientes:ver',
   '/dashboard/reportes':              'reportes:ver',
@@ -119,16 +121,22 @@ const HREF_PERMISSION: Record<string, Permission> = {
   '/dashboard/listas-precios':        'productos:ver',
   '/dashboard/vendedores':            'productos:ver',
 
-  // Compras — solo owner y admin
-  '/dashboard/compras':               'compras:ver',
+  // Compras — owner/admin (e-CF de proveedores) o productos:gestionar (compras manuales)
+  '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
 
   // Caja
   '/dashboard/caja':                  'caja:operar',
   '/dashboard/caja/aprobaciones':     'caja:aprobar',
   '/dashboard/caja/historial':        'caja:ver',
 
+  // Punto de venta (POS)
+  '/pos':                             'pos:vender',
+  '/dashboard/pos-terminales':        'pos:configurar',
+
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
+  '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
+
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
@@ -148,13 +156,15 @@ function canAccessHref(
 ): boolean {
   const perm = HREF_PERMISSION[href];
   if (!perm) return true; // sin gate explícito → visible para todos
-  if (!perms) return userCan(undefined, role, perm); // fallback mientras carga
-  return perms.has(perm);
+  const needed = Array.isArray(perm) ? perm : [perm];
+  // fallback mientras cargan los permisos efectivos: catálogo estático del rol
+  if (!perms) return needed.some(p => userCan(undefined, role, p));
+  return needed.some(p => perms.has(p));
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; }
+interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; }
 interface UserInfo { name: string | null; email: string; platformRole?: string | null; }
 
 function getInitials(name: string | null, email: string) {
@@ -576,6 +586,17 @@ function Sidebar({
     ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
     : null;
 
+  // Grupo Punto de venta — solo visible si posHabilitado y el rol tiene acceso.
+  const posHabilitado = activeTeam?.posHabilitado ?? false;
+  const posCandidatos: NavGroup['children'] = [
+    { href: '/pos',                      label: 'Abrir punto de venta' },
+    { href: '/dashboard/pos-terminales', label: 'Terminales' },
+  ].filter(c => can(c.href));
+
+  const posGroup: NavGroup | null = posHabilitado && posCandidatos.length > 0
+    ? { id: 'pos', label: 'Punto de venta', icon: Store, children: posCandidatos }
+    : null;
+
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
@@ -584,7 +605,7 @@ function Sidebar({
   const staticGroupsVis   = GROUPS
     .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
     .filter(g => g.children.length > 0);
-  const groupsVisibles    = cajaGroup ? [cajaGroup, ...staticGroupsVis] : staticGroupsVis;
+  const groupsVisibles    = [posGroup, cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
 
   const defaultOpen = groupsVisibles.reduce((acc, g) => {
     acc[g.id] = g.children.some(c => pathname.startsWith(c.href));
