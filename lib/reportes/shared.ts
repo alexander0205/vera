@@ -78,8 +78,12 @@ export type Granularidad = 'dia' | 'semana' | 'mes';
 /** trunc de Postgres para agrupar por período en zona RD. */
 export function truncFecha(g: Granularidad): SQL<string> {
   const unit = g === 'dia' ? 'day' : g === 'semana' ? 'week' : 'month';
+  // `unit` va como LITERAL (sql.raw), NO parámetro: si se parametriza, drizzle le
+  // asigna placeholders distintos en SELECT vs GROUP BY y Postgres lanza
+  // "column fecha_emision must appear in the GROUP BY clause". `unit` es un enum
+  // interno cerrado ('day'|'week'|'month') → sin riesgo de inyección.
   // Convertir a hora RD antes de truncar para que el "día" sea el día local.
-  return sql<string>`to_char(date_trunc(${unit}, ${ecfDocuments.fechaEmision} AT TIME ZONE 'America/Santo_Domingo'), 'YYYY-MM-DD')`;
+  return sql<string>`to_char(date_trunc(${sql.raw(`'${unit}'`)}, ${ecfDocuments.fechaEmision} AT TIME ZONE 'America/Santo_Domingo'), 'YYYY-MM-DD')`;
 }
 
 /** Rango del mes actual (default de la mayoría de reportes). */
