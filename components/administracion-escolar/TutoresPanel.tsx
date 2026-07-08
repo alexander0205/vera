@@ -11,7 +11,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, X, Loader2 } from 'lucide-react';
+import { Plus, Pencil, X, Loader2, Search, Link2, Building2 } from 'lucide-react';
 
 export interface TutorVinculo {
   id: number;
@@ -20,11 +20,22 @@ export interface TutorVinculo {
   documento: string | null;
   telefono: string | null;
   email: string | null;
+  clientId: number | null;
+  clienteRazonSocial: string | null;
   relacion: string;
   responsablePago: boolean;
 }
 
-interface TutorTeam { id: number; nombre: string; telefono: string | null; email: string | null; }
+interface TutorTeam {
+  id: number;
+  nombre: string;
+  telefono: string | null;
+  email: string | null;
+  clientId: number | null;
+  clienteRazonSocial: string | null;
+}
+
+interface Cliente { id: number; razonSocial: string; rnc: string | null; email: string | null; telefono: string | null; }
 
 const RELACIONES = [
   { value: 'padre', label: 'Padre' },
@@ -56,12 +67,48 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
   const [quitarTarget, setQuitarTarget] = useState<TutorVinculo | null>(null);
   const [quitando, setQuitando]       = useState(false);
 
+  // Vínculo opcional con un contacto/cliente (para el comprobante fiscal).
+  const [clienteVinculado, setClienteVinculado] = useState<Cliente | null>(null);
+  const [clienteQuery, setClienteQuery] = useState('');
+  const [clienteResultados, setClienteResultados] = useState<Cliente[]>([]);
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
+
   const cargarTutoresTeam = useCallback(async () => {
     const data = await fetch('/api/administracion-escolar/tutores').then((r) => r.json());
     setTutoresTeam(data.tutores ?? []);
   }, []);
 
   useEffect(() => { if (showForm) cargarTutoresTeam(); }, [showForm, cargarTutoresTeam]);
+
+  // Búsqueda de clientes con debounce (solo en modo nuevo tutor, sin cliente ya elegido).
+  useEffect(() => {
+    if (!showForm || editVinculo || !modoNuevo || clienteVinculado) return;
+    const q = clienteQuery.trim();
+    if (!q) { setClienteResultados([]); return; }
+    setBuscandoCliente(true);
+    const t = setTimeout(async () => {
+      try {
+        const data = await fetch(`/api/clientes?q=${encodeURIComponent(q)}`).then((r) => r.json());
+        setClienteResultados(data.clientes ?? []);
+      } finally {
+        setBuscandoCliente(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [clienteQuery, showForm, editVinculo, modoNuevo, clienteVinculado]);
+
+  function elegirCliente(c: Cliente) {
+    setClienteVinculado(c);
+    setClienteResultados([]);
+    setClienteQuery('');
+    // Prellenar datos vacíos del tutor con los del cliente.
+    setNuevo((f) => ({
+      ...f,
+      nombre: f.nombre.trim() || c.razonSocial,
+      telefono: f.telefono.trim() || (c.telefono ?? ''),
+      email: f.email.trim() || (c.email ?? ''),
+    }));
+  }
 
   const yaVinculados = new Set(tutores.map((t) => t.tutorId));
   const disponibles = tutoresTeam.filter((t) => !yaVinculados.has(t.id));
@@ -73,6 +120,9 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     setNuevo(EMPTY_NUEVO);
     setRelacion('tutor');
     setResponsablePago(false);
+    setClienteVinculado(null);
+    setClienteQuery('');
+    setClienteResultados([]);
     setError(null);
     setShowForm(true);
   }
@@ -81,6 +131,9 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     setEditVinculo(v);
     setRelacion(v.relacion);
     setResponsablePago(v.responsablePago);
+    setClienteVinculado(null);
+    setClienteQuery('');
+    setClienteResultados([]);
     setError(null);
     setShowForm(true);
   }
@@ -97,7 +150,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
         const res = await fetch('/api/administracion-escolar/tutores', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nuevo),
+          body: JSON.stringify({ ...nuevo, clientId: clienteVinculado?.id ?? null }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? 'Error creando tutor');
@@ -167,7 +220,14 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
             <tbody>
               {tutores.map((t) => (
                 <tr key={t.id} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-2.5 font-medium text-gray-900">{t.nombre}</td>
+                  <td className="px-3 py-2.5">
+                    <span className="font-medium text-gray-900">{t.nombre}</span>
+                    {t.clientId && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-teal-700" title={`Contacto: ${t.clienteRazonSocial}`}>
+                        <Link2 className="h-3 w-3" />Contacto
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-gray-600 capitalize">{t.relacion}</td>
                   <td className="px-3 py-2.5 text-gray-600">{t.telefono ?? '—'}</td>
                   <td className="px-3 py-2.5 text-gray-600">{t.email ?? '—'}</td>
@@ -228,16 +288,53 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                       <SelectTrigger><SelectValue placeholder="Selecciona un tutor" /></SelectTrigger>
                       <SelectContent>
                         {disponibles.map((t) => (
-                          <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>
+                          <SelectItem key={t.id} value={String(t.id)}>
+                            {t.nombre}{t.clientId ? ` · ${t.clienteRazonSocial}` : ''}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 ) : (
                   <>
+                    {/* Vínculo opcional con un contacto/cliente existente */}
+                    <div className="space-y-1.5">
+                      <Label className="flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-gray-400" />Contacto / cliente (para facturar)
+                      </Label>
+                      {clienteVinculado ? (
+                        <div className="flex items-center justify-between gap-2 border border-teal-200 bg-teal-50 rounded-lg px-3 py-2">
+                          <span className="text-sm font-medium text-teal-800 truncate">{clienteVinculado.razonSocial}</span>
+                          <button onClick={() => setClienteVinculado(null)}
+                            className="text-teal-600 hover:text-teal-800 shrink-0">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <Input className="pl-8" placeholder="Buscar cliente (opcional)…"
+                            value={clienteQuery} onChange={(e) => setClienteQuery(e.target.value)} />
+                          {(buscandoCliente || clienteResultados.length > 0) && (
+                            <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
+                              {buscandoCliente ? (
+                                <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
+                              ) : clienteResultados.map((c) => (
+                                <button key={c.id} onClick={() => elegirCliente(c)}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
+                                  <p className="font-medium text-gray-900">{c.razonSocial}</p>
+                                  <p className="text-xs text-gray-400">{c.rnc ?? c.email ?? '—'}</p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="space-y-1.5">
                       <Label>Nombre *</Label>
-                      <Input autoFocus value={nuevo.nombre}
+                      <Input value={nuevo.nombre}
                         onChange={(e) => setNuevo((f) => ({ ...f, nombre: e.target.value }))} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">

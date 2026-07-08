@@ -4,6 +4,7 @@ import {
   adminEscolarEstudiantes,
   adminEscolarEstudianteTutores,
   adminEscolarTutores,
+  clients,
 } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
@@ -25,11 +26,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       documento: adminEscolarTutores.documento,
       telefono: adminEscolarTutores.telefono,
       email: adminEscolarTutores.email,
+      clientId: adminEscolarTutores.clientId,
+      clienteRazonSocial: clients.razonSocial,
       relacion: adminEscolarEstudianteTutores.relacion,
       responsablePago: adminEscolarEstudianteTutores.responsablePago,
     })
     .from(adminEscolarEstudianteTutores)
     .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+    .leftJoin(clients, eq(adminEscolarTutores.clientId, clients.id))
     .where(and(
       eq(adminEscolarEstudianteTutores.teamId, teamId),
       eq(adminEscolarEstudianteTutores.estudianteId, estudianteId),

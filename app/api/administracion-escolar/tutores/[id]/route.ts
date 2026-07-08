@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarTutores } from '@/lib/db/schema';
+import { adminEscolarTutores, clients } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
@@ -9,7 +9,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { nombre, documento, telefono, email, direccion } = await req.json();
+  const { nombre, documento, telefono, email, direccion, clientId } = await req.json();
+
+  // clientId: null desvincula; si viene un id, debe pertenecer al team.
+  if (clientId !== undefined && clientId !== null) {
+    const [c] = await db.select({ id: clients.id }).from(clients)
+      .where(and(eq(clients.id, clientId), eq(clients.teamId, teamId)))
+      .limit(1);
+    if (!c) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+  }
+
   const [row] = await db.update(adminEscolarTutores)
     .set({
       ...(nombre !== undefined ? { nombre: nombre.trim() } : {}),
@@ -17,6 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(telefono !== undefined ? { telefono: telefono?.trim() || null } : {}),
       ...(email !== undefined ? { email: email?.trim() || null } : {}),
       ...(direccion !== undefined ? { direccion: direccion?.trim() || null } : {}),
+      ...(clientId !== undefined ? { clientId } : {}),
       updatedAt: new Date(),
     })
     .where(and(eq(adminEscolarTutores.id, parseInt(id)), eq(adminEscolarTutores.teamId, teamId)))

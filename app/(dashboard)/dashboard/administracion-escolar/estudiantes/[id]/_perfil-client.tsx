@@ -66,6 +66,8 @@ interface TutorVinculo {
   documento: string | null;
   telefono: string | null;
   email: string | null;
+  clientId: number | null;
+  clienteRazonSocial: string | null;
   relacion: string;
   responsablePago: boolean;
 }
