@@ -845,7 +845,7 @@ function Venta({
           ) : filtrados.length === 0 ? (
             <p className="text-sm text-gray-500">Sin productos para esta terminal.</p>
           ) : (
-            <div className="grid flex-1 grid-cols-2 content-start gap-3 overflow-auto pb-24 sm:grid-cols-3 md:pb-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-auto pb-24 sm:grid-cols-3 md:pb-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtrados.map((p) => {
                 const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
                 const qty = qtyEnCarrito(p.id);
