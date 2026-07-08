@@ -12,6 +12,10 @@
 --
 -- Si esta migración aún no se aplica, `getIngresosPorProducto` cae a expansión
 -- en vivo — el rollup solo acelera, no es requisito de funcionamiento.
+--
+-- Nota: los campos numéricos de `lineas_json` pueden venir como texto no-numérico
+-- (ej. tasaItbis = 'exento'). Se extraen con un cast SEGURO (regex que descarta
+-- todo lo que no sea dígito/punto/signo) → valor inválido se trata como 0/1.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_reportes_ventas_lineas AS
@@ -28,25 +32,11 @@ SELECT
   END                                                          AS clave,
   coalesce(ln.elem->>'nombreItem', ln.elem->>'nombre', 'Ítem') AS nombre,
   nullif(trim(coalesce(ln.elem->>'referencia', '')), '')       AS referencia,
-  coalesce((ln.elem->>'cantidadItem')::numeric, (ln.elem->>'cantidad')::numeric, 1) AS unidades,
+  v.cant                                                       AS unidades,
   -- base (sin ITBIS) en centavos = (precio*cantidad − descuento) * 100
-  round(
-    greatest(
-      0,
-      coalesce((ln.elem->>'precioUnitarioItem')::numeric, (ln.elem->>'precio')::numeric, 0)
-        * coalesce((ln.elem->>'cantidadItem')::numeric, (ln.elem->>'cantidad')::numeric, 1)
-      - coalesce((ln.elem->>'descuentoMonto')::numeric, (ln.elem->>'descuento')::numeric, 0)
-    ) * 100
-  )::bigint                                                    AS base_cents,
+  round(greatest(0, v.precio * v.cant - v.descuento) * 100)::bigint   AS base_cents,
   -- itbis de la línea en centavos = base * tasa
-  round(
-    greatest(
-      0,
-      coalesce((ln.elem->>'precioUnitarioItem')::numeric, (ln.elem->>'precio')::numeric, 0)
-        * coalesce((ln.elem->>'cantidadItem')::numeric, (ln.elem->>'cantidad')::numeric, 1)
-      - coalesce((ln.elem->>'descuentoMonto')::numeric, (ln.elem->>'descuento')::numeric, 0)
-    ) * coalesce((ln.elem->>'tasaItbis')::numeric, (ln.elem->>'tasa')::numeric, 0) * 100
-  )::bigint                                                    AS itbis_cents
+  round(greatest(0, v.precio * v.cant - v.descuento) * v.tasa * 100)::bigint AS itbis_cents
 FROM ecf_documents d
 CROSS JOIN LATERAL jsonb_array_elements(
   CASE
@@ -55,6 +45,14 @@ CROSS JOIN LATERAL jsonb_array_elements(
     ELSE '[]'::jsonb
   END
 ) WITH ORDINALITY AS ln(elem, ord)
+-- Cast numérico seguro (computa una vez por línea)
+CROSS JOIN LATERAL (
+  SELECT
+    coalesce(nullif(regexp_replace(coalesce(ln.elem->>'precioUnitarioItem', ln.elem->>'precio', ''), '[^0-9.\-]', '', 'g'), '')::numeric, 0) AS precio,
+    coalesce(nullif(regexp_replace(coalesce(ln.elem->>'cantidadItem',       ln.elem->>'cantidad',  ''), '[^0-9.\-]', '', 'g'), '')::numeric, 1) AS cant,
+    coalesce(nullif(regexp_replace(coalesce(ln.elem->>'descuentoMonto',      ln.elem->>'descuento', ''), '[^0-9.\-]', '', 'g'), '')::numeric, 0) AS descuento,
+    coalesce(nullif(regexp_replace(coalesce(ln.elem->>'tasaItbis',           ln.elem->>'tasa',      ''), '[^0-9.\-]', '', 'g'), '')::numeric, 0) AS tasa
+) AS v
 WHERE d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
   AND d.tipo_ecf IN ('31', '32', '33', '44', '45');
 
