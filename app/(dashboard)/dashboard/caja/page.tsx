@@ -48,6 +48,11 @@ interface Movimiento {
   createdAt: string;
 }
 
+interface Terminal {
+  id: number;
+  nombre: string;
+}
+
 const TIPO_LABELS: Record<string, string> = {
   ENTRADA: 'Entrada',
   SALIDA:  'Salida',
@@ -389,11 +394,14 @@ export default function CajaPage() {
   const [desglose, setDesglose]       = useState<Desglose | null>(null);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [ventasPorMetodo, setVentasPorMetodo] = useState<VentaPorMetodo[]>([]);
+  const [terminalActiva, setTerminalActiva]   = useState<Terminal | null>(null);
 
   // Apertura form
   const [montoApertura, setMontoApertura] = useState('');
   const [aperObs, setAperObs]             = useState('');
   const [abriendo, setAbriendo]           = useState(false);
+  const [terminales, setTerminales]       = useState<Terminal[]>([]);
+  const [terminalId, setTerminalId]       = useState<number | null>(null);
 
   // Modals
   const [showMovimiento, setShowMovimiento] = useState(false);
@@ -412,6 +420,12 @@ export default function CajaPage() {
       setDesglose(data.desglose ?? null);
       setMovimientos(data.movimientos ?? []);
       setVentasPorMetodo(data.ventasPorMetodo ?? []);
+      setTerminalActiva(data.terminal ?? null);
+
+      const terms: Terminal[] = data.terminales ?? [];
+      setTerminales(terms);
+      // Preselecciona la primera terminal por defecto (si hay alguna).
+      setTerminalId(prev => prev ?? (terms.length > 0 ? terms[0].id : null));
     }
     setLoading(false);
   }, []);
@@ -448,7 +462,11 @@ export default function CajaPage() {
     const res = await fetch('/api/caja/turnos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ montoApertura: monto, observaciones: aperObs || undefined }),
+      body: JSON.stringify({
+        montoApertura: monto,
+        observaciones: aperObs || undefined,
+        terminalId: terminalId ?? undefined,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     setAbriendo(false);
@@ -486,6 +504,33 @@ export default function CajaPage() {
         </div>
 
         <form onSubmit={abrirTurno} className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5 shadow-sm">
+          {terminales.length > 0 && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Terminal / Caja
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {terminales.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTerminalId(t.id)}
+                    className={`rounded-xl border px-3 py-2.5 text-sm font-medium text-left transition-colors ${
+                      terminalId === t.id
+                        ? 'border-teal-500 bg-teal-50 text-teal-800 ring-1 ring-teal-500'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {t.nombre}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                Selecciona la caja física en la que abres el turno.
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Monto de apertura (RD$)
@@ -605,7 +650,9 @@ export default function CajaPage() {
             <Wallet className="h-5 w-5 text-teal-700" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Mi caja</h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              {terminalActiva ? terminalActiva.nombre : 'Mi caja'}
+            </h1>
             <p className="text-sm text-gray-500">
               Abierta a las {fmtHora(turno.aperturaAt)}
             </p>

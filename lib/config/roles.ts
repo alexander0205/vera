@@ -36,6 +36,8 @@ export type Permission =
   // Productos
   | 'productos:ver'
   | 'productos:gestionar'
+  // Maestros (listas custom de atributos) — solo admin/owner
+  | 'maestros:gestionar'
   // Cotizaciones
   | 'cotizaciones:ver'
   | 'cotizaciones:gestionar'
@@ -53,6 +55,9 @@ export type Permission =
   | 'caja:ver'       // ver estado de caja, turnos e historial
   | 'caja:operar'    // abrir turno, registrar movimientos, solicitar cierre (cajero)
   | 'caja:aprobar'   // aprobar/rechazar cierres con descuadre, ajustes (supervisor)
+  // Punto de venta (POS)
+  | 'pos:vender'     // abrir terminal, vender y cobrar en el POS (cajero)
+  | 'pos:configurar' // crear/editar terminales y config del POS (admin/owner)
   // Suscripción / billing
   | 'suscripcion:gestionar'
   // Administración escolar
@@ -116,7 +121,9 @@ export const ROLES: RoleDef[] = [
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
       'compras:ver',
+      'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
+      'pos:vender', 'pos:configurar',
       'suscripcion:gestionar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
     ],
@@ -137,8 +144,10 @@ export const ROLES: RoleDef[] = [
       'equipo:ver', 'equipo:gestionar',
       'configuracion:ver', 'configuracion:gestionar',
       'compras:ver',
+      'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
+      'pos:vender', 'pos:configurar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -158,6 +167,7 @@ export const ROLES: RoleDef[] = [
       'equipo:ver',
       'caja:ver', 'caja:operar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:pagos',
+      'pos:vender',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
   },
@@ -215,6 +225,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   { module: 'Productos', icon: 'Package', permissions: [
     { key: 'productos:ver',       label: 'Ver productos' },
     { key: 'productos:gestionar', label: 'Crear / editar / eliminar' },
+    { key: 'maestros:gestionar',  label: 'Gestionar maestros (atributos)' },
   ]},
   { module: 'Cotizaciones', icon: 'FileSpreadsheet', permissions: [
     { key: 'cotizaciones:ver',       label: 'Ver cotizaciones' },
@@ -230,6 +241,10 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'caja:ver',     label: 'Ver caja e historial' },
     { key: 'caja:operar',  label: 'Abrir turno / registrar movimientos' },
     { key: 'caja:aprobar', label: 'Aprobar cierres y descuadres' },
+  ]},
+  { module: 'Punto de venta', icon: 'Store', permissions: [
+    { key: 'pos:vender',     label: 'Vender y cobrar (cajero)' },
+    { key: 'pos:configurar', label: 'Configurar terminales del POS' },
   ]},
   { module: 'Equipo', icon: 'UserCog', permissions: [
     { key: 'equipo:ver',       label: 'Ver equipo' },

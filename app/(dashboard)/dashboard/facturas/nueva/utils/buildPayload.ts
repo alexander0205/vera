@@ -124,6 +124,9 @@ export function buildPayload(input: BuildPayloadInput) {
           descuentoMonto:         item.descuentoPct > 0 ? descuentoMonto : undefined,
           tasaItbis:              tasaToFloat(item.tasaItbis),
           indicadorBienoServicio: parseInt(item.indicadorBienoServicio) as 1 | 2,
+          // Control de inventario — sin esto el backend no puede descontar stock
+          // (ver lib/inventario/descuento.ts: filtra por productoId > 0).
+          productoId:             item.productoId ?? undefined,
           // Beneficiario por línea — el backend valida items[].dependienteId.
           dependienteId:          item.dependienteId ?? undefined,
           dependienteNombre:      item.dependienteNombre || undefined,

@@ -5,11 +5,13 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
-  ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2,
+  ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2, PackagePlus,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
+import ModalRegistrarCompra from '../_modal-registrar-compra';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +119,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 export default function CompraDetallePage() {
   const { id } = useParams<{ id: string }>();
   const { can, isLoading: permLoading } = usePermissions();
+  const [showEntrada, setShowEntrada] = useState(false);
 
   const { data, isLoading, error } = useSWR<RecepcionEcfDto>(
     !permLoading && can('compras:ver') && id ? `/api/compras/${id}` : null,
@@ -173,7 +176,7 @@ export default function CompraDetallePage() {
       </Link>
 
       {/* Header */}
-      <div className="flex items-start gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-lg font-bold text-gray-900 font-mono">{data.eNcf}</h1>
@@ -185,7 +188,22 @@ export default function CompraDetallePage() {
           </div>
           <p className="text-sm text-gray-500 mt-0.5">{tipoLabel(data)}</p>
         </div>
+        {can('productos:gestionar') && (
+          <Button size="sm" variant="outline" onClick={() => setShowEntrada(true)}>
+            <PackagePlus className="h-4 w-4 mr-1.5" /> Registrar entrada
+          </Button>
+        )}
       </div>
+
+      <ModalRegistrarCompra
+        open={showEntrada}
+        onClose={() => setShowEntrada(false)}
+        onSuccess={() => {}}
+        prefill={{
+          proveedorRnc:   data.rncEmisor ?? data.rnc ?? undefined,
+          referenciaEncf: data.eNcf ?? undefined,
+        }}
+      />
 
       {/* Datos principales */}
       <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">

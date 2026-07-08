@@ -148,6 +148,9 @@ export default function ConfiguracionPage() {
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
+  // Módulo punto de venta (POS)
+  const [posHabilitado, setPosHabilitado]               = useState(false);
+  const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
   // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
@@ -175,6 +178,9 @@ export default function ConfiguracionPage() {
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
+        // Módulo POS
+        setPosHabilitado(d.posHabilitado ?? false);
+        setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
         setRole(d.role ?? null);
@@ -203,6 +209,8 @@ export default function ConfiguracionPage() {
           // Gracia eliminada del config: la mora aplica al vencer.
           recargoMoraDiasGracia: 0,
           cajaHabilitada,
+          posHabilitado,
+          posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
           metodosObligaDgii,
         }),
@@ -676,6 +684,57 @@ export default function ConfiguracionPage() {
         </CardContent>
       </Card>}
 
+      {/* ── Módulo Punto de Venta (POS) ─────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Punto de venta (POS)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Habilita la pantalla de venta rápida full-screen para cafeterías, tiendas o cualquier
+            negocio de mostrador. Cada caja se configura como una "terminal" con su almacén fijo.
+          </p>
+
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Activar punto de venta</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Habilita el acceso a <code>/pos</code> y la gestión de terminales.
+              </p>
+            </div>
+            <button
+              type="button" role="switch" aria-checked={posHabilitado}
+              onClick={() => setPosHabilitado(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                posHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          {posHabilitado && (
+            <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Capa escolar (monedero del estudiante)</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Solo para colegios: saldo prepago por estudiante con cargo al acudiente.
+                </p>
+              </div>
+              <button
+                type="button" role="switch" aria-checked={posEscolarHabilitado}
+                onClick={() => setPosEscolarHabilitado(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                  posEscolarHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posEscolarHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Equipo y permisos — solo roles con equipo:gestionar */}
       {canManageTeam && <EquipoCard />}
 
@@ -683,7 +742,7 @@ export default function ConfiguracionPage() {
 
       {/* Botón guardar final — barra sticky inferior (solo si puede editar) */}
       {canManage && (
-        <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
+        <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
           <Button
             onClick={handleSave}
             disabled={saving}
