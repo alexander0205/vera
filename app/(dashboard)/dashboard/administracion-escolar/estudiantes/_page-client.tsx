@@ -252,6 +252,7 @@ export default function EstudiantesClient() {
               key={seleccionado.id}
               estudiante={seleccionado}
               onRegistrarPago={() => { if (puedePagos) setPagoOpen(true); }}
+              onChange={cargar}
             />
           ) : (
             <div className="border border-dashed border-gray-200 rounded-xl p-8 text-center text-sm text-gray-400 h-full flex items-center justify-center">

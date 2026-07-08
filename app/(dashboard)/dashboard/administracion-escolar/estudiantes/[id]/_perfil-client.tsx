@@ -8,6 +8,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
+import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
+import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
@@ -80,6 +82,7 @@ function badgeSaldo(c: Cargo) {
 export default function PerfilEstudianteClient({ id }: { id: number }) {
   const { permissions } = usePermissions();
   const puedePagos = permissions.includes('administracion-escolar:pagos');
+  const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
 
   const [estudiante, setEstudiante] = useState<Estudiante | null>(null);
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
@@ -89,9 +92,12 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [loading, setLoading]       = useState(true);
   const [notFound, setNotFound]     = useState(false);
   const [pagoOpen, setPagoOpen]     = useState(false);
+  const [editOpen, setEditOpen]     = useState(false);
 
+  // No pone `loading` en true en recargas posteriores: si lo hiciera, el early
+  // return de abajo desmontaría <Tabs> en cada refresh (registrar pago, editar,
+  // tutores) y se perdería la pestaña activa del usuario.
   const cargar = useCallback(async () => {
-    setLoading(true);
     try {
       const est = await fetch(`/api/administracion-escolar/estudiantes/${id}`).then((r) => r.json());
       if (!est.estudiante) { setNotFound(true); setLoading(false); return; }
@@ -145,12 +151,17 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
             {matriculaActiva?.periodo ? ` · Período ${matriculaActiva.periodo}` : ''}
           </p>
         </div>
-        {puedePagos && (
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => setPagoOpen(true)}
-            disabled={estudiante.deudaCentavos === 0}>
-            Registrar pago
-          </Button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {puedeGestionar && (
+            <Button variant="outline" onClick={() => setEditOpen(true)}>Editar</Button>
+          )}
+          {puedePagos && (
+            <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => setPagoOpen(true)}
+              disabled={estudiante.deudaCentavos === 0}>
+              Registrar pago
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -299,20 +310,26 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
             {/* Tutores */}
             <TabsContent value="tutores" className="pt-4">
-              <h2 className="text-base font-semibold text-gray-900 mb-2">Tutores</h2>
-              {tutores.length === 0 ? (
-                <EmptyBox text="Sin tutores asociados" />
+              {puedeGestionar ? (
+                <TutoresPanel estudianteId={estudiante.id} tutores={tutores} onChange={cargar} />
               ) : (
-                <SimpleTable head={['Nombre', 'Relación', 'Teléfono', 'Email', 'Responsable']}
-                  rows={tutores.map((t) => [
-                    t.nombre,
-                    <span key="r" className="capitalize">{t.relacion}</span>,
-                    t.telefono ?? '—',
-                    t.email ?? '—',
-                    t.responsablePago
-                      ? <Badge key="p" className="bg-teal-50 text-teal-700 border-teal-200">Pago</Badge>
-                      : <span key="p" className="text-gray-300">—</span>,
-                  ])} />
+                <>
+                  <h2 className="text-base font-semibold text-gray-900 mb-2">Tutores</h2>
+                  {tutores.length === 0 ? (
+                    <EmptyBox text="Sin tutores asociados" />
+                  ) : (
+                    <SimpleTable head={['Nombre', 'Relación', 'Teléfono', 'Email', 'Responsable']}
+                      rows={tutores.map((t) => [
+                        t.nombre,
+                        <span key="r" className="capitalize">{t.relacion}</span>,
+                        t.telefono ?? '—',
+                        t.email ?? '—',
+                        t.responsablePago
+                          ? <Badge key="p" className="bg-teal-50 text-teal-700 border-teal-200">Pago</Badge>
+                          : <span key="p" className="text-gray-300">—</span>,
+                      ])} />
+                  )}
+                </>
               )}
             </TabsContent>
 
@@ -331,6 +348,13 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         open={pagoOpen}
         onClose={() => setPagoOpen(false)}
         onDone={cargar}
+      />
+
+      <EditarEstudianteDialog
+        estudiante={estudiante}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSaved={cargar}
       />
     </section>
   );
