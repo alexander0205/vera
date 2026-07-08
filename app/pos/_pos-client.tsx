@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText, Star, Package, Plus, Camera, X, Percent } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText, Star, Plus, Camera, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
+import { RncSearch } from '@/components/RncSearch';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
 
@@ -16,7 +17,15 @@ interface TerminalProp {
   listaPreciosId: number | null;
   listaNombre:    string | null;
   tipoEcf:        string;
+  mesas:          boolean;
 }
+
+interface MesaVista {
+  id: number; nombre: string; zona: string | null;
+  ocupada: boolean; comandaId: number | null;
+  meseroNombre: string | null; totalCentavos: number; items: number;
+}
+interface MeseroVista { id: number; nombre: string; }
 interface TurnoProp {
   id:                    number;
   terminalId:            number | null;
@@ -38,7 +47,12 @@ interface ProductoPos {
   categoriaNombre:      string | null;
   imagen:               string | null;
 }
-interface LineaCarrito extends ProductoPos { qty: number; }
+interface LineaCarrito extends ProductoPos { qty: number; precioOverride?: number; }
+
+/** Precio efectivo de una línea: el editado manualmente o el de catálogo. */
+function precioLinea(it: LineaCarrito): number {
+  return it.precioOverride ?? it.precio;
+}
 
 interface ListaPrecio { id: number; nombre: string; }
 interface ClienteView { id: number; razonSocial: string; rnc: string | null; email: string | null; }
@@ -46,6 +60,31 @@ interface ClienteView { id: number; razonSocial: string; rnc: string | null; ema
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
 type MetodoCobro = Metodo | 'cuenta-estudiante';
+
+/** Venta aparcada (hold) — se persiste en localStorage por turno para no perder
+ *  el carrito al atender otra venta o si se recarga la página. */
+interface VentaAparcada {
+  id:        string;   // marca de tiempo/etiqueta única
+  etiqueta:  string;   // nombre visible (cliente o "Venta N")
+  ts:        number;
+  carrito:   LineaCarrito[];
+  tipoEcf:   string;
+  cliente:   ClienteView | null;
+}
+
+function claveAparcadas(turnoId: number): string {
+  return `pos:aparcadas:${turnoId}`;
+}
+function leerAparcadas(turnoId: number): VentaAparcada[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(claveAparcadas(turnoId));
+    return raw ? (JSON.parse(raw) as VentaAparcada[]) : [];
+  } catch { return []; }
+}
+function guardarAparcadas(turnoId: number, lista: VentaAparcada[]) {
+  try { window.localStorage.setItem(claveAparcadas(turnoId), JSON.stringify(lista)); } catch { /* cuota llena: ignora */ }
+}
 
 interface MonederoView {
   id:                    number;
@@ -64,6 +103,21 @@ function tasaFloat(t: string): number {
   const n = Number(t);
   return Number.isFinite(n) ? n : 0;
 }
+
+/** Color de fondo estable por nombre (tile de producto sin foto, estilo POS). */
+function tileColor(nombre: string): { bg: string; fg: string } {
+  let h = 0;
+  for (let i = 0; i < nombre.length; i++) h = (h * 31 + nombre.charCodeAt(i)) % 360;
+  return { bg: `hsl(${h} 55% 90%)`, fg: `hsl(${h} 45% 32%)` };
+}
+
+/** Inicial(es) para el tile: primeras letras de las dos primeras palabras. */
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/);
+  const a = partes[0]?.[0] ?? '';
+  const b = partes[1]?.[0] ?? '';
+  return (a + b).toUpperCase() || '?';
+}
 function fmt(centavos: number): string {
   return 'RD$ ' + (centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -72,7 +126,7 @@ interface DescuentoAplicado { pct: number; ids: Set<number>; }
 /** Descuento (centavos) que aplica a una línea del carrito, 0 si no está seleccionada. */
 function descuentoLinea(it: LineaCarrito, descuento: DescuentoAplicado | null): number {
   if (!descuento || !descuento.ids.has(it.id)) return 0;
-  return Math.round(it.precio * it.qty * descuento.pct / 100);
+  return Math.round(precioLinea(it) * it.qty * descuento.pct / 100);
 }
 
 /** base + ITBIS encima (espejo de calcularTotales del motor de facturas). Descuento
@@ -80,7 +134,7 @@ function descuentoLinea(it: LineaCarrito, descuento: DescuentoAplicado | null): 
 function totalesCarrito(items: LineaCarrito[], descuento: DescuentoAplicado | null = null) {
   let subtotal = 0, itbis = 0, descuentoTotal = 0;
   for (const it of items) {
-    const baseSinDescuento = it.precio * it.qty;
+    const baseSinDescuento = precioLinea(it) * it.qty;
     const desc = descuentoLinea(it, descuento);
     const base = baseSinDescuento - desc;
     descuentoTotal += desc;
@@ -88,9 +142,6 @@ function totalesCarrito(items: LineaCarrito[], descuento: DescuentoAplicado | nu
     itbis += Math.round(base * tasaFloat(it.tasaItbis));
   }
   return { subtotal, itbis, total: subtotal + itbis, descuentoTotal };
-}
-function abrirTicket(id: number) {
-  window.open(`/pos-ticket/${id}`, '_blank', 'width=420,height=680');
 }
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -226,6 +277,9 @@ function Venta({
   const [cliente, setCliente] = useState<ClienteView | null>(null);
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
   const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
+  const [cierreAbierto, setCierreAbierto] = useState(false);
+  const [aparcadas, setAparcadas] = useState<VentaAparcada[]>([]);
+  const [aparcadasAbierto, setAparcadasAbierto] = useState(false);
 
   // El botón "Nuevo producto" vive SIEMPRE en la misma fila que los chips de
   // categoría (a su misma altura, alineado a la derecha). Cuando el botón con
@@ -250,19 +304,21 @@ function Venta({
     if (res.ok) setEstudiante((await res.json()).monedero);
   }, []);
 
-  const cargarCatalogo = useCallback(async () => {
+  // `silencioso` refresca en segundo plano sin mostrar el spinner "Cargando…"
+  // (p.ej. tras una venta, para refrescar stock sin blanquear la grilla).
+  const cargarCatalogo = useCallback(async (silencioso = false) => {
     if (!turno.terminalId) { setCargando(false); return; }
-    setCargando(true);
+    if (!silencioso) setCargando(true);
     const params = new URLSearchParams({ terminalId: String(turno.terminalId) });
     if (listaPreciosId !== 'general') params.set('listaPreciosId', String(listaPreciosId));
     const res = await fetch(`/api/pos/catalogo?${params}`);
     if (res.ok) {
       const data = await res.json();
       setProductos(data.productos ?? []);
-    } else {
+    } else if (!silencioso) {
       toast.error('No se pudo cargar el catálogo');
     }
-    setCargando(false);
+    if (!silencioso) setCargando(false);
   }, [turno.terminalId, listaPreciosId]);
 
   useEffect(() => { cargarCatalogo(); }, [cargarCatalogo]);
@@ -359,25 +415,178 @@ function Venta({
     );
   }
 
-  async function cobrar(metodo: MetodoCobro, recibidoCentavos: number) {
-    const esMonedero = metodo === 'cuenta-estudiante';
+  /** Fija un precio manual (centavos) a la línea; null restaura el de catálogo. */
+  function editarPrecio(id: number, centavos: number | null) {
+    setCarrito((prev) =>
+      prev.map((c) => (c.id === id
+        ? { ...c, precioOverride: centavos == null ? undefined : Math.max(0, centavos) }
+        : c)),
+    );
+  }
+
+  // Carga las ventas aparcadas del turno al montar.
+  useEffect(() => { setAparcadas(leerAparcadas(turno.id)); }, [turno.id]);
+
+  /** Aparca el carrito actual (hold) y limpia la venta para atender otra. */
+  function aparcar() {
+    if (carrito.length === 0) return;
+    const nueva: VentaAparcada = {
+      id:       String(carrito[0].id) + '-' + carrito.length + '-' + (aparcadas.length + 1),
+      etiqueta: cliente?.razonSocial ?? `Venta ${aparcadas.length + 1}`,
+      ts:       Date.now(),
+      carrito,
+      tipoEcf,
+      cliente,
+    };
+    const lista = [...aparcadas, nueva];
+    setAparcadas(lista);
+    guardarAparcadas(turno.id, lista);
+    setCarrito([]);
+    setDescuentoAplicado(null);
+    setCliente(null);
+    toast.success('Venta aparcada');
+  }
+
+  /** Retoma una venta aparcada al carrito activo (si el actual está vacío). */
+  function retomar(a: VentaAparcada) {
+    if (carrito.length > 0) { toast.error('Cobra o aparca la venta actual antes de retomar otra'); return; }
+    setCarrito(a.carrito);
+    setTipoEcf(a.tipoEcf);
+    setCliente(a.cliente);
+    descartarAparcada(a.id);
+    setAparcadasAbierto(false);
+  }
+
+  function descartarAparcada(id: string) {
+    const lista = aparcadas.filter((x) => x.id !== id);
+    setAparcadas(lista);
+    guardarAparcadas(turno.id, lista);
+  }
+
+  // Atajos de teclado (no interfieren cuando se escribe en un input/textarea/select).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'F2') { e.preventDefault(); setCobroDirecto(true); }
+      else if (e.key === 'F3') { e.preventDefault(); aparcar(); }
+      else if (e.key === 'F4') { e.preventDefault(); setAparcadasAbierto(true); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carrito, aparcadas, cliente, tipoEcf]);
+
+  // F2 abre el cobro directamente desde el panel de carrito.
+  const [cobroDirecto, setCobroDirecto] = useState(false);
+
+  // ── Modo restaurante (capacidad `mesas` de la terminal) ────────────────────
+  const modoMesas = !!terminal?.mesas;
+  const [mesaActiva, setMesaActiva] = useState<MesaVista | null>(null);
+  const [comandaId, setComandaId] = useState<number | null>(null);
+  const [mesero, setMesero] = useState<MeseroVista | null>(null);
+  const [pinAbierto, setPinAbierto] = useState(false);
+  const [mesaPendiente, setMesaPendiente] = useState<MesaVista | null>(null);
+  const [refrescoMesas, setRefrescoMesas] = useState(0);
+
+  /** Reconstruye el carrito desde las líneas persistidas de la comanda. */
+  const hidratarComanda = useCallback((items: { productoId: number | null; nombre: string; precioCentavos: number; qty: number; tasaItbis: string; tipo: string }[]): LineaCarrito[] => {
+    return items.map((it) => {
+      const prod = productos.find((p) => p.id === it.productoId);
+      if (prod) {
+        return { ...prod, qty: it.qty, precioOverride: it.precioCentavos !== prod.precio ? it.precioCentavos : undefined };
+      }
+      // Línea mínima (producto fuera de catálogo o sin id, p.ej. propina).
+      return {
+        id: it.productoId ?? -Math.abs(it.precioCentavos + it.nombre.length),
+        nombre: it.nombre, referencia: null, codigoBarras: null, precio: it.precioCentavos,
+        tasaItbis: it.tasaItbis, tipo: it.tipo, controlaInventario: false, permiteVentaSinStock: true,
+        favorito: false, stockAlmacen: null, categoriaId: null, categoriaNombre: null, imagen: null, qty: it.qty,
+      };
+    });
+  }, [productos]);
+
+  async function abrirMesa(m: MesaVista) {
+    if (!mesero) { setMesaPendiente(m); setPinAbierto(true); return; }
+    await entrarComanda(m);
+  }
+
+  async function entrarComanda(m: MesaVista, meseroOverride?: MeseroVista) {
+    const mid = (meseroOverride ?? mesero)?.id ?? null;
+    const res = await fetch('/api/pos/comandas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terminalId: turno.terminalId, mesaId: m.id, meseroId: mid, turnoId: turno.id }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(d.error ?? 'No se pudo abrir la mesa'); return; }
+    setComandaId(d.comanda.id);
+    setCarrito(hidratarComanda(d.items ?? []));
+    setDescuentoAplicado(null);
+    setMesaActiva(m);
+  }
+
+  /** Persiste el carrito actual en la comanda (sin cobrar). */
+  async function guardarComanda(silencioso = false): Promise<boolean> {
+    if (comandaId == null) return true;
+    const items = carrito.map((c) => ({
+      productoId: c.id > 0 ? c.id : null,
+      nombre: c.nombre, precioCentavos: precioLinea(c), qty: c.qty,
+      tasaItbis: c.tasaItbis, tipo: c.tipo,
+      descuentoPct: descuentoAplicado?.ids.has(c.id) ? descuentoAplicado.pct : 0,
+    }));
+    const res = await fetch(`/api/pos/comandas/${comandaId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, meseroId: mesero?.id ?? null }),
+    });
+    if (!res.ok) { toast.error('No se pudo guardar la comanda'); return false; }
+    if (!silencioso) toast.success('Comanda guardada');
+    return true;
+  }
+
+  function volverAMesas() {
+    setMesaActiva(null);
+    setComandaId(null);
+    setCarrito([]);
+    setDescuentoAplicado(null);
+    setRefrescoMesas((n) => n + 1);
+  }
+
+  async function guardarYVolver() {
+    if (await guardarComanda(true)) { toast.success('Comanda guardada'); volverAMesas(); }
+  }
+
+  async function cobrar(
+    pagos: { metodo: MetodoCobro; valorCentavos: number }[],
+    recibidoCentavos: number,
+    propinaCentavos = 0,
+  ) {
+    const esMonedero = pagos.length === 1 && pagos[0].metodo === 'cuenta-estudiante';
+    const totalConPropina = totales.total + propinaCentavos;
+
+    // Crédito fiscal (e31) exige RNC del comprador (DGII #38). El servidor lo
+    // revalida, pero se corta aquí para no perder la venta con un error tardío.
+    if (tipoEcf === '31' && !cliente?.rnc) {
+      toast.error('El crédito fiscal (e31) requiere el RNC del comprador');
+      return;
+    }
 
     // Pre-chequeo del monedero (el servidor lo re-valida atómicamente).
     if (esMonedero) {
       if (!estudiante) { toast.error('Selecciona un estudiante'); return; }
-      if (estudiante.saldoCentavos < totales.total) { toast.error('Saldo insuficiente en el monedero'); return; }
-      if (estudiante.disponibleHoyCentavos != null && totales.total > estudiante.disponibleHoyCentavos) {
+      if (estudiante.saldoCentavos < totalConPropina) { toast.error('Saldo insuficiente en el monedero'); return; }
+      if (estudiante.disponibleHoyCentavos != null && totalConPropina > estudiante.disponibleHoyCentavos) {
         toast.error('La venta excede el límite diario del estudiante'); return;
       }
     }
 
     setCobrando(true);
+    let docId: number | null = null;
     const items = carrito.map((c) => {
       const descCentavos = descuentoLinea(c, descuentoAplicado);
       return {
         nombreItem:             c.nombre,
         cantidadItem:           c.qty,
-        precioUnitarioItem:     c.precio / 100,         // base en pesos
+        precioUnitarioItem:     precioLinea(c) / 100,   // base en pesos (precio editado o de catálogo)
         descuentoMonto:         descCentavos > 0 ? descCentavos / 100 : undefined,
         tasaItbis:              tasaFloat(c.tasaItbis) as 0 | 0.16 | 0.18,
         indicadorBienoServicio: (c.tipo === 'bien' ? 1 : 2) as 1 | 2,
@@ -385,13 +594,35 @@ function Venta({
       };
     });
 
+    // La propina va como línea de servicio exenta: entra en el NCF y el ticket,
+    // y reconcilia en caja como parte del cobro (no distorsiona el ITBIS).
+    if (propinaCentavos > 0) {
+      items.push({
+        nombreItem:             'Propina',
+        cantidadItem:           1,
+        precioUnitarioItem:     propinaCentavos / 100,
+        descuentoMonto:         undefined,
+        tasaItbis:              0,
+        indicadorBienoServicio: 2,
+        productoId:             undefined as unknown as number,
+      });
+    }
+
     // Persistir las líneas (detalle de venta + ticket). Forma compatible con ItemLinea[].
-    const lineasJson = JSON.stringify(carrito.map((c, i) => ({
+    const lineasBase = carrito.map((c, i) => ({
       id: i + 1, productoId: c.id, nombreItem: c.nombre, referencia: c.referencia ?? '',
-      descripcionItem: '', cantidadItem: c.qty, precioUnitarioItem: c.precio / 100,
+      descripcionItem: '', cantidadItem: c.qty, precioUnitarioItem: precioLinea(c) / 100,
       descuentoPct: (descuentoAplicado?.ids.has(c.id) ? descuentoAplicado.pct : 0),
       tasaItbis: c.tasaItbis, indicadorBienoServicio: c.tipo === 'bien' ? '1' : '2',
-    })));
+    }));
+    if (propinaCentavos > 0) {
+      lineasBase.push({
+        id: lineasBase.length + 1, productoId: 0, nombreItem: 'Propina', referencia: '',
+        descripcionItem: '', cantidadItem: 1, precioUnitarioItem: propinaCentavos / 100,
+        descuentoPct: 0, tasaItbis: 'exento', indicadorBienoServicio: '2',
+      });
+    }
+    const lineasJson = JSON.stringify(lineasBase);
 
     const payload = {
       modo:                 'borrador',
@@ -405,7 +636,7 @@ function Venta({
       items,
       lineasJson,
       pagoRecibido:         true,
-      pagos:                [{ metodo, valor: totales.total / 100 }],
+      pagos:                pagos.map((p) => ({ metodo: p.metodo, valor: p.valorCentavos / 100 })),
       almacenId:            terminal?.almacenId ?? null,
     };
 
@@ -425,7 +656,7 @@ function Venta({
       }
       toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(r.saldoCentavos)}`);
       await refrescarEstudiante(estudiante.dependienteId);
-      if (r.documentoId) abrirTicket(r.documentoId);
+      if (r.documentoId) { docId = r.documentoId; }
     } else {
       const res = await fetch('/api/ecf/emitir', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -437,20 +668,71 @@ function Venta({
         toast.error(venta.error ?? 'No se pudo completar la venta');
         return;
       }
-      const cambio = recibidoCentavos - totales.total;
+      const cambio = recibidoCentavos - totalConPropina;
       toast.success(cambio > 0 ? `Venta cobrada. Cambio: ${fmt(cambio)}` : 'Venta cobrada');
-      if (venta.documentoId) abrirTicket(venta.documentoId);
+      if (venta.documentoId) { docId = venta.documentoId; }
+    }
+
+    // Modo restaurante: cierra la comanda contra el e-CF emitido y libera la mesa.
+    if (comandaId != null && docId != null) {
+      await fetch(`/api/pos/comandas/${comandaId}/cobrar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ecfDocumentId: docId }),
+      }).catch(() => {});
+      volverAMesas();
+      cargarCatalogo(true);   // refresca stock sin parpadeo
+      return;
     }
 
     setCarrito([]);
     setDescuentoAplicado(null);
-    cargarCatalogo();   // refresca stock
+    cargarCatalogo(true);   // refresca stock sin parpadeo
   }
 
   const [carritoMovilAbierto, setCarritoMovilAbierto] = useState(false);
 
+  // Modo restaurante: sin mesa activa → pantalla de salón (grid de mesas).
+  if (modoMesas && !mesaActiva) {
+    return (
+      <>
+        <GridMesas
+          terminalNombre={terminal?.nombre ?? 'Salón'}
+          terminalId={turno.terminalId ?? 0}
+          mesero={mesero}
+          refresco={refrescoMesas}
+          onAbrirMesa={abrirMesa}
+          onCambiarMesero={() => setMesero(null)}
+        />
+        {pinAbierto && (
+          <PinMeseroModal
+            onClose={() => { setPinAbierto(false); setMesaPendiente(null); }}
+            onOk={(m) => {
+              setMesero(m); setPinAbierto(false);
+              const mp = mesaPendiente; setMesaPendiente(null);
+              if (mp) entrarComanda(mp, m);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden">
+      {mesaActiva && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-sm sm:px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <button onClick={guardarYVolver} className="flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100">
+              <ArrowLeft className="h-3.5 w-3.5" /> Mesas
+            </button>
+            <span className="truncate font-semibold text-amber-900">{mesaActiva.nombre}</span>
+            {mesero && <span className="truncate text-xs text-amber-700">· {mesero.nombre}</span>}
+          </div>
+          <button onClick={() => guardarComanda(false)} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700">
+            Guardar comanda
+          </button>
+        </div>
+      )}
       <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 sm:px-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Link href="/dashboard" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2" title="Volver al panel">
@@ -471,17 +753,39 @@ function Venta({
           className="order-last h-11 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 sm:order-none sm:mx-3 sm:h-10 sm:max-w-xs md:max-w-sm"
         />
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <span className="hidden rounded-full bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 sm:inline">Turno abierto</span>
+          <span className="hidden rounded-full bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 lg:inline">Turno abierto</span>
+          <button
+            onClick={aparcar}
+            disabled={carrito.length === 0}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+            title="Aparcar venta (F3)"
+          >
+            <PauseCircle className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Aparcar</span>
+          </button>
+          <button
+            onClick={() => setAparcadasAbierto(true)}
+            className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+            title="Ventas aparcadas (F4)"
+          >
+            <ListChecks className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Aparcadas</span>
+            {aparcadas.length > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[11px] font-semibold text-white">{aparcadas.length}</span>
+            )}
+          </button>
           <button
             onClick={() => window.open(`/pos-reporte/${turno.id}`, '_blank', 'width=420,height=680')}
             className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
             title="Corte X del turno"
           >
-            <FileText className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Reporte X</span>
+            <FileText className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Reporte X</span>
           </button>
-          <Link href="/dashboard/caja" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2" title="Ir a cierre de caja">
-            <LogOut className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Cerrar turno</span>
-          </Link>
+          <button
+            onClick={() => setCierreAbierto(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+            title="Cerrar turno (corte Z)"
+          >
+            <LogOut className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm md:inline">Cerrar turno</span>
+          </button>
         </div>
       </header>
 
@@ -504,7 +808,7 @@ function Venta({
                   <>
                     <button
                       onClick={() => setCategoriaActiva('todas')}
-                      className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium ${
+                      className={`shrink-0 rounded-full border px-5 py-2.5 text-base font-medium ${
                         categoriaActiva === 'todas' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
                       }`}
                     >
@@ -514,7 +818,7 @@ function Venta({
                       <button
                         key={c.id}
                         onClick={() => setCategoriaActiva(c.id)}
-                        className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium ${
+                        className={`shrink-0 rounded-full border px-5 py-2.5 text-base font-medium ${
                           categoriaActiva === c.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
                         }`}
                       >
@@ -558,12 +862,17 @@ function Venta({
                       {p.imagen ? (
                         <img src={p.imagen} alt={p.nombre} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-gray-300">
-                          <Package className="h-10 w-10" />
-                        </div>
+                        (() => {
+                          const c = tileColor(p.nombre);
+                          return (
+                            <div className="flex h-full w-full items-center justify-center" style={{ backgroundColor: c.bg }}>
+                              <span className="text-4xl font-bold sm:text-5xl" style={{ color: c.fg }}>{iniciales(p.nombre)}</span>
+                            </div>
+                          );
+                        })()
                       )}
                       {qty > 0 && (
-                        <span className="absolute left-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-semibold text-white">
+                        <span className="absolute left-2 top-2 flex h-8 min-w-8 items-center justify-center rounded-full bg-blue-600 px-2 text-sm font-bold text-white shadow">
                           {qty}
                         </span>
                       )}
@@ -571,20 +880,20 @@ function Venta({
                         role="button"
                         title={p.favorito ? 'Quitar de favoritos' : 'Marcar favorito'}
                         onClick={(e) => { e.stopPropagation(); toggleFavorito(p); }}
-                        className="absolute right-0.5 top-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-white/80"
+                        className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-full bg-white/85"
                       >
-                        <Star className={`h-5 w-5 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
+                        <Star className={`h-6 w-6 ${p.favorito ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
                       </span>
                     </div>
-                    <div className="flex flex-1 flex-col justify-between p-3">
+                    <div className="flex flex-1 flex-col justify-between p-3.5">
                       <div>
-                        <div className="text-sm font-semibold leading-tight sm:text-base">{p.nombre}</div>
-                        <div className="mt-0.5 text-xs text-gray-400">
+                        <div className="text-base font-semibold leading-tight sm:text-lg">{p.nombre}</div>
+                        <div className="mt-1 text-sm text-gray-400">
                           {p.referencia ? p.referencia + ' · ' : ''}
                           {p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : ''}
                         </div>
                       </div>
-                      <div className="mt-1 text-base font-semibold text-gray-900">{fmt(p.precio)}</div>
+                      <div className="mt-1.5 text-xl font-bold text-gray-900">{fmt(p.precio)}</div>
                     </div>
                   </button>
                 );
@@ -599,6 +908,7 @@ function Venta({
             carrito={carrito}
             totales={totales}
             cambiarQty={cambiarQty}
+            editarPrecio={editarPrecio}
             cobrando={cobrando}
             onCobrar={cobrar}
             escolar={escolarHabilitado}
@@ -613,6 +923,8 @@ function Venta({
             onSelectCliente={setCliente}
             descuentoAplicado={descuentoAplicado}
             onAplicarDescuento={setDescuentoAplicado}
+            cobroDirecto={cobroDirecto}
+            onCobroConsumido={() => setCobroDirecto(false)}
           />
         </div>
       </div>
@@ -638,6 +950,7 @@ function Venta({
               carrito={carrito}
               totales={totales}
               cambiarQty={cambiarQty}
+              editarPrecio={editarPrecio}
               cobrando={cobrando}
               onCobrar={cobrar}
               escolar={escolarHabilitado}
@@ -663,6 +976,23 @@ function Venta({
           onCreated={() => { setNuevoProductoAbierto(false); cargarCatalogo(); }}
         />
       )}
+
+      {aparcadasAbierto && (
+        <AparcadasModal
+          aparcadas={aparcadas}
+          onRetomar={retomar}
+          onDescartar={descartarAparcada}
+          onClose={() => setAparcadasAbierto(false)}
+        />
+      )}
+
+      {cierreAbierto && (
+        <CierreModal
+          turnoId={turno.id}
+          onClose={() => setCierreAbierto(false)}
+          onCerrado={() => { setCierreAbierto(false); router.refresh(); }}
+        />
+      )}
     </div>
   );
 }
@@ -670,15 +1000,16 @@ function Venta({
 // ─── Panel de carrito + cobro ────────────────────────────────────────────────
 
 function CarritoPanel({
-  carrito, totales, cambiarQty, cobrando, onCobrar, escolar, estudiante, onSelectEstudiante,
+  carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, estudiante, onSelectEstudiante,
   listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
-  descuentoAplicado, onAplicarDescuento,
+  descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido,
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
   cambiarQty: (id: number, delta: number) => void;
+  editarPrecio: (id: number, centavos: number | null) => void;
   cobrando: boolean;
-  onCobrar: (metodo: MetodoCobro, recibidoCentavos: number) => void;
+  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
   escolar: boolean;
   estudiante: MonederoView | null;
   onSelectEstudiante: (e: MonederoView | null) => void;
@@ -691,9 +1022,19 @@ function CarritoPanel({
   onSelectCliente: (c: ClienteView | null) => void;
   descuentoAplicado: DescuentoAplicado | null;
   onAplicarDescuento: (d: DescuentoAplicado | null) => void;
+  cobroDirecto?: boolean;
+  onCobroConsumido?: () => void;
 }) {
   const [abrirCobro, setAbrirCobro] = useState(false);
   const [panelDescuento, setPanelDescuento] = useState(false);
+
+  // F2: abre el cobro desde el panel si hay ítems en el carrito.
+  useEffect(() => {
+    if (cobroDirecto) {
+      if (carrito.length > 0) setAbrirCobro(true);
+      onCobroConsumido?.();
+    }
+  }, [cobroDirecto, carrito.length, onCobroConsumido]);
 
   if (panelDescuento) {
     return (
@@ -735,6 +1076,27 @@ function CarritoPanel({
           </div>
         </div>
         <ClientePicker cliente={cliente} onSelect={onSelectCliente} />
+        {tipoEcf === '31' && (
+          <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+            <label className="mb-1 block text-xs font-medium text-amber-800">
+              RNC del comprador · obligatorio para crédito fiscal
+            </label>
+            {cliente?.rnc ? (
+              <div className="flex items-center justify-between text-sm">
+                <span className="truncate font-medium text-amber-900">
+                  {cliente.rnc} · {cliente.razonSocial}
+                </span>
+                <button onClick={() => onSelectCliente(null)} className="shrink-0 text-xs text-amber-700 underline">cambiar</button>
+              </div>
+            ) : (
+              <RncSearch
+                placeholder="Buscar RNC / cédula o razón social…"
+                showSyncHint={false}
+                onSelect={(r) => onSelectCliente({ id: 0, razonSocial: r.nombre || 'Sin nombre', rnc: r.rnc, email: null })}
+              />
+            )}
+          </div>
+        )}
       </div>
       {escolar && <EstudiantePicker estudiante={estudiante} onSelect={onSelectEstudiante} />}
       <div className="mb-2 flex items-center justify-between">
@@ -755,18 +1117,18 @@ function CarritoPanel({
           carrito.map((c) => {
             const desc = descuentoLinea(c, descuentoAplicado);
             return (
-              <div key={c.id} className="flex items-center justify-between gap-2 border-b border-gray-100 py-2.5">
+              <div key={c.id} className="flex items-center justify-between gap-2 border-b border-gray-100 py-3">
                 <div className="min-w-0 leading-tight">
-                  <div className="truncate text-sm font-medium">{c.nombre}</div>
-                  <div className="text-xs text-gray-400">
-                    {fmt(c.precio)} c/u
-                    {desc > 0 && <span className="ml-1 text-emerald-600">−{descuentoAplicado!.pct}%</span>}
+                  <div className="truncate text-base font-medium">{c.nombre}</div>
+                  <div className="mt-0.5 flex items-center gap-1 text-sm text-gray-400">
+                    <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(c.id, cents)} />
+                    {desc > 0 && <span className="text-emerald-600">−{descuentoAplicado!.pct}%</span>}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <button onClick={() => cambiarQty(c.id, -1)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-lg text-gray-600 active:bg-gray-50">−</button>
-                  <span className="w-6 text-center text-sm font-medium">{c.qty}</span>
-                  <button onClick={() => cambiarQty(c.id, 1)} className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-lg text-gray-600 active:bg-gray-50">+</button>
+                  <button onClick={() => cambiarQty(c.id, -1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">−</button>
+                  <span className="w-7 text-center text-lg font-semibold">{c.qty}</span>
+                  <button onClick={() => cambiarQty(c.id, 1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">+</button>
                 </div>
               </div>
             );
@@ -781,16 +1143,19 @@ function CarritoPanel({
             <button onClick={() => onAplicarDescuento(null)} className="font-medium underline">quitar</button>
           </div>
         )}
-        <div className="mb-0.5 flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>{fmt(totales.subtotal + totales.descuentoTotal)}</span></div>
+        <div className="mb-1 flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>{fmt(totales.subtotal + totales.descuentoTotal)}</span></div>
         {totales.descuentoTotal > 0 && (
-          <div className="mb-0.5 flex justify-between text-xs text-emerald-600"><span>Descuento</span><span>−{fmt(totales.descuentoTotal)}</span></div>
+          <div className="mb-1 flex justify-between text-sm text-emerald-600"><span>Descuento</span><span>−{fmt(totales.descuentoTotal)}</span></div>
         )}
-        <div className="mb-2 flex justify-between text-xs text-gray-500"><span>ITBIS</span><span>{fmt(totales.itbis)}</span></div>
-        <div className="mb-3 flex justify-between text-lg font-medium"><span>Total</span><span>{fmt(totales.total)}</span></div>
+        <div className="mb-2 flex justify-between text-sm text-gray-500"><span>ITBIS</span><span>{fmt(totales.itbis)}</span></div>
+        <div className="mb-3 flex items-baseline justify-between"><span className="text-lg font-semibold">Total</span><span className="text-2xl font-bold">{fmt(totales.total)}</span></div>
+        {tipoEcf === '31' && !cliente?.rnc && carrito.length > 0 && (
+          <p className="mb-2 text-center text-sm font-medium text-amber-600">Carga el RNC del comprador para el crédito fiscal</p>
+        )}
         <button
-          disabled={carrito.length === 0}
+          disabled={carrito.length === 0 || (tipoEcf === '31' && !cliente?.rnc)}
           onClick={() => setAbrirCobro(true)}
-          className="w-full rounded-lg bg-green-600 py-3 font-medium text-white disabled:opacity-50"
+          className="w-full rounded-xl bg-green-600 py-4 text-lg font-semibold text-white disabled:opacity-50"
         >
           Cobrar {fmt(totales.total)}
         </button>
@@ -802,7 +1167,7 @@ function CarritoPanel({
           cobrando={cobrando}
           estudiante={estudiante}
           onClose={() => setAbrirCobro(false)}
-          onConfirm={(m, recibido) => { onCobrar(m, recibido); setAbrirCobro(false); }}
+          onConfirm={(pagos, recibido, propina) => { onCobrar(pagos, recibido, propina); setAbrirCobro(false); }}
         />
       )}
     </div>
@@ -1136,96 +1501,396 @@ function CobroModal({
   cobrando: boolean;
   estudiante: MonederoView | null;
   onClose: () => void;
-  onConfirm: (metodo: MetodoCobro, recibidoCentavos: number) => void;
+  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
 }) {
+  const [propina, setPropina] = useState('');
+  const [split, setSplit] = useState(false);
+
+  // Modo simple (un método) — o cuenta-estudiante.
   const [metodo, setMetodo] = useState<MetodoCobro>('efectivo');
   const [recibido, setRecibido] = useState('');
 
-  const recibidoCentavos = Math.round((Number(recibido) || 0) * 100);
-  const cambio = metodo === 'efectivo' ? recibidoCentavos - total : 0;
-  const faltaEfectivo = metodo === 'efectivo' && recibidoCentavos < total;
+  // Modo dividido — filas {método, valor en pesos}.
+  const [filas, setFilas] = useState<{ metodo: Metodo; valor: string }[]>([
+    { metodo: 'efectivo', valor: '' },
+    { metodo: 'tarjeta', valor: '' },
+  ]);
 
-  // Validación del monedero al seleccionar "Cuenta estudiante".
-  const saldoCorto   = metodo === 'cuenta-estudiante' && !!estudiante && estudiante.saldoCentavos < total;
-  const excedeLimite = metodo === 'cuenta-estudiante' && !!estudiante
-    && estudiante.disponibleHoyCentavos != null && total > estudiante.disponibleHoyCentavos;
-  const monederoBloqueado = metodo === 'cuenta-estudiante' && (saldoCorto || excedeLimite);
+  const propinaCentavos = Math.max(0, Math.round((Number(propina) || 0) * 100));
+  const totalCobrar = total + propinaCentavos;
+
+  const esMonedero = metodo === 'cuenta-estudiante' && !split;
+  const recibidoCentavos = Math.round((Number(recibido) || 0) * 100);
+  const cambio = metodo === 'efectivo' && !split ? recibidoCentavos - totalCobrar : 0;
+  const faltaEfectivo = metodo === 'efectivo' && !split && recibidoCentavos < totalCobrar;
+
+  // Suma del split (centavos) y si cuadra exacto con el total a cobrar.
+  const sumaSplit = filas.reduce((s, f) => s + Math.round((Number(f.valor) || 0) * 100), 0);
+  const splitCuadra = split && sumaSplit === totalCobrar && totalCobrar > 0;
+  const restanteSplit = totalCobrar - sumaSplit;
+
+  // Validación del monedero (solo modo simple).
+  const saldoCorto   = esMonedero && !!estudiante && estudiante.saldoCentavos < totalCobrar;
+  const excedeLimite = esMonedero && !!estudiante
+    && estudiante.disponibleHoyCentavos != null && totalCobrar > estudiante.disponibleHoyCentavos;
+  const monederoBloqueado = esMonedero && (saldoCorto || excedeLimite);
+
+  function setFilaMetodo(i: number, m: Metodo) {
+    setFilas((prev) => prev.map((f, idx) => (idx === i ? { ...f, metodo: m } : f)));
+  }
+  function setFilaValor(i: number, v: string) {
+    setFilas((prev) => prev.map((f, idx) => (idx === i ? { ...f, valor: v } : f)));
+  }
+  function autollenarResto(i: number) {
+    const otros = filas.reduce((s, f, idx) => (idx === i ? s : s + Math.round((Number(f.valor) || 0) * 100)), 0);
+    const resto = Math.max(0, totalCobrar - otros);
+    setFilaValor(i, (resto / 100).toFixed(2));
+  }
+
+  function confirmar() {
+    if (split) {
+      if (!splitCuadra) return;
+      const pagos = filas
+        .map((f) => ({ metodo: f.metodo as MetodoCobro, valorCentavos: Math.round((Number(f.valor) || 0) * 100) }))
+        .filter((p) => p.valorCentavos > 0);
+      onConfirm(pagos, totalCobrar, propinaCentavos);
+      return;
+    }
+    if (esMonedero) {
+      onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos);
+      return;
+    }
+    const recibidoOut = metodo === 'efectivo' ? recibidoCentavos : totalCobrar;
+    onConfirm([{ metodo, valorCentavos: totalCobrar }], recibidoOut, propinaCentavos);
+  }
+
+  const puedeConfirmar = !cobrando && (split ? splitCuadra : (!faltaEfectivo && !monederoBloqueado));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[92vh] w-full max-w-sm overflow-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <span className="text-base font-medium">Cobrar venta</span>
           <button onClick={onClose} className="text-gray-400">✕</button>
         </div>
 
-        <div className="mb-4 rounded-lg bg-gray-50 p-3 text-center">
+        <div className="mb-3 rounded-lg bg-gray-50 p-3 text-center">
           <div className="text-xs text-gray-500">Total a cobrar</div>
-          <div className="text-2xl font-medium">{fmt(total)}</div>
+          <div className="text-2xl font-medium">{fmt(totalCobrar)}</div>
+          {propinaCentavos > 0 && (
+            <div className="mt-0.5 text-[11px] text-gray-400">Incluye propina {fmt(propinaCentavos)}</div>
+          )}
         </div>
 
-        <div className="mb-3 grid grid-cols-3 gap-2">
-          {METODOS.map((m) => (
-            <button
-              key={m}
-              onClick={() => setMetodo(m)}
-              className={`rounded-lg border py-2 text-xs capitalize ${
-                metodo === m ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
+        {/* Propina */}
+        <label className="mb-1 block text-xs text-gray-500">Propina (opcional)</label>
+        <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
+          <span className="text-gray-400">RD$</span>
+          <input
+            type="number" min="0" step="0.01" value={propina}
+            onChange={(e) => setPropina(e.target.value)}
+            placeholder="0.00"
+            className="w-full bg-transparent px-2 py-2 text-sm outline-none"
+          />
         </div>
 
-        {estudiante && (
-          <button
-            onClick={() => setMetodo('cuenta-estudiante')}
-            className={`mb-3 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${
-              metodo === 'cuenta-estudiante' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-            }`}
-          >
-            <span>Cuenta de {estudiante.nombre}</span>
-            <span className="text-xs">saldo {fmt(estudiante.saldoCentavos)}</span>
-          </button>
-        )}
+        {/* Toggle pago dividido */}
+        <label className="mb-3 flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
+          <span className="text-gray-700">Pago dividido</span>
+          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} />
+        </label>
 
-        {monederoBloqueado && (
-          <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-            {saldoCorto ? 'Saldo insuficiente en el monedero.' : 'Excede el límite diario del estudiante.'}
-          </div>
-        )}
-
-        {metodo === 'efectivo' && (
+        {!split ? (
           <>
-            <label className="mb-1 block text-xs text-gray-500">Efectivo recibido</label>
-            <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
-              <span className="text-gray-400">RD$</span>
-              <input
-                type="number" min="0" step="0.01" value={recibido} autoFocus
-                onChange={(e) => setRecibido(e.target.value)}
-                className="w-full bg-transparent px-2 py-2.5 text-lg outline-none"
-              />
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              {METODOS.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMetodo(m)}
+                  className={`rounded-lg border py-2 text-xs capitalize ${
+                    metodo === m ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
             </div>
-            {recibidoCentavos > 0 && !faltaEfectivo && (
-              <div className="mb-3 flex justify-between rounded-lg bg-green-50 p-3 text-green-700">
-                <span className="text-sm">Cambio</span>
-                <span className="font-medium">{fmt(cambio)}</span>
+
+            {estudiante && (
+              <button
+                onClick={() => setMetodo('cuenta-estudiante')}
+                className={`mb-3 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                  metodo === 'cuenta-estudiante' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                <span>Cuenta de {estudiante.nombre}</span>
+                <span className="text-xs">saldo {fmt(estudiante.saldoCentavos)}</span>
+              </button>
+            )}
+
+            {monederoBloqueado && (
+              <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                {saldoCorto ? 'Saldo insuficiente en el monedero.' : 'Excede el límite diario del estudiante.'}
               </div>
             )}
+
+            {metodo === 'efectivo' && (
+              <>
+                <label className="mb-1 block text-xs text-gray-500">Efectivo recibido</label>
+                <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
+                  <span className="text-gray-400">RD$</span>
+                  <input
+                    type="number" min="0" step="0.01" value={recibido} autoFocus
+                    onChange={(e) => setRecibido(e.target.value)}
+                    className="w-full bg-transparent px-2 py-2.5 text-lg outline-none"
+                  />
+                </div>
+                {recibidoCentavos > 0 && !faltaEfectivo && (
+                  <div className="mb-3 flex justify-between rounded-lg bg-green-50 p-3 text-green-700">
+                    <span className="text-sm">Cambio</span>
+                    <span className="font-medium">{fmt(cambio)}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="mb-2 space-y-2">
+              {filas.map((f, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    value={f.metodo}
+                    onChange={(e) => setFilaMetodo(i, e.target.value as Metodo)}
+                    className="h-10 rounded-lg border border-gray-300 px-2 text-sm capitalize outline-none focus:border-blue-500"
+                  >
+                    {METODOS.map((m) => <option key={m} value={m} className="capitalize">{m}</option>)}
+                  </select>
+                  <div className="flex flex-1 items-center rounded-lg border border-gray-300 px-2">
+                    <span className="text-xs text-gray-400">RD$</span>
+                    <input
+                      type="number" min="0" step="0.01" value={f.valor}
+                      onChange={(e) => setFilaValor(i, e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-transparent px-1.5 py-2 text-sm outline-none"
+                    />
+                  </div>
+                  <button onClick={() => autollenarResto(i)} title="Completar el resto"
+                    className="rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-500 hover:bg-gray-50">resto</button>
+                  {filas.length > 2 && (
+                    <button onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="text-gray-300 hover:text-red-500"><X className="h-4 w-4" /></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setFilas((prev) => [...prev, { metodo: 'transferencia', valor: '' }])}
+              className="mb-2 flex items-center gap-1 text-xs font-medium text-blue-600"
+            >
+              <Plus className="h-3.5 w-3.5" /> Agregar método
+            </button>
+            <div className={`mb-3 flex justify-between rounded-lg px-3 py-2 text-sm ${
+              splitCuadra ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+            }`}>
+              <span>{splitCuadra ? 'Cuadra' : (restanteSplit > 0 ? 'Falta' : 'Sobra')}</span>
+              <span className="font-medium">{fmt(Math.abs(restanteSplit))}</span>
+            </div>
           </>
         )}
 
         <button
-          disabled={cobrando || faltaEfectivo || monederoBloqueado}
-          onClick={() => onConfirm(metodo, metodo === 'efectivo' ? recibidoCentavos : total)}
+          disabled={!puedeConfirmar}
+          onClick={confirmar}
           className="w-full rounded-lg bg-green-600 py-3 font-medium text-white disabled:opacity-50"
         >
           {cobrando ? 'Procesando…'
+            : split ? (splitCuadra ? 'Confirmar venta' : 'El pago no cuadra')
             : faltaEfectivo ? 'Efectivo insuficiente'
             : monederoBloqueado ? (saldoCorto ? 'Saldo insuficiente' : 'Excede límite diario')
             : 'Confirmar venta'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Precio editable en línea del carrito ────────────────────────────────────
+
+function PrecioEditable({ linea, onEditar }: {
+  linea: LineaCarrito;
+  onEditar: (centavos: number | null) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState('');
+  const editado = linea.precioOverride != null;
+
+  function abrir() {
+    setValor((precioLinea(linea) / 100).toFixed(2));
+    setEditando(true);
+  }
+  function guardar() {
+    const n = Number(valor);
+    onEditar(Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null);
+    setEditando(false);
+  }
+
+  if (editando) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span className="text-gray-400">RD$</span>
+        <input
+          type="number" min="0" step="0.01" value={valor} autoFocus
+          onChange={(e) => setValor(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false); }}
+          onBlur={guardar}
+          className="w-16 rounded border border-blue-300 px-1 py-0.5 text-xs outline-none"
+        />
+      </span>
+    );
+  }
+
+  return (
+    <button onClick={abrir} title="Editar precio" className={`underline decoration-dotted underline-offset-2 ${editado ? 'text-blue-600' : 'text-gray-400'}`}>
+      {fmt(precioLinea(linea))} c/u{editado ? '*' : ''}
+    </button>
+  );
+}
+
+// ─── Ventas aparcadas (hold) ─────────────────────────────────────────────────
+
+function AparcadasModal({ aparcadas, onRetomar, onDescartar, onClose }: {
+  aparcadas: VentaAparcada[];
+  onRetomar: (a: VentaAparcada) => void;
+  onDescartar: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="max-h-[85vh] w-full max-w-md overflow-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Ventas aparcadas ({aparcadas.length})</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+        {aparcadas.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">No hay ventas aparcadas.</p>
+        ) : (
+          <div className="space-y-2">
+            {aparcadas.map((a) => {
+              const t = totalesCarrito(a.carrito);
+              return (
+                <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{a.etiqueta}</div>
+                    <div className="text-xs text-gray-400">
+                      {a.carrito.length} {a.carrito.length === 1 ? 'ítem' : 'ítems'} · {fmt(t.total)}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button onClick={() => onRetomar(a)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white">Retomar</button>
+                    <button onClick={() => onDescartar(a.id)} className="text-gray-300 hover:text-red-500"><X className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Cierre de turno (corte Z) dentro del POS ────────────────────────────────
+
+function CierreModal({ turnoId, onClose, onCerrado }: {
+  turnoId: number;
+  onClose: () => void;
+  onCerrado: () => void;
+}) {
+  const [estado, setEstado] = useState<{
+    esperado: number; contado: string; obs: string;
+  }>({ esperado: 0, contado: '', obs: '' });
+  const [cargando, setCargando] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/caja/turnos').then((r) => r.json()).then((d) => {
+      setEstado((s) => ({ ...s, esperado: d.desglose?.esperado ?? 0 }));
+      setCargando(false);
+    }).catch(() => setCargando(false));
+  }, []);
+
+  const contadoCentavos = Math.round((Number(estado.contado) || 0) * 100);
+  const diferencia = contadoCentavos - estado.esperado;
+  const hayDiff = estado.contado !== '' && diferencia !== 0;
+
+  async function enviar() {
+    if (hayDiff && !estado.obs.trim()) { toast.error('Hay diferencia: justifica el cierre'); return; }
+    setEnviando(true);
+    const res = await fetch(`/api/caja/turnos/${turnoId}/cierre`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ efectivoContado: Number(estado.contado) || 0, observaciones: estado.obs || undefined }),
+    });
+    setEnviando(false);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(d.error ?? 'No se pudo cerrar'); return; }
+    toast.success('Cierre enviado — pendiente de aprobación del administrador');
+    onCerrado();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Cerrar turno (corte Z)</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+
+        {cargando ? (
+          <p className="py-6 text-center text-sm text-gray-400">Calculando esperado…</p>
+        ) : (
+          <>
+            <div className="mb-3 rounded-lg bg-gray-50 p-3 text-center">
+              <div className="text-xs text-gray-500">Efectivo esperado en caja</div>
+              <div className="text-2xl font-medium">{fmt(estado.esperado)}</div>
+            </div>
+
+            <label className="mb-1 block text-xs text-gray-500">Efectivo contado (RD$)</label>
+            <div className="mb-3 flex items-center rounded-lg border border-gray-300 px-3">
+              <span className="text-gray-400">RD$</span>
+              <input
+                type="number" min="0" step="0.01" value={estado.contado} autoFocus
+                onChange={(e) => setEstado((s) => ({ ...s, contado: e.target.value }))}
+                className="w-full bg-transparent px-2 py-2.5 text-lg outline-none"
+              />
+            </div>
+
+            {estado.contado !== '' && (
+              <div className={`mb-3 flex justify-between rounded-lg px-3 py-2 text-sm ${
+                hayDiff ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+              }`}>
+                <span>{hayDiff ? `Diferencia ${diferencia > 0 ? '+' : ''}${fmt(diferencia)}` : 'Cuadrada'}</span>
+              </div>
+            )}
+
+            <label className="mb-1 block text-xs text-gray-500">Observaciones {hayDiff && <span className="text-red-500">*</span>}</label>
+            <textarea
+              value={estado.obs}
+              onChange={(e) => setEstado((s) => ({ ...s, obs: e.target.value }))}
+              rows={2} maxLength={500}
+              placeholder={hayDiff ? 'Explica el descuadre…' : 'Opcional'}
+              className="mb-3 w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+
+            <button
+              disabled={enviando || estado.contado === ''}
+              onClick={enviar}
+              className="w-full rounded-lg bg-green-600 py-3 font-medium text-white disabled:opacity-50"
+            >
+              {enviando ? 'Enviando…' : 'Firmar y enviar cierre'}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1296,6 +1961,227 @@ function MonederoModal({ estudiante, onClose, onUpdated }: {
             className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="sin límite" />
           <button onClick={guardarLimite} disabled={busy} className="rounded-lg border border-gray-300 px-4 text-sm">Guardar</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modo restaurante: grid de mesas (salón) ─────────────────────────────────
+
+function GridMesas({ terminalNombre, terminalId, mesero, refresco, onAbrirMesa, onCambiarMesero }: {
+  terminalNombre: string;
+  terminalId: number;
+  mesero: MeseroVista | null;
+  refresco: number;
+  onAbrirMesa: (m: MesaVista) => void;
+  onCambiarMesero: () => void;
+}) {
+  const [mesas, setMesas] = useState<MesaVista[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [nuevaAbierto, setNuevaAbierto] = useState(false);
+
+  const cargar = useCallback(async () => {
+    const res = await fetch(`/api/pos/mesas?terminalId=${terminalId}`);
+    if (res.ok) setMesas((await res.json()).mesas ?? []);
+    setCargando(false);
+  }, [terminalId]);
+
+  useEffect(() => { cargar(); }, [cargar, refresco]);
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden">
+      <header className="z-20 flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link href="/dashboard" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2" title="Volver al panel">
+            <ArrowLeft className="h-5 w-5 sm:h-4 sm:w-4" /> <span className="hidden text-sm sm:inline">Panel</span>
+          </Link>
+          <span className="truncate text-sm font-medium">{terminalNombre}</span>
+          <span className="hidden text-gray-400 sm:inline">· Salón</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {mesero ? (
+            <button onClick={onCambiarMesero} className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700">
+              <UserRound className="h-3.5 w-3.5" /> {mesero.nombre} · cambiar
+            </button>
+          ) : (
+            <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-500">Elige mesa → PIN</span>
+          )}
+          <button onClick={() => setNuevaAbierto(true)} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+            <Plus className="h-4 w-4" /> Mesa
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-auto p-4">
+        {cargando ? (
+          <p className="text-sm text-gray-500">Cargando salón…</p>
+        ) : mesas.length === 0 ? (
+          <div className="mx-auto mt-16 max-w-sm text-center">
+            <p className="text-sm text-gray-500">No hay mesas configuradas en esta terminal.</p>
+            <button onClick={() => setNuevaAbierto(true)} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">Crear primera mesa</button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {mesas.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onAbrirMesa(m)}
+                className={`flex aspect-[4/3] flex-col justify-between rounded-xl border p-3 text-left ${
+                  m.ocupada ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white hover:border-blue-400'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-base font-semibold text-gray-900">{m.nombre}</span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${m.ocupada ? 'bg-amber-500' : 'bg-emerald-400'}`} />
+                </div>
+                {m.ocupada ? (
+                  <div className="leading-tight">
+                    <div className="text-sm font-semibold text-amber-800">{fmt(m.totalCentavos)}</div>
+                    <div className="truncate text-[11px] text-amber-600">
+                      {m.items} {m.items === 1 ? 'ítem' : 'ítems'}{m.meseroNombre ? ` · ${m.meseroNombre}` : ''}
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400">{m.zona ?? 'Libre'}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {nuevaAbierto && (
+        <NuevaMesaModal terminalId={terminalId} onClose={() => setNuevaAbierto(false)} onCreated={() => { setNuevaAbierto(false); cargar(); }} />
+      )}
+    </div>
+  );
+}
+
+function PinMeseroModal({ onClose, onOk }: { onClose: () => void; onOk: (m: MeseroVista) => void }) {
+  const [pin, setPin] = useState('');
+  const [verificando, setVerificando] = useState(false);
+  const [gestion, setGestion] = useState(false);
+
+  async function verificar(p: string) {
+    if (p.length < 4) return;
+    setVerificando(true);
+    const res = await fetch('/api/pos/meseros?verificar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: p }),
+    });
+    setVerificando(false);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(d.error ?? 'PIN no reconocido'); setPin(''); return; }
+    onOk(d.mesero);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="w-full max-w-xs rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Identifícate</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+        <p className="mb-3 text-xs text-gray-500">Ingresa tu PIN de mesero.</p>
+        <input
+          type="password" inputMode="numeric" autoFocus value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          onKeyDown={(e) => { if (e.key === 'Enter') verificar(pin); }}
+          placeholder="••••"
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-3 text-center text-2xl tracking-[0.5em] outline-none focus:border-blue-500"
+        />
+        <button
+          disabled={verificando || pin.length < 4}
+          onClick={() => verificar(pin)}
+          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:opacity-50"
+        >
+          {verificando ? 'Verificando…' : 'Entrar'}
+        </button>
+        <button onClick={() => setGestion(true)} className="mt-3 w-full text-center text-xs text-blue-600">
+          Registrar nuevo mesero
+        </button>
+        {gestion && <NuevoMeseroModal onClose={() => setGestion(false)} onCreated={() => setGestion(false)} />}
+      </div>
+    </div>
+  );
+}
+
+function NuevoMeseroModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [nombre, setNombre] = useState('');
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function guardar() {
+    if (!nombre.trim()) { toast.error('Nombre requerido'); return; }
+    if (!/^\d{4,6}$/.test(pin)) { toast.error('PIN de 4 a 6 dígitos'); return; }
+    setBusy(true);
+    const res = await fetch('/api/pos/meseros', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, pin }),
+    });
+    setBusy(false);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(d.error ?? 'No se pudo crear'); return; }
+    toast.success('Mesero registrado');
+    onCreated();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="w-full max-w-xs rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Nuevo mesero</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+        <label className="mb-1 block text-xs text-gray-500">Nombre</label>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+        <label className="mb-1 block text-xs text-gray-500">PIN (4–6 dígitos)</label>
+        <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric"
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+        <button disabled={busy} onClick={guardar} className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+          {busy ? 'Creando…' : 'Registrar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NuevaMesaModal({ terminalId, onClose, onCreated }: { terminalId: number; onClose: () => void; onCreated: () => void }) {
+  const [nombre, setNombre] = useState('');
+  const [zona, setZona] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function guardar() {
+    if (!nombre.trim()) { toast.error('Nombre requerido'); return; }
+    setBusy(true);
+    const res = await fetch('/api/pos/mesas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terminalId, nombre, zona: zona || null }),
+    });
+    setBusy(false);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(d.error ?? 'No se pudo crear la mesa'); return; }
+    toast.success('Mesa creada');
+    onCreated();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+      <div className="w-full max-w-xs rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-base font-medium">Nueva mesa</span>
+          <button onClick={onClose} className="text-gray-400">✕</button>
+        </div>
+        <label className="mb-1 block text-xs text-gray-500">Nombre / número</label>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus placeholder="Mesa 1"
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+        <label className="mb-1 block text-xs text-gray-500">Zona (opcional)</label>
+        <input value={zona} onChange={(e) => setZona(e.target.value)} placeholder="Terraza"
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500" />
+        <button disabled={busy} onClick={guardar} className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+          {busy ? 'Creando…' : 'Crear mesa'}
+        </button>
       </div>
     </div>
   );

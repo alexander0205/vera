@@ -56,6 +56,8 @@ export interface TerminalInput {
   listaPreciosId?: number | null;
   tipoEcf?:       string;
   activo?:        boolean;
+  /** Capacidad restaurante (mesas/comandas). */
+  mesas?:         boolean;
 }
 
 /** Valida que las FKs pertenezcan al mismo equipo (no fugar entre tenants). */
@@ -88,6 +90,7 @@ export async function crearTerminal(teamId: number, input: TerminalInput): Promi
     listaPreciosId: input.listaPreciosId ?? null,
     tipoEcf:        input.tipoEcf ?? 'sin-ncf',
     activo:         input.activo ?? true,
+    mesas:          input.mesas ?? false,
   }).returning();
   return t;
 }
@@ -104,6 +107,7 @@ export async function actualizarTerminal(teamId: number, id: number, input: Term
     listaPreciosId: input.listaPreciosId ?? null,
     tipoEcf:        input.tipoEcf ?? existente.tipoEcf,
     activo:         input.activo ?? existente.activo,
+    mesas:          input.mesas ?? existente.mesas,
   }).where(and(eq(posTerminales.id, id), eq(posTerminales.teamId, teamId))).returning();
   return t;
 }

@@ -16,9 +16,10 @@ interface Terminal {
   listaNombre: string | null;
   tipoEcf: string;
   activo: boolean;
+  mesas: boolean;
 }
 
-const EMPTY = { nombre: '', almacenId: 0, impresoraId: 0, listaPreciosId: 0, tipoEcf: 'sin-ncf' };
+const EMPTY = { nombre: '', almacenId: 0, impresoraId: 0, listaPreciosId: 0, tipoEcf: 'sin-ncf', mesas: false };
 
 export default function TerminalesClient({
   terminalesIniciales, almacenes, impresoras, listas,
@@ -48,6 +49,7 @@ export default function TerminalesClient({
       impresoraId: t.impresoraId ?? 0,
       listaPreciosId: t.listaPreciosId ?? 0,
       tipoEcf: t.tipoEcf,
+      mesas: t.mesas,
     });
     setAbierto(true);
   }
@@ -62,6 +64,7 @@ export default function TerminalesClient({
       impresoraId: form.impresoraId || null,
       listaPreciosId: form.listaPreciosId || null,
       tipoEcf: form.tipoEcf,
+      mesas: form.mesas,
     };
     const url = editId ? `/api/pos/terminales/${editId}` : '/api/pos/terminales';
     const res = await fetch(url, {
@@ -190,6 +193,21 @@ export default function TerminalesClient({
               <option value="32">Factura de consumo (e32)</option>
               <option value="31">Crédito fiscal (e31)</option>
             </select>
+
+            <label className="mb-5 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3">
+              <input
+                type="checkbox"
+                checked={form.mesas}
+                onChange={(e) => setForm({ ...form, mesas: e.target.checked })}
+                className="mt-0.5"
+              />
+              <span className="text-sm">
+                <span className="font-medium text-gray-800">Modo restaurante (mesas)</span>
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  La terminal opera con salón: mesas, meseros con PIN y comandas abiertas.
+                </span>
+              </span>
+            </label>
 
             <div className="flex justify-end gap-2">
               <button onClick={() => setAbierto(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Cancelar</button>

@@ -1257,6 +1257,8 @@ export const posTerminales = pgTable('pos_terminales', {
   listaPreciosId: integer('lista_precios_id').references(() => listasPrecios.id),
   /** Tipo de comprobante por defecto al cobrar: 'sin-ncf' (ticket) o un e-CF. */
   tipoEcf:        varchar('tipo_ecf', { length: 10 }).notNull().default('sin-ncf'),
+  /** Capacidad restaurante: si true, la terminal opera con mesas/comandas. */
+  mesas:          boolean('mesas').notNull().default(false),
   activo:         boolean('activo').notNull().default(true),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
@@ -1273,6 +1275,76 @@ export const posTerminalesRelations = relations(posTerminales, ({ one }) => ({
 
 export type PosTerminal    = typeof posTerminales.$inferSelect;
 export type NewPosTerminal = typeof posTerminales.$inferInsert;
+
+// ─── POS — Modo Restaurante (mesas + comandas + meseros) ─────────────────────
+//
+// Capacidad componible: una terminal con `mesas=true` opera con salón. Las
+// cuentas (comandas) viven server-side porque varios meseros las tocan desde la
+// misma pantalla compartida. Al cobrar, la comanda se convierte en un e-CF.
+
+export const posMeseros = pgTable('pos_meseros', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  nombre:    varchar('nombre', { length: 80 }).notNull(),
+  /** PIN corto para identificarse en la pantalla compartida. */
+  pin:       varchar('pin', { length: 6 }).notNull(),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('pos_meseros_team_idx').on(t.teamId),
+]);
+
+export const mesas = pgTable('mesas', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  terminalId: integer('terminal_id').notNull().references(() => posTerminales.id),
+  nombre:     varchar('nombre', { length: 40 }).notNull(),
+  zona:       varchar('zona', { length: 40 }),
+  activo:     boolean('activo').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('mesas_team_idx').on(t.teamId),
+  index('mesas_terminal_idx').on(t.terminalId),
+]);
+
+export const comandas = pgTable('comandas', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  terminalId:    integer('terminal_id').notNull().references(() => posTerminales.id),
+  mesaId:        integer('mesa_id').notNull().references(() => mesas.id),
+  meseroId:      integer('mesero_id').references(() => posMeseros.id),
+  turnoId:       integer('turno_id').references(() => cajaTurnos.id),
+  /** 'abierta' | 'cobrada' | 'cancelada' */
+  estado:        varchar('estado', { length: 12 }).notNull().default('abierta'),
+  ecfDocumentId: integer('ecf_document_id').references(() => ecfDocuments.id),
+  totalCentavos: integer('total_centavos').notNull().default(0),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('comandas_team_idx').on(t.teamId),
+  index('comandas_mesa_idx').on(t.mesaId),
+]);
+
+export const comandaItems = pgTable('comanda_items', {
+  id:            serial('id').primaryKey(),
+  comandaId:     integer('comanda_id').notNull().references(() => comandas.id, { onDelete: 'cascade' }),
+  productoId:    integer('producto_id').references(() => products.id),
+  nombre:        varchar('nombre', { length: 200 }).notNull(),
+  precioCentavos: integer('precio_centavos').notNull(),
+  qty:           integer('qty').notNull().default(1),
+  tasaItbis:     varchar('tasa_itbis', { length: 10 }).notNull().default('0.18'),
+  tipo:          varchar('tipo', { length: 10 }).notNull().default('bien'),
+  descuentoPct:  integer('descuento_pct').notNull().default(0),
+  notas:         varchar('notas', { length: 200 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('comanda_items_comanda_idx').on(t.comandaId),
+]);
+
+export type PosMesero   = typeof posMeseros.$inferSelect;
+export type Mesa        = typeof mesas.$inferSelect;
+export type Comanda     = typeof comandas.$inferSelect;
+export type ComandaItem = typeof comandaItems.$inferSelect;
 
 // ─── EmiteDO — Cuadre de Caja (turnos) ───────────────────────────────────────
 //

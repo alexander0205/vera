@@ -23,6 +23,7 @@ const terminalSchema = z.object({
   listaPreciosId: z.number().int().positive().nullable().optional(),
   tipoEcf:        z.string().max(10).optional(),
   activo:         z.boolean().optional(),
+  mesas:          z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
