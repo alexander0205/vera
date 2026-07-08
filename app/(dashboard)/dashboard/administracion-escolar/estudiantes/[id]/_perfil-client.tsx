@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2 } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularDependienteDialog } from '@/components/administracion-escolar/VincularDependienteDialog';
+import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
@@ -47,6 +48,8 @@ interface Cargo {
   saldoCentavos: number;
   fechaVencimiento: string | null;
   estado: string;
+  ecfDocumentId: number | null;
+  facturaEncf: string | null;
 }
 interface Pago {
   id: number;
@@ -99,6 +102,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [pagoOpen, setPagoOpen]     = useState(false);
   const [editOpen, setEditOpen]     = useState(false);
   const [vincularOpen, setVincularOpen] = useState(false);
+  const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
 
   // No pone `loading` en true en recargas posteriores: si lo hiciera, el early
   // return de abajo desmontaría <Tabs> en cada refresh (registrar pago, editar,
@@ -276,13 +280,15 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 {cargosPendientes.length === 0 ? (
                   <EmptyBox text="Sin cargos pendientes" />
                 ) : (
-                  <SimpleTable head={['Concepto', 'Mes', 'Vencimiento', 'Monto', 'Saldo']}
+                  <SimpleTable head={['Concepto', 'Mes', 'Vencimiento', 'Monto', 'Saldo', 'Factura']}
                     rows={cargosPendientes.map((c) => [
                       c.concepto ?? '—',
                       c.mes ? MESES[c.mes] : '—',
                       c.fechaVencimiento ? fmtFechaCorta(c.fechaVencimiento) : '—',
                       fmtDOP(c.montoCentavos),
                       badgeSaldo(c),
+                      <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
+                        onVincular={() => setCargoVincularFactura(c)} />,
                     ])} />
                 )}
               </div>
@@ -292,13 +298,15 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 {cargos.length === 0 ? (
                   <EmptyBox text="Sin cargos registrados" />
                 ) : (
-                  <SimpleTable head={['Concepto', 'Mes', 'Año', 'Monto', 'Saldo']}
+                  <SimpleTable head={['Concepto', 'Mes', 'Año', 'Monto', 'Saldo', 'Factura']}
                     rows={cargos.map((c) => [
                       c.concepto ?? '—',
                       c.mes ? MESES[c.mes] : '—',
                       String(c.anio),
                       fmtDOP(c.montoCentavos),
                       badgeSaldo(c),
+                      <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
+                        onVincular={() => setCargoVincularFactura(c)} />,
                     ])} />
                 )}
               </div>
@@ -393,11 +401,38 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         onClose={() => setVincularOpen(false)}
         onSaved={cargar}
       />
+
+      {cargoVincularFactura && (
+        <VincularFacturaDialog
+          cargoId={cargoVincularFactura.id}
+          cargoLabel={`${cargoVincularFactura.concepto ?? 'Cargo'}${cargoVincularFactura.mes ? ` ${MESES[cargoVincularFactura.mes]}` : ''}`}
+          clienteId={responsable?.clientId ?? null}
+          open={!!cargoVincularFactura}
+          onClose={() => setCargoVincularFactura(null)}
+          onSaved={cargar}
+        />
+      )}
     </section>
   );
 }
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────
+
+function FacturaCell({ cargo, puedeGestionar, onVincular }: { cargo: Cargo; puedeGestionar: boolean; onVincular: () => void }) {
+  if (cargo.ecfDocumentId) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-teal-700">
+        <Receipt className="h-3 w-3" />{cargo.facturaEncf ?? `#${cargo.ecfDocumentId}`}
+      </span>
+    );
+  }
+  if (!puedeGestionar) return <span className="text-gray-300 text-xs">—</span>;
+  return (
+    <button onClick={onVincular} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-teal-600 transition-colors">
+      <Link2 className="h-3 w-3" />Vincular
+    </button>
+  );
+}
 
 function VolverLink() {
   return (

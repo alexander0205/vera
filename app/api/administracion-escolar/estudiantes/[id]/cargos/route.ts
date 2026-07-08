@@ -3,6 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCargos,
   adminEscolarConceptosPago,
+  ecfDocuments,
 } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, desc } from 'drizzle-orm';
@@ -25,9 +26,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       saldoCentavos: adminEscolarCargos.saldoCentavos,
       fechaVencimiento: adminEscolarCargos.fechaVencimiento,
       estado: adminEscolarCargos.estado,
+      ecfDocumentId: adminEscolarCargos.ecfDocumentId,
+      facturaEncf: ecfDocuments.encf,
     })
     .from(adminEscolarCargos)
     .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .leftJoin(ecfDocuments, eq(adminEscolarCargos.ecfDocumentId, ecfDocuments.id))
     .where(and(
       eq(adminEscolarCargos.teamId, teamId),
       eq(adminEscolarCargos.estudianteId, parseInt(id)),
