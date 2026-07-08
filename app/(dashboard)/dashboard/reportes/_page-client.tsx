@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, Tags } from 'lucide-react';
+import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet } from 'lucide-react';
 
 type ReporteId = '606' | '607' | '608' | '609';
 
@@ -54,6 +54,44 @@ const REPORTES: ReporteCard[] = [
   },
 ];
 
+const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React.ElementType; color: string }[] = [
+  {
+    href: '/dashboard/reportes/panel',
+    titulo: 'Panel financiero',
+    descripcion: 'KPIs del período: ingresos, ITBIS, cartera y aceptación DGII en una vista.',
+    icon: LayoutDashboard,
+    color: 'bg-teal-50 text-teal-600',
+  },
+  {
+    href: '/dashboard/reportes/tendencia',
+    titulo: 'Tendencia de ingresos',
+    descripcion: 'Evolución de ventas por día, semana o mes. Gráfica y exportable a Excel.',
+    icon: TrendingUp,
+    color: 'bg-sky-50 text-sky-600',
+  },
+  {
+    href: '/dashboard/reportes/por-producto',
+    titulo: 'Ingresos por producto',
+    descripcion: 'Qué productos/servicios generan tus ingresos. Incluye análisis Pareto (80/20).',
+    icon: Package,
+    color: 'bg-indigo-50 text-indigo-600',
+  },
+  {
+    href: '/dashboard/reportes/cuentas-por-cobrar',
+    titulo: 'Cuentas por cobrar',
+    descripcion: 'Antigüedad de saldos (aging) de tu cartera abierta y facturas vencidas.',
+    icon: Wallet,
+    color: 'bg-amber-50 text-amber-600',
+  },
+  {
+    href: '/dashboard/reportes/ventas-generales',
+    titulo: 'Ventas generales',
+    descripcion: 'Visión detallada de ventas y devoluciones. Filtros por fecha, exportable a CSV.',
+    icon: LineChart,
+    color: 'bg-emerald-50 text-emerald-600',
+  },
+];
+
 const MESES: [string, string][] = [
   ['01', 'Enero'],     ['02', 'Febrero'],  ['03', 'Marzo'],     ['04', 'Abril'],
   ['05', 'Mayo'],      ['06', 'Junio'],    ['07', 'Julio'],      ['08', 'Agosto'],
@@ -91,41 +129,24 @@ export default function ReportesPage() {
       <div>
         <p className="text-sm font-semibold text-gray-700 mb-3">Análisis comercial</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Link
-            href="/dashboard/reportes/ventas-generales"
-            className="bg-white border border-gray-200 hover:border-teal-300 hover:shadow-sm rounded-xl p-4 flex items-start gap-3 group transition-all"
-          >
-            <div className="h-10 w-10 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-              <LineChart className="h-5 w-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm font-semibold text-gray-900">Ventas generales</p>
-                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-teal-600 transition-colors" />
+          {ANALISIS.map(a => (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="bg-white border border-gray-200 hover:border-teal-300 hover:shadow-sm rounded-xl p-4 flex items-start gap-3 group transition-all"
+            >
+              <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${a.color}`}>
+                <a.icon className="h-5 w-5" />
               </div>
-              <p className="text-xs text-gray-500">
-                Visión detallada de ventas y devoluciones. Filtros por fecha, gráfica y exportable a CSV.
-              </p>
-            </div>
-          </Link>
-
-          <Link
-            href="/dashboard/reportes/maestros"
-            className="bg-white border border-gray-200 hover:border-teal-300 hover:shadow-sm rounded-xl p-4 flex items-start gap-3 group transition-all"
-          >
-            <div className="h-10 w-10 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-              <Tags className="h-5 w-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm font-semibold text-gray-900">Ventas por clasificación</p>
-                <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-teal-600 transition-colors" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-semibold text-gray-900">{a.titulo}</p>
+                  <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-teal-600 transition-colors" />
+                </div>
+                <p className="text-xs text-gray-500">{a.descripcion}</p>
               </div>
-              <p className="text-xs text-gray-500">
-                Totales de venta agrupados por los valores de un maestro de factura (campaña, canal…).
-              </p>
-            </div>
-          </Link>
+            </Link>
+          ))}
         </div>
       </div>
 
