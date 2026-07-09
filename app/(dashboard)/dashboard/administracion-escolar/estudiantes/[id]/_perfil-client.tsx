@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -95,9 +96,13 @@ function badgeSaldo(c: Cargo) {
 // ─── Página ────────────────────────────────────────────────────────────────
 
 export default function PerfilEstudianteClient({ id }: { id: number }) {
+  const router = useRouter();
   const { permissions } = usePermissions();
   const puedePagos = permissions.includes('administracion-escolar:pagos');
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
+  // Para el flujo "facturar un cargo" hace falta poder crear facturas Y registrar
+  // el pago escolar que lo salda al volver.
+  const puedeFacturar = puedePagos && permissions.includes('facturas:crear');
 
   const [estudiante, setEstudiante] = useState<Estudiante | null>(null);
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
@@ -145,12 +150,16 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
     if (!responsableClientId) { setFacturasTutor([]); return; }
     let cancel = false;
     setFacturasLoading(true);
-    fetch(`/api/facturas?clientId=${responsableClientId}&limit=50`)
+    // dependienteId afina a las facturas de ESTE estudiante — si el estudiante
+    // aún no está vinculado a un dependiente, se mantiene el comportamiento
+    // anterior (todas las facturas del tutor, sin poder distinguir por hijo).
+    const dependienteParam = estudiante?.dependienteId ? `&dependienteId=${estudiante.dependienteId}` : '';
+    fetch(`/api/facturas?clientId=${responsableClientId}${dependienteParam}&limit=50`)
       .then((r) => r.json())
       .then((data) => { if (!cancel) setFacturasTutor(data.docs ?? []); })
       .finally(() => { if (!cancel) setFacturasLoading(false); });
     return () => { cancel = true; };
-  }, [responsableClientId]);
+  }, [responsableClientId, estudiante?.dependienteId]);
 
   if (loading) {
     return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>;
@@ -313,7 +322,9 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       fmtDOP(c.montoCentavos),
                       badgeSaldo(c),
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
-                        onVincular={() => setCargoVincularFactura(c)} />,
+                        puedeFacturar={puedeFacturar}
+                        onVincular={() => setCargoVincularFactura(c)}
+                        onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
               </div>
@@ -331,7 +342,9 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       fmtDOP(c.montoCentavos),
                       badgeSaldo(c),
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
-                        onVincular={() => setCargoVincularFactura(c)} />,
+                        puedeFacturar={puedeFacturar}
+                        onVincular={() => setCargoVincularFactura(c)}
+                        onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
               </div>
@@ -462,7 +475,10 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────
 
-function FacturaCell({ cargo, puedeGestionar, onVincular }: { cargo: Cargo; puedeGestionar: boolean; onVincular: () => void }) {
+function FacturaCell({ cargo, puedeGestionar, puedeFacturar, onVincular, onFacturar }: {
+  cargo: Cargo; puedeGestionar: boolean; puedeFacturar: boolean;
+  onVincular: () => void; onFacturar: () => void;
+}) {
   if (cargo.ecfDocumentId) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-teal-700">
@@ -470,12 +486,25 @@ function FacturaCell({ cargo, puedeGestionar, onVincular }: { cargo: Cargo; pued
       </span>
     );
   }
-  if (!puedeGestionar) return <span className="text-gray-300 text-xs">—</span>;
-  return (
-    <button onClick={onVincular} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-teal-600 transition-colors">
-      <Link2 className="h-3 w-3" />Vincular
-    </button>
-  );
+  // Facturar solo tiene sentido para un cargo que aún debe algo.
+  const facturable = ['pendiente', 'parcial', 'vencido'].includes(cargo.estado);
+  const acciones: React.ReactNode[] = [];
+  if (puedeFacturar && facturable) {
+    acciones.push(
+      <button key="fac" onClick={onFacturar} className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
+        <Receipt className="h-3 w-3" />Facturar
+      </button>,
+    );
+  }
+  if (puedeGestionar) {
+    acciones.push(
+      <button key="vin" onClick={onVincular} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-teal-600 transition-colors">
+        <Link2 className="h-3 w-3" />Vincular
+      </button>,
+    );
+  }
+  if (acciones.length === 0) return <span className="text-gray-300 text-xs">—</span>;
+  return <span className="inline-flex items-center justify-end gap-3">{acciones}</span>;
 }
 
 function VolverLink() {
