@@ -26,6 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       documento: adminEscolarTutores.documento,
       telefono: adminEscolarTutores.telefono,
       email: adminEscolarTutores.email,
+      imagen: adminEscolarTutores.imagen,
       clientId: adminEscolarTutores.clientId,
       clienteRazonSocial: clients.razonSocial,
       relacion: adminEscolarEstudianteTutores.relacion,

@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { nombre, documento, telefono, email, direccion, clientId } = await req.json();
+  const { nombre, documento, telefono, email, direccion, clientId, imagen } = await req.json();
 
   // clientId: null desvincula; si viene un id, debe pertenecer al team.
   if (clientId !== undefined && clientId !== null) {
@@ -27,6 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(email !== undefined ? { email: email?.trim() || null } : {}),
       ...(direccion !== undefined ? { direccion: direccion?.trim() || null } : {}),
       ...(clientId !== undefined ? { clientId } : {}),
+      ...(imagen !== undefined ? { imagen: imagen || null } : {}),
       updatedAt: new Date(),
     })
     .where(and(eq(adminEscolarTutores.id, parseInt(id)), eq(adminEscolarTutores.teamId, teamId)))

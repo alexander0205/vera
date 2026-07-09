@@ -19,6 +19,7 @@ export async function GET() {
       telefono: adminEscolarTutores.telefono,
       email: adminEscolarTutores.email,
       direccion: adminEscolarTutores.direccion,
+      imagen: adminEscolarTutores.imagen,
     })
     .from(adminEscolarTutores)
     .leftJoin(clients, eq(adminEscolarTutores.clientId, clients.id))
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   const auth = await requirePermission('administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
-  const { nombre, documento, telefono, email, direccion, clientId } = await req.json();
+  const { nombre, documento, telefono, email, direccion, clientId, imagen } = await req.json();
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
 
   // clientId opcional: si viene, debe pertenecer al team.
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
     telefono: telefono?.trim() || null,
     email: email?.trim() || null,
     direccion: direccion?.trim() || null,
+    imagen: imagen || null,
   }).returning();
   return NextResponse.json({ tutor: row });
 }
