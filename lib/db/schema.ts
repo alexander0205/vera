@@ -1528,6 +1528,9 @@ export const adminEscolarTutores = pgTable('admin_escolar_tutores', {
   telefono:  varchar('telefono', { length: 30 }),
   email:     varchar('email', { length: 160 }),
   direccion: varchar('direccion', { length: 300 }),
+  /** Foto del tutor (data URL base64, mismo patrón que products.imagen/teams.logo).
+   *  Útil para identificar a un tutor que no es padre/contacto (ej. chofer, cuidador). */
+  imagen:    text('imagen'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
