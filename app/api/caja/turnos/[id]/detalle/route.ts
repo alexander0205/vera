@@ -14,7 +14,7 @@ import { labelMetodo } from '@/lib/pagos/metodos';
 import { db } from '@/lib/db/drizzle';
 import {
   cajaTurnos, cajaMovimientos, pagosRecibidos,
-  users, teams,
+  ecfDocuments, users, teams,
 } from '@/lib/db/schema';
 
 export async function GET(
@@ -80,16 +80,20 @@ export async function GET(
       ))
       .orderBy(cajaMovimientos.createdAt),
 
-    // Pagos del turno agrupados por método
+    // Pagos del turno agrupados por método. Se excluyen los cobros de
+    // comprobantes ANULADOS (su fila pagos_recibidos puede seguir viva tras la
+    // anulación) para que el desglose cuadre con lib/caja/core.
     db.select({
         metodo: pagosRecibidos.metodo,
         total:  sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
         cuenta: pagosRecibidos.cuenta,
       })
       .from(pagosRecibidos)
+      .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
       .where(and(
         eq(pagosRecibidos.teamId, teamId),
         eq(pagosRecibidos.turnoCajaId, turnoId),
+        sql`${ecfDocuments.estado} <> 'ANULADO'`,
       ))
       .groupBy(pagosRecibidos.metodo, pagosRecibidos.cuenta),
   ]);
