@@ -21,6 +21,10 @@ export async function GET(req: NextRequest) {
   // Filtro por cliente — usado por módulos que necesitan las facturas de UN
   // cliente puntual (ej. administración escolar: facturas del tutor).
   const clientId = sp.get('clientId') ? parseInt(sp.get('clientId')!, 10) : null;
+  // Filtro por dependiente — afina clientId a las facturas de UN hijo puntual
+  // (ej. administración escolar: perfil de un estudiante específico, no todos
+  // los hijos del mismo tutor). Aditivo: solo aplica si se manda.
+  const dependienteId = sp.get('dependienteId') ? parseInt(sp.get('dependienteId')!, 10) : null;
   const limit = Math.min(parseInt(sp.get('limit') ?? '50', 10), 200);
   const offset = parseInt(sp.get('offset') ?? '0', 10);
 
@@ -34,6 +38,10 @@ export async function GET(req: NextRequest) {
 
   if (clientId) {
     conditions.push(eq(ecfDocuments.clientId, clientId));
+  }
+
+  if (dependienteId) {
+    conditions.push(eq(ecfDocuments.dependienteId, dependienteId));
   }
 
   if (search) {
