@@ -247,14 +247,13 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 )}
               </div>
               {estudiante.dependiente ? (
-                <div className="border border-gray-200 rounded-lg p-3">
-                  <p className="font-semibold text-gray-900">
-                    {estudiante.dependiente.nombre} {estudiante.dependiente.apellido}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Cliente: {estudiante.dependiente.clienteRazonSocial}
-                  </p>
-                </div>
+                <Link href={`/dashboard/clientes/${estudiante.dependiente.clienteId}/editar`}
+                  className="block border border-gray-200 rounded-lg p-3 hover:border-teal-300 hover:bg-teal-50/40 transition-colors">
+                  <p className="font-semibold text-gray-900">{estudiante.dependiente.clienteRazonSocial}</p>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-teal-700 mt-0.5">
+                    <Link2 className="h-3 w-3" />Ver contacto
+                  </span>
+                </Link>
               ) : (
                 <p className="text-sm text-gray-400">Sin vincular a Contactos</p>
               )}
