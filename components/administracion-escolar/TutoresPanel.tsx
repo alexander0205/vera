@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +12,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, X, Loader2, Search, Link2, Building2 } from 'lucide-react';
+import { Plus, Pencil, X, Loader2, Search, Link2, Building2, Camera, User } from 'lucide-react';
 
 export interface TutorVinculo {
   id: number;
@@ -20,6 +21,7 @@ export interface TutorVinculo {
   documento: string | null;
   telefono: string | null;
   email: string | null;
+  imagen: string | null;
   clientId: number | null;
   clienteRazonSocial: string | null;
   relacion: string;
@@ -29,8 +31,10 @@ export interface TutorVinculo {
 interface TutorTeam {
   id: number;
   nombre: string;
+  documento: string | null;
   telefono: string | null;
   email: string | null;
+  imagen: string | null;
   clientId: number | null;
   clienteRazonSocial: string | null;
 }
@@ -45,7 +49,32 @@ const RELACIONES = [
   { value: 'otro', label: 'Otro' },
 ];
 
-const EMPTY_NUEVO = { nombre: '', documento: '', telefono: '', email: '', direccion: '' };
+const EMPTY_NUEVO = { nombre: '', documento: '', telefono: '', email: '', direccion: '', imagen: '' };
+
+const IMG_MAX_BYTES = 800_000; // ~800KB, mismo tope que logo/producto.
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Avatar del tutor: foto si existe, o iniciales. */
+function TutorAvatar({ nombre, imagen, size = 'md' }: { nombre: string; imagen: string | null; size?: 'sm' | 'md' | 'lg' }) {
+  const cls = size === 'lg' ? 'h-14 w-14 text-lg' : size === 'sm' ? 'h-7 w-7 text-[10px]' : 'h-9 w-9 text-xs';
+  const iniciales = nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+  if (imagen) {
+    return <img src={imagen} alt={nombre} className={`${cls} rounded-full object-cover shrink-0 border border-gray-200`} />;
+  }
+  return (
+    <span className={`${cls} rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-semibold shrink-0`}>
+      {iniciales || <User className="h-1/2 w-1/2" />}
+    </span>
+  );
+}
 
 interface Props {
   estudianteId: number;
@@ -64,6 +93,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
   const [responsablePago, setResponsablePago] = useState(false);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
+  const [imgError, setImgError]       = useState<string | null>(null);
   const [quitarTarget, setQuitarTarget] = useState<TutorVinculo | null>(null);
   const [quitando, setQuitando]       = useState(false);
 
@@ -80,9 +110,10 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
 
   useEffect(() => { if (showForm) cargarTutoresTeam(); }, [showForm, cargarTutoresTeam]);
 
-  // Búsqueda de clientes con debounce (solo en modo nuevo tutor, sin cliente ya elegido).
+  // Búsqueda de clientes con debounce (al crear/editar datos del tutor, sin cliente ya elegido).
+  const editandoDatos = editVinculo != null || modoNuevo;
   useEffect(() => {
-    if (!showForm || editVinculo || !modoNuevo || clienteVinculado) return;
+    if (!showForm || !editandoDatos || clienteVinculado) return;
     const q = clienteQuery.trim();
     if (!q) { setClienteResultados([]); return; }
     setBuscandoCliente(true);
@@ -95,7 +126,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [clienteQuery, showForm, editVinculo, modoNuevo, clienteVinculado]);
+  }, [clienteQuery, showForm, editandoDatos, clienteVinculado]);
 
   function elegirCliente(c: Cliente) {
     setClienteVinculado(c);
@@ -110,8 +141,17 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     }));
   }
 
+  async function handleImagen(file: File) {
+    if (!file.type.startsWith('image/')) { setImgError('Solo se aceptan imágenes'); return; }
+    if (file.size > IMG_MAX_BYTES) { setImgError('Imagen demasiado grande (máx 800 KB)'); return; }
+    setImgError(null);
+    const b64 = await fileToBase64(file);
+    setNuevo((f) => ({ ...f, imagen: b64 }));
+  }
+
   const yaVinculados = new Set(tutores.map((t) => t.tutorId));
   const disponibles = tutoresTeam.filter((t) => !yaVinculados.has(t.id));
+  const tutorPreview = tutoresTeam.find((t) => String(t.id) === tutorSeleccionado) ?? null;
 
   function abrirNuevo() {
     setEditVinculo(null);
@@ -123,18 +163,24 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     setClienteVinculado(null);
     setClienteQuery('');
     setClienteResultados([]);
-    setError(null);
+    setError(null); setImgError(null);
     setShowForm(true);
   }
 
   function abrirEdicion(v: TutorVinculo) {
     setEditVinculo(v);
+    setNuevo({
+      nombre: v.nombre, documento: v.documento ?? '', telefono: v.telefono ?? '',
+      email: v.email ?? '', direccion: '', imagen: v.imagen ?? '',
+    });
     setRelacion(v.relacion);
     setResponsablePago(v.responsablePago);
-    setClienteVinculado(null);
+    setClienteVinculado(v.clientId
+      ? { id: v.clientId, razonSocial: v.clienteRazonSocial ?? '', rnc: null, email: null, telefono: null }
+      : null);
     setClienteQuery('');
     setClienteResultados([]);
-    setError(null);
+    setError(null); setImgError(null);
     setShowForm(true);
   }
 
@@ -144,6 +190,15 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     try {
       let tutorId: number;
       if (editVinculo) {
+        // Editar datos del tutor (afecta al tutor en todo el sistema).
+        if (!nuevo.nombre.trim()) throw new Error('El nombre del tutor es obligatorio');
+        const res = await fetch(`/api/administracion-escolar/tutores/${editVinculo.tutorId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...nuevo, clientId: clienteVinculado?.id ?? null }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Error actualizando tutor');
         tutorId = editVinculo.tutorId;
       } else if (modoNuevo) {
         if (!nuevo.nombre.trim()) throw new Error('El nombre del tutor es obligatorio');
@@ -209,7 +264,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
-                <th className="px-3 py-2 font-medium">Nombre</th>
+                <th className="px-3 py-2 font-medium">Tutor</th>
                 <th className="px-3 py-2 font-medium">Relación</th>
                 <th className="px-3 py-2 font-medium">Teléfono</th>
                 <th className="px-3 py-2 font-medium">Email</th>
@@ -221,12 +276,22 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
               {tutores.map((t) => (
                 <tr key={t.id} className="border-t border-gray-100 hover:bg-gray-50">
                   <td className="px-3 py-2.5">
-                    <span className="font-medium text-gray-900">{t.nombre}</span>
-                    {t.clientId && (
-                      <span className="ml-2 inline-flex items-center gap-1 text-[11px] text-teal-700" title={`Contacto: ${t.clienteRazonSocial}`}>
-                        <Link2 className="h-3 w-3" />Contacto
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2.5">
+                      <TutorAvatar nombre={t.nombre} imagen={t.imagen} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900 truncate">{t.nombre}</span>
+                          {t.clientId && (
+                            <Link href={`/dashboard/clientes/${t.clientId}/editar`}
+                              className="inline-flex items-center gap-1 text-[11px] text-teal-700 hover:text-teal-900 hover:underline shrink-0"
+                              title={`Editar contacto: ${t.clienteRazonSocial}`}>
+                              <Link2 className="h-3 w-3" />Contacto
+                            </Link>
+                          )}
+                        </div>
+                        {t.documento && <span className="text-xs text-gray-400">Cédula: {t.documento}</span>}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-gray-600 capitalize">{t.relacion}</td>
                   <td className="px-3 py-2.5 text-gray-600">{t.telefono ?? '—'}</td>
@@ -238,10 +303,10 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => abrirEdicion(t)}>
+                      <Button variant="ghost" size="sm" onClick={() => abrirEdicion(t)} title="Editar tutor">
                         <Pencil className="h-3.5 w-3.5 text-gray-400" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setQuitarTarget(t)}>
+                      <Button variant="ghost" size="sm" onClick={() => setQuitarTarget(t)} title="Quitar del estudiante">
                         <X className="h-3.5 w-3.5 text-red-400" />
                       </Button>
                     </div>
@@ -264,98 +329,119 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>
             )}
 
-            {!editVinculo && (
-              <>
-                {disponibles.length > 0 && (
-                  <div className="flex gap-1 rounded-lg bg-gray-100 p-1 text-sm">
-                    <button
-                      className={`flex-1 rounded-md py-1.5 transition-colors ${!modoNuevo ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500'}`}
-                      onClick={() => setModoNuevo(false)}>
-                      Tutor existente
-                    </button>
-                    <button
-                      className={`flex-1 rounded-md py-1.5 transition-colors ${modoNuevo ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500'}`}
-                      onClick={() => setModoNuevo(true)}>
-                      Nuevo tutor
-                    </button>
+            {!editVinculo && disponibles.length > 0 && (
+              <div className="flex gap-1 rounded-lg bg-gray-100 p-1 text-sm">
+                <button
+                  className={`flex-1 rounded-md py-1.5 transition-colors ${!modoNuevo ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500'}`}
+                  onClick={() => setModoNuevo(false)}>
+                  Tutor existente
+                </button>
+                <button
+                  className={`flex-1 rounded-md py-1.5 transition-colors ${modoNuevo ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500'}`}
+                  onClick={() => setModoNuevo(true)}>
+                  Nuevo tutor
+                </button>
+              </div>
+            )}
+
+            {(!editVinculo && !modoNuevo) ? (
+              <div className="space-y-1.5">
+                <Label>Tutor *</Label>
+                <Select value={tutorSeleccionado} onValueChange={setTutorSeleccionado}>
+                  <SelectTrigger><SelectValue placeholder="Selecciona un tutor" /></SelectTrigger>
+                  <SelectContent>
+                    {disponibles.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.nombre}{t.clientId ? ` · ${t.clienteRazonSocial}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Preview del tutor elegido: foto + cédula + contacto */}
+                {tutorPreview && (
+                  <div className="mt-2 flex items-center gap-3 border border-gray-200 rounded-lg p-3">
+                    <TutorAvatar nombre={tutorPreview.nombre} imagen={tutorPreview.imagen} size="lg" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{tutorPreview.nombre}</p>
+                      <p className="text-xs text-gray-500">Cédula: {tutorPreview.documento || '—'}</p>
+                      {tutorPreview.telefono && <p className="text-xs text-gray-500">{tutorPreview.telefono}</p>}
+                      {tutorPreview.clientId && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-teal-700 mt-0.5">
+                          <Link2 className="h-3 w-3" />{tutorPreview.clienteRazonSocial}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
-
-                {!modoNuevo ? (
-                  <div className="space-y-1.5">
-                    <Label>Tutor *</Label>
-                    <Select value={tutorSeleccionado} onValueChange={setTutorSeleccionado}>
-                      <SelectTrigger><SelectValue placeholder="Selecciona un tutor" /></SelectTrigger>
-                      <SelectContent>
-                        {disponibles.map((t) => (
-                          <SelectItem key={t.id} value={String(t.id)}>
-                            {t.nombre}{t.clientId ? ` · ${t.clienteRazonSocial}` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <>
-                    {/* Vínculo opcional con un contacto/cliente existente */}
-                    <div className="space-y-1.5">
-                      <Label className="flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5 text-gray-400" />Contacto / cliente (para facturar)
-                      </Label>
-                      {clienteVinculado ? (
-                        <div className="flex items-center justify-between gap-2 border border-teal-200 bg-teal-50 rounded-lg px-3 py-2">
-                          <span className="text-sm font-medium text-teal-800 truncate">{clienteVinculado.razonSocial}</span>
-                          <button onClick={() => setClienteVinculado(null)}
-                            className="text-teal-600 hover:text-teal-800 shrink-0">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                          <Input className="pl-8" placeholder="Buscar cliente (opcional)…"
-                            value={clienteQuery} onChange={(e) => setClienteQuery(e.target.value)} />
-                          {(buscandoCliente || clienteResultados.length > 0) && (
-                            <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
-                              {buscandoCliente ? (
-                                <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
-                              ) : clienteResultados.map((c) => (
-                                <button key={c.id} onClick={() => elegirCliente(c)}
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
-                                  <p className="font-medium text-gray-900">{c.razonSocial}</p>
-                                  <p className="text-xs text-gray-400">{c.rnc ?? c.email ?? '—'}</p>
-                                </button>
-                              ))}
-                            </div>
-                          )}
+              </div>
+            ) : (
+              <>
+                {/* Vínculo opcional con un contacto/cliente existente */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-gray-400" />Contacto / cliente (para facturar)
+                  </Label>
+                  {clienteVinculado ? (
+                    <div className="flex items-center justify-between gap-2 border border-teal-200 bg-teal-50 rounded-lg px-3 py-2">
+                      <span className="text-sm font-medium text-teal-800 truncate">{clienteVinculado.razonSocial}</span>
+                      <button onClick={() => setClienteVinculado(null)}
+                        className="text-teal-600 hover:text-teal-800 shrink-0">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input className="pl-8" placeholder="Buscar cliente (opcional)…"
+                        value={clienteQuery} onChange={(e) => setClienteQuery(e.target.value)} />
+                      {(buscandoCliente || clienteResultados.length > 0) && (
+                        <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
+                          {buscandoCliente ? (
+                            <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
+                          ) : clienteResultados.map((c) => (
+                            <button key={c.id} onClick={() => elegirCliente(c)}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
+                              <p className="font-medium text-gray-900">{c.razonSocial}</p>
+                              <p className="text-xs text-gray-400">{c.rnc ?? c.email ?? '—'}</p>
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>
+                  )}
+                </div>
 
+                {/* Foto + datos del tutor */}
+                <div className="flex gap-3">
+                  <ImagenTutorBox imagen={nuevo.imagen}
+                    onPick={handleImagen}
+                    onClear={() => setNuevo((f) => ({ ...f, imagen: '' }))} />
+                  <div className="flex-1 space-y-3">
                     <div className="space-y-1.5">
                       <Label>Nombre *</Label>
                       <Input value={nuevo.nombre}
                         onChange={(e) => setNuevo((f) => ({ ...f, nombre: e.target.value }))} />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label>Teléfono</Label>
-                        <Input value={nuevo.telefono}
-                          onChange={(e) => setNuevo((f) => ({ ...f, telefono: e.target.value }))} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Documento</Label>
-                        <Input value={nuevo.documento}
-                          onChange={(e) => setNuevo((f) => ({ ...f, documento: e.target.value }))} />
-                      </div>
-                    </div>
                     <div className="space-y-1.5">
-                      <Label>Email</Label>
-                      <Input type="email" value={nuevo.email}
-                        onChange={(e) => setNuevo((f) => ({ ...f, email: e.target.value }))} />
+                      <Label>Cédula</Label>
+                      <Input value={nuevo.documento} placeholder="000-0000000-0"
+                        onChange={(e) => setNuevo((f) => ({ ...f, documento: e.target.value }))} />
                     </div>
-                  </>
-                )}
+                  </div>
+                </div>
+                {imgError && <p className="text-xs text-red-600">{imgError}</p>}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Teléfono</Label>
+                    <Input value={nuevo.telefono}
+                      onChange={(e) => setNuevo((f) => ({ ...f, telefono: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Email</Label>
+                    <Input type="email" value={nuevo.email}
+                      onChange={(e) => setNuevo((f) => ({ ...f, email: e.target.value }))} />
+                  </div>
+                </div>
               </>
             )}
 
@@ -403,6 +489,35 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** Caja cuadrada para subir/quitar la foto del tutor. */
+function ImagenTutorBox({ imagen, onPick, onClear }: {
+  imagen: string; onPick: (f: File) => void; onClear: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>Foto</Label>
+      <label className="relative flex h-[92px] w-[92px] cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300">
+        <input type="file" accept="image/*" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); }} />
+        {imagen ? (
+          <>
+            <img src={imagen} alt="Tutor" className="h-full w-full rounded-lg object-cover" />
+            <button type="button" onClick={(e) => { e.preventDefault(); onClear(); }}
+              className="absolute right-1 top-1 rounded-full bg-white/90 p-0.5 text-gray-600 shadow hover:bg-white">
+              <X className="h-3 w-3" />
+            </button>
+          </>
+        ) : (
+          <>
+            <Camera className="h-6 w-6" />
+            <span className="text-[10px] text-center leading-tight">Foto<br />máx 800 KB</span>
+          </>
+        )}
+      </label>
     </div>
   );
 }
