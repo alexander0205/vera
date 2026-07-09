@@ -14,10 +14,10 @@
  */
 import { sql, and, eq, count, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
+import { ecfDocuments, pagosRecibidos, users } from '@/lib/db/schema';
 import { diasVencido } from '@/lib/utils/format';
 import {
-  VENTA_ESTADOS, TIPOS_VENTA, TIPO_NOTA_CREDITO,
+  VENTA_ESTADOS, TIPOS_VENTA, TIPO_NOTA_CREDITO, TIPO_ECF_NOMBRE,
   pRango, pVentaEstados, pTiposVenta, pNotaCredito,
   truncFecha, parseLineas, claveProducto,
   type Granularidad,
@@ -364,4 +364,109 @@ export async function getItbisResumen(teamId: number, desde: Date, hasta: Date):
     itbisCreditoCents: credito,
     aPagarCents: Math.max(0, debito - credito),
   };
+}
+
+// ─── 8. Ventas por tipo de comprobante DGII (e31, e32, e33…) ──────────────────
+
+export interface FilaTipo {
+  tipoEcf: string;
+  nombre: string;
+  ingresosCents: number;
+  itbisCents: number;
+  numFacturas: number;
+}
+
+export async function getVentasPorTipo(
+  teamId: number, desde: Date, hasta: Date,
+): Promise<FilaTipo[]> {
+  const rows = await db.select({
+    tipoEcf:  ecfDocuments.tipoEcf,
+    ingresos: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+    itbis:    sql<number>`coalesce(sum(${ecfDocuments.totalItbis}), 0)`,
+    n:        count(),
+  })
+    .from(ecfDocuments)
+    .where(and(pRango(teamId, desde, hasta), pVentaEstados))
+    .groupBy(ecfDocuments.tipoEcf)
+    .orderBy(desc(sql`sum(${ecfDocuments.montoTotal})`));
+
+  return rows.map(r => ({
+    tipoEcf: r.tipoEcf,
+    nombre: TIPO_ECF_NOMBRE[r.tipoEcf] ?? `Tipo ${r.tipoEcf}`,
+    ingresosCents: Number(r.ingresos),
+    itbisCents: Number(r.itbis),
+    numFacturas: Number(r.n),
+  }));
+}
+
+// ─── 9. Ventas por usuario emisor (quién hizo la factura) ────────────────────
+
+export interface FilaUsuario {
+  usuarioId: number | null;
+  nombre: string;
+  ingresosCents: number;
+  numFacturas: number;
+}
+
+export async function getVentasPorUsuario(
+  teamId: number, desde: Date, hasta: Date,
+): Promise<FilaUsuario[]> {
+  const rows = await db.select({
+    usuarioId: ecfDocuments.createdBy,
+    nombre:    users.name,
+    email:     users.email,
+    ingresos:  sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+    n:         count(),
+  })
+    .from(ecfDocuments)
+    .leftJoin(users, eq(users.id, ecfDocuments.createdBy))
+    .where(and(pRango(teamId, desde, hasta), pTiposVenta, pVentaEstados))
+    .groupBy(ecfDocuments.createdBy, users.name, users.email)
+    .orderBy(desc(sql`sum(${ecfDocuments.montoTotal})`));
+
+  return rows.map(r => ({
+    usuarioId: r.usuarioId,
+    nombre: r.nombre || r.email || 'Sin usuario',
+    ingresosCents: Number(r.ingresos),
+    numFacturas: Number(r.n),
+  }));
+}
+
+// ─── 10. Pagos por usuario (quién registró el cobro) ─────────────────────────
+
+export interface FilaUsuarioPago {
+  usuarioId: number | null;
+  nombre: string;
+  totalCents: number;
+  numPagos: number;
+}
+
+export async function getPagosPorUsuario(
+  teamId: number, desde: Date, hasta: Date,
+): Promise<FilaUsuarioPago[]> {
+  const d0 = desde.toISOString().slice(0, 10);
+  const d1 = hasta.toISOString().slice(0, 10);
+  const rows = await db.select({
+    usuarioId: pagosRecibidos.createdBy,
+    nombre:    users.name,
+    email:     users.email,
+    total:     sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
+    n:         count(),
+  })
+    .from(pagosRecibidos)
+    .leftJoin(users, eq(users.id, pagosRecibidos.createdBy))
+    .where(and(
+      eq(pagosRecibidos.teamId, teamId),
+      sql`${pagosRecibidos.fechaPago} >= ${d0}`,
+      sql`${pagosRecibidos.fechaPago} <= ${d1}`,
+    ))
+    .groupBy(pagosRecibidos.createdBy, users.name, users.email)
+    .orderBy(desc(sql`sum(${pagosRecibidos.montoCentavos})`));
+
+  return rows.map(r => ({
+    usuarioId: r.usuarioId,
+    nombre: r.nombre || r.email || 'Sin usuario',
+    totalCents: Number(r.total),
+    numPagos: Number(r.n),
+  }));
 }
