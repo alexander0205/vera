@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Receipt, Link2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
@@ -368,16 +368,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               ) : facturasTutor.length === 0 ? (
                 <EmptyBox text={`Sin facturas registradas para ${responsable.clienteRazonSocial}`} />
               ) : (
-                <SimpleTable head={['NCF', 'Fecha', 'Monto', 'Estado', 'Cargo']}
-                  rows={facturasTutor.map((f) => [
-                    f.encf,
-                    fmtFechaCorta(f.createdAt),
-                    fmtDOP(f.montoTotal),
-                    <Badge key="e" variant="outline" className="text-xs">{f.estado}</Badge>,
-                    cargosVinculadosIds.has(f.id)
-                      ? <Badge key="c" className="bg-teal-50 text-teal-700 border-teal-200">Cubre cargo</Badge>
-                      : <span key="c" className="text-gray-300">—</span>,
-                  ])} />
+                <FacturasConLineas facturas={facturasTutor} cargosVinculadosIds={cargosVinculadosIds} />
               )}
             </TabsContent>
 
@@ -528,6 +519,113 @@ function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][]
               ))}
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+interface LineaFactura {
+  nombreItem: string;
+  cantidadItem: number;
+  precioUnitarioItem: number;
+  dependienteNombre?: string | null;
+}
+
+/**
+ * Tabla de facturas con detalle expandible por fila (líneas/productos de cada
+ * factura). Reusa GET /api/facturas/[id] — endpoint de detalle ya existente
+ * que parsea lineasJson — no se agregó nada al motor de facturación, solo se
+ * consume lo que ya expone.
+ */
+function FacturasConLineas({ facturas, cargosVinculadosIds }: { facturas: Factura[]; cargosVinculadosIds: Set<number> }) {
+  const [expandidaId, setExpandidaId] = useState<number | null>(null);
+  const [lineasPorFactura, setLineasPorFactura] = useState<Record<number, LineaFactura[]>>({});
+  const [cargandoId, setCargandoId] = useState<number | null>(null);
+
+  async function toggle(id: number) {
+    if (expandidaId === id) { setExpandidaId(null); return; }
+    setExpandidaId(id);
+    if (lineasPorFactura[id]) return;
+    setCargandoId(id);
+    try {
+      const data = await fetch(`/api/facturas/${id}`).then((r) => r.json());
+      setLineasPorFactura((prev) => ({ ...prev, [id]: data.lineas ?? [] }));
+    } finally {
+      setCargandoId(null);
+    }
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-100">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+            <th className="px-3 py-2 font-medium w-6"></th>
+            <th className="px-3 py-2 font-medium">NCF</th>
+            <th className="px-3 py-2 font-medium">Fecha</th>
+            <th className="px-3 py-2 font-medium">Monto</th>
+            <th className="px-3 py-2 font-medium">Estado</th>
+            <th className="px-3 py-2 font-medium text-right">Cargo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {facturas.map((f) => {
+            const abierta = expandidaId === f.id;
+            return (
+              <Fragment key={f.id}>
+                <tr
+                  onClick={() => toggle(f.id)}
+                  className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer">
+                  <td className="px-3 py-2.5 text-gray-400">
+                    {abierta ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  </td>
+                  <td className="px-3 py-2.5 text-gray-700">{f.encf}</td>
+                  <td className="px-3 py-2.5 text-gray-700">{fmtFechaCorta(f.createdAt)}</td>
+                  <td className="px-3 py-2.5 text-gray-700">{fmtDOP(f.montoTotal)}</td>
+                  <td className="px-3 py-2.5"><Badge variant="outline" className="text-xs">{f.estado}</Badge></td>
+                  <td className="px-3 py-2.5 text-right">
+                    {cargosVinculadosIds.has(f.id)
+                      ? <Badge className="bg-teal-50 text-teal-700 border-teal-200">Cubre cargo</Badge>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                </tr>
+                {abierta && (
+                  <tr className="border-t border-gray-100 bg-gray-50/50">
+                    <td colSpan={6} className="px-3 py-2">
+                      {cargandoId === f.id ? (
+                        <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
+                      ) : (lineasPorFactura[f.id]?.length ?? 0) === 0 ? (
+                        <p className="text-xs text-gray-400 py-1 pl-6">Sin líneas registradas</p>
+                      ) : (
+                        <table className="w-full text-xs ml-6" style={{ width: 'calc(100% - 1.5rem)' }}>
+                          <thead>
+                            <tr className="text-left text-gray-400">
+                              <th className="py-1 font-medium">Producto/servicio</th>
+                              <th className="py-1 font-medium text-right">Cant.</th>
+                              <th className="py-1 font-medium text-right">Precio</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lineasPorFactura[f.id].map((l, i) => (
+                              <tr key={i} className="border-t border-gray-100">
+                                <td className="py-1.5 text-gray-700">
+                                  {l.nombreItem}
+                                  {l.dependienteNombre && <span className="text-gray-400"> · {l.dependienteNombre}</span>}
+                                </td>
+                                <td className="py-1.5 text-right text-gray-600">{l.cantidadItem}</td>
+                                <td className="py-1.5 text-right text-gray-600">RD${Number(l.precioUnitarioItem).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
