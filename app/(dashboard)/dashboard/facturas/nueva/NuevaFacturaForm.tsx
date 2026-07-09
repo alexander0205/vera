@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
   StickyNote, ScrollText, MessageSquare, CreditCard, Send,
+  GraduationCap, Loader2,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
@@ -103,6 +104,10 @@ export default function NuevaFacturaForm({
     ? searchParams.get('tipo')!
     : null;
   const qpPadreId = !initialData ? searchParams.get('padreId') : null;
+  // ?desdeCargo=N → prefill desde un cargo escolar (cliente=tutor, dependiente=
+  // estudiante, línea=producto del concepto). Solo lee/pre-llena; NO toca el
+  // motor de emisión. Ver /api/administracion-escolar/cargos/[id]/prefill-factura.
+  const qpDesdeCargo = !initialData ? searchParams.get('desdeCargo') : null;
 
   // Categoría fija por ruta (factura/NC/ND/compras/gastos). Si está presente,
   // oculta el selector de categoría y el tipo arranca en el de esa categoría.
@@ -166,6 +171,12 @@ export default function NuevaFacturaForm({
 
   // ── Clasificación por maestros (Plan A) ─────────────────────────────────────
   const [clasificacion, setClasificacion] = useState<ClasifAsig[]>([]);
+
+  // ── Origen: cargo escolar (prefill vía ?desdeCargo) ─────────────────────────
+  // Si esta factura nace de un cargo escolar, guardamos su id + saldo para
+  // ofrecer, en la pantalla de éxito, "volver al estudiante y saldar el cargo".
+  const [origenCargo, setOrigenCargo] = useState<{ id: number; saldoCentavos: number } | null>(null);
+  const [saldandoCargo, setSaldandoCargo] = useState(false);
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
@@ -352,6 +363,89 @@ export default function NuevaFacturaForm({
       .catch(() => {});
   }
 
+  // Prefill desde un cargo escolar (payload de /prefill-factura). Setea el
+  // cliente (tutor), una única línea (producto del concepto + monto del cargo)
+  // con el estudiante como beneficiario, y recuerda el cargo de origen para
+  // ofrecer el saldado al terminar. Solo pre-llena — el usuario decide y emite.
+  function aplicarPrefillCargo(p: {
+    cargo?: { id: number; saldoCentavos: number };
+    comprador?: { clienteId: number; razonSocial?: string | null; rnc?: string | null; email?: string | null; telefono?: string | null } | null;
+    linea?: {
+      productoId?: number | null; nombreItem?: string; cantidadItem?: number;
+      precioUnitarioItem?: number; tasaItbis?: string; indicadorBienoServicio?: string;
+      dependienteId?: number | null; dependienteNombre?: string;
+    };
+    advertencias?: string[];
+  }) {
+    if (!p?.cargo?.id) return;
+    setOrigenCargo({ id: p.cargo.id, saldoCentavos: p.cargo.saldoCentavos });
+
+    if (p.comprador?.clienteId) {
+      seleccionarCliente({
+        id:          p.comprador.clienteId,
+        razonSocial: p.comprador.razonSocial ?? '',
+        rnc:         p.comprador.rnc ?? null,
+        email:       p.comprador.email ?? null,
+        telefono:    p.comprador.telefono ?? null,
+      });
+    }
+
+    if (p.linea) {
+      const l = p.linea;
+      const item: ItemLinea = {
+        id:                     1,
+        productoId:             typeof l.productoId === 'number' ? l.productoId : undefined,
+        nombreItem:             String(l.nombreItem ?? ''),
+        referencia:             '',
+        descripcionItem:        '',
+        cantidadItem:           Number(l.cantidadItem) || 1,
+        precioUnitarioItem:     Number(l.precioUnitarioItem) || 0,
+        descuentoPct:           0,
+        tasaItbis:              (['0.18', '0.16', '0', 'exento'].includes(String(l.tasaItbis))
+                                  ? String(l.tasaItbis) : 'exento') as ItemLinea['tasaItbis'],
+        indicadorBienoServicio: String(l.indicadorBienoServicio) === '1' ? '1' : '2',
+        dependienteId:          typeof l.dependienteId === 'number' ? l.dependienteId : null,
+        dependienteNombre:      String(l.dependienteNombre ?? ''),
+      };
+      dispatchItems({ type: 'SET', items: [item] });
+    }
+
+    (p.advertencias ?? []).forEach(msg => toast.warning(msg, { duration: 7000 }));
+  }
+
+  // Carga el prefill del cargo por id (fetch + aplicarPrefillCargo).
+  function cargarPrefillCargo(cargoId: number) {
+    fetch(`/api/administracion-escolar/cargos/${cargoId}/prefill-factura`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(aplicarPrefillCargo)
+      .catch(() => toast.error('No se pudo cargar el cargo para prefacturar.'));
+  }
+
+  // Cierra el loop: vincula la factura recién creada al cargo de origen y lo
+  // salda, luego vuelve al perfil del estudiante. Solo disponible si esta
+  // factura nació de un cargo escolar (?desdeCargo) y ya se creó (resultado).
+  async function saldarCargoConFactura(documentoId: number) {
+    if (!origenCargo) return;
+    setSaldandoCargo(true);
+    try {
+      const res = await fetch(`/api/administracion-escolar/cargos/${origenCargo.id}/saldar-con-factura`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ecfDocumentId: documentoId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo saldar el cargo');
+      toast.success('Cargo saldado y vinculado a la factura.');
+      const estudianteId = data.cargo?.estudianteId;
+      router.push(estudianteId
+        ? `/dashboard/administracion-escolar/estudiantes/${estudianteId}`
+        : '/dashboard/administracion-escolar/estudiantes');
+    } catch (e) {
+      setSaldandoCargo(false);
+      toast.error(e instanceof Error ? e.message : 'No se pudo saldar el cargo');
+    }
+  }
+
   // Limpia el vínculo con la factura de origen (mantiene cliente/líneas editables).
   function limpiarPadre() {
     setPadreNota(null);
@@ -368,8 +462,8 @@ export default function NuevaFacturaForm({
 
   useEffect(() => {
     if (initialData) return; // editar borrador manda sobre los query params
-    if (!qpPadreId) return;
-    cargarPadre(Number(qpPadreId));
+    if (qpPadreId) { cargarPadre(Number(qpPadreId)); return; }
+    if (qpDesdeCargo) cargarPrefillCargo(Number(qpDesdeCargo));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -690,7 +784,9 @@ export default function NuevaFacturaForm({
   // ─── Cambio de tipo ───────────────────────────────────────────────────────
   function handleChangeTipo(t: string) {
     setTipoEcf(t);
-    limpiarCliente();
+    // No se limpia el cliente: el comprador no depende del tipo de e-CF, y
+    // borrarlo obligaba a re-elegir cliente + beneficiarios (perdiendo el
+    // prefill de un cargo escolar). El ITBIS sí se ajusta abajo según la regla.
     setNcfModificado('');
     setError(null);
     const r = TIPO_ECF_REGLAS[t];
@@ -1119,6 +1215,38 @@ export default function NuevaFacturaForm({
                 </Badge>
               </div>
             </div>
+            {/* Origen cargo escolar → cerrar el loop: vincular la factura al
+                cargo y saldarlo, volviendo al perfil del estudiante. */}
+            {origenCargo && (
+              <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-left mb-6">
+                <div className="flex items-start gap-2 mb-3">
+                  <GraduationCap className="h-5 w-5 text-teal-700 shrink-0 mt-0.5" />
+                  <p className="text-sm text-teal-900">
+                    Esta factura nació de un cargo escolar. Al saldarlo, el cargo
+                    quedará vinculado a esta factura y aparecerá como pagado en el
+                    perfil del estudiante.
+                  </p>
+                </div>
+                <div className="flex gap-3 flex-wrap">
+                  <Button
+                    className="bg-teal-600 hover:bg-teal-700 text-white"
+                    disabled={saldandoCargo}
+                    onClick={() => saldarCargoConFactura(resultado.documentoId)}
+                  >
+                    {saldandoCargo
+                      ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saldando…</>
+                      : <><CheckCircle className="h-4 w-4 mr-1.5" />Volver al estudiante y saldar el cargo</>}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={saldandoCargo}
+                    onClick={() => router.push(`${detalleBase}/${resultado.documentoId}`)}
+                  >
+                    Ver factura sin saldar
+                  </Button>
+                </div>
+              </div>
+            )}
             {/* Nota en borrador → elección explícita: emitir ahora o dejar borrador.
                 Nunca obligatorio — emitir requiere que la factura padre tenga e-CF. */}
             {esNotaBorrador && (
