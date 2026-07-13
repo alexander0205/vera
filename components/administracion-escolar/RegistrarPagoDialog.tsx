@@ -41,12 +41,14 @@ const hoy = () => new Date().toISOString().split('T')[0];
 interface Props {
   estudianteId: number;
   estudianteNombre: string;
+  /** Si viene, el diálogo abre fijado a ese cargo (sin selector). */
+  cargoIdInicial?: number | null;
   open: boolean;
   onClose: () => void;
   onDone: () => void;
 }
 
-export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onClose, onDone }: Props) {
+export function RegistrarPagoDialog({ estudianteId, estudianteNombre, cargoIdInicial, open, onClose, onDone }: Props) {
   const [cargos, setCargos]       = useState<CargoPendiente[]>([]);
   const [loading, setLoading]     = useState(false);
   const [cargoId, setCargoId]     = useState<string>('');
@@ -66,9 +68,13 @@ export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onCl
         (c: CargoPendiente) => ['pendiente', 'parcial', 'vencido'].includes(c.estado),
       );
       setCargos(pendientes);
-      if (pendientes.length > 0) {
-        setCargoId(String(pendientes[0].id));
-        setMonto((pendientes[0].saldoCentavos / 100).toFixed(2));
+      const inicial = cargoIdInicial
+        ? pendientes.find((c) => c.id === cargoIdInicial)
+        : undefined;
+      const elegido = inicial ?? pendientes[0];
+      if (elegido) {
+        setCargoId(String(elegido.id));
+        setMonto((elegido.saldoCentavos / 100).toFixed(2));
       } else {
         setCargoId('');
         setMonto('');
@@ -76,7 +82,7 @@ export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onCl
     } finally {
       setLoading(false);
     }
-  }, [estudianteId]);
+  }, [estudianteId, cargoIdInicial]);
 
   useEffect(() => {
     if (open) {
@@ -154,7 +160,7 @@ export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onCl
             <>
               <div className="space-y-1.5">
                 <Label>Cargo a pagar</Label>
-                <Select value={cargoId} onValueChange={onSelectCargo}>
+                <Select value={cargoId} onValueChange={onSelectCargo} disabled={!!cargoIdInicial}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {cargos.map((c) => (

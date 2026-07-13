@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Receipt, Link2, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
@@ -113,7 +113,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [tutores, setTutores]       = useState<TutorVinculo[]>([]);
   const [loading, setLoading]       = useState(true);
   const [notFound, setNotFound]     = useState(false);
-  const [pagoOpen, setPagoOpen]     = useState(false);
+  const [cargoPagar, setCargoPagar] = useState<Cargo | null>(null);
   const [editOpen, setEditOpen]     = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
 
@@ -196,12 +196,6 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         <div className="flex items-center gap-2 shrink-0">
           {puedeGestionar && (
             <Button variant="outline" onClick={() => setEditOpen(true)}>Editar</Button>
-          )}
-          {puedePagos && (
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => setPagoOpen(true)}
-              disabled={estudiante.deudaCentavos === 0}>
-              Registrar pago
-            </Button>
           )}
         </div>
       </div>
@@ -315,8 +309,9 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       fmtDOP(c.montoCentavos),
                       badgeSaldo(c),
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
-                        puedeFacturar={puedeFacturar}
+                        puedeFacturar={puedeFacturar} puedePagos={puedePagos}
                         onVincular={() => setCargoVincularFactura(c)}
+                        onRegistrarPago={() => setCargoPagar(c)}
                         onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
@@ -335,8 +330,9 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       fmtDOP(c.montoCentavos),
                       badgeSaldo(c),
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
-                        puedeFacturar={puedeFacturar}
+                        puedeFacturar={puedeFacturar} puedePagos={puedePagos}
                         onVincular={() => setCargoVincularFactura(c)}
+                        onRegistrarPago={() => setCargoPagar(c)}
                         onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
@@ -433,8 +429,9 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
       <RegistrarPagoDialog
         estudianteId={estudiante.id}
         estudianteNombre={`${estudiante.nombres} ${estudiante.apellidos}`}
-        open={pagoOpen}
-        onClose={() => setPagoOpen(false)}
+        cargoIdInicial={cargoPagar?.id ?? null}
+        open={!!cargoPagar}
+        onClose={() => setCargoPagar(null)}
         onDone={cargar}
       />
 
@@ -461,19 +458,31 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────
 
-function FacturaCell({ cargo, puedeGestionar, puedeFacturar, onVincular, onFacturar }: {
-  cargo: Cargo; puedeGestionar: boolean; puedeFacturar: boolean;
-  onVincular: () => void; onFacturar: () => void;
+function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincular, onFacturar, onRegistrarPago }: {
+  cargo: Cargo; puedeGestionar: boolean; puedeFacturar: boolean; puedePagos: boolean;
+  onVincular: () => void; onFacturar: () => void; onRegistrarPago: () => void;
 }) {
+  // Facturar/pagar solo tiene sentido para un cargo que aún debe algo.
+  const facturable = ['pendiente', 'parcial', 'vencido'].includes(cargo.estado);
   if (cargo.ecfDocumentId) {
-    return (
+    const chip = (
       <span className="inline-flex items-center gap-1 text-xs text-teal-700">
-        <Receipt className="h-3 w-3" />{cargo.facturaEncf ?? `#${cargo.ecfDocumentId}`}
+        <Receipt className="h-3 w-3" />{cargo.facturaEncf || `#${cargo.ecfDocumentId}`}
       </span>
     );
+    // Con factura y saldo pendiente: registrar el pago (abono) contra esa factura.
+    if (puedePagos && facturable) {
+      return (
+        <span className="inline-flex items-center justify-end gap-3">
+          {chip}
+          <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
+            <Wallet className="h-3 w-3" />Registrar pago
+          </button>
+        </span>
+      );
+    }
+    return chip;
   }
-  // Facturar solo tiene sentido para un cargo que aún debe algo.
-  const facturable = ['pendiente', 'parcial', 'vencido'].includes(cargo.estado);
   const acciones: React.ReactNode[] = [];
   if (puedeFacturar && facturable) {
     acciones.push(
