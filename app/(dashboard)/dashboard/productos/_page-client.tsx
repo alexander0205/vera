@@ -136,6 +136,13 @@ export default function ProductosPage() {
     setShowForm(true);
   }
 
+  // Deep-link `?nuevo=1`: abre el modal de creación al entrar (p. ej. desde el
+  // form de concepto escolar). Se dispara una sola vez al montar.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('nuevo') === '1') abrirNuevo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function abrirEdicion(p: Producto) {
     setEditTarget(p);
     setForm({

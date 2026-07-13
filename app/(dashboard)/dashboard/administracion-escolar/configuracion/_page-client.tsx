@@ -89,11 +89,14 @@ export default function ConfiguracionEscolarClient() {
   const [saving, setSaving]       = useState(false);
   const [opError, setOpError]     = useState<string | null>(null);
 
-  // Producto/servicio opcional vinculado al concepto (evita duplicar catálogo).
+  // Producto/servicio vinculado al concepto. Obligatorio para conceptos nuevos
+  // (el nombre se hereda del producto). `conceptoLegacy`=true al editar un
+  // concepto viejo sin producto: se mantiene editable por nombre para no romperlo.
   const [productoSel, setProductoSel] = useState<Producto | null>(null);
   const [productoQuery, setProductoQuery] = useState('');
   const [productoResultados, setProductoResultados] = useState<Producto[]>([]);
   const [buscandoProducto, setBuscandoProducto] = useState(false);
+  const [conceptoLegacy, setConceptoLegacy] = useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -139,6 +142,7 @@ export default function ConfiguracionEscolarClient() {
     setOpError(null);
     setProductoSel(null);
     setProductoQuery('');
+    setConceptoLegacy(false);
     setOpen(true);
   }
 
@@ -164,6 +168,8 @@ export default function ConfiguracionEscolarClient() {
         ? { id: concepto.productId, nombre: concepto.productNombre ?? `#${concepto.productId}`, precioDOP: 0, tipo: '' }
         : null,
     );
+    // Concepto viejo sin producto: modo legacy (editable por nombre).
+    setConceptoLegacy(k === 'concepto' && !concepto.productId);
     setProductoQuery('');
   }
 
@@ -179,7 +185,13 @@ export default function ConfiguracionEscolarClient() {
       case 'materia':
         return { nombre: form.nombre, activo: form.activo };
       case 'concepto':
-        return { nombre: form.nombre, tipo: form.tipo, recurrente: form.recurrente, activo: form.activo, productId: productoSel?.id ?? null };
+        return {
+          // Conceptos nuevos heredan el nombre del producto; los legacy sin
+          // producto conservan su nombre escrito.
+          nombre: conceptoLegacy ? form.nombre : (productoSel?.nombre ?? form.nombre),
+          tipo: form.tipo, recurrente: form.recurrente, activo: form.activo,
+          productId: productoSel?.id ?? null,
+        };
       default:
         return {};
     }
@@ -187,7 +199,11 @@ export default function ConfiguracionEscolarClient() {
 
   async function handleGuardar() {
     if (!kind) return;
-    if (!form.nombre.trim()) { setOpError('El nombre es obligatorio'); return; }
+    if (kind === 'concepto' && !conceptoLegacy) {
+      if (!productoSel) { setOpError('Selecciona o crea un producto/servicio'); return; }
+    } else if (!form.nombre.trim()) {
+      setOpError('El nombre es obligatorio'); return;
+    }
     setSaving(true);
     setOpError(null);
     try {
@@ -355,15 +371,20 @@ export default function ConfiguracionEscolarClient() {
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
             )}
 
-            <div className="space-y-1.5">
-              <Label>Nombre *</Label>
-              <Input
-                autoFocus
-                placeholder={kind === 'periodo' ? 'Ej: 2025-2026' : kind === 'curso' ? 'Ej: Primero A' : kind === 'concepto' ? 'Ej: Mensualidad' : 'Ej: Matemáticas'}
-                value={form.nombre}
-                onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-              />
-            </div>
+            {(kind !== 'concepto' || conceptoLegacy) && (
+              <div className="space-y-1.5">
+                <Label>Nombre *</Label>
+                <Input
+                  autoFocus
+                  placeholder={kind === 'periodo' ? 'Ej: 2025-2026' : kind === 'curso' ? 'Ej: Primero A' : kind === 'concepto' ? 'Ej: Mensualidad' : 'Ej: Matemáticas'}
+                  value={form.nombre}
+                  onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+                />
+                {kind === 'concepto' && conceptoLegacy && (
+                  <p className="text-xs text-amber-600">Concepto sin producto. Vincula uno abajo para estandarizarlo.</p>
+                )}
+              </div>
+            )}
 
             {kind === 'periodo' && (
               <div className="grid grid-cols-2 gap-3">
@@ -411,9 +432,9 @@ export default function ConfiguracionEscolarClient() {
                 </Select>
 
                 <div className="space-y-1.5">
-                  <Label>Producto/servicio (opcional)</Label>
+                  <Label>Producto/servicio *</Label>
                   <p className="text-xs text-gray-400 -mt-1">
-                    Si la factura se genera desde este concepto, hereda nombre e ITBIS del producto en vez de crear uno nuevo.
+                    El concepto toma su nombre e ITBIS de este producto/servicio (un solo catálogo, sin duplicar).
                   </p>
                   {productoSel ? (
                     <div className="flex items-center justify-between gap-2 border border-teal-200 bg-teal-50 rounded-lg px-3 py-2">
@@ -423,25 +444,35 @@ export default function ConfiguracionEscolarClient() {
                       </button>
                     </div>
                   ) : (
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input className="pl-8" placeholder="Buscar producto o servicio…"
-                        value={productoQuery} onChange={(e) => setProductoQuery(e.target.value)} />
-                      {(buscandoProducto || productoResultados.length > 0) && (
-                        <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
-                          {buscandoProducto ? (
-                            <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
-                          ) : productoResultados.map((p) => (
-                            <button key={p.id}
-                              onClick={() => { setProductoSel(p); setProductoQuery(''); setProductoResultados([]); }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
-                              <p className="font-medium text-gray-900">{p.nombre}</p>
-                              <p className="text-xs text-gray-400 capitalize">{p.tipo} · RD${p.precioDOP.toFixed(2)}</p>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input className="pl-8" placeholder="Buscar producto o servicio…"
+                          value={productoQuery} onChange={(e) => setProductoQuery(e.target.value)} />
+                        {(buscandoProducto || productoResultados.length > 0) && (
+                          <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
+                            {buscandoProducto ? (
+                              <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
+                            ) : productoResultados.map((p) => (
+                              <button key={p.id}
+                                onClick={() => { setProductoSel(p); setProductoQuery(''); setProductoResultados([]); }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
+                                <p className="font-medium text-gray-900">{p.nombre}</p>
+                                <p className="text-xs text-gray-400 capitalize">{p.tipo} · RD${p.precioDOP.toFixed(2)}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-xs text-gray-400">¿No existe?</span>
+                        <a href="/dashboard/productos?nuevo=1" target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700">
+                          <Plus className="h-3.5 w-3.5" />Crear producto/servicio
+                        </a>
+                        <span className="text-xs text-gray-400">y vuelve a buscarlo.</span>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
