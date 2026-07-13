@@ -840,7 +840,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const fieldLabelSx = { display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#4b5563', mb: 0.75 } as const;
 
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box component="section" sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 2, sm: 3 }, pb: 2 }}>
 
       {/* ─── Header ────────────────────────────────────────────────────────── */}
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, alignItems: { lg: 'flex-start' }, justifyContent: { lg: 'space-between' }, gap: 1.5, mb: 2.5 }}>
@@ -1773,12 +1774,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           )}
         </Box>
       </Box>
+      </Box>
 
       {/* ─── Bottom action bar ────────────────────────────────────────────── */}
       {/* Vista detalle = read-only. Solo borrador habilita acciones de edición.
           Para facturas emitidas: Volver + Ver PDF + Acciones (imprimir/email). */}
       <Box sx={{
-        position: 'sticky', bottom: 0, zIndex: 30, mx: { xs: -2, sm: -3 }, mt: 'auto',
+        flexShrink: 0, zIndex: 30,
         bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)', borderTop: '1px solid #e5e7eb',
         boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)',
         display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' }, alignItems: { sm: 'center' },

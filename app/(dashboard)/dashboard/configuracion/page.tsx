@@ -479,8 +479,7 @@ export default function ConfiguracionPage() {
         </Box>
 
         {/* 8. Punto de venta (POS) */}
-        {canManage && (
-          <Box sx={cardSx}>
+        <Box sx={cardSx}>
             <Box sx={cardHeaderSx}>
               <Store style={{ width: 16, height: 16, color: '#0d9488' }} />
               <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Punto de venta (POS)</Typography>
@@ -511,11 +510,9 @@ export default function ConfiguracionPage() {
               </Box>
             </Box>
           </Box>
-        )}
 
         {/* 9. Métodos que obligan facturar a la DGII */}
-        {canManage && (
-          <Box sx={cardSx}>
+        <Box sx={cardSx}>
             <Box sx={cardHeaderSx}>
               <CreditCard size={16} color="#0d9488" />
               <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Métodos que obligan facturar a la DGII</Typography>
@@ -545,7 +542,6 @@ export default function ConfiguracionPage() {
               </Box>
             </Box>
           </Box>
-        )}
 
         {/* Equipo y permisos */}
         <EquipoCard />
