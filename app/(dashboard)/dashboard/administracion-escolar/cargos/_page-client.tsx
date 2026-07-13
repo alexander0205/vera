@@ -37,6 +37,7 @@ interface Periodo { id: number; nombre: string; activo: boolean; }
 interface Curso { id: number; nombre: string; activo: boolean; }
 interface Concepto { id: number; nombre: string; tipo: string; recurrente: boolean; activo: boolean; }
 interface Matricula { id: number; estudianteId: number; periodoId: number; cursoId: number; estado: string; }
+interface Estudiante { id: number; nombres: string; apellidos: string; }
 
 const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -83,6 +84,7 @@ export default function CargosClient() {
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [conceptos, setConceptos] = useState<Concepto[]>([]);
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
+  const [estudiantes, setEstudiantes] = useState<Estudiante[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -96,6 +98,17 @@ export default function CargosClient() {
   const [opError, setOpError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ creados: number; omitidos: number; total: number } | null>(null);
 
+  // Cargo individual (un estudiante) — dialog aparte del masivo.
+  const [openInd, setOpenInd] = useState(false);
+  const [formInd, setFormInd] = useState({
+    periodoId: '', cursoId: 'todos', estudianteId: '', matriculaId: '',
+    conceptoId: '', mes: '', anio: String(new Date().getFullYear()), monto: '', fechaVencimiento: hoy(),
+  });
+  const [queryEst, setQueryEst] = useState('');
+  const [savingInd, setSavingInd] = useState(false);
+  const [errInd, setErrInd] = useState<string | null>(null);
+  const [okInd, setOkInd] = useState<string | null>(null);
+
   const cargarCargos = useCallback(async () => {
     const params = new URLSearchParams();
     if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
@@ -108,14 +121,15 @@ export default function CargosClient() {
   }, [filtroEstado, filtroPeriodo]);
 
   const cargarCatalogos = useCallback(async () => {
-    const [periodosRes, cursosRes, conceptosRes, matriculasRes] = await Promise.all([
+    const [periodosRes, cursosRes, conceptosRes, matriculasRes, estudiantesRes] = await Promise.all([
       fetch('/api/administracion-escolar/periodos'),
       fetch('/api/administracion-escolar/cursos'),
       fetch('/api/administracion-escolar/conceptos'),
       fetch('/api/administracion-escolar/matriculas'),
+      fetch('/api/administracion-escolar/estudiantes'),
     ]);
-    const [p, c, k, m] = await Promise.all([
-      periodosRes.json(), cursosRes.json(), conceptosRes.json(), matriculasRes.json(),
+    const [p, c, k, m, e] = await Promise.all([
+      periodosRes.json(), cursosRes.json(), conceptosRes.json(), matriculasRes.json(), estudiantesRes.json(),
     ]);
     if (!periodosRes.ok) throw new Error(p.error ?? 'Error cargando períodos');
     if (!cursosRes.ok) throw new Error(c.error ?? 'Error cargando cursos');
@@ -125,6 +139,7 @@ export default function CargosClient() {
     setCursos(c.cursos ?? []);
     setConceptos(k.conceptos ?? []);
     setMatriculas(m.matriculas ?? []);
+    setEstudiantes(e.estudiantes ?? []);
   }, []);
 
   const cargar = useCallback(async () => {
@@ -221,6 +236,82 @@ export default function CargosClient() {
     }
   }
 
+  // ── Cargo individual ──────────────────────────────────────────────────────
+  const estNombre = useMemo(
+    () => new Map(estudiantes.map((e) => [e.id, `${e.nombres} ${e.apellidos}`])),
+    [estudiantes],
+  );
+  const conceptoIndSel = conceptos.find((c) => String(c.id) === formInd.conceptoId) ?? null;
+
+  // Estudiantes con matrícula activa en el período (y curso, si se filtró) elegido.
+  const estudiantesDelCurso = useMemo(() => {
+    if (!formInd.periodoId) return [];
+    const q = queryEst.trim().toLowerCase();
+    return matriculas
+      .filter((m) => (
+        m.estado === 'activa'
+        && String(m.periodoId) === formInd.periodoId
+        && (formInd.cursoId === 'todos' || String(m.cursoId) === formInd.cursoId)
+      ))
+      .map((m) => ({ matriculaId: m.id, estudianteId: m.estudianteId, cursoId: m.cursoId, nombre: estNombre.get(m.estudianteId) ?? `#${m.estudianteId}` }))
+      .filter((x) => !q || x.nombre.toLowerCase().includes(q))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [matriculas, formInd.periodoId, formInd.cursoId, queryEst, estNombre]);
+
+  function abrirIndividual() {
+    const periodoActivo = periodos.find((p) => p.activo);
+    setFormInd({
+      periodoId: periodoActivo ? String(periodoActivo.id) : '',
+      cursoId: 'todos', estudianteId: '', matriculaId: '',
+      conceptoId: '', mes: '', anio: String(new Date().getFullYear()), monto: '', fechaVencimiento: hoy(),
+    });
+    setQueryEst('');
+    setErrInd(null);
+    setOkInd(null);
+    setOpenInd(true);
+  }
+
+  async function handleCrearIndividual() {
+    const montoCentavos = toCentavos(formInd.monto);
+    if (!formInd.periodoId || !formInd.estudianteId || !formInd.matriculaId || !formInd.conceptoId || montoCentavos <= 0) {
+      setErrInd('Estudiante, concepto y monto son obligatorios');
+      return;
+    }
+    if (conceptoIndSel?.tipo === 'mensualidad' && !formInd.mes) {
+      setErrInd('Selecciona el mes de la mensualidad');
+      return;
+    }
+    setSavingInd(true);
+    setErrInd(null);
+    setOkInd(null);
+    try {
+      const res = await fetch('/api/administracion-escolar/cargos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          estudianteId: Number.parseInt(formInd.estudianteId),
+          matriculaId: Number.parseInt(formInd.matriculaId),
+          periodoId: Number.parseInt(formInd.periodoId),
+          conceptoId: Number.parseInt(formInd.conceptoId),
+          mes: formInd.mes ? Number.parseInt(formInd.mes) : null,
+          anio: Number.parseInt(formInd.anio),
+          montoCentavos,
+          fechaVencimiento: formInd.fechaVencimiento || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error creando el cargo');
+      setOkInd(`Cargo creado para ${estNombre.get(Number.parseInt(formInd.estudianteId)) ?? 'el estudiante'}.`);
+      setFormInd((f) => ({ ...f, estudianteId: '', matriculaId: '', monto: '' }));
+      setQueryEst('');
+      await cargarCargos();
+    } catch (e: unknown) {
+      setErrInd(e instanceof Error ? e.message : 'Error creando el cargo');
+    } finally {
+      setSavingInd(false);
+    }
+  }
+
   const sinCatalogos = periodos.length === 0 || conceptosActivos.length === 0 || matriculas.length === 0;
 
   return (
@@ -231,9 +322,14 @@ export default function CargosClient() {
           <p className="text-sm text-gray-500 mt-1">Inscripción, mensualidades y otros cargos por estudiante</p>
         </div>
         {puedeGestionar && (
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirGenerar} disabled={loading || sinCatalogos}>
-            <Plus className="h-4 w-4 mr-2" />Generar cargos
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" onClick={abrirIndividual} disabled={loading || sinCatalogos}>
+              <Plus className="h-4 w-4 mr-2" />Cargo individual
+            </Button>
+            <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirGenerar} disabled={loading || sinCatalogos}>
+              <Plus className="h-4 w-4 mr-2" />Generar cargos
+            </Button>
+          </div>
         )}
       </div>
 
@@ -413,6 +509,120 @@ export default function CargosClient() {
             <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cerrar</Button>
             <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGenerar} disabled={saving || objetivo === 0}>
               {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Generando...</> : 'Generar cargos'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cargo individual — un estudiante */}
+      <Dialog open={openInd} onOpenChange={(o: boolean) => { if (!o) setOpenInd(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Cargo individual</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            {errInd && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{errInd}</div>}
+            {okInd && <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg p-3">{okInd}</div>}
+
+            {/* Filtros para encontrar al estudiante */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Período *</Label>
+                <Select value={formInd.periodoId} onValueChange={(v) => setFormInd((f) => ({ ...f, periodoId: v, estudianteId: '', matriculaId: '' }))}>
+                  <SelectTrigger><SelectValue placeholder="Período" /></SelectTrigger>
+                  <SelectContent>
+                    {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Curso</Label>
+                <Select value={formInd.cursoId} onValueChange={(v) => setFormInd((f) => ({ ...f, cursoId: v, estudianteId: '', matriculaId: '' }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los cursos</SelectItem>
+                    {cursosActivos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Estudiante: búsqueda + lista */}
+            <div className="space-y-1.5">
+              <Label>Estudiante *</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input className="pl-8" placeholder="Buscar por nombre…" value={queryEst}
+                  onChange={(e) => setQueryEst(e.target.value)} disabled={!formInd.periodoId} />
+              </div>
+              {!formInd.periodoId ? (
+                <p className="text-xs text-gray-400">Elige un período para ver los estudiantes.</p>
+              ) : (
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                  {estudiantesDelCurso.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">Sin matrículas activas en ese filtro.</p>
+                  ) : estudiantesDelCurso.map((e) => {
+                    const sel = String(e.estudianteId) === formInd.estudianteId;
+                    return (
+                      <button key={e.matriculaId} type="button"
+                        onClick={() => setFormInd((f) => ({ ...f, estudianteId: String(e.estudianteId), matriculaId: String(e.matriculaId) }))}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors ${sel ? 'bg-teal-50 text-teal-800 font-medium' : 'hover:bg-gray-50 text-gray-800'}`}>
+                        {e.nombre}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Concepto */}
+            <div className="space-y-1.5">
+              <Label>Concepto *</Label>
+              <Select value={formInd.conceptoId} onValueChange={(v) => {
+                const concepto = conceptos.find((c) => String(c.id) === v);
+                setFormInd((f) => ({ ...f, conceptoId: v, mes: concepto?.tipo === 'mensualidad' ? (f.mes || String(new Date().getMonth() + 1)) : '' }));
+              }}>
+                <SelectTrigger><SelectValue placeholder="Concepto" /></SelectTrigger>
+                <SelectContent>
+                  {conceptosActivos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Mes</Label>
+                <Select value={formInd.mes || 'sin-mes'} onValueChange={(v) => setFormInd((f) => ({ ...f, mes: v === 'sin-mes' ? '' : v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sin-mes">Sin mes</SelectItem>
+                    {MESES.slice(1).map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Año *</Label>
+                <Input type="number" value={formInd.anio}
+                  onChange={(e) => setFormInd((f) => ({ ...f, anio: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Monto (RD$) *</Label>
+                <Input type="number" step="0.01" placeholder="3500.00" value={formInd.monto}
+                  onChange={(e) => setFormInd((f) => ({ ...f, monto: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fecha vencimiento</Label>
+                <Input type="date" value={formInd.fechaVencimiento}
+                  onChange={(e) => setFormInd((f) => ({ ...f, fechaVencimiento: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenInd(false)} disabled={savingInd}>Cerrar</Button>
+            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleCrearIndividual}
+              disabled={savingInd || !formInd.estudianteId || !formInd.conceptoId}>
+              {savingInd ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Creando...</> : 'Crear cargo'}
             </Button>
           </DialogFooter>
         </DialogContent>
