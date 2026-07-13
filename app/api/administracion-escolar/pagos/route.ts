@@ -71,6 +71,9 @@ export async function POST(req: NextRequest) {
           .limit(1);
         if (!cargo) throw new HttpError(404, 'Cargo no encontrado');
         if (cargo.estado === 'anulado') throw new HttpError(400, 'El cargo está anulado');
+        if (!cargo.ecfDocumentId) {
+          throw new HttpError(400, 'El cargo no tiene factura vinculada. Factura o vincula una factura antes de registrar el pago.');
+        }
         if (montoCentavos > cargo.saldoCentavos) {
           throw new HttpError(400, `El pago (${montoCentavos}) excede el saldo pendiente (${cargo.saldoCentavos}).`);
         }

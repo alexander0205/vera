@@ -21,6 +21,8 @@ interface CargoPendiente {
   saldoCentavos: number;
   fechaVencimiento: string | null;
   estado: string;
+  ecfDocumentId: number | null;
+  facturaEncf: string | null;
 }
 
 const MESES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -92,6 +94,10 @@ export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onCl
   async function handleGuardar() {
     const cargo = cargos.find((c) => String(c.id) === cargoId);
     if (!cargo) { setError('Selecciona un cargo'); return; }
+    if (!cargo.ecfDocumentId) {
+      setError('Este cargo no tiene factura vinculada. Factura o vincula una factura antes de registrar el pago.');
+      return;
+    }
     const montoCentavos = Math.round(parseFloat(monto) * 100);
     if (!Number.isInteger(montoCentavos) || montoCentavos <= 0) {
       setError('Monto inválido'); return;
@@ -124,6 +130,9 @@ export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onCl
     }
   }
 
+  const cargoSel = cargos.find((c) => String(c.id) === cargoId) ?? null;
+  const sinFactura = !!cargoSel && !cargoSel.ecfDocumentId;
+
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
@@ -153,6 +162,17 @@ export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onCl
                     ))}
                   </SelectContent>
                 </Select>
+                {cargoSel?.ecfDocumentId ? (
+                  <p className="text-xs text-teal-700">
+                    Factura vinculada: {cargoSel.facturaEncf || `#${cargoSel.ecfDocumentId}`}
+                  </p>
+                ) : sinFactura ? (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg p-3">
+                    Este cargo no tiene factura vinculada. Cierra este diálogo y usa <strong>Facturar</strong> o
+                    {' '}<strong>Vincular factura</strong> en la lista de cargos. El pago solo se puede registrar
+                    después de asociar una factura.
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -191,7 +211,7 @@ export function RegistrarPagoDialog({ estudianteId, estudianteNombre, open, onCl
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar}
-            disabled={saving || loading || cargos.length === 0}>
+            disabled={saving || loading || cargos.length === 0 || sinFactura}>
             {saving
               ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
               : 'Registrar pago'}
