@@ -60,11 +60,10 @@ function labelCargoPendiente(c: CargoPendiente): string {
 
 interface Props {
   estudiante: EstudianteEnriquecido;
-  onRegistrarPago: () => void;
   onChange: () => void;
 }
 
-export function EstudianteFicha({ estudiante: e, onRegistrarPago, onChange }: Props) {
+export function EstudianteFicha({ estudiante: e, onChange }: Props) {
   const router = useRouter();
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
@@ -155,14 +154,9 @@ export function EstudianteFicha({ estudiante: e, onRegistrarPago, onChange }: Pr
         )}
       </div>
 
-      {/* Acciones */}
+      {/* Acciones — el cobro se hace por-cargo en el perfil (va a la factura). */}
       <div className="border-t border-gray-100 pt-3 space-y-2">
         <Button className="w-full bg-teal-600 hover:bg-teal-700"
-          onClick={onRegistrarPago}
-          disabled={e.deudaCentavos === 0}>
-          Registrar pago
-        </Button>
-        <Button variant="outline" className="w-full"
           onClick={() => router.push(`/dashboard/administracion-escolar/estudiantes/${e.id}`)}>
           Abrir perfil completo
         </Button>

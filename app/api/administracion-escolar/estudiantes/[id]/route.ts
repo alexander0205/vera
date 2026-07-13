@@ -3,7 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudiantes, dependientes, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { deudaEstudiante } from '@/lib/administracion-escolar/queries';
+import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { eq, and } from 'drizzle-orm';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
@@ -16,6 +16,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .where(and(eq(adminEscolarEstudiantes.id, parseInt(id)), eq(adminEscolarEstudiantes.teamId, teamId)))
     .limit(1);
   if (!estudiante) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  // Refleja el cobro de las facturas vinculadas antes de calcular la deuda.
+  await sincronizarSaldosDesdeFacturas(teamId, estudiante.id);
   const deudaCentavos = await deudaEstudiante(teamId, estudiante.id);
 
   // Enlace opcional a Contactos (dependiente del cliente/tutor).

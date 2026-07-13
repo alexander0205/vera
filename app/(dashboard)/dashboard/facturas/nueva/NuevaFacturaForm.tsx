@@ -434,15 +434,15 @@ export default function NuevaFacturaForm({
         body: JSON.stringify({ ecfDocumentId: documentoId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'No se pudo saldar el cargo');
-      toast.success('Cargo saldado y vinculado a la factura.');
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo vincular el cargo');
+      toast.success('Cargo vinculado a la factura. Registra el cobro en la factura.');
       const estudianteId = data.cargo?.estudianteId;
       router.push(estudianteId
         ? `/dashboard/administracion-escolar/estudiantes/${estudianteId}`
         : '/dashboard/administracion-escolar/estudiantes');
     } catch (e) {
       setSaldandoCargo(false);
-      toast.error(e instanceof Error ? e.message : 'No se pudo saldar el cargo');
+      toast.error(e instanceof Error ? e.message : 'No se pudo vincular el cargo');
     }
   }
 
@@ -1216,15 +1216,16 @@ export default function NuevaFacturaForm({
               </div>
             </div>
             {/* Origen cargo escolar → cerrar el loop: vincular la factura al
-                cargo y saldarlo, volviendo al perfil del estudiante. */}
+                cargo. El cobro se registra luego en la factura (no hay pago
+                escolar paralelo), y el cargo refleja el estado de la factura. */}
             {origenCargo && (
               <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-left mb-6">
                 <div className="flex items-start gap-2 mb-3">
                   <GraduationCap className="h-5 w-5 text-teal-700 shrink-0 mt-0.5" />
                   <p className="text-sm text-teal-900">
-                    Esta factura nació de un cargo escolar. Al saldarlo, el cargo
-                    quedará vinculado a esta factura y aparecerá como pagado en el
-                    perfil del estudiante.
+                    Esta factura nació de un cargo escolar. Al vincularla, el cargo
+                    quedará ligado a esta factura y su saldo reflejará lo que se
+                    cobre aquí. El cobro se registra en la factura.
                   </p>
                 </div>
                 <div className="flex gap-3 flex-wrap">
@@ -1234,15 +1235,15 @@ export default function NuevaFacturaForm({
                     onClick={() => saldarCargoConFactura(resultado.documentoId)}
                   >
                     {saldandoCargo
-                      ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Saldando…</>
-                      : <><CheckCircle className="h-4 w-4 mr-1.5" />Volver al estudiante y saldar el cargo</>}
+                      ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Vinculando…</>
+                      : <><CheckCircle className="h-4 w-4 mr-1.5" />Vincular al cargo y volver al estudiante</>}
                   </Button>
                   <Button
                     variant="outline"
                     disabled={saldandoCargo}
                     onClick={() => router.push(`${detalleBase}/${resultado.documentoId}`)}
                   >
-                    Ver factura sin saldar
+                    Ver factura sin vincular
                   </Button>
                 </div>
               </div>

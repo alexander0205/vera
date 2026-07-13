@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
@@ -50,6 +49,8 @@ interface Cargo {
   estado: string;
   ecfDocumentId: number | null;
   facturaEncf: string | null;
+  facturaCodigo: string | null;
+  facturaEstadoPago: string | null;
 }
 interface Pago {
   id: number;
@@ -113,7 +114,6 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [tutores, setTutores]       = useState<TutorVinculo[]>([]);
   const [loading, setLoading]       = useState(true);
   const [notFound, setNotFound]     = useState(false);
-  const [cargoPagar, setCargoPagar] = useState<Cargo | null>(null);
   const [editOpen, setEditOpen]     = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
 
@@ -311,7 +311,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
                         puedeFacturar={puedeFacturar} puedePagos={puedePagos}
                         onVincular={() => setCargoVincularFactura(c)}
-                        onRegistrarPago={() => setCargoPagar(c)}
+                        onRegistrarPago={() => router.push(`/dashboard/cuentas-por-cobrar?pagar=${c.ecfDocumentId}`)}
                         onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
@@ -332,7 +332,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
                         puedeFacturar={puedeFacturar} puedePagos={puedePagos}
                         onVincular={() => setCargoVincularFactura(c)}
-                        onRegistrarPago={() => setCargoPagar(c)}
+                        onRegistrarPago={() => router.push(`/dashboard/cuentas-por-cobrar?pagar=${c.ecfDocumentId}`)}
                         onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
@@ -426,15 +426,6 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         </div>
       </div>
 
-      <RegistrarPagoDialog
-        estudianteId={estudiante.id}
-        estudianteNombre={`${estudiante.nombres} ${estudiante.apellidos}`}
-        cargoIdInicial={cargoPagar?.id ?? null}
-        open={!!cargoPagar}
-        onClose={() => setCargoPagar(null)}
-        onDone={cargar}
-      />
-
       <EditarEstudianteDialog
         estudiante={estudiante}
         open={editOpen}
@@ -465,12 +456,16 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
   // Facturar/pagar solo tiene sentido para un cargo que aún debe algo.
   const facturable = ['pendiente', 'parcial', 'vencido'].includes(cargo.estado);
   if (cargo.ecfDocumentId) {
+    // El cobro vive en la factura. El chip enlaza al documento; "Registrar pago"
+    // redirige a la factura para cobrar ahí (no hay pago escolar paralelo).
+    const ref = cargo.facturaEncf || cargo.facturaCodigo || `#${cargo.ecfDocumentId}`;
     const chip = (
-      <span className="inline-flex items-center gap-1 text-xs text-teal-700">
-        <Receipt className="h-3 w-3" />{cargo.facturaEncf || `#${cargo.ecfDocumentId}`}
-      </span>
+      <Link href={`/dashboard/facturas/${cargo.ecfDocumentId}`}
+        className="inline-flex items-center gap-1 text-xs text-teal-700 hover:text-teal-800 hover:underline">
+        <Receipt className="h-3 w-3" />{ref}
+      </Link>
     );
-    // Con factura y saldo pendiente: registrar el pago (abono) contra esa factura.
+    // Con factura y saldo pendiente: ir a la factura a registrar el cobro.
     if (puedePagos && facturable) {
       return (
         <span className="inline-flex items-center justify-end gap-3">

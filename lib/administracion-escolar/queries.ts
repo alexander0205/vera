@@ -157,6 +157,54 @@ export async function listarEstudiantesEnriquecidos(
   });
 }
 
+/**
+ * Sincroniza el saldo/estado de los cargos QUE TIENEN factura vinculada,
+ * derivándolos del ledger de cobro de la factura (`ecf_documents.estado_pago`
+ * + suma de `pagos_recibidos`). El módulo escolar NO registra pagos propios: el
+ * cobro vive en el motor de facturación y aquí solo se refleja (unidireccional:
+ * lee la factura, escribe únicamente su propio cargo).
+ *
+ * Regla del negocio (Alex): todo pago va atado a la factura; el módulo no crea
+ * un sistema de cobro paralelo. Ver [[no-contaminar-entidades-genericas]].
+ *
+ * Nota N:1: cuando varias facturas comparten cargo o una factura cubre varios
+ * cargos, el reparto por-línea no existe en `pagos_recibidos` (es por documento).
+ * Pendiente de resolver aparte — hoy cada cargo refleja el saldo de SU factura.
+ * Cargos ya `anulado` (anulación escolar manual) no se tocan.
+ */
+export async function sincronizarSaldosDesdeFacturas(
+  teamId: number,
+  estudianteId?: number,
+): Promise<void> {
+  await db.execute(sql`
+    UPDATE admin_escolar_cargos AS c
+    SET saldo_centavos = CASE
+          WHEN d.estado_pago IN ('PAGADA', 'GRATUITA') THEN 0
+          ELSE GREATEST(0, d.monto_total - COALESCE(p.pagado, 0))
+        END,
+        estado = CASE
+          WHEN d.estado_pago IN ('PAGADA', 'GRATUITA') THEN 'pagado'
+          WHEN d.estado_pago = 'ANULADA' THEN 'anulado'
+          WHEN d.estado_pago = 'PARCIAL' THEN 'parcial'
+          WHEN c.fecha_vencimiento IS NOT NULL AND c.fecha_vencimiento < CURRENT_DATE THEN 'vencido'
+          ELSE 'pendiente'
+        END,
+        updated_at = now()
+    FROM ecf_documents AS d
+    LEFT JOIN (
+      SELECT ecf_document_id, SUM(monto_centavos) AS pagado
+      FROM pagos_recibidos
+      WHERE team_id = ${teamId}
+      GROUP BY ecf_document_id
+    ) AS p ON p.ecf_document_id = d.id
+    WHERE c.ecf_document_id = d.id
+      AND c.team_id = ${teamId}
+      AND c.ecf_document_id IS NOT NULL
+      AND c.estado <> 'anulado'
+      ${estudianteId != null ? sql`AND c.estudiante_id = ${estudianteId}` : sql``}
+  `);
+}
+
 /** Deuda viva total (centavos) de un estudiante. */
 export async function deudaEstudiante(teamId: number, estudianteId: number): Promise<number> {
   const [row] = await db

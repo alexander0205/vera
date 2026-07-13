@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { fmtDOP } from '@/lib/utils/format';
 import { EstudianteFicha, type EstudianteEnriquecido } from '@/components/administracion-escolar/EstudianteFicha';
-import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
@@ -31,7 +30,6 @@ const EMPTY_FORM = { nombres: '', apellidos: '', codigo: '', fechaNacimiento: ''
 export default function EstudiantesClient() {
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
-  const puedePagos     = permissions.includes('administracion-escolar:pagos');
 
   const [estudiantes, setEstudiantes] = useState<EstudianteEnriquecido[]>([]);
   const [periodoActivo, setPeriodoActivo] = useState<string | null>(null);
@@ -48,9 +46,6 @@ export default function EstudiantesClient() {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
   const [opError, setOpError]     = useState<string | null>(null);
-
-  // registrar pago
-  const [pagoOpen, setPagoOpen]   = useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -251,7 +246,6 @@ export default function EstudiantesClient() {
             <EstudianteFicha
               key={seleccionado.id}
               estudiante={seleccionado}
-              onRegistrarPago={() => { if (puedePagos) setPagoOpen(true); }}
               onChange={cargar}
             />
           ) : (
@@ -303,17 +297,6 @@ export default function EstudiantesClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Modal registrar pago */}
-      {seleccionado && (
-        <RegistrarPagoDialog
-          estudianteId={seleccionado.id}
-          estudianteNombre={`${seleccionado.nombres} ${seleccionado.apellidos}`}
-          open={pagoOpen}
-          onClose={() => setPagoOpen(false)}
-          onDone={cargar}
-        />
-      )}
     </section>
   );
 }

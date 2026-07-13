@@ -76,6 +76,17 @@ export default function CuentasPorCobrarPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Deep-link `?pagar=<docId>`: al llegar desde otro módulo (p. ej. un cargo
+  // escolar) abre directo el modal de cobro de esa factura. Se consume una vez.
+  const [pagarConsumido, setPagarConsumido] = useState(false);
+  useEffect(() => {
+    if (!data || pagarConsumido) return;
+    const pagarId = new URLSearchParams(window.location.search).get('pagar');
+    if (!pagarId) return;
+    const cuenta = data.cuentas.find((c) => String(c.id) === pagarId);
+    if (cuenta) { setPagoModal(cuenta); setPagarConsumido(true); }
+  }, [data, pagarConsumido]);
+
   const agrupar = filterValues.agrupar === 'cliente';
 
   // ── Filtrado client-side: cliente (texto), tipo de documento, vencimiento ──

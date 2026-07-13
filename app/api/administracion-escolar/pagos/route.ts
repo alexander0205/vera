@@ -7,7 +7,6 @@ import {
   adminEscolarConceptosPago,
 } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
-import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and, desc } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
@@ -45,80 +44,16 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Registra un pago. Si trae cargoId, se aplica al cargo dentro de una
- * transacción: reduce saldo y actualiza estado (parcial/pagado). No se permite
- * pagar más que el saldo pendiente.
+ * DEPRECADO. El módulo escolar ya no registra pagos propios: todo cobro va
+ * atado a la factura y vive en el ledger `pagos_recibidos` del motor de
+ * facturación (regla de Alex — no crear un sistema de cobro paralelo). Para
+ * cobrar un cargo: vincúlalo a una factura y registra el cobro en la factura
+ * (/dashboard/facturas/[id] o Cuentas por Cobrar). El saldo del cargo se
+ * refleja de la factura vía sincronizarSaldosDesdeFacturas.
  */
-export async function POST(req: NextRequest) {
-  const auth = await requirePermission('administracion-escolar:pagos');
-  if (!auth.ok) return auth.response;
-  const { teamId, user } = auth;
-  const body = await req.json();
-  const { cargoId, montoCentavos, fechaPago, metodo, referencia, notas, ecfDocumentId, pagoRecibidoId } = body;
-  let { estudianteId, matriculaId } = body;
-
-  if (!Number.isInteger(montoCentavos) || montoCentavos <= 0) {
-    return NextResponse.json({ error: 'montoCentavos debe ser un entero positivo' }, { status: 400 });
-  }
-  if (!fechaPago) return NextResponse.json({ error: 'fechaPago requerida' }, { status: 400 });
-
-  try {
-    const pago = await db.transaction(async (tx) => {
-      if (cargoId) {
-        const [cargo] = await tx.select().from(adminEscolarCargos)
-          .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, teamId)))
-          .for('update')
-          .limit(1);
-        if (!cargo) throw new HttpError(404, 'Cargo no encontrado');
-        if (cargo.estado === 'anulado') throw new HttpError(400, 'El cargo está anulado');
-        if (!cargo.ecfDocumentId) {
-          throw new HttpError(400, 'El cargo no tiene factura vinculada. Factura o vincula una factura antes de registrar el pago.');
-        }
-        if (montoCentavos > cargo.saldoCentavos) {
-          throw new HttpError(400, `El pago (${montoCentavos}) excede el saldo pendiente (${cargo.saldoCentavos}).`);
-        }
-        const nuevoSaldo = cargo.saldoCentavos - montoCentavos;
-        await tx.update(adminEscolarCargos)
-          .set({
-            saldoCentavos: nuevoSaldo,
-            estado: nuevoSaldo === 0 ? 'pagado' : 'parcial',
-            updatedAt: new Date(),
-          })
-          .where(eq(adminEscolarCargos.id, cargo.id));
-        // Derivar estudiante/matrícula del cargo si no vinieron.
-        estudianteId = estudianteId ?? cargo.estudianteId;
-        matriculaId = matriculaId ?? cargo.matriculaId;
-      }
-
-      if (!estudianteId) throw new HttpError(400, 'estudianteId o cargoId requerido');
-
-      const [row] = await tx.insert(adminEscolarPagos).values({
-        teamId,
-        estudianteId,
-        matriculaId: matriculaId ?? null,
-        cargoId: cargoId ?? null,
-        ecfDocumentId: ecfDocumentId ?? null,
-        pagoRecibidoId: pagoRecibidoId ?? null,
-        montoCentavos,
-        fechaPago,
-        metodo: metodo?.trim() || null,
-        referencia: referencia?.trim() || null,
-        notas: notas?.trim() || null,
-        createdBy: user.id,
-      }).returning();
-      return row;
-    });
-    return NextResponse.json({ pago });
-  } catch (err) {
-    if (err instanceof HttpError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
-    throw err;
-  }
-}
-
-class HttpError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
+export async function POST() {
+  return NextResponse.json(
+    { error: 'Los pagos escolares se registran en la factura vinculada, no aquí. Abre la factura del cargo para cobrar.' },
+    { status: 409 },
+  );
 }
