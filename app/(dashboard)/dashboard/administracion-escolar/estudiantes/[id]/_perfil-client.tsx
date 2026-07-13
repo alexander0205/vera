@@ -11,7 +11,6 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { RegistrarPagoDialog } from '@/components/administracion-escolar/RegistrarPagoDialog';
 import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
-import { VincularDependienteDialog } from '@/components/administracion-escolar/VincularDependienteDialog';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
@@ -116,7 +115,6 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [notFound, setNotFound]     = useState(false);
   const [pagoOpen, setPagoOpen]     = useState(false);
   const [editOpen, setEditOpen]     = useState(false);
-  const [vincularOpen, setVincularOpen] = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
 
   // No pone `loading` en true en recargas posteriores: si lo hiciera, el early
@@ -236,16 +234,11 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               <Row label="Estado" value={matriculaActiva?.estado ?? '—'} strong capitalize />
             </div>
 
-            {/* Contacto vinculado (dependiente de Contactos) */}
+            {/* Contacto vinculado (derivado del tutor de pago). Ya no se edita a
+                mano: se establece automáticamente al asignar el tutor responsable
+                de pago, bajo su mismo cliente, para que la factura sea coherente. */}
             <div className="border-t border-gray-100 pt-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-gray-900">Contacto vinculado</p>
-                {puedeGestionar && (
-                  <button className="text-xs text-teal-600 hover:underline" onClick={() => setVincularOpen(true)}>
-                    {estudiante.dependiente ? 'Cambiar' : 'Vincular'}
-                  </button>
-                )}
-              </div>
+              <p className="text-sm font-medium text-gray-900 mb-2">Contacto vinculado</p>
               {estudiante.dependiente ? (
                 <Link href={`/dashboard/clientes/${estudiante.dependiente.clienteId}/editar`}
                   className="block border border-gray-200 rounded-lg p-3 hover:border-teal-300 hover:bg-teal-50/40 transition-colors">
@@ -255,7 +248,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                   </span>
                 </Link>
               ) : (
-                <p className="text-sm text-gray-400">Sin vincular a Contactos</p>
+                <p className="text-sm text-gray-400">Se establece al asignar el tutor de pago.</p>
               )}
             </div>
 
@@ -449,13 +442,6 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         estudiante={estudiante}
         open={editOpen}
         onClose={() => setEditOpen(false)}
-        onSaved={cargar}
-      />
-
-      <VincularDependienteDialog
-        estudianteId={estudiante.id}
-        open={vincularOpen}
-        onClose={() => setVincularOpen(false)}
         onSaved={cargar}
       />
 

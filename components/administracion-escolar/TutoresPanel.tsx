@@ -185,6 +185,16 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
   }
 
   async function handleGuardar() {
+    // El responsable de pago es el contacto fiscal → exige cliente vinculado.
+    if (responsablePago) {
+      const tieneCliente = (!editVinculo && !modoNuevo)
+        ? tutorPreview?.clientId != null   // tutor existente: ya debe tener cliente
+        : clienteVinculado != null;        // nuevo/editar: se vincula aquí
+      if (!tieneCliente) {
+        setError('El responsable de pago debe estar vinculado a un contacto/cliente (es quien recibe las facturas).');
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
