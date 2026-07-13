@@ -17,6 +17,7 @@ import { Info, X } from 'lucide-react';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import { Autocomplete } from '../components/Autocomplete';
+import { LineaMaestros } from './LineaMaestros';
 import { calcularMontoItem } from '../utils/calculos';
 import { TASA_ITBIS } from '../utils/types';
 import type { ItemLinea, Producto } from '../utils/types';
@@ -209,6 +210,7 @@ export function ItemsTable({
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
               />
+              <LineaMaestros productoId={item.productoId} />
             </Box>
 
             {showReferencia && (
@@ -581,6 +583,7 @@ export function ItemsTable({
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
                   />
+                  <LineaMaestros productoId={item.productoId} />
                 </TableCell>
 
                 {/* Referencia */}

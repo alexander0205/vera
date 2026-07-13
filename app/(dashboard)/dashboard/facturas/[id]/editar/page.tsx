@@ -183,6 +183,9 @@ export default async function EditarBorradorPage({
     lineasJson:           doc.lineasJson,
     dependienteId:        doc.dependienteId   ?? null,
     dependienteNombre:    doc.dependienteNombre ?? null,
+    almacenId:            doc.almacenId        ?? null,
+    vendedorId:           doc.vendedorId       ?? null,
+    listaPreciosId:       doc.listaPreciosId   ?? null,
     // Pago — restaurar split al editar
     pagoRecibido:         pagoLineas.length > 0,
     pagoFecha:            doc.pagoFecha ?? null,

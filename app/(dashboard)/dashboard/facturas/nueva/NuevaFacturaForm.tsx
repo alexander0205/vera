@@ -26,6 +26,7 @@ import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
 import { DetallesSection, MOTIVOS_NOTA } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
+import { ClasificacionFactura, type ClasifAsig } from './sections/ClasificacionFactura';
 import { ColumnasToggle } from './sections/ColumnasToggle';
 import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
@@ -167,6 +168,9 @@ export default function NuevaFacturaForm({
     : '/dashboard/facturas';
 
   const regla = TIPO_ECF_REGLAS[tipoEcf];
+
+  // ── Clasificación por maestros (Plan A) ─────────────────────────────────────
+  const [clasificacion, setClasificacion] = useState<ClasifAsig[]>([]);
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
@@ -473,11 +477,11 @@ export default function NuevaFacturaForm({
   const [showListaPrecios, setShowListaPrecios]     = useState(false);
   const [showVendedor, setShowVendedor]             = useState(false);
 
-  const [almacenId, setAlmacenId]                   = useState<number | null>(null);
+  const [almacenId, setAlmacenId]                   = useState<number | null>(initialData?.almacenId ?? null);
   const [almacenNombre, setAlmacenNombre]           = useState('');
-  const [listaPreciosId, setListaPreciosId]         = useState<number | null>(null);
+  const [listaPreciosId, setListaPreciosId]         = useState<number | null>(initialData?.listaPreciosId ?? null);
   const [listaPreciosNombre, setListaPreciosNombre] = useState('');
-  const [vendedorId, setVendedorId]                 = useState<number | null>(null);
+  const [vendedorId, setVendedorId]                 = useState<number | null>(initialData?.vendedorId ?? null);
   const [vendedorNombre, setVendedorNombre]         = useState('');
 
   const {
@@ -635,6 +639,16 @@ export default function NuevaFacturaForm({
         unidadMedida: (p as Producto & { unidad?: string }).unidad ?? '',
       },
     });
+
+    if (p.controlaInventario) {
+      if (p.stockActual === 0 && !p.permiteVentaSinStock) {
+        toast.error(`"${p.nombre}" está agotado y no permite venta sin stock.`, { duration: 7000 });
+      } else if (p.stockActual === 0) {
+        toast.warning(`"${p.nombre}" está agotado. Stock actual: 0 unidades.`, { duration: 6000 });
+      } else if (p.stockActual <= p.stockMinimo) {
+        toast.warning(`Stock bajo en "${p.nombre}": ${p.stockActual} unidades (mínimo: ${p.stockMinimo}).`, { duration: 6000 });
+      }
+    }
   }
 
   /**
@@ -948,8 +962,31 @@ export default function NuevaFacturaForm({
     try {
       const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...buildPayload(modoEfectivo), _traza: traza }) });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
+      if (!res.ok) {
+        setError(data.error ?? 'Error al guardar');
+        // El método de pago obliga tipo fiscal (ej. tarjeta con «Sin NCF»): llevar
+        // al usuario al selector de tipo y resaltarlo para que lo cambie.
+        if (data.requiereTipoFiscal) {
+          const el = document.getElementById('tipo-comprobante-anchor');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-2', 'ring-red-500', 'ring-offset-2');
+            setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2'), 4000);
+          }
+        }
+        return;
+      }
       try { localStorage.removeItem(draftKey); } catch {}
+      // Persistir clasificación por maestros (Plan A) — metadata no fiscal.
+      if (data.documentoId) {
+        try {
+          await fetch(`/api/facturas/${data.documentoId}/maestros`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asignaciones: clasificacion }),
+          });
+        } catch {}
+      }
       if (opts?.andThen === 'nueva') {
         resetForm();
         return;
@@ -1415,6 +1452,13 @@ export default function NuevaFacturaForm({
                   tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
                 />
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <ClasificacionFactura
+                    docId={initialData?.id}
+                    value={clasificacion}
+                    onChange={setClasificacion}
+                  />
+                </div>
               </SectionCard>
 
               <SectionCard

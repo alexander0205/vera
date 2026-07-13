@@ -11,10 +11,11 @@ import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
-import { ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2, PackagePlus } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
+import ModalRegistrarCompra from '../_modal-registrar-compra';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 export default function CompraDetallePage() {
   const { id } = useParams<{ id: string }>();
   const { can, isLoading: permLoading } = usePermissions();
+  const [showEntrada, setShowEntrada] = useState(false);
 
   const { data, isLoading, error } = useSWR<RecepcionEcfDto>(
     !permLoading && can('compras:ver') && id ? `/api/compras/${id}` : null,
@@ -171,15 +173,40 @@ export default function CompraDetallePage() {
       </Link>
 
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flexWrap: 'wrap' }}>
-        <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{data.eNcf}</Typography>
-        <Chip
-          label={estado}
-          size="small"
-          sx={{ bgcolor: badge.bgcolor, color: badge.color, border: `1px solid ${badge.border}`, fontSize: '0.6875rem', height: 22, fontWeight: 500 }}
-        />
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{data.eNcf}</Typography>
+            <Chip
+              label={estado}
+              size="small"
+              sx={{ bgcolor: badge.bgcolor, color: badge.color, border: `1px solid ${badge.border}`, fontSize: '0.6875rem', height: 22, fontWeight: 500 }}
+            />
+          </Box>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>{tipoLabel(data)}</Typography>
+        </Box>
+        {can('productos:gestionar') && (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setShowEntrada(true)}
+            startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
+            sx={{ textTransform: 'none', borderRadius: '8px' }}
+          >
+            Registrar entrada
+          </Button>
+        )}
       </Box>
-      <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: -1 }}>{tipoLabel(data)}</Typography>
+
+      <ModalRegistrarCompra
+        open={showEntrada}
+        onClose={() => setShowEntrada(false)}
+        onSuccess={() => {}}
+        prefill={{
+          proveedorRnc:   data.rncEmisor ?? data.rnc ?? undefined,
+          referenciaEncf: data.eNcf ?? undefined,
+        }}
+      />
 
       {/* Datos principales */}
       <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight } from 'lucide-react';
+import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet, Receipt, Users, HandCoins, UserCircle } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -71,6 +71,72 @@ const REPORTES: ReporteCard[] = [
   },
 ];
 
+const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React.ElementType; color: string }[] = [
+  {
+    href: '/dashboard/reportes/panel',
+    titulo: 'Panel financiero',
+    descripcion: 'KPIs del período: ingresos, ITBIS, cartera y aceptación DGII en una vista.',
+    icon: LayoutDashboard,
+    color: 'bg-teal-50 text-teal-600',
+  },
+  {
+    href: '/dashboard/reportes/tendencia',
+    titulo: 'Tendencia de ingresos',
+    descripcion: 'Evolución de ventas por día, semana o mes. Gráfica y exportable a Excel.',
+    icon: TrendingUp,
+    color: 'bg-sky-50 text-sky-600',
+  },
+  {
+    href: '/dashboard/reportes/por-producto',
+    titulo: 'Ingresos por producto',
+    descripcion: 'Qué productos/servicios generan tus ingresos. Incluye análisis Pareto (80/20).',
+    icon: Package,
+    color: 'bg-indigo-50 text-indigo-600',
+  },
+  {
+    href: '/dashboard/reportes/cuentas-por-cobrar',
+    titulo: 'Cuentas por cobrar',
+    descripcion: 'Antigüedad de saldos (aging) de tu cartera abierta y facturas vencidas.',
+    icon: Wallet,
+    color: 'bg-amber-50 text-amber-600',
+  },
+  {
+    href: '/dashboard/reportes/por-tipo',
+    titulo: 'Por tipo de comprobante',
+    descripcion: 'Desglose por tipo de e-CF DGII: e31 crédito fiscal, e32 consumo, notas, etc.',
+    icon: Receipt,
+    color: 'bg-cyan-50 text-cyan-600',
+  },
+  {
+    href: '/dashboard/reportes/por-cliente',
+    titulo: 'Ingresos por cliente',
+    descripcion: 'Ranking de clientes por facturación en el período.',
+    icon: UserCircle,
+    color: 'bg-violet-50 text-violet-600',
+  },
+  {
+    href: '/dashboard/reportes/por-usuario',
+    titulo: 'Ventas por usuario',
+    descripcion: 'Quién emitió cada factura. Ranking por monto facturado.',
+    icon: Users,
+    color: 'bg-blue-50 text-blue-600',
+  },
+  {
+    href: '/dashboard/reportes/por-usuario-pago',
+    titulo: 'Cobros por usuario',
+    descripcion: 'Quién registró cada pago recibido. Ranking por monto cobrado.',
+    icon: HandCoins,
+    color: 'bg-rose-50 text-rose-600',
+  },
+  {
+    href: '/dashboard/reportes/ventas-generales',
+    titulo: 'Ventas generales',
+    descripcion: 'Visión detallada de ventas y devoluciones. Filtros por fecha, exportable a CSV.',
+    icon: LineChart,
+    color: 'bg-emerald-50 text-emerald-600',
+  },
+];
+
 const MESES: [string, string][] = [
   ['01', 'Enero'],     ['02', 'Febrero'],  ['03', 'Marzo'],     ['04', 'Abril'],
   ['05', 'Mayo'],      ['06', 'Junio'],    ['07', 'Julio'],      ['08', 'Agosto'],
@@ -107,39 +173,47 @@ export default function ReportesPage() {
         </Typography>
       </Box>
 
-      {/* Análisis comercial */}
+      {/* Reportes gerenciales (no DGII) — análisis comercial */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1.5, display: 'block' }}>
           Análisis comercial
         </Typography>
-        <Link href="/dashboard/reportes/ventas-generales" style={{ textDecoration: 'none' }}>
-          <Card
-            elevation={0}
-            sx={{
-              border: '1px solid #e5e7eb',
-              borderRadius: '12px',
-              maxWidth: 380,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              '&:hover': { borderColor: 'primary.main', boxShadow: '0 2px 8px rgba(13,148,136,0.12)' },
-            }}
-          >
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, p: '16px !important' }}>
-              <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <LineChart style={{ width: 20, height: 20, color: '#0d9488' }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  Ventas generales
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
-                  Visión detallada de ventas y devoluciones. Filtros por fecha, gráfica y exportable a CSV.
-                </Typography>
-              </Box>
-              <ChevronRight style={{ width: 16, height: 16, color: '#9ca3af', flexShrink: 0 }} />
-            </CardContent>
-          </Card>
-        </Link>
+        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' } }}>
+          {ANALISIS.map(a => {
+            const [bg, fg] = ({
+              'bg-teal-50 text-teal-600':       ['#f0fdfa', '#0d9488'],
+              'bg-sky-50 text-sky-600':         ['#f0f9ff', '#0284c7'],
+              'bg-indigo-50 text-indigo-600':   ['#eef2ff', '#4f46e5'],
+              'bg-amber-50 text-amber-600':     ['#fffbeb', '#d97706'],
+              'bg-cyan-50 text-cyan-600':       ['#ecfeff', '#0891b2'],
+              'bg-violet-50 text-violet-600':   ['#f5f3ff', '#7c3aed'],
+              'bg-rose-50 text-rose-600':       ['#fff1f2', '#e11d48'],
+              'bg-emerald-50 text-emerald-600': ['#ecfdf5', '#059669'],
+            } as Record<string, [string, string]>)[a.color] ?? ['#f0fdfa', '#0d9488'];
+            return (
+              <Card
+                key={a.href}
+                component={Link}
+                href={a.href}
+                elevation={0}
+                sx={{ textDecoration: 'none', border: '1px solid #e5e7eb', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.15s', '&:hover': { borderColor: 'primary.main', boxShadow: '0 2px 8px rgba(13,148,136,0.12)' } }}
+              >
+                <CardContent sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: '16px !important' }}>
+                  <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <a.icon style={{ width: 20, height: 20 }} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.25 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{a.titulo}</Typography>
+                      <ChevronRight style={{ width: 16, height: 16, color: '#9ca3af', flexShrink: 0 }} />
+                    </Box>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{a.descripcion}</Typography>
+                  </Box>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Box>
       </Box>
 
       {/* Período de reporte */}

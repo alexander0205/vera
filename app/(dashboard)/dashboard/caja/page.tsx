@@ -67,6 +67,11 @@ interface Movimiento {
   createdAt: string;
 }
 
+interface Terminal {
+  id: number;
+  nombre: string;
+}
+
 const TIPO_LABELS: Record<string, string> = {
   ENTRADA: 'Entrada', SALIDA: 'Salida', GASTO: 'Gasto', RETIRO: 'Retiro', AJUSTE: 'Ajuste',
 };
@@ -326,10 +331,13 @@ export default function CajaPage() {
   const [desglose, setDesglose]       = useState<Desglose | null>(null);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [ventasPorMetodo, setVentasPorMetodo] = useState<VentaPorMetodo[]>([]);
+  const [terminalActiva, setTerminalActiva]   = useState<Terminal | null>(null);
 
   const [montoApertura, setMontoApertura] = useState('');
   const [aperObs, setAperObs]             = useState('');
   const [abriendo, setAbriendo]           = useState(false);
+  const [terminales, setTerminales]       = useState<Terminal[]>([]);
+  const [terminalId, setTerminalId]       = useState<number | null>(null);
 
   const [showMovimiento, setShowMovimiento] = useState(false);
   const [showCierre, setShowCierre]         = useState(false);
@@ -346,6 +354,12 @@ export default function CajaPage() {
       setDesglose(data.desglose ?? null);
       setMovimientos(data.movimientos ?? []);
       setVentasPorMetodo(data.ventasPorMetodo ?? []);
+      setTerminalActiva(data.terminal ?? null);
+
+      const terms: Terminal[] = data.terminales ?? [];
+      setTerminales(terms);
+      // Preselecciona la primera terminal por defecto (si hay alguna).
+      setTerminalId(prev => prev ?? (terms.length > 0 ? terms[0].id : null));
     }
     setLoading(false);
   }, []);
@@ -375,8 +389,13 @@ export default function CajaPage() {
 
     setAbriendo(true);
     const res = await fetch('/api/caja/turnos', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ montoApertura: monto, observaciones: aperObs || undefined }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        montoApertura: monto,
+        observaciones: aperObs || undefined,
+        terminalId: terminalId ?? undefined,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     setAbriendo(false);
@@ -410,6 +429,25 @@ export default function CajaPage() {
         <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '16px' }}>
           <CardContent sx={{ p: '24px !important' }}>
             <Box component="form" onSubmit={abrirTurno} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              {terminales.length > 0 && (
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>Terminal / Caja</Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                    {terminales.map(t => (
+                      <Box key={t.id} component="button" type="button" onClick={() => setTerminalId(t.id)}
+                        sx={{ borderRadius: '10px', border: '1px solid', px: 1.5, py: 1.25, fontSize: '0.875rem', fontWeight: 500, textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s',
+                          ...(terminalId === t.id
+                            ? { borderColor: '#0d9488', bgcolor: '#f0fdfa', color: '#065f46', boxShadow: '0 0 0 1px #0d9488' }
+                            : { borderColor: '#d1d5db', color: '#374151', bgcolor: 'white', '&:hover': { bgcolor: 'grey.50' } }) }}>
+                        {t.nombre}
+                      </Box>
+                    ))}
+                  </Box>
+                  <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
+                    Selecciona la caja física en la que abres el turno.
+                  </Typography>
+                </Box>
+              )}
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>Monto de apertura (RD$)</Typography>
                 <MuiTextField
@@ -506,7 +544,7 @@ export default function CajaPage() {
             <Wallet style={{ width: 20, height: 20, color: '#0d9488' }} />
           </Box>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>Mi caja</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>{terminalActiva ? terminalActiva.nombre : 'Mi caja'}</Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>Abierta a las {fmtHora(turno.aperturaAt)}</Typography>
           </Box>
         </Box>

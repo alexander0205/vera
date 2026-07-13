@@ -84,16 +84,21 @@ export async function calcularEsperado(
   turno: CajaTurno,
   executor: typeof db = db,
 ): Promise<DesgloseEsperado> {
-  // Ventas en efectivo: pagos del turno con método efectivo.
+  // Ventas en efectivo: pagos del turno con método efectivo. Se excluyen los
+  // pagos de comprobantes ANULADOS — al anular una factura su cobro deja de ser
+  // real, aunque la fila pagos_recibidos siga existiendo (anulaciones legacy no
+  // la borraban). Sin este filtro el esperado se infla con cobros fantasma.
   const [pagoAgg] = await executor
     .select({
       total: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
     })
     .from(pagosRecibidos)
+    .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
     .where(and(
       eq(pagosRecibidos.teamId, teamId),
       eq(pagosRecibidos.turnoCajaId, turno.id),
       sql`lower(${pagosRecibidos.metodo}) IN ('efectivo', 'cash')`,
+      sql`${ecfDocuments.estado} <> 'ANULADO'`,
     ));
   const ventasEfectivo = Number(pagoAgg?.total ?? 0);
 
@@ -148,9 +153,12 @@ export async function getVentasPorMetodo(
       total:  sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
     })
     .from(pagosRecibidos)
+    .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
     .where(and(
       eq(pagosRecibidos.teamId, teamId),
       eq(pagosRecibidos.turnoCajaId, turnoId),
+      // Excluye cobros de comprobantes anulados (ver calcularEsperado).
+      sql`${ecfDocuments.estado} <> 'ANULADO'`,
     ))
     .groupBy(sql`lower(${pagosRecibidos.metodo})`);
 
@@ -197,6 +205,8 @@ export async function abrirTurno(input: {
   aperturaPor: number;
   montoAperturaCentavos: number;
   aperturaObs?: string | null;
+  /** Terminal POS en la que se abre (define almacén/lista/impresora). Nullable: caja fuera del POS. */
+  terminalId?: number | null;
 }): Promise<CajaTurno> {
   if (input.montoAperturaCentavos < 0) {
     throw new Error('El monto de apertura no puede ser negativo');
@@ -217,6 +227,7 @@ export async function abrirTurno(input: {
         montoAperturaCentavos: input.montoAperturaCentavos,
         aperturaPor:           input.aperturaPor,
         aperturaObs:           input.aperturaObs ?? null,
+        terminalId:            input.terminalId ?? null,
       })
       .returning();
     return turno;

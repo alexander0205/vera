@@ -60,8 +60,9 @@ export function CompactHeader({
 
         {/* Tipos selector — categoría (oculta si fija por ruta) + subtipo. El
             subtipo solo se muestra cuando la categoría tiene más de un tipo;
-            con un solo tipo (NC/ND/Compras) se rotula el documento fijo. */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+            con un solo tipo (NC/ND/Compras) se rotula el documento fijo.
+            id: ancla para resaltar cuando el método de pago obliga tipo fiscal. */}
+        <Box id="tipo-comprobante-anchor" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, borderRadius: '8px', transition: 'box-shadow 0.2s' }}>
           {!ocultarCategoria && (
             <Select
               value={categoriaId}

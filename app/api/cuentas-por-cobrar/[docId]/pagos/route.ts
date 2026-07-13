@@ -15,9 +15,9 @@ import { z } from 'zod';
 import { getUser, getTeamIdForUser, getPagosDocumento, registrarPagoFacturaConMora } from '@/lib/db/queries';
 import { getSaldoFavorCliente, getNotasCreditoDisponibles } from '@/lib/facturas/notas-credito';
 import { getTurnoAbierto } from '@/lib/caja/core';
-import { METODO_PAGO_VALUES_VALIDOS, METODO_SALDO_FAVOR, METODO_NOTA_CREDITO } from '@/lib/pagos/metodos';
+import { METODO_PAGO_VALUES_VALIDOS, METODO_SALDO_FAVOR, METODO_NOTA_CREDITO, labelMetodo } from '@/lib/pagos/metodos';
 import { db } from '@/lib/db/drizzle';
-import { teamMembers, ecfDocuments } from '@/lib/db/schema';
+import { teamMembers, ecfDocuments, teams } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { logAudit, getIp } from '@/lib/audit';
@@ -147,6 +147,46 @@ export async function POST(
     }
 
     const totalCentavos = lineas.reduce((s, l) => s + l.montoCentavos, 0);
+
+    // ── Método que obliga DGII sobre factura NO emitida ─────────────────────────
+    // Si la empresa marca un método (ej. tarjeta) como "obliga DGII", no se puede
+    // registrar ese pago sobre una factura que aún no fue emitida a la DGII: hay
+    // que emitirla primero. Se devuelve el link al detalle para emitirla.
+    const [teamCfg] = await db
+      .select({ metodosObligaDgii: teams.metodosObligaDgii })
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    const metodosObliga = new Set(
+      ((teamCfg?.metodosObligaDgii as string[] | null) ?? []).map(m => m.trim().toLowerCase()),
+    );
+    if (metodosObliga.size > 0) {
+      const metodoBloqueado = lineas
+        .map(l => l.metodo.trim().toLowerCase())
+        .find(m => metodosObliga.has(m));
+      if (metodoBloqueado) {
+        const [docDgii] = await db
+          .select({ estado: ecfDocuments.estado, encf: ecfDocuments.encf, tipoEcf: ecfDocuments.tipoEcf })
+          .from(ecfDocuments)
+          .where(and(eq(ecfDocuments.id, docIdNum), eq(ecfDocuments.teamId, teamId)))
+          .limit(1);
+        if (!docDgii) {
+          return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+        }
+        const emitida = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL'].includes(docDgii.estado);
+        if (!emitida) {
+          return NextResponse.json(
+            {
+              error: `El pago con «${labelMetodo(metodoBloqueado)}» requiere que la factura esté emitida a la DGII. Emítela primero y luego registra el pago.`,
+              requiereEmision: true,
+              emitirUrl: `/dashboard/facturas/${docIdNum}`,
+              metodoObligaDgii: metodoBloqueado,
+            },
+            { status: 422 },
+          );
+        }
+      }
+    }
 
     // ── Saldo a favor: validar que el cliente tenga crédito suficiente ──────────
     // Aplicar saldo a favor consume el crédito del cliente (generado por NCs). No

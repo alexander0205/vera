@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload, PackagePlus, Camera, X } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
+import MaestrosProductoSection from './MaestrosProductoSection';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import MuiButton from '@mui/material/Button';
@@ -19,18 +20,42 @@ import DialogActions from '@mui/material/DialogActions';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
 import Collapse from '@mui/material/Collapse';
+import Switch from '@mui/material/Switch';
 import CircularProgress from '@mui/material/CircularProgress';
 
 interface Producto {
-  id: number;
-  nombre: string;
-  descripcion: string | null;
-  referencia: string | null;
-  precio: number;
-  precioDOP: number;
-  tasaItbis: string;
-  tipo: string;
-  activo: string;
+  id:                   number;
+  nombre:               string;
+  descripcion:          string | null;
+  referencia:           string | null;
+  codigoBarras:         string | null;
+  precio:               number;
+  precioDOP:            number;
+  costo:                number;
+  costoDOP:             number;
+  tasaItbis:            string;
+  tipo:                 string;
+  activo:               string;
+  unidadMedida:         string;
+  stockActual:          number;
+  stockMinimo:          number;
+  controlaInventario:   boolean;
+  permiteVentaSinStock: boolean;
+  categoriaId:          number | null;
+  imagen:               string | null;
+}
+
+interface Categoria { id: number; nombre: string; }
+
+const IMG_MAX_BYTES = 800_000; // ~800KB, mismo tope que logo/firma de empresa
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 const TASA_LABELS: Record<string, string> = {
@@ -56,8 +81,11 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
 ];
 
 const EMPTY_FORM = {
-  nombre: '', descripcion: '', referencia: '',
+  nombre: '', descripcion: '', referencia: '', codigoBarras: '',
   precio: '', tasaItbis: 'exento', tipo: 'servicio', unidad: 'Unidad',
+  costo: '', stockActual: '', stockMinimo: '',
+  controlaInventario: false, permiteVentaSinStock: true,
+  categoriaId: '', imagen: '',
 };
 
 export default function ProductosPage() {
@@ -73,6 +101,11 @@ export default function ProductosPage() {
   const [deleting, setDeleting]         = useState(false);
   const [opError, setOpError]           = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
+  const [categorias, setCategorias]     = useState<Categoria[]>([]);
+
+  useEffect(() => {
+    fetch('/api/categorias').then((r) => r.json()).then((d) => setCategorias(d.categorias ?? []));
+  }, []);
 
   const search      = filterValues.q    ?? '';
   const tipoFilter  = filterValues.tipo ?? '';
@@ -107,13 +140,21 @@ export default function ProductosPage() {
   function abrirEdicion(p: Producto) {
     setEditTarget(p);
     setForm({
-      nombre:      p.nombre,
-      descripcion: p.descripcion ?? '',
-      referencia:  p.referencia  ?? '',
-      precio:      p.precioDOP.toString(),
-      tasaItbis:   p.tasaItbis,
-      tipo:        p.tipo,
-      unidad:      'Unidad',
+      nombre:               p.nombre,
+      descripcion:          p.descripcion ?? '',
+      referencia:           p.referencia  ?? '',
+      codigoBarras:         p.codigoBarras ?? '',
+      precio:               p.precioDOP.toString(),
+      tasaItbis:            p.tasaItbis,
+      tipo:                 p.tipo,
+      unidad:               p.unidadMedida ?? 'Unidad',
+      costo:                p.costoDOP?.toString() ?? '',
+      stockActual:          p.stockActual?.toString() ?? '',
+      stockMinimo:          p.stockMinimo?.toString() ?? '',
+      controlaInventario:   p.controlaInventario   ?? false,
+      permiteVentaSinStock: p.permiteVentaSinStock ?? true,
+      categoriaId:          p.categoriaId != null ? String(p.categoriaId) : '',
+      imagen:               p.imagen ?? '',
     });
     setOpError(null);
     setShowForm(true);
@@ -129,10 +170,24 @@ export default function ProductosPage() {
     try {
       const url    = editTarget ? `/api/productos/${editTarget.id}` : '/api/productos';
       const method = editTarget ? 'PUT' : 'POST';
+      const costo      = parseFloat(form.costo) || 0;
+      const stockActual = parseInt(form.stockActual) || 0;
+      const stockMinimo = parseInt(form.stockMinimo) || 0;
       const res    = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, precio }),
+        body: JSON.stringify({
+          ...form,
+          precio,
+          unidadMedida:         form.unidad,
+          costo,
+          stockActual,
+          stockMinimo,
+          controlaInventario:   form.controlaInventario,
+          permiteVentaSinStock: form.permiteVentaSinStock,
+          categoriaId:          form.categoriaId ? Number(form.categoriaId) : null,
+          imagen:               form.imagen || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando');
@@ -203,6 +258,31 @@ export default function ProductosPage() {
       ),
     },
     {
+      id: 'stock',
+      header: 'Stock',
+      visibleAt: 'md',
+      render: p => {
+        if (p.tipo !== 'bien' || !p.controlaInventario) {
+          return <span className="text-xs text-gray-400 italic">No aplica</span>;
+        }
+        const agotado    = p.stockActual <= 0;
+        const bajominimo = !agotado && p.stockActual <= p.stockMinimo;
+        return (
+          <div className="flex items-center gap-2">
+            <span className={`font-medium text-sm ${agotado ? 'text-red-600' : bajominimo ? 'text-amber-600' : 'text-green-700'}`}>
+              {p.stockActual}
+            </span>
+            {agotado && (
+              <Chip label="Agotado" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', '& .MuiChip-label': { px: 0.75 } }} />
+            )}
+            {bajominimo && (
+              <Chip label="Bajo mínimo" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', '& .MuiChip-label': { px: 0.75 } }} />
+            )}
+          </div>
+        );
+      },
+    },
+    {
       id: 'precio',
       header: 'Precio (DOP)',
       align: 'right',
@@ -223,8 +303,11 @@ export default function ProductosPage() {
   ], []);
 
   const rowActions = (p: Producto): RowAction[] => [
-    { icon: Pencil, title: 'Editar',   onClick: () => abrirEdicion(p) },
-    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(p); setOpError(null); }, variant: 'danger' },
+    { icon: Pencil, title: 'Editar', onClick: () => abrirEdicion(p) },
+    ...(p.tipo === 'bien' && p.controlaInventario
+      ? [{ icon: PackagePlus, title: 'Ver movimientos', onClick: () => { window.location.href = `/dashboard/inventario?productoId=${p.id}`; } }]
+      : []),
+    { icon: Trash2, title: 'Eliminar', onClick: () => { setDeleteTarget(p); setOpError(null); }, variant: 'danger' as const },
   ];
 
   return (
@@ -233,6 +316,7 @@ export default function ProductosPage() {
         data={productos}
         loading={loading}
         columns={columns}
+        rowHref={p => `/dashboard/productos/${p.id}`}
         title="Productos y Servicios"
         description="Catálogo de ítems para tus facturas"
         filters={[
@@ -453,5 +537,43 @@ export default function ProductosPage() {
         </DialogActions>
       </Dialog>
     </Box>
+  );
+}
+
+// ─── Imagen del producto (upload + preview) ──────────────────────────────────
+
+function ImagenProductoBox({ imagen, onChange }: { imagen: string; onChange: (v: string) => void }) {
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(file: File) {
+    if (!file.type.startsWith('image/')) { setError('Solo se aceptan imágenes'); return; }
+    if (file.size > IMG_MAX_BYTES) { setError('Imagen demasiado grande (máx 800 KB)'); return; }
+    setError(null);
+    onChange(await fileToBase64(file));
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151', mb: 0.5 }}>Imagen (opcional)</Typography>
+      <label className="relative flex aspect-square w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300">
+        <input type="file" accept="image/*" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+        {imagen ? (
+          <>
+            <img src={imagen} alt="Producto" className="h-full w-full rounded-lg object-cover" />
+            <button type="button" onClick={(e) => { e.preventDefault(); onChange(''); }}
+              className="absolute right-1.5 top-1.5 rounded-full bg-white/90 p-1 text-gray-600 shadow hover:bg-white">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </>
+        ) : (
+          <>
+            <Camera className="h-8 w-8" />
+            <span className="text-xs text-center">Selecciona una imagen<br />Tamaño máximo: 800 KB</span>
+          </>
+        )}
+      </label>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
   );
 }

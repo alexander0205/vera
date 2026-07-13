@@ -17,11 +17,13 @@ import CircularProgress from '@mui/material/CircularProgress';
 import InputAdornment from '@mui/material/InputAdornment';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
+import { roleHasPermission } from '@/lib/config/roles';
+import { METODOS_PAGO } from '@/lib/pagos/metodos';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -135,10 +137,23 @@ export default function ConfiguracionPage() {
   const [firma, setFirma]                       = useState('');
   const [provincia, setProvincia]               = useState('');
   const [municipio, setMunicipio]               = useState('');
-  const [recargoActivo, setRecargoActivo]       = useState(false);
-  const [recargoPorcentaje, setRecargoPorcentaje] = useState('2.00');
-  const [cajaHabilitada, setCajaHabilitada]     = useState(false);
-  const [plazoDefaultDias, setPlazoDefaultDias] = useState('');
+  // Recargo por mora
+  const [recargoActivo, setRecargoActivo]               = useState(false);
+  const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
+  // Módulo cuadre de caja
+  const [cajaHabilitada, setCajaHabilitada]             = useState(false);
+  // Módulo punto de venta (POS)
+  const [posHabilitado, setPosHabilitado]               = useState(false);
+  const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
+  // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
+  const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
+  // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
+  const [metodosObligaDgii, setMetodosObligaDgii]      = useState<string[]>([]);
+
+  // Rol del usuario activo → permisos de gestión (read-only para roles sin permiso)
+  const [role, setRole]           = useState<string | null>(null);
+  const canManage     = roleHasPermission(role, 'configuracion:gestionar');
+  const canManageTeam = roleHasPermission(role, 'equipo:gestionar');
 
   useEffect(() => {
     fetch('/api/equipo/perfil')
@@ -159,7 +174,12 @@ export default function ConfiguracionPage() {
         setRecargoActivo(d.recargoMoraActivo ?? false);
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
         setCajaHabilitada(d.cajaHabilitada ?? false);
+        // Módulo POS
+        setPosHabilitado(d.posHabilitado ?? false);
+        setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
+        setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
+        setRole(d.role ?? null);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -172,11 +192,19 @@ export default function ConfiguracionPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          razonSocial, nombreComercial, rnc, direccion, provincia, municipio,
-          telefono, sitioWeb, emailFacturacion, colorPrimario, logo, firma,
-          recargoMoraActivo: recargoActivo, recargoMoraPorcentaje: pctBps,
-          recargoMoraDiasGracia: 0, cajaHabilitada,
-          plazoPagoDefaultDias: plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
+          razonSocial, nombreComercial, rnc, direccion,
+          provincia, municipio,
+          telefono, sitioWeb, emailFacturacion, colorPrimario,
+          logo, firma,
+          recargoMoraActivo:     recargoActivo,
+          recargoMoraPorcentaje: pctBps,
+          // Gracia eliminada del config: la mora aplica al vencer.
+          recargoMoraDiasGracia: 0,
+          cajaHabilitada,
+          posHabilitado,
+          posEscolarHabilitado,
+          plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
+          metodosObligaDgii,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');

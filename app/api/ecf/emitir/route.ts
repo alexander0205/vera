@@ -12,10 +12,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
+import { descontarInventario } from '@/lib/inventario/descuento';
+import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
-import { eq, and, sql, isNull, gte, desc } from 'drizzle-orm';
+import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
@@ -28,6 +30,7 @@ import { calcularEstadoPago, recalcularEstadoPago } from '@/lib/facturas/estado-
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 import { getTurnoAbierto } from '@/lib/caja/core';
+import { labelMetodo } from '@/lib/pagos/metodos';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -43,6 +46,8 @@ const itemSchema = z.object({
   // Beneficiario por línea — metadato, no va al XML DGII
   dependienteId:          z.number().int().positive().optional().nullable(),
   dependienteNombre:      z.string().max(255).optional(),
+  // Control de inventario — metadato, no va al XML DGII
+  productoId:             z.number().int().positive().optional().nullable(),
 });
 
 const retencionSchema = z.object({
@@ -111,6 +116,11 @@ const emitirSchema = z.object({
   // Edición de borrador existente — hacer UPDATE en lugar de INSERT
   borradorId: z.number().int().positive().optional(),
 
+  // Metadatos de venta — persisten en ecf_documents, no van al XML DGII
+  almacenId:      z.number().int().positive().optional().nullable(),
+  vendedorId:     z.number().int().positive().optional().nullable(),
+  listaPreciosId: z.number().int().positive().optional().nullable(),
+
   // Traza anti-duplicados (tracking): identifica el botón + secuencia de clicks
   // del montaje del form que disparó este submit. Solo para diagnóstico.
   _traza: z.object({
@@ -159,6 +169,38 @@ async function acquireNextEncf(
 
   const encf = `E${tipoEcf}${row.numero.padStart(10, '0')}`;
   return { encf, sequenceId: row.id, numero: row.numero, fechaVencimiento: row.fecha_venc ?? null };
+}
+
+// ─── Bloqueo por stock agotado ────────────────────────────────────────────────
+// Compartido entre modo emitir y modo borrador — ahora que el borrador también
+// descuenta stock al guardarse, debe pasar por el mismo chequeo.
+async function validarStockAgotado(
+  teamId: number,
+  items: Array<{ indicadorBienoServicio?: 1 | 2; productoId?: number | null }>,
+): Promise<string | null> {
+  const bienesIds = items
+    .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
+    .map(i => i.productoId as number);
+  if (bienesIds.length === 0) return null;
+
+  const prods = await db
+    .select({
+      id:                   products.id,
+      nombre:               products.nombre,
+      stockActual:          products.stockActual,
+      controlaInventario:   products.controlaInventario,
+      permiteVentaSinStock: products.permiteVentaSinStock,
+    })
+    .from(products)
+    .where(and(eq(products.teamId, teamId), inArray(products.id, bienesIds)));
+
+  const bloqueados = prods.filter(
+    p => p.controlaInventario && p.stockActual === 0 && !p.permiteVentaSinStock,
+  );
+  if (bloqueados.length === 0) return null;
+
+  const nombres = bloqueados.map(p => `"${p.nombre}"`).join(', ');
+  return `No se puede guardar: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.`;
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -428,6 +470,9 @@ export async function POST(request: NextRequest) {
     }
 
     const extraFields = {
+      almacenId:      data.almacenId      ?? null,
+      vendedorId:     data.vendedorId     ?? null,
+      listaPreciosId: data.listaPreciosId ?? null,
       notas:               data.notas          || null,
       terminosCondiciones: data.terminosCondiciones || null,
       pieFactura:          data.pieFactura      || null,
@@ -445,26 +490,91 @@ export async function POST(request: NextRequest) {
 
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
-      const totales  = calcularTotales(data.items);
-      const montoCts = Math.round(totales.montoTotal * 100);
-
       // Cuadre de caja: si el cajero tiene un turno ABIERTO, el borrador y su
       // cobro se atribuyen al turno para que el efectivo entre en el esperado
       // del cierre (los borradores no pasan por el bloqueo de emisión).
       const turnoBorrador = await getTurnoAbierto(teamId, user.id);
       const turnoBorradorId = turnoBorrador?.estado === 'ABIERTO' ? turnoBorrador.id : null;
 
+      // Config empresa: si la factura registra un pago con un método marcado como
+      // "obliga DGII", no se puede guardar como borrador — debe emitirse a la DGII.
+      // Excepción: ventas de POS con turno de caja abierto. El cajero ya cobró en
+      // el momento (efectivo/tarjeta físico) y el ticket sin-ncf/borrador ES la
+      // venta final — el POS no tiene un paso "Emitir" posterior al que remitir
+      // al cajero, así que bloquear aquí dejaría el cobro sin forma de completarse.
+      const metodosObliga = new Set(
+        ((team.metodosObligaDgii as string[] | null) ?? []).map(m => m.trim().toLowerCase()),
+      );
+      if (metodosObliga.size > 0 && !turnoBorradorId) {
+        const metodosUsados = (data.pagos?.length
+          ? data.pagos.map(p => p.metodo)
+          : (data.pagoMetodo ? [data.pagoMetodo] : []))
+          .map(m => m.trim().toLowerCase());
+        const bloqueado = metodosUsados.find(m => metodosObliga.has(m));
+        if (bloqueado) {
+          // 'sin-ncf' nunca va a la DGII (solo existe como borrador). Si el método
+          // obliga DGII, hay que cambiar el tipo de comprobante a uno fiscal ANTES
+          // de emitir — decir "usa Emitir" sería engañoso porque no está disponible.
+          const requiereTipoFiscal = data.tipoEcf === 'sin-ncf';
+          const metodoLbl = labelMetodo(bloqueado);
+          return NextResponse.json(
+            {
+              error: requiereTipoFiscal
+                ? `El método de pago «${metodoLbl}» obliga a facturar a la DGII. Cambia el tipo de comprobante de «Sin NCF» a uno fiscal (Crédito Fiscal, Consumo, etc.) y emite la factura.`
+                : `El método de pago «${metodoLbl}» requiere emitir la factura a la DGII — no se puede guardar como borrador. Usa "Emitir" para enviarla.`,
+              metodoObligaDgii: bloqueado,
+              requiereTipoFiscal,
+            },
+            { status: 422 },
+          );
+        }
+      }
+
+      const totales  = calcularTotales(data.items);
+      const montoCts = Math.round(totales.montoTotal * 100);
+
       // ── Editar borrador existente (UPDATE) ──────────────────────────────────
       if (data.borradorId) {
         const borradorId = data.borradorId; // narrowed to number
         const [existing] = await db
-          .select({ id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo, estado: ecfDocuments.estado })
+          .select({
+            id: ecfDocuments.id, encf: ecfDocuments.encf, codigo: ecfDocuments.codigo,
+            estado: ecfDocuments.estado, lineasJson: ecfDocuments.lineasJson,
+            stockDescontado: ecfDocuments.stockDescontado, almacenId: ecfDocuments.almacenId,
+          })
           .from(ecfDocuments)
           .where(and(eq(ecfDocuments.id, borradorId), eq(ecfDocuments.teamId, teamId)))
           .limit(1);
 
         if (!existing || !['BORRADOR', 'HISTORICA'].includes(existing.estado)) {
           return NextResponse.json({ error: 'Borrador no encontrado o ya emitido' }, { status: 404 });
+        }
+
+        // Descuento solo aplica a "Guardar factura" (tipoEcf='sin-ncf', factura
+        // local definitiva). "Guardar como borrador" (tipoEcf real, encf=BOR-xxx)
+        // es un borrador editable pendiente de emitir — no toca stock todavía.
+        const esFacturaDefinitiva = data.tipoEcf === 'sin-ncf';
+
+        // El borrador puede haber descontado stock al guardarse la primera vez
+        // (porque era sin-ncf). Si cambian las líneas, o si deja de ser
+        // sin-ncf, hay que restaurar lo viejo antes de seguir.
+        if (existing.stockDescontado && existing.lineasJson) {
+          try {
+            const lineasViejas = JSON.parse(existing.lineasJson) as Array<Record<string, unknown>>;
+            const itemsViejos = lineasViejas.map(i => ({
+              productoId:             i.productoId ? Number(i.productoId) : null,
+              cantidadItem:           Number(i.cantidadItem) || 0,
+              indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 as const : 2 as const,
+            }));
+            await restaurarInventario(teamId, user.id, borradorId, existing.encf, itemsViejos, existing.almacenId ?? null);
+          } catch (e) { console.error('[editar borrador] restaurar stock viejo falló', e); }
+        }
+
+        if (esFacturaDefinitiva) {
+          const errorAgotado = await validarStockAgotado(teamId, data.items);
+          if (errorAgotado) {
+            return NextResponse.json({ error: errorAgotado }, { status: 422 });
+          }
         }
 
         const estadoPago = calcularEstadoPago({
@@ -493,6 +603,7 @@ export async function POST(request: NextRequest) {
             fechaLimitePago:      data.fechaLimitePago ?? null,
             dependienteId:        data.dependienteId ?? null,
             dependienteNombre:    data.dependienteNombre ?? null,
+            stockDescontado:      esFacturaDefinitiva,
             updatedBy:            user.id,
             updatedAt:            new Date(),
             ...extraFields,
@@ -500,6 +611,11 @@ export async function POST(request: NextRequest) {
             .returning(),
           { userId: user.id, teamId },
         );
+
+        if (esFacturaDefinitiva) {
+          await descontarInventario(teamId, user.id, saved.id, saved.encf, data.items, data.almacenId ?? null)
+            .catch((e) => console.error('[editar borrador] descuento stock falló', e));
+        }
 
         // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
         if (data.tipoEcf === '34' && padreDoc) {
@@ -589,6 +705,17 @@ export async function POST(request: NextRequest) {
         ? ''
         : `BOR-${data.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
+      // Descuento solo aplica a "Guardar factura" (tipoEcf='sin-ncf'). Un
+      // borrador de tipo real (BOR-xxx, pendiente de emitir) no toca stock.
+      const esFacturaDefinitivaNueva = data.tipoEcf === 'sin-ncf';
+
+      if (esFacturaDefinitivaNueva) {
+        const errorAgotadoNuevo = await validarStockAgotado(teamId, data.items);
+        if (errorAgotadoNuevo) {
+          return NextResponse.json({ error: errorAgotadoNuevo }, { status: 422 });
+        }
+      }
+
       const codigo      = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
       const estadoPago  = calcularEstadoPago({
         estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
@@ -638,6 +765,7 @@ export async function POST(request: NextRequest) {
             dependienteId:        data.dependienteId ?? null,
             dependienteNombre:    data.dependienteNombre ?? null,
             turnoCajaId:          turnoBorradorId,
+            stockDescontado:      esFacturaDefinitivaNueva,
             ...extraFields,
           }).returning();
           return { deduped: false as const, row: inserted };
@@ -678,6 +806,13 @@ export async function POST(request: NextRequest) {
         });
       }
       const saved = outcome.row;
+
+      // Descuento de stock al guardar la factura definitiva (sin-ncf). El
+      // borrador real (tipo e31/e32/etc, BOR-xxx) no descuenta hasta emitirse.
+      if (esFacturaDefinitivaNueva) {
+        await descontarInventario(teamId, user.id, saved.id, saved.encf, data.items, data.almacenId ?? null)
+          .catch((e) => console.error('[borrador nuevo] descuento stock falló', e));
+      }
 
       // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
       if (data.tipoEcf === '34' && padreDoc) {
@@ -738,6 +873,38 @@ export async function POST(request: NextRequest) {
     // ── MODO EMITIR via ecf-api ────────────────────────────────────────────────
 
     const totales = calcularTotales(data.items);
+
+    // ── Bloqueo stock agotado ─────────────────────────────────────────────────
+    // Solo bienes con productoId. Si permiteVentaSinStock=false y stock=0 → 422.
+    // Se verifica antes de consumir secuencia para no quemar un eNCF en vano.
+    const bienesIds = data.items
+      .filter(i => i.indicadorBienoServicio === 1 && i.productoId)
+      .map(i => i.productoId as number);
+
+    if (bienesIds.length > 0) {
+      const prods = await db
+        .select({
+          id:                   products.id,
+          nombre:               products.nombre,
+          stockActual:          products.stockActual,
+          controlaInventario:   products.controlaInventario,
+          permiteVentaSinStock: products.permiteVentaSinStock,
+        })
+        .from(products)
+        .where(and(eq(products.teamId, teamId), inArray(products.id, bienesIds)));
+
+      const bloqueados = prods.filter(
+        p => p.controlaInventario && p.stockActual === 0 && !p.permiteVentaSinStock,
+      );
+
+      if (bloqueados.length > 0) {
+        const nombres = bloqueados.map(p => `"${p.nombre}"`).join(', ');
+        return NextResponse.json(
+          { error: `No se puede emitir: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.` },
+          { status: 422 },
+        );
+      }
+    }
 
     // ── Cuadre de caja ────────────────────────────────────────────────────────
     // Si la empresa tiene el módulo habilitado, no se puede facturar sin un turno
@@ -896,6 +1063,7 @@ export async function POST(request: NextRequest) {
     // Guardar en BD local (auditoría + PDFs + webhooks)
     const lineasJsonParaGuardar = data.lineasJson
       ?? JSON.stringify(data.items.map(item => ({
+          productoId:         item.productoId ?? null,
           nombreItem:         item.nombreItem,
           descripcionItem:    item.descripcionItem,
           cantidadItem:       item.cantidadItem,
@@ -904,6 +1072,7 @@ export async function POST(request: NextRequest) {
           tasaItbis:          item.tasaItbis ?? 0,
           subtotalConItbis:   item.precioUnitarioItem * item.cantidadItem * (1 + (item.tasaItbis ?? 0)),
           unidadMedida:       item.unidadMedidaItem,
+          indicadorBienoServicio: item.indicadorBienoServicio ?? 2,
         })));
 
     const codigoEmit     = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
@@ -942,6 +1111,7 @@ export async function POST(request: NextRequest) {
         createdBy:            user.id,
         dependienteId:        data.dependienteId ?? null,
         dependienteNombre:    data.dependienteNombre ?? null,
+        stockDescontado:      true,
         ...extraFields,
       }).returning(),
       { userId: user.id, teamId },
@@ -998,6 +1168,18 @@ export async function POST(request: NextRequest) {
       ip:       getIp(request),
       meta:     { tipoEcf: data.tipoEcf, trackId, montoTotal: totales.montoTotal, via: 'ecf-api', traza: data._traza ?? null, docId: saved.id },
     });
+
+    // ── Descuento automático de inventario ───────────────────────────────────
+    // Fire-and-forget: si falla, el e-CF ya fue emitido y guardado.
+    // Solo afecta bienes (indicadorBienoServicio === 1) con productoId conocido.
+    descontarInventario(
+      teamId,
+      user.id,
+      saved.id,
+      encf,
+      data.items,
+      data.almacenId ?? null,
+    ).catch((e) => console.error('[ecf/emitir] stock decrement failed', e));
 
     import('@/lib/webhooks').then(({ dispatchWebhook }) =>
       dispatchWebhook(teamId, 'ecf.emitido', {

@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos, teamMembers, users } from '@/lib/db/schema';
+import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
@@ -88,6 +89,9 @@ export async function POST(
       tipoEcf:           ecfDocuments.tipoEcf,
       pagoRecibido:      ecfDocuments.pagoRecibido,
       pagoValorCts:      ecfDocuments.pagoValorCts,
+      lineasJson:        ecfDocuments.lineasJson,
+      almacenId:         ecfDocuments.almacenId,
+      stockDescontado:   ecfDocuments.stockDescontado,
       ncfModificado:     ecfDocuments.ncfModificado,
       origenDocumentoId: ecfDocuments.origenDocumentoId,
     })
@@ -159,10 +163,29 @@ export async function POST(
       estado:        'ANULADO',
       estadoPago:    'ANULADA',
       tipoAnulacion,
+      stockDescontado: false,
       updatedBy:     user.id,
       updatedAt:     new Date(),
     })
     .where(eq(ecfDocuments.id, docId));
+
+  // Restaurar stock solo si este documento llegó a descontarlo. Ya no se basa
+  // en `estado` porque ahora un BORRADOR también puede haber descontado stock
+  // al guardarse (ver /api/ecf/emitir).
+  if (doc.stockDescontado && doc.lineasJson) {
+    try {
+      const lineas = JSON.parse(doc.lineasJson) as Array<Record<string, unknown>>;
+      const items = lineas.map(i => ({
+        productoId:             i.productoId             ? Number(i.productoId)   : null,
+        cantidadItem:           i.cantidadItem           ? Number(i.cantidadItem) : 1,
+        indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 : 2 as 1 | 2,
+      }));
+      restaurarInventario(teamId, user.id, docId, doc.encf, items, doc.almacenId ?? null)
+        .catch((e) => console.error('[anular] stock restore failed', e));
+    } catch {
+      // lineasJson malformado — no bloquear la anulación
+    }
+  }
 
   // Si se anula una Nota de Crédito, el crédito deja de aplicar al padre →
   // recalcular su estado de pago (vuelve a deber el monto acreditado).

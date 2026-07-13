@@ -102,7 +102,7 @@ The 10 JSON files in `./schemas/` are static at build time.  Re-fetch them whene
 
 ```bash
 for t in 31 32 33 34 41 43 44 45 46 47; do
-  curl -s "https://ecf-api.yisraeltech.com/v1/schemas/ecf/$t" \
+  curl -s "https://ecf-api.zero.com.do/v1/schemas/ecf/$t" \
     > lib/factura/validator/schemas/$t.json
 done
 ```

@@ -998,6 +998,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
   }, [runId]);
 
   const [dupRunId, setDupRunId] = useState<string | null>(null);
+  const [reemitting, setReemit] = useState(false);
 
   async function handleUpload() {
     if (!file) return;
@@ -1053,6 +1054,31 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
       setDupRunId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al borrar la corrida previa');
+    }
+  }
+
+  // Re-emitir la corrida previa SIN borrarla ni re-subir el Excel. Reusa el
+  // runId duplicado, re-emite sus casos y lo adopta como corrida activa.
+  async function handleReemitirDuplicado() {
+    const targetRunId = dupRunId ?? runId;
+    if (!targetRunId) return;
+    setReemit(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/runs/${targetRunId}/emitir-todos`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al re-emitir la corrida');
+      setDupRunId(null);
+      setFile(null);
+      persistUpdate(s => ({
+        ...s,
+        step2: { runId: targetRunId, status: data.status, lastChecked: new Date().toISOString() },
+      }));
+      setRun(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al re-emitir la corrida');
+    } finally {
+      setReemit(false);
     }
   }
 
@@ -1178,6 +1204,19 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
               </Box>
             </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                type="button"
+                variant="outlined"
+                onClick={handleReemitirDuplicado}
+                disabled={reemitting}
+                title="Re-emite todos los casos de esta corrida sin borrarla"
+                startIcon={reemitting
+                  ? <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
+                  : <RotateCcw style={{ width: 12, height: 12 }} />}
+                sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: '#0d9488', borderColor: '#99f6e4', '&:hover': { bgcolor: '#f0fdfa' } }}
+              >
+                {reemitting ? 'Re-emitiendo…' : 'Re-emitir'}
+              </Button>
               <Button
                 type="button"
                 variant="outlined"
@@ -1319,17 +1358,35 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
           <Box sx={{ flex: 1 }}>
             <Typography sx={{ fontSize: '0.6875rem', color: '#b91c1c' }}>{error}</Typography>
             {dupRunId && (
-              <Button
-                type="button"
-                variant="contained"
-                size="small"
-                onClick={handleDeleteDuplicate}
-                startIcon={<X style={{ width: 12, height: 12 }} />}
-                disableElevation
-                sx={{ mt: 1, fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: 'error.main', '&:hover': { bgcolor: 'error.dark' } }}
-              >
-                Borrar corrida previa y reintentar
-              </Button>
+              <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                <Button
+                  type="button"
+                  variant="contained"
+                  size="small"
+                  onClick={handleReemitirDuplicado}
+                  disabled={reemitting}
+                  disableElevation
+                  title="Reusa la corrida previa y re-emite sus casos sin borrarla ni re-subir el Excel"
+                  startIcon={reemitting
+                    ? <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
+                    : <RotateCcw style={{ width: 12, height: 12 }} />}
+                  sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+                >
+                  {reemitting ? 'Re-emitiendo…' : 'Re-emitir sin borrar'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="contained"
+                  size="small"
+                  onClick={handleDeleteDuplicate}
+                  disabled={reemitting}
+                  disableElevation
+                  startIcon={<X style={{ width: 12, height: 12 }} />}
+                  sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: 'error.main', '&:hover': { bgcolor: 'error.dark' } }}
+                >
+                  Borrar corrida previa y reintentar
+                </Button>
+              </Box>
             )}
           </Box>
         </Box>

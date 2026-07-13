@@ -44,13 +44,24 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
     if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
     setSaving(true); setError(null);
     try {
+      // Si es un bien y se indicó cantidad inicial, activar control de inventario
+      // y sembrar el stock. Sin esto el producto no genera movimientos de venta
+      // ni aparece en el historial del detalle de producto.
+      const cantidadInicial = parseInt(form.cantidadInicial, 10);
+      const tieneStockInicial =
+        form.tipo === 'bien' && form.cantidadInicial.trim() !== '' && !isNaN(cantidadInicial);
+
       const payload = {
-        nombre:      form.nombre,
-        precio:      parseFloat(form.precio) || 0,
-        tasaItbis:   form.tasaItbis,
-        tipo:        form.tipo === 'bien' ? 'bien' : 'servicio',
-        descripcion: form.descripcion,
-        unidad:      form.unidad,
+        nombre:       form.nombre,
+        precio:       parseFloat(form.precio) || 0,
+        tasaItbis:    form.tasaItbis,
+        tipo:         form.tipo === 'bien' ? 'bien' : 'servicio',
+        descripcion:  form.descripcion,
+        unidadMedida: form.unidad,
+        ...(tieneStockInicial && {
+          controlaInventario: true,
+          stockActual:        Math.max(0, cantidadInicial),
+        }),
       };
       const res  = await fetch('/api/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();

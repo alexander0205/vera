@@ -346,6 +346,9 @@ function PagoModal({ cuenta, onClose, onSuccess }: {
   const [fecha, setFecha]         = useState(today);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  // Cuando el pago se bloquea por método que obliga DGII sobre factura no emitida,
+  // el backend devuelve el link al detalle para emitirla primero.
+  const [emitirUrl, setEmitirUrl] = useState<string | null>(null);
 
   // Notas de crédito del cliente usables como pago (voucher por código, uso parcial).
   const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
@@ -372,6 +375,7 @@ function PagoModal({ cuenta, onClose, onSuccess }: {
     if (!valido) return;
     setGuardando(true);
     setError(null);
+    setEmitirUrl(null);
     try {
       const pagos = lineas
         .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
@@ -387,7 +391,10 @@ function PagoModal({ cuenta, onClose, onSuccess }: {
         body: JSON.stringify({ fechaPago: fecha, pagos }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Error al registrar pago');
+      if (!res.ok) {
+        setEmitirUrl(typeof json.emitirUrl === 'string' ? json.emitirUrl : null);
+        throw new Error(json.error ?? 'Error al registrar pago');
+      }
       onSuccess();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
@@ -451,6 +458,15 @@ function PagoModal({ cuenta, onClose, onSuccess }: {
           {error && (
             <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
               {error}
+              {emitirUrl && (
+                <Box
+                  component={Link}
+                  href={emitirUrl}
+                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 1, fontWeight: 600, color: '#991b1b', textDecoration: 'underline', textUnderlineOffset: 2, '&:hover': { color: '#7f1d1d' } }}
+                >
+                  Ir a emitir la factura →
+                </Box>
+              )}
             </Alert>
           )}
         </Box>
