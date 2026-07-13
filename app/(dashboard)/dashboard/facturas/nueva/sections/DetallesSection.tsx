@@ -1,12 +1,14 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Info } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 
 export const MOTIVOS_NOTA = [
   { value: 'devolucion',   label: 'Devolución de mercancía',   codigo: 3 },
@@ -20,7 +22,6 @@ export const MOTIVOS_NOTA = [
 
 export type MotivoNota = typeof MOTIVOS_NOTA[number]['value'];
 
-// Condición de pago DGII: 1=contado, 2=crédito, 3=gratuito, 4=uso/consumo.
 const CONDICIONES_PAGO = [
   { value: '1', label: 'De contado' },
   { value: '2', label: 'Crédito' },
@@ -75,66 +76,68 @@ export function DetallesSection({
   const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf);
 
   return (
-    <div className="space-y-4">
-      {/* Fila: Condición de pago · Plazo de vencimiento */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <div>
-          <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
-          <Select value={condicionPago} onValueChange={setCondicionPago}>
-            <SelectTrigger className="mt-1 h-10">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CONDICIONES_PAGO.map((c) => (
-                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-              ))}
-            </SelectContent>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: 1.5 }}>
+        <FormControl size="small" fullWidth>
+          <InputLabel sx={{ fontSize: '0.75rem' }}>Condición de pago</InputLabel>
+          <Select
+            value={condicionPago}
+            label="Condición de pago"
+            onChange={(e) => setCondicionPago(e.target.value)}
+            sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+          >
+            {CONDICIONES_PAGO.map((c) => (
+              <MenuItem key={c.value} value={c.value} sx={{ fontSize: '0.875rem' }}>{c.label}</MenuItem>
+            ))}
           </Select>
-        </div>
-        <div>
-          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
-            Plazo de vencimiento {esCredito && <span className="text-red-500">*</span>}
-          </Label>
-          <div className="relative mt-1 w-28">
-            <Input
+        </FormControl>
+
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: esCredito ? '#4b5563' : '#d1d5db', mb: 0.5 }}>
+            Plazo de vencimiento {esCredito && <Box component="span" sx={{ color: '#ef4444' }}>*</Box>}
+          </Typography>
+          <Box sx={{ position: 'relative', width: 112 }}>
+            <TextField
               type="number"
-              min={1}
+              size="small"
               value={diasParaPago}
               onChange={(e) => setDiasParaPago(e.target.value)}
               disabled={!esCredito}
-              className="h-10 pr-10 disabled:bg-gray-50 disabled:text-gray-300"
+              slotProps={{ htmlInput: { min: 1 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem', pr: '36px' } }}
             />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
-          </div>
-        </div>
+            <Typography sx={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#9ca3af', pointerEvents: 'none' }}>
+              días
+            </Typography>
+          </Box>
+        </Box>
 
         {muestraTipoIngresos && (
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Tipo de ingresos</Label>
-            <Select value={tipoIngresos} onValueChange={setTipoIngresos}>
-              <SelectTrigger className="mt-1 h-10">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TIPOS_INGRESO.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
+          <FormControl size="small" fullWidth>
+            <InputLabel sx={{ fontSize: '0.75rem' }}>Tipo de ingresos</InputLabel>
+            <Select
+              value={tipoIngresos}
+              label="Tipo de ingresos"
+              onChange={(e) => setTipoIngresos(e.target.value)}
+              sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+            >
+              {TIPOS_INGRESO.map((t) => (
+                <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.875rem' }}>{t.label}</MenuItem>
+              ))}
             </Select>
-          </div>
+          </FormControl>
         )}
-      </div>
+      </Box>
 
-      {/* Info pill: vencimiento derivado */}
       {esCredito && fechaLimitePago && (
-        <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
-          <Info className="h-4 w-4 text-teal-700 shrink-0" />
-          <p className="text-sm text-teal-900">
-            Vence el <span className="font-semibold">{formatFechaCorta(fechaLimitePago)}</span>.
-          </p>
-        </div>
+        <Box sx={{ bgcolor: '#f0fdfa', border: '1px solid #ccfbf1', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Info size={16} color="#0f766e" style={{ flexShrink: 0 }} />
+          <Typography sx={{ fontSize: '0.875rem', color: '#134e4a' }}>
+            Vence el <Box component="span" sx={{ fontWeight: 600 }}>{formatFechaCorta(fechaLimitePago)}</Box>.
+          </Typography>
+        </Box>
       )}
 
-    </div>
+    </Box>
   );
 }

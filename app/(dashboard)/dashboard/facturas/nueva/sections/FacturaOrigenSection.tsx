@@ -1,11 +1,13 @@
 'use client';
 
 import { X, FileText } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import { Autocomplete } from '../components/Autocomplete';
 import { MOTIVOS_NOTA } from './DetallesSection';
 
@@ -45,6 +47,17 @@ interface Props {
   today: string;
 }
 
+const labelSx = {
+  fontSize: '0.75rem',
+  color: '#4b5563',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.025em',
+  display: 'block',
+  mb: 0.5,
+};
+
+const inputSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } };
+
 /**
  * Selector de la factura de origen para una Nota de Crédito/Débito + los datos
  * de modificación (e-NCF que se modifica, motivo, fecha). Al elegir una factura
@@ -67,14 +80,14 @@ export function FacturaOrigenSection({
     : '';
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 md:px-5 md:py-4">
-      <label className="text-xs text-gray-600 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
-        <FileText className="h-3.5 w-3.5" />
+    <Box sx={{ bgcolor: '#ffffff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', px: { xs: 2, md: 2.5 }, py: { xs: 1.5, md: 2 } }}>
+      <Typography component="label" sx={{ ...labelSx, mb: 0.75, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <FileText style={{ width: 14, height: 14 }} />
         {label}
-        <span className="text-red-500" aria-label="campo obligatorio">*</span>
-      </label>
+        <Box component="span" sx={{ color: '#ef4444' }} aria-label="campo obligatorio">*</Box>
+      </Typography>
 
-      <div className="relative">
+      <Box sx={{ position: 'relative' }}>
         <Autocomplete<FacturaResumen>
           placeholder="Buscar factura por e-NCF o cliente…"
           value={valorActual}
@@ -82,131 +95,160 @@ export function FacturaOrigenSection({
           onSelect={onSelect}
           onClear={onClear}
           renderOption={(f) => (
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-medium truncate">{f.encf || f.codigo || `#${f.id}`}</p>
-                <p className="text-xs text-gray-600 truncate">{f.razonSocialComprador ?? 'Sin cliente'}</p>
-              </div>
-              <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.encf || f.codigo || `#${f.id}`}</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.razonSocialComprador ?? 'Sin cliente'}</Typography>
+              </Box>
+              <Box component="span" sx={{ fontSize: '0.75rem', color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 RD$ {(f.montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
+              </Box>
+            </Box>
           )}
         />
         {padreSeleccionado && (
-          <button
+          <IconButton
             type="button"
             onClick={onClear}
             aria-label="Quitar factura de origen"
             title="Quitar factura de origen"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-1 transition-colors z-10"
+            sx={{
+              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+              color: '#9ca3af', p: 0.5, zIndex: 10, '&:hover': { color: '#ef4444', bgcolor: 'transparent' },
+            }}
           >
-            <X className="h-4 w-4" />
-          </button>
+            <X style={{ width: 16, height: 16 }} />
+          </IconButton>
         )}
-      </div>
+      </Box>
 
       {!padreSeleccionado && (
-        <p className="text-[11px] text-gray-500 mt-1.5">
+        <Typography sx={{ fontSize: '11px', color: '#6b7280', mt: 0.75 }}>
           Selecciona la factura de origen. Se cargarán el e-NCF modificado, el cliente y las líneas.
-        </p>
+        </Typography>
       )}
 
       {/* Factura sin comprobante fiscal → nota interna, sin e-NCF que referenciar. */}
       {padreSeleccionado && esPadreSinNcf && (
-        <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
-          <p className="text-[11px] text-gray-500">Sin comprobante fiscal — nota interna, solo borrador.</p>
-          <div className="sm:max-w-sm">
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">Motivo</Label>
-            <Select value={motivoNota || undefined} onValueChange={setMotivoNota}>
-              <SelectTrigger className="mt-1 h-10">
-                <SelectValue placeholder="Selecciona el motivo…" />
-              </SelectTrigger>
-              <SelectContent>
+        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography sx={{ fontSize: '11px', color: '#6b7280' }}>Sin comprobante fiscal — nota interna, solo borrador.</Typography>
+          <Box sx={{ maxWidth: { sm: 384 } }}>
+            <Typography component="label" sx={labelSx}>Motivo</Typography>
+            <FormControl size="small" fullWidth sx={{ mt: 0.5 }}>
+              <Select
+                value={motivoNota || ''}
+                onChange={(e) => setMotivoNota(e.target.value)}
+                displayEmpty
+                renderValue={(v) => (v
+                  ? MOTIVOS_NOTA.find((m) => m.value === v)?.label ?? v
+                  : <Box component="span" sx={{ color: '#9ca3af' }}>Selecciona el motivo…</Box>)}
+                sx={{ borderRadius: '8px' }}
+              >
                 {MOTIVOS_NOTA.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
+              </Select>
+            </FormControl>
+          </Box>
           {motivoNota === 'otro' && (
-            <div>
-              <Label className="text-xs text-gray-600 uppercase tracking-wide">Especifica el motivo</Label>
-              <Input
-                className="mt-1 h-10"
+            <Box>
+              <Typography component="label" sx={labelSx}>Especifica el motivo</Typography>
+              <TextField
+                size="small"
+                fullWidth
                 placeholder="Describe brevemente el motivo de la nota…"
                 value={razonModificacion}
                 onChange={(e) => setRazonModificacion(e.target.value)}
-                maxLength={500}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+                sx={{ mt: 0.5, ...inputSx }}
               />
-            </div>
+            </Box>
           )}
-        </div>
+        </Box>
       )}
 
       {/* Datos de modificación DGII — aparecen al elegir la factura de origen. */}
       {padreSeleccionado && !esPadreSinNcf && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-100">
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">
-              e-NCF que se modifica <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-600"
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 1.5, mt: 1.5, pt: 1.5, borderTop: '1px solid #f3f4f6' }}>
+          <Box>
+            <Typography component="label" sx={labelSx}>
+              e-NCF que se modifica <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
               placeholder="E310000000001"
               value={ncfModificado}
               onChange={(e) => setNcfModificado(e.target.value.toUpperCase())}
-              maxLength={13}
               disabled={conEcfReal}
+              slotProps={{ htmlInput: { maxLength: 13 } }}
+              sx={{
+                mt: 0.5, ...inputSx,
+                '& .MuiOutlinedInput-root.Mui-disabled': { bgcolor: '#f9fafb' },
+                '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: '#4b5563' },
+              }}
             />
             {!conEcfReal && (
-              <p className="text-[10px] text-amber-700 mt-1">La factura de origen no tiene e-NCF — escríbelo para emitir.</p>
+              <Typography sx={{ fontSize: '10px', color: '#b45309', mt: 0.5 }}>La factura de origen no tiene e-NCF — escríbelo para emitir.</Typography>
             )}
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">
-              Motivo <span className="text-red-500">*</span>
-            </Label>
-            <Select value={motivoNota || undefined} onValueChange={setMotivoNota}>
-              <SelectTrigger className="mt-1 h-10">
-                <SelectValue placeholder="Selecciona el motivo…" />
-              </SelectTrigger>
-              <SelectContent>
+          </Box>
+          <Box>
+            <Typography component="label" sx={labelSx}>
+              Motivo <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+            </Typography>
+            <FormControl size="small" fullWidth sx={{ mt: 0.5 }}>
+              <Select
+                value={motivoNota || ''}
+                onChange={(e) => setMotivoNota(e.target.value)}
+                displayEmpty
+                renderValue={(v) => (v
+                  ? MOTIVOS_NOTA.find((m) => m.value === v)?.label ?? v
+                  : <Box component="span" sx={{ color: '#9ca3af' }}>Selecciona el motivo…</Box>)}
+                sx={{ borderRadius: '8px' }}
+              >
                 {MOTIVOS_NOTA.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs text-gray-600 uppercase tracking-wide">
-              Fecha del e-NCF original <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-600"
+              </Select>
+            </FormControl>
+          </Box>
+          <Box>
+            <Typography component="label" sx={labelSx}>
+              Fecha del e-NCF original <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
               type="date"
               value={fechaNcfModificado}
               onChange={(e) => setFechaNcfModificado(e.target.value)}
-              max={today}
               disabled={conEcfReal}
+              slotProps={{ htmlInput: { max: today }, inputLabel: { shrink: true } }}
+              sx={{
+                mt: 0.5, ...inputSx,
+                '& .MuiOutlinedInput-root.Mui-disabled': { bgcolor: '#f9fafb' },
+                '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: '#4b5563' },
+              }}
             />
-          </div>
+          </Box>
           {motivoNota === 'otro' && (
-            <div className="sm:col-span-2 lg:col-span-3">
-              <Label className="text-xs text-gray-600 uppercase tracking-wide">
-                Especifica el motivo <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                className="mt-1 h-10"
+            <Box sx={{ gridColumn: { sm: 'span 2', lg: 'span 3' } }}>
+              <Typography component="label" sx={labelSx}>
+                Especifica el motivo <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
                 placeholder="Describe brevemente el motivo de la nota…"
                 value={razonModificacion}
                 onChange={(e) => setRazonModificacion(e.target.value)}
-                maxLength={500}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+                sx={{ mt: 0.5, ...inputSx }}
               />
-            </div>
+            </Box>
           )}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

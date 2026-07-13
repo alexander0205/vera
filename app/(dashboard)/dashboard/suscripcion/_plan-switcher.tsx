@@ -1,8 +1,11 @@
 'use client';
 
 import { useTransition } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import { switchPlanAction } from './actions';
-import { Loader2 } from 'lucide-react';
 
 const PLANS = [
   { key: 'starter',  label: 'Starter',  price: '$15' },
@@ -21,27 +24,33 @@ export function PlanSwitcher({ currentPlan }: { currentPlan: string }) {
   }
 
   return (
-    <div className="border border-dashed border-amber-300 bg-amber-50 rounded-xl p-4 space-y-3">
-      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+    <Box sx={{ border: '1px dashed #fcd34d', bgcolor: '#fffbeb', borderRadius: '12px', p: 2 }}>
+      <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1.5 }}>
         Cambiar plan (dev)
-      </p>
-      <div className="flex gap-2 flex-wrap">
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         {PLANS.map(({ key, label, price }) => (
-          <button
+          <Button
             key={key}
+            size="small"
+            variant={key === currentKey ? 'contained' : 'outlined'}
+            disableElevation
             onClick={() => handleSwitch(key)}
             disabled={pending || key === currentKey}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-              key === currentKey
-                ? 'bg-teal-600 text-white border-teal-600 cursor-default'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-teal-500 hover:text-teal-700'
-            } disabled:opacity-50`}
+            startIcon={pending && key !== currentKey ? <CircularProgress size={12} /> : undefined}
+            sx={{
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontSize: '0.8125rem',
+              ...(key === currentKey
+                ? { bgcolor: '#0d9488', '&:hover': { bgcolor: '#0d9488' } }
+                : { borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#0d9488', color: '#0d9488' } }),
+            }}
           >
-            {pending && key !== currentKey && <Loader2 className="h-3 w-3 animate-spin" />}
-            {label} <span className="text-xs opacity-70">{price}/mes</span>
-          </button>
+            {label} <Box component="span" sx={{ fontSize: '0.6875rem', opacity: 0.7, ml: 0.5 }}>{price}/mes</Box>
+          </Button>
         ))}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

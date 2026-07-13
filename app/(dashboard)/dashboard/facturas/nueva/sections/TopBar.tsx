@@ -1,16 +1,19 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { ArrowLeft, ChevronDown, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import type {
   AlmacenItem, ListaPrecioItem, VendedorItem,
 } from '../hooks/useDropdownsCatalog';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 interface Props {
   showAlmacen: boolean;
@@ -58,52 +61,63 @@ export function NavBar({
   }, []);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">
-      <Button variant="ghost" size="sm" asChild className="text-gray-600 hover:text-gray-900 px-2 sm:px-3">
-        <Link href="/dashboard/facturas">
-          <ArrowLeft className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">Volver</span>
-        </Link>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: 2 }}>
+      <Button
+        component={Link}
+        href="/dashboard/facturas"
+        variant="text"
+        size="small"
+        startIcon={<ArrowLeft size={16} />}
+        sx={{ textTransform: 'none', color: '#4b5563', '&:hover': { color: '#111827', bgcolor: 'transparent' }, px: 1 }}
+      >
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Volver</Box>
       </Button>
-      <h1 className="text-base sm:text-lg font-semibold text-gray-700 flex-1 sm:flex-none truncate">{title}</h1>
+      <Typography sx={{ fontSize: { xs: '1rem', sm: '1.125rem' }, fontWeight: 600, color: '#374151', flex: { xs: 1, sm: 'none' }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {title}
+      </Typography>
 
-      <div className="relative ml-auto" ref={personalizarRef}>
+      <Box ref={personalizarRef} sx={{ position: 'relative', ml: 'auto' }}>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
+          variant="outlined"
+          size="small"
           aria-label="Personalizar opciones"
-          className="flex items-center gap-2 text-sm"
           onClick={() => setShowPersonalizar(v => !v)}
+          endIcon={<ChevronDown size={14} style={{ opacity: 0.6 }} />}
+          startIcon={<Settings size={16} />}
+          sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', fontSize: '0.875rem' }}
         >
-          <Settings className="h-4 w-4" />
-          <span className="hidden sm:inline">Personalizar opciones</span>
-          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Personalizar opciones</Box>
         </Button>
         {showPersonalizar && (
-          <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-4 w-52">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Opciones disponibles</p>
+          <Box sx={{ position: 'absolute', right: 0, top: '100%', mt: 0.5, zIndex: 50, bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', p: 2, width: 208 }}>
+            <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.5 }}>
+              Opciones disponibles
+            </Typography>
             {[
-              { key: 'almacen',     label: 'Almacén',         state: showAlmacen,      setter: setShowAlmacen },
+              { key: 'almacen',      label: 'Almacén',         state: showAlmacen,      setter: setShowAlmacen },
               { key: 'listaPrecios', label: 'Lista de Precio', state: showListaPrecios, setter: setShowListaPrecios },
-              { key: 'vendedor',    label: 'Vendedor',         state: showVendedor,     setter: setShowVendedor },
+              { key: 'vendedor',     label: 'Vendedor',        state: showVendedor,     setter: setShowVendedor },
             ].map(({ key, label, state, setter }) => (
-              <label key={key} className="flex items-center justify-between py-2 cursor-pointer hover:bg-gray-50 rounded px-2 -mx-2">
-                <span className="text-sm text-gray-700">{label}</span>
-                <input
-                  type="checkbox"
-                  checked={state}
-                  onChange={e => {
-                    setter(e.target.checked);
-                    toggleOpcion(key, e.target.checked);
-                  }}
-                  className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                />
-              </label>
+              <FormControlLabel
+                key={key}
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={state}
+                    onChange={(e) => { setter(e.target.checked); toggleOpcion(key, e.target.checked); }}
+                    sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' }, p: 0.5 }}
+                  />
+                }
+                label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>{label}</Typography>}
+                labelPlacement="start"
+                sx={{ display: 'flex', justifyContent: 'space-between', mx: 0, px: 0.75, py: 0.75, borderRadius: '6px', '&:hover': { bgcolor: '#f9fafb' } }}
+              />
             ))}
-          </div>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -118,83 +132,84 @@ export function TopBar({
   if (!showAlmacen && !showListaPrecios && !showVendedor) return null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-4 md:px-6 mb-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center lg:gap-8 gap-3">
+    <Box sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #f3f4f6', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 3 }, py: 2, mb: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'auto auto auto 1fr' }, alignItems: 'center', gap: 1.5 }}>
         {showAlmacen && (
-          <div className="space-y-1 lg:min-w-[160px]">
-            <Label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Almacén</Label>
-            <Select
-              value={almacenId?.toString() ?? ''}
-              onValueChange={(v) => {
-                if (v === '__nuevo') { onOpenNuevoAlmacen(); return; }
-                const alm = almacenes.find(a => a.id.toString() === v);
-                setAlmacenId(alm?.id ?? null);
-                setAlmacenNombre(alm?.nombre ?? '');
-              }}
-            >
-              <SelectTrigger className="h-10 md:h-9 text-sm">
-                <SelectValue placeholder="Seleccionar..." />
-              </SelectTrigger>
-              <SelectContent>
-                {almacenes.map(a => <SelectItem key={a.id} value={a.id.toString()}>{a.nombre}</SelectItem>)}
-                <SelectItem value="__nuevo" className="text-teal-700 font-medium">+ Nuevo almacén</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Box sx={{ minWidth: 160 }}>
+            <Typography sx={{ fontSize: '0.6875rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500, mb: 0.5 }}>Almacén</Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                value={almacenId?.toString() ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '__nuevo') { onOpenNuevoAlmacen(); return; }
+                  const alm = almacenes.find(a => a.id.toString() === v);
+                  setAlmacenId(alm?.id ?? null);
+                  setAlmacenNombre(alm?.nombre ?? '');
+                }}
+                displayEmpty
+                sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+              >
+                <MenuItem value="" disabled sx={{ fontSize: '0.875rem' }}>Seleccionar...</MenuItem>
+                {almacenes.map(a => <MenuItem key={a.id} value={a.id.toString()} sx={{ fontSize: '0.875rem' }}>{a.nombre}</MenuItem>)}
+                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>+ Nuevo almacén</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
         )}
 
         {showListaPrecios && (
-          <div className="space-y-1 lg:min-w-[160px]">
-            <Label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Lista de precios</Label>
-            <Select
-              value={listaPreciosId?.toString() ?? '__none'}
-              onValueChange={(v) => {
-                if (v === '__nuevo') { onOpenNuevaLista(); return; }
-                if (v === '__none') { setListaPreciosId(null); setListaPreciosNombre(''); return; }
-                const lista = listasPrecios.find(l => l.id.toString() === v);
-                setListaPreciosId(lista?.id ?? null);
-                setListaPreciosNombre(lista?.nombre ?? '');
-              }}
-            >
-              <SelectTrigger className="h-10 md:h-9 text-sm">
-                <SelectValue placeholder="General" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none">General</SelectItem>
+          <Box sx={{ minWidth: 160 }}>
+            <Typography sx={{ fontSize: '0.6875rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500, mb: 0.5 }}>Lista de precios</Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                value={listaPreciosId?.toString() ?? '__none'}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '__nuevo') { onOpenNuevaLista(); return; }
+                  if (v === '__none') { setListaPreciosId(null); setListaPreciosNombre(''); return; }
+                  const lista = listasPrecios.find(l => l.id.toString() === v);
+                  setListaPreciosId(lista?.id ?? null);
+                  setListaPreciosNombre(lista?.nombre ?? '');
+                }}
+                sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+              >
+                <MenuItem value="__none" sx={{ fontSize: '0.875rem' }}>General</MenuItem>
                 {listasPrecios.map(l => (
-                  <SelectItem key={l.id} value={l.id.toString()}>
+                  <MenuItem key={l.id} value={l.id.toString()} sx={{ fontSize: '0.875rem' }}>
                     {l.nombre}{l.tipo === 'porcentaje' && l.porcentaje > 0 ? ` (${(l.porcentaje / 100).toFixed(2)}%)` : ''}
-                  </SelectItem>
+                  </MenuItem>
                 ))}
-                <SelectItem value="__nuevo" className="text-teal-700 font-medium">+ Nueva lista</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>+ Nueva lista</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
         )}
 
         {showVendedor && (
-          <div className="space-y-1 lg:min-w-[160px]">
-            <Label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Vendedor</Label>
-            <Select
-              value={vendedorId?.toString() ?? ''}
-              onValueChange={(v) => {
-                if (v === '__nuevo') { onOpenNuevoVendedor(); return; }
-                const ven = vendedores.find(v2 => v2.id.toString() === v);
-                setVendedorId(ven?.id ?? null);
-                setVendedorNombre(ven?.nombre ?? '');
-              }}
-            >
-              <SelectTrigger className="h-10 md:h-9 text-sm">
-                <SelectValue placeholder="Buscar..." />
-              </SelectTrigger>
-              <SelectContent>
-                {vendedores.map(v => <SelectItem key={v.id} value={v.id.toString()}>{v.nombre}</SelectItem>)}
-                <SelectItem value="__nuevo" className="text-teal-700 font-medium">+ Nuevo vendedor</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Box sx={{ minWidth: 160 }}>
+            <Typography sx={{ fontSize: '0.6875rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500, mb: 0.5 }}>Vendedor</Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                value={vendedorId?.toString() ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '__nuevo') { onOpenNuevoVendedor(); return; }
+                  const ven = vendedores.find(v2 => v2.id.toString() === v);
+                  setVendedorId(ven?.id ?? null);
+                  setVendedorNombre(ven?.nombre ?? '');
+                }}
+                displayEmpty
+                sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+              >
+                <MenuItem value="" disabled sx={{ fontSize: '0.875rem' }}>Buscar...</MenuItem>
+                {vendedores.map(v => <MenuItem key={v.id} value={v.id.toString()} sx={{ fontSize: '0.875rem' }}>{v.nombre}</MenuItem>)}
+                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>+ Nuevo vendedor</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

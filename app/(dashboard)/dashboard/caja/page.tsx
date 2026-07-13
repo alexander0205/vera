@@ -8,6 +8,25 @@ import {
 import { toast } from 'sonner';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { METODO_PAGO_LABELS as METODO_LABELS } from '@/lib/pagos/metodos';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +54,7 @@ interface Desglose {
 
 interface VentaPorMetodo {
   metodo: string;
-  total: number;  // centavos
+  total: number;
 }
 
 interface Movimiento {
@@ -49,45 +68,42 @@ interface Movimiento {
 }
 
 const TIPO_LABELS: Record<string, string> = {
-  ENTRADA: 'Entrada',
-  SALIDA:  'Salida',
-  GASTO:   'Gasto',
-  RETIRO:  'Retiro',
-  AJUSTE:  'Ajuste',
+  ENTRADA: 'Entrada', SALIDA: 'Salida', GASTO: 'Gasto', RETIRO: 'Retiro', AJUSTE: 'Ajuste',
 };
 
-const TIPO_COLORS: Record<string, string> = {
-  ENTRADA: 'text-emerald-700 bg-emerald-50',
-  SALIDA:  'text-red-700 bg-red-50',
-  GASTO:   'text-red-700 bg-red-50',
-  RETIRO:  'text-amber-700 bg-amber-50',
-  AJUSTE:  'text-sky-700 bg-sky-50',
+const TIPO_CHIP_SX: Record<string, object> = {
+  ENTRADA: { bgcolor: '#ecfdf5', color: '#065f46' },
+  SALIDA:  { bgcolor: '#fef2f2', color: '#991b1b' },
+  GASTO:   { bgcolor: '#fef2f2', color: '#991b1b' },
+  RETIRO:  { bgcolor: '#fffbeb', color: '#92400e' },
+  AJUSTE:  { bgcolor: '#eff6ff', color: '#1e40af' },
 };
 
 function fmtHora(iso: string) {
   return new Date(iso).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
 }
 
-// ─── Subcomponents ────────────────────────────────────────────────────────────
+// ─── StatCard ─────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, sub, color = 'gray' }: {
   label: string; value: string; sub?: string; color?: 'gray' | 'emerald' | 'red' | 'amber';
 }) {
-  const colors = {
-    gray:    'bg-white border-gray-200',
-    emerald: 'bg-emerald-50 border-emerald-200',
-    red:     'bg-red-50 border-red-200',
-    amber:   'bg-amber-50 border-amber-200',
+  const sxMap = {
+    gray:    { bgcolor: 'background.paper', border: '1px solid #e5e7eb' },
+    emerald: { bgcolor: '#ecfdf5', border: '1px solid #a7f3d0' },
+    red:     { bgcolor: '#fef2f2', border: '1px solid #fecaca' },
+    amber:   { bgcolor: '#fffbeb', border: '1px solid #fde68a' },
   };
-  const textColors = {
-    gray: 'text-gray-900', emerald: 'text-emerald-800', red: 'text-red-800', amber: 'text-amber-800',
-  };
+  const textColor = {
+    gray: 'text.primary', emerald: '#065f46', red: '#991b1b', amber: '#92400e',
+  }[color];
+
   return (
-    <div className={`rounded-xl border p-4 ${colors[color]}`}>
-      <p className="text-xs font-medium text-gray-500 mb-1">{label}</p>
-      <p className={`text-lg font-bold tabular-nums ${textColors[color]}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-    </div>
+    <Box sx={{ borderRadius: '12px', p: 2, ...sxMap[color] }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>{label}</Typography>
+      <Typography variant="h6" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: textColor }}>{value}</Typography>
+      {sub && <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>{sub}</Typography>}
+    </Box>
   );
 }
 
@@ -96,11 +112,11 @@ function StatCard({ label, value, sub, color = 'gray' }: {
 function ModalMovimiento({ turnoId, onClose, onCreated }: {
   turnoId: number; onClose: () => void; onCreated: () => void;
 }) {
-  const [tipo, setTipo]           = useState('ENTRADA');
-  const [monto, setMonto]         = useState('');
-  const [descripcion, setDesc]    = useState('');
-  const [motivo, setMotivo]       = useState('');
-  const [loading, setLoading]     = useState(false);
+  const [tipo, setTipo]       = useState('ENTRADA');
+  const [monto, setMonto]     = useState('');
+  const [descripcion, setDesc] = useState('');
+  const [motivo, setMotivo]   = useState('');
+  const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -109,100 +125,61 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
 
     setLoading(true);
     const res = await fetch('/api/caja/movimientos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        turnoId,
-        tipo,
-        monto: montoNum,
-        descripcion: descripcion || undefined,
-        motivo: motivo || undefined,
-      }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turnoId, tipo, monto: montoNum, descripcion: descripcion || undefined, motivo: motivo || undefined }),
     });
     const data = await res.json().catch(() => ({}));
     setLoading(false);
 
-    if (res.ok) {
-      toast.success('Movimiento registrado');
-      onCreated();
-      onClose();
-    } else {
-      toast.error(data.error ?? 'Error al registrar movimiento');
-    }
+    if (res.ok) { toast.success('Movimiento registrado'); onCreated(); onClose(); }
+    else toast.error(data.error ?? 'Error al registrar movimiento');
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-        <h2 className="text-base font-semibold text-gray-900">Registrar movimiento</h2>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-          <select
-            value={tipo}
-            onChange={e => setTipo(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-          >
-            {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Monto (RD$)</label>
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={monto}
-            onChange={e => setMonto(e.target.value)}
-            placeholder="0.00"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            required
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth
+      slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+      <Box component="form" onSubmit={submit}>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Registrar movimiento</DialogTitle>
+        <DialogContent sx={{ pt: '8px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <FormControl size="small" fullWidth>
+            <InputLabel>Tipo</InputLabel>
+            <Select value={tipo} label="Tipo" onChange={e => setTipo(e.target.value)} sx={{ borderRadius: '8px' }}>
+              {Object.entries(TIPO_LABELS).map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <MuiTextField
+            type="number" label="Monto (RD$)" placeholder="0.00"
+            value={monto} onChange={e => setMonto(e.target.value)}
+            size="small" fullWidth required
+            slotProps={{ htmlInput: { min: '0.01', step: '0.01' } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-          <input
-            type="text"
-            value={descripcion}
-            onChange={e => setDesc(e.target.value)}
-            maxLength={200}
-            placeholder="Opcional"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          <MuiTextField
+            label="Descripción" placeholder="Opcional"
+            value={descripcion} onChange={e => setDesc(e.target.value)}
+            size="small" fullWidth
+            slotProps={{ htmlInput: { maxLength: 200 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
-
-        {tipo === 'AJUSTE' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Motivo <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={motivo}
-              onChange={e => setMotivo(e.target.value)}
-              rows={2}
-              maxLength={500}
-              placeholder="Requerido para ajustes"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
-              required
+          {tipo === 'AJUSTE' && (
+            <MuiTextField
+              label="Motivo *" placeholder="Requerido para ajustes"
+              value={motivo} onChange={e => setMotivo(e.target.value)}
+              multiline rows={2} size="small" fullWidth required
+              slotProps={{ htmlInput: { maxLength: 500 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
-        )}
-
-        <div className="flex gap-3 justify-end pt-1">
-          <button type="button" onClick={onClose}
-            className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-            Cancelar
-          </button>
-          <button type="submit" disabled={loading}
-            className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
-            {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Registrar
-          </button>
-        </div>
-      </form>
-    </div>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton variant="outlined" onClick={onClose} sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+          <MuiButton type="submit" variant="contained" color="primary" disableElevation disabled={loading}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            {loading ? <CircularProgress size={16} color="inherit" /> : 'Registrar'}
+          </MuiButton>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }
 
@@ -211,9 +188,9 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
 function ModalCierre({ turno, desglose, ventasPorMetodo, onClose, onCerrado }: {
   turno: Turno; desglose: Desglose; ventasPorMetodo: VentaPorMetodo[]; onClose: () => void; onCerrado: () => void;
 }) {
-  const [contado, setContado]   = useState('');
-  const [obs, setObs]           = useState('');
-  const [loading, setLoading]   = useState(false);
+  const [contado, setContado] = useState('');
+  const [obs, setObs]         = useState('');
+  const [loading, setLoading] = useState(false);
 
   const contadoNum  = parseFloat(contado.replace(',', '.')) || 0;
   const esperadoDOP = desglose.esperado / 100;
@@ -227,157 +204,117 @@ function ModalCierre({ turno, desglose, ventasPorMetodo, onClose, onCerrado }: {
 
     setLoading(true);
     const res = await fetch(`/api/caja/turnos/${turno.id}/cierre`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ efectivoContado: contadoNum, observaciones: obs || undefined }),
     });
     const data = await res.json().catch(() => ({}));
     setLoading(false);
 
-    if (res.ok) {
-      toast.success('Cuadre firmado — pendiente de aprobación del administrador');
-      onCerrado();
-      onClose();
-    } else {
-      toast.error(data.error ?? 'Error al cerrar');
-    }
+    if (res.ok) { toast.success('Cuadre firmado — pendiente de aprobación del administrador'); onCerrado(); onClose(); }
+    else toast.error(data.error ?? 'Error al cerrar');
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900">Cuadre de caja</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth
+      slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+      <Box component="form" onSubmit={submit}>
+        <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
+          Cuadre de caja
+          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', fontWeight: 400 }}>
             El administrador recibirá una notificación para aprobar el cierre.
-          </p>
-        </div>
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Desglose esperado */}
+          <Box sx={{ bgcolor: 'grey.50', borderRadius: '10px', p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {[
+              { label: 'Apertura', value: fmtDOP(desglose.montoApertura), color: 'text.secondary' },
+              { label: 'Ventas efectivo', value: `+${fmtDOP(desglose.ventasEfectivo)}`, color: '#059669' },
+              ...(desglose.entradas > 0 ? [{ label: 'Entradas', value: `+${fmtDOP(desglose.entradas)}`, color: '#059669' }] : []),
+              ...(desglose.salidas > 0 ? [{ label: 'Salidas / gastos', value: `−${fmtDOP(desglose.salidas)}`, color: '#dc2626' }] : []),
+            ].map((row, i) => (
+              <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>{row.label}</Typography>
+                <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: row.color }}>{row.value}</Typography>
+              </Box>
+            ))}
+            <Divider sx={{ my: 0.5 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>Esperado en caja</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>{fmtDOP(desglose.esperado)}</Typography>
+            </Box>
+          </Box>
 
-        {/* Desglose esperado */}
-        <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
-          <div className="flex justify-between text-gray-600">
-            <span>Apertura</span>
-            <span className="tabular-nums">{fmtDOP(desglose.montoApertura)}</span>
-          </div>
-          <div className="flex justify-between text-gray-600">
-            <span>Ventas efectivo</span>
-            <span className="tabular-nums text-emerald-700">+{fmtDOP(desglose.ventasEfectivo)}</span>
-          </div>
-          {desglose.entradas > 0 && (
-            <div className="flex justify-between text-gray-600">
-              <span>Entradas</span>
-              <span className="tabular-nums text-emerald-700">+{fmtDOP(desglose.entradas)}</span>
-            </div>
+          {/* Ventas por método */}
+          {ventasPorMetodo.length > 0 && (
+            <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '10px' }}>
+              <CardContent sx={{ p: '12px 16px !important', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>Ventas del turno por método</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(ventasPorMetodo.reduce((s, v) => s + v.total, 0))}</Typography>
+                </Box>
+                {ventasPorMetodo.map(v => {
+                  const esEfectivo = v.metodo === 'efectivo' || v.metodo === 'cash';
+                  return (
+                    <Box key={v.metodo} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        {METODO_LABELS[v.metodo] ?? v.metodo}
+                        {!esEfectivo && <Box component="span" sx={{ opacity: 0.5 }}>(no afecta caja)</Box>}
+                      </Typography>
+                      <Typography variant="caption" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(v.total)}</Typography>
+                    </Box>
+                  );
+                })}
+              </CardContent>
+            </Card>
           )}
-          {desglose.salidas > 0 && (
-            <div className="flex justify-between text-gray-600">
-              <span>Salidas / gastos</span>
-              <span className="tabular-nums text-red-700">−{fmtDOP(desglose.salidas)}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-200 pt-2 mt-1">
-            <span>Esperado en caja</span>
-            <span className="tabular-nums">{fmtDOP(desglose.esperado)}</span>
-          </div>
-        </div>
 
-        {/* Ventas del turno por método (informativo — solo efectivo afecta la gaveta) */}
-        {ventasPorMetodo.length > 0 && (
-          <div className="rounded-xl border border-gray-200 p-4 space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-gray-700">Ventas del turno por método</span>
-              <span className="tabular-nums font-semibold text-gray-900">
-                {fmtDOP(ventasPorMetodo.reduce((s, v) => s + v.total, 0))}
-              </span>
-            </div>
-            {ventasPorMetodo.map(v => {
-              const esEfectivo = v.metodo === 'efectivo' || v.metodo === 'cash';
-              return (
-                <div key={v.metodo} className="flex justify-between text-gray-600">
-                  <span className="flex items-center gap-1.5">
-                    {METODO_LABELS[v.metodo] ?? v.metodo}
-                    {!esEfectivo && (
-                      <span className="text-[10px] text-gray-400">(no afecta caja)</span>
-                    )}
-                  </span>
-                  <span className="tabular-nums">{fmtDOP(v.total)}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Conteo físico */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Efectivo contado (RD$)
-          </label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={contado}
-            onChange={e => setContado(e.target.value)}
-            placeholder="0.00"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 tabular-nums"
-            required
-            autoFocus
+          <MuiTextField
+            type="number" label="Efectivo contado (RD$)" placeholder="0.00"
+            value={contado} onChange={e => setContado(e.target.value)}
+            size="small" fullWidth required autoFocus
+            slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
 
-        {/* Diferencia live */}
-        {contado !== '' && (
-          <div className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium ${
-            hasDiff ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-          }`}>
-            {hasDiff
-              ? <AlertTriangle className="h-4 w-4 shrink-0" />
-              : <CheckCircle className="h-4 w-4 shrink-0" />}
-            <span>
+          {contado !== '' && (
+            <Alert
+              severity={hasDiff ? 'error' : 'success'}
+              icon={hasDiff ? <AlertTriangle style={{ width: 16, height: 16 }} /> : <CheckCircle style={{ width: 16, height: 16 }} />}
+              sx={{ borderRadius: '8px' }}
+            >
               {hasDiff
                 ? `Diferencia: ${diferencia > 0 ? '+' : ''}${fmtDOP(Math.round(diferencia * 100))} — se requiere justificación`
                 : 'Caja cuadrada — el admin revisará el cuadre'}
-            </span>
-          </div>
-        )}
+            </Alert>
+          )}
 
-        {/* Observaciones (obligatorio si hay diferencia, opcional si no) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Observaciones {hasDiff && <span className="text-red-500">*</span>}
-          </label>
-          <textarea
-            value={obs}
-            onChange={e => setObs(e.target.value)}
-            rows={3}
-            maxLength={500}
+          <MuiTextField
+            label={`Observaciones${hasDiff ? ' *' : ''}`}
             placeholder={hasDiff ? 'Explica el descuadre…' : 'Opcional — ej: novedades del turno'}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+            value={obs} onChange={e => setObs(e.target.value)}
+            multiline rows={3} size="small" fullWidth required={hasDiff}
+            slotProps={{ htmlInput: { maxLength: 500 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
 
-        {/* Declaración de firma */}
-        {contado !== '' && (
-          <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">
-            Al firmar confirmas que el conteo físico es correcto y que la información
-            es veraz. El cuadre quedará pendiente de aprobación del administrador.
-          </p>
-        )}
-
-        <div className="flex gap-3 justify-end">
-          <button type="button" onClick={onClose}
-            className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-            Cancelar
-          </button>
-          <button type="submit" disabled={loading || !contado}
-            className="text-sm px-5 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 font-medium">
-            {loading
-              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando...</>
-              : <><CheckCircle className="h-3.5 w-3.5" /> Firmar y enviar cierre</>}
-          </button>
-        </div>
-      </form>
-    </div>
+          {contado !== '' && (
+            <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+              Al firmar confirmas que el conteo físico es correcto y que la información
+              es veraz. El cuadre quedará pendiente de aprobación del administrador.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton variant="outlined" onClick={onClose} sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+          <MuiButton type="submit" variant="contained" color="primary" disableElevation disabled={loading || !contado}
+            startIcon={<CheckCircle style={{ width: 16, height: 16 }} />}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            {loading ? 'Enviando...' : 'Firmar y enviar cierre'}
+          </MuiButton>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 }
 
@@ -390,17 +327,14 @@ export default function CajaPage() {
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [ventasPorMetodo, setVentasPorMetodo] = useState<VentaPorMetodo[]>([]);
 
-  // Apertura form
   const [montoApertura, setMontoApertura] = useState('');
   const [aperObs, setAperObs]             = useState('');
   const [abriendo, setAbriendo]           = useState(false);
 
-  // Modals
   const [showMovimiento, setShowMovimiento] = useState(false);
   const [showCierre, setShowCierre]         = useState(false);
   const [showMovs, setShowMovs]             = useState(false);
 
-  // Rastrea el estado anterior para detectar transiciones y mostrar toasts
   const prevEstado = useRef<EstadoTurno | null>(null);
 
   const fetchTurno = useCallback(async () => {
@@ -418,23 +352,18 @@ export default function CajaPage() {
 
   useEffect(() => { fetchTurno(); }, [fetchTurno]);
 
-  // Polling mientras hay cierre pendiente — revisa cada 15 s
   useEffect(() => {
     if (turno?.estado !== 'CIERRE_SOLICITADO') return;
     const iv = setInterval(fetchTurno, 15_000);
     return () => clearInterval(iv);
   }, [turno?.estado, fetchTurno]);
 
-  // Detecta transiciones de estado y muestra toast al cajero
   useEffect(() => {
     const prev = prevEstado.current;
     const curr = turno?.estado ?? null;
     if (prev === 'CIERRE_SOLICITADO') {
-      if (curr === 'CERRADO') {
-        toast.success('✓ Tu cuadre fue aprobado por el administrador', { duration: 6000 });
-      } else if (curr === 'ABIERTO') {
-        toast.error('Tu cuadre fue rechazado — revisa el motivo y vuelve a contar', { duration: 8000 });
-      }
+      if (curr === 'CERRADO') toast.success('✓ Tu cuadre fue aprobado por el administrador', { duration: 6000 });
+      else if (curr === 'ABIERTO') toast.error('Tu cuadre fue rechazado — revisa el motivo y vuelve a contar', { duration: 8000 });
     }
     prevEstado.current = curr;
   }, [turno?.estado]);
@@ -446,91 +375,71 @@ export default function CajaPage() {
 
     setAbriendo(true);
     const res = await fetch('/api/caja/turnos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ montoApertura: monto, observaciones: aperObs || undefined }),
     });
     const data = await res.json().catch(() => ({}));
     setAbriendo(false);
 
-    if (res.ok) {
-      toast.success('Turno de caja abierto');
-      setMontoApertura('');
-      setAperObs('');
-      fetchTurno();
-    } else {
-      toast.error(data.error ?? 'Error al abrir caja');
-    }
+    if (res.ok) { toast.success('Turno de caja abierto'); setMontoApertura(''); setAperObs(''); fetchTurno(); }
+    else toast.error(data.error ?? 'Error al abrir caja');
   }
 
   if (loading) {
     return (
-      <section className="p-6 flex items-center justify-center min-h-[300px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-      </section>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
+        <CircularProgress size={36} color="primary" />
+      </Box>
     );
   }
 
-  // ── Sin turno: formulario de apertura ────────────────────────────────────────
+  // ── Sin turno: apertura ──────────────────────────────────────────────────────
   if (!turno) {
     return (
-      <section className="p-4 sm:p-6 max-w-md mx-auto mt-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center">
-            <Wallet className="h-5 w-5 text-teal-700" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Apertura de caja</h1>
-            <p className="text-sm text-gray-500">No tienes un turno activo</p>
-          </div>
-        </div>
+      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 440, mx: 'auto', mt: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Wallet style={{ width: 20, height: 20, color: '#0d9488' }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Apertura de caja</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>No tienes un turno activo</Typography>
+          </Box>
+        </Box>
 
-        <form onSubmit={abrirTurno} className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5 shadow-sm">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Monto de apertura (RD$)
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={montoApertura}
-              onChange={e => setMontoApertura(e.target.value)}
-              placeholder="0.00"
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-lg font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-teal-500"
-              required
-              autoFocus
-            />
-            <p className="text-xs text-gray-400 mt-1.5">
-              Efectivo físico que estás depositando en la caja para iniciar el turno.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Observaciones <span className="text-gray-400 font-normal">(opcional)</span>
-            </label>
-            <textarea
-              value={aperObs}
-              onChange={e => setAperObs(e.target.value)}
-              rows={2}
-              maxLength={500}
-              placeholder="Ej: Turno de la mañana"
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={abriendo || !montoApertura}
-            className="w-full flex items-center justify-center gap-2 bg-teal-600 text-white font-semibold py-3 rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors"
-          >
-            {abriendo
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Abriendo...</>
-              : <><Wallet className="h-4 w-4" /> Confirmar apertura</>}
-          </button>
-        </form>
-      </section>
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '16px' }}>
+          <CardContent sx={{ p: '24px !important' }}>
+            <Box component="form" onSubmit={abrirTurno} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>Monto de apertura (RD$)</Typography>
+                <MuiTextField
+                  type="number" placeholder="0.00"
+                  value={montoApertura} onChange={e => setMontoApertura(e.target.value)}
+                  size="small" fullWidth required autoFocus
+                  slotProps={{ htmlInput: { min: '0', step: '0.01', style: { fontSize: '1.25rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' } } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+                />
+                <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
+                  Efectivo físico que estás depositando en la caja para iniciar el turno.
+                </Typography>
+              </Box>
+              <MuiTextField
+                label="Observaciones (opcional)" placeholder="Ej: Turno de la mañana"
+                value={aperObs} onChange={e => setAperObs(e.target.value)}
+                multiline rows={2} size="small" fullWidth
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+              />
+              <MuiButton type="submit" variant="contained" color="primary" disableElevation fullWidth
+                disabled={abriendo || !montoApertura}
+                startIcon={abriendo ? <CircularProgress size={16} color="inherit" /> : <Wallet style={{ width: 16, height: 16 }} />}
+                sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, py: 1.5 }}>
+                {abriendo ? 'Abriendo...' : 'Confirmar apertura'}
+              </MuiButton>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
     );
   }
 
@@ -538,206 +447,179 @@ export default function CajaPage() {
   if (turno.estado === 'CIERRE_SOLICITADO') {
     const tieneDiff = turno.diferenciaCentavos !== null && turno.diferenciaCentavos !== 0;
     return (
-      <section className="p-4 sm:p-6 max-w-lg mx-auto mt-8">
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4">
-          {/* Header */}
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-              <Clock className="h-5 w-5 text-amber-700" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-amber-900">Cuadre enviado — pendiente de aprobación</h1>
-              <p className="text-xs text-amber-600 mt-0.5 font-mono">{turno.numeroCierre}</p>
-            </div>
-          </div>
+      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 520, mx: 'auto', mt: 4 }}>
+        <Card elevation={0} sx={{ border: '1px solid #fde68a', bgcolor: '#fffbeb', borderRadius: '16px' }}>
+          <CardContent sx={{ p: '24px !important', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ width: 44, height: 44, borderRadius: '50%', bgcolor: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Clock style={{ width: 20, height: 20, color: '#92400e' }} />
+              </Box>
+              <Box>
+                <Typography variant="body1" sx={{ fontWeight: 700, color: '#78350f' }}>Cuadre enviado — pendiente de aprobación</Typography>
+                {turno.numeroCierre && (
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#b45309' }}>{turno.numeroCierre}</Typography>
+                )}
+              </Box>
+            </Box>
 
-          <p className="text-sm text-amber-700">
-            Tu cuadre fue firmado y enviado al administrador para su revisión.
-            Recibirás una notificación cuando sea aprobado o rechazado.
-          </p>
+            <Typography variant="body2" sx={{ color: '#92400e' }}>
+              Tu cuadre fue firmado y enviado al administrador para su revisión. Recibirás una notificación cuando sea aprobado o rechazado.
+            </Typography>
 
-          {/* Cifras */}
-          <div className="grid grid-cols-2 gap-3 text-left">
-            <div className="bg-white rounded-xl border border-amber-200 p-3">
-              <p className="text-xs text-gray-500">Esperado</p>
-              <p className="font-bold text-gray-900 tabular-nums text-sm">
-                {fmtDOP(turno.montoEsperadoCentavos ?? 0)}
-              </p>
-            </div>
-            <div className="bg-white rounded-xl border border-amber-200 p-3">
-              <p className="text-xs text-gray-500">Contado</p>
-              <p className="font-bold text-gray-900 tabular-nums text-sm">
-                {fmtDOP(turno.efectivoContadoCentavos ?? 0)}
-              </p>
-            </div>
-          </div>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+              {[
+                { label: 'Esperado', value: fmtDOP(turno.montoEsperadoCentavos ?? 0) },
+                { label: 'Contado', value: fmtDOP(turno.efectivoContadoCentavos ?? 0) },
+              ].map(item => (
+                <Box key={item.label} sx={{ bgcolor: 'background.paper', borderRadius: '10px', border: '1px solid #fde68a', p: 1.5 }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{item.label}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{item.value}</Typography>
+                </Box>
+              ))}
+            </Box>
 
-          {/* Estado del cuadre */}
-          {tieneDiff ? (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-              <p className="text-xs font-semibold text-red-700">
-                Descuadre: {turno.diferenciaCentavos! > 0 ? '+' : ''}{fmtDOP(turno.diferenciaCentavos!)}
-              </p>
-              {turno.cierreObs && (
-                <p className="text-xs text-red-600 mt-1 italic">"{turno.cierreObs}"</p>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-              <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
-              <p className="text-xs font-medium text-emerald-700">Caja cuadrada — sin diferencias</p>
-            </div>
-          )}
-        </div>
-      </section>
+            {tieneDiff ? (
+              <Alert severity="error" sx={{ borderRadius: '8px' }}>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Descuadre: {turno.diferenciaCentavos! > 0 ? '+' : ''}{fmtDOP(turno.diferenciaCentavos!)}
+                </Typography>
+                {turno.cierreObs && <Typography variant="caption" sx={{ fontStyle: 'italic' }}>"{turno.cierreObs}"</Typography>}
+              </Alert>
+            ) : (
+              <Alert severity="success" icon={<CheckCircle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>Caja cuadrada — sin diferencias</Typography>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
     );
   }
 
   // ── Turno ABIERTO ────────────────────────────────────────────────────────────
-  const esperadoDOP = (desglose?.esperado ?? turno.montoAperturaCentavos);
-
   return (
-    <section className="p-4 sm:p-6 space-y-5 max-w-2xl mx-auto">
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 720, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center shrink-0">
-            <Wallet className="h-5 w-5 text-teal-700" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Mi caja</h1>
-            <p className="text-sm text-gray-500">
-              Abierta a las {fmtHora(turno.aperturaAt)}
-            </p>
-          </div>
-        </div>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Abierta
-        </span>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Wallet style={{ width: 20, height: 20, color: '#0d9488' }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Mi caja</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>Abierta a las {fmtHora(turno.aperturaAt)}</Typography>
+          </Box>
+        </Box>
+        <Chip
+          label="Abierta"
+          size="small"
+          sx={{ bgcolor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontWeight: 700, height: 26, '& .MuiChip-label': { px: 1.5 } }}
+        />
+      </Box>
 
       {/* Desglose */}
       {desglose && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Apertura"      value={fmtDOP(desglose.montoApertura)}  />
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+          <StatCard label="Apertura" value={fmtDOP(desglose.montoApertura)} />
           <StatCard label="Ventas efect." value={fmtDOP(desglose.ventasEfectivo)} color="emerald" />
-          <StatCard
-            label="Entradas netas"
-            value={fmtDOP(desglose.entradas - desglose.salidas)}
-            color={desglose.entradas >= desglose.salidas ? 'gray' : 'red'}
-          />
-          <StatCard label="Total esperado" value={fmtDOP(desglose.esperado)} color="emerald"
-            sub="Efectivo estimado en caja" />
-        </div>
+          <StatCard label="Entradas netas" value={fmtDOP(desglose.entradas - desglose.salidas)} color={desglose.entradas >= desglose.salidas ? 'gray' : 'red'} />
+          <StatCard label="Total esperado" value={fmtDOP(desglose.esperado)} color="emerald" sub="Efectivo estimado en caja" />
+        </Box>
       )}
 
-      {/* Ventas del turno por método (efectivo afecta caja; los demás informativos) */}
+      {/* Ventas por método */}
       {ventasPorMetodo.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">Ventas del turno por método</h2>
-            <span className="tabular-nums text-sm font-semibold text-gray-900">
-              {fmtDOP(ventasPorMetodo.reduce((s, v) => s + v.total, 0))}
-            </span>
-          </div>
-          <div className="space-y-1.5">
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+          <CardContent sx={{ p: '16px 20px !important' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Ventas del turno por método</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                {fmtDOP(ventasPorMetodo.reduce((s, v) => s + v.total, 0))}
+              </Typography>
+            </Box>
             {ventasPorMetodo.map(v => {
               const esEfectivo = v.metodo === 'efectivo' || v.metodo === 'cash';
               return (
-                <div key={v.metodo} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5 text-gray-600">
+                <Box key={v.metodo} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     {METODO_LABELS[v.metodo] ?? v.metodo}
-                    {!esEfectivo && <span className="text-[10px] text-gray-400">(no afecta caja)</span>}
-                  </span>
-                  <span className={`tabular-nums ${esEfectivo ? 'text-emerald-700 font-medium' : 'text-gray-600'}`}>
+                    {!esEfectivo && <Typography variant="caption" sx={{ color: 'text.disabled' }}>(no afecta caja)</Typography>}
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: esEfectivo ? '#059669' : 'text.secondary', fontWeight: esEfectivo ? 600 : 400 }}>
                     {fmtDOP(v.total)}
-                  </span>
-                </div>
+                  </Typography>
+                </Box>
               );
             })}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Acciones */}
-      <div className="flex flex-wrap gap-3">
-        <button
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+        <MuiButton variant="outlined" startIcon={<Plus style={{ width: 16, height: 16 }} />}
           onClick={() => setShowMovimiento(true)}
-          className="flex items-center gap-2 text-sm border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Movimiento
-        </button>
-        <button
+          sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
+          Movimiento
+        </MuiButton>
+        <MuiButton variant="contained" color="primary" disableElevation
+          startIcon={<CheckCircle style={{ width: 16, height: 16 }} />}
           onClick={() => setShowCierre(true)}
-          className="flex items-center gap-2 text-sm bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium transition-colors"
-        >
-          <CheckCircle className="h-4 w-4" /> Solicitar cierre
-        </button>
-      </div>
+          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+          Solicitar cierre
+        </MuiButton>
+      </Box>
 
       {/* Movimientos */}
-      {movimientos.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <button
+      {movimientos.length > 0 ? (
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+          <MuiButton
+            fullWidth
             onClick={() => setShowMovs(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            endIcon={showMovs ? <ChevronUp style={{ width: 16, height: 16 }} /> : <ChevronDown style={{ width: 16, height: 16 }} />}
+            sx={{ px: 2.5, py: 1.75, justifyContent: 'space-between', textTransform: 'none', color: 'text.primary', fontWeight: 600, borderRadius: 0 }}
           >
-            <span>Movimientos del turno ({movimientos.length})</span>
-            {showMovs ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-          </button>
-
-          {showMovs && (
-            <div className="divide-y divide-gray-100">
-              {movimientos.map(m => (
-                <div key={m.id} className="flex items-center gap-3 px-5 py-3">
-                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${TIPO_COLORS[m.tipo] ?? 'text-gray-600 bg-gray-100'}`}>
-                    {['ENTRADA'].includes(m.tipo)
-                      ? <ArrowDownCircle className="h-3 w-3" />
-                      : <ArrowUpCircle className="h-3 w-3" />}
-                    {TIPO_LABELS[m.tipo] ?? m.tipo}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700 truncate">{m.descripcion ?? m.motivo ?? '—'}</p>
-                    <p className="text-xs text-gray-400">{fmtHora(m.createdAt)}</p>
-                  </div>
-                  <span className={`text-sm font-semibold tabular-nums ${
-                    ['ENTRADA', 'AJUSTE'].includes(m.tipo) ? 'text-emerald-700' : 'text-red-700'
-                  }`}>
+            Movimientos del turno ({movimientos.length})
+          </MuiButton>
+          <Collapse in={showMovs}>
+            {movimientos.map((m, i) => (
+              <Box key={m.id}>
+                {i > 0 && <Divider />}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2.5, py: 1.5 }}>
+                  <Chip
+                    label={TIPO_LABELS[m.tipo] ?? m.tipo}
+                    size="small"
+                    icon={['ENTRADA'].includes(m.tipo) ? <ArrowDownCircle style={{ width: 12, height: 12 }} /> : <ArrowUpCircle style={{ width: 12, height: 12 }} />}
+                    sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 }, ...(TIPO_CHIP_SX[m.tipo] ?? {}) }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.descripcion ?? m.motivo ?? '—'}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fmtHora(m.createdAt)}</Typography>
+                  </Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: ['ENTRADA', 'AJUSTE'].includes(m.tipo) ? '#059669' : '#dc2626' }}>
                     {['ENTRADA', 'AJUSTE'].includes(m.tipo) ? '+' : '−'}{fmtDOP(m.montoCentavos)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Collapse>
+        </Card>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2.5, py: 2, bgcolor: 'grey.50', borderRadius: '12px', border: '1px solid #f3f4f6' }}>
+          <Info style={{ width: 16, height: 16, color: '#9ca3af', flexShrink: 0 }} />
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>Sin movimientos en este turno aún.</Typography>
+        </Box>
       )}
 
-      {movimientos.length === 0 && (
-        <div className="flex items-center gap-3 px-5 py-4 bg-gray-50 rounded-2xl border border-gray-100 text-sm text-gray-500">
-          <Info className="h-4 w-4 text-gray-400 shrink-0" />
-          Sin movimientos en este turno aún.
-        </div>
-      )}
-
-      {/* Modals */}
       {showMovimiento && (
-        <ModalMovimiento
-          turnoId={turno.id}
-          onClose={() => setShowMovimiento(false)}
-          onCreated={fetchTurno}
-        />
+        <ModalMovimiento turnoId={turno.id} onClose={() => setShowMovimiento(false)} onCreated={fetchTurno} />
       )}
-
       {showCierre && desglose && (
-        <ModalCierre
-          turno={turno}
-          desglose={desglose}
-          ventasPorMetodo={ventasPorMetodo}
-          onClose={() => setShowCierre(false)}
-          onCerrado={fetchTurno}
-        />
+        <ModalCierre turno={turno} desglose={desglose} ventasPorMetodo={ventasPorMetodo}
+          onClose={() => setShowCierre(false)} onCerrado={fetchTurno} />
       )}
-    </section>
+    </Box>
   );
 }

@@ -10,6 +10,10 @@
  */
 
 import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export interface EmpresaData {
@@ -21,6 +25,18 @@ export interface EmpresaData {
   emailFacturacion?: string | null;
   sitioWeb?:         string | null;
 }
+
+// Input compartido: mismo look que el `.input` original (borde gris, foco naranja,
+// fuente 1rem en móvil para evitar zoom de iOS y 0.875rem en desktop).
+const inputSx = {
+  '& .MuiOutlinedInput-root': {
+    borderRadius: '8px',
+    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#0d9488', borderWidth: '2px' },
+  },
+  '& .MuiOutlinedInput-input': { fontSize: { xs: '1rem', md: '0.875rem' } },
+} as const;
 
 export function EmpresaForm({ initial }: { initial: EmpresaData }) {
   const [data, setData]     = useState<EmpresaData>(initial);
@@ -57,147 +73,194 @@ export function EmpresaForm({ initial }: { initial: EmpresaData }) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 sm:p-6 space-y-5">
-      <div>
-        <h2 className="text-base font-semibold text-gray-900">Datos de tu empresa</h2>
-        <p className="text-sm text-gray-600 mt-0.5">
+    <Box
+      sx={{
+        bgcolor: '#fff',
+        borderRadius: '12px',
+        border: '1px solid #e5e7eb',
+        boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        p: { xs: 2, sm: 3 },
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2.5,
+      }}
+    >
+      <Box>
+        <Typography component="h2" sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+          Datos de tu empresa
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 0.25 }}>
           Esta información aparece en cada factura emitida.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
         <Field label="Razón social" required>
-          <input
+          <TextField
             type="text"
+            size="small"
+            fullWidth
             value={data.razonSocial ?? ''}
             onChange={e => set('razonSocial', e.target.value)}
-            className="input"
             placeholder="Mi Empresa SRL"
+            sx={inputSx}
           />
         </Field>
 
         <Field label="Nombre comercial">
-          <input
+          <TextField
             type="text"
+            size="small"
+            fullWidth
             value={data.nombreComercial ?? ''}
             onChange={e => set('nombreComercial', e.target.value)}
-            className="input"
             placeholder="Mi Empresa"
+            sx={inputSx}
           />
         </Field>
 
         <Field label="RNC" required>
-          <input
+          <TextField
             type="text"
-            inputMode="numeric"
+            size="small"
+            fullWidth
             value={data.rnc ?? ''}
             onChange={e => set('rnc', e.target.value)}
-            className="input"
             placeholder="131988032"
-            maxLength={11}
+            slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 11 } }}
+            sx={inputSx}
           />
         </Field>
 
         <Field label="Teléfono">
-          <input
+          <TextField
             type="tel"
+            size="small"
+            fullWidth
             value={data.telefono ?? ''}
             onChange={e => set('telefono', e.target.value)}
-            className="input"
             placeholder="809-555-0001"
+            sx={inputSx}
           />
         </Field>
 
-        <Field label="Dirección" className="md:col-span-2">
-          <input
+        <Field label="Dirección" span2>
+          <TextField
             type="text"
+            size="small"
+            fullWidth
             value={data.direccion ?? ''}
             onChange={e => set('direccion', e.target.value)}
-            className="input"
             placeholder="Calle, número, sector, ciudad"
+            sx={inputSx}
           />
         </Field>
 
         <Field label="Email de facturación">
-          <input
+          <TextField
             type="email"
+            size="small"
+            fullWidth
             value={data.emailFacturacion ?? ''}
             onChange={e => set('emailFacturacion', e.target.value)}
-            className="input"
             placeholder="facturas@miempresa.com"
+            sx={inputSx}
           />
         </Field>
 
         <Field label="Sitio web">
-          <input
+          <TextField
             type="url"
+            size="small"
+            fullWidth
             value={data.sitioWeb ?? ''}
             onChange={e => set('sitioWeb', e.target.value)}
-            className="input"
             placeholder="https://miempresa.com"
+            sx={inputSx}
           />
         </Field>
-      </div>
+      </Box>
 
       {error && (
-        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
-          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+            p: 1.5,
+            bgcolor: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '8px',
+            fontSize: '0.875rem',
+            color: '#991b1b',
+          }}
+        >
+          <AlertCircle size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+          <Box component="span">{error}</Box>
+        </Box>
       )}
       {saved && (
-        <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-800">
-          <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>Cambios guardados.</span>
-        </div>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+            p: 1.5,
+            bgcolor: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '8px',
+            fontSize: '0.875rem',
+            color: '#166534',
+          }}
+        >
+          <CheckCircle2 size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+          <Box component="span">Cambios guardados.</Box>
+        </Box>
       )}
 
-      <div className="flex justify-end pt-2 border-t border-gray-100">
-        <button
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 1, borderTop: '1px solid #f3f4f6' }}>
+        <Button
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="w-full sm:w-auto px-6 py-3 sm:py-2.5 bg-orange-600 text-white font-medium rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          variant="contained"
+          disableElevation
+          startIcon={saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : undefined}
+          sx={{
+            width: { xs: '100%', sm: 'auto' },
+            px: 3,
+            py: { xs: 1.5, sm: 1.25 },
+            bgcolor: '#0d9488',
+            color: '#fff',
+            fontWeight: 500,
+            borderRadius: '8px',
+            textTransform: 'none',
+            '&:hover': { bgcolor: '#0f766e' },
+            '&.Mui-disabled': { opacity: 0.5, color: '#fff', bgcolor: '#0d9488' },
+          }}
         >
-          {saving ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
-          ) : 'Guardar cambios'}
-        </button>
-      </div>
-
-      <style jsx>{`
-        .input {
-          width: 100%;
-          padding: 0.625rem 0.75rem;
-          font-size: 1rem;
-          border: 1px solid rgb(209 213 219);
-          border-radius: 0.375rem;
-        }
-        @media (min-width: 768px) {
-          .input { font-size: 0.875rem; }
-        }
-        .input:focus {
-          outline: none;
-          border-color: rgb(249 115 22);
-          box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
-        }
-      `}</style>
-    </div>
+          {saving ? 'Guardando...' : 'Guardar cambios'}
+        </Button>
+      </Box>
+    </Box>
   );
 }
 
-function Field({ label, required, children, className = '' }: {
+function Field({ label, required, children, span2 = false }: {
   label: string;
   required?: boolean;
   children: React.ReactNode;
-  className?: string;
+  span2?: boolean;
 }) {
   return (
-    <div className={className}>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
+    <Box sx={span2 ? { gridColumn: { md: '1 / -1' } } : undefined}>
+      <Typography
+        component="label"
+        sx={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', mb: 0.5 }}
+      >
+        {label}{required && <Box component="span" sx={{ color: '#ef4444', ml: 0.25 }}>*</Box>}
+      </Typography>
       {children}
-    </div>
+    </Box>
   );
 }

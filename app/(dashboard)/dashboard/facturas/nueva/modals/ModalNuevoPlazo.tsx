@@ -1,11 +1,12 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 
 export function ModalNuevoPlazo({
   open, onClose, npNombre, setNpNombre, npDias, setNpDias, npError, onGuardar,
@@ -20,43 +21,67 @@ export function ModalNuevoPlazo({
   onGuardar: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="text-teal-600">Agregar nuevo término de pago</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          {npError && <p className="text-xs text-red-500">{npError}</p>}
-          <div className="space-y-1.5">
-            <Label>Nombre <span className="text-red-500">*</span></Label>
-            <Input
-              placeholder="Ej: 45 días"
-              value={npNombre}
-              onChange={(e) => setNpNombre(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onGuardar()}
-              autoFocus
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Días <span className="text-red-500">*</span></Label>
-            <Input
-              type="number"
-              min={1}
-              max={365}
-              placeholder="45"
-              value={npDias}
-              onChange={(e) => setNpDias(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onGuardar()}
-            />
-          </div>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={onGuardar}>
-            Aceptar
-          </Button>
-        </DialogFooter>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 480, width: '100%' } } as object }}
+    >
+      <DialogTitle sx={{ color: '#0d9488', fontWeight: 600 }}>
+        Agregar nuevo término de pago
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 1 }}>
+        {npError && (
+          <Typography variant="caption" sx={{ color: '#ef4444', display: 'block', mb: 1 }}>
+            {npError}
+          </Typography>
+        )}
+
+        <TextField
+          label="Nombre"
+          required
+          size="small"
+          fullWidth
+          placeholder="Ej: 45 días"
+          value={npNombre}
+          onChange={(e) => setNpNombre(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onGuardar()}
+          autoFocus
+          sx={{ mb: 2, mt: 1, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        />
+
+        <TextField
+          label="Días"
+          required
+          size="small"
+          fullWidth
+          type="number"
+          placeholder="45"
+          value={npDias}
+          onChange={(e) => setNpDias(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onGuardar()}
+          slotProps={{ htmlInput: { min: 1, max: 365 } }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        />
       </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button
+          variant="outlined"
+          onClick={onClose}
+          sx={{ textTransform: 'none', color: '#4b5563', borderColor: '#e5e7eb' }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          variant="contained"
+          onClick={onGuardar}
+          disableElevation
+          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+        >
+          Aceptar
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

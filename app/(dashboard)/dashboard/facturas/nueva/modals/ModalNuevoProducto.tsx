@@ -1,16 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Check, ChevronDown, ChevronUp, Loader2, PackagePlus } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import { Check, ChevronDown, ChevronUp, PackagePlus } from 'lucide-react';
 import type { Producto } from '../utils/types';
 
 const TASA_ITBIS_MODAL = [
@@ -61,116 +65,203 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
     }
   }
 
+  function handleClose() {
+    onClose();
+    setError(null);
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) { onClose(); setError(null); } }}>
-      <DialogContent className="max-w-lg w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <PackagePlus className="h-5 w-5 text-teal-600" />Nuevo producto/servicio
-          </DialogTitle>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 520, width: '100%' } } as object }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}>
+        <PackagePlus size={20} color="#0d9488" />
+        Nuevo producto/servicio
+      </DialogTitle>
 
-        <div className="space-y-4 py-2">
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+      <DialogContent sx={{ pt: 1 }}>
+        {/* Tipo selector pill buttons */}
+        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+          {TIPOS_ITEM.map((t) => {
+            const isSelected = form.tipo === t.value;
+            if (t.disabled) {
+              return (
+                <Box
+                  key={t.value}
+                  title="Próximamente"
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.75,
+                    px: 2, py: 0.75, borderRadius: '9999px',
+                    border: '1px solid #e5e7eb', bgcolor: '#fff',
+                    fontSize: '0.875rem', fontWeight: 500,
+                    color: '#9ca3af', opacity: 0.4,
+                    cursor: 'not-allowed', userSelect: 'none',
+                  }}
+                >
+                  {t.label}
+                </Box>
+              );
+            }
+            return (
+              <Box
+                key={t.value}
+                component="button"
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, tipo: t.value }))}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75,
+                  px: 2, py: 0.75, borderRadius: '9999px',
+                  border: isSelected ? '1px solid #99f6e4' : '1px solid #e5e7eb',
+                  bgcolor: isSelected ? '#ccfbf1' : '#fff',
+                  color: isSelected ? '#134e4a' : '#4b5563',
+                  fontSize: '0.875rem', fontWeight: 500,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                  '&:hover': {
+                    borderColor: isSelected ? '#99f6e4' : '#d1d5db',
+                    bgcolor: isSelected ? '#ccfbf1' : '#f9fafb',
+                  },
+                }}
+              >
+                {isSelected && <Check size={14} />}
+                {t.label}
+              </Box>
+            );
+          })}
+        </Box>
+        <Typography variant="caption" sx={{ color: '#4b5563', display: 'block', mb: 2 }}>
+          Ten en cuenta que, una vez creado, no podrás cambiar el tipo del artículo.
+        </Typography>
 
-          <div>
-            <div className="flex gap-2">
-              {TIPOS_ITEM.map((t) => {
-                const isSelected = form.tipo === t.value;
-                if (t.disabled) {
-                  return (
-                    <div key={t.value} title="Próximamente"
-                      className="relative flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium cursor-not-allowed opacity-40 bg-white border-gray-200 text-gray-600 select-none">
-                      {t.label}
-                    </div>
-                  );
-                }
-                return (
-                  <button key={t.value} type="button"
-                    onClick={() => setForm((f) => ({ ...f, tipo: t.value }))}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium transition-colors ${
-                      isSelected
-                        ? 'bg-teal-100 border-teal-300 text-teal-800'
-                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                    }`}>
-                    {isSelected && <Check className="h-3.5 w-3.5" />}
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-xs text-gray-600 mt-2">
-              Ten en cuenta que, una vez creado, no podrás cambiar el tipo del artículo.
-            </p>
-          </div>
+        {error && (
+          <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', p: 1.5, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: '#b91c1c' }}>{error}</Typography>
+          </Box>
+        )}
 
-          <div className="space-y-1.5">
-            <Label>Nombre <span className="text-red-500">*</span></Label>
-            <Input placeholder={form.tipo === 'bien' ? 'Ej. Camisa talla M' : 'Ej. Diseño de logo'}
-              value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
-          </div>
+        {/* Nombre */}
+        <TextField
+          label={<>Nombre <span style={{ color: '#ef4444' }}>*</span></>}
+          size="small"
+          fullWidth
+          placeholder={form.tipo === 'bien' ? 'Ej. Camisa talla M' : 'Ej. Diseño de logo'}
+          value={form.nombre}
+          onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+          sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Precio (DOP) <span className="text-red-500">*</span></Label>
-              <Input type="number" min={0} step={0.01} placeholder="0.00"
-                value={form.precio} onChange={(e) => setForm((f) => ({ ...f, precio: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Impuesto (ITBIS)</Label>
-              <Select value={form.tasaItbis} onValueChange={(v) => setForm((f) => ({ ...f, tasaItbis: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TASA_ITBIS_MODAL.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Unidad de medida</Label>
-            <Select value={form.unidad} onValueChange={(v) => setForm((f) => ({ ...f, unidad: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {UNIDADES.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-              </SelectContent>
+        {/* Precio + ITBIS */}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+          <TextField
+            label={<>Precio (DOP) <span style={{ color: '#ef4444' }}>*</span></>}
+            size="small"
+            fullWidth
+            type="number"
+            placeholder="0.00"
+            value={form.precio}
+            onChange={(e) => setForm((f) => ({ ...f, precio: e.target.value }))}
+            slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+          <FormControl size="small" fullWidth>
+            <InputLabel>Impuesto (ITBIS)</InputLabel>
+            <Select
+              value={form.tasaItbis}
+              label="Impuesto (ITBIS)"
+              onChange={(e) => setForm((f) => ({ ...f, tasaItbis: e.target.value }))}
+              sx={{ borderRadius: '8px' }}
+            >
+              {TASA_ITBIS_MODAL.map((t) => (
+                <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+              ))}
             </Select>
-          </div>
+          </FormControl>
+        </Box>
 
-          {form.tipo === 'bien' && (
-            <div className="space-y-1.5">
-              <Label>Cantidad inicial en inventario</Label>
-              <Input type="number" min={0} step={1} placeholder="0"
-                value={form.cantidadInicial} onChange={(e) => setForm((f) => ({ ...f, cantidadInicial: e.target.value }))} />
-            </div>
+        {/* Unidad */}
+        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+          <InputLabel>Unidad de medida</InputLabel>
+          <Select
+            value={form.unidad}
+            label="Unidad de medida"
+            onChange={(e) => setForm((f) => ({ ...f, unidad: e.target.value }))}
+            sx={{ borderRadius: '8px' }}
+          >
+            {UNIDADES.map((u) => (
+              <MenuItem key={u} value={u}>{u}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Cantidad inicial — solo para bienes */}
+        {form.tipo === 'bien' && (
+          <TextField
+            label="Cantidad inicial en inventario"
+            size="small"
+            fullWidth
+            type="number"
+            placeholder="0"
+            value={form.cantidadInicial}
+            onChange={(e) => setForm((f) => ({ ...f, cantidadInicial: e.target.value }))}
+            slotProps={{ htmlInput: { min: 0, step: 1 } }}
+            sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+        )}
+
+        {/* Formulario avanzado toggle */}
+        <Box>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setShowAvanzado((v) => !v)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 0.75,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#0f766e', fontSize: '0.875rem', fontWeight: 500, p: 0,
+              '&:hover': { color: '#134e4a' },
+            }}
+          >
+            {showAvanzado ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            Mostrar formulario avanzado
+          </Box>
+
+          {showAvanzado && (
+            <Box sx={{ mt: 1.5, border: '1px dashed #e5e7eb', borderRadius: '8px', p: 2 }}>
+              <TextField
+                label="Descripción"
+                size="small"
+                fullWidth
+                placeholder="Descripción opcional que aparecerá en la factura"
+                value={form.descripcion}
+                onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
+            </Box>
           )}
-
-          <div>
-            <button type="button"
-              onClick={() => setShowAvanzado((v) => !v)}
-              className="flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900 font-medium">
-              {showAvanzado ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              Mostrar formulario avanzado
-            </button>
-            {showAvanzado && (
-              <div className="mt-3 space-y-3 border border-dashed border-gray-200 rounded-lg p-4">
-                <div className="space-y-1.5">
-                  <Label>Descripción</Label>
-                  <Input placeholder="Descripción opcional que aparecerá en la factura"
-                    value={form.descripcion} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => { onClose(); setError(null); }} disabled={saving}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSave} disabled={saving}>
-            {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Crear ítem'}
-          </Button>
-        </DialogFooter>
+        </Box>
       </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button
+          variant="outlined"
+          onClick={handleClose}
+          disabled={saving}
+          sx={{ textTransform: 'none', color: '#4b5563', borderColor: '#e5e7eb' }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={saving}
+          disableElevation
+          startIcon={saving ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
+          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+        >
+          {saving ? 'Guardando…' : 'Crear ítem'}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

@@ -1,10 +1,14 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import { CheckCircle, Download, Loader2, Printer } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import { CheckCircle, Download, Printer } from 'lucide-react';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 
 export function ModalPreviewPDF({
@@ -19,72 +23,149 @@ export function ModalPreviewPDF({
   onEmitir: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[calc(100%-1rem)] sm:w-full h-[95dvh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-4 pt-4 pb-3 md:px-6 border-b shrink-0">
-          <DialogTitle className="text-sm md:text-base font-semibold flex flex-wrap items-center gap-2">
-            <span className="truncate">Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}</span>
-            <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-              BORRADOR
-            </span>
-          </DialogTitle>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onClose={() => onOpenChange(false)}
+      maxWidth="lg"
+      fullWidth
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: '16px',
+            height: '95dvh',
+            maxHeight: '95dvh',
+            display: 'flex',
+            flexDirection: 'column',
+            m: { xs: 0.5, sm: 2 },
+          },
+        } as object,
+      }}
+    >
+      {/* Header */}
+      <DialogTitle
+        sx={{
+          px: { xs: 2, md: 3 },
+          pt: 2,
+          pb: 1.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 1,
+          fontSize: { xs: '0.875rem', md: '1rem' },
+          fontWeight: 600,
+        }}
+      >
+        <Typography
+          component="span"
+          variant="inherit"
+          sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}
+        </Typography>
+        <Box
+          component="span"
+          sx={{
+            fontSize: '0.75rem',
+            fontWeight: 400,
+            color: '#92400e',
+            bgcolor: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: '4px',
+            px: 0.75,
+            py: 0.25,
+          }}
+        >
+          BORRADOR
+        </Box>
+      </DialogTitle>
 
-        <div className="flex-1 min-h-0 bg-gray-100">
-          {previewUrl ? (
-            <iframe
-              src={previewUrl}
-              className="w-full h-full border-0"
-              title="Vista previa del comprobante"
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-600">
-              <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              Cargando PDF…
-            </div>
-          )}
-        </div>
-
-        <div className="px-4 py-3 md:px-6 md:py-4 border-t shrink-0 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 bg-white">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-gray-500 w-full sm:w-auto">
-            ← Volver a editar
-          </Button>
-          <div className="flex flex-wrap gap-2 justify-end">
-            {previewUrl && (
-              <>
-                <Button
-                  variant="outline" size="sm"
-                  className="flex items-center gap-1.5"
-                  onClick={() => window.open(previewUrl, '_blank')}
-                >
-                  <Printer className="h-3.5 w-3.5" />Imprimir
-                </Button>
-                <Button
-                  variant="outline" size="sm"
-                  className="flex items-center gap-1.5"
-                  onClick={() => {
-                    const a = document.createElement('a');
-                    a.href = previewUrl;
-                    a.download = 'vista-previa.pdf';
-                    a.click();
-                  }}
-                >
-                  <Download className="h-3.5 w-3.5" />Descargar
-                </Button>
-              </>
-            )}
-            <Button
-              size="sm"
-              disabled={loading}
-              className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-1.5"
-              onClick={onEmitir}
-            >
-              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
-              Emitir
-            </Button>
-          </div>
-        </div>
+      {/* PDF area */}
+      <DialogContent
+        sx={{ p: 0, flexGrow: 1, minHeight: 0, bgcolor: '#f3f4f6', display: 'flex', flexDirection: 'column' }}
+      >
+        {previewUrl ? (
+          <Box
+            component="iframe"
+            src={previewUrl}
+            title="Vista previa del comprobante"
+            sx={{ width: '100%', height: '100%', flexGrow: 1, border: 'none' }}
+          />
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexGrow: 1, color: '#4b5563', gap: 1 }}>
+            <CircularProgress size={24} sx={{ color: '#6b7280' }} />
+            <Typography variant="body2">Cargando PDF…</Typography>
+          </Box>
+        )}
       </DialogContent>
+
+      {/* Footer actions */}
+      <DialogActions
+        sx={{
+          px: { xs: 2, md: 3 },
+          py: { xs: 1.5, md: 2 },
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          flexShrink: 0,
+          bgcolor: '#fff',
+          flexDirection: { xs: 'column-reverse', sm: 'row' },
+          alignItems: { xs: 'stretch', sm: 'center' },
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
+      >
+        <Button
+          variant="text"
+          size="small"
+          onClick={() => onOpenChange(false)}
+          sx={{ textTransform: 'none', color: '#6b7280', width: { xs: '100%', sm: 'auto' } }}
+        >
+          ← Volver a editar
+        </Button>
+
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end' }}>
+          {previewUrl && (
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<Printer size={14} />}
+                onClick={() => window.open(previewUrl, '_blank')}
+                sx={{ textTransform: 'none', color: '#4b5563', borderColor: '#e5e7eb' }}
+              >
+                Imprimir
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<Download size={14} />}
+                onClick={() => {
+                  const a = document.createElement('a');
+                  a.href = previewUrl;
+                  a.download = 'vista-previa.pdf';
+                  a.click();
+                }}
+                sx={{ textTransform: 'none', color: '#4b5563', borderColor: '#e5e7eb' }}
+              >
+                Descargar
+              </Button>
+            </>
+          )}
+          <Button
+            variant="contained"
+            size="small"
+            disabled={loading}
+            onClick={onEmitir}
+            disableElevation
+            startIcon={loading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <CheckCircle size={14} />}
+            sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+          >
+            Emitir
+          </Button>
+        </Box>
+      </DialogActions>
     </Dialog>
   );
 }

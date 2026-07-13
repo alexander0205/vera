@@ -5,6 +5,8 @@ import { getUser, getTeamForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
 import { Toaster } from 'sonner';
 import { WebVitals } from './(dashboard)/dashboard/_web-vitals';
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
+import { MuiProviders } from '@/components/mui-providers';
 
 export const metadata: Metadata = {
   title: 'EmiteDO — Facturación Electrónica República Dominicana',
@@ -35,18 +37,20 @@ export default function RootLayout({
     >
       <body className="min-h-[100dvh] bg-gray-50">
         <WebVitals />
-        <SWRConfig
-          value={{
-            fallback: {
-              // We do NOT await here
-              // Only components that read this data will suspend
-              '/api/user': getUser(),
-              '/api/team': getTeamForUser()
-            }
-          }}
-        >
-          {children}
-        </SWRConfig>
+        <AppRouterCacheProvider>
+          <MuiProviders>
+            <SWRConfig
+              value={{
+                fallback: {
+                  '/api/user': getUser(),
+                  '/api/team': getTeamForUser()
+                }
+              }}
+            >
+              {children}
+            </SWRConfig>
+          </MuiProviders>
+        </AppRouterCacheProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>

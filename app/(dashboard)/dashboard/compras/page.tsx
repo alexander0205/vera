@@ -2,20 +2,22 @@
 
 import useSWR from 'swr';
 import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
 import { ShoppingCart, FileText } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
 
-// ─── Estado badge ─────────────────────────────────────────────────────────────
-
-const ESTADO_BADGE: Record<string, string> = {
-  ACEPTADO:             'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  ACEPTADO_CONDICIONAL: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  RECHAZADO:            'bg-red-50 text-red-700 ring-1 ring-red-200',
-  RECIBIDO:             'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
-  PENDIENTE:            'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
+const ESTADO_CHIP: Record<string, { label: string; bgcolor: string; color: string; border: string }> = {
+  ACEPTADO:             { label: 'Aceptado',    bgcolor: '#ecfdf5', color: '#065f46', border: '#6ee7b7' },
+  ACEPTADO_CONDICIONAL: { label: 'Condicional', bgcolor: '#fffbeb', color: '#92400e', border: '#fde68a' },
+  RECHAZADO:            { label: 'Rechazado',   bgcolor: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
+  RECIBIDO:             { label: 'Recibido',    bgcolor: '#e0f2fe', color: '#0c4a6e', border: '#7dd3fc' },
+  PENDIENTE:            { label: 'Pendiente',   bgcolor: '#f3f4f6', color: '#4b5563', border: '#d1d5db' },
 };
 
 const TIPO_LABELS: Record<string, string> = {
@@ -24,15 +26,11 @@ const TIPO_LABELS: Record<string, string> = {
   '44': 'Reg. Único',   '45': 'Gub.',    '46': 'Export.', '47': 'Otros',
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Tipo e-CF: viene null en `tipoECF`; el real está en el e-NCF (E31… → "31"). */
 export function tipoFromEncf(item: RecepcionEcfDto): string {
   const code = item.tipoECF || item.tipoComprobante || item.eNcf?.match(/^E(\d{2})/)?.[1] || '';
   return code ? (TIPO_LABELS[code] ?? `e${code}`) : '—';
 }
 
-/** El monto NO viene como campo del API — se extrae del XML firmado (<MontoTotal>, en pesos). */
 export function montoFromXml(xml?: string): number | null {
   if (!xml) return null;
   const m = xml.match(/<MontoTotal>\s*([\d.]+)\s*<\/MontoTotal>/i);
@@ -45,8 +43,6 @@ function fmtMonto(item: RecepcionEcfDto): string {
   return `RD$${v.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// ─── API response shape ───────────────────────────────────────────────────────
-
 interface ComprasResponse {
   items?: RecepcionEcfDto[];
   sinContribuyente?: boolean;
@@ -55,18 +51,15 @@ interface ComprasResponse {
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
-// ─── Columns ──────────────────────────────────────────────────────────────────
-
 const columns: DataTableColumn<RecepcionEcfDto>[] = [
   {
     id: 'emisor',
     header: 'Emisor (RNC)',
     render: item => (
-      <Link
-        href={`/dashboard/compras/${item.id}`}
-        className="font-mono text-xs text-teal-700 hover:underline font-semibold"
-      >
-        {item.rncEmisor ?? item.rnc}
+      <Link href={`/dashboard/compras/${item.id}`} style={{ textDecoration: 'none' }}>
+        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#0f766e', '&:hover': { textDecoration: 'underline' } }}>
+          {item.rncEmisor ?? item.rnc}
+        </Typography>
       </Link>
     ),
   },
@@ -74,11 +67,10 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     id: 'encf',
     header: 'e-NCF',
     render: item => (
-      <Link
-        href={`/dashboard/compras/${item.id}`}
-        className="font-mono text-xs text-gray-700 hover:underline"
-      >
-        {item.eNcf}
+      <Link href={`/dashboard/compras/${item.id}`} style={{ textDecoration: 'none' }}>
+        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#374151', '&:hover': { textDecoration: 'underline' } }}>
+          {item.eNcf}
+        </Typography>
       </Link>
     ),
   },
@@ -86,18 +78,16 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     id: 'tipo',
     header: 'Tipo',
     visibleAt: 'md',
-    render: item => (
-      <span className="text-xs text-gray-600">{tipoFromEncf(item)}</span>
-    ),
+    render: item => <Typography sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{tipoFromEncf(item)}</Typography>,
   },
   {
     id: 'fecha',
     header: 'Fecha',
     visibleAt: 'md',
     render: item => (
-      <span className="text-xs text-gray-600 tabular-nums whitespace-nowrap">
+      <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
         {fmtFechaCorta(item.fechaRecepcion ?? item.createdAt)}
-      </span>
+      </Typography>
     ),
   },
   {
@@ -106,12 +96,9 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     align: 'center',
     render: item => {
       const estado = item.estado ?? 'PENDIENTE';
+      const chip = ESTADO_CHIP[estado] ?? { label: estado, bgcolor: '#f3f4f6', color: '#6b7280', border: '#d1d5db' };
       return (
-        <span
-          className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${ESTADO_BADGE[estado] ?? 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          {estado}
-        </span>
+        <Chip label={chip.label} size="small" sx={{ bgcolor: chip.bgcolor, color: chip.color, border: `1px solid ${chip.border}`, fontSize: '0.6875rem', fontWeight: 500 }} />
       );
     },
   },
@@ -120,14 +107,12 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     header: 'Monto',
     align: 'right',
     render: item => (
-      <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
+      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
         {fmtMonto(item)}
-      </span>
+      </Typography>
     ),
   },
 ];
-
-// ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function ComprasPage() {
   const { can, isLoading: permLoading } = usePermissions();
@@ -141,41 +126,36 @@ export default function ComprasPage() {
   const loading = permLoading || swrLoading;
   const items   = data?.items ?? [];
 
-  // ── Estados especiales ──
   if (!permLoading && !can('compras:ver')) {
     return (
-      <section className="p-4 sm:p-6">
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
-          <p className="text-sm text-gray-500">No tienes permiso para ver esta sección.</p>
-        </div>
-      </section>
+      <Box sx={{ p: 3 }}>
+        <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', bgcolor: '#fff', p: 5, textAlign: 'center' }}>
+          <Typography variant="body2" sx={{ color: '#6b7280' }}>No tienes permiso para ver esta sección.</Typography>
+        </Box>
+      </Box>
     );
   }
 
-  // Hint text según estado
   const emptyHint = data?.sinContribuyente
     ? 'Configura el certificado digital y regístrate en la DGII para comenzar a recibir facturas electrónicas.'
     : 'Aquí aparecerán las e-CF que tus proveedores te emitan.';
 
   return (
-    <section className="p-4 sm:p-6 space-y-4">
-      {/* Header tipo Alegra */}
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-          <ShoppingCart className="h-5 w-5 text-teal-600" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold text-gray-900 leading-tight">Facturas recibidas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box sx={{ height: 40, width: 40, borderRadius: '12px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <ShoppingCart size={20} color="#0d9488" />
+        </Box>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', lineHeight: 1.3 }}>Facturas recibidas</Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.25 }}>
             e-CF que otros contribuyentes te han emitido y que la DGII reportó a tu empresa.
-          </p>
-        </div>
-      </div>
+          </Typography>
+        </Box>
+      </Box>
 
       {data?.error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-sm text-red-700">{data.error}</p>
-        </div>
+        <Alert severity="error" sx={{ borderRadius: '10px' }}>{data.error}</Alert>
       )}
 
       <DataTable<RecepcionEcfDto>
@@ -191,6 +171,6 @@ export default function ComprasPage() {
           hint: emptyHint,
         }}
       />
-    </section>
+    </Box>
   );
 }

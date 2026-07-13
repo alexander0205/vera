@@ -4,6 +4,15 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, X, Building2, Check } from 'lucide-react';
 import { crearEmpresa } from './actions';
 import { PLANS, FREE_PLAN, type PlanDef } from '@/lib/config/plans';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import InputLabel from '@mui/material/InputLabel';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface RncResult {
   rnc:             string;
@@ -106,67 +115,124 @@ export function NuevaEmpresaForm({ provincias }: Props) {
   const rncSeleccionado = !!rnc && !!razonSocial;
 
   return (
-    <form action={crearEmpresa} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+    <Box
+      component="form"
+      action={crearEmpresa}
+      sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}
+    >
 
       {/* ─── Buscador de empresa ──────────────────────────────────────────── */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Buscar empresa en el padrón DGII</h2>
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151', mb: 1.5 }}>
+          Buscar empresa en el padrón DGII
+        </Typography>
 
         {rncSeleccionado ? (
-          <div className="flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-3">
-            <Building2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-teal-900 text-sm truncate">{razonSocial}</p>
-              <p className="text-xs text-teal-600 font-mono">RNC {rnc}</p>
-            </div>
-            <button type="button" onClick={limpiarBusqueda} className="text-teal-500 hover:text-teal-700 flex-shrink-0">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1.5,
+            bgcolor: '#f0fdfa', border: '1px solid #99f6e4',
+            borderRadius: '8px', px: 2, py: 1.5,
+          }}>
+            <Building2 style={{ width: 16, height: 16, color: '#0d9488', flexShrink: 0 }} />
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 500, color: '#134e4a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {razonSocial}
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#0d9488', fontFamily: 'monospace' }}>
+                RNC {rnc}
+              </Typography>
+            </Box>
+            <Box
+              component="button"
+              type="button"
+              onClick={limpiarBusqueda}
+              sx={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0d9488', '&:hover': { color: '#0f766e' }, flexShrink: 0, p: 0, display: 'flex' }}
+            >
+              <X style={{ width: 16, height: 16 }} />
+            </Box>
+          </Box>
         ) : (
-          <div ref={wrapperRef} className="relative">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={e => buscar(e.target.value)}
-                onFocus={() => results.length > 0 && setOpen(true)}
-                placeholder="Nombre o RNC de la empresa..."
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-              {loading && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
-              )}
-            </div>
+          <Box ref={wrapperRef} sx={{ position: 'relative' }}>
+            <TextField
+              type="text"
+              value={query}
+              onChange={e => buscar(e.target.value)}
+              onFocus={() => results.length > 0 && setOpen(true)}
+              placeholder="Nombre o RNC de la empresa..."
+              size="small"
+              fullWidth
+              slotProps={{
+                input: {
+                  startAdornment: <Search style={{ width: 16, height: 16, color: '#9ca3af', marginRight: 8 }} />,
+                  endAdornment: loading ? <CircularProgress size={16} sx={{ color: '#0d9488' }} /> : null,
+                },
+              }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
 
             {open && results.length > 0 && (
-              <ul className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+              <Box
+                component="ul"
+                sx={{
+                  position: 'absolute', zIndex: 20, width: '100%', mt: '4px',
+                  bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.08)', maxHeight: 256,
+                  overflowY: 'auto', m: 0, p: 0, listStyle: 'none',
+                }}
+              >
                 {results.map(r => (
-                  <li key={r.rnc}>
-                    <button type="button" onClick={() => seleccionar(r)} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors">
-                      <p className="text-sm font-medium text-gray-900 truncate">{r.nombre}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs font-mono text-gray-500">{r.rnc}</span>
-                        {r.nombreComercial && <span className="text-xs text-gray-400 truncate">· {r.nombreComercial}</span>}
-                        <span className={`text-xs ml-auto flex-shrink-0 ${r.estadoLabel === 'Activo' ? 'text-green-600' : 'text-amber-600'}`}>
+                  <Box
+                    component="li"
+                    key={r.rnc}
+                    sx={{ borderBottom: '1px solid #f3f4f6', '&:last-child': { borderBottom: 'none' } }}
+                  >
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => seleccionar(r)}
+                      sx={{
+                        width: '100%', textAlign: 'left', px: 2, py: 1.5,
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        '&:hover': { bgcolor: '#f9fafb' },
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.nombre}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.25 }}>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#6b7280' }}>{r.rnc}</Typography>
+                        {r.nombreComercial && (
+                          <Typography variant="caption" sx={{ color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            · {r.nombreComercial}
+                          </Typography>
+                        )}
+                        <Typography
+                          variant="caption"
+                          sx={{ ml: 'auto', flexShrink: 0, color: r.estadoLabel === 'Activo' ? '#16a34a' : '#d97706' }}
+                        >
                           {r.estadoLabel}
-                        </span>
-                      </div>
-                    </button>
-                  </li>
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
                 ))}
-              </ul>
+              </Box>
             )}
 
             {open && !loading && results.length === 0 && query.length >= 2 && (
-              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow px-4 py-3 text-sm text-gray-400">
-                Sin resultados para "{query}"
-              </div>
+              <Box sx={{
+                position: 'absolute', zIndex: 20, width: '100%', mt: '4px',
+                bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)', px: 2, py: 1.5,
+              }}>
+                <Typography variant="body2" sx={{ color: '#9ca3af' }}>
+                  Sin resultados para &quot;{query}&quot;
+                </Typography>
+              </Box>
             )}
-          </div>
+          </Box>
         )}
-      </div>
+      </Box>
 
       {/* Campos ocultos con valores del buscador */}
       <input type="hidden" name="rnc"             value={rnc} />
@@ -174,144 +240,168 @@ export function NuevaEmpresaForm({ provincias }: Props) {
       <input type="hidden" name="nombreComercial" value={nombreComercial} />
 
       {/* ─── Datos complementarios ───────────────────────────────────────── */}
-      <div className="border-t border-gray-100 pt-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Datos complementarios</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 2.5 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151', mb: 2 }}>
+          Datos complementarios
+        </Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
 
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Razón social <span className="text-red-500">*</span>
-            </label>
-            <input
+          <Box sx={{ gridColumn: { sm: 'span 2' } }}>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+              Razón social <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+            </Typography>
+            <TextField
               value={razonSocial}
               onChange={e => setRazonSocial(e.target.value)}
               required
               placeholder="EMPRESA EJEMPLO SRL"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              size="small"
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
+          </Box>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              RNC <span className="text-red-500">*</span>
-            </label>
-            <input
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+              RNC <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+            </Typography>
+            <TextField
               value={rnc}
               onChange={e => setRnc(e.target.value)}
               required
-              maxLength={11}
+              slotProps={{ htmlInput: { maxLength: 11 } }}
               placeholder="131000000"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500"
+              size="small"
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontFamily: 'monospace' } }}
             />
-          </div>
+          </Box>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Nombre comercial</label>
-            <input
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+              Nombre comercial
+            </Typography>
+            <TextField
               value={nombreComercial}
               onChange={e => setNombreComercial(e.target.value)}
               placeholder="Empresa Ejemplo"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              size="small"
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
+          </Box>
 
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Dirección</label>
-            <input
+          <Box sx={{ gridColumn: { sm: 'span 2' } }}>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+              Dirección
+            </Typography>
+            <TextField
               name="direccion"
               value={direccion}
               onChange={e => setDireccion(e.target.value)}
               placeholder="Calle, No., Sector"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              size="small"
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
+          </Box>
 
           {/* Provincia */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Provincia</label>
-            <select
-              name="provincia"
-              value={provincia}
-              onChange={e => setProvincia(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
-            >
-              <option value="">— Seleccionar —</option>
-              {provincias.map(p => (
-                <option key={p.codigo} value={p.codigo}>
-                  {p.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+              Provincia
+            </Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                name="provincia"
+                value={provincia}
+                onChange={e => setProvincia(e.target.value)}
+                displayEmpty
+                sx={{ borderRadius: '8px' }}
+                MenuProps={{ sx: { '& .MuiPaper-root': { borderRadius: '8px' } } }}
+              >
+                <MenuItem value=""><em style={{ color: '#9ca3af' }}>— Seleccionar —</em></MenuItem>
+                {provincias.map(p => (
+                  <MenuItem key={p.codigo} value={p.codigo}>{p.nombre}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
 
           {/* Municipio — dependiente de provincia */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
               Municipio
-              {loadingMunic && (
-                <span className="ml-2 inline-block w-3 h-3 border-2 border-teal-400 border-t-transparent rounded-full animate-spin align-middle" />
-              )}
-            </label>
-            <select
-              name="municipio"
-              value={municipio}
-              onChange={e => setMunicipio(e.target.value)}
-              disabled={!provincia || loadingMunic}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white disabled:bg-gray-50 disabled:text-gray-400"
-            >
-              <option value="">
-                {!provincia ? 'Selecciona provincia primero' : loadingMunic ? 'Cargando...' : '— Seleccionar —'}
-              </option>
-              {municipios.map(m => (
-                <option key={m.codigo} value={m.codigo}>
-                  {m.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
+              {loadingMunic && <CircularProgress size={12} sx={{ color: '#0d9488' }} />}
+            </Typography>
+            <FormControl size="small" fullWidth disabled={!provincia || loadingMunic}>
+              <Select
+                name="municipio"
+                value={municipio}
+                onChange={e => setMunicipio(e.target.value)}
+                displayEmpty
+                sx={{ borderRadius: '8px' }}
+                MenuProps={{ sx: { '& .MuiPaper-root': { borderRadius: '8px' } } }}
+              >
+                <MenuItem value="">
+                  <em style={{ color: '#9ca3af' }}>
+                    {!provincia ? 'Selecciona provincia primero' : loadingMunic ? 'Cargando...' : '— Seleccionar —'}
+                  </em>
+                </MenuItem>
+                {municipios.map(m => (
+                  <MenuItem key={m.codigo} value={m.codigo}>{m.nombre}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Teléfono</label>
-            <input
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+              Teléfono
+            </Typography>
+            <TextField
               name="telefono"
               value={telefono}
               onChange={e => setTelefono(e.target.value)}
               placeholder="809-000-0000"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              size="small"
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
+          </Box>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email facturación</label>
-            <input
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+              Email facturación
+            </Typography>
+            <TextField
               name="emailFacturacion"
               type="email"
               value={emailFact}
               onChange={e => setEmailFact(e.target.value)}
               placeholder="facturas@empresa.com"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              size="small"
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
+          </Box>
 
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* ─── Plan ────────────────────────────────────────────────────────── */}
       <input type="hidden" name="planName" value={planKey} />
-      <div className="border-t border-gray-100 pt-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-1">Plan</h2>
-        <p className="text-xs text-gray-500 mb-4">
+      <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 2.5 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151', mb: 0.5 }}>Plan</Typography>
+        <Typography variant="caption" sx={{ color: '#6b7280', mb: 2, display: 'block' }}>
           Asignado manualmente — no requiere Stripe.
-        </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-
-          {/* Sin plan */}
+        </Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,1fr)', sm: 'repeat(3,1fr)' }, gap: 1 }}>
           <PlanCard
             plan={FREE_PLAN}
             selected={planKey === ''}
             onSelect={() => setPlanKey('')}
           />
-
           {PLANS.map(p => (
             <PlanCard
               key={p.key}
@@ -320,40 +410,57 @@ export function NuevaEmpresaForm({ provincias }: Props) {
               onSelect={() => setPlanKey(p.key)}
             />
           ))}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* ─── Invitación ───────────────────────────────────────────────────── */}
-      <div className="border-t border-gray-100 pt-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-1">Invitar usuario</h2>
-        <p className="text-xs text-gray-500 mb-4">
+      <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 2.5 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151', mb: 0.5 }}>Invitar usuario</Typography>
+        <Typography variant="caption" sx={{ color: '#6b7280', mb: 2, display: 'block' }}>
           Opcional — le llegará un correo para crear su cuenta y acceder a esta empresa.
-        </p>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Email del cliente</label>
-          <input
+        </Typography>
+        <Box>
+          <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+            Email del cliente
+          </Typography>
+          <TextField
             name="inviteEmail"
             type="email"
             value={inviteEmail}
             onChange={e => setInviteEmail(e.target.value)}
             placeholder="cliente@suempresa.com"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            size="small"
+            fullWidth
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <div className="flex gap-3 pt-2">
-        <button
+      <Box sx={{ display: 'flex', gap: 1.5, pt: 1 }}>
+        <Button
           type="submit"
-          className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors"
+          variant="contained"
+          disableElevation
+          sx={{
+            textTransform: 'none',
+            borderRadius: '8px',
+            bgcolor: '#0d9488',
+            fontWeight: 500,
+            '&:hover': { bgcolor: '#0f766e' },
+          }}
         >
           Crear empresa
-        </button>
-        <a href="/admin/empresas" className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2.5">
+        </Button>
+        <Button
+          component="a"
+          href="/admin/empresas"
+          variant="text"
+          sx={{ textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}
+        >
           Cancelar
-        </a>
-      </div>
-    </form>
+        </Button>
+      </Box>
+    </Box>
   );
 }
 
@@ -369,31 +476,41 @@ function PlanCard({
   const isFree = plan.price === 0;
 
   return (
-    <button
+    <Box
+      component="button"
       type="button"
       onClick={onSelect}
-      className={`relative text-left rounded-lg border-2 px-3 py-2.5 transition-all ${
-        selected
-          ? 'border-teal-500 bg-teal-50'
-          : 'border-gray-200 hover:border-gray-300 bg-white'
-      }`}
+      sx={{
+        position: 'relative', textAlign: 'left', borderRadius: '8px',
+        border: `2px solid ${selected ? '#0d9488' : '#e5e7eb'}`,
+        bgcolor: selected ? '#f0fdfa' : '#fff',
+        px: 1.5, py: 1.25, cursor: 'pointer',
+        transition: 'border-color 0.15s, background-color 0.15s',
+        '&:hover': { borderColor: selected ? '#0d9488' : '#d1d5db' },
+      }}
     >
       {selected && (
-        <span className="absolute top-2 right-2 bg-teal-500 rounded-full p-0.5">
-          <Check className="w-3 h-3 text-white" />
-        </span>
+        <Box sx={{
+          position: 'absolute', top: 8, right: 8,
+          bgcolor: '#0d9488', borderRadius: '50%', p: '2px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Check style={{ width: 12, height: 12, color: '#fff' }} />
+        </Box>
       )}
-      <p className="text-sm font-semibold text-gray-900 pr-5">{plan.name}</p>
-      <p className="text-xs text-gray-500 mt-0.5">
+      <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', pr: 2.5 }}>
+        {plan.name}
+      </Typography>
+      <Typography variant="caption" sx={{ color: '#6b7280', mt: 0.25, display: 'block' }}>
         {isFree ? 'Sin plan' : `$${plan.price}/mes`}
-      </p>
+      </Typography>
       {!isFree && (
-        <p className="text-xs text-gray-400 mt-1 leading-tight">
+        <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block', lineHeight: 1.3 }}>
           {plan.limits.docs === -1 ? '∞ docs' : `${plan.limits.docs} docs/mes`}
           {' · '}
           {plan.limits.users === -1 ? '∞ usuarios' : `${plan.limits.users} usuario${plan.limits.users !== 1 ? 's' : ''}`}
-        </p>
+        </Typography>
       )}
-    </button>
+    </Box>
   );
 }

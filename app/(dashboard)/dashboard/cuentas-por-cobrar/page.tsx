@@ -4,11 +4,23 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2,
+  Wallet, Loader2, Archive, Wallet2,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface Cuenta {
   id:                   number;
@@ -25,13 +37,9 @@ interface Cuenta {
   montoTotal:           number;
   totalItbis:           number;
   pagado:               number;
-  // saldo = saldoFactura + moraSaldo (TOTAL combinado a cobrar).
   saldo:                number;
-  // Saldo SOLO de la factura (montoTotal − pagado).
   saldoFactura:         number;
-  // Saldo combinado de las ND de mora atadas a esta factura.
   moraSaldo:            number;
-  // Lista de ND de mora con saldo > 0 (para desglose).
   moraNotas?:           { id: number; codigo: string | null; saldo: number }[];
   vencida:              boolean;
   diasVencido:          number;
@@ -46,7 +54,19 @@ interface Totales {
   countVencidas: number;
 }
 
-// ─── Componente principal ──────────────────────────────────────────────────────
+function StatCard({ icon, label, value, color }: {
+  icon: React.ReactNode; label: string; value: string; color?: string;
+}) {
+  return (
+    <Box sx={{ bgcolor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.disabled', mb: 1 }}>
+        {icon}
+        <Typography variant="caption" sx={{ fontWeight: 600 }}>{label}</Typography>
+      </Box>
+      <Typography variant="h6" sx={{ fontWeight: 700, color: color ?? 'text.primary' }}>{value}</Typography>
+    </Box>
+  );
+}
 
 export default function CuentasPorCobrarPage() {
   const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
@@ -110,74 +130,85 @@ export default function CuentasPorCobrarPage() {
       id: 'codigo',
       header: 'Código',
       render: c => (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
-            {c.codigo ?? `Factura #${c.id}`}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+          <Link href={`/dashboard/facturas/${c.id}`} style={{ textDecoration: 'none' }}>
+            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}>
+              {c.codigo ?? `Factura #${c.id}`}
+            </Typography>
           </Link>
           {isHistorica(c) && (
-            <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
-              histórica
-            </span>
+            <Chip label="histórica" size="small"
+              sx={{ height: 18, fontSize: '0.625rem', fontWeight: 600, bgcolor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', '& .MuiChip-label': { px: 0.75 } }} />
           )}
-        </div>
+        </Box>
       ),
     },
     {
       id: 'cliente',
       header: 'Cliente',
       render: c => (
-        <div className="max-w-[220px]">
-          <p className="text-sm text-gray-900 truncate">{c.razonSocialComprador ?? 'Consumidor Final'}</p>
-          {c.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{c.rncComprador}</p>}
-        </div>
+        <Box sx={{ maxWidth: 220 }}>
+          <Typography variant="body2" sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {c.razonSocialComprador ?? 'Consumidor Final'}
+          </Typography>
+          {c.rncComprador && (
+            <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace', display: 'block' }}>{c.rncComprador}</Typography>
+          )}
+        </Box>
       ),
     },
     {
       id: 'fechaEmision',
       header: 'Emisión',
       visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
+      render: c => <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fmtFechaCorta(c.fechaEmision)}</Typography>,
     },
     {
       id: 'vence',
       header: 'Vence',
       visibleAt: 'lg',
       render: c => c.fechaLimitePago ? (
-        <div>
-          <p className={`text-xs ${c.vencida ? 'text-red-700 font-medium' : 'text-gray-700'}`}>
+        <Box>
+          <Typography variant="caption" sx={{ color: c.vencida ? 'error.main' : 'text.secondary', fontWeight: c.vencida ? 700 : 400, display: 'block' }}>
             {fmtFechaCorta(c.fechaLimitePago)}
-          </p>
+          </Typography>
           {c.vencida && (
-            <p className="text-[11px] text-red-600">{c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida</p>
+            <Typography variant="caption" sx={{ color: 'error.main', display: 'block' }}>
+              {c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida
+            </Typography>
           )}
-        </div>
-      ) : <span className="text-gray-400 text-xs">—</span>,
+        </Box>
+      ) : <Typography variant="caption" sx={{ color: 'text.disabled' }}>—</Typography>,
     },
     {
       id: 'total',
       header: 'Total',
       align: 'right',
       visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600 whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
+      render: c => <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>{fmtDOP(c.montoTotal)}</Typography>,
     },
     {
       id: 'pagado',
       header: 'Pagado',
       align: 'right',
       visibleAt: 'lg',
-      render: c => <span className="text-xs text-emerald-700 whitespace-nowrap">{fmtDOP(c.pagado)}</span>,
+      render: c => <Typography variant="caption" sx={{ color: '#059669', whiteSpace: 'nowrap' }}>{fmtDOP(c.pagado)}</Typography>,
     },
     {
       id: 'saldo',
       header: 'Saldo',
       align: 'right',
       render: c => (
-        <div className="text-right">
-          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+            {fmtDOP(c.saldo)}
+          </Typography>
           {c.moraSaldo > 0 && (
-            <p className="text-[11px] text-orange-600 whitespace-nowrap">incl. mora {fmtDOP(c.moraSaldo)}</p>
+            <Typography variant="caption" sx={{ color: '#ea580c', display: 'block', whiteSpace: 'nowrap' }}>
+              incl. mora {fmtDOP(c.moraSaldo)}
+            </Typography>
           )}
-        </div>
+        </Box>
       ),
     },
   ], []);
@@ -187,55 +218,33 @@ export default function CuentasPorCobrarPage() {
   ];
 
   return (
-    <section className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1100 }}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Cuentas por cobrar</h1>
-          <p className="text-sm text-gray-500 mt-1">
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: 'space-between', gap: 2, mb: 3 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>Cuentas por cobrar</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
             Facturas a crédito pendientes de pago. Registra abonos y monitorea vencimientos.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setHistoricaModal(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
-            title="Importar factura previa al uso de emitedo (no va a DGII)"
-          >
-            <Archive className="h-4 w-4" />
-            Agregar cuenta histórica
-          </button>
-        </div>
-      </div>
+          </Typography>
+        </Box>
+        <MuiButton variant="outlined" size="small"
+          startIcon={<Archive style={{ width: 14, height: 14 }} />}
+          onClick={() => setHistoricaModal(true)}
+          title="Importar factura previa al uso de emitedo (no va a DGII)"
+          sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary', flexShrink: 0 }}>
+          Agregar cuenta histórica
+        </MuiButton>
+      </Box>
 
-      {/* Stats — reflejan el filtro activo */}
+      {/* Stats — reflejan el filtro activo (totales reactivos a cuentasFiltradas) */}
       {data && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard
-            icon={<DollarSign className="h-5 w-5" />}
-            label="Pendiente"
-            value={fmtDOP(totales.pendiente)}
-            color="text-gray-900"
-          />
-          <StatCard
-            icon={<AlertTriangle className="h-5 w-5" />}
-            label="Vencido"
-            value={fmtDOP(totales.vencido)}
-            color="text-red-600"
-          />
-          <StatCard
-            icon={<Wallet className="h-5 w-5" />}
-            label="Cuentas"
-            value={totales.count.toString()}
-            color="text-gray-900"
-          />
-          <StatCard
-            icon={<Clock className="h-5 w-5" />}
-            label="Vencidas"
-            value={totales.countVencidas.toString()}
-            color={totales.countVencidas > 0 ? 'text-red-600' : 'text-gray-900'}
-          />
-        </div>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
+          <StatCard icon={<DollarSign style={{ width: 18, height: 18 }} />} label="Pendiente" value={fmtDOP(totales.pendiente)} />
+          <StatCard icon={<AlertTriangle style={{ width: 18, height: 18 }} />} label="Vencido" value={fmtDOP(totales.vencido)} color="#dc2626" />
+          <StatCard icon={<Wallet style={{ width: 18, height: 18 }} />} label="Cuentas" value={totales.count.toString()} />
+          <StatCard icon={<Clock style={{ width: 18, height: 18 }} />} label="Vencidas" value={totales.countVencidas.toString()}
+            color={totales.countVencidas > 0 ? '#dc2626' : undefined} />
+        </Box>
       )}
 
       {/* Tabla reutilizable con filtros + agrupación */}
@@ -284,16 +293,16 @@ export default function CuentasPorCobrarPage() {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
           const venc = rows.filter(c => c.vencida).length;
           return (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-gray-800">
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>
                 {key}
-                <span className="text-gray-400 font-normal"> · {rows.length} cuenta{rows.length !== 1 ? 's' : ''}</span>
+                <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}> · {rows.length} cuenta{rows.length !== 1 ? 's' : ''}</Box>
                 {venc > 0 && (
-                  <span className="text-red-600 font-normal"> · {venc} vencida{venc !== 1 ? 's' : ''}</span>
+                  <Box component="span" sx={{ color: '#dc2626', fontWeight: 400 }}> · {venc} vencida{venc !== 1 ? 's' : ''}</Box>
                 )}
-              </span>
-              <span className="text-xs font-bold text-gray-900 whitespace-nowrap">{fmtDOP(tot)}</span>
-            </div>
+              </Typography>
+              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{fmtDOP(tot)}</Typography>
+            </Box>
           );
         }) : undefined}
         emptyState={{
@@ -305,7 +314,7 @@ export default function CuentasPorCobrarPage() {
         }}
       />
 
-      {/* Modal registrar pago */}
+      {/* Modal: Registrar pago */}
       {pagoModal && (
         <PagoModal
           cuenta={pagoModal}
@@ -314,48 +323,25 @@ export default function CuentasPorCobrarPage() {
         />
       )}
 
-      {/* Modal agregar cuenta histórica */}
+      {/* Modal: Agregar cuenta histórica */}
       {historicaModal && (
         <HistoricaModal
           onClose={() => setHistoricaModal(false)}
           onSuccess={() => { setHistoricaModal(false); cargar(); }}
         />
       )}
-    </section>
-  );
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function StatCard({ icon, label, value, color }: {
-  icon: React.ReactNode; label: string; value: string; color: string;
-}) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex items-center gap-2 text-gray-400 mb-2">
-        {icon}
-        <p className="text-xs font-medium">{label}</p>
-      </div>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
-    </div>
+    </Box>
   );
 }
 
 // ─── Modal: registrar pago ───────────────────────────────────────────────────
 
-function PagoModal({
-  cuenta, onClose, onSuccess,
-}: {
-  cuenta: Cuenta;
-  onClose: () => void;
-  onSuccess: () => void;
+function PagoModal({ cuenta, onClose, onSuccess }: {
+  cuenta: Cuenta; onClose: () => void; onSuccess: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  // saldo = saldoFactura + moraSaldo (combinado). Montos en DOP.
-  const saldoDOP        = cuenta.saldo / 100;        // combinado, disponible a abonar
-  // El repeater valida contra (total − yaPagado). Con yaPagado=0, el cap es el
-  // saldo combinado factura + mora.
-  const totalDOP  = saldoDOP;
+  const today    = new Date().toISOString().slice(0, 10);
+  const saldoDOP = cuenta.saldo / 100;
+  const totalDOP = saldoDOP;
   const pagadoDOP = 0;
   const [fecha, setFecha]         = useState(today);
   const [guardando, setGuardando] = useState(false);
@@ -395,7 +381,6 @@ function PagoModal({
           referencia:    l.referencia?.trim() || undefined,
           notaCreditoId: l.notaCreditoId ?? undefined,
         }));
-
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -412,52 +397,46 @@ function PagoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">Registrar pago</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{cuenta.codigo ?? `Factura #${cuenta.id}`}</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Saldo factura</span>
-              <span className="text-gray-700">{fmtDOP(cuenta.saldoFactura)}</span>
-            </div>
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth
+      slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+      <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
+        Registrar pago
+        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+          {cuenta.codigo ?? `Factura #${cuenta.id}`}
+        </Typography>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '12px !important' }}>
+        <Box component="form" id="pago-form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Resumen de saldo */}
+          <Box sx={{ bgcolor: 'grey.50', borderRadius: '8px', p: 1.5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Saldo factura</Typography>
+              <Typography variant="caption" sx={{ color: 'text.primary' }}>{fmtDOP(cuenta.saldoFactura)}</Typography>
+            </Box>
             {cuenta.moraSaldo > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Mora</span>
-                <span className="text-orange-600">{fmtDOP(cuenta.moraSaldo)}</span>
-              </div>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>Mora</Typography>
+                <Typography variant="caption" sx={{ color: '#ea580c' }}>{fmtDOP(cuenta.moraSaldo)}</Typography>
+              </Box>
             )}
-            <div className="flex justify-between border-t border-gray-200 pt-1 mt-1 font-medium">
-              <span className="text-gray-700">Total a cobrar</span>
-              <span className="text-gray-900">{fmtDOP(cuenta.saldo)}</span>
-            </div>
+            <Divider sx={{ my: 0.75 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Total a cobrar</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>{fmtDOP(cuenta.saldo)}</Typography>
+            </Box>
             {cuenta.moraSaldo > 0 && (
-              <p className="text-[11px] text-gray-400 pt-0.5">
+              <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.5 }}>
                 El pago cubre primero la factura; el resto se aplica a la mora.
-              </p>
+              </Typography>
             )}
-          </div>
+          </Box>
 
-          {/* Fecha (compartida) */}
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha *</label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={e => setFecha(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
+          {/* Fecha */}
+          <MuiTextField
+            label="Fecha *" type="date" value={fecha} size="small" fullWidth required
+            onChange={e => setFecha(e.target.value)}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
 
           <PagoMetodos
             lineas={lineas}
@@ -470,42 +449,29 @@ function PagoModal({
           />
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-700">{error}</p>
-            </div>
+            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+              {error}
+            </Alert>
           )}
-
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={guardando || !valido}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
-            >
-              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
-              Registrar pago
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+        <MuiButton variant="outlined" onClick={onClose} sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+        <MuiButton type="submit" form="pago-form" variant="contained" disableElevation
+          disabled={guardando || !valido}
+          startIcon={guardando ? <CircularProgress size={14} color="inherit" /> : undefined}
+          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+          Registrar pago
+        </MuiButton>
+      </DialogActions>
+    </Dialog>
   );
 }
 
-// ─── Modal: agregar cuenta histórica (factura previa, no DGII) ──────────────
+// ─── Modal: agregar cuenta histórica ─────────────────────────────────────────
 
-function HistoricaModal({
-  onClose, onSuccess,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
+function HistoricaModal({ onClose, onSuccess }: {
+  onClose: () => void; onSuccess: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const vencDefault = (() => {
@@ -514,16 +480,16 @@ function HistoricaModal({
     return d.toISOString().slice(0, 10);
   })();
 
-  const [encf, setEncf]               = useState('');
-  const [razonSocial, setRazonSocial] = useState('');
-  const [rnc, setRnc]                 = useState('');
+  const [encf, setEncf]                 = useState('');
+  const [razonSocial, setRazonSocial]   = useState('');
+  const [rnc, setRnc]                   = useState('');
   const [fechaEmision, setFechaEmision] = useState(today);
-  const [fechaLimite, setFechaLimite] = useState(vencDefault);
-  const [montoDOP, setMontoDOP]       = useState('');
-  const [yaPagadoDOP, setYaPagadoDOP] = useState('0');
-  const [notas, setNotas]             = useState('');
-  const [guardando, setGuardando]     = useState(false);
-  const [error, setError]             = useState<string | null>(null);
+  const [fechaLimite, setFechaLimite]   = useState(vencDefault);
+  const [montoDOP, setMontoDOP]         = useState('');
+  const [yaPagadoDOP, setYaPagadoDOP]   = useState('0');
+  const [notas, setNotas]               = useState('');
+  const [guardando, setGuardando]       = useState(false);
+  const [error, setError]               = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -555,153 +521,97 @@ function HistoricaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">Agregar cuenta histórica</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Factura previa al uso de EmiteDO — solo tracking de cobranza. No se envía a DGII.
-            </p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* NCF + Razón social */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">NCF / Referencia</label>
-              <input
-                type="text"
-                value={encf}
-                onChange={e => setEncf(e.target.value.toUpperCase())}
-                placeholder="B01000000001 (opcional)"
-                maxLength={40}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">Si lo dejas vacío se genera automáticamente.</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">RNC / Cédula</label>
-              <input
-                type="text"
-                value={rnc}
-                onChange={e => setRnc(e.target.value)}
-                placeholder="131988032"
-                maxLength={20}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Cliente *</label>
-            <input
-              type="text"
-              value={razonSocial}
-              onChange={e => setRazonSocial(e.target.value)}
-              required
-              placeholder="Razón social del cliente"
-              maxLength={255}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth
+      slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+      <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
+        Agregar cuenta histórica
+        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+          Factura previa al uso de EmiteDO — solo tracking de cobranza. No se envía a DGII.
+        </Typography>
+      </DialogTitle>
+      <DialogContent sx={{ pt: '12px !important' }}>
+        <Box component="form" id="historica-form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+            <MuiTextField
+              label="NCF / Referencia" placeholder="B01000000001 (opcional)"
+              value={encf} size="small" fullWidth
+              slotProps={{ htmlInput: { maxLength: 40, style: { fontFamily: 'monospace', textTransform: 'uppercase' } } }}
+              onChange={e => setEncf(e.target.value.toUpperCase())}
+              helperText="Si lo dejas vacío se genera automáticamente."
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
-
-          {/* Fechas */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha emisión *</label>
-              <input
-                type="date"
-                value={fechaEmision}
-                onChange={e => setFechaEmision(e.target.value)}
-                required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Vencimiento *</label>
-              <input
-                type="date"
-                value={fechaLimite}
-                onChange={e => setFechaLimite(e.target.value)}
-                required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-          </div>
-
-          {/* Montos */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Monto total RD$ *</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={montoDOP}
-                onChange={e => setMontoDOP(e.target.value)}
-                required
-                placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Ya pagado RD$</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={yaPagadoDOP}
-                onChange={e => setYaPagadoDOP(e.target.value)}
-                placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">Abonos previos al sistema.</p>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Notas (opcional)</label>
-            <textarea
-              value={notas}
-              onChange={e => setNotas(e.target.value)}
-              rows={2}
-              maxLength={1000}
-              placeholder="Factura preimpresa serie B01 julio 2025, etc."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            <MuiTextField
+              label="RNC / Cédula" placeholder="131988032"
+              value={rnc} size="small" fullWidth
+              slotProps={{ htmlInput: { maxLength: 20 } }}
+              onChange={e => setRnc(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
+          </Box>
+
+          <MuiTextField
+            label="Cliente *" placeholder="Razón social del cliente"
+            value={razonSocial} size="small" fullWidth required
+            slotProps={{ htmlInput: { maxLength: 255 } }}
+            onChange={e => setRazonSocial(e.target.value)}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            <MuiTextField
+              label="Fecha emisión *" type="date" value={fechaEmision} size="small" fullWidth required
+              onChange={e => setFechaEmision(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+            <MuiTextField
+              label="Vencimiento *" type="date" value={fechaLimite} size="small" fullWidth required
+              onChange={e => setFechaLimite(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+          </Box>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            <MuiTextField
+              label="Monto total RD$ *" type="number" placeholder="0.00"
+              value={montoDOP} size="small" fullWidth required
+              slotProps={{ htmlInput: { step: 0.01, min: 0.01 } }}
+              onChange={e => setMontoDOP(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+            <MuiTextField
+              label="Ya pagado RD$" type="number" placeholder="0.00"
+              value={yaPagadoDOP} size="small" fullWidth
+              slotProps={{ htmlInput: { step: 0.01, min: 0 } }}
+              onChange={e => setYaPagadoDOP(e.target.value)}
+              helperText="Abonos previos al sistema."
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+          </Box>
+
+          <MuiTextField
+            label="Notas (opcional)" placeholder="Factura preimpresa serie B01 julio 2025, etc."
+            value={notas} size="small" fullWidth multiline rows={2}
+            slotProps={{ htmlInput: { maxLength: 1000 } }}
+            onChange={e => setNotas(e.target.value)}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-700">{error}</p>
-            </div>
+            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+              {error}
+            </Alert>
           )}
-
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={guardando}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
-            >
-              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
-              Agregar cuenta
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+        <MuiButton variant="outlined" onClick={onClose} sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+        <MuiButton type="submit" form="historica-form" variant="contained" disableElevation
+          disabled={guardando}
+          startIcon={guardando ? <CircularProgress size={14} color="inherit" /> : undefined}
+          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+          Agregar cuenta
+        </MuiButton>
+      </DialogActions>
+    </Dialog>
   );
 }

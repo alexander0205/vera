@@ -1,8 +1,15 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { CreditCard, Zap, AlertCircle, TrendingUp } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import MuiButton from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import LinearProgress from '@mui/material/LinearProgress';
+import Divider from '@mui/material/Divider';
 import { getTeamIdForUser, getTeamProfile, getMonthlyEcfCount, getPlanLimit } from '@/lib/db/queries';
 import { getPlan, PLANS, getPlanPriceId } from '@/lib/config/plans';
 import { customerPortalAction } from '@/lib/payments/actions';
@@ -82,123 +89,138 @@ export default async function SuscripcionPage() {
   const planDef   = getPlan(planKey);
   const planPrice = planDef.price > 0 ? `$${planDef.price} USD/mes` : 'Gratis';
 
-  const statusLabel: Record<string, { label: string; color: string }> = {
-    active:   { label: 'Activa',    color: 'bg-green-100 text-green-700' },
-    trialing: { label: '15 días gratis', color: 'bg-blue-100 text-blue-700' },
-    canceled: { label: 'Cancelada', color: 'bg-red-100 text-red-700' },
-    unpaid:   { label: 'Sin pago',  color: 'bg-red-100 text-red-700' },
-    past_due: { label: 'Vencida',   color: 'bg-orange-100 text-orange-700' },
+  const statusLabel: Record<string, { label: string; bgcolor: string; color: string }> = {
+    active:   { label: 'Activa',         bgcolor: '#ecfdf5', color: '#065f46' },
+    trialing: { label: '15 días gratis', bgcolor: '#eff6ff', color: '#1e40af' },
+    canceled: { label: 'Cancelada',      bgcolor: '#fef2f2', color: '#991b1b' },
+    unpaid:   { label: 'Sin pago',       bgcolor: '#fef2f2', color: '#991b1b' },
+    past_due: { label: 'Vencida',        bgcolor: '#fff7ed', color: '#9a3412' },
   };
 
   const statusInfo = subStatus
-    ? (statusLabel[subStatus] ?? { label: subStatus, color: 'bg-gray-100 text-gray-700' })
+    ? (statusLabel[subStatus] ?? { label: subStatus, bgcolor: '#f3f4f6', color: '#374151' })
     : null;
 
+  const COMPARE_ROWS = [
+    { feature: 'Comprobantes/mes', starter: '200',      business: '800',      pro: 'Ilimitados' },
+    { feature: 'Usuarios',          starter: '1',        business: '3',        pro: 'Ilimitados' },
+    { feature: 'Facturas e-CF',     starter: '✓',        business: '✓',        pro: '✓' },
+    { feature: 'Clientes y prods.', starter: '—',        business: '✓',        pro: '✓' },
+    { feature: 'Cotizaciones',      starter: '—',        business: '✓',        pro: '✓' },
+    { feature: 'Reportes DGII',     starter: '—',        business: '✓',        pro: '✓' },
+    { feature: 'API REST',          starter: '—',        business: '—',        pro: '✓' },
+    { feature: 'Webhooks',          starter: '—',        business: '—',        pro: '✓' },
+    { feature: 'Precio/mes',        starter: '$15',      business: '$35',      pro: '$65' },
+  ];
+
   return (
-    <section className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Suscripción</h1>
-        <p className="text-sm text-gray-500 mt-1">Gestiona tu plan y uso mensual de comprobantes.</p>
-      </div>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 800 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+          Suscripción
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+          Gestiona tu plan y uso mensual de comprobantes.
+        </Typography>
+      </Box>
 
       {/* Dev switcher */}
       <PlanSwitcher currentPlan={planKey} />
 
       {/* Plan actual */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-teal-600" />
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+        <CardContent sx={{ p: '20px !important', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CreditCard style={{ width: 16, height: 16, color: '#0d9488' }} />
             Plan actual
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-gray-900">{planName}</span>
+          </Typography>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>{planName}</Typography>
               {statusInfo && (
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusInfo.color}`}>
-                  {statusInfo.label}
-                </span>
+                <Chip
+                  label={statusInfo.label}
+                  size="small"
+                  sx={{ bgcolor: statusInfo.bgcolor, color: statusInfo.color, fontWeight: 600, height: 22, fontSize: '0.6875rem', '& .MuiChip-label': { px: 1.25 } }}
+                />
               )}
-            </div>
+            </Box>
             {isPaid && (
-              <span className="text-lg font-semibold text-gray-700">
+              <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
                 {isTrialing ? `Gratis → ${planPrice}` : planPrice}
-              </span>
+              </Typography>
             )}
-          </div>
+          </Box>
 
           {team.stripeSubscriptionId && (
-            <p className="text-xs text-gray-400">
-              ID suscripción: <span className="font-mono">{team.stripeSubscriptionId}</span>
-            </p>
+            <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+              ID suscripción: <Box component="span" sx={{ fontFamily: 'monospace' }}>{team.stripeSubscriptionId}</Box>
+            </Typography>
           )}
 
           {/* Barra de uso */}
-          <div>
-            <div className="flex items-center justify-between text-sm mb-1.5">
-              <span className="text-gray-600 flex items-center gap-1">
-                <TrendingUp className="h-3.5 w-3.5" />
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <TrendingUp style={{ width: 14, height: 14 }} />
                 Comprobantes este mes
-              </span>
-              <span className={`font-semibold ${!isIlimitado && usoPct >= 90 ? 'text-red-600' : 'text-gray-900'}`}>
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: !isIlimitado && usoPct >= 90 ? 'error.main' : 'text.primary' }}>
                 {usadoEsteMes} {isIlimitado ? '/ ∞' : `/ ${isTrialing ? '30 (trial)' : limite}`}
-              </span>
-            </div>
-            {isIlimitado ? (
-              <div className="w-full bg-teal-100 rounded-full h-2">
-                <div className="h-2 rounded-full bg-teal-400 w-full opacity-40" />
-              </div>
-            ) : (
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    usoPct >= 90 ? 'bg-red-500' : usoPct >= 70 ? 'bg-orange-500' : 'bg-teal-500'
-                  }`}
-                  style={{ width: `${usoPct}%` }}
-                />
-              </div>
-            )}
-            <p className="text-xs text-gray-400 mt-1">
+              </Typography>
+            </Box>
+            <LinearProgress
+              variant="determinate"
+              value={isIlimitado ? 40 : usoPct}
+              sx={{
+                height: 8, borderRadius: 4, bgcolor: 'grey.100',
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 4,
+                  bgcolor: isIlimitado ? '#0d9488' : usoPct >= 90 ? 'error.main' : usoPct >= 70 ? 'warning.main' : '#0d9488',
+                  opacity: isIlimitado ? 0.4 : 1,
+                },
+              }}
+            />
+            <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
               {isIlimitado
                 ? 'Comprobantes ilimitados en tu plan.'
                 : limite > 0 && usadoEsteMes < limite
                   ? `Quedan ${limite - usadoEsteMes} comprobantes disponibles este mes.`
                   : 'Has alcanzado el límite mensual de tu plan.'}
-            </p>
-          </div>
+            </Typography>
+          </Box>
 
           {/* Acciones */}
-          <div className="flex gap-3 pt-2">
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
             {isPaid && team.stripeCustomerId ? (
               <form action={customerPortalAction}>
-                <Button type="submit" variant="outline" className="border-teal-600 text-teal-700 hover:bg-teal-50">
+                <MuiButton type="submit" variant="outlined" color="primary"
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
                   Gestionar suscripción
-                </Button>
+                </MuiButton>
               </form>
             ) : (
-              <Button asChild className="bg-teal-600 hover:bg-teal-700 text-white">
-                <Link href="/pricing">
-                  <Zap className="h-4 w-4 mr-2" />
+              <Link href="/pricing" style={{ textDecoration: 'none' }}>
+                <MuiButton variant="contained" color="primary" disableElevation
+                  startIcon={<Zap style={{ width: 16, height: 16 }} />}
+                  sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
                   Ver planes — desde $15/mes
-                </Link>
-              </Button>
+                </MuiButton>
+              </Link>
             )}
-          </div>
+          </Box>
         </CardContent>
       </Card>
 
-      {/* Cambiar plan — solo si hay suscripción activa en Stripe */}
+      {/* Cambiar plan */}
       {isPaid && team.stripeSubscriptionId && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-teal-600" />
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+          <CardContent sx={{ p: '20px !important' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <TrendingUp style={{ width: 16, height: 16, color: '#0d9488' }} />
               Cambiar plan
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </Typography>
             <ChangePlan
               plans={PLANS}
               currentPlan={planDef}
@@ -210,76 +232,79 @@ export default async function SuscripcionPage() {
       )}
 
       {/* Tabla comparativa */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Comparativa de planes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="divide-y">
-            {[
-              { feature: 'Comprobantes/mes', starter: '200',    business: '800',    pro: 'Ilimitados' },
-              { feature: 'Usuarios',          starter: '1',      business: '3',      pro: 'Ilimitados' },
-              { feature: 'Facturas e-CF',     starter: '✓',      business: '✓',      pro: '✓' },
-              { feature: 'Clientes y prods.', starter: '—',      business: '✓',      pro: '✓' },
-              { feature: 'Cotizaciones',      starter: '—',      business: '✓',      pro: '✓' },
-              { feature: 'Reportes DGII',     starter: '—',      business: '✓',      pro: '✓' },
-              { feature: 'API REST',          starter: '—',      business: '—',      pro: '✓' },
-              { feature: 'Webhooks',          starter: '—',      business: '—',      pro: '✓' },
-              { feature: 'Precio/mes',        starter: '$15',    business: '$35',    pro: '$65' },
-            ].map((row) => (
-              <div key={row.feature} className="flex items-center py-2.5 text-sm">
-                <span className="flex-1 text-gray-600">{row.feature}</span>
-                <span className={`w-20 text-center text-xs ${planKey === 'starter'  ? 'font-semibold text-teal-700' : 'text-gray-400'}`}>{row.starter}</span>
-                <span className={`w-20 text-center text-xs ${planKey === 'business' ? 'font-semibold text-teal-700' : 'text-gray-400'}`}>{row.business}</span>
-                <span className={`w-20 text-center text-xs ${planKey === 'pro'      ? 'font-semibold text-teal-700' : 'text-gray-400'}`}>{row.pro}</span>
-              </div>
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+        <CardContent sx={{ p: '20px !important' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', mb: 2 }}>
+            Comparativa de planes
+          </Typography>
+          {/* Header */}
+          <Box sx={{ display: 'flex', mb: 0.5 }}>
+            <Box sx={{ flex: 1 }} />
+            {['Starter', 'Business', 'Pro'].map((col, i) => (
+              <Typography key={col} variant="caption" sx={{ width: 80, textAlign: 'center', fontWeight: 700, color: ['starter', 'business', 'pro'][i] === planKey ? 'primary.main' : 'text.secondary' }}>
+                {col}
+              </Typography>
             ))}
-          </div>
-          <div className="flex text-xs text-gray-400 mt-1 border-t pt-2">
-            <span className="flex-1" />
-            <span className="w-20 text-center font-medium">Starter</span>
-            <span className="w-20 text-center font-medium">Business</span>
-            <span className="w-20 text-center font-medium">Pro</span>
-          </div>
+          </Box>
+          <Divider />
+          {COMPARE_ROWS.map((row, i) => (
+            <Box key={row.feature}>
+              <Box sx={{ display: 'flex', alignItems: 'center', py: 1.25 }}>
+                <Typography variant="body2" sx={{ flex: 1, color: 'text.secondary' }}>{row.feature}</Typography>
+                {(['starter', 'business', 'pro'] as const).map(col => (
+                  <Typography key={col} variant="caption" sx={{ width: 80, textAlign: 'center', fontWeight: col === planKey ? 700 : 400, color: col === planKey ? 'primary.main' : 'text.secondary' }}>
+                    {row[col]}
+                  </Typography>
+                ))}
+              </Box>
+              {i < COMPARE_ROWS.length - 1 && <Divider />}
+            </Box>
+          ))}
         </CardContent>
       </Card>
 
       {/* Uso por tipo */}
       {usagePorTipo.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Uso por tipo este mes</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {usagePorTipo.map(u => (
-                <div key={u.tipoEcf} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{TIPOS_ECF[u.tipoEcf as keyof typeof TIPOS_ECF] ?? `Tipo ${u.tipoEcf}`}</span>
-                  <span className="font-medium text-gray-900">{u.total}</span>
-                </div>
-              ))}
-            </div>
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+          <CardContent sx={{ p: '20px !important', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>
+              Uso por tipo este mes
+            </Typography>
+            {usagePorTipo.map(u => (
+              <Box key={u.tipoEcf} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {TIPOS_ECF[u.tipoEcf as keyof typeof TIPOS_ECF] ?? `Tipo ${u.tipoEcf}`}
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>{u.total}</Typography>
+              </Box>
+            ))}
           </CardContent>
         </Card>
       )}
 
       {/* Alerta límite */}
       {!isIlimitado && limite > 0 && usadoEsteMes >= limite && (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
-          <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-red-800">
-              Has alcanzado el límite de {isTrialing ? '30 (trial)' : limite} comprobantes
-            </p>
-            <p className="text-xs text-red-600 mt-0.5">
-              {planKey === 'pro' ? 'Contacta soporte para un plan Enterprise.' : 'Actualiza tu plan para emitir más comprobantes.'}
-            </p>
-            {planKey !== 'pro' && (
-              <Link href="/pricing" className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-red-700 underline">
-                <Zap className="h-3 w-3" />Ver planes →
-              </Link>
-            )}
-          </div>
-        </div>
+        <Alert
+          severity="error"
+          icon={<AlertCircle style={{ width: 18, height: 18 }} />}
+          sx={{ borderRadius: '12px' }}
+          action={planKey !== 'pro' ? (
+            <Link href="/pricing" style={{ textDecoration: 'none' }}>
+              <MuiButton size="small" color="error" startIcon={<Zap style={{ width: 12, height: 12 }} />}
+                sx={{ textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                Ver planes →
+              </MuiButton>
+            </Link>
+          ) : undefined}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            Has alcanzado el límite de {isTrialing ? '30 (trial)' : limite} comprobantes
+          </Typography>
+          <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
+            {planKey === 'pro' ? 'Contacta soporte para un plan Enterprise.' : 'Actualiza tu plan para emitir más comprobantes.'}
+          </Typography>
+        </Alert>
       )}
-    </section>
+    </Box>
   );
 }

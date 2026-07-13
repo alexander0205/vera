@@ -7,6 +7,12 @@ import {
   Settings, BarChart3, CreditCard, Shield, Activity, X,
 } from 'lucide-react';
 
+// MUI imports
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+
 const STATIC_ITEMS = [
   { group: 'Páginas', label: 'Inicio', href: '/dashboard', icon: LayoutDashboard },
   { group: 'Páginas', label: 'Contactos', href: '/dashboard/clientes', icon: Users },
@@ -30,6 +36,36 @@ interface SearchResult {
   href: string;
   type: 'factura' | 'cliente' | 'producto';
 }
+
+// Estilos de los primitivos de cmdk (input/list/empty/item) — cmdk expone
+// atributos `[cmdk-*]` para estilizar sus nodos internos. El item seleccionado
+// por teclado lleva `data-selected="true"`.
+const cmdkSx = {
+  width: '100%',
+  '& [cmdk-root]': { width: '100%' },
+  '& [cmdk-input]': {
+    flex: 1,
+    fontSize: '0.875rem',
+    outline: 'none',
+    border: 'none',
+    p: 0,
+    m: 0,
+    color: '#111827',
+    bgcolor: 'transparent',
+  },
+  '& [cmdk-input]::placeholder': { color: '#9ca3af' },
+  '& [cmdk-list]': { maxHeight: 320, overflowY: 'auto', p: 1 },
+  '& [cmdk-empty]': { py: 3, textAlign: 'center', fontSize: '0.875rem', color: '#9ca3af' },
+  '& [cmdk-item]': {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.5,
+    borderRadius: '8px',
+    cursor: 'pointer',
+  },
+  '& [cmdk-item]:hover': { bgcolor: '#f9fafb' },
+  '& [cmdk-item][data-selected="true"]': { bgcolor: '#f0fdfa' },
+} as const;
 
 export function GlobalSearch() {
   const router = useRouter();
@@ -109,114 +145,178 @@ export function GlobalSearch() {
   return (
     <>
       {/* Hidden trigger button — clicked by sidebar search button */}
-      <button
+      <Box
+        component="button"
         id="global-search-trigger"
         onClick={() => setOpen(true)}
-        className="hidden"
         aria-label="Búsqueda global"
+        sx={{ display: 'none' }}
       />
 
       {/* Modal */}
       {open && (
-        <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[10vh] px-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200">
-            <Command className="w-full" shouldFilter={false}>
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                <Search className="h-4 w-4 text-gray-400 shrink-0" />
-                <Command.Input
-                  value={query}
-                  onValueChange={setQuery}
-                  placeholder="Buscar facturas, clientes, productos..."
-                  className="flex-1 text-sm outline-none placeholder-gray-400 text-gray-900 bg-transparent"
-                  autoFocus
-                />
-                {query && (
-                  <button onClick={() => setQuery('')} className="text-gray-400 hover:text-gray-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 text-xs text-gray-400 bg-gray-100 rounded px-1.5 py-0.5">
-                  ESC
-                </kbd>
-              </div>
+        <Box
+          sx={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 200,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            pt: '10vh',
+            px: 2,
+          }}
+        >
+          <Box
+            onClick={() => setOpen(false)}
+            sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.4)' }}
+          />
+          <Paper
+            elevation={0}
+            sx={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: 512,
+              bgcolor: '#ffffff',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)',
+            }}
+          >
+            <Box sx={cmdkSx}>
+              <Command shouldFilter={false}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 2,
+                    py: 1.5,
+                    borderBottom: '1px solid #f3f4f6',
+                  }}
+                >
+                  <Search style={{ width: 16, height: 16, color: '#9ca3af', flexShrink: 0 }} />
+                  <Command.Input
+                    value={query}
+                    onValueChange={setQuery}
+                    placeholder="Buscar facturas, clientes, productos..."
+                    autoFocus
+                  />
+                  {query && (
+                    <IconButton
+                      onClick={() => setQuery('')}
+                      sx={{ p: 0.25, color: '#9ca3af', '&:hover': { color: '#4b5563', bgcolor: 'transparent' } }}
+                    >
+                      <X style={{ width: 16, height: 16 }} />
+                    </IconButton>
+                  )}
+                  <Box
+                    component="kbd"
+                    sx={{
+                      display: { xs: 'none', sm: 'inline-flex' },
+                      alignItems: 'center',
+                      gap: '2px',
+                      fontSize: '0.75rem',
+                      color: '#9ca3af',
+                      bgcolor: '#f3f4f6',
+                      borderRadius: '4px',
+                      px: 0.75,
+                      py: 0.25,
+                    }}
+                  >
+                    ESC
+                  </Box>
+                </Box>
 
-              <Command.List className="max-h-80 overflow-y-auto p-2">
-                {loading && (
-                  <Command.Empty className="py-6 text-center text-sm text-gray-400">Buscando...</Command.Empty>
-                )}
+                <Command.List>
+                  {loading && (
+                    <Command.Empty>Buscando...</Command.Empty>
+                  )}
 
-                {!loading && query.length >= 2 && results.length === 0 && (
-                  <Command.Empty className="py-6 text-center text-sm text-gray-400">
-                    Sin resultados para &ldquo;{query}&rdquo;
-                  </Command.Empty>
-                )}
+                  {!loading && query.length >= 2 && results.length === 0 && (
+                    <Command.Empty>
+                      Sin resultados para &ldquo;{query}&rdquo;
+                    </Command.Empty>
+                  )}
 
-                {results.length > 0 && (
-                  <Command.Group heading={<span className="text-xs text-gray-400 uppercase tracking-wide px-2">Resultados</span>}>
-                    {results.map(r => {
-                      const Icon = TYPE_ICON[r.type];
-                      return (
-                        <Command.Item
-                          key={`${r.type}-${r.id}`}
-                          value={`${r.type}-${r.id}`}
-                          onSelect={() => navigate(r.href)}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-gray-50 data-[selected]:bg-teal-50"
-                        >
-                          <div className="h-7 w-7 rounded-md bg-teal-100 flex items-center justify-center shrink-0">
-                            <Icon className="h-3.5 w-3.5 text-teal-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{r.label}</p>
-                            <p className="text-xs text-gray-400 truncate">{r.sublabel}</p>
-                          </div>
-                          <span className="text-xs text-gray-300">{TYPE_LABEL[r.type]}</span>
-                        </Command.Item>
-                      );
-                    })}
-                  </Command.Group>
-                )}
-
-                {(!query || query.length < 2) && (
-                  <>
-                    <Command.Group heading={<span className="text-xs text-gray-400 uppercase tracking-wide px-2">Páginas</span>}>
-                      {STATIC_ITEMS.filter(i => i.group === 'Páginas').map(item => (
-                        <Command.Item
-                          key={item.href + item.label}
-                          value={item.label}
-                          onSelect={() => navigate(item.href)}
-                          className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 data-[selected]:bg-teal-50"
-                        >
-                          <item.icon className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm text-gray-700">{item.label}</span>
-                        </Command.Item>
-                      ))}
+                  {results.length > 0 && (
+                    <Command.Group heading={<Box component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.025em', px: 1 }}>Resultados</Box>}>
+                      {results.map(r => {
+                        const Icon = TYPE_ICON[r.type];
+                        return (
+                          <Command.Item
+                            key={`${r.type}-${r.id}`}
+                            value={`${r.type}-${r.id}`}
+                            onSelect={() => navigate(r.href)}
+                            style={{ padding: '10px 12px' }}
+                          >
+                            <Box sx={{ height: 28, width: 28, borderRadius: '6px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Icon style={{ width: 14, height: 14, color: '#0d9488' }} />
+                            </Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{r.label}</Typography>
+                              <Typography noWrap sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{r.sublabel}</Typography>
+                            </Box>
+                            <Typography component="span" sx={{ fontSize: '0.75rem', color: '#d1d5db' }}>{TYPE_LABEL[r.type]}</Typography>
+                          </Command.Item>
+                        );
+                      })}
                     </Command.Group>
-                    <Command.Group heading={<span className="text-xs text-gray-400 uppercase tracking-wide px-2">Acciones rápidas</span>}>
-                      {STATIC_ITEMS.filter(i => i.group === 'Acciones').map(item => (
-                        <Command.Item
-                          key={item.label}
-                          value={item.label}
-                          onSelect={() => navigate(item.href)}
-                          className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 data-[selected]:bg-teal-50"
-                        >
-                          <item.icon className="h-4 w-4 text-teal-500" />
-                          <span className="text-sm text-gray-700">{item.label}</span>
-                        </Command.Item>
-                      ))}
-                    </Command.Group>
-                  </>
-                )}
-              </Command.List>
+                  )}
 
-              <div className="border-t border-gray-100 px-4 py-2 flex items-center gap-4 text-xs text-gray-400">
-                <span><kbd className="bg-gray-100 rounded px-1 py-0.5">↑↓</kbd> navegar</span>
-                <span><kbd className="bg-gray-100 rounded px-1 py-0.5">↵</kbd> abrir</span>
-                <span><kbd className="bg-gray-100 rounded px-1 py-0.5">Esc</kbd> cerrar</span>
-              </div>
-            </Command>
-          </div>
-        </div>
+                  {(!query || query.length < 2) && (
+                    <>
+                      <Command.Group heading={<Box component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.025em', px: 1 }}>Páginas</Box>}>
+                        {STATIC_ITEMS.filter(i => i.group === 'Páginas').map(item => (
+                          <Command.Item
+                            key={item.href + item.label}
+                            value={item.label}
+                            onSelect={() => navigate(item.href)}
+                            style={{ padding: '8px 12px' }}
+                          >
+                            <item.icon style={{ width: 16, height: 16, color: '#9ca3af' }} />
+                            <Typography component="span" sx={{ fontSize: '0.875rem', color: '#374151' }}>{item.label}</Typography>
+                          </Command.Item>
+                        ))}
+                      </Command.Group>
+                      <Command.Group heading={<Box component="span" sx={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.025em', px: 1 }}>Acciones rápidas</Box>}>
+                        {STATIC_ITEMS.filter(i => i.group === 'Acciones').map(item => (
+                          <Command.Item
+                            key={item.label}
+                            value={item.label}
+                            onSelect={() => navigate(item.href)}
+                            style={{ padding: '8px 12px' }}
+                          >
+                            <item.icon style={{ width: 16, height: 16, color: '#14b8a6' }} />
+                            <Typography component="span" sx={{ fontSize: '0.875rem', color: '#374151' }}>{item.label}</Typography>
+                          </Command.Item>
+                        ))}
+                      </Command.Group>
+                    </>
+                  )}
+                </Command.List>
+
+                <Box
+                  sx={{
+                    borderTop: '1px solid #f3f4f6',
+                    px: 2,
+                    py: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    fontSize: '0.75rem',
+                    color: '#9ca3af',
+                  }}
+                >
+                  <Box component="span"><Box component="kbd" sx={{ bgcolor: '#f3f4f6', borderRadius: '4px', px: 0.5, py: 0.25 }}>↑↓</Box> navegar</Box>
+                  <Box component="span"><Box component="kbd" sx={{ bgcolor: '#f3f4f6', borderRadius: '4px', px: 0.5, py: 0.25 }}>↵</Box> abrir</Box>
+                  <Box component="span"><Box component="kbd" sx={{ bgcolor: '#f3f4f6', borderRadius: '4px', px: 0.5, py: 0.25 }}>Esc</Box> cerrar</Box>
+                </Box>
+              </Command>
+            </Box>
+          </Paper>
+        </Box>
       )}
     </>
   );

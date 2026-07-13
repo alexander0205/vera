@@ -1,16 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Loader2, UserPlus, X } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import { UserPlus, X } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import type { Cliente } from '../utils/types';
 
@@ -67,87 +71,148 @@ export function ModalNuevoCliente({ open, onClose, onCreated }: {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <UserPlus className="h-5 w-5 text-teal-600" />Nuevo contacto
-          </DialogTitle>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onClose={() => { if (!saving) onClose(); }}
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 520, width: '100%' } } as object }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '1.125rem', fontWeight: 600 }}>
+        <UserPlus size={20} color="#0d9488" />
+        Nuevo contacto
+      </DialogTitle>
 
-        <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+      <DialogContent sx={{ pt: 1 }}>
+        {/* Tipo contacto toggle */}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, p: 0.5, bgcolor: '#f3f4f6', borderRadius: '12px', mb: 2 }}>
           {(['cliente', 'proveedor'] as const).map((t) => (
-            <button key={t} type="button"
+            <Box
+              key={t}
+              component="button"
+              type="button"
               onClick={() => setTipo(t)}
-              className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tipoContacto === t
-                  ? 'bg-teal-100 text-teal-800 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}>
-              {tipoContacto === t && <span className="h-4 w-4 rounded-full border-2 border-teal-600 flex items-center justify-center"><span className="h-2 w-2 bg-teal-600 rounded-full" /></span>}
+              sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1,
+                py: 1, borderRadius: '8px', border: 'none', cursor: 'pointer',
+                fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.15s',
+                bgcolor: tipoContacto === t ? '#ccfbf1' : 'transparent',
+                color: tipoContacto === t ? '#134e4a' : '#6b7280',
+                boxShadow: tipoContacto === t ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                '&:hover': { color: tipoContacto === t ? '#134e4a' : '#374151' },
+              }}
+            >
+              {tipoContacto === t && (
+                <Box sx={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box sx={{ width: 8, height: 8, bgcolor: '#0d9488', borderRadius: '50%' }} />
+                </Box>
+              )}
               {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
+            </Box>
           ))}
-        </div>
+        </Box>
 
-        <div className="space-y-3 py-1">
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
+        {error && (
+          <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', p: 1.5, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: '#b91c1c' }}>{error}</Typography>
+          </Box>
+        )}
 
-          <div className="space-y-1.5">
-            <Label className="text-sm">Tipo de identificación</Label>
-            <Select value={form.tipoId} onValueChange={(v) => setForm((f) => ({ ...f, tipoId: v }))}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-              <SelectContent>
-                {TIPOS_IDENTIFICACION.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Tipo de identificación */}
+        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
+          <InputLabel>Tipo de identificación</InputLabel>
+          <Select
+            value={form.tipoId}
+            label="Tipo de identificación"
+            onChange={(e) => setForm((f) => ({ ...f, tipoId: e.target.value }))}
+            sx={{ borderRadius: '8px' }}
+          >
+            {TIPOS_IDENTIFICACION.map((t) => (
+              <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
-          <div className="space-y-1.5">
-            <Label className="text-sm">RNC / Cédula</Label>
-            <RncSearch
-              placeholder="Buscar RNC, Cédula o razón social…"
-              value={form.rnc ? `${form.rnc}${form.razonSocial ? ` · ${form.razonSocial}` : ''}` : undefined}
-              onSelect={(r) => setForm((f) => ({
-                ...f,
-                rnc: r.rnc,
-                razonSocial: r.nombre,
-                tipoId: r.tipo === 'cedula' ? 'cedula' : 'rnc',
-              }))}
-              onClear={() => setForm((f) => ({ ...f, rnc: '', razonSocial: '' }))}
-              showSyncHint
-            />
-          </div>
+        {/* RNC Search */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" sx={{ mb: 0.75, fontWeight: 500, color: '#374151' }}>
+            RNC / Cédula
+          </Typography>
+          <RncSearch
+            placeholder="Buscar RNC, Cédula o razón social…"
+            value={form.rnc ? `${form.rnc}${form.razonSocial ? ` · ${form.razonSocial}` : ''}` : undefined}
+            onSelect={(r) => setForm((f) => ({
+              ...f,
+              rnc: r.rnc,
+              razonSocial: r.nombre,
+              tipoId: r.tipo === 'cedula' ? 'cedula' : 'rnc',
+            }))}
+            onClear={() => setForm((f) => ({ ...f, rnc: '', razonSocial: '' }))}
+            showSyncHint
+          />
+        </Box>
 
-          <div className="space-y-1.5">
-            <Label className="text-sm">Nombre o Razón social <span className="text-red-500">*</span></Label>
-            <Input placeholder="Empresa XYZ SRL" value={form.razonSocial} onChange={(e) => setForm((f) => ({ ...f, razonSocial: e.target.value }))} />
-          </div>
+        {/* Razón social */}
+        <TextField
+          label={<>Nombre o Razón social <span style={{ color: '#ef4444' }}>*</span></>}
+          size="small"
+          fullWidth
+          placeholder="Empresa XYZ SRL"
+          value={form.razonSocial}
+          onChange={(e) => setForm((f) => ({ ...f, razonSocial: e.target.value }))}
+          sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-sm">Correo electrónico</Label>
-              <Input type="email" placeholder="Ejemplo@email.com" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Teléfono</Label>
-              <Input placeholder="___-___-____" value={form.telefono} onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))} />
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} disabled={saving} className="flex items-center gap-1">
-            <X className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Ir a formulario avanzado
-          </Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSave} disabled={saving}>
-            {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Crear contacto'}
-          </Button>
-        </DialogFooter>
+        {/* Email + Teléfono */}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          <TextField
+            label="Correo electrónico"
+            size="small"
+            fullWidth
+            type="email"
+            placeholder="Ejemplo@email.com"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+          <TextField
+            label="Teléfono"
+            size="small"
+            fullWidth
+            placeholder="___-___-____"
+            value={form.telefono}
+            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+        </Box>
       </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button
+          variant="outlined"
+          onClick={onClose}
+          disabled={saving}
+          sx={{ textTransform: 'none', color: '#4b5563', borderColor: '#e5e7eb', minWidth: 0, px: 1.5 }}
+        >
+          <X size={16} />
+        </Button>
+        <Button
+          variant="outlined"
+          onClick={onClose}
+          disabled={saving}
+          sx={{ textTransform: 'none', color: '#4b5563', borderColor: '#e5e7eb' }}
+        >
+          Ir a formulario avanzado
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={saving}
+          disableElevation
+          startIcon={saving ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
+          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+        >
+          {saving ? 'Guardando…' : 'Crear contacto'}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

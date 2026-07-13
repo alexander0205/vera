@@ -12,6 +12,15 @@ import EcfApiSection from './_ecf-section';
 import { RoleSelect } from './_role-select';
 import { ROLE_KEYS } from '@/lib/config/roles';
 import { revalidatePath } from 'next/cache';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 
 // ─── Server Action: invitar usuario ──────────────────────────────────────────
 
@@ -221,62 +230,90 @@ export default async function EmpresaDetailPage({
   const inviteUrl = (tok: string) => `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${tok}`;
 
   return (
-    <div className="w-full space-y-6">
+    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
+
       {/* Breadcrumb */}
-      <div className="flex items-center gap-3">
-        <Link href="/admin/empresas" className="text-sm text-gray-500 hover:text-gray-700">← Empresas</Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-xl font-bold text-gray-900">{team.razonSocial ?? team.name}</h1>
-        <Link
-          href={`/admin/empresas/${teamId}/editar`}
-          className="ml-auto text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-3 py-1.5 rounded-lg transition-colors"
-        >
-          Editar
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Link href="/admin/empresas" style={{ textDecoration: 'none' }}>
+          <Typography variant="body2" sx={{ color: '#6b7280', '&:hover': { color: '#374151' } }}>
+            ← Empresas
+          </Typography>
         </Link>
-      </div>
+        <Typography variant="body2" sx={{ color: '#d1d5db' }}>/</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', fontSize: '1.1rem' }}>
+          {team.razonSocial ?? team.name}
+        </Typography>
+        <Box sx={{ ml: 'auto' }}>
+          <Link href={`/admin/empresas/${teamId}/editar`} style={{ textDecoration: 'none' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              disableElevation
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                color: '#374151',
+                borderColor: '#e5e7eb',
+                bgcolor: '#f3f4f6',
+                fontWeight: 500,
+                fontSize: '0.8125rem',
+                '&:hover': { bgcolor: '#e5e7eb', borderColor: '#d1d5db' },
+              }}
+            >
+              Editar
+            </Button>
+          </Link>
+        </Box>
+      </Box>
 
       {/* Resend warning */}
       {!resendConfigured && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3">
-          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-medium">Emails no configurados</p>
-            <p className="text-xs mt-0.5">
-              <code className="bg-amber-100 px-1 rounded">RESEND_API_KEY</code> es placeholder.
-              Las invitaciones se crean pero el correo no se envía. Copia el enlace manualmente de la sección de invitaciones pendientes.
-            </p>
-          </div>
-        </div>
+        <Box sx={{
+          display: 'flex', alignItems: 'flex-start', gap: 1.5,
+          bgcolor: '#fffbeb', border: '1px solid #fde68a',
+          borderRadius: '8px', px: 2, py: 1.5,
+        }}>
+          <AlertTriangle style={{ width: 16, height: 16, color: '#92400e', marginTop: 2, flexShrink: 0 }} />
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: '#92400e' }}>
+              Emails no configurados
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#92400e', mt: 0.5, display: 'block' }}>
+              <code style={{ background: '#fef3c7', padding: '0 4px', borderRadius: 4 }}>RESEND_API_KEY</code>
+              {' '}es placeholder. Las invitaciones se crean pero el correo no se envía. Copia el enlace manualmente de la sección de invitaciones pendientes.
+            </Typography>
+          </Box>
+        </Box>
       )}
 
       {/* Feedback */}
       {ok === 'invitado'    && <Alert color="green" msg="✓ Invitación enviada." />}
       {ok === 'eliminado'   && <Alert color="green" msg="✓ Usuario eliminado de la empresa." />}
       {ok === 'actualizado' && <Alert color="green" msg="✓ Datos actualizados correctamente." />}
-      {ok === 'vinculado_ecf'      && <Alert color="green" msg="✓ Empresa vinculada a ecf-api." />}
+      {ok === 'vinculado_ecf'        && <Alert color="green" msg="✓ Empresa vinculada a ecf-api." />}
       {ok === 'ambiente_actualizado' && <Alert color="green" msg="✓ Ambiente DGII actualizado." />}
-      {ok === 'cert_subido'        && <Alert color="green" msg="✓ Certificado subido y activado." />}
-      {ok === 'cert_revocado'      && <Alert color="green" msg="✓ Certificado revocado." />}
-      {ok === 'rango_registrado'   && <Alert color="green" msg="✓ Rango NCF registrado en ecf-api." />}
-      {ok === 'rango_eliminado'    && <Alert color="green" msg="✓ Rango desactivado." />}
-      {ok === 'token_refrescado'   && <Alert color="green" msg="✓ Token DGII refrescado." />}
-      {ok === 'reenviado'          && <Alert color="green" msg="✓ Invitación reenviada." />}
-      {error === 'ya_miembro' && <Alert color="amber" msg="⚠ Ese usuario ya es miembro." />}
-      {error === 'reenvio_fallido'      && <Alert color="amber" msg="⚠ No se pudo reenviar el correo. Revisa la configuración de Resend." />}
-      {error === 'inv_no_encontrada'    && <Alert color="amber" msg="⚠ Invitación no encontrada o ya cancelada." />}
-      {error === 'empresa_no_encontrada' && <Alert color="amber" msg="⚠ Empresa no encontrada." />}
+      {ok === 'cert_subido'          && <Alert color="green" msg="✓ Certificado subido y activado." />}
+      {ok === 'cert_revocado'        && <Alert color="green" msg="✓ Certificado revocado." />}
+      {ok === 'rango_registrado'     && <Alert color="green" msg="✓ Rango NCF registrado en ecf-api." />}
+      {ok === 'rango_eliminado'      && <Alert color="green" msg="✓ Rango desactivado." />}
+      {ok === 'token_refrescado'     && <Alert color="green" msg="✓ Token DGII refrescado." />}
+      {ok === 'reenviado'            && <Alert color="green" msg="✓ Invitación reenviada." />}
+      {error === 'ya_miembro'             && <Alert color="amber" msg="⚠ Ese usuario ya es miembro." />}
+      {error === 'reenvio_fallido'        && <Alert color="amber" msg="⚠ No se pudo reenviar el correo. Revisa la configuración de Resend." />}
+      {error === 'inv_no_encontrada'      && <Alert color="amber" msg="⚠ Invitación no encontrada o ya cancelada." />}
+      {error === 'empresa_no_encontrada'  && <Alert color="amber" msg="⚠ Empresa no encontrada." />}
       {error?.startsWith('ecf_')   && <Alert color="amber" msg={`⚠ ecf-api: ${decodeURIComponent(error.slice(4))}`} />}
       {error?.startsWith('cert_')  && <Alert color="amber" msg={`⚠ Certificado: ${decodeURIComponent(error.slice(5))}`} />}
       {error?.startsWith('rango_') && <Alert color="amber" msg={`⚠ Rango: ${decodeURIComponent(error.slice(6))}`} />}
       {error?.startsWith('token_') && <Alert color="amber" msg={`⚠ Token DGII: ${decodeURIComponent(error.slice(6))}`} />}
 
-      {/* Datos fiscales — strip horizontal compacto */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Building2 className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Datos fiscales</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+      {/* Datos fiscales */}
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <Building2 style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Datos fiscales</Typography>
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' }, gap: '12px 24px' }}>
           <Item label="RNC"          value={team.rnc} mono />
           <Item label="Razón social" value={team.razonSocial} />
           <Item label="Comercial"    value={team.nombreComercial} />
@@ -284,126 +321,150 @@ export default async function EmpresaDetailPage({
           <Item label="Teléfono"     value={team.telefono} />
           <Item label="Email fact."  value={team.emailFacturacion} />
           <Item label="Plan"         value={team.planName ?? 'Sin plan'} />
-          {/* Ambiente DGII se muestra en la sección ecf-api (fuente de verdad). */}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* Módulos del equipo */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <ToggleRight className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Módulos</h2>
-        </div>
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <p className="text-sm font-medium text-gray-800">Cuadre de Caja</p>
-            <p className="text-xs text-gray-400 mt-0.5">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <ToggleRight style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Módulos</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1 }}>
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Cuadre de Caja</Typography>
+            <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>
               Habilita el módulo de apertura, cierre y cuadre de turnos de caja para este equipo.
-            </p>
-          </div>
+            </Typography>
+          </Box>
           <form action={toggleCajaHabilitada}>
             <input type="hidden" name="teamId"    value={teamId} />
             <input type="hidden" name="habilitar" value={team.cajaHabilitada ? '0' : '1'} />
-            <button
+            <Button
               type="submit"
-              title={team.cajaHabilitada ? 'Deshabilitar caja' : 'Habilitar caja'}
-              className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${
-                team.cajaHabilitada
-                  ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
-                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-              }`}
+              variant="outlined"
+              size="small"
+              disableElevation
+              startIcon={team.cajaHabilitada
+                ? <ToggleRight style={{ width: 16, height: 16 }} />
+                : <ToggleLeft  style={{ width: 16, height: 16 }} />}
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                fontWeight: 500,
+                fontSize: '0.8125rem',
+                ...(team.cajaHabilitada
+                  ? { bgcolor: '#f0fdfa', color: '#0f766e', borderColor: '#99f6e4', '&:hover': { bgcolor: '#ccfbf1', borderColor: '#5eead4' } }
+                  : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
+                ),
+              }}
             >
-              {team.cajaHabilitada
-                ? <><ToggleRight className="w-4 h-4" /> Habilitada</>
-                : <><ToggleLeft  className="w-4 h-4" /> Deshabilitada</>}
-            </button>
+              {team.cajaHabilitada ? 'Habilitada' : 'Deshabilitada'}
+            </Button>
           </form>
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      {/* Integración ecf-api — incluye tab Habilitación */}
+      {/* Integración ecf-api */}
       <EcfApiSection teamId={teamId} rnc={team.rnc} />
 
       {/* Miembros */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
-          <Users className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Usuarios ({members.length})</h2>
-        </div>
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.5, borderBottom: '1px solid #f3f4f6' }}>
+          <Users style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>
+            Usuarios ({members.length})
+          </Typography>
+        </Box>
 
         {members.length === 0 ? (
-          <p className="text-sm text-gray-400 px-5 py-4">Sin usuarios. Invita al primero abajo.</p>
+          <Typography variant="body2" sx={{ color: '#9ca3af', px: 2.5, py: 2 }}>
+            Sin usuarios. Invita al primero abajo.
+          </Typography>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase">Usuario</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase">Rol</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase">Desde</th>
-                <th className="px-5 py-2.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>Usuario</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>Rol</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>Desde</TableCell>
+                <TableCell sx={{ borderBottom: '1px solid #f3f4f6' }} />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {(() => {
                 const ownerCount = members.filter(x => x.role === 'owner').length;
                 return members.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50">
-                  <td className="px-5 py-3">
-                    <p className="font-medium text-gray-900">{m.name ?? '—'}</p>
-                    <p className="text-xs text-gray-400">{m.email}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <RoleSelect
-                      teamId={teamId}
-                      userId={m.id}
-                      currentRole={m.role}
-                      isLastOwner={m.role === 'owner' && ownerCount <= 1}
-                      action={cambiarRolMiembro}
-                    />
-                  </td>
-                  <td className="px-5 py-3 text-xs text-gray-400">
-                    {new Date(m.joinedAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <ConfirmButton
-                      action={eliminarMiembro}
-                      message={`¿Eliminar a ${m.email} de esta empresa?`}
-                      className="text-xs text-red-500 hover:text-red-700 font-medium"
-                      fields={{ teamId, userId: m.id }}
-                    >
-                      Eliminar
-                    </ConfirmButton>
-                  </td>
-                </tr>
+                  <TableRow key={m.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                    <TableCell sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#111827' }}>{m.name ?? '—'}</Typography>
+                      <Typography variant="caption" sx={{ color: '#9ca3af' }}>{m.email}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <RoleSelect
+                        teamId={teamId}
+                        userId={m.id}
+                        currentRole={m.role}
+                        isLastOwner={m.role === 'owner' && ownerCount <= 1}
+                        action={cambiarRolMiembro}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <Typography variant="caption" sx={{ color: '#9ca3af' }}>
+                        {new Date(m.joinedAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ borderBottom: '1px solid #f9fafb' }}>
+                      <ConfirmButton
+                        action={eliminarMiembro}
+                        message={`¿Eliminar a ${m.email} de esta empresa?`}
+                        fields={{ teamId, userId: m.id }}
+                        color="error"
+                      >
+                        Eliminar
+                      </ConfirmButton>
+                    </TableCell>
+                  </TableRow>
                 ));
               })()}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Box>
 
       {/* Invitaciones pendientes */}
       {pendingInvites.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
-            <Clock className="w-4 h-4 text-gray-400" />
-            <h2 className="text-sm font-semibold text-gray-700">Invitaciones pendientes ({pendingInvites.length})</h2>
-          </div>
-          <ul className="divide-y divide-gray-50">
+        <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.5, borderBottom: '1px solid #f3f4f6' }}>
+            <Clock style={{ width: 16, height: 16, color: '#9ca3af' }} />
+            <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>
+              Invitaciones pendientes ({pendingInvites.length})
+            </Typography>
+          </Box>
+          <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none' }}>
             {pendingInvites.map(inv => (
-              <li key={inv.id} className="px-5 py-3 flex items-center gap-4">
-                <span className="text-sm text-gray-700 flex-shrink-0">{inv.email}</span>
-                <a
+              <Box
+                component="li"
+                key={inv.id}
+                sx={{ px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 2, borderBottom: '1px solid #f9fafb', '&:last-child': { borderBottom: 'none' } }}
+              >
+                <Typography variant="body2" sx={{ color: '#374151', flexShrink: 0 }}>{inv.email}</Typography>
+                <Typography
+                  component="a"
                   href={inviteUrl(inv.token)}
                   target="_blank"
-                  className="text-xs text-teal-600 hover:underline font-mono truncate flex-1 min-w-0"
+                  variant="caption"
+                  sx={{
+                    color: '#0d9488', fontFamily: 'monospace', flex: 1, minWidth: 0,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
                 >
                   {inviteUrl(inv.token)}
-                </a>
+                </Typography>
                 <ConfirmButton
                   action={reenviarInvitacion}
                   message="¿Reenviar correo de invitación?"
-                  className="text-xs text-teal-600 hover:text-teal-700 flex-shrink-0"
                   fields={{ invId: inv.id, teamId }}
                 >
                   Reenviar
@@ -411,47 +472,65 @@ export default async function EmpresaDetailPage({
                 <ConfirmButton
                   action={cancelarInvitacion}
                   message="¿Cancelar esta invitación?"
-                  className="text-xs text-gray-400 hover:text-red-500 flex-shrink-0"
                   fields={{ invId: inv.id, teamId }}
+                  color="error"
                 >
                   Cancelar
                 </ConfirmButton>
-              </li>
+              </Box>
             ))}
-          </ul>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {/* Invitar usuario */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <Mail className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-700">Invitar usuario</h2>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <Mail style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Invitar usuario</Typography>
+        </Box>
+        <Typography variant="caption" sx={{ color: '#6b7280', mb: 2, display: 'block' }}>
           {resendConfigured
             ? 'Le llegará un correo con el enlace para crear su cuenta.'
             : 'El correo no se enviará (Resend no configurado). Copia el enlace de la sección de arriba.'}
-        </p>
-        <form action={invitarUsuario} className="flex gap-3 items-end">
+        </Typography>
+        <form action={invitarUsuario}>
           <input type="hidden" name="teamId"   value={teamId} />
           <input type="hidden" name="teamName" value={team.razonSocial ?? team.name} />
-          <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-            <input
-              name="email" type="email" required placeholder="cliente@suempresa.com"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors whitespace-nowrap"
-          >
-            Enviar invitación
-          </button>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-end' }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'block' }}>
+                Email
+              </Typography>
+              <TextField
+                name="email"
+                type="email"
+                required
+                placeholder="cliente@suempresa.com"
+                size="small"
+                fullWidth
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
+            </Box>
+            <Button
+              type="submit"
+              variant="contained"
+              disableElevation
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                bgcolor: '#0d9488',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                '&:hover': { bgcolor: '#0f766e' },
+              }}
+            >
+              Enviar invitación
+            </Button>
+          </Box>
         </form>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -459,13 +538,15 @@ export default async function EmpresaDetailPage({
 
 function Alert({ color, msg }: { color: 'green' | 'amber'; msg: string }) {
   return (
-    <div className={`text-sm rounded-lg px-4 py-3 border ${
-      color === 'green'
-        ? 'bg-green-50 border-green-200 text-green-700'
-        : 'bg-amber-50 border-amber-200 text-amber-700'
-    }`}>
-      {msg}
-    </div>
+    <Box sx={{
+      px: 2, py: 1.5, borderRadius: '8px',
+      ...(color === 'green'
+        ? { bgcolor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d' }
+        : { bgcolor: '#fffbeb', border: '1px solid #fde68a', color: '#b45309' }
+      ),
+    }}>
+      <Typography variant="body2" sx={{ color: 'inherit' }}>{msg}</Typography>
+    </Box>
   );
 }
 
@@ -475,15 +556,30 @@ function Item({ label, value, mono, badge, badgeColor }: {
 }) {
   if (!value) return null;
   return (
-    <div>
-      <p className="text-xs text-gray-400">{label}</p>
+    <Box>
+      <Typography variant="caption" sx={{ color: '#9ca3af', display: 'block' }}>{label}</Typography>
       {badge ? (
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-          badgeColor === 'green' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-        }`}>{value}</span>
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-block', fontSize: '0.75rem', px: 1, py: '2px',
+            borderRadius: '999px', fontWeight: 500,
+            ...(badgeColor === 'green'
+              ? { bgcolor: '#f0fdf4', color: '#15803d' }
+              : { bgcolor: '#fffbeb', color: '#b45309' }
+            ),
+          }}
+        >
+          {value}
+        </Box>
       ) : (
-        <p className={`text-gray-800 ${mono ? 'font-mono' : ''}`}>{value}</p>
+        <Typography
+          variant="body2"
+          sx={{ color: '#1f2937', ...(mono ? { fontFamily: 'monospace' } : {}) }}
+        >
+          {value}
+        </Typography>
       )}
-    </div>
+    </Box>
   );
 }

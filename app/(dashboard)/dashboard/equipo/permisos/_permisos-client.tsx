@@ -4,20 +4,28 @@ import { useState, useMemo, useCallback } from 'react';
 import useSWR from 'swr';
 import {
   Crown, Shield, User, Eye, UserCog, Plus, Lock, ArrowLeft, Trash2,
-  Loader2, Check, Pencil, AlertTriangle,
+  Check, Pencil, AlertTriangle,
   FileText, Users, Package, FileSpreadsheet, ShoppingCart, BarChart3,
   Wallet, Settings, CreditCard,
 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Switch from '@mui/material/Switch';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogActions from '@mui/material/DialogActions';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import ButtonBase from '@mui/material/ButtonBase';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 interface PermDef { key: string; label: string }
@@ -40,9 +48,9 @@ const ICONS: Record<string, React.ElementType> = {
   FileText, Users, Package, FileSpreadsheet, ShoppingCart, BarChart3,
   Wallet, Settings, CreditCard,
 };
-function Icon({ name, className }: { name: string | null; className?: string }) {
+function Icon({ name, style }: { name: string | null; style?: React.CSSProperties }) {
   const C = (name && ICONS[name]) || UserCog;
-  return <C className={className} />;
+  return <C style={style} />;
 }
 
 const fetcher = (url: string) => fetch(url).then(r => (r.ok ? r.json() : Promise.reject(r)));
@@ -55,10 +63,18 @@ export default function PermisosClient() {
   const selected = data?.roles.find(r => r.id === selectedId) ?? null;
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-20 text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>;
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 10, color: '#9ca3af' }}>
+        <CircularProgress size={20} color="inherit" />
+      </Box>
+    );
   }
   if (!data) {
-    return <div className="py-20 text-center text-gray-500">No se pudieron cargar los roles.</div>;
+    return (
+      <Box sx={{ py: 10, textAlign: 'center', color: '#6b7280' }}>
+        No se pudieron cargar los roles.
+      </Box>
+    );
   }
 
   if (selected) {
@@ -98,53 +114,120 @@ function RolesList({ roles, onSelect, onCreate }: {
   onCreate: () => void;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Roles y permisos</h1>
-          <p className="text-sm text-gray-500">Define qué puede hacer cada rol. Aplica solo a tu empresa.</p>
-        </div>
-        <Button onClick={onCreate} className="gap-2">
-          <Plus className="h-4 w-4" /> Nuevo rol
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography variant="h1" sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827' }}>
+            Roles y permisos
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
+            Define qué puede hacer cada rol. Aplica solo a tu empresa.
+          </Typography>
+        </Box>
+        <Button
+          onClick={onCreate}
+          variant="contained"
+          startIcon={<Plus style={{ width: 16, height: 16 }} />}
+          sx={{
+            textTransform: 'none',
+            bgcolor: '#0d9488',
+            color: '#fff',
+            boxShadow: 'none',
+            '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+          }}
+        >
+          Nuevo rol
         </Button>
-      </div>
+      </Box>
 
-      <div className="space-y-2">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {roles.map(r => {
           const isOwner = r.key === 'owner';
           return (
-            <button
+            <ButtonBase
               key={r.id}
               onClick={() => onSelect(r.id)}
-              className="w-full flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-left transition-colors hover:border-gray-300 hover:bg-gray-50"
+              sx={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1.5,
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb',
+                bgcolor: '#fff',
+                px: 2,
+                py: 1.5,
+                textAlign: 'left',
+                transition: 'background-color 0.15s, border-color 0.15s',
+                '&:hover': { borderColor: '#d1d5db', bgcolor: '#f9fafb' },
+              }}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-50">
-                  <Icon name={r.icon} className="h-[18px] w-[18px] text-gray-600" />
-                </span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">{r.label}</span>
-                    <span className={`text-[10px] rounded-full px-2 py-0.5 ${r.isSystem ? 'bg-gray-100 text-gray-500' : 'bg-teal-50 text-teal-700'}`}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'flex',
+                    height: 36,
+                    width: 36,
+                    flexShrink: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '8px',
+                    bgcolor: '#f9fafb',
+                  }}
+                >
+                  <Icon name={r.icon} style={{ width: 18, height: 18, color: '#4b5563' }} />
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>
+                      {r.label}
+                    </Box>
+                    <Box
+                      component="span"
+                      sx={{
+                        fontSize: '10px',
+                        borderRadius: '9999px',
+                        px: 1,
+                        py: 0.25,
+                        ...(r.isSystem
+                          ? { bgcolor: '#f3f4f6', color: '#6b7280' }
+                          : { bgcolor: '#f0fdfa', color: '#0f766e' }),
+                      }}
+                    >
                       {r.isSystem ? 'sistema' : 'personalizado'}
-                    </span>
-                  </div>
-                  <div className="truncate text-xs text-gray-500">{r.description ?? `${r.permissions.length} permisos`}</div>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="flex items-center gap-1 text-xs text-gray-400">
-                  <User className="h-3.5 w-3.5" />{r.memberCount}
-                </span>
+                    </Box>
+                  </Box>
+                  <Box
+                    sx={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontSize: '0.75rem',
+                      color: '#6b7280',
+                    }}
+                  >
+                    {r.description ?? `${r.permissions.length} permisos`}
+                  </Box>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.5 }}>
+                <Box
+                  component="span"
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: '#9ca3af' }}
+                >
+                  <User style={{ width: 14, height: 14 }} />{r.memberCount}
+                </Box>
                 {isOwner
-                  ? <Lock className="h-4 w-4 text-gray-400" />
-                  : <Pencil className="h-4 w-4 text-gray-400" />}
-              </div>
-            </button>
+                  ? <Lock style={{ width: 16, height: 16, color: '#9ca3af' }} />
+                  : <Pencil style={{ width: 16, height: 16, color: '#9ca3af' }} />}
+              </Box>
+            </ButtonBase>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -214,127 +297,255 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
   }
 
   return (
-    <div className="space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
-        <ArrowLeft className="h-4 w-4" /> Volver a roles
-      </button>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <ButtonBase
+        onClick={onBack}
+        sx={{
+          alignSelf: 'flex-start',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+          fontSize: '0.875rem',
+          color: '#6b7280',
+          '&:hover': { color: '#1f2937' },
+        }}
+      >
+        <ArrowLeft style={{ width: 16, height: 16 }} /> Volver a roles
+      </ButtonBase>
 
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-50">
-            <Icon name={role.icon} className="h-5 w-5 text-gray-600" />
-          </span>
-          <div className="min-w-0">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+          <Box
+            component="span"
+            sx={{
+              display: 'flex',
+              height: 40,
+              width: 40,
+              flexShrink: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '8px',
+              bgcolor: '#f9fafb',
+            }}
+          >
+            <Icon name={role.icon} style={{ width: 20, height: 20, color: '#4b5563' }} />
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
             {editingLabel && !isOwner ? (
-              <Input
+              <TextField
                 autoFocus
+                size="small"
                 value={label}
                 onChange={e => { setLabel(e.target.value); setSaved(false); }}
                 onBlur={() => setEditingLabel(false)}
                 onKeyDown={e => { if (e.key === 'Enter') setEditingLabel(false); }}
-                className="h-8 w-56"
-                maxLength={60}
+                slotProps={{ htmlInput: { maxLength: 60 } }}
+                sx={{ width: 224, '& .MuiInputBase-root': { height: 32 } }}
               />
             ) : (
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold text-gray-900">{label}</h1>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h1" sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827' }}>
+                  {label}
+                </Typography>
                 {!isOwner && (
-                  <button onClick={() => setEditingLabel(true)} className="text-gray-400 hover:text-gray-700">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
+                  <IconButton
+                    onClick={() => setEditingLabel(true)}
+                    size="small"
+                    sx={{ color: '#9ca3af', p: 0.25, '&:hover': { color: '#374151', bgcolor: 'transparent' } }}
+                  >
+                    <Pencil style={{ width: 14, height: 14 }} />
+                  </IconButton>
                 )}
-                {isOwner && <Lock className="h-4 w-4 text-gray-400" />}
-              </div>
+                {isOwner && <Lock style={{ width: 16, height: 16, color: '#9ca3af' }} />}
+              </Box>
             )}
-            <p className="text-xs text-gray-500">
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
               {isOwner ? 'Acceso completo. No editable.' : role.isSystem ? 'Rol de sistema — permisos editables.' : 'Rol personalizado.'}
-            </p>
-          </div>
-        </div>
+            </Typography>
+          </Box>
+        </Box>
 
-        <div className="flex items-center gap-2">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {!role.isSystem && (
-            <Button variant="outline" onClick={() => setConfirmDelete(true)} className="gap-2 text-red-600 hover:text-red-700">
-              <Trash2 className="h-4 w-4" /> Borrar
+            <Button
+              variant="outlined"
+              onClick={() => setConfirmDelete(true)}
+              startIcon={<Trash2 style={{ width: 16, height: 16 }} />}
+              sx={{
+                textTransform: 'none',
+                color: '#dc2626',
+                borderColor: '#d1d5db',
+                '&:hover': { color: '#b91c1c', borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+              }}
+            >
+              Borrar
             </Button>
           )}
           {!isOwner && (
-            <Button onClick={save} disabled={!dirty || saving} className="gap-2 min-w-[130px]">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" />
-                : saved && !dirty ? <><Check className="h-4 w-4" /> Guardado</>
-                : 'Guardar cambios'}
+            <Button
+              onClick={save}
+              disabled={!dirty || saving}
+              variant="contained"
+              startIcon={
+                saving ? <CircularProgress size={16} color="inherit" />
+                  : saved && !dirty ? <Check style={{ width: 16, height: 16 }} />
+                  : undefined
+              }
+              sx={{
+                textTransform: 'none',
+                minWidth: 130,
+                bgcolor: '#0d9488',
+                color: '#fff',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+                '&.Mui-disabled': { bgcolor: '#0d9488', color: '#fff', opacity: 0.5 },
+              }}
+            >
+              {saving ? '' : saved && !dirty ? 'Guardado' : 'Guardar cambios'}
             </Button>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          <AlertTriangle className="h-4 w-4" /> {error}
-        </div>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            borderRadius: '8px',
+            border: '1px solid #fecaca',
+            bgcolor: '#fef2f2',
+            px: 1.5,
+            py: 1,
+            fontSize: '0.875rem',
+            color: '#b91c1c',
+          }}
+        >
+          <AlertTriangle style={{ width: 16, height: 16 }} /> {error}
+        </Box>
       )}
 
-      <Card>
-        <CardContent className="divide-y divide-gray-100 p-0">
-          {catalog.map(group => (
-            <div key={group.module} className="px-4 py-3">
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-400">
-                <Icon name={group.icon} className="h-3.5 w-3.5" /> {group.module}
-              </div>
-              <div className="space-y-1">
-                {group.permissions.map(p => {
-                  const on = isOwner || perms.has(p.key);
-                  return (
-                    <div key={p.key} className="flex items-center justify-between py-1.5">
-                      <span className="text-sm text-gray-700">{p.label}</span>
-                      <Toggle on={on} disabled={isOwner} onClick={() => toggle(p.key)} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+        {catalog.map((group, gi) => (
+          <Box key={group.module} sx={{ px: 2, py: 1.5, borderTop: gi === 0 ? 'none' : '1px solid #f3f4f6' }}>
+            <Box
+              sx={{
+                mb: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: '#9ca3af',
+              }}
+            >
+              <Icon name={group.icon} style={{ width: 14, height: 14 }} /> {group.module}
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {group.permissions.map(p => {
+                const on = isOwner || perms.has(p.key);
+                return (
+                  <Box
+                    key={p.key}
+                    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75 }}
+                  >
+                    <Box component="span" sx={{ fontSize: '0.875rem', color: '#374151' }}>{p.label}</Box>
+                    <Toggle on={on} disabled={isOwner} onClick={() => toggle(p.key)} />
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        ))}
+      </Paper>
 
       {confirmDelete && (
-        <Dialog open onOpenChange={(o) => !o && setConfirmDelete(false)}>
+        <Dialog open onClose={() => setConfirmDelete(false)} fullWidth maxWidth="xs">
+          <DialogTitle>Borrar rol &ldquo;{role.label}&rdquo;</DialogTitle>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Borrar rol &ldquo;{role.label}&rdquo;</DialogTitle>
-              <DialogDescription>
-                {role.memberCount > 0
-                  ? `${role.memberCount} usuario(s) con este rol pasarán a Vendedor.`
-                  : 'Esta acción no se puede deshacer.'}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
-              <Button onClick={doDelete} disabled={saving} className="gap-2 bg-red-600 hover:bg-red-700">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Borrar rol
-              </Button>
-            </DialogFooter>
+            <DialogContentText sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              {role.memberCount > 0
+                ? `${role.memberCount} usuario(s) con este rol pasarán a Vendedor.`
+                : 'Esta acción no se puede deshacer.'}
+            </DialogContentText>
           </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={() => setConfirmDelete(false)}
+              sx={{
+                textTransform: 'none',
+                color: '#374151',
+                borderColor: '#d1d5db',
+                '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={doDelete}
+              disabled={saving}
+              variant="contained"
+              startIcon={
+                saving ? <CircularProgress size={16} color="inherit" />
+                  : <Trash2 style={{ width: 16, height: 16 }} />
+              }
+              sx={{
+                textTransform: 'none',
+                bgcolor: '#dc2626',
+                color: '#fff',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#b91c1c', boxShadow: 'none' },
+              }}
+            >
+              Borrar rol
+            </Button>
+          </DialogActions>
         </Dialog>
       )}
-    </div>
+    </Box>
   );
 }
 
 function Toggle({ on, disabled, onClick }: { on: boolean; disabled?: boolean; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
+    <Switch
+      checked={on}
       disabled={disabled}
-      onClick={onClick}
-      className={`relative h-[22px] w-[38px] rounded-full border transition-colors ${
-        on ? 'border-teal-600 bg-teal-600' : 'border-gray-300 bg-gray-100'
-      } ${disabled ? 'opacity-60' : 'cursor-pointer'}`}
-    >
-      <span className={`absolute top-[2px] h-[16px] w-[16px] rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-[2px]'}`} />
-    </button>
+      onChange={onClick}
+      disableRipple
+      sx={{
+        width: 38,
+        height: 22,
+        padding: 0,
+        '& .MuiSwitch-switchBase': {
+          padding: '2px',
+          '&.Mui-checked': {
+            transform: 'translateX(16px)',
+            color: '#fff',
+            '& + .MuiSwitch-track': { backgroundColor: '#0d9488', borderColor: '#0d9488', opacity: 1 },
+          },
+          '&.Mui-disabled': { opacity: 0.6 },
+          '&.Mui-disabled + .MuiSwitch-track': { opacity: 0.6 },
+        },
+        '& .MuiSwitch-thumb': {
+          width: 16,
+          height: 16,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+          backgroundColor: '#fff',
+        },
+        '& .MuiSwitch-track': {
+          borderRadius: '9999px',
+          border: '1px solid #d1d5db',
+          backgroundColor: '#f3f4f6',
+          opacity: 1,
+          boxSizing: 'border-box',
+        },
+      }}
+    />
   );
 }
 
@@ -368,39 +579,76 @@ function CreateRoleDialog({ roles, onClose, onCreated }: {
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>Nuevo rol</DialogTitle>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Nuevo rol</DialogTitle>
-          <DialogDescription>Empieza desde un rol existente y ajusta sus permisos.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="role-label">Nombre del rol</Label>
-            <Input id="role-label" value={label} onChange={e => setLabel(e.target.value)}
-              placeholder="Cajero turno noche" maxLength={60} autoFocus />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Basado en</Label>
-            <Select value={basedOn} onValueChange={setBasedOn}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {roles.filter(r => r.key !== 'owner').map(r => (
-                  <SelectItem key={r.id} value={r.key}>{r.label}</SelectItem>
-                ))}
-              </SelectContent>
+        <DialogContentText sx={{ fontSize: '0.875rem', color: '#6b7280', mb: 2 }}>
+          Empieza desde un rol existente y ajusta sus permisos.
+        </DialogContentText>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <TextField
+            id="role-label"
+            label="Nombre del rol"
+            size="small"
+            fullWidth
+            value={label}
+            onChange={e => setLabel(e.target.value)}
+            placeholder="Cajero turno noche"
+            autoFocus
+            slotProps={{ htmlInput: { maxLength: 60 }, inputLabel: { shrink: true } }}
+          />
+          <FormControl size="small" fullWidth>
+            <InputLabel id="based-on-label" shrink>Basado en</InputLabel>
+            <Select
+              labelId="based-on-label"
+              label="Basado en"
+              value={basedOn}
+              onChange={e => setBasedOn(e.target.value)}
+              displayEmpty
+            >
+              {roles.filter(r => r.key !== 'owner').map(r => (
+                <MenuItem key={r.id} value={r.key}>{r.label}</MenuItem>
+              ))}
             </Select>
-            <p className="text-xs text-gray-500">Copia los permisos de ese rol como punto de partida.</p>
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={create} disabled={saving} className="gap-2">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Crear rol
-          </Button>
-        </DialogFooter>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.75 }}>
+              Copia los permisos de ese rol como punto de partida.
+            </Typography>
+          </FormControl>
+          {error && <Typography sx={{ fontSize: '0.875rem', color: '#dc2626' }}>{error}</Typography>}
+        </Box>
       </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button
+          variant="outlined"
+          onClick={onClose}
+          sx={{
+            textTransform: 'none',
+            color: '#374151',
+            borderColor: '#d1d5db',
+            '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+          }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          onClick={create}
+          disabled={saving}
+          variant="contained"
+          startIcon={
+            saving ? <CircularProgress size={16} color="inherit" />
+              : <Plus style={{ width: 16, height: 16 }} />
+          }
+          sx={{
+            textTransform: 'none',
+            bgcolor: '#0d9488',
+            color: '#fff',
+            boxShadow: 'none',
+            '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+          }}
+        >
+          Crear rol
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

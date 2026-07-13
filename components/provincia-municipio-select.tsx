@@ -15,8 +15,11 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Paper from '@mui/material/Paper';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 interface CatalogItem {
   codigo: string;
@@ -33,6 +36,7 @@ function AutocompleteInput({
   disabled,
   hasError,
   loading,
+  label,
 }: {
   value: string;
   onChange: (codigo: string) => void;
@@ -41,6 +45,7 @@ function AutocompleteInput({
   disabled?: boolean;
   hasError?: boolean;
   loading?: boolean;
+  label: string;
 }) {
   const [open, setOpen]   = useState(false);
   const [query, setQuery] = useState('');
@@ -81,34 +86,51 @@ function AutocompleteInput({
   const isDisabled = disabled || loading;
 
   return (
-    <div ref={containerRef} className="relative" onBlur={handleBlur}>
-      <Input
+    <Box ref={containerRef} sx={{ position: 'relative' }} onBlur={handleBlur}>
+      <TextField
+        size="small"
+        fullWidth
+        label={label}
         value={loading ? 'Cargando…' : query}
         disabled={isDisabled}
         placeholder={placeholder}
         autoComplete="off"
+        error={hasError}
         onChange={handleInputChange}
         onFocus={() => { if (!isDisabled) setOpen(true); }}
-        className={[
-          isDisabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : '',
-          hasError   ? 'border-red-400' : '',
-        ].filter(Boolean).join(' ')}
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
       />
       {open && filtered.length > 0 && !isDisabled && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+        <Paper
+          elevation={4}
+          sx={{
+            position: 'absolute', zIndex: 50, left: 0, right: 0, mt: 0.5,
+            borderRadius: '12px', border: '1px solid #e5e7eb',
+            maxHeight: 208, overflowY: 'auto',
+          }}
+        >
           {filtered.map(item => (
-            <button
+            <Box
               key={item.codigo}
+              component="button"
               type="button"
-              onMouseDown={e => { e.preventDefault(); select(item); }}
-              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors first:rounded-t-xl last:rounded-b-xl"
+              onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); select(item); }}
+              sx={{
+                width: '100%', textAlign: 'left', px: 2, py: 1.25,
+                fontSize: '0.875rem', color: '#374151', border: 'none',
+                bgcolor: 'transparent', cursor: 'pointer', display: 'block',
+                '&:hover': { bgcolor: '#f0fdfa', color: '#0f766e' },
+                '&:first-of-type': { borderRadius: '12px 12px 0 0' },
+                '&:last-of-type': { borderRadius: '0 0 12px 12px' },
+                transition: 'background-color 0.12s, color 0.12s',
+              }}
             >
               {item.nombre}
-            </button>
+            </Box>
           ))}
-        </div>
+        </Paper>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -125,7 +147,8 @@ export interface ProvinciaMunicipioSelectProps {
   required?: boolean;
   /** Mensajes de error por campo */
   errors?: { provincia?: string; municipio?: string };
-  className?: string;
+  /** MUI sx prop for the container grid Box */
+  sx?: SxProps<Theme>;
 }
 
 export function ProvinciaMunicipioSelect({
@@ -135,7 +158,7 @@ export function ProvinciaMunicipioSelect({
   onMunicipioChange,
   required = false,
   errors,
-  className = 'grid grid-cols-2 gap-3',
+  sx,
 }: ProvinciaMunicipioSelectProps) {
   const [provincias,   setProvincias]   = useState<CatalogItem[]>([]);
   const [municipios,   setMunicipios]   = useState<CatalogItem[]>([]);
@@ -172,14 +195,18 @@ export function ProvinciaMunicipioSelect({
     onMunicipioChange('');
   }
 
+  const defaultSx: SxProps<Theme> = {
+    display: 'grid',
+    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+    gap: 2,
+  };
+
   return (
-    <div className={className}>
+    <Box sx={sx ?? defaultSx}>
       {/* Provincia */}
-      <div>
-        <Label className="text-xs mb-1.5 block">
-          Provincia {required && <span className="text-red-500">*</span>}
-        </Label>
+      <Box>
         <AutocompleteInput
+          label={required ? 'Provincia *' : 'Provincia'}
           value={provincia}
           options={provincias}
           placeholder="Buscar provincia…"
@@ -188,16 +215,16 @@ export function ProvinciaMunicipioSelect({
           onChange={handleProvinciaChange}
         />
         {errors?.provincia && (
-          <p className="text-xs text-red-500 mt-1">{errors.provincia}</p>
+          <Typography sx={{ fontSize: '0.75rem', color: '#ef4444', mt: 0.5 }}>
+            {errors.provincia}
+          </Typography>
         )}
-      </div>
+      </Box>
 
       {/* Municipio */}
-      <div>
-        <Label className="text-xs mb-1.5 block">
-          Municipio {required && <span className="text-red-500">*</span>}
-        </Label>
+      <Box>
         <AutocompleteInput
+          label={required ? 'Municipio *' : 'Municipio'}
           value={municipio}
           options={municipios}
           placeholder={provincia ? 'Buscar municipio…' : 'Selecciona provincia primero'}
@@ -207,9 +234,11 @@ export function ProvinciaMunicipioSelect({
           onChange={onMunicipioChange}
         />
         {errors?.municipio && (
-          <p className="text-xs text-red-500 mt-1">{errors.municipio}</p>
+          <Typography sx={{ fontSize: '0.75rem', color: '#ef4444', mt: 0.5 }}>
+            {errors.municipio}
+          </Typography>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

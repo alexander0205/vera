@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect } from 'react';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { useEffect, useState } from 'react';
 import { Settings } from 'lucide-react';
 import { CATEGORIAS_ECF } from '@/lib/ecf/categorias';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import type { EmpresaPerfil, SecuenciaInfo } from '../utils/types';
 import { EmpresaBlock } from './EmpresaBlock';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 
 interface Props {
   empresa: EmpresaPerfil | null;
@@ -27,11 +28,6 @@ interface Props {
   onEditarNcf: () => void;
 }
 
-/**
- * Compact single-row header. Logo + razón social on the left; tipo selectors,
- * NCF, fecha and status badge on the right. Wraps to multi-line on small
- * screens. Replaces the previous full-width HeaderDocumento.
- */
 export function CompactHeader({
   empresa, categoriaId, setCategoriaId, tipoEcf, onChangeTipo,
   ocultarCategoria, mostrarCodigoTipo = true, sinComprobante = false,
@@ -42,12 +38,9 @@ export function CompactHeader({
   const sinNcfEfectivo = sinComprobante || !!secuencia?.sinNcf;
   const { tipoVisible } = useTiposDisponibles();
   const categoriaActual = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
-  // Filtrar por secuencias disponibles (e31/e32/sin-ncf siempre). Fallback a la
-  // lista completa si el filtro deja vacío (evita dropdown sin opciones).
   const tiposVisibles  = categoriaActual.tipos.filter(t => tipoVisible(t.codigo));
   const tiposCategoria = tiposVisibles.length ? tiposVisibles : categoriaActual.tipos;
 
-  // Auto-correct tipoEcf when category change desyncs.
   useEffect(() => {
     if (!tiposCategoria.some(t => t.codigo === tipoEcf)) {
       onChangeTipo(tiposCategoria[0].codigo);
@@ -61,103 +54,100 @@ export function CompactHeader({
   })();
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 md:px-5 md:py-4">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        {/* Logo + company */}
+    <Box sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 2.5 }, py: { xs: 1.5, md: 2 } }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '20px 10px' }}>
         <EmpresaBlock empresa={empresa} />
 
         {/* Tipos selector — categoría (oculta si fija por ruta) + subtipo. El
             subtipo solo se muestra cuando la categoría tiene más de un tipo;
             con un solo tipo (NC/ND/Compras) se rotula el documento fijo. */}
-        <div className="flex items-center gap-1 min-w-0">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
           {!ocultarCategoria && (
             <Select
               value={categoriaId}
-              onValueChange={(catId) => {
-                // Radix emite '' cuando el item seleccionado se desmonta — ignorar.
+              onChange={(e) => {
+                const catId = e.target.value;
                 if (!catId) return;
                 const cat = CATEGORIAS_ECF.find(c => c.id === catId) ?? CATEGORIAS_ECF[0];
                 setCategoriaId(catId);
                 onChangeTipo(cat.tipos[0].codigo);
               }}
+              variant="standard"
+              disableUnderline
+              sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151', '& .MuiSelect-select': { py: 0, pr: '20px !important' } }}
             >
-              <SelectTrigger className="border-0 bg-transparent text-gray-700 hover:text-gray-900 text-sm font-medium h-8 px-2 shadow-none focus:ring-0 gap-1 w-auto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORIAS_ECF.map(cat => (
-                  <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>
-                ))}
-              </SelectContent>
+              {CATEGORIAS_ECF.map(cat => (
+                <MenuItem key={cat.id} value={cat.id} sx={{ fontSize: '0.875rem' }}>{cat.label}</MenuItem>
+              ))}
             </Select>
           )}
           {ocultarCategoria && (
-            <span className="text-sm font-semibold text-gray-800 px-1">{categoriaActual.label}</span>
+            <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937', px: 0.5 }}>{categoriaActual.label}</Typography>
           )}
           {tiposCategoria.length > 1 ? (
-            <Select value={tipoEcf} onValueChange={(v) => { if (v) onChangeTipo(v); }}>
-              <SelectTrigger className="border-0 bg-transparent text-teal-700 font-medium text-xs h-7 px-2 shadow-none focus:ring-0 gap-1 w-auto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {tiposCategoria.map(t => (
-                  <SelectItem key={t.codigo} value={t.codigo}>{t.etiqueta}</SelectItem>
-                ))}
-              </SelectContent>
+            <Select
+              value={tipoEcf}
+              onChange={(e) => { if (e.target.value) onChangeTipo(e.target.value); }}
+              variant="standard"
+              disableUnderline
+              sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#0f766e', '& .MuiSelect-select': { py: 0, pr: '20px !important' } }}
+            >
+              {tiposCategoria.map(t => (
+                <MenuItem key={t.codigo} value={t.codigo} sx={{ fontSize: '0.75rem' }}>{t.etiqueta}</MenuItem>
+              ))}
             </Select>
           ) : mostrarCodigoTipo ? (
-            <span className="text-teal-700 font-medium text-xs px-2">{tiposCategoria[0]?.etiqueta}</span>
+            <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#0f766e', px: 1 }}>{tiposCategoria[0]?.etiqueta}</Typography>
           ) : null}
-        </div>
+        </Box>
 
         {/* NCF block */}
-        <div className="flex items-center gap-2 min-w-0">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           {!sinNcfEfectivo && (
-            <span className="text-[11px] uppercase font-medium text-gray-500 tracking-wide">NCF</span>
+            <Typography sx={{ fontSize: '0.6875rem', textTransform: 'uppercase', fontWeight: 500, color: '#6b7280', letterSpacing: '0.04em' }}>NCF</Typography>
           )}
           {sinNcfEfectivo ? (
-            <span className="text-[11px] text-gray-600 bg-gray-100 border border-gray-200 rounded px-2 py-0.5 font-medium">Sin comprobante fiscal</span>
+            <Box component="span" sx={{ fontSize: '0.6875rem', color: '#374151', bgcolor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '4px', px: 1, py: '2px', fontWeight: 500 }}>Sin comprobante fiscal</Box>
           ) : secuencia === null ? (
-            <span className="font-mono text-sm text-gray-300 animate-pulse">Cargando…</span>
+            <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#d1d5db' }}>Cargando…</Typography>
           ) : secuencia.encf ? (
-            <span className="font-mono text-sm font-bold text-gray-900 break-all">{secuencia.encf}</span>
+            <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#111827', wordBreak: 'break-all' }}>{secuencia.encf}</Typography>
           ) : secuencia.sinSecuencia ? (
-            <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Sin secuencias</span>
+            <Box component="span" sx={{ fontSize: '0.6875rem', color: '#92400e', bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', px: 1, py: '2px' }}>Sin secuencias</Box>
           ) : secuencia.agotada ? (
-            <span className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">Agotadas</span>
+            <Box component="span" sx={{ fontSize: '0.6875rem', color: '#991b1b', bgcolor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '4px', px: 1, py: '2px' }}>Agotadas</Box>
           ) : secuencia.vencida ? (
-            <span className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">Vencidas</span>
+            <Box component="span" sx={{ fontSize: '0.6875rem', color: '#991b1b', bgcolor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '4px', px: 1, py: '2px' }}>Vencidas</Box>
           ) : (
-            <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Sin disponibles</span>
+            <Box component="span" sx={{ fontSize: '0.6875rem', color: '#92400e', bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', px: 1, py: '2px' }}>Sin disponibles</Box>
           )}
           {!sinNcfEfectivo && (
-            <button
+            <Box
+              component="button"
               type="button"
               onClick={onEditarNcf}
               aria-label="Configurar secuencia NCF"
-              className="text-gray-400 hover:text-gray-700 p-1 -m-1"
+              sx={{ color: '#9ca3af', '&:hover': { color: '#374151' }, p: '4px', m: '-4px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
             >
-              <Settings className="h-3.5 w-3.5" />
-            </button>
+              <Settings size={14} />
+            </Box>
           )}
-        </div>
+        </Box>
 
-        {/* Fecha */}
-        <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-gray-500">Fecha:</span>
-          <span className="font-medium text-gray-900">{fechaFmt}</span>
-        </div>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem' }}>
+          <Typography component="span" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Fecha:</Typography>
+          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#111827' }}>{fechaFmt}</Typography>
+        </Box>
 
-        {/* Estado */}
-        <div className="ml-auto flex items-center gap-1.5 text-xs">
-          <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
-          <span className="font-medium text-gray-700">Borrador</span>
-        </div>
-      </div>
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ height: 8, width: 8, borderRadius: '50%', bgcolor: '#fbbf24' }} aria-hidden />
+          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151' }}>Borrador</Typography>
+        </Box>
+      </Box>
 
       {secuencia?.disponibles !== undefined && secuencia.disponibles < 50 && secuencia.disponibles > 0 && (
-        <p className="text-[11px] text-amber-600 mt-2">{secuencia.disponibles} NCF restantes</p>
+        <Typography sx={{ fontSize: '0.6875rem', color: '#d97706', mt: 1 }}>{secuencia.disponibles} NCF restantes</Typography>
       )}
-    </div>
+    </Box>
   );
 }

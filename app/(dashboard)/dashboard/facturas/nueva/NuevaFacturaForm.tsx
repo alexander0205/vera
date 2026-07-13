@@ -4,8 +4,13 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Typography,
+} from '@mui/material';
 import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
   StickyNote, ScrollText, MessageSquare, CreditCard, Send,
@@ -1023,114 +1028,221 @@ export default function NuevaFacturaForm({
     const esSinEcf = resultado.modo === 'borrador';
     const esNotaBorrador = esSinEcf && (tipoEcf === '33' || tipoEcf === '34');
     return (
-      <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-md p-5 sm:p-8 text-center">
-            <CheckCircle className="h-16 w-16 text-teal-500 mx-auto mb-4" />
+      <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: { xs: 2, sm: 3 } }}>
+        <Box sx={{ maxWidth: 672, mx: 'auto' }}>
+          <Box
+            sx={{
+              bgcolor: '#fff',
+              borderRadius: '16px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+              p: { xs: 2.5, sm: 4 },
+              textAlign: 'center',
+            }}
+          >
+            <CheckCircle
+              style={{ width: 64, height: 64, color: '#0d9488', margin: '0 auto 16px' }}
+            />
             {esNotaBorrador ? (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
                   ¡{tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} guardada!
-                </h2>
-                <p className="text-gray-500 mb-6">
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
                   La nota quedó como borrador{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
-                </p>
+                </Typography>
               </>
             ) : esSinEcf ? (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Factura guardada!</h2>
-                <p className="text-gray-500 mb-6">Tu factura fue guardada correctamente.</p>
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
+                  ¡Factura guardada!
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+                  Tu factura fue guardada correctamente.
+                </Typography>
               </>
             ) : (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Comprobante emitido!</h2>
-                <p className="text-gray-500 mb-6">Tu e-CF fue enviado a la DGII exitosamente.</p>
+                <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
+                  ¡Comprobante emitido!
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+                  Tu e-CF fue enviado a la DGII exitosamente.
+                </Typography>
               </>
             )}
-            <div className="bg-gray-50 rounded-xl p-6 text-left space-y-3 border border-gray-100 mb-6">
+
+            <Box
+              sx={{
+                bgcolor: '#f9fafb',
+                borderRadius: '12px',
+                p: 3,
+                textAlign: 'left',
+                border: '1px solid #f3f4f6',
+                mb: 3,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1.5,
+              }}
+            >
               {!esSinEcf && resultado.encf && (
-                <div className="flex justify-between"><span className="text-sm text-gray-500">e-NCF</span><span className="font-mono font-bold">{resultado.encf}</span></div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">e-NCF</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{resultado.encf}</Typography>
+                </Box>
               )}
               {!esSinEcf && resultado.trackId && (
-                <div className="flex justify-between"><span className="text-sm text-gray-500">Track ID</span><span className="font-mono text-sm">{resultado.trackId}</span></div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">Track ID</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{resultado.trackId}</Typography>
+                </Box>
               )}
               {!esSinEcf && resultado.codigoSeguridad && (
-                <div className="flex justify-between"><span className="text-sm text-gray-500">Código de seguridad</span><span className="font-mono font-bold text-teal-700 text-lg">{resultado.codigoSeguridad}</span></div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">Código de seguridad</Typography>
+                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f766e' }}>{resultado.codigoSeguridad}</Typography>
+                </Box>
               )}
-              <div className="flex justify-between"><span className="text-sm text-gray-500">Monto total</span><span className="font-bold">DOP {(resultado.montoTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span></div>
-              {/* Fila cobro — solo en modo borrador (sin-ncf / sin DGII) */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">Monto total</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  DOP {(resultado.montoTotal ?? 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                </Typography>
+              </Box>
               {resultado.modo === 'borrador' && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Cobro</span>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">Cobro</Typography>
                   {resultado.pagoRecibido ? (
-                    <span className="text-sm font-medium text-emerald-700">
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'success.dark' }}>
                       ✓ Cobrado
                       {resultado.pagoMetodo ? ` · ${resultado.pagoMetodo.charAt(0).toUpperCase() + resultado.pagoMetodo.slice(1).replace('_', ' ')}` : ''}
                       {resultado.pagoValor != null ? ` · DOP ${resultado.pagoValor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : ''}
-                    </span>
+                    </Typography>
                   ) : (
-                    <span className="text-sm font-medium text-amber-600">⏳ Pendiente de cobro</span>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'warning.dark' }}>
+                      ⏳ Pendiente de cobro
+                    </Typography>
                   )}
-                </div>
+                </Box>
               )}
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">Estado</span>
-                <Badge variant="outline">
-                  {resultado.modo === 'borrador'
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Estado</Typography>
+                <Chip
+                  label={resultado.modo === 'borrador'
                     ? (resultado.pagoRecibido ? 'Pagada' : 'Guardada')
                     : resultado.estado}
-                </Badge>
-              </div>
-            </div>
-            {/* Nota en borrador → elección explícita: emitir ahora o dejar borrador.
-                Nunca obligatorio — emitir requiere que la factura padre tenga e-CF. */}
+                  size="small"
+                  variant="outlined"
+                />
+              </Box>
+            </Box>
+
             {esNotaBorrador && (
-              <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-left mb-6">
-                <p className="text-sm text-teal-900 mb-3">
+              <Box
+                sx={{
+                  bgcolor: '#f0fdfa',
+                  border: '1px solid #ccfbf1',
+                  borderRadius: '12px',
+                  p: 2,
+                  textAlign: 'left',
+                  mb: 3,
+                }}
+              >
+                <Typography variant="body2" sx={{ color: '#134e4a', mb: 1.5 }}>
                   ¿Deseas enviar esta nota a la DGII ahora? Solo es posible si la
                   factura original ya tiene e-CF emitido. También puedes dejarla
                   como borrador y emitirla después desde su detalle.
-                </p>
-                <div className="flex gap-3 flex-wrap">
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                   <Button
-                    className="bg-teal-600 hover:bg-teal-700 text-white"
+                    variant="contained"
+                    disableElevation
                     disabled={padreNota ? (!padreNota.conEcfReal && !ncfModificadoValido) : false}
                     onClick={() => router.push(`${detalleBase}/${resultado.documentoId}?emitir=1`)}
+                    startIcon={<Send style={{ width: 16, height: 16 }} />}
+                    sx={{
+                      bgcolor: '#0d9488',
+                      '&:hover': { bgcolor: '#0f766e' },
+                      textTransform: 'none',
+                      borderRadius: '8px',
+                    }}
                   >
-                    <Send className="h-4 w-4 mr-1.5" />
                     Enviar a DGII ahora
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="outlined"
+                    disableElevation
                     onClick={() => router.push(`${detalleBase}/${resultado.documentoId}`)}
+                    sx={{ textTransform: 'none', borderRadius: '8px' }}
                   >
                     Dejar como borrador
                   </Button>
-                </div>
+                </Box>
                 {padreNota && !padreNota.conEcfReal && !ncfModificadoValido && (
-                  <p className="text-xs text-amber-700 mt-2">
+                  <Typography variant="caption" color="warning.dark" sx={{ display: 'block', mt: 1 }}>
                     Escribe el e-NCF original en la nota para poder enviarla a la DGII, o emite primero la factura padre.
-                  </p>
+                  </Typography>
                 )}
-              </div>
+              </Box>
             )}
-            <div className="flex gap-3 justify-center flex-wrap">
-              <Button variant="outline" asChild><a href={`/api/pdf/factura/${resultado.documentoId}`} target="_blank" rel="noreferrer">Descargar PDF</a></Button>
-              <Button variant="outline" asChild><Link href={`${detalleBase}/${resultado.documentoId}`}>Ver detalle</Link></Button>
-              <Button variant="outline" onClick={() => { try { localStorage.removeItem(draftKey); } catch {} setResultado(null); dispatchItems({ type: 'RESET' }); limpiarCliente(); }}>Nueva {docAccent.noun}</Button>
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => router.push(detalleBase)}>Ver todas</Button>
-            </div>
-          </div>
-        </div>
-      </div>
+            <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button
+                variant="outlined"
+                disableElevation
+                component="a"
+                href={`/api/pdf/factura/${resultado.documentoId}`}
+                target="_blank"
+                rel="noreferrer"
+                sx={{ textTransform: 'none', borderRadius: '8px' }}
+              >
+                Descargar PDF
+              </Button>
+              <Button
+                variant="outlined"
+                disableElevation
+                component={Link}
+                href={`${detalleBase}/${resultado.documentoId}`}
+                sx={{ textTransform: 'none', borderRadius: '8px' }}
+              >
+                Ver detalle
+              </Button>
+              <Button
+                variant="outlined"
+                disableElevation
+                onClick={() => {
+                  try { localStorage.removeItem(draftKey); } catch {}
+                  setResultado(null);
+                  dispatchItems({ type: 'RESET' });
+                  limpiarCliente();
+                }}
+                sx={{ textTransform: 'none', borderRadius: '8px' }}
+              >
+                Nueva {docAccent.noun}
+              </Button>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={() => router.push(detalleBase)}
+                sx={{
+                  bgcolor: '#0d9488',
+                  '&:hover': { bgcolor: '#0f766e' },
+                  textTransform: 'none',
+                  borderRadius: '8px',
+                }}
+              >
+                Ver todas
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
   // ─── Formulario ───────────────────────────────────────────────────────────
   return (
-    <div className="bg-[#eef0f7] min-h-full flex flex-col">
-      <a href="#main-content" className="skip-link">Saltar al contenido</a>
-      <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box component="a" href="#main-content" sx={{ position: 'absolute', left: '-9999px', '&:focus': { left: 8, top: 8, zIndex: 9999 } }}>Saltar al contenido</Box>
+      <Box sx={{ p: { xs: 1.5, sm: 2, md: 2.5 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <NavBar
           title={initialData ? tituloDoc.editar : tituloDoc.nuevo}
           showAlmacen={showAlmacen}             setShowAlmacen={setShowAlmacen}
@@ -1140,16 +1252,75 @@ export default function NuevaFacturaForm({
         />
 
         {error && (
-          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-            <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
+          <Alert
+            severity="error"
+            icon={<AlertTriangle style={{ width: 20, height: 20 }} />}
+            sx={{ borderRadius: '12px', mb: 2 }}
+          >
+            {error}
+          </Alert>
         )}
 
-        <form
+        {/* Banner: nota creada desde una factura */}
+        {padreNota && (tipoEcf === '33' || tipoEcf === '34') && (
+          <Alert
+            severity={padreNota.conEcfReal ? 'success' : 'warning'}
+            icon={<FileText style={{ width: 20, height: 20 }} />}
+            sx={{ borderRadius: '12px', mb: 2, alignItems: 'flex-start' }}
+          >
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
+                <Link
+                  href={`/dashboard/facturas/${padreNota.id}`}
+                  style={{ fontFamily: 'monospace', textDecoration: 'underline' }}
+                  target="_blank"
+                >
+                  {padreNota.conEcfReal ? padreNota.encf : (padreNota.codigo ?? `#${padreNota.id}`)}
+                </Link>
+              </Typography>
+              <Box
+                sx={{
+                  mt: 1,
+                  display: 'grid',
+                  gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
+                  gap: '4px 16px',
+                }}
+              >
+                {padreNota.razonSocial && (
+                  <Box>
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>Cliente</Typography>
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>{padreNota.razonSocial}</Typography>
+                  </Box>
+                )}
+                {padreNota.montoTotal && (
+                  <Box>
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>Monto original</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>RD$ {padreNota.montoTotal}</Typography>
+                  </Box>
+                )}
+                {padreNota.fechaEmision && (
+                  <Box>
+                    <Typography variant="caption" sx={{ opacity: 0.7 }}>Fecha</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{padreNota.fechaEmision}</Typography>
+                  </Box>
+                )}
+              </Box>
+              {!padreNota.conEcfReal && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                  La factura original no tiene e-CF emitido — esta nota solo puede guardarse como{' '}
+                  <strong>borrador</strong>. Podrás enviarla a la DGII cuando el padre sea emitido.
+                </Typography>
+              )}
+            </Box>
+          </Alert>
+        )}
+
+        <Box
+          component="form"
           id="main-content"
           onSubmit={handleSubmit}
-          onKeyDown={(e) => {
+          onKeyDown={(e: React.KeyboardEvent<HTMLFormElement>) => {
             const t = e.target as HTMLElement;
             const isInput = t.tagName === 'INPUT' || t.tagName === 'SELECT';
             const isSubmitBtn = t.tagName === 'BUTTON' && (t as HTMLButtonElement).type === 'submit';
@@ -1157,7 +1328,7 @@ export default function NuevaFacturaForm({
               e.preventDefault();
             }
           }}
-          className="flex-1 flex flex-col"
+          sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
           <TopBar
             showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
@@ -1174,9 +1345,15 @@ export default function NuevaFacturaForm({
           />
 
           {/* ── SPLIT LAYOUT: form left, sticky sidebar right ─────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 lg:gap-5">
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', lg: 'minmax(0,1fr) 360px' },
+              gap: { xs: 2, lg: 2.5 },
+            }}
+          >
             {/* LEFT column */}
-            <div className="space-y-4 min-w-0">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
               <CompactHeader
                 empresa={empresa}
                 categoriaId={categoriaId} setCategoriaId={setCategoriaId}
@@ -1303,7 +1480,7 @@ export default function NuevaFacturaForm({
               </AccordionSection>
 
               {/* Sección 8 Pago movida al sidebar derecho (ResumenSidebar) */}
-            </div>
+            </Box>
 
             {/* RIGHT column — sticky sidebar: Resumen + Pago */}
             <ResumenSidebar
@@ -1320,7 +1497,7 @@ export default function NuevaFacturaForm({
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
             />
-          </div>
+          </Box>
 
           {/* Action bar — sticky bottom, full width */}
           <BottomActionBar
@@ -1337,7 +1514,7 @@ export default function NuevaFacturaForm({
               router.push('/dashboard/facturas');
             }}
           />
-        </form>
+        </Box>
 
         {/* Modals */}
         <ModalPreviewPDF
@@ -1418,7 +1595,7 @@ export default function NuevaFacturaForm({
           }}
         />
 
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

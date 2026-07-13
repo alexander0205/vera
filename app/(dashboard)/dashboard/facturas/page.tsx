@@ -10,6 +10,15 @@ import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, fmtHora, diasVencido } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
+import MuiButton from '@mui/material/Button';
+import MuiDialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import MuiTextField from '@mui/material/TextField';
+import Chip from '@mui/material/Chip';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -50,15 +59,15 @@ function isECFReal(encf: string): boolean {
   return /^E\d{12}$/.test(encf);
 }
 
-// Color del TEXTO del comprobante según estado DGII (no badge, solo texto)
-const ESTADO_TEXT: Record<string, string> = {
-  ACEPTADO:             'text-emerald-700',
-  ACEPTADO_CONDICIONAL: 'text-amber-700',
-  EN_PROCESO:           'text-sky-700',
-  RECHAZADO:            'text-red-700',
-  BORRADOR:             'text-gray-400',
-  ANULADO:              'text-gray-400 line-through',
-  HISTORICA:            'text-indigo-600',
+// Color del TEXTO del comprobante según estado DGII (como sx color value)
+const ESTADO_COLOR: Record<string, { color: string; textDecoration?: string }> = {
+  ACEPTADO:             { color: '#065f46' },
+  ACEPTADO_CONDICIONAL: { color: '#92400e' },
+  EN_PROCESO:           { color: '#0369a1' },
+  RECHAZADO:            { color: '#991b1b' },
+  BORRADOR:             { color: '#9ca3af' },
+  ANULADO:              { color: '#9ca3af', textDecoration: 'line-through' },
+  HISTORICA:            { color: '#4f46e5' },
 };
 
 /**
@@ -181,10 +190,24 @@ export default function FacturasPage() {
       render: doc => (
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          className="font-mono text-xs font-semibold text-gray-700 hover:text-teal-700 hover:underline tabular-nums leading-tight block"
+          style={{ textDecoration: 'none' }}
           title={doc.codigo ?? `#${doc.id}`}
         >
-          {doc.codigo ?? `#${doc.id}`}
+          <Typography
+            component="span"
+            sx={{
+              fontFamily: 'monospace',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#374151',
+              display: 'block',
+              lineHeight: 1.25,
+              fontVariantNumeric: 'tabular-nums',
+              '&:hover': { color: '#0f766e', textDecoration: 'underline' },
+            }}
+          >
+            {doc.codigo ?? `#${doc.id}`}
+          </Typography>
         </Link>
       ),
     },
@@ -194,22 +217,51 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.razonSocialComprador ?? '',
       render: doc => (
-        <div className="max-w-[200px] min-w-0">
-          <p
-            className="text-sm text-gray-900 truncate font-medium leading-tight"
+        <Box sx={{ maxWidth: 200, minWidth: 0 }}>
+          <Typography
             title={doc.razonSocialComprador ?? 'Consumidor Final'}
+            sx={{
+              fontSize: '0.875rem',
+              color: doc.razonSocialComprador ? '#111827' : '#9ca3af',
+              fontWeight: doc.razonSocialComprador ? 500 : 400,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.25,
+            }}
           >
-            {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
-          </p>
+            {doc.razonSocialComprador ?? 'Consumidor Final'}
+          </Typography>
           {doc.rncComprador && (
-            <p className="text-[11px] text-gray-400 font-mono mt-0.5 leading-tight">{doc.rncComprador}</p>
+            <Typography
+              sx={{
+                fontSize: '0.6875rem',
+                color: '#9ca3af',
+                fontFamily: 'monospace',
+                mt: '2px',
+                lineHeight: 1.25,
+              }}
+            >
+              {doc.rncComprador}
+            </Typography>
           )}
           {doc.dependienteNombre && (
-            <p className="text-[11px] text-gray-400 mt-0.5 leading-tight truncate" title={`Beneficiario: ${doc.dependienteNombre}`}>
+            <Typography
+              title={`Beneficiario: ${doc.dependienteNombre}`}
+              sx={{
+                fontSize: '0.6875rem',
+                color: '#9ca3af',
+                mt: '2px',
+                lineHeight: 1.25,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               Benef.: {doc.dependienteNombre}
-            </p>
+            </Typography>
           )}
-        </div>
+        </Box>
       ),
     },
     {
@@ -219,12 +271,12 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.createdAt,
       render: doc => (
-        <div className="whitespace-nowrap tabular-nums leading-tight">
-          <span className="text-xs text-gray-600">{fmtFechaRD(doc.createdAt)}</span>
+        <Box component="span" sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', lineHeight: 1.15 }}>
+          <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', display: 'block' }}>{fmtFechaRD(doc.createdAt)}</Typography>
           {doc.createdAt && (
-            <span className="block text-[11px] text-gray-400">{fmtHora(doc.createdAt)}</span>
+            <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#9ca3af', display: 'block' }}>{fmtHora(doc.createdAt)}</Typography>
           )}
-        </div>
+        </Box>
       ),
     },
     {
@@ -237,17 +289,38 @@ export default function FacturasPage() {
         const saldo = doc.montoTotal - (doc.pagado ?? 0);
         const vencida = esCredito && saldo > 0 && dias > 0 && ['ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'].includes(doc.estado);
         return (
-          <div className="min-w-0">
-            <p className={`text-xs font-medium leading-tight ${esCredito ? 'text-amber-700' : 'text-gray-500'}`}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                lineHeight: 1.25,
+                color: esCredito ? '#92400e' : '#6b7280',
+              }}
+            >
               {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
-            </p>
+            </Typography>
             {esCredito && doc.fechaLimitePago && (
-              <p className={`text-[11px] mt-0.5 tabular-nums leading-tight whitespace-nowrap ${vencida ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+              <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  mt: '2px',
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1.25,
+                  whiteSpace: 'nowrap',
+                  color: vencida ? '#dc2626' : '#9ca3af',
+                  fontWeight: vencida ? 600 : 400,
+                }}
+              >
                 {fmtFechaCorta(doc.fechaLimitePago)}
-                {vencida && <span className="ml-1 text-red-500">· {dias}d</span>}
-              </p>
+                {vencida && (
+                  <Typography component="span" sx={{ ml: '4px', color: '#ef4444', fontSize: '0.6875rem' }}>
+                    · {dias}d
+                  </Typography>
+                )}
+              </Typography>
             )}
-          </div>
+          </Box>
         );
       },
     },
@@ -259,9 +332,17 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.montoTotal - doc.totalItbis,
       render: doc => (
-        <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
+        <Typography
+          component="span"
+          sx={{
+            fontSize: '0.75rem',
+            color: '#6b7280',
+            whiteSpace: 'nowrap',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
           {fmtDOP(doc.montoTotal - doc.totalItbis)}
-        </span>
+        </Typography>
       ),
     },
     {
@@ -270,9 +351,17 @@ export default function FacturasPage() {
       visibleAt: 'xl',
       align: 'right',
       render: doc => (
-        <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
-          {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : <span className="text-gray-300">—</span>}
-        </span>
+        <Typography
+          component="span"
+          sx={{
+            fontSize: '0.75rem',
+            color: doc.totalItbis > 0 ? '#6b7280' : '#d1d5db',
+            whiteSpace: 'nowrap',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : '—'}
+        </Typography>
       ),
     },
     {
@@ -282,9 +371,18 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.montoTotal,
       render: doc => (
-        <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
+        <Typography
+          component="span"
+          sx={{
+            fontSize: '0.875rem',
+            fontWeight: 700,
+            color: '#111827',
+            whiteSpace: 'nowrap',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
           {fmtDOP(doc.montoTotal)}
-        </span>
+        </Typography>
       ),
     },
     {
@@ -321,9 +419,21 @@ export default function FacturasPage() {
       header: 'Creado por',
       visibleAt: 'xl',
       render: doc => (
-        <span className="text-xs text-gray-500 truncate max-w-[120px] block" title={doc.createdByName ?? undefined}>
+        <Typography
+          component="span"
+          title={doc.createdByName ?? undefined}
+          sx={{
+            fontSize: '0.75rem',
+            color: '#6b7280',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: 120,
+            display: 'block',
+          }}
+        >
           {doc.createdByName ?? '—'}
-        </span>
+        </Typography>
       ),
     },
     {
@@ -334,15 +444,29 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.encf,
       render: doc => {
-        const compacto = fmtEncf(doc.encf);
-        const color    = ESTADO_TEXT[doc.estado] ?? 'text-gray-400';
+        const compacto  = fmtEncf(doc.encf);
+        const colorSx   = ESTADO_COLOR[doc.estado] ?? { color: '#9ca3af' };
         return (
           <Link
             href={`/dashboard/facturas/${doc.id}`}
-            className={`font-mono text-xs font-semibold hover:underline leading-tight block whitespace-nowrap ${color}`}
+            style={{ textDecoration: 'none' }}
             title={`${doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
           >
-            {compacto ?? (doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : '—')}
+            <Typography
+              component="span"
+              sx={{
+                fontFamily: 'monospace',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                lineHeight: 1.25,
+                display: 'block',
+                whiteSpace: 'nowrap',
+                '&:hover': { textDecoration: 'underline' },
+                ...colorSx,
+              }}
+            >
+              {compacto ?? (doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : '—')}
+            </Typography>
           </Link>
         );
       },
@@ -371,7 +495,7 @@ export default function FacturasPage() {
   const canCrear    = !permLoading && can('facturas:crear');
 
   return (
-    <section className="p-4 sm:p-6 space-y-4">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
       <DataTable<Doc>
         data={docs}
         loading={loading}
@@ -408,29 +532,66 @@ export default function FacturasPage() {
           icon: FileText,
           title: 'No se encontraron comprobantes',
           cta: canCrear ? (
-            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-teal-600 hover:underline">
-              <Plus className="h-4 w-4" /> Emitir primer comprobante
+            <Link href="/dashboard/facturas/nueva" style={{ textDecoration: 'none' }}>
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.875rem',
+                  color: '#0d9488',
+                  '&:hover': { textDecoration: 'underline', color: '#0f766e' },
+                }}
+              >
+                <Plus style={{ width: 16, height: 16 }} /> Emitir primer comprobante
+              </Box>
             </Link>
           ) : undefined,
         }}
         headerActions={
           <>
             {canCrear && (
-              <button onClick={() => setShowImport(true)}
-                className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
-                <Upload className="h-4 w-4" /> Importar de Alegra
-              </button>
+              <MuiButton
+                variant="outlined"
+                size="small"
+                disableElevation
+                onClick={() => setShowImport(true)}
+                startIcon={<Upload style={{ width: 16, height: 16 }} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#e5e7eb', color: '#6b7280' }}
+              >
+                Importar de Alegra
+              </MuiButton>
             )}
             {canExportar && (
-              <button onClick={exportCsv}
-                className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
-                <Download className="h-4 w-4" /> CSV
-              </button>
+              <MuiButton
+                variant="outlined"
+                size="small"
+                disableElevation
+                onClick={exportCsv}
+                startIcon={<Download style={{ width: 16, height: 16 }} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#e5e7eb', color: '#6b7280' }}
+              >
+                CSV
+              </MuiButton>
             )}
             {canCrear && (
-              <Link href="/dashboard/facturas/nueva"
-                className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium transition-colors">
-                <Plus className="h-4 w-4" /> Nueva Factura
+              <Link href="/dashboard/facturas/nueva" style={{ textDecoration: 'none' }}>
+                <MuiButton
+                  variant="contained"
+                  size="small"
+                  disableElevation
+                  startIcon={<Plus style={{ width: 16, height: 16 }} />}
+                  sx={{
+                    borderRadius: '8px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    bgcolor: '#0d9488',
+                    '&:hover': { bgcolor: '#0f766e' },
+                  }}
+                >
+                  Nueva Factura
+                </MuiButton>
               </Link>
             )}
           </>
@@ -456,61 +617,87 @@ export default function FacturasPage() {
       />
 
       {/* Email modal */}
-      {emailModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Enviar factura por email</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email del destinatario</label>
-              <input
-                type="email"
-                value={emailModal.email}
-                onChange={e => setEmailModal(m => m ? { ...m, email: e.target.value } : m)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                placeholder="cliente@empresa.com"
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setEmailModal(null)}
-                className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-                Cancelar
-              </button>
-              <button onClick={sendEmail} disabled={emailLoading || !emailModal.email}
-                className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50">
-                {emailLoading ? 'Enviando...' : 'Enviar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
+      <MuiDialog
+        open={!!emailModal}
+        onClose={() => setEmailModal(null)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Enviar factura por email</DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          <MuiTextField
+            type="email"
+            label="Email del destinatario"
+            value={emailModal?.email ?? ''}
+            onChange={e => setEmailModal(m => m ? { ...m, email: e.target.value } : m)}
+            placeholder="cliente@empresa.com"
+            fullWidth
+            size="small"
+            sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton
+            variant="outlined"
+            disableElevation
+            onClick={() => setEmailModal(null)}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}
+          >
+            Cancelar
+          </MuiButton>
+          <MuiButton
+            variant="contained"
+            disableElevation
+            onClick={sendEmail}
+            disabled={emailLoading || !emailModal?.email}
+            sx={{
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 600,
+              bgcolor: '#0d9488',
+              '&:hover': { bgcolor: '#0f766e' },
+            }}
+          >
+            {emailLoading ? 'Enviando...' : 'Enviar'}
+          </MuiButton>
+        </DialogActions>
+      </MuiDialog>
+    </Box>
   );
 }
 
 // ─── Badge helper (uso interno a esta página) ─────────────────────────────────
 
-const BADGE_COLORS = {
-  green: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  amber: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  red:   'bg-red-50 text-red-700 ring-1 ring-red-200',
-  gray:  'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
-} as const;
+const BADGE_SX: Record<string, object> = {
+  green: { bgcolor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' },
+  amber: { bgcolor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' },
+  red:   { bgcolor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' },
+  gray:  { bgcolor: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' },
+};
 
 function Badge({
   color,
   title,
   children,
 }: {
-  color: keyof typeof BADGE_COLORS;
+  color: keyof typeof BADGE_SX;
   title?: string;
   children: React.ReactNode;
 }) {
   return (
-    <span
-      className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${BADGE_COLORS[color]}`}
+    <Chip
+      label={children}
+      size="small"
       title={title}
-    >
-      {children}
-    </span>
+      sx={{
+        height: 20,
+        borderRadius: '10px',
+        fontSize: '0.6875rem',
+        fontWeight: 600,
+        '& .MuiChip-label': { px: 1, py: '1px' },
+        ...BADGE_SX[color],
+      }}
+    />
   );
 }

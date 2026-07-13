@@ -1,12 +1,16 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Loader2 } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import CircularProgress from '@mui/material/CircularProgress';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 import type { SecuenciaInfo } from '../utils/types';
 
@@ -32,64 +36,157 @@ export function ModalEditarNCF({
   onSave: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold">Editar numeración</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label className="text-sm text-gray-500">Nombre</Label>
-            <Input value={TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? ''} readOnly className="bg-gray-50 text-gray-600" />
-          </div>
-          <div className="flex items-center gap-3">
-            <Label className="text-sm text-gray-500">Numeración automática</Label>
-            <input type="checkbox" checked readOnly className="h-4 w-4 accent-teal-600 cursor-default" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm text-gray-500">Tipo de NCF</Label>
-            <Input value={`E${tipoEcf}`} readOnly className="bg-gray-50 text-gray-600 font-mono" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Siguiente número</Label>
-            <Input
+    <Dialog
+      open={open}
+      onClose={onClose}
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 480, width: '100%' } } as object }}
+    >
+      <DialogTitle sx={{ fontWeight: 600, fontSize: '1rem' }}>
+        Editar numeración
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box>
+            <Typography variant="caption" sx={{ color: '#6b7280', mb: 0.5, display: 'block' }}>
+              Nombre
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              value={TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? ''}
+              slotProps={{ htmlInput: { readOnly: true } }}
+              sx={{
+                '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb' },
+                '& .MuiInputBase-input': { color: '#4b5563' },
+              }}
+            />
+          </Box>
+
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked
+                readOnly
+                size="small"
+                sx={{ color: '#0d9488', '&.Mui-checked': { color: '#0d9488' } }}
+              />
+            }
+            label={
+              <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                Numeración automática
+              </Typography>
+            }
+          />
+
+          <Box>
+            <Typography variant="caption" sx={{ color: '#6b7280', mb: 0.5, display: 'block' }}>
+              Tipo de NCF
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              value={`E${tipoEcf}`}
+              slotProps={{ htmlInput: { readOnly: true } }}
+              sx={{
+                '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb' },
+                '& .MuiInputBase-input': { color: '#4b5563', fontFamily: 'monospace' },
+              }}
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              Siguiente número
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
               type="number"
-              min={1}
-              step={1}
               placeholder={secuencia?.encf?.slice(-8) ?? '1'}
               value={ncfSiguienteNum}
               onChange={(e) => setNcfSiguienteNum(e.target.value)}
+              slotProps={{ htmlInput: { min: 1, step: 1 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Fecha de vencimiento</Label>
-            <Input
+          </Box>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              Fecha de vencimiento
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
               type="date"
               value={ncfFechaVenc}
               onChange={(e) => setNcfFechaVenc(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Pie de factura</Label>
-            <textarea
-              className="w-full min-h-[80px] text-sm border border-gray-200 rounded-md p-2 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+          </Box>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              Pie de factura
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              minRows={3}
               placeholder="Texto que aparecerá al pie del comprobante..."
               value={ncfPieFactura}
               onChange={(e) => setNcfPieFactura(e.target.value)}
+              sx={{
+                '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#0d9488',
+                },
+              }}
             />
-          </div>
-        </div>
-        {ncfError && <p className="text-xs text-red-500 px-1">{ncfError}</p>}
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button
-            className="bg-teal-600 hover:bg-teal-700 text-white"
-            disabled={ncfSaving}
-            onClick={onSave}>
-            {ncfSaving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Guardar'}
-          </Button>
-        </DialogFooter>
+          </Box>
+
+          {ncfError && (
+            <Typography variant="caption" sx={{ color: '#ef4444', px: 0.5 }}>
+              {ncfError}
+            </Typography>
+          )}
+        </Box>
       </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button
+          variant="outlined"
+          onClick={onClose}
+          sx={{
+            textTransform: 'none',
+            color: '#4b5563',
+            borderColor: '#e5e7eb',
+            '&:hover': { borderColor: '#d1d5db', bgcolor: 'transparent' },
+          }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          variant="contained"
+          disableElevation
+          disabled={ncfSaving}
+          onClick={onSave}
+          sx={{
+            textTransform: 'none',
+            bgcolor: '#0d9488',
+            '&:hover': { bgcolor: '#0f766e' },
+            '&.Mui-disabled': { bgcolor: '#0d948880' },
+          }}
+        >
+          {ncfSaving ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <CircularProgress size={16} sx={{ color: 'inherit' }} />
+              Guardando…
+            </Box>
+          ) : 'Guardar'}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

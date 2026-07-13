@@ -2,21 +2,26 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { mutate } from 'swr';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Switch from '@mui/material/Switch';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import InputAdornment from '@mui/material/InputAdornment';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
-import { roleHasPermission } from '@/lib/config/roles';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,26 +35,29 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 const COLORES = [
-  { label: 'Azul DGII',    value: '#1e40af' },
-  { label: 'Azul oscuro',  value: '#1e3a5f' },
-  { label: 'Verde',        value: '#15803d' },
-  { label: 'Rojo',         value: '#b91c1c' },
-  { label: 'Morado',       value: '#7c3aed' },
-  { label: 'Naranja',      value: '#c2410c' },
-  { label: 'Gris oscuro',  value: '#374151' },
-  { label: 'Negro',        value: '#111827' },
+  { label: 'Azul DGII',   value: '#1e40af' },
+  { label: 'Azul oscuro', value: '#1e3a5f' },
+  { label: 'Verde',       value: '#15803d' },
+  { label: 'Rojo',        value: '#b91c1c' },
+  { label: 'Morado',      value: '#7c3aed' },
+  { label: 'Naranja',     value: '#c2410c' },
+  { label: 'Gris oscuro', value: '#374151' },
+  { label: 'Negro',       value: '#111827' },
 ];
+
+const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
+const cardHeaderSx = { px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1 };
+const cardContentSx = { px: 3, py: 3 };
 
 // ─── Sub-componente: UploadImagen ─────────────────────────────────────────────
 
 function UploadImagen({
-  label, hint, value, onChange, disabled = false,
+  label, hint, value, onChange,
 }: {
   label: string;
   hint: string;
   value: string;
   onChange: (v: string) => void;
-  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -65,70 +73,56 @@ function UploadImagen({
   }
 
   return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">{label}</Label>
-      <p className="text-xs text-gray-500">{hint}</p>
-
-      <div
-        onDragOver={(e) => { if (disabled) return; e.preventDefault(); setDragging(true); }}
+    <Box>
+      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151', mb: 0.25 }}>{label}</Typography>
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 1 }}>{hint}</Typography>
+      <Box
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          if (disabled) return;
-          e.preventDefault();
-          setDragging(false);
-          const f = e.dataTransfer.files[0];
-          if (f) handleFile(f);
+        onDrop={e => {
+          e.preventDefault(); setDragging(false);
+          const f = e.dataTransfer.files[0]; if (f) handleFile(f);
         }}
-        className={`relative border-2 border-dashed rounded-xl transition-colors
-          ${disabled ? 'cursor-not-allowed opacity-60 bg-gray-50 border-gray-200' : `cursor-pointer ${dragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300 bg-gray-50'}`}`}
-        onClick={() => { if (!disabled) inputRef.current?.click(); }}
-        style={{ minHeight: 100 }}
+        onClick={() => inputRef.current?.click()}
+        sx={{
+          position: 'relative', border: '2px dashed', borderRadius: '12px', cursor: 'pointer',
+          minHeight: 100, transition: 'all 0.15s',
+          borderColor: dragging ? '#3b82f6' : '#e5e7eb',
+          bgcolor: dragging ? '#eff6ff' : '#f9fafb',
+          '&:hover': { borderColor: '#d1d5db' },
+        }}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-        />
-
+        <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         {value ? (
-          <div className="flex items-center justify-center p-4 gap-4">
-            <img src={value} alt={label} className="max-h-20 max-w-[180px] object-contain rounded" />
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onChange(''); }}
-              className="p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, gap: 2 }}>
+            <img src={value} alt={label} style={{ maxHeight: 80, maxWidth: 180, objectFit: 'contain', borderRadius: 6 }} />
+            <Box component="button" type="button"
+              onClick={e => { e.stopPropagation(); onChange(''); }}
+              sx={{ p: 0.75, borderRadius: '50%', bgcolor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', '&:hover': { bgcolor: '#fecaca' }, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={16} />
+            </Box>
+          </Box>
         ) : (
-          <div className="flex flex-col items-center justify-center py-6 gap-2 text-gray-400">
-            <Upload className="h-8 w-8" />
-            <span className="text-sm">Arrastra o haz click para subir</span>
-            <span className="text-xs">PNG, JPG, SVG · Máx 800 KB</span>
-          </div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4, gap: 0.75, color: '#9ca3af' }}>
+            <Upload size={32} />
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Arrastra o haz click para subir</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>PNG, JPG, SVG · Máx 800 KB</Typography>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function ConfiguracionPage() {
-  const [loading, setLoading]     = useState(true);
-  const [saving, setSaving]       = useState(false);
-  const [saved, setSaved]         = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  const [role, setRole]           = useState<string | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
-  // Permisos derivados del rol
-  const canManage     = roleHasPermission(role, 'configuracion:gestionar');
-  const canManageTeam = roleHasPermission(role, 'equipo:gestionar');
-
-  // Campos
   const [razonSocial, setRazonSocial]           = useState('');
   const [nombreComercial, setNombreComercial]   = useState('');
   const [rnc, setRnc]                           = useState('');
@@ -139,18 +133,13 @@ export default function ConfiguracionPage() {
   const [colorPrimario, setColorPrimario]       = useState('#1e40af');
   const [logo, setLogo]                         = useState('');
   const [firma, setFirma]                       = useState('');
-  const [previewPDF, setPreviewPDF]             = useState(false);
   const [provincia, setProvincia]               = useState('');
   const [municipio, setMunicipio]               = useState('');
-  // Recargo por mora
-  const [recargoActivo, setRecargoActivo]               = useState(false);
-  const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
-  // Módulo cuadre de caja
-  const [cajaHabilitada, setCajaHabilitada]             = useState(false);
-  // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
-  const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
+  const [recargoActivo, setRecargoActivo]       = useState(false);
+  const [recargoPorcentaje, setRecargoPorcentaje] = useState('2.00');
+  const [cajaHabilitada, setCajaHabilitada]     = useState(false);
+  const [plazoDefaultDias, setPlazoDefaultDias] = useState('');
 
-  // Cargar datos actuales
   useEffect(() => {
     fetch('/api/equipo/perfil')
       .then(r => r.json())
@@ -167,39 +156,27 @@ export default function ConfiguracionPage() {
         setFirma(d.firma ?? '');
         setProvincia(d.provincia ?? '');
         setMunicipio(d.municipio ?? '');
-        // Recargo por mora — convertir bps → %
         setRecargoActivo(d.recargoMoraActivo ?? false);
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
-        // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
-        setRole(d.role ?? null);
       })
       .finally(() => setLoading(false));
   }, []);
 
   async function handleSave() {
-    setSaving(true);
-    setError(null);
-    setSaved(false);
+    setSaving(true); setError(null); setSaved(false);
     try {
-      // Convertir % → bps para guardar (ej: "2.50" → 250)
       const pctBps = Math.round(parseFloat(recargoPorcentaje || '0') * 100);
-
       const res = await fetch('/api/equipo/perfil', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          razonSocial, nombreComercial, rnc, direccion,
-          provincia, municipio,
-          telefono, sitioWeb, emailFacturacion, colorPrimario,
-          logo, firma,
-          recargoMoraActivo:     recargoActivo,
-          recargoMoraPorcentaje: pctBps,
-          // Gracia eliminada del config: la mora aplica al vencer.
-          recargoMoraDiasGracia: 0,
-          cajaHabilitada,
-          plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
+          razonSocial, nombreComercial, rnc, direccion, provincia, municipio,
+          telefono, sitioWeb, emailFacturacion, colorPrimario, logo, firma,
+          recargoMoraActivo: recargoActivo, recargoMoraPorcentaje: pctBps,
+          recargoMoraDiasGracia: 0, cajaHabilitada,
+          plazoPagoDefaultDias: plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');
@@ -215,426 +192,283 @@ export default function ConfiguracionPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <CircularProgress size={36} sx={{ color: '#0d9488' }} />
+      </Box>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 min-h-full flex flex-col">
-      <div className="flex flex-col flex-1 gap-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Configuración del negocio</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Estos datos aparecen en todas tus facturas PDF
-          </p>
-        </div>
-        {canManage && (
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-teal-600 hover:bg-teal-700 sm:min-w-[130px] w-full sm:w-auto"
-          >
-            {saving ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
-            ) : saved ? (
-              <><CheckCircle className="h-4 w-4 mr-2" />Guardado</>
-            ) : (
-              'Guardar cambios'
-            )}
+    <Box sx={{ p: { xs: 2, sm: 3 }, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 3 }}>
+
+        {/* Header */}
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: 'space-between', gap: 2 }}>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Configuración del negocio</Typography>
+            <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>Estos datos aparecen en todas tus facturas PDF</Typography>
+          </Box>
+          <Button variant="contained" disableElevation onClick={handleSave} disabled={saving}
+            startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : saved ? <CheckCircle size={16} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, minWidth: 140 }}>
+            {saving ? 'Guardando…' : saved ? 'Guardado' : 'Guardar cambios'}
           </Button>
-        )}
-      </div>
+        </Box>
 
-      {!canManage && (
-        <div className="flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 text-sm text-sky-700">
-          <Lock className="h-4 w-4 shrink-0" />
-          Solo lectura — tu rol puede ver la configuración pero no modificarla.
-        </div>
-      )}
+        {error && <Alert severity="error" sx={{ borderRadius: '10px' }}>{error}</Alert>}
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4">
-          {error}
-        </div>
-      )}
-
-      {/* 1. Datos fiscales */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-teal-600" />
-            Datos fiscales
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>Razón Social</Label>
-            <Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)}
-              placeholder="Empresa XYZ SRL" disabled={!canManage} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Nombre Comercial</Label>
-            <Input value={nombreComercial} onChange={e => setNombreComercial(e.target.value)}
-              placeholder="MiTienda (opcional)" disabled={!canManage} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>RNC</Label>
-            <Input value={rnc} onChange={e => setRnc(e.target.value)}
-              placeholder="130123456" maxLength={11} disabled={!canManage} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Teléfono</Label>
-            <Input value={telefono} onChange={e => setTelefono(formatTelefonoDO(e.target.value))}
-              inputMode="tel"
-              placeholder="(809) 000-0000" disabled={!canManage} />
-          </div>
-          <div className="space-y-1.5 md:col-span-2">
-            <Label>Dirección</Label>
-            <Input value={direccion} onChange={e => setDireccion(e.target.value)}
-              placeholder="Calle y número" disabled={!canManage} />
-          </div>
-          {/* Provincia / Municipio en cascada */}
-          <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>
-            <ProvinciaMunicipioSelect
-              provincia={provincia}
-              municipio={municipio}
-              onProvinciaChange={setProvincia}
-              onMunicipioChange={setMunicipio}
-              className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Email de facturación</Label>
-            <Input type="email" value={emailFacturacion}
-              onChange={e => setEmailFacturacion(e.target.value)}
-              placeholder="facturacion@empresa.com" disabled={!canManage} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Sitio web</Label>
-            <Input value={sitioWeb} onChange={e => setSitioWeb(e.target.value)}
-              placeholder="www.miempresa.com" disabled={!canManage} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 2. Logo */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-teal-600" />
-            Logo de la empresa
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <UploadImagen
-            label="Logo"
-            hint="Aparece en la esquina superior izquierda de cada factura. Fondo transparente recomendado."
-            value={logo}
-            onChange={setLogo}
-            disabled={!canManage}
-          />
-        </CardContent>
-      </Card>
-
-      {/* 3. Firma */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <PenLine className="h-4 w-4 text-teal-600" />
-            Firma autorizada
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <UploadImagen
-            label="Imagen de firma"
-            hint="Aparece en el pie de cada factura. Usa fondo blanco o transparente."
-            value={firma}
-            onChange={setFirma}
-            disabled={!canManage}
-          />
-        </CardContent>
-      </Card>
-
-      {/* 4. Color */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Palette className="h-4 w-4 text-teal-600" />
-            Color de marca
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Se usa en el encabezado, tabla y totales del PDF de la factura.
-          </p>
-
-          {/* Paleta rápida */}
-          <div className={`flex flex-wrap gap-2 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>
-            {COLORES.map(c => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColorPrimario(c.value)}
-                title={c.label}
-                disabled={!canManage}
-                className={`w-9 h-9 rounded-full border-2 transition-all ${
-                  colorPrimario === c.value
-                    ? 'border-gray-900 scale-110 shadow-md'
-                    : 'border-transparent hover:scale-105'
-                }`}
-                style={{ backgroundColor: c.value }}
+        {/* 1. Datos fiscales */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <Building2 size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Datos fiscales</Typography>
+          </Box>
+          <Box sx={{ ...cardContentSx, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+            <TextField label="Razón Social" size="small" fullWidth placeholder="Empresa XYZ SRL"
+              value={razonSocial} onChange={e => setRazonSocial(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            <TextField label="Nombre Comercial" size="small" fullWidth placeholder="MiTienda (opcional)"
+              value={nombreComercial} onChange={e => setNombreComercial(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            <TextField label="RNC" size="small" fullWidth placeholder="130123456"
+              slotProps={{ htmlInput: { maxLength: 11 } }}
+              value={rnc} onChange={e => setRnc(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            <TextField label="Teléfono" size="small" fullWidth placeholder="(809) 000-0000"
+              slotProps={{ htmlInput: { inputMode: 'tel' } }}
+              value={telefono} onChange={e => setTelefono(formatTelefonoDO(e.target.value))}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            <TextField label="Dirección" size="small" fullWidth placeholder="Calle y número"
+              value={direccion} onChange={e => setDireccion(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' }, gridColumn: { md: 'span 2' } }} />
+            <Box sx={{ gridColumn: { md: 'span 2' } }}>
+              <ProvinciaMunicipioSelect
+                provincia={provincia}
+                municipio={municipio}
+                onProvinciaChange={setProvincia}
+                onMunicipioChange={setMunicipio}
               />
-            ))}
-          </div>
+            </Box>
+            <TextField label="Email de facturación" size="small" fullWidth type="email" placeholder="facturacion@empresa.com"
+              value={emailFacturacion} onChange={e => setEmailFacturacion(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            <TextField label="Sitio web" size="small" fullWidth placeholder="www.miempresa.com"
+              value={sitioWeb} onChange={e => setSitioWeb(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+          </Box>
+        </Box>
 
-          {/* Picker manual */}
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={colorPrimario}
-              onChange={e => setColorPrimario(e.target.value)}
-              disabled={!canManage}
-              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-            />
-            <Input
-              value={colorPrimario}
-              onChange={e => setColorPrimario(e.target.value)}
-              placeholder="#1e40af"
-              className="w-32 font-mono"
-              maxLength={7}
-              disabled={!canManage}
-            />
-            <div
-              className="flex-1 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-white text-sm font-medium"
-              style={{ backgroundColor: colorPrimario }}
-            >
-              Vista previa
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        {/* 2. Logo */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <ImageIcon size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Logo de la empresa</Typography>
+          </Box>
+          <Box sx={cardContentSx}>
+            <UploadImagen label="Logo"
+              hint="Aparece en la esquina superior izquierda de cada factura. Fondo transparente recomendado."
+              value={logo} onChange={setLogo} />
+          </Box>
+        </Box>
 
-      {/* Preview visual del encabezado */}
-      <Card className="border-dashed">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Eye className="h-4 w-4 text-teal-600" />
-            Previsualización del encabezado
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-xl border overflow-hidden">
-            {/* Simula el header del PDF */}
-            <div
-              className="flex items-center justify-between p-4 text-white"
-              style={{ backgroundColor: colorPrimario }}
-            >
-              {logo ? (
-                <img src={logo} alt="Logo" className="h-12 object-contain bg-white rounded p-1" />
-              ) : (
-                <div className="bg-white/20 rounded px-3 py-2 text-sm font-bold">
-                  {(nombreComercial || razonSocial || 'LOGO').substring(0, 8).toUpperCase()}
-                </div>
-              )}
-              <div className="text-right">
-                <div className="text-xl font-bold tracking-widest">e-CF</div>
-                <div className="text-sm opacity-80 font-mono">E320000000001</div>
-                <div className="text-xs opacity-70">Factura de Consumo</div>
-              </div>
-            </div>
-            <div className="p-4 bg-white text-sm text-gray-700 space-y-0.5">
-              <p className="font-bold">{nombreComercial || razonSocial || 'Nombre de tu empresa'}</p>
-              <p className="text-gray-500">RNC: {rnc || '000-00000-0'}</p>
-              {direccion && <p className="text-gray-500">{direccion}</p>}
-              {telefono && <p className="text-gray-500">Tel: {telefono}</p>}
-              {emailFacturacion && <p className="text-gray-500">{emailFacturacion}</p>}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        {/* 3. Firma */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <PenLine size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Firma autorizada</Typography>
+          </Box>
+          <Box sx={cardContentSx}>
+            <UploadImagen label="Imagen de firma"
+              hint="Aparece en el pie de cada factura. Usa fondo blanco o transparente."
+              value={firma} onChange={setFirma} />
+          </Box>
+        </Box>
 
-      {/* Padrón DGII se sincroniza automáticamente vía cron diario — no UI expuesta */}
+        {/* 4. Color de marca */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <Palette size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Color de marca</Typography>
+          </Box>
+          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="body2" sx={{ color: '#6b7280' }}>
+              Se usa en el encabezado, tabla y totales del PDF de la factura.
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {COLORES.map(c => (
+                <Box key={c.value} component="button" type="button" title={c.label}
+                  onClick={() => setColorPrimario(c.value)}
+                  sx={{
+                    width: 36, height: 36, borderRadius: '50%', border: '2px solid', cursor: 'pointer',
+                    borderColor: colorPrimario === c.value ? '#111827' : 'transparent',
+                    bgcolor: c.value, transition: 'transform 0.15s',
+                    transform: colorPrimario === c.value ? 'scale(1.15)' : 'scale(1)',
+                    '&:hover': { transform: 'scale(1.1)' },
+                    boxShadow: colorPrimario === c.value ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
+                  }} />
+              ))}
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box component="input" type="color" value={colorPrimario} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setColorPrimario(e.target.value)}
+                sx={{ width: 40, height: 40, border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', p: 0.5 }} />
+              <TextField size="small" value={colorPrimario} onChange={e => setColorPrimario(e.target.value)}
+                placeholder="#1e40af" slotProps={{ htmlInput: { maxLength: 7 } }}
+                sx={{ width: 120, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontFamily: 'monospace' } }} />
+              <Box sx={{ flex: 1, height: 40, borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: colorPrimario }}>
+                <Typography sx={{ color: '#fff', fontSize: '0.875rem', fontWeight: 500 }}>Vista previa</Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
 
-      {/* 5. Plazo de pago por defecto — solo roles con configuracion:gestionar */}
-      {canManage && <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-teal-600" />
-            Plazo de pago
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Plazo de pago por defecto al crear una factura nueva o recurrente.
-            Puedes cambiarlo en cada factura.
-          </p>
-          <div className="space-y-1.5 md:max-w-xs">
-            <Label>Plazo de pago por defecto</Label>
-            <Select value={plazoDefaultDias || 'contado'} onValueChange={v => setPlazoDefaultDias(v === 'contado' ? '' : v)}>
-              <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="contado">De contado</SelectItem>
-                <SelectItem value="8">8 días</SelectItem>
-                <SelectItem value="15">15 días</SelectItem>
-                <SelectItem value="30">30 días</SelectItem>
-                <SelectItem value="60">60 días</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-400">
-              «De contado» no genera fecha de vencimiento.
-            </p>
-          </div>
-        </CardContent>
-      </Card>}
+        {/* Vista previa encabezado */}
+        <Box sx={{ ...cardSx, border: '1px dashed #d1d5db' }}>
+          <Box sx={cardHeaderSx}>
+            <Eye size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Previsualización del encabezado</Typography>
+          </Box>
+          <Box sx={cardContentSx}>
+            <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, bgcolor: colorPrimario }}>
+                {logo ? (
+                  <img src={logo} alt="Logo" style={{ height: 48, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 4 }} />
+                ) : (
+                  <Box sx={{ bgcolor: 'rgba(255,255,255,0.2)', borderRadius: '6px', px: 1.5, py: 1, color: '#fff', fontWeight: 700, fontSize: '0.875rem' }}>
+                    {(nombreComercial || razonSocial || 'LOGO').substring(0, 8).toUpperCase()}
+                  </Box>
+                )}
+                <Box sx={{ textAlign: 'right', color: '#fff' }}>
+                  <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '0.1em' }}>e-CF</Typography>
+                  <Typography sx={{ fontSize: '0.8125rem', opacity: 0.8, fontFamily: 'monospace' }}>E320000000001</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.7 }}>Factura de Consumo</Typography>
+                </Box>
+              </Box>
+              <Box sx={{ p: 2, bgcolor: '#fff' }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{nombreComercial || razonSocial || 'Nombre de tu empresa'}</Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>RNC: {rnc || '000-00000-0'}</Typography>
+                {direccion && <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{direccion}</Typography>}
+                {telefono && <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>Tel: {telefono}</Typography>}
+                {emailFacturacion && <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{emailFacturacion}</Typography>}
+              </Box>
+            </Box>
+          </Box>
+        </Box>
 
-      {/* 6. Recargo por mora — solo roles con configuracion:gestionar */}
-      {canManage && <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-teal-600" />
-            Recargo por mora
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Aplica automáticamente un recargo a facturas a crédito vencidas.
-            El recargo se suma al saldo de cobranza — el documento fiscal original no se modifica.
-          </p>
+        {/* 5. Plazo de pago */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <AlertCircle size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Plazo de pago</Typography>
+          </Box>
+          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="body2" sx={{ color: '#6b7280' }}>
+              Plazo de pago por defecto al crear una factura nueva o recurrente. Puedes cambiarlo en cada factura.
+            </Typography>
+            <Box sx={{ maxWidth: 320 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Plazo de pago por defecto</InputLabel>
+                <Select value={plazoDefaultDias || 'contado'} label="Plazo de pago por defecto"
+                  onChange={e => setPlazoDefaultDias(e.target.value === 'contado' ? '' : e.target.value)}
+                  sx={{ borderRadius: '8px' }}>
+                  <MenuItem value="contado">De contado</MenuItem>
+                  <MenuItem value="8">8 días</MenuItem>
+                  <MenuItem value="15">15 días</MenuItem>
+                  <MenuItem value="30">30 días</MenuItem>
+                  <MenuItem value="60">60 días</MenuItem>
+                </Select>
+              </FormControl>
+              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.75 }}>
+                «De contado» no genera fecha de vencimiento.
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
 
-          {/* Toggle activar */}
-          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-gray-800">Activar recargo por mora</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                El cron diario (09:00 UTC) aplicará el recargo una sola vez por factura.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={recargoActivo}
-              onClick={() => setRecargoActivo(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                recargoActivo ? 'bg-teal-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  recargoActivo ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Porcentaje de recargo */}
-          <div className={`transition-opacity ${recargoActivo ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-            <div className="space-y-1.5 md:max-w-xs">
-              <Label>Porcentaje de recargo (%)</Label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="100"
-                  value={recargoPorcentaje}
-                  onChange={e => setRecargoPorcentaje(e.target.value)}
-                  placeholder="2.00"
-                  className="pr-8"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
-              </div>
-              <p className="text-xs text-gray-400">
+        {/* 6. Recargo por mora */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <AlertCircle size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Recargo por mora</Typography>
+          </Box>
+          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="body2" sx={{ color: '#6b7280' }}>
+              Aplica automáticamente un recargo a facturas a crédito vencidas. El recargo se suma al saldo de cobranza — el documento fiscal original no se modifica.
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar recargo por mora</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                  El cron diario (09:00 UTC) aplicará el recargo una sola vez por factura.
+                </Typography>
+              </Box>
+              <Switch checked={recargoActivo} onChange={(_, v) => setRecargoActivo(v)} color="primary"
+                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+            </Box>
+            <Box sx={{ opacity: recargoActivo ? 1 : 0.4, pointerEvents: recargoActivo ? 'auto' : 'none', transition: 'opacity 0.2s', maxWidth: 320 }}>
+              <TextField label="Porcentaje de recargo (%)" size="small" fullWidth type="number"
+                slotProps={{ htmlInput: { step: 0.01, min: 0.01, max: 100 }, input: { endAdornment: <InputAdornment position="end">%</InputAdornment> } }}
+                placeholder="2.00" value={recargoPorcentaje} onChange={e => setRecargoPorcentaje(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.75 }}>
                 Se aplica al vencer la factura. Default: 2.00% (200 basis points).
-              </p>
-            </div>
-          </div>
-
-          {recargoActivo && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
-              <strong>Nota fiscal:</strong> El recargo NO modifica la factura electrónica emitida ante la DGII.
-              Solo se suma al saldo visible en Cuentas por cobrar y en tickets de cobranza.
-            </div>
-          )}
-        </CardContent>
-      </Card>}
-
-      {/* 6. Módulo de caja — solo roles con configuracion:gestionar */}
-      {canManage && <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-teal-600" />
-            Cuadre de Caja
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Habilita el módulo de apertura y cierre de turnos de caja. Los cajeros deberán
-            abrir un turno antes de emitir facturas, y el sistema calculará automáticamente
-            el efectivo esperado al cierre.
-          </p>
-
-          {/* Toggle activar */}
-          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-gray-800">Activar cuadre de caja</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Aparecerá el menú "Caja" en el panel y se requerirá turno abierto para facturar.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={cajaHabilitada}
-              onClick={() => setCajaHabilitada(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                cajaHabilitada ? 'bg-teal-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  cajaHabilitada ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          {cajaHabilitada && (
-            <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-700">
-              <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
-              debe abrir su turno antes de emitir. Los cierres con descuadre requieren aprobación
-              de un admin u owner.
-            </div>
-          )}
-        </CardContent>
-      </Card>}
-
-      {/* Equipo y permisos — solo roles con equipo:gestionar */}
-      {canManageTeam && <EquipoCard />}
-
-      </div>
-
-      {/* Botón guardar final — barra sticky inferior (solo si puede editar) */}
-      {canManage && (
-        <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-teal-600 hover:bg-teal-700 min-w-[160px]"
-          >
-            {saving ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
-            ) : saved ? (
-              <><CheckCircle className="h-4 w-4 mr-2" />¡Guardado!</>
-            ) : (
-              'Guardar cambios'
+              </Typography>
+            </Box>
+            {recargoActivo && (
+              <Alert severity="warning" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+                <strong>Nota fiscal:</strong> El recargo NO modifica la factura electrónica emitida ante la DGII.
+                Solo se suma al saldo visible en Cuentas por cobrar y en tickets de cobranza.
+              </Alert>
             )}
-          </Button>
-        </div>
-      )}
-    </div>
+          </Box>
+        </Box>
+
+        {/* 7. Módulo de caja */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <Wallet size={16} color="#0d9488" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Cuadre de Caja</Typography>
+          </Box>
+          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="body2" sx={{ color: '#6b7280' }}>
+              Habilita el módulo de apertura y cierre de turnos de caja. Los cajeros deberán abrir un turno antes de emitir facturas, y el sistema calculará automáticamente el efectivo esperado al cierre.
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar cuadre de caja</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                  Aparecerá el menú "Caja" en el panel y se requerirá turno abierto para facturar.
+                </Typography>
+              </Box>
+              <Switch checked={cajaHabilitada} onChange={(_, v) => setCajaHabilitada(v)} color="primary"
+                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+            </Box>
+            {cajaHabilitada && (
+              <Alert severity="info" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+                <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero debe abrir su turno antes de emitir. Los cierres con descuadre requieren aprobación de un admin u owner.
+              </Alert>
+            )}
+          </Box>
+        </Box>
+
+        {/* Equipo y permisos */}
+        <EquipoCard />
+
+      </Box>
+
+      {/* Sticky bottom bar */}
+      <Box sx={{
+        position: 'sticky', bottom: 0, zIndex: 30,
+        mx: { xs: -2, sm: -3 }, px: { xs: 2, sm: 3 }, mt: 'auto', py: 1.5,
+        bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)',
+        borderTop: '1px solid #e5e7eb', boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)',
+        display: 'flex', justifyContent: 'flex-end',
+      }}>
+        <Button variant="contained" disableElevation onClick={handleSave} disabled={saving}
+          startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : saved ? <CheckCircle size={16} /> : <Loader2 size={16} style={{ opacity: 0 }} />}
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, minWidth: 160 }}>
+          {saving ? 'Guardando…' : saved ? '¡Guardado!' : 'Guardar cambios'}
+        </Button>
+      </Box>
+    </Box>
   );
 }

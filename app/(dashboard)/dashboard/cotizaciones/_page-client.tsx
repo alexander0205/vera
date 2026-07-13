@@ -2,13 +2,18 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil,
+  FileText, Plus, Trash2, AlertTriangle, Pencil,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
@@ -23,30 +28,30 @@ interface Cotizacion {
   fechaVencimiento: string | null;
 }
 
-function estadoBadge(estado: string) {
+function EstadoChip({ estado }: { estado: string }) {
   switch (estado) {
     case 'borrador':
-      return <Badge variant="outline" className="text-gray-600 border-gray-300">Borrador</Badge>;
+      return <Chip label="Borrador" size="small" variant="outlined" sx={{ borderColor: '#d1d5db', color: '#4b5563', fontSize: '0.75rem' }} />;
     case 'enviada':
-      return <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">Enviada</Badge>;
+      return <Chip label="Enviada" size="small" sx={{ bgcolor: '#dbeafe', color: '#1d4ed8', fontSize: '0.75rem', border: '1px solid #bfdbfe' }} />;
     case 'aceptada':
-      return <Badge className="bg-green-600 hover:bg-green-600 text-white">Aceptada</Badge>;
+      return <Chip label="Aceptada" size="small" sx={{ bgcolor: '#16a34a', color: '#fff', fontSize: '0.75rem' }} />;
     case 'rechazada':
-      return <Badge variant="destructive">Rechazada</Badge>;
+      return <Chip label="Rechazada" size="small" sx={{ bgcolor: '#dc2626', color: '#fff', fontSize: '0.75rem' }} />;
     case 'vencida':
-      return <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">Vencida</Badge>;
+      return <Chip label="Vencida" size="small" sx={{ bgcolor: '#fef3c7', color: '#92400e', fontSize: '0.75rem', border: '1px solid #fde68a' }} />;
     default:
-      return <Badge variant="outline">{estado}</Badge>;
+      return <Chip label={estado} size="small" variant="outlined" sx={{ fontSize: '0.75rem' }} />;
   }
 }
 
 export default function CotizacionesPage() {
-  const [cotizaciones, setCotizaciones]   = useState<Cotizacion[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [filterValues, setFilterValues]   = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget]   = useState<Cotizacion | null>(null);
-  const [deleting, setDeleting]           = useState(false);
-  const [opError, setOpError]             = useState<string | null>(null);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<Cotizacion | null>(null);
+  const [deleting, setDeleting]         = useState(false);
+  const [opError, setOpError]           = useState<string | null>(null);
 
   const search = filterValues.q ?? '';
 
@@ -61,7 +66,6 @@ export default function CotizacionesPage() {
     }
   }, []);
 
-  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => cargar(search), 300);
     return () => clearTimeout(t);
@@ -89,14 +93,18 @@ export default function CotizacionesPage() {
       id: 'numero',
       header: 'Número',
       sortable: true,
-      render: c => <span className="font-mono font-medium text-sm">{c.numero}</span>,
+      render: c => (
+        <Typography sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.875rem' }}>
+          {c.numero}
+        </Typography>
+      ),
     },
     {
       id: 'cliente',
       header: 'Cliente',
       render: c => c.razonSocialComprador
-        ? <span className="text-gray-700">{c.razonSocialComprador}</span>
-        : <span className="text-gray-400 italic">Sin cliente</span>,
+        ? <Typography variant="body2" sx={{ color: '#374151' }}>{c.razonSocialComprador}</Typography>
+        : <Typography variant="body2" sx={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin cliente</Typography>,
     },
     {
       id: 'montoTotal',
@@ -104,13 +112,17 @@ export default function CotizacionesPage() {
       align: 'right',
       sortable: true,
       sortAccessor: c => c.montoTotal,
-      render: c => <span className="font-medium whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
+      render: c => (
+        <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+          {fmtDOP(c.montoTotal)}
+        </Typography>
+      ),
     },
     {
       id: 'estado',
       header: 'Estado',
       visibleAt: 'md',
-      render: c => estadoBadge(c.estado),
+      render: c => <EstadoChip estado={c.estado} />,
     },
     {
       id: 'fechaEmision',
@@ -118,7 +130,11 @@ export default function CotizacionesPage() {
       visibleAt: 'lg',
       sortable: true,
       sortAccessor: c => c.fechaEmision,
-      render: c => <span className="text-sm text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
+      render: c => (
+        <Typography variant="body2" sx={{ color: '#6b7280' }}>
+          {fmtFechaCorta(c.fechaEmision)}
+        </Typography>
+      ),
     },
   ], []);
 
@@ -128,7 +144,7 @@ export default function CotizacionesPage() {
   ];
 
   return (
-    <section className="bg-[#eef0f7] min-h-full p-6 space-y-6">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3 }}>
       <DataTable<Cotizacion>
         data={cotizaciones}
         loading={loading}
@@ -146,58 +162,82 @@ export default function CotizacionesPage() {
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin cotizaciones registradas',
           hint: search ? undefined : 'Crea tu primera cotización para enviarla a un cliente',
           cta: search ? undefined : (
-            <Link href="/dashboard/cotizaciones/nueva">
-              <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
-                <Plus className="h-4 w-4 mr-1" /> Nueva cotización
+            <Link href="/dashboard/cotizaciones/nueva" style={{ textDecoration: 'none' }}>
+              <Button
+                variant="contained"
+                disableElevation
+                size="small"
+                startIcon={<Plus size={16} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+              >
+                Nueva cotización
               </Button>
             </Link>
           ),
         }}
         headerActions={
-          <Link href="/dashboard/cotizaciones/nueva">
-            <Button className="bg-teal-600 hover:bg-teal-700">
-              <Plus className="h-4 w-4 mr-2" />
+          <Link href="/dashboard/cotizaciones/nueva" style={{ textDecoration: 'none' }}>
+            <Button
+              variant="contained"
+              disableElevation
+              startIcon={<Plus size={18} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+            >
               Nueva cotización
             </Button>
           </Link>
         }
       />
 
-      {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar cotización?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-                {opError}
-              </div>
-            )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar la cotización{' '}
-              <strong>{deleteTarget?.numero}</strong>
-              {deleteTarget?.razonSocialComprador
-                ? ` de ${deleteTarget.razonSocialComprador}`
-                : ''}
-              . Esta acción no se puede deshacer.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Esta cotización no se convertirá en factura si la eliminas.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</>
-                : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+      {/* Modal: Confirmar eliminación */}
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => { if (!deleting) setDeleteTarget(null); }}
+        slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 360 } } as object }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>
+          ¿Eliminar cotización?
+        </DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
+          {opError && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>{opError}</Alert>
+          )}
+          <Typography variant="body2" sx={{ color: '#374151', mb: 2 }}>
+            Vas a eliminar la cotización{' '}
+            <strong>{deleteTarget?.numero}</strong>
+            {deleteTarget?.razonSocialComprador ? ` de ${deleteTarget.razonSocialComprador}` : ''}
+            . Esta acción no se puede deshacer.
+          </Typography>
+          <Alert
+            severity="warning"
+            icon={<AlertTriangle size={16} />}
+            sx={{ borderRadius: '8px', fontSize: '0.75rem' }}
+          >
+            Esta cotización no se convertirá en factura si la eliminas.
+          </Alert>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteTarget(null)}
+            disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            disableElevation
+            color="error"
+            onClick={handleEliminar}
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}
+          >
+            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+          </Button>
+        </DialogActions>
       </Dialog>
-    </section>
+    </Box>
   );
 }

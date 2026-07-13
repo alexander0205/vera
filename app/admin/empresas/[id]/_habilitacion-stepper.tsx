@@ -8,7 +8,29 @@ import {
   Clock, AlertCircle, Rocket, Copy, Check, ExternalLink, Settings, User,
   FileSignature, Upload, Download, Loader2, X, ArrowRight, RotateCcw, FileText,
 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import { keyframes } from '@mui/material/styles';
 import { firmarXml, descargarBase64 } from '@/lib/habilitacion/client';
+
+// Animación de giro para loaders (reemplaza el `animate-spin` de Tailwind)
+const spin = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+// Loader giratorio — sustituye el spinner de Tailwind por keyframes MUI
+function Spinner({ size }: { size: number }) {
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', animation: `${spin} 1s linear infinite` }}>
+      <Loader2 style={{ width: size, height: size }} />
+    </Box>
+  );
+}
 
 // ─── Persistencia local del progreso (per-teamId) ────────────────────────────
 
@@ -124,7 +146,7 @@ interface SubScreen {
 interface Step {
   id: number;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   desc: string;
   screens: SubScreen[];
 }
@@ -314,46 +336,47 @@ export function HabilitacionStepper({
   }
 
   return (
-    <div className={embedded ? '-m-5' : 'bg-white rounded-xl border border-gray-200 overflow-hidden'}>
+    <Box sx={embedded ? { m: '-20px' } : { bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
       {/* Header con progreso global */}
-      <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-br from-teal-50/40 to-white">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center flex-shrink-0">
-            <Rocket className="w-5 h-5 text-teal-700" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-base font-bold text-gray-900">Habilitación DGII</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+      <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', background: 'linear-gradient(135deg, rgba(240,253,250,0.4) 0%, #fff 100%)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Rocket style={{ width: 20, height: 20, color: '#0f766e' }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700, color: 'text.primary' }}>Habilitación DGII</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: '2px' }}>
               Team #{teamId} · {completedCount} de {STEPS.length} pasos completados
               {inProgress && ` · paso ${inProgress.id} en progreso`}
-            </p>
-          </div>
+            </Typography>
+          </Box>
           {completedCount > 0 && (
-            <button
-              type="button"
+            <Button
+              size="small"
               onClick={() => { if (confirm('¿Reiniciar todo el progreso de habilitación de este team?')) reset(); }}
-              className="text-[11px] text-gray-400 hover:text-red-500 flex items-center gap-1 px-2 py-1 rounded hover:bg-red-50"
               title="Reiniciar progreso local"
+              sx={{ fontSize: '0.6875rem', color: 'text.disabled', textTransform: 'none', minWidth: 0, px: 1, py: 0.5, borderRadius: '6px', '&:hover': { color: 'error.main', bgcolor: '#fef2f2' } }}
+              startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
             >
-              <RotateCcw className="w-3 h-3" /> Reiniciar
-            </button>
+              Reiniciar
+            </Button>
           )}
-          <div className="text-right flex-shrink-0">
-            <p className="text-2xl font-bold text-teal-700 tabular-nums">{pctComplete.toFixed(0)}%</p>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">completado</p>
-          </div>
-        </div>
+          <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f766e', fontVariantNumeric: 'tabular-nums' }}>{pctComplete.toFixed(0)}%</Typography>
+            <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>completado</Typography>
+          </Box>
+        </Box>
         {/* Progress bar */}
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-teal-500 to-teal-600 transition-all"
+        <Box sx={{ height: 6, bgcolor: '#f3f4f6', borderRadius: '999px', overflow: 'hidden' }}>
+          <Box
+            sx={{ height: '100%', background: 'linear-gradient(90deg, #14b8a6, #0d9488)', transition: 'width 0.3s ease' }}
             style={{ width: `${pctComplete}%` }}
           />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* Steps */}
-      <ul className="divide-y divide-gray-100">
+      <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, '& > li + li': { borderTop: '1px solid #f3f4f6' } }}>
         {STEPS.map((step) => (
           <StepRow
             key={step.id}
@@ -369,8 +392,8 @@ export function HabilitacionStepper({
             ctx={{ teamId, software, webhookBaseUrl, codigoPublico, rnc, ambiente }}
           />
         ))}
-      </ul>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -400,58 +423,69 @@ function StepRow({
   const Icon = step.icon;
 
   return (
-    <li>
-      <button
+    <Box component="li">
+      <Box
+        component="button"
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-4 px-6 py-4 hover:bg-gray-50/80 transition-colors text-left group"
+        sx={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 2, px: 3, py: 2,
+          bgcolor: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+          transition: 'background-color 0.15s',
+          '&:hover': { bgcolor: 'rgba(249,250,251,0.8)' },
+          '&:hover [data-status="pending"]': { bgcolor: '#e5e7eb' },
+        }}
       >
         {/* Número grande con anillo */}
-        <div className={`relative flex items-center justify-center w-11 h-11 rounded-full font-bold text-sm flex-shrink-0 transition-colors
-          ${status === 'done'
-            ? 'bg-emerald-500 text-white'
-            : status === 'in-progress'
-              ? 'bg-amber-100 text-amber-900 ring-2 ring-amber-400'
-              : status === 'error'
-                ? 'bg-red-100 text-red-700 ring-2 ring-red-400'
-                : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200'
-          }`}>
-          {status === 'done' ? <CheckCircle2 className="w-5 h-5" /> : step.id}
-        </div>
+        <Box
+          data-status={status}
+          sx={{
+            position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 44, height: 44, borderRadius: '50%', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0,
+            transition: 'background-color 0.15s',
+            ...(status === 'done' ? { bgcolor: '#10b981', color: '#fff' }
+              : status === 'in-progress' ? { bgcolor: '#fef3c7', color: '#78350f', outline: '2px solid #fbbf24', outlineOffset: '0px' }
+              : status === 'error' ? { bgcolor: '#fee2e2', color: '#b91c1c', outline: '2px solid #f87171', outlineOffset: '0px' }
+              : { bgcolor: '#f3f4f6', color: '#6b7280' }),
+          }}
+        >
+          {status === 'done' ? <CheckCircle2 style={{ width: 20, height: 20 }} /> : step.id}
+        </Box>
 
         {/* Icono + título + desc */}
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Icon className={`w-5 h-5 flex-shrink-0 ${
-            status === 'done' ? 'text-emerald-600' :
-            status === 'in-progress' ? 'text-amber-600' :
-            status === 'error' ? 'text-red-600' :
-            'text-gray-400'
-          }`} />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{step.label}</p>
-            <p className="text-xs text-gray-500 truncate hidden sm:block">{step.desc}</p>
-          </div>
-        </div>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
+          <Icon style={{
+            width: 20, height: 20, flexShrink: 0,
+            color: status === 'done' ? '#059669'
+              : status === 'in-progress' ? '#d97706'
+              : status === 'error' ? '#dc2626'
+              : '#9ca3af',
+          }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{step.label}</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>{step.desc}</Typography>
+          </Box>
+        </Box>
 
         {/* Status pill */}
         <StatusPill status={status} />
 
         {/* Sub-screens count */}
-        <span className="text-[10px] text-gray-400 font-mono hidden md:inline">
+        <Typography component="span" sx={{ fontSize: '0.625rem', color: '#9ca3af', fontFamily: 'monospace', display: { xs: 'none', md: 'inline' } }}>
           {step.screens.length} pantalla{step.screens.length === 1 ? '' : 's'}
-        </span>
+        </Typography>
 
         {/* Expand chevron */}
         {isOpen ? (
-          <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <ChevronDown style={{ width: 20, height: 20, color: '#9ca3af', flexShrink: 0 }} />
         ) : (
-          <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <ChevronRight style={{ width: 20, height: 20, color: '#9ca3af', flexShrink: 0 }} />
         )}
-      </button>
+      </Box>
 
       {/* Body expandido */}
       {isOpen && (
-        <div className="px-6 pb-5 pt-1 pl-[5.25rem] bg-gray-50/40 border-t border-gray-100">
+        <Box sx={{ px: 3, pb: 2.5, pt: 0.5, pl: '84px', bgcolor: 'rgba(249,250,251,0.4)', borderTop: '1px solid #f3f4f6' }}>
           {step.id === 1 ? (
             <Step1Body ctx={ctx} persisted={persisted} persistUpdate={persistUpdate} />
           ) : step.id === 2 ? (
@@ -481,9 +515,9 @@ function StepRow({
             isCurrent={isCurrent}
             onMarkDone={onMarkDone}
           />
-        </div>
+        </Box>
       )}
-    </li>
+    </Box>
   );
 }
 
@@ -497,30 +531,33 @@ function StepNavFooter({ stepId, status, isCurrent, onMarkDone }: {
 
   if (status === 'done') {
     return (
-      <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
-        <span className="text-[11px] text-emerald-700 flex items-center gap-1.5 font-medium">
-          <CheckCircle2 className="w-3.5 h-3.5" /> Paso completado y guardado
-        </span>
-      </div>
+      <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#15803d', display: 'flex', alignItems: 'center', gap: 0.75, fontWeight: 500 }}>
+          <CheckCircle2 style={{ width: 14, height: 14 }} /> Paso completado y guardado
+        </Typography>
+      </Box>
     );
   }
 
   return (
-    <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between gap-3">
-      <p className="text-[11px] text-gray-500">
+    <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+      <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>
         {isCurrent
           ? 'Cuando termines aquí, marca completado para avanzar al siguiente paso.'
           : 'Este paso no es el actual. Puedes revisarlo pero marcarlo no salta el orden.'}
-      </p>
-      <button
+      </Typography>
+      <Button
         type="button"
+        variant="contained"
+        size="small"
         onClick={onMarkDone}
-        className="text-xs bg-teal-600 hover:bg-teal-700 text-white font-semibold px-4 py-1.5 rounded-md flex items-center gap-1.5 flex-shrink-0"
+        endIcon={!isLast ? <ArrowRight style={{ width: 14, height: 14 }} /> : undefined}
+        disableElevation
+        sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', flexShrink: 0, '&:hover': { bgcolor: '#0f766e' } }}
       >
         {isLast ? 'Finalizar habilitación' : 'Marcar completado y continuar'}
-        {!isLast && <ArrowRight className="w-3.5 h-3.5" />}
-      </button>
-    </div>
+      </Button>
+    </Box>
   );
 }
 
@@ -535,92 +572,93 @@ function Step1Body({ ctx, persisted, persistUpdate }: {
   const baseValue = ctx.webhookBaseUrl ?? 'Cargando…';
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Intro */}
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <ExternalLink className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 text-xs text-blue-900">
-          <p className="font-semibold mb-0.5">Registrar en portal DGII</p>
-          <p className="text-blue-800/80">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 1.5 }}>
+        <ExternalLink style={{ width: 16, height: 16, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Box sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f' }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, mb: '2px', color: '#1e3a5f' }}>Registrar en portal DGII</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: 'rgba(30,58,95,0.8)' }}>
             Copia los campos abajo y pégalos en el formulario del portal DGII
             ({ctx.ambiente === 'Produccion' ? 'producción' : ctx.ambiente === 'CerteCF' ? 'CerteCF' : 'TesteCF'}).
             Luego usa el bloque de la derecha para firmar el XML descargado.
-          </p>
-        </div>
-        <a
+          </Typography>
+        </Box>
+        <Box
+          component="a"
           href={ctx.ambiente === 'Produccion'
             ? 'https://ecf.dgii.gov.do/ecf/contribuyentes'
             : ctx.ambiente === 'CerteCF'
               ? 'https://ecf.dgii.gov.do/certecf/contribuyentes'
               : 'https://ecf.dgii.gov.do/testecf/contribuyentes'}
           target="_blank" rel="noopener noreferrer"
-          className="text-[11px] bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-md flex items-center gap-1 flex-shrink-0"
+          sx={{ fontSize: '0.6875rem', bgcolor: '#2563eb', color: '#fff', fontWeight: 600, px: 1.5, py: 0.75, borderRadius: '6px', display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, textDecoration: 'none', '&:hover': { bgcolor: '#1d4ed8' } }}
         >
-          Abrir portal <ExternalLink className="w-3 h-3" />
-        </a>
-      </div>
+          Abrir portal <ExternalLink style={{ width: 12, height: 12 }} />
+        </Box>
+      </Box>
 
       {/* 2-col: izq form datos · der upload+firmar */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '2fr 1fr' }, gap: 2.5 }}>
         {/* IZQ: form portal DGII (2/3) */}
-        <div className="xl:col-span-2 space-y-5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           {/* Datos del software a utilizar */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Settings className="w-4 h-4 text-gray-500" />
-              <h3 className="text-sm font-semibold text-gray-800">Datos del software a utilizar</h3>
-            </div>
+          <Box component="section">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Settings style={{ width: 16, height: 16, color: '#6b7280' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Datos del software a utilizar</Typography>
+            </Box>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1.5, mb: 1.5 }}>
               <DgiiCopyField label="Tipo de software"     value={SOFTWARE_PROVIDER.tipo} required={false} />
               <DgiiCopyField label="Nombre del software"  value={software_or_loading(ctx.software?.nombre)} />
               <DgiiCopyField label="Versión del software" value="1" />
-            </div>
+            </Box>
 
-            <div className="space-y-3">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <DgiiCopyField label="URL de recepción"            value={baseValue} isUrl />
               <DgiiCopyField label="URL de aprobación comercial" value={baseValue} isUrl />
               <DgiiCopyField label="URL de autenticación"        value={baseValue} isUrl />
-            </div>
-          </section>
+            </Box>
+          </Box>
 
           {/* Datos del proveedor electrónico */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <User className="w-4 h-4 text-gray-500" />
-              <h3 className="text-sm font-semibold text-gray-800">Datos del proveedor electrónico</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Box component="section">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <User style={{ width: 16, height: 16, color: '#6b7280' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Datos del proveedor electrónico</Typography>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1.5 }}>
               <DgiiCopyField label="RNC / Cédula" value={SOFTWARE_PROVIDER.rnc} />
-              <DgiiCopyField label="Razón social" value={SOFTWARE_PROVIDER.razonSocial} className="md:col-span-2" />
-            </div>
-          </section>
+              <DgiiCopyField label="Razón social" value={SOFTWARE_PROVIDER.razonSocial} colSpan={2} />
+            </Box>
+          </Box>
 
           {/* Datos del contribuyente vinculado */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <UserCheck className="w-4 h-4 text-gray-500" />
-              <h3 className="text-sm font-semibold text-gray-800">Contribuyente vinculado</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Box component="section">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <UserCheck style={{ width: 16, height: 16, color: '#6b7280' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Contribuyente vinculado</Typography>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1.5 }}>
               <DgiiCopyField label="RNC contribuyente" value={ctx.rnc ?? '—'} required={false} />
               <DgiiCopyField label="Código público"    value={ctx.codigoPublico ?? '—'} required={false} />
               <DgiiCopyField label="Ambiente"          value={ctx.ambiente ?? '—'} required={false} />
-            </div>
-          </section>
-        </div>
+            </Box>
+          </Box>
+        </Box>
 
         {/* DER: upload + firmar XML postulación (1/3) */}
-        <div className="xl:col-span-1">
+        <Box>
           <FirmarPostulacionPanel
             rnc={ctx.rnc}
             codigoPublico={ctx.codigoPublico}
             persisted={persisted}
             persistUpdate={persistUpdate}
           />
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -695,37 +733,35 @@ function FirmarPostulacionPanel({
   const persistedStep1 = slot; // alias para el resto del JSX (timestamp)
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 h-full flex flex-col">
-      <div className="flex items-center gap-2 mb-3">
-        <FileSignature className="w-4 h-4 text-teal-600" />
-        <h3 className="text-sm font-semibold text-gray-800">{titulo}</h3>
-      </div>
+    <Paper variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', borderRadius: '8px', borderColor: '#e5e7eb' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+        <FileSignature style={{ width: 16, height: 16, color: '#0d9488' }} />
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>{titulo}</Typography>
+      </Box>
 
       {/* Pasos numerados */}
-      <ol className="space-y-3 flex-1">
+      <Box component="ol" sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, flex: 1, listStyle: 'none', m: 0, p: 0 }}>
         {/* Paso 1: generar archivo en portal */}
-        <li className="flex gap-2.5">
-          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-[11px] font-bold flex items-center justify-center">1</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-gray-800">Generar archivo en DGII</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+        <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
+          <Typography component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', bgcolor: '#f3f4f6', color: '#4b5563', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</Typography>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>Generar archivo en DGII</Typography>
+            <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: '2px' }}>
               En el portal DGII llena los campos y haz clic en <strong>"Generar archivo"</strong>.
               Descargarás un XML sin firmar.
-            </p>
-          </div>
-        </li>
+            </Typography>
+          </Box>
+        </Box>
 
         {/* Paso 2: subir XML */}
-        <li className="flex gap-2.5">
-          <span className={`flex-shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center ${
-            displayFileName ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
-          }`}>
-            {displayFileName ? <Check className="w-3 h-3" /> : '2'}
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-gray-800">Subir XML sin firmar</p>
+        <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
+          <Box component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', ...(displayFileName ? { bgcolor: '#0d9488', color: '#fff' } : { bgcolor: '#f3f4f6', color: '#4b5563' }) }}>
+            {displayFileName ? <Check style={{ width: 12, height: 12 }} /> : '2'}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>Subir XML sin firmar</Typography>
             {!displayFileName ? (
-              <label className="mt-1.5 block">
+              <Box component="label" sx={{ mt: 0.75, display: 'block', cursor: 'pointer' }}>
                 <input
                   type="file"
                   accept=".xml,application/xml,text/xml"
@@ -733,94 +769,91 @@ function FirmarPostulacionPanel({
                     const f = e.target.files?.[0];
                     if (f) { setFile(f); setError(null); }
                   }}
-                  className="block w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:bg-gray-100 file:text-gray-700 file:font-medium hover:file:bg-gray-200 file:cursor-pointer cursor-pointer text-gray-500"
+                  style={{ display: 'block', width: '100%', fontSize: '0.6875rem', cursor: 'pointer', color: '#6b7280' }}
                 />
-              </label>
+              </Box>
             ) : (
-              <div className="mt-1.5 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5">
-                <Upload className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                <span className="text-[11px] text-gray-700 font-mono truncate flex-1">{displayFileName}</span>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="text-gray-400 hover:text-red-500"
-                  title="Quitar archivo"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
+              <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', px: 1, py: 0.75 }}>
+                <Upload style={{ width: 12, height: 12, flexShrink: 0, color: '#9ca3af' }} />
+                <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#374151', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{displayFileName}</Typography>
+                <IconButton size="small" onClick={handleReset} title="Quitar archivo" sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
+                  <X style={{ width: 12, height: 12 }} />
+                </IconButton>
+              </Box>
             )}
-          </div>
-        </li>
+          </Box>
+        </Box>
 
         {/* Paso 3: firmar */}
-        <li className="flex gap-2.5">
-          <span className={`flex-shrink-0 w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center ${
-            signed ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
-          }`}>
-            {signed ? <Check className="w-3 h-3" /> : '3'}
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-gray-800">Firmar con certificado P12</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+        <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
+          <Box component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', ...(signed ? { bgcolor: '#0d9488', color: '#fff' } : { bgcolor: '#f3f4f6', color: '#4b5563' }) }}>
+            {signed ? <Check style={{ width: 12, height: 12 }} /> : '3'}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>Firmar con certificado P12</Typography>
+            <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: '2px' }}>
               Aplicamos XMLDSig RSA-SHA256 con el cert de {rnc ? `RNC ${rnc}` : 'esta empresa'}.
               {persistedStep1.signedAt && ` Firmado: ${new Date(persistedStep1.signedAt).toLocaleString('es-DO')}`}
-            </p>
+            </Typography>
             {!signed && (
-              <button
+              <Button
                 type="button"
+                variant="contained"
+                fullWidth
                 onClick={handleFirmar}
                 disabled={!file || loading}
-                className="mt-2 w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-semibold px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 transition-colors"
+                disableElevation
+                startIcon={loading ? <Spinner size={14} /> : <FileSignature style={{ width: 14, height: 14 }} />}
+                sx={{ mt: 1, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#e5e7eb', color: '#9ca3af' } }}
               >
-                {loading ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Firmando…</>
-                ) : (
-                  <><FileSignature className="w-3.5 h-3.5" /> Firmar XML</>
-                )}
-              </button>
+                {loading ? 'Firmando…' : 'Firmar XML'}
+              </Button>
             )}
-          </div>
-        </li>
+          </Box>
+        </Box>
 
         {/* Paso 4: descargar */}
         {signed && (
-          <li className="flex gap-2.5">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-[11px] font-bold flex items-center justify-center">4</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-gray-800">Descargar XML firmado</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">Luego súbelo al portal DGII para completar la postulación.</p>
-              <button
+          <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
+            <Typography component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', bgcolor: '#f3f4f6', color: '#4b5563', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>4</Typography>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>Descargar XML firmado</Typography>
+              <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: '2px' }}>Luego súbelo al portal DGII para completar la postulación.</Typography>
+              <Button
                 type="button"
+                variant="contained"
+                fullWidth
                 onClick={handleDownload}
-                className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5"
+                disableElevation
+                startIcon={<Download style={{ width: 14, height: 14 }} />}
+                sx={{ mt: 1, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#059669', '&:hover': { bgcolor: '#047857' } }}
               >
-                <Download className="w-3.5 h-3.5" /> Descargar {signed.nombre}
-              </button>
-            </div>
-          </li>
+                Descargar {signed.nombre}
+              </Button>
+            </Box>
+          </Box>
         )}
-      </ol>
+      </Box>
 
       {/* Error */}
       {error && (
-        <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
-          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-red-700 flex-1">{error}</p>
-        </div>
+        <Box sx={{ mt: 1.5, bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', p: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <AlertCircle style={{ width: 14, height: 14, flexShrink: 0, marginTop: 2, color: '#dc2626' }} />
+          <Typography sx={{ fontSize: '0.6875rem', color: '#b91c1c', flex: 1 }}>{error}</Typography>
+        </Box>
       )}
 
       {/* Reset si firmado */}
       {signed && (
-        <button
+        <Button
           type="button"
           onClick={handleReset}
-          className="mt-3 text-[11px] text-gray-500 hover:text-gray-700 underline self-center"
+          sx={{ mt: 1.5, fontSize: '0.6875rem', color: 'text.secondary', textTransform: 'none', textDecoration: 'underline', alignSelf: 'center', '&:hover': { color: 'text.primary' } }}
         >
           Firmar otro XML
-        </button>
+        </Button>
       )}
-    </div>
+    </Paper>
   );
 }
 
@@ -830,12 +863,12 @@ function software_or_loading(v: string | undefined) {
 
 // ─── Campo estilo portal DGII con copy button ────────────────────────────────
 
-function DgiiCopyField({ label, value, isUrl = false, required = true, className = '' }: {
+function DgiiCopyField({ label, value, isUrl = false, required = true, colSpan }: {
   label: string;
   value: string;
   isUrl?: boolean;
   required?: boolean;
-  className?: string;
+  colSpan?: number;
 }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -845,29 +878,29 @@ function DgiiCopyField({ label, value, isUrl = false, required = true, className
   };
 
   return (
-    <div className={className}>
-      <label className="block text-xs font-medium text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      <div className="flex items-center border border-gray-300 rounded-md bg-white overflow-hidden focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-400">
+    <Box sx={colSpan ? { gridColumn: `span ${colSpan}` } : undefined}>
+      <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#374151', mb: 0.5 }}>
+        {label}{required && <Typography component="span" sx={{ color: 'error.main', ml: '2px' }}>*</Typography>}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: '6px', bgcolor: '#fff', overflow: 'hidden', '&:focus-within': { outline: '2px solid rgba(13,148,136,0.2)', borderColor: '#2dd4bf' } }}>
         {isUrl && (
-          <span className="shrink-0 px-2.5 py-1.5 text-xs text-gray-400 bg-gray-50 border-r border-gray-200 select-none font-mono">
+          <Typography component="span" sx={{ flexShrink: 0, px: 1.25, py: 0.75, fontSize: '0.75rem', color: '#9ca3af', bgcolor: '#f9fafb', borderRight: '1px solid #e5e7eb', userSelect: 'none', fontFamily: 'monospace' }}>
             https://
-          </span>
+          </Typography>
         )}
-        <span className="flex-1 px-3 py-1.5 text-xs text-gray-900 truncate min-w-0 font-mono">
+        <Typography component="span" sx={{ flex: 1, px: 1.5, py: 0.75, fontSize: '0.75rem', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, fontFamily: 'monospace' }}>
           {isUrl ? value.replace(/^https?:\/\//, '') : value}
-        </span>
-        <button
-          type="button"
+        </Typography>
+        <IconButton
+          size="small"
           onClick={handleCopy}
-          className="shrink-0 px-2.5 py-1.5 border-l border-gray-200 bg-gray-50 hover:bg-teal-50 text-gray-400 hover:text-teal-600 transition-colors"
           title="Copiar"
+          sx={{ flexShrink: 0, borderRadius: 0, px: 1.25, py: 0.75, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#f0fdfa', color: '#0d9488' } }}
         >
-          {copied ? <Check className="h-3.5 w-3.5 text-teal-600" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-      </div>
-    </div>
+          {copied ? <Check style={{ width: 14, height: 14, color: '#0d9488' }} /> : <Copy style={{ width: 14, height: 14 }} />}
+        </IconButton>
+      </Box>
+    </Box>
   );
 }
 
@@ -1064,226 +1097,244 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
   const failedEncfs = failedCases.map(c => c.eNcf).filter(Boolean);
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Info banner azul */}
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
-          <p>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+        <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Box sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
             Etapa en la que se comprueba la capacidad de su sistema para generar
             Comprobantes Fiscales Electrónicos (e-CF), con datos suministrados por DGII.
-          </p>
-          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+          </Typography>
+          <Box component="ul" sx={{ listStyleType: 'disc', ml: 2.5, mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.75rem', color: '#1e3a5f' }}>
             <li>Descarga el <strong>Excel (Set de pruebas)</strong> del portal DGII, súbelo aquí y el sistema emite los casos automáticamente con el cert del contribuyente (resuelto por <code>RNCEmisor</code> del Excel).</li>
             <li>Las FC <strong>&lt; RD$250,000</strong> NO se envían por API: se descargan en ZIP y se suben manual al portal DGII.</li>
-          </ul>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Card: Subir Excel + arrancar */}
       <CardSection title="1. Subir Excel del Set de Pruebas" icon={Upload} color="teal">
         {!runId ? (
-          <div className="space-y-2">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {!file ? (
-              <label className="block">
+              <Box component="label" sx={{ display: 'block', cursor: 'pointer' }}>
                 <input
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); setError(null); } }}
-                  className="block w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:bg-gray-100 file:text-gray-700 file:font-medium hover:file:bg-gray-200 file:cursor-pointer cursor-pointer text-gray-500"
+                  style={{ display: 'block', width: '100%', fontSize: '0.6875rem', cursor: 'pointer', color: '#6b7280' }}
                 />
-              </label>
+              </Box>
             ) : (
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5">
-                <Upload className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                <span className="text-[11px] text-gray-700 font-mono truncate flex-1">{file.name}</span>
-                <button type="button" onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', px: 1, py: 0.75 }}>
+                <Upload style={{ width: 12, height: 12, flexShrink: 0, color: '#9ca3af' }} />
+                <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#374151', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.name}</Typography>
+                <IconButton size="small" onClick={() => setFile(null)} sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
+                  <X style={{ width: 12, height: 12 }} />
+                </IconButton>
+              </Box>
             )}
             {/* e-NCFs a excluir (re-correr solo los que fallaron) */}
-            <div>
-              <label className="block text-[11px] font-medium text-gray-600 mb-1">
+            <Box>
+              <Typography component="label" sx={{ display: 'block', fontSize: '0.6875rem', fontWeight: 500, color: '#4b5563', mb: 0.5 }}>
                 Excluir e-NCFs (opcional)
-              </label>
-              <input
-                type="text"
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
                 value={skipEncfs}
                 onChange={e => setSkipEncfs(e.target.value)}
                 placeholder="E320000000012,E320000000015"
-                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '0.6875rem', fontFamily: 'monospace' } }}
               />
-              <p className="text-[10px] text-gray-400 mt-1">
+              <Typography sx={{ fontSize: '0.625rem', color: '#9ca3af', mt: 0.5 }}>
                 CSV de e-NCF a saltar. Útil para re-subir el Excel omitiendo los que ya fallaron.
-              </p>
-            </div>
-            <button
+              </Typography>
+            </Box>
+            <Button
               type="button"
+              variant="contained"
+              fullWidth
               onClick={handleUpload}
               disabled={!file || uploading}
-              className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+              disableElevation
+              startIcon={uploading ? <Spinner size={14} /> : <ArrowRight style={{ width: 14, height: 14 }} />}
+              sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
             >
-              {uploading
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Subiendo…</>
-                : <><ArrowRight className="w-3.5 h-3.5" /> Procesar Set de Pruebas</>}
-            </button>
-            <p className="text-[10px] text-gray-400 text-center">
+              {uploading ? 'Subiendo…' : 'Procesar Set de Pruebas'}
+            </Button>
+            <Typography sx={{ fontSize: '0.625rem', color: '#9ca3af', textAlign: 'center' }}>
               Ambiente: <strong>{env}</strong> · Excel .xlsx, máx 20 MB
-            </p>
-          </div>
+            </Typography>
+          </Box>
         ) : (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold text-emerald-800">Corrida iniciada</p>
-                <p className="text-[10px] text-emerald-700 font-mono truncate">run: {runId}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', px: 1.25, py: 1 }}>
+              <CheckCircle2 style={{ width: 16, height: 16, flexShrink: 0, color: '#059669' }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#065f46' }}>Corrida iniciada</Typography>
+                <Typography sx={{ fontSize: '0.625rem', color: '#047857', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>run: {runId}</Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
                 type="button"
+                variant="outlined"
+                fullWidth
                 onClick={handleForgetRun}
-                className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 flex items-center justify-center gap-1 py-1.5 border border-gray-200 rounded-md hover:bg-gray-50"
+                startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: 'text.secondary', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f9fafb' } }}
               >
-                <RotateCcw className="w-3 h-3" /> Olvidar
-              </button>
-              <button
+                Olvidar
+              </Button>
+              <Button
                 type="button"
+                variant="outlined"
+                fullWidth
                 onClick={handleDeleteRun}
-                className="flex-1 text-[11px] text-red-600 hover:text-red-700 flex items-center justify-center gap-1 py-1.5 border border-red-200 rounded-md hover:bg-red-50"
+                startIcon={<X style={{ width: 12, height: 12 }} />}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: 'error.main', borderColor: '#fecaca', '&:hover': { bgcolor: '#fef2f2' } }}
               >
-                <X className="w-3 h-3" /> Borrar en ecf-api
-              </button>
-            </div>
-          </div>
+                Borrar en ecf-api
+              </Button>
+            </Box>
+          </Box>
         )}
       </CardSection>
 
       {/* Card: Estado emisión */}
       {runId && (
         <CardSection title="2. Estado de la emisión" icon={ShieldCheck} color="teal">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <RunStatusBadge status={run?.status ?? persisted.step2?.status ?? 'PROCESANDO'} polling={polling} />
-              <button
+              <Button
                 type="button"
                 onClick={() => runId && fetchRun(runId)}
-                className="ml-auto text-[11px] text-teal-600 hover:text-teal-700 flex items-center gap-1"
+                startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
+                sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#0d9488', textTransform: 'none', '&:hover': { color: '#0f766e' } }}
               >
-                <RotateCcw className="w-3 h-3" /> Refrescar
-              </button>
-            </div>
+                Refrescar
+              </Button>
+            </Box>
 
             {/* Counters de emisión */}
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, textAlign: 'center' }}>
               <MiniStat label="Total"    value={run?.total ?? 0} />
               <MiniStat label="OK"       value={run?.ok ?? 0}      tone="emerald" />
               <MiniStat label="Fallidos" value={run?.failed ?? 0}  tone="red" />
               <MiniStat label="Saltados" value={run?.skipped ?? 0} tone="gray" />
-            </div>
+            </Box>
 
             {/* Counters DGII */}
-            <div className="border-t border-gray-100 pt-2 space-y-1">
+            <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
               <CounterRow label="Aceptados por DGII"  accepted={aceptados}     total={run?.total ?? 0} />
               <CounterRow label="Resúmenes (RFCE) Aceptados" accepted={rfceAceptados} total={rfceRows.length} />
-              {rechazados > 0 && <p className="text-[11px] text-red-600">{rechazados} rechazados por DGII</p>}
-              {enProceso > 0 && <p className="text-[11px] text-amber-600">{enProceso} en proceso/pendientes</p>}
-            </div>
+              {rechazados > 0 && <Typography sx={{ fontSize: '0.6875rem', color: '#dc2626' }}>{rechazados} rechazados por DGII</Typography>}
+              {enProceso > 0 && <Typography sx={{ fontSize: '0.6875rem', color: '#d97706' }}>{enProceso} en proceso/pendientes</Typography>}
+            </Box>
 
             {run?.errorMessage && (
-              <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-2">{run.errorMessage}</p>
+              <Typography sx={{ fontSize: '0.6875rem', color: '#dc2626', bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', p: 1 }}>{run.errorMessage}</Typography>
             )}
 
             {/* Casos fallidos con su e-NCF + error específico */}
             {failedCases.length > 0 && (
-              <div className="border-t border-gray-100 pt-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[11px] font-semibold text-red-700">
+              <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#b91c1c' }}>
                     {failedCases.length} caso{failedCases.length === 1 ? '' : 's'} fallido{failedCases.length === 1 ? '' : 's'}
-                  </p>
-                  <button
+                  </Typography>
+                  <Button
                     type="button"
+                    size="small"
                     onClick={() => {
                       setSkipEncfs(failedEncfs.join(','));
                       handleForgetRun();
                     }}
-                    className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-2 py-1 rounded flex items-center gap-1"
                     title="Copia los e-NCF fallidos al campo Excluir y limpia la corrida para re-subir"
+                    startIcon={<RotateCcw style={{ width: 10, height: 10 }} />}
+                    sx={{ fontSize: '0.625rem', bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, textTransform: 'none', borderRadius: '4px', '&:hover': { bgcolor: '#fde68a' } }}
                   >
-                    <RotateCcw className="w-2.5 h-2.5" /> Excluir fallidos y re-subir
-                  </button>
-                </div>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
+                    Excluir fallidos y re-subir
+                  </Button>
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 192, overflowY: 'auto' }}>
                   {failedCases.map((c, i) => (
-                    <div key={i} className="text-[10px] bg-red-50 border border-red-100 rounded px-2 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-red-800">{c.eNcf || '(sin e-NCF)'}</span>
-                        <span className="text-gray-400">tipo {c.tipoECF}</span>
-                        <span className="ml-auto px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">
+                    <Box key={i} sx={{ fontSize: '0.625rem', bgcolor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '4px', px: 1, py: 0.75 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#991b1b', fontSize: '0.625rem' }}>{c.eNcf || '(sin e-NCF)'}</Typography>
+                        <Typography component="span" sx={{ color: '#9ca3af', fontSize: '0.625rem' }}>tipo {c.tipoECF}</Typography>
+                        <Typography component="span" sx={{ ml: 'auto', px: 0.75, py: '1px', borderRadius: '3px', bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 600, fontSize: '0.625rem' }}>
                           {c.estadoDgii ?? c.status}
-                        </span>
-                      </div>
+                        </Typography>
+                      </Box>
                       {(c.error || (c.mensajesDgii && c.mensajesDgii.length > 0)) && (
-                        <p className="text-red-600 mt-0.5 leading-snug">
+                        <Typography sx={{ color: '#dc2626', mt: '2px', lineHeight: 1.4, fontSize: '0.625rem' }}>
                           {c.error ?? c.mensajesDgii
                             ?.map(m => [m.codigo, m.valor].filter(Boolean).join(': '))
                             .filter(Boolean)
                             .join(' · ')}
-                        </p>
+                        </Typography>
                       )}
-                    </div>
+                    </Box>
                   ))}
-                </div>
-              </div>
+                </Box>
+              </Box>
             )}
-          </div>
+          </Box>
         </CardSection>
       )}
 
       {/* Card: Descargas (FC<250K + paquete) */}
       {runId && (
         <CardSection title="3. Descargas" icon={Download} color="teal">
-          <div className="space-y-2">
-            <a
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box
+              component="a"
               href={`${apiBase}/runs/${runId}/manual-upload/zip`}
-              className="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+              sx={{ width: '100%', bgcolor: '#0d9488', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' } }}
             >
-              <Download className="w-3.5 h-3.5" /> ZIP Facturas &lt; RD$250K
-            </a>
-            <p className="text-[10px] text-gray-500 text-center">
+              <Download style={{ width: 14, height: 14 }} /> ZIP Facturas &lt; RD$250K
+            </Box>
+            <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary', textAlign: 'center' }}>
               Descomprime y sube cada XML al portal DGII en <strong>"Facturas de consumo &lt; 250Mil"</strong>.
-            </p>
-            <a
+            </Typography>
+            <Box
+              component="a"
               href={`${apiBase}/runs/${runId}/package`}
-              className="w-full text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50"
+              sx={{ width: '100%', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, border: '1px solid #d1d5db', color: '#374151', textDecoration: 'none', '&:hover': { bgcolor: '#f9fafb' } }}
             >
-              <Download className="w-3.5 h-3.5" /> Paquete completo (XML + PDF)
-            </a>
-          </div>
+              <Download style={{ width: 14, height: 14 }} /> Paquete completo (XML + PDF)
+            </Box>
+          </Box>
         </CardSection>
       )}
 
       {/* Error global */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
-          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-[11px] text-red-700">{error}</p>
+        <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', p: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <AlertCircle style={{ width: 14, height: 14, flexShrink: 0, marginTop: 2, color: '#dc2626' }} />
+          <Box sx={{ flex: 1 }}>
+            <Typography sx={{ fontSize: '0.6875rem', color: '#b91c1c' }}>{error}</Typography>
             {dupRunId && (
-              <button
+              <Button
                 type="button"
+                variant="contained"
+                size="small"
                 onClick={handleDeleteDuplicate}
-                className="mt-2 text-[11px] bg-red-600 hover:bg-red-700 text-white font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
+                startIcon={<X style={{ width: 12, height: 12 }} />}
+                disableElevation
+                sx={{ mt: 1, fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: 'error.main', '&:hover': { bgcolor: 'error.dark' } }}
               >
-                <X className="w-3 h-3" /> Borrar corrida previa y reintentar
-              </button>
+                Borrar corrida previa y reintentar
+              </Button>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -1347,159 +1398,165 @@ function Step3Body({ ctx, persisted, persistUpdate }: {
   const failedEncfs = failedRows.map(r => r.eNcf).filter(Boolean) as string[];
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Info banner */}
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
-          <p>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+        <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Box sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
             Etapa en la que se comprueba la capacidad de su sistema para generar
             Aprobaciones Comerciales (ACECF), con datos suministrados por DGII.
-          </p>
-          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+          </Typography>
+          <Box component="ul" sx={{ listStyleType: 'disc', ml: 2.5, mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.75rem', color: '#1e3a5f' }}>
             <li>Descarga <strong>"Aprobaciones Comerciales"</strong> del portal DGII (archivo distinto al del paso 2), súbelo aquí.</li>
             <li>Cada ACECF se firma con el cert del <strong>RNCComprador</strong> (derivado del Excel) y se envía a DGII. Proceso síncrono.</li>
             <li>Para certificar deben enviarse satisfactoriamente <strong>todas</strong> las aprobaciones generadas.</li>
-          </ul>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Card: Subir Excel */}
       <CardSection title="1. Subir Excel de Aprobaciones Comerciales" icon={Upload} color="teal">
-        <div className="space-y-2">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {!file ? (
-            <label className="block">
+            <Box component="label" sx={{ display: 'block', cursor: 'pointer' }}>
               <input
                 type="file"
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); setError(null); } }}
-                className="block w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:bg-gray-100 file:text-gray-700 file:font-medium hover:file:bg-gray-200 file:cursor-pointer cursor-pointer text-gray-500"
+                style={{ display: 'block', width: '100%', fontSize: '0.6875rem', cursor: 'pointer', color: '#6b7280' }}
               />
-            </label>
+            </Box>
           ) : (
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5">
-              <Upload className="w-3 h-3 text-gray-400 flex-shrink-0" />
-              <span className="text-[11px] text-gray-700 font-mono truncate flex-1">{file.name}</span>
-              <button type="button" onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500">
-                <X className="w-3 h-3" />
-              </button>
-            </div>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', px: 1, py: 0.75 }}>
+              <Upload style={{ width: 12, height: 12, flexShrink: 0, color: '#9ca3af' }} />
+              <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#374151', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.name}</Typography>
+              <IconButton size="small" onClick={() => setFile(null)} sx={{ p: 0, color: '#9ca3af', '&:hover': { color: 'error.main' } }}>
+                <X style={{ width: 12, height: 12 }} />
+              </IconButton>
+            </Box>
           )}
-          <div>
-            <label className="block text-[11px] font-medium text-gray-600 mb-1">Shift selectivo de fecha (opcional)</label>
-            <input
-              type="text"
+          <Box>
+            <Typography component="label" sx={{ display: 'block', fontSize: '0.6875rem', fontWeight: 500, color: '#4b5563', mb: 0.5 }}>Shift selectivo de fecha (opcional)</Typography>
+            <TextField
+              fullWidth
+              size="small"
               value={secShiftEncfs}
               onChange={e => setShift(e.target.value)}
               placeholder="E450000000010,E330000000001"
-              className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '0.6875rem', fontFamily: 'monospace' } }}
             />
-            <p className="text-[10px] text-gray-400 mt-1">
+            <Typography sx={{ fontSize: '0.625rem', color: '#9ca3af', mt: 0.5 }}>
               CSV de e-NCF — ajusta FechaHoraAprobacionComercial si DGII lo pide al re-enviar.
-            </p>
-          </div>
-          <button
+            </Typography>
+          </Box>
+          <Button
             type="button"
+            variant="contained"
+            fullWidth
             onClick={handleUpload}
             disabled={!file || uploading}
-            className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+            disableElevation
+            startIcon={uploading ? <Spinner size={14} /> : <ArrowRight style={{ width: 14, height: 14 }} />}
+            sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
           >
-            {uploading
-              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando…</>
-              : <><ArrowRight className="w-3.5 h-3.5" /> Procesar Aprobaciones</>}
-          </button>
-          <p className="text-[10px] text-gray-400 text-center">
+            {uploading ? 'Procesando…' : 'Procesar Aprobaciones'}
+          </Button>
+          <Typography sx={{ fontSize: '0.625rem', color: '#9ca3af', textAlign: 'center' }}>
             Ambiente: <strong>{env}</strong> · Excel .xlsx (hoja ACEECF_Generadas), máx 20 MB
-          </p>
-        </div>
+          </Typography>
+        </Box>
       </CardSection>
 
       {/* Card: Resultado */}
       {result && (
         <CardSection title="2. Resultado del envío" icon={ShieldCheck} color="teal">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-gray-500">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>
                 {persisted.step3?.lastRunAt && `Último envío: ${new Date(persisted.step3.lastRunAt).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' })}`}
-              </span>
-              <button
+              </Typography>
+              <Button
                 type="button"
                 onClick={handleClear}
-                className="ml-auto text-[11px] text-gray-400 hover:text-red-600 flex items-center gap-1"
+                startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
+                sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#9ca3af', textTransform: 'none', '&:hover': { color: 'error.main' } }}
               >
-                <RotateCcw className="w-3 h-3" /> Limpiar
-              </button>
-            </div>
+                Limpiar
+              </Button>
+            </Box>
 
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, textAlign: 'center' }}>
               <MiniStat label="Total"    value={result.total} />
               <MiniStat label="OK"       value={result.ok}     tone="emerald" />
               <MiniStat label="Fallidas" value={result.failed} tone="red" />
-            </div>
+            </Box>
 
             <CounterRow label="Aprobaciones comerciales aceptadas" accepted={result.ok} total={result.total} />
 
             {/* Filas fallidas con e-NCF + error */}
             {failedRows.length > 0 && (
-              <div className="border-t border-gray-100 pt-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-[11px] font-semibold text-red-700">
+              <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#b91c1c' }}>
                     {failedRows.length} fallida{failedRows.length === 1 ? '' : 's'}
-                  </p>
+                  </Typography>
                   {failedEncfs.length > 0 && (
-                    <button
+                    <Button
                       type="button"
+                      size="small"
                       onClick={() => setShift(failedEncfs.join(','))}
-                      className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-2 py-1 rounded flex items-center gap-1"
                       title="Copia los e-NCF fallidos al campo de shift selectivo"
+                      startIcon={<RotateCcw style={{ width: 10, height: 10 }} />}
+                      sx={{ fontSize: '0.625rem', bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, textTransform: 'none', borderRadius: '4px', '&:hover': { bgcolor: '#fde68a' } }}
                     >
-                      <RotateCcw className="w-2.5 h-2.5" /> Copiar fallidos a shift
-                    </button>
+                      Copiar fallidos a shift
+                    </Button>
                   )}
-                </div>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 192, overflowY: 'auto' }}>
                   {failedRows.map((r, i) => (
-                    <div key={i} className="text-[10px] bg-red-50 border border-red-100 rounded px-2 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-red-800">{r.eNcf || '(sin e-NCF)'}</span>
-                        <span className="ml-auto px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">
+                    <Box key={i} sx={{ fontSize: '0.625rem', bgcolor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '4px', px: 1, py: 0.75 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#991b1b', fontSize: '0.625rem' }}>{r.eNcf || '(sin e-NCF)'}</Typography>
+                        <Typography component="span" sx={{ ml: 'auto', px: 0.75, py: '1px', borderRadius: '3px', bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 600, fontSize: '0.625rem' }}>
                           {r.estadoDgii ?? r.estadoEnvio ?? 'ERROR'}
-                        </span>
-                      </div>
-                      {r.error && <p className="text-red-600 mt-0.5 leading-snug">{r.error}</p>}
-                    </div>
+                        </Typography>
+                      </Box>
+                      {r.error && <Typography sx={{ color: '#dc2626', mt: '2px', lineHeight: 1.4, fontSize: '0.625rem' }}>{r.error}</Typography>}
+                    </Box>
                   ))}
-                </div>
-              </div>
+                </Box>
+              </Box>
             )}
 
             {/* Filas OK (resumen compacto) */}
             {rows.length > 0 && (
-              <details className="border-t border-gray-100 pt-2">
-                <summary className="text-[11px] text-gray-500 cursor-pointer">Ver todas las filas ({rows.length})</summary>
-                <div className="space-y-1 max-h-48 overflow-y-auto mt-1.5">
+              <Box component="details" sx={{ borderTop: '1px solid #f3f4f6', pt: 1 }}>
+                <Typography component="summary" sx={{ fontSize: '0.6875rem', color: 'text.secondary', cursor: 'pointer' }}>Ver todas las filas ({rows.length})</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 192, overflowY: 'auto', mt: 0.75 }}>
                   {rows.map((r, i) => (
-                    <div key={i} className="text-[10px] flex items-center gap-2 px-2 py-1 bg-gray-50 rounded">
-                      <span className="font-mono text-gray-700">{r.eNcf || '—'}</span>
-                      <span className="text-gray-400">{r.trackId ?? ''}</span>
-                      <span className="ml-auto text-gray-600">{r.estadoDgii ?? r.estadoEnvio ?? ''}</span>
-                    </div>
+                    <Box key={i} sx={{ fontSize: '0.625rem', display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.5, bgcolor: '#f9fafb', borderRadius: '4px' }}>
+                      <Typography component="span" sx={{ fontFamily: 'monospace', color: '#374151', fontSize: '0.625rem' }}>{r.eNcf || '—'}</Typography>
+                      <Typography component="span" sx={{ color: '#9ca3af', fontSize: '0.625rem' }}>{r.trackId ?? ''}</Typography>
+                      <Typography component="span" sx={{ ml: 'auto', color: '#4b5563', fontSize: '0.625rem' }}>{r.estadoDgii ?? r.estadoEnvio ?? ''}</Typography>
+                    </Box>
                   ))}
-                </div>
-              </details>
+                </Box>
+              </Box>
             )}
-          </div>
+          </Box>
         </CardSection>
       )}
 
       {/* Error global */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
-          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-red-700 flex-1">{error}</p>
-        </div>
+        <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', p: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <AlertCircle style={{ width: 14, height: 14, flexShrink: 0, marginTop: 2, color: '#dc2626' }} />
+          <Typography sx={{ fontSize: '0.6875rem', color: '#b91c1c', flex: 1 }}>{error}</Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -1652,167 +1709,177 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
   );
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Banner */}
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
-          <p>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+        <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Box sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
             Pruebas de Simulación: el sistema genera <strong>29 e-CF sintéticos</strong> y
             los envía a DGII con el cert del contribuyente. No requiere Excel.
-          </p>
-          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+          </Typography>
+          <Box component="ul" sx={{ listStyleType: 'disc', ml: 2.5, mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.75rem', color: '#1e3a5f' }}>
             <li>Cada tipo usa un rango de NCF 1–10,000,000; los NCF rechazados no se reutilizan.</li>
             <li>Las FC <strong>&lt; RD$250,000</strong> se descargan en ZIP y se suben manual al portal DGII.</li>
             <li>Si DGII rechaza, usa <strong>Re-iniciar</strong> para correr con NCFs frescos (+100).</li>
-          </ul>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Card: Iniciar */}
       <CardSection title="1. Iniciar simulación" icon={FlaskConical} color="teal">
         {!runId ? (
-          <div className="space-y-2">
-            <div>
-              <label className="block text-[11px] font-medium text-gray-600 mb-1">NCF inicial</label>
-              <input
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box>
+              <Typography component="label" sx={{ display: 'block', fontSize: '0.6875rem', fontWeight: 500, color: '#4b5563', mb: 0.5 }}>NCF inicial</Typography>
+              <TextField
+                fullWidth
+                size="small"
                 type="number"
                 value={ncfStart}
                 onChange={e => setNcfStart(parseInt(e.target.value, 10) || 500)}
-                min={1}
-                className="w-full border border-gray-300 rounded-md px-2.5 py-1.5 text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400"
+                slotProps={{ htmlInput: { min: 1 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '0.6875rem', fontFamily: 'monospace' } }}
               />
-              <p className="text-[10px] text-gray-400 mt-1">Usa un valor alto/fresco (500+) para no chocar con eNCF ya quemados.</p>
-            </div>
-            <button
+              <Typography sx={{ fontSize: '0.625rem', color: '#9ca3af', mt: 0.5 }}>Usa un valor alto/fresco (500+) para no chocar con eNCF ya quemados.</Typography>
+            </Box>
+            <Button
               type="button"
+              variant="contained"
+              fullWidth
               onClick={handleStart}
               disabled={starting}
-              className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+              disableElevation
+              startIcon={starting ? <Spinner size={14} /> : <FlaskConical style={{ width: 14, height: 14 }} />}
+              sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
             >
-              {starting
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Iniciando…</>
-                : <><FlaskConical className="w-3.5 h-3.5" /> Iniciar simulación (29 casos)</>}
-            </button>
-            <p className="text-[10px] text-gray-400 text-center">Ambiente: <strong>{env}</strong></p>
-          </div>
+              {starting ? 'Iniciando…' : 'Iniciar simulación (29 casos)'}
+            </Button>
+            <Typography sx={{ fontSize: '0.625rem', color: '#9ca3af', textAlign: 'center' }}>Ambiente: <strong>{env}</strong></Typography>
+          </Box>
         ) : (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold text-emerald-800">Simulación iniciada</p>
-                <p className="text-[10px] text-emerald-700 font-mono truncate">run: {runId}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', px: 1.25, py: 1 }}>
+              <CheckCircle2 style={{ width: 16, height: 16, flexShrink: 0, color: '#059669' }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#065f46' }}>Simulación iniciada</Typography>
+                <Typography sx={{ fontSize: '0.625rem', color: '#047857', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>run: {runId}</Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
                 type="button"
+                variant="outlined"
+                fullWidth
                 onClick={handleRestart}
                 disabled={starting}
-                className="flex-1 text-[11px] text-teal-700 hover:text-teal-800 flex items-center justify-center gap-1 py-1.5 border border-teal-200 rounded-md hover:bg-teal-50 disabled:opacity-50"
+                startIcon={starting ? <Spinner size={12} /> : <RotateCcw style={{ width: 12, height: 12 }} />}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: '#0f766e', borderColor: '#a7f3d0', '&:hover': { bgcolor: '#f0fdfa' }, '&:disabled': { opacity: 0.5 } }}
               >
-                {starting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />} Re-iniciar (+100)
-              </button>
-              <button
+                Re-iniciar (+100)
+              </Button>
+              <Button
                 type="button"
+                variant="outlined"
+                fullWidth
                 onClick={handleForget}
-                className="flex-1 text-[11px] text-gray-500 hover:text-gray-700 flex items-center justify-center gap-1 py-1.5 border border-gray-200 rounded-md hover:bg-gray-50"
+                startIcon={<X style={{ width: 12, height: 12 }} />}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: 'text.secondary', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f9fafb' } }}
               >
-                <X className="w-3 h-3" /> Olvidar
-              </button>
-            </div>
-          </div>
+                Olvidar
+              </Button>
+            </Box>
+          </Box>
         )}
       </CardSection>
 
       {/* Card: Estado por tipo */}
       {runId && (
         <CardSection title="2. Estado de las pruebas de simulación" icon={ShieldCheck} color="teal">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <RunStatusBadge status={run?.status ?? persisted.step4?.status ?? 'PROCESANDO'} polling={polling} />
-              <button
+              <Button
                 type="button"
                 onClick={() => runId && fetchRun(runId)}
-                className="ml-auto text-[11px] text-teal-600 hover:text-teal-700 flex items-center gap-1"
+                startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
+                sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#0d9488', textTransform: 'none', '&:hover': { color: '#0f766e' } }}
               >
-                <RotateCcw className="w-3 h-3" /> Refrescar
-              </button>
-            </div>
+                Refrescar
+              </Button>
+            </Box>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 1 }}>
               {SIMUL_REQUERIDOS.map(t => {
                 const acc = acceptedOf(t.tipo, t.formato);
                 const done = acc >= t.req;
                 return (
-                  <div key={t.key} className={`flex items-baseline gap-1.5 px-2 py-1.5 rounded border ${
-                    done ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
-                  }`}>
-                    <span className={`text-sm font-bold tabular-nums ${done ? 'text-emerald-700' : 'text-gray-900'}`}>
+                  <Box key={t.key} sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, px: 1, py: 0.75, borderRadius: '4px', border: '1px solid', ...(done ? { bgcolor: '#ecfdf5', borderColor: '#a7f3d0' } : { bgcolor: '#f9fafb', borderColor: '#e5e7eb' }) }}>
+                    <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: done ? '#065f46' : 'text.primary' }}>
                       {acc}/{t.req}
-                    </span>
-                    <span className="text-[10px] text-gray-600">{t.label}</span>
-                  </div>
+                    </Typography>
+                    <Typography component="span" sx={{ fontSize: '0.625rem', color: '#4b5563' }}>{t.label}</Typography>
+                  </Box>
                 );
               })}
-            </div>
+            </Box>
 
-            <div className="grid grid-cols-4 gap-2 text-center border-t border-gray-100 pt-2">
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, textAlign: 'center', borderTop: '1px solid #f3f4f6', pt: 1 }}>
               <MiniStat label="Total"    value={run?.total ?? 0} />
               <MiniStat label="OK"       value={run?.ok ?? 0}      tone="emerald" />
               <MiniStat label="Fallidos" value={run?.failed ?? 0}  tone="red" />
               <MiniStat label="Saltados" value={run?.skipped ?? 0} tone="gray" />
-            </div>
+            </Box>
 
             {failedCases.length > 0 && (
-              <div className="border-t border-gray-100 pt-2">
-                <p className="text-[11px] font-semibold text-red-700 mb-1.5">{failedCases.length} fallidos</p>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
+              <Box sx={{ borderTop: '1px solid #f3f4f6', pt: 1 }}>
+                <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#b91c1c', mb: 0.75 }}>{failedCases.length} fallidos</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 192, overflowY: 'auto' }}>
                   {failedCases.map((c, i) => (
-                    <div key={i} className="text-[10px] bg-red-50 border border-red-100 rounded px-2 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-red-800">{c.eNcf || '(sin e-NCF)'}</span>
-                        <span className="text-gray-400">tipo {c.tipoECF}</span>
-                        <span className="ml-auto px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">{c.estadoDgii ?? c.status}</span>
-                      </div>
+                    <Box key={i} sx={{ fontSize: '0.625rem', bgcolor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '4px', px: 1, py: 0.75 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#991b1b', fontSize: '0.625rem' }}>{c.eNcf || '(sin e-NCF)'}</Typography>
+                        <Typography component="span" sx={{ color: '#9ca3af', fontSize: '0.625rem' }}>tipo {c.tipoECF}</Typography>
+                        <Typography component="span" sx={{ ml: 'auto', px: 0.75, py: '1px', borderRadius: '3px', bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 600, fontSize: '0.625rem' }}>{c.estadoDgii ?? c.status}</Typography>
+                      </Box>
                       {(c.error || (c.mensajesDgii && c.mensajesDgii.length > 0)) && (
-                        <p className="text-red-600 mt-0.5 leading-snug">{c.error ?? c.mensajesDgii
+                        <Typography sx={{ color: '#dc2626', mt: '2px', lineHeight: 1.4, fontSize: '0.625rem' }}>{c.error ?? c.mensajesDgii
                           ?.map(m => [m.codigo, m.valor].filter(Boolean).join(': '))
                           .filter(Boolean)
-                          .join(' · ')}</p>
+                          .join(' · ')}</Typography>
                       )}
-                    </div>
+                    </Box>
                   ))}
-                </div>
-              </div>
+                </Box>
+              </Box>
             )}
-          </div>
+          </Box>
         </CardSection>
       )}
 
       {/* Card: Descargas */}
       {runId && (
         <CardSection title="3. Facturas < RD$250K" icon={Download} color="teal">
-          <a
+          <Box
+            component="a"
             href={`${zipBase}/runs/${runId}/manual-upload/zip`}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+            sx={{ width: '100%', bgcolor: '#0d9488', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' } }}
           >
-            <Download className="w-3.5 h-3.5" /> ZIP Facturas &lt; RD$250K
-          </a>
-          <p className="text-[10px] text-gray-500 text-center mt-2">
+            <Download style={{ width: 14, height: 14 }} /> ZIP Facturas &lt; RD$250K
+          </Box>
+          <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary', textAlign: 'center', mt: 1 }}>
             Descomprime y sube cada XML al portal DGII en <strong>"Facturas de consumo &lt; 250Mil"</strong>.
-          </p>
+          </Typography>
         </CardSection>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
-          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-red-700 flex-1">{error}</p>
-        </div>
+        <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', p: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <AlertCircle style={{ width: 14, height: 14, flexShrink: 0, marginTop: 2, color: '#dc2626' }} />
+          <Typography sx={{ fontSize: '0.6875rem', color: '#b91c1c', flex: 1 }}>{error}</Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -1868,96 +1935,98 @@ function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState
 
   if (!runId) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-        <div className="text-xs text-amber-900">
-          <p className="font-semibold mb-0.5">Completa el paso 4 primero</p>
-          <p>Las representaciones impresas (PDF) salen de los e-CF emitidos en la Simulación (paso 4).</p>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', p: 2 }}>
+        <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#d97706' }} />
+        <Box sx={{ fontSize: '0.75rem', color: '#78350f' }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, mb: '2px', color: '#78350f' }}>Completa el paso 4 primero</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#78350f' }}>Las representaciones impresas (PDF) salen de los e-CF emitidos en la Simulación (paso 4).</Typography>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Banner */}
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
-          <p>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+        <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Box sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
             Genera y envía las Representaciones Impresas (PDF) de los e-CF del paso 4.
             La subida es <strong>manual en el portal DGII</strong> — el sistema solo entrega los PDF con el QR correcto.
-          </p>
-          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+          </Typography>
+          <Box component="ul" sx={{ listStyleType: 'disc', ml: 2.5, mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.75rem', color: '#1e3a5f' }}>
             <li>Descarga el paquete, descomprime y sube un PDF de cada tipo en el portal (Paso 5 → ENVIAR ARCHIVOS).</li>
             <li>La suma de archivos no puede superar <strong>10MB</strong>.</li>
-          </ul>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Card: Descargar paquete */}
       <CardSection title="1. Descargar representaciones (PDF)" icon={Printer} color="teal">
-        <a
+        <Box
+          component="a"
           href={`${zipBase}/runs/${runId}/package`}
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-1.5"
+          sx={{ width: '100%', bgcolor: '#0d9488', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' } }}
         >
-          <Download className="w-3.5 h-3.5" /> Paquete completo (PDF + XML por tipo)
-        </a>
-        <p className="text-[10px] text-gray-500 text-center mt-2">
+          <Download style={{ width: 14, height: 14 }} /> Paquete completo (PDF + XML por tipo)
+        </Box>
+        <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary', textAlign: 'center', mt: 1 }}>
           PDFs nombrados por tipo (incluye 32 ≥250mil y 32 &lt;250mil).
-        </p>
+        </Typography>
       </CardSection>
 
       {/* Card: PDF individual por tipo */}
       <CardSection title="2. PDF individual por tipo" icon={FileText} color="teal">
         {loading ? (
-          <div className="flex items-center gap-2 text-xs text-gray-500 py-3 justify-center">
-            <Loader2 className="w-4 h-4 animate-spin" /> Cargando emisiones…
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.75rem', color: 'text.secondary', py: 1.5, justifyContent: 'center' }}>
+            <Spinner size={16} /> Cargando emisiones…
+          </Box>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 1 }}>
             {REPR_TIPOS.map(t => {
               const row = pdfFor(t.tipo, t.formato);
               return (
-                <div key={t.key} className="flex items-center gap-2 border border-gray-200 rounded-md px-2.5 py-1.5">
-                  <span className="text-[11px] text-gray-700 flex-1">{t.label}</span>
+                <Box key={t.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, border: '1px solid #e5e7eb', borderRadius: '6px', px: 1.25, py: 0.75 }}>
+                  <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#374151', flex: 1 }}>{t.label}</Typography>
                   {row?.emisionId ? (
-                    <a
+                    <Box
+                      component="a"
                       href={`${apiBase}/emisiones/${row.emisionId}/pdf`}
                       target="_blank" rel="noopener noreferrer"
-                      className="text-[11px] text-teal-600 hover:text-teal-700 font-semibold flex items-center gap-1"
+                      sx={{ fontSize: '0.6875rem', color: '#0d9488', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', '&:hover': { color: '#0f766e' } }}
                     >
-                      <Download className="w-3 h-3" /> PDF
-                    </a>
+                      <Download style={{ width: 12, height: 12 }} /> PDF
+                    </Box>
                   ) : (
-                    <span className="text-[10px] text-gray-300">—</span>
+                    <Typography component="span" sx={{ fontSize: '0.625rem', color: '#d1d5db' }}>—</Typography>
                   )}
-                </div>
+                </Box>
               );
             })}
-          </div>
+          </Box>
         )}
-        <p className="text-[10px] text-gray-400 mt-2">
+        <Typography sx={{ fontSize: '0.625rem', color: '#9ca3af', mt: 1 }}>
           La FC tipo 32 &lt;RD$250mil se incluye en el paquete completo.
-        </p>
+        </Typography>
       </CardSection>
 
       {/* Aviso responsabilidad */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-        <p className="text-[11px] text-amber-800">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', p: 1.5 }}>
+        <AlertCircle style={{ width: 16, height: 16, flexShrink: 0, marginTop: 2, color: '#d97706' }} />
+        <Typography sx={{ fontSize: '0.6875rem', color: '#92400e' }}>
           Es responsabilidad del contribuyente que la representación impresa cumpla con la Ley 32-23
           y la documentación técnica del Formato de e-CF.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-start gap-2">
-          <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-red-700 flex-1">{error}</p>
-        </div>
+        <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', p: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <AlertCircle style={{ width: 14, height: 14, flexShrink: 0, marginTop: 2, color: '#dc2626' }} />
+          <Typography sx={{ fontSize: '0.6875rem', color: '#b91c1c', flex: 1 }}>{error}</Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -1966,13 +2035,13 @@ function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState
 function PasoPasivoBody({ stepId }: { stepId: number }) {
   if (stepId === 15) {
     return (
-      <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-        <PartyPopper className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
-        <div className="text-xs text-emerald-900">
-          <p className="font-semibold mb-0.5">¡Habilitación completada!</p>
-          <p>El contribuyente está habilitado para emitir e-CF en producción. No requiere más acciones.</p>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', p: 2 }}>
+        <PartyPopper style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#059669' }} />
+        <Box sx={{ fontSize: '0.75rem', color: '#064e3b' }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, mb: '2px', color: '#064e3b' }}>¡Habilitación completada!</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#064e3b' }}>El contribuyente está habilitado para emitir e-CF en producción. No requiere más acciones.</Typography>
+        </Box>
+      </Box>
     );
   }
 
@@ -1987,13 +2056,13 @@ function PasoPasivoBody({ stepId }: { stepId: number }) {
       };
 
   return (
-    <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-      <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-      <div className="text-xs text-blue-900">
-        <p className="font-semibold mb-0.5">{info.title}</p>
-        <p className="text-blue-800/80">{info.body}</p>
-      </div>
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+      <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+      <Box sx={{ fontSize: '0.75rem', color: '#1e3a5f' }}>
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, mb: '2px', color: '#1e3a5f' }}>{info.title}</Typography>
+        <Typography sx={{ fontSize: '0.75rem', color: 'rgba(30,58,95,0.8)' }}>{info.body}</Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -2012,39 +2081,40 @@ function Step13Body({ ctx, persisted, persistUpdate }: {
       : 'https://ecf.dgii.gov.do/testecf/contribuyentes';
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <ScrollText className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
-          <p className="font-semibold mb-0.5">Declaración Jurada</p>
-          <p className="text-blue-800/80">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+        <ScrollText style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Box sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, mb: '2px', color: '#1e3a5f' }}>Declaración Jurada</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: 'rgba(30,58,95,0.8)' }}>
             En el portal DGII genera el archivo de Declaración Jurada ("Generar archivo"),
             descárgalo, súbelo a la derecha para firmarlo con el cert del contribuyente y
             sube el XML firmado de vuelta al portal ("Enviar archivo").
-          </p>
-        </div>
-        <a
+          </Typography>
+        </Box>
+        <Box
+          component="a"
           href={portalUrl}
           target="_blank" rel="noopener noreferrer"
-          className="text-[11px] bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-md flex items-center gap-1 flex-shrink-0"
+          sx={{ fontSize: '0.6875rem', bgcolor: '#2563eb', color: '#fff', fontWeight: 600, px: 1.5, py: 0.75, borderRadius: '6px', display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, textDecoration: 'none', '&:hover': { bgcolor: '#1d4ed8' } }}
         >
-          Abrir portal <ExternalLink className="w-3 h-3" />
-        </a>
-      </div>
+          Abrir portal <ExternalLink style={{ width: 12, height: 12 }} />
+        </Box>
+      </Box>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <div className="text-xs text-gray-600 leading-relaxed space-y-2">
-          <p>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, 1fr)' }, gap: 2.5 }}>
+        <Box sx={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.6 }}>
             La Declaración Jurada acredita que el contribuyente, responsable o tercero mandatario
             conoce el modelo de facturación electrónica de la DGII y es responsable solidario del
             uso de los e-CF.
-          </p>
-          <p>
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.6 }}>
             Requiere un certificado de firma digital acreditado por una entidad certificadora
             autorizada (INDOTEL). Se firma con el cert del contribuyente
             {ctx.rnc ? ` (RNC ${ctx.rnc})` : ''}.
-          </p>
-        </div>
+          </Typography>
+        </Box>
         <FirmarPostulacionPanel
           rnc={ctx.rnc}
           codigoPublico={ctx.codigoPublico}
@@ -2054,8 +2124,8 @@ function Step13Body({ ctx, persisted, persistUpdate }: {
           slotKey="step13"
           titulo="Firma de la Declaración Jurada"
         />
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -2093,38 +2163,39 @@ function PortalStepBody({ stepId, ctx }: { stepId: number; ctx: StepCtx }) {
       : 'https://ecf.dgii.gov.do/testecf/contribuyentes';
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <p className="flex-1 text-xs text-blue-900 leading-relaxed">{info.intro}</p>
-      </div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+        <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Typography sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>{info.intro}</Typography>
+      </Box>
 
-      <div className="space-y-2.5">
-        <div className="flex items-start gap-2.5">
-          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-teal-100 text-teal-700 text-[11px] font-bold flex items-center justify-center">1</span>
-          <p className="text-xs text-gray-700 flex-1">{info.accion}</p>
-        </div>
-        <div className="flex items-start gap-2.5">
-          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-[11px] font-bold flex items-center justify-center">2</span>
-          <p className="text-xs text-gray-600 flex-1">{info.valida}</p>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+          <Typography component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', bgcolor: '#ccfbf1', color: '#0f766e', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#374151', flex: 1 }}>{info.accion}</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+          <Typography component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', bgcolor: '#f3f4f6', color: '#4b5563', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>2</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', flex: 1 }}>{info.valida}</Typography>
+        </Box>
+      </Box>
 
-      <a
+      <Box
+        component="a"
         href={portalUrl}
         target="_blank" rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-md"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', bgcolor: '#2563eb', color: '#fff', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', textDecoration: 'none', alignSelf: 'flex-start', '&:hover': { bgcolor: '#1d4ed8' } }}
       >
-        Abrir portal DGII <ExternalLink className="w-3.5 h-3.5" />
-      </a>
+        Abrir portal DGII <ExternalLink style={{ width: 14, height: 14 }} />
+      </Box>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-        <p className="text-[11px] text-amber-800">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', p: 1.5 }}>
+        <AlertCircle style={{ width: 16, height: 16, flexShrink: 0, marginTop: 2, color: '#d97706' }} />
+        <Typography sx={{ fontSize: '0.6875rem', color: '#92400e' }}>
           Cuando DGII confirme este paso en el portal, márcalo como completado abajo.
-        </p>
-      </div>
-    </div>
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -2136,95 +2207,95 @@ function UrlServiciosBody({ ctx, produccion }: { ctx: StepCtx; produccion: boole
   const baseValue = ctx.webhookBaseUrl ?? 'Cargando…';
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 text-xs text-blue-900 leading-relaxed">
-          <p>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', p: 2 }}>
+        <AlertCircle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#2563eb' }} />
+        <Box sx={{ flex: 1, fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6 }}>
             Etapa en la que deben ser validadas y/o actualizadas las URL de los servicios de
             Recepción, Aprobación Comercial y/o Autenticación
             {produccion ? ' para el ambiente de PRODUCCIÓN.' : '.'}
-          </p>
-          <p className="mt-1.5">
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#1e3a5f', lineHeight: 1.6, mt: 0.75 }}>
             Pega la misma URL en cada campo del portal DGII — el portal añade el sufijo
             (<code>/fe/recepcion/api/ecf</code>, etc.) automáticamente.
-          </p>
-        </div>
-      </div>
+          </Typography>
+        </Box>
+      </Box>
 
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <Link2 className="w-4 h-4 text-gray-500" />
-          <h3 className="text-sm font-semibold text-gray-800">URLs para confirmación</h3>
-        </div>
-        <div className="space-y-3">
+      <Box component="section">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <Link2 style={{ width: 16, height: 16, color: '#6b7280' }} />
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>URLs para confirmación</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <DgiiCopyField label="Servicio de Autenticación"     value={baseValue} isUrl required={false} />
           <DgiiCopyField label="Servicio de Recepción"         value={baseValue} isUrl />
           <DgiiCopyField label="Servicio de Aprobación Comercial" value={baseValue} isUrl />
-        </div>
-      </section>
+        </Box>
+      </Box>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
-        <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-        <p className="text-[11px] text-amber-800">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', p: 1.5 }}>
+        <AlertCircle style={{ width: 16, height: 16, flexShrink: 0, marginTop: 2, color: '#d97706' }} />
+        <Typography sx={{ fontSize: '0.6875rem', color: '#92400e' }}>
           Tras pegar las URLs en el portal DGII, haz clic en <strong>"Confirmar URLs"</strong> ahí,
           luego marca este paso como completado.
-        </p>
-      </div>
-    </div>
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
 function RunStatusBadge({ status, polling }: { status: string; polling: boolean }) {
-  const map: Record<string, { cls: string; label: string }> = {
-    PENDIENTE:  { cls: 'bg-gray-100 text-gray-600 border-gray-200',     label: 'Pendiente' },
-    PROCESANDO: { cls: 'bg-amber-50 text-amber-700 border-amber-200',   label: 'Procesando' },
-    COMPLETO:   { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Completo' },
-    FALLIDO:    { cls: 'bg-red-50 text-red-700 border-red-200',         label: 'Fallido' },
+  const map: Record<string, { bgcolor: string; color: string; borderColor: string; label: string }> = {
+    PENDIENTE:  { bgcolor: '#f3f4f6', color: '#4b5563', borderColor: '#e5e7eb', label: 'Pendiente' },
+    PROCESANDO: { bgcolor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', label: 'Procesando' },
+    COMPLETO:   { bgcolor: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0', label: 'Completo' },
+    FALLIDO:    { bgcolor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca', label: 'Fallido' },
   };
   const c = map[status] ?? map.PROCESANDO;
   return (
-    <span className={`text-[11px] uppercase tracking-wide border px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${c.cls}`}>
-      {polling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Circle className="w-2.5 h-2.5" />}
+    <Typography component="span" sx={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', border: '1px solid', px: 1, py: '2px', borderRadius: '999px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: c.bgcolor, color: c.color, borderColor: c.borderColor }}>
+      {polling ? <Spinner size={12} /> : <Circle style={{ width: 10, height: 10 }} />}
       {c.label}
-    </span>
+    </Typography>
   );
 }
 
 function MiniStat({ label, value, tone = 'gray' }: { label: string; value: number; tone?: 'emerald'|'red'|'gray' }) {
-  const toneCls = tone === 'emerald' ? 'text-emerald-700' : tone === 'red' ? 'text-red-600' : 'text-gray-900';
+  const color = tone === 'emerald' ? '#065f46' : tone === 'red' ? '#dc2626' : 'text.primary';
   return (
-    <div className="bg-gray-50 rounded-md py-2">
-      <p className={`text-lg font-bold tabular-nums ${toneCls}`}>{value}</p>
-      <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
-    </div>
+    <Box sx={{ bgcolor: '#f9fafb', borderRadius: '6px', py: 1 }}>
+      <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color }}>{value}</Typography>
+      <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</Typography>
+    </Box>
   );
 }
 
 function CardSection({ title, icon: Icon, children, color = 'teal' }: {
   title: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   children: React.ReactNode;
   color?: 'teal' | 'amber';
 }) {
-  const headerCls = color === 'teal' ? 'bg-teal-600 text-white' : 'bg-amber-600 text-white';
+  const headerBg = color === 'teal' ? '#0d9488' : '#d97706';
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <div className={`flex items-center gap-2 px-3 py-2 ${headerCls}`}>
-        <Icon className="w-4 h-4" />
-        <p className="text-xs font-semibold">{title}</p>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
+    <Paper variant="outlined" sx={{ bgcolor: '#fff', borderRadius: '8px', overflow: 'hidden', borderColor: '#e5e7eb' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: headerBg }}>
+        <Icon style={{ width: 16, height: 16, color: '#fff' }} />
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#fff' }}>{title}</Typography>
+      </Box>
+      <Box sx={{ p: 2 }}>{children}</Box>
+    </Paper>
   );
 }
 
 function CounterRow({ label, accepted, total }: { label: string; accepted: number; total: number }) {
   return (
-    <div className="flex items-baseline gap-2 py-1">
-      <span className="text-xl font-bold text-gray-900 tabular-nums">{accepted}/{total}</span>
-      <span className="text-xs text-gray-600">{label}</span>
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, py: 0.5 }}>
+      <Typography component="span" sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>{accepted}/{total}</Typography>
+      <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{label}</Typography>
+    </Box>
   );
 }
 
@@ -2233,50 +2304,52 @@ function CounterRow({ label, accepted, total }: { label: string; accepted: numbe
 function StepPlaceholderBody({ step }: { step: Step }) {
   return (
     <>
-      <p className="text-xs text-gray-600 mb-3 leading-relaxed">{step.desc}</p>
+      <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', mb: 1.5, lineHeight: 1.6 }}>{step.desc}</Typography>
 
       {/* Sub-pantallas grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 1, mb: 1.5 }}>
         {step.screens.map((sc, i) => (
-          <div
+          <Paper
             key={i}
-            className="bg-white border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition-colors"
+            variant="outlined"
+            sx={{ bgcolor: '#fff', borderRadius: '8px', p: 1.5, borderColor: '#e5e7eb', transition: 'border-color 0.15s', '&:hover': { borderColor: '#d1d5db' } }}
           >
-            <div className="flex items-start gap-2">
-              <span className="text-[10px] font-mono text-gray-400 bg-gray-100 rounded px-1.5 py-0.5 flex-shrink-0 mt-0.5">
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography component="span" sx={{ fontSize: '0.625rem', fontFamily: 'monospace', color: '#9ca3af', bgcolor: '#f3f4f6', borderRadius: '4px', px: 0.75, py: '2px', flexShrink: 0, mt: '2px' }}>
                 {step.id}.{i + 1}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-800">{sc.label}</p>
-                <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{sc.desc}</p>
-              </div>
-            </div>
-          </div>
+              </Typography>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>{sc.label}</Typography>
+                <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: '2px', lineHeight: 1.4 }}>{sc.desc}</Typography>
+              </Box>
+            </Box>
+          </Paper>
         ))}
-      </div>
+      </Box>
 
-      <div className="bg-white border border-dashed border-gray-300 rounded-lg p-3 text-center">
-        <p className="text-xs text-gray-400">
+      <Paper variant="outlined" sx={{ bgcolor: '#fff', borderRadius: '8px', p: 1.5, borderStyle: 'dashed', borderColor: '#d1d5db', textAlign: 'center' }}>
+        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
           Acciones de este paso pendientes de wire (endpoint por conectar).
-        </p>
-      </div>
+        </Typography>
+      </Paper>
     </>
   );
 }
 
 function StatusPill({ status }: { status: Status }) {
-  const config = {
-    'pending':     { label: 'Pendiente',   icon: Circle,        cls: 'bg-gray-100 text-gray-600 border-gray-200' },
-    'in-progress': { label: 'En progreso', icon: Clock,         cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-    'done':        { label: 'Completo',    icon: CheckCircle2,  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    'error':       { label: 'Error',       icon: AlertCircle,   cls: 'bg-red-50 text-red-700 border-red-200' },
-  }[status];
+  const config: Record<Status, { label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; bgcolor: string; color: string; borderColor: string }> = {
+    'pending':     { label: 'Pendiente',   icon: Circle,       bgcolor: '#f3f4f6', color: '#4b5563', borderColor: '#e5e7eb' },
+    'in-progress': { label: 'En progreso', icon: Clock,        bgcolor: '#fffbeb', color: '#b45309', borderColor: '#fde68a' },
+    'done':        { label: 'Completo',    icon: CheckCircle2, bgcolor: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' },
+    'error':       { label: 'Error',       icon: AlertCircle,  bgcolor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' },
+  };
 
-  const Icon = config.icon;
+  const c = config[status];
+  const Icon = c.icon;
   return (
-    <span className={`text-[10px] uppercase tracking-wide border px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 flex-shrink-0 ${config.cls}`}>
-      <Icon className="w-2.5 h-2.5" />
-      {config.label}
-    </span>
+    <Typography component="span" sx={{ fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em', border: '1px solid', px: 1, py: '2px', borderRadius: '999px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 0.5, flexShrink: 0, bgcolor: c.bgcolor, color: c.color, borderColor: c.borderColor }}>
+      <Icon style={{ width: 10, height: 10 }} />
+      {c.label}
+    </Typography>
   );
 }

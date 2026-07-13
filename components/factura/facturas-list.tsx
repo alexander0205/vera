@@ -2,108 +2,148 @@
 
 import Link from 'next/link';
 import { Download } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
 import { fmtMoneda, fmtFecha, type FacturaRow } from '@/lib/factura/core';
 
-const ESTADO_STYLES: Record<string, string> = {
-  ACEPTADO:             'bg-green-100 text-green-800',
-  ACEPTADO_CONDICIONAL: 'bg-yellow-100 text-yellow-800',
-  EN_PROCESO:           'bg-blue-100 text-blue-800',
-  RECHAZADO:            'bg-red-100 text-red-800',
-  BORRADOR:             'bg-gray-100 text-gray-700',
-  ANULADO:              'bg-gray-100 text-gray-500 line-through',
+const ESTADO_STYLES: Record<string, { bgcolor: string; color: string; lineThrough?: boolean }> = {
+  ACEPTADO:             { bgcolor: '#dcfce7', color: '#166534' },
+  ACEPTADO_CONDICIONAL: { bgcolor: '#fef9c3', color: '#854d0e' },
+  EN_PROCESO:           { bgcolor: '#dbeafe', color: '#1e40af' },
+  RECHAZADO:            { bgcolor: '#fee2e2', color: '#991b1b' },
+  BORRADOR:             { bgcolor: '#f3f4f6', color: '#374151' },
+  ANULADO:              { bgcolor: '#f3f4f6', color: '#6b7280', lineThrough: true },
 };
 
+const THEAD_CELL = {
+  px: 2,
+  py: 1.25,
+  fontWeight: 500,
+  color: '#4b5563',
+  bgcolor: '#f9fafb',
+  fontSize: '0.875rem',
+  borderBottom: '1px solid #e5e7eb',
+} as const;
+
+const TBODY_CELL = {
+  px: 2,
+  py: 1.5,
+  fontSize: '0.875rem',
+  borderColor: '#e5e7eb',
+} as const;
+
 function EstadoBadge({ estado }: { estado: string }) {
+  const style = ESTADO_STYLES[estado] ?? { bgcolor: '#f3f4f6', color: '#374151' };
   return (
-    <span
-      className={`inline-block px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${
-        ESTADO_STYLES[estado] ?? 'bg-gray-100 text-gray-700'
-      }`}
-    >
-      {estado}
-    </span>
+    <Chip
+      label={estado}
+      size="small"
+      sx={{
+        height: 20,
+        fontSize: '0.75rem',
+        borderRadius: '9999px',
+        whiteSpace: 'nowrap',
+        bgcolor: style.bgcolor,
+        color: style.color,
+        '& .MuiChip-label': style.lineThrough ? { textDecoration: 'line-through' } : undefined,
+      }}
+    />
   );
 }
 
 export function FacturasList({ facturas }: { facturas: FacturaRow[] }) {
   if (facturas.length === 0) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6 sm:p-8 text-center text-sm text-gray-500">
+      <Box sx={{ bgcolor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', p: { xs: 3, sm: 4 }, textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
         Aún no has emitido facturas. Cuando emitas una, aparecerá aquí.
-      </div>
+      </Box>
     );
   }
 
   return (
     <>
       {/* ─── Móvil: cards ─────────────────────────────────────────────────── */}
-      <div className="md:hidden space-y-2">
+      <Box sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 1 }}>
         {facturas.map(f => (
-          <div key={f.id} className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-mono text-xs text-gray-700 break-all">{f.encf}</span>
+          <Box key={f.id} sx={{ bgcolor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+              <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#374151', wordBreak: 'break-all' }}>{f.encf}</Box>
               <EstadoBadge estado={f.estado} />
-            </div>
-            <div className="text-sm text-gray-900 truncate">
-              {f.razonSocialComprador ?? <span className="text-gray-400">Consumidor final</span>}
-            </div>
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xs text-gray-500">{fmtFecha(f.createdAt)}</span>
-              <span className="text-sm font-medium text-gray-900">
+            </Box>
+            <Box sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {f.razonSocialComprador ?? <Box component="span" sx={{ color: '#9ca3af' }}>Consumidor final</Box>}
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 0.5 }}>
+              <Box component="span" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{fmtFecha(f.createdAt)}</Box>
+              <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>
                 {fmtMoneda(f.montoTotal / 100)}
-              </span>
-            </div>
-            <Link
+              </Box>
+            </Box>
+            <Button
+              component="a"
               href={`/api/pdf/factura/${f.id}`}
               target="_blank"
-              className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 text-xs pt-1"
+              nativeButton={false}
+              variant="text"
+              startIcon={<Download style={{ width: 14, height: 14 }} />}
+              sx={{ alignSelf: 'flex-start', textTransform: 'none', p: 0, minWidth: 0, mt: 0.5, fontSize: '0.75rem', color: '#ea580c', '&:hover': { color: '#c2410c', bgcolor: 'transparent' } }}
             >
-              <Download className="w-3.5 h-3.5" /> Descargar PDF
-            </Link>
-          </div>
+              Descargar PDF
+            </Button>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ─── Desktop: tabla ───────────────────────────────────────────────── */}
-      <div className="hidden md:block bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600">
-            <tr>
-              <th className="px-4 py-2.5 text-left font-medium">e-NCF</th>
-              <th className="px-4 py-2.5 text-left font-medium">Cliente</th>
-              <th className="px-4 py-2.5 text-left font-medium">Fecha</th>
-              <th className="px-4 py-2.5 text-right font-medium">Total</th>
-              <th className="px-4 py-2.5 text-center font-medium">Estado</th>
-              <th className="px-4 py-2.5 text-right font-medium w-20">PDF</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
+      <Box sx={{ display: { xs: 'none', md: 'block' }, bgcolor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+        <Table sx={{ '& td, & th': { borderColor: '#e5e7eb' } }}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={THEAD_CELL}>e-NCF</TableCell>
+              <TableCell sx={THEAD_CELL}>Cliente</TableCell>
+              <TableCell sx={THEAD_CELL}>Fecha</TableCell>
+              <TableCell align="right" sx={THEAD_CELL}>Total</TableCell>
+              <TableCell align="center" sx={THEAD_CELL}>Estado</TableCell>
+              <TableCell align="right" sx={{ ...THEAD_CELL, width: 80 }}>PDF</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {facturas.map(f => (
-              <tr key={f.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono text-xs text-gray-700">{f.encf}</td>
-                <td className="px-4 py-3 text-gray-900 truncate max-w-xs">
-                  {f.razonSocialComprador ?? <span className="text-gray-400">Consumidor final</span>}
-                </td>
-                <td className="px-4 py-3 text-gray-600">{fmtFecha(f.createdAt)}</td>
-                <td className="px-4 py-3 text-right text-gray-900">{fmtMoneda(f.montoTotal / 100)}</td>
-                <td className="px-4 py-3 text-center">
+              <TableRow key={f.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
+                <TableCell sx={{ ...TBODY_CELL, fontFamily: 'monospace', fontSize: '0.75rem', color: '#374151' }}>{f.encf}</TableCell>
+                <TableCell sx={{ ...TBODY_CELL, color: '#111827', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {f.razonSocialComprador ?? <Box component="span" sx={{ color: '#9ca3af' }}>Consumidor final</Box>}
+                </TableCell>
+                <TableCell sx={{ ...TBODY_CELL, color: '#4b5563' }}>{fmtFecha(f.createdAt)}</TableCell>
+                <TableCell align="right" sx={{ ...TBODY_CELL, color: '#111827' }}>{fmtMoneda(f.montoTotal / 100)}</TableCell>
+                <TableCell align="center" sx={TBODY_CELL}>
                   <EstadoBadge estado={f.estado} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link
+                </TableCell>
+                <TableCell align="right" sx={TBODY_CELL}>
+                  <IconButton
+                    component="a"
                     href={`/api/pdf/factura/${f.id}`}
                     target="_blank"
-                    className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 text-xs"
+                    nativeButton={false}
                     title="Descargar PDF"
+                    size="small"
+                    sx={{ color: '#ea580c', '&:hover': { color: '#c2410c', bgcolor: 'transparent' } }}
                   >
-                    <Download className="w-3.5 h-3.5" />
-                  </Link>
-                </td>
-              </tr>
+                    <Download style={{ width: 14, height: 14 }} />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Box>
     </>
   );
 }

@@ -2,7 +2,11 @@
   "private": true,
   "version": "1.0.0",
   "pnpm": {
-    "onlyBuiltDependencies": ["@tailwindcss/oxide", "esbuild", "sharp"]
+    "onlyBuiltDependencies": [
+      "@tailwindcss/oxide",
+      "esbuild",
+      "sharp"
+    ]
   },
   "scripts": {
     "release:patch": "npm version patch -m \"chore(release): v%s\"",
@@ -26,6 +30,11 @@
     "branch:setup": "bash scripts/branch-setup.sh"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.1.1",
+    "@mui/material": "^9.1.1",
+    "@mui/material-nextjs": "^9.1.1",
     "@react-pdf/renderer": "^4.4.0",
     "@tailwindcss/postcss": "4.1.7",
     "@types/adm-zip": "^0.5.8",

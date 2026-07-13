@@ -1,7 +1,12 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { MessageCircle, Phone, X, Sparkles } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
 
 /**
  * Dialog reutilizable que se muestra cuando un usuario clickea una feature
@@ -26,85 +31,100 @@ interface DialogProps {
 }
 
 export function ProximamenteDialog({ open, feature, onClose }: DialogProps) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   const message = encodeURIComponent(
     `Hola, estoy interesado en la funcionalidad "${feature}" de EmiteDO. ¿Pueden habilitarla?`,
   );
   const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      role="dialog"
-      aria-modal="true"
+    <Dialog
+      open={open}
+      onClose={onClose}
       aria-labelledby="proximamente-title"
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 448, width: '100%', p: 3 } } as object }}
     >
-      <div ref={ref} className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="h-10 w-10 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
-            <Sparkles className="h-5 w-5 text-teal-700" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 id="proximamente-title" className="text-base font-bold text-gray-900">
-              {feature} — Próximamente
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Esta funcionalidad aún no está habilitada en tu cuenta.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 p-1 -m-1"
-            aria-label="Cerrar"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
+        <Box sx={{ height: 40, width: 40, borderRadius: '9999px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Sparkles style={{ width: 20, height: 20, color: '#0f766e' }} />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography id="proximamente-title" sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>
+            {feature} — Próximamente
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 0.5 }}>
+            Esta funcionalidad aún no está habilitada en tu cuenta.
+          </Typography>
+        </Box>
+        <IconButton
+          onClick={onClose}
+          aria-label="Cerrar"
+          sx={{ color: '#9ca3af', p: 0.5, m: '-4px', '&:hover': { color: '#374151', bgcolor: 'transparent' } }}
+        >
+          <X style={{ width: 20, height: 20 }} />
+        </IconButton>
+      </Box>
 
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
-          <p className="text-sm text-emerald-900 leading-relaxed">
-            ¿La necesitas ya? Estaré muy feliz de habilitar esta funcionalidad
-            para ti. <strong>Contáctame y la activamos:</strong>
-          </p>
-        </div>
+      <Box sx={{ bgcolor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', p: 2, mb: 2 }}>
+        <Typography sx={{ fontSize: '0.875rem', color: '#064e3b', lineHeight: 1.625 }}>
+          ¿La necesitas ya? Estaré muy feliz de habilitar esta funcionalidad
+          para ti. <Box component="strong" sx={{ fontWeight: 700 }}>Contáctame y la activamos:</Box>
+        </Typography>
+      </Box>
 
-        <div className="space-y-2">
-          <a
-            href={waUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-3 w-full bg-[#25D366] hover:bg-[#1ebe5b] text-white font-medium py-3 px-4 rounded-lg transition-colors"
-          >
-            <MessageCircle className="h-5 w-5" />
-            <span>WhatsApp · {WHATSAPP_DISPLAY}</span>
-          </a>
-          <a
-            href={`tel:${WHATSAPP_NUMBER}`}
-            className="flex items-center gap-3 w-full border border-gray-300 hover:bg-gray-50 text-gray-800 font-medium py-3 px-4 rounded-lg transition-colors"
-          >
-            <Phone className="h-5 w-5 text-gray-500" />
-            <span>Llamar · {WHATSAPP_DISPLAY}</span>
-          </a>
-        </div>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Button
+          component="a"
+          href={waUrl}
+          target="_blank"
+          rel="noreferrer"
+          nativeButton={false}
+          fullWidth
+          variant="contained"
+          disableElevation
+          startIcon={<MessageCircle style={{ width: 20, height: 20 }} />}
+          sx={{
+            justifyContent: 'flex-start',
+            gap: 1.5,
+            py: 1.5,
+            px: 2,
+            borderRadius: '8px',
+            textTransform: 'none',
+            fontWeight: 500,
+            color: '#fff',
+            bgcolor: '#25D366',
+            '&:hover': { bgcolor: '#1ebe5b' },
+          }}
+        >
+          WhatsApp · {WHATSAPP_DISPLAY}
+        </Button>
+        <Button
+          component="a"
+          href={`tel:${WHATSAPP_NUMBER}`}
+          nativeButton={false}
+          fullWidth
+          variant="outlined"
+          startIcon={<Phone style={{ width: 20, height: 20, color: '#6b7280' }} />}
+          sx={{
+            justifyContent: 'flex-start',
+            gap: 1.5,
+            py: 1.5,
+            px: 2,
+            borderRadius: '8px',
+            textTransform: 'none',
+            fontWeight: 500,
+            color: '#1f2937',
+            borderColor: '#d1d5db',
+            '&:hover': { bgcolor: '#f9fafb', borderColor: '#d1d5db' },
+          }}
+        >
+          Llamar · {WHATSAPP_DISPLAY}
+        </Button>
+      </Box>
 
-        <p className="text-xs text-gray-400 text-center mt-4">
-          Mientras tanto, puedes seguir usando el resto del sistema sin problemas.
-        </p>
-      </div>
-    </div>
+      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', mt: 2 }}>
+        Mientras tanto, puedes seguir usando el resto del sistema sin problemas.
+      </Typography>
+    </Dialog>
   );
 }
 
@@ -132,13 +152,15 @@ export function ProximamenteButton({ feature, className, children }: ButtonProps
   const { openProximamente, dialog } = useProximamenteDialog();
   return (
     <>
-      <button
+      <Button
         type="button"
         onClick={() => openProximamente(feature)}
-        className={className}
+        variant="text"
+        {...(className ? { className } : {})}
+        sx={{ textTransform: 'none' }}
       >
         {children}
-      </button>
+      </Button>
       {dialog}
     </>
   );
