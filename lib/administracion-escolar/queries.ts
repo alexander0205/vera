@@ -61,6 +61,10 @@ export async function listarEstudiantesEnriquecidos(
   if (estudiantes.length === 0) return [];
   const ids = estudiantes.map((e) => e.id);
 
+  // Refleja el cobro de las facturas vinculadas (todo el team) antes de sumar la
+  // deuda, para que el listado no quede rezagado respecto al perfil.
+  await sincronizarSaldosDesdeFacturas(teamId);
+
   // Matrícula activa + período + curso por estudiante.
   const matriculas = await db
     .select({
