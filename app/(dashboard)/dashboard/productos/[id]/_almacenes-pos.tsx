@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react';
 import { Store, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 
 interface AlmacenAsig {
   id: number;
@@ -59,42 +63,45 @@ export default function AlmacenesPosSection({ productoId, visiblePos }: { produc
   const huerfano = visiblePos && sel.size === 0;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
-      <div className="mb-1 flex items-center gap-2">
-        <Store className="h-4.5 w-4.5 text-gray-500" />
-        <h2 className="text-sm font-medium text-gray-900">Almacenes donde se vende (POS)</h2>
-      </div>
-      <p className="mb-3 text-xs text-gray-500">El producto aparece en la caja de cada almacén marcado.</p>
+    <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 2.5 }}>
+      <Box sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Store style={{ width: 18, height: 18, color: '#6b7280' }} />
+        <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>Almacenes donde se vende (POS)</Typography>
+      </Box>
+      <Typography sx={{ mb: 1.5, fontSize: '0.75rem', color: '#6b7280' }}>El producto aparece en la caja de cada almacén marcado.</Typography>
 
       {huerfano && (
-        <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Este producto está marcado como visible en POS pero no está en ningún almacén → no aparecerá en ninguna caja. Asígnale al menos uno.</span>
-        </div>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: '8px', border: '1px solid #fde68a', bgcolor: '#fffbeb', px: 1.5, py: 1, fontSize: '0.75rem', color: '#b45309' }}>
+          <AlertTriangle style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0 }} />
+          <Box component="span">Este producto está marcado como visible en POS pero no está en ningún almacén → no aparecerá en ninguna caja. Asígnale al menos uno.</Box>
+        </Box>
       )}
 
       {almacenes === null ? (
-        <p className="text-sm text-gray-400">Cargando…</p>
+        <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af' }}>Cargando…</Typography>
       ) : almacenes.length === 0 ? (
-        <p className="text-sm text-gray-400">No hay almacenes. Crea uno en Inventario → Almacenes.</p>
+        <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af' }}>No hay almacenes. Crea uno en Inventario → Almacenes.</Typography>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 1 }}>
             {almacenes.map((a) => (
-              <label key={a.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-gray-100 px-3 py-2 text-sm hover:bg-gray-50">
-                <input type="checkbox" checked={sel.has(a.id)} onChange={() => toggle(a.id)} />
-                <span className="flex-1">{a.nombre}</span>
-                {a.stockActual > 0 && <span className="text-xs text-gray-400">stock {a.stockActual}</span>}
-              </label>
+              <Box component="label" key={a.id}
+                sx={{ display: 'flex', cursor: 'pointer', alignItems: 'center', gap: 1.25, borderRadius: '8px', border: '1px solid #f3f4f6', px: 1.5, py: 1, fontSize: '0.875rem', '&:hover': { bgcolor: '#f9fafb' } }}>
+                <Checkbox checked={sel.has(a.id)} onChange={() => toggle(a.id)} size="small"
+                  sx={{ p: 0, color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' } }} />
+                <Box component="span" sx={{ flex: 1 }}>{a.nombre}</Box>
+                {a.stockActual > 0 && <Box component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>stock {a.stockActual}</Box>}
+              </Box>
             ))}
-          </div>
-          <div className="mt-3 flex justify-end">
-            <button onClick={guardar} disabled={guardando} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+          </Box>
+          <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button variant="contained" disableElevation onClick={guardar} disabled={guardando}
+              sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 500 }}>
               {guardando ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
+            </Button>
+          </Box>
         </>
       )}
-    </div>
+    </Box>
   );
 }

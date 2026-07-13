@@ -17,7 +17,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import InputAdornment from '@mui/material/InputAdornment';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard, Store,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
@@ -477,6 +477,75 @@ export default function ConfiguracionPage() {
             )}
           </Box>
         </Box>
+
+        {/* 8. Punto de venta (POS) */}
+        {canManage && (
+          <Box sx={cardSx}>
+            <Box sx={cardHeaderSx}>
+              <Store style={{ width: 16, height: 16, color: '#0d9488' }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Punto de venta (POS)</Typography>
+            </Box>
+            <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                Habilita la pantalla de punto de venta para ventas rápidas de mostrador. Ideal para tiendas, colmados, cafeterías y cantinas escolares.
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar punto de venta</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                    Aparecerá el módulo «POS» en el panel para registrar ventas rápidas de mostrador.
+                  </Typography>
+                </Box>
+                <Switch checked={posHabilitado} onChange={(_, v) => setPosHabilitado(v)} color="primary"
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Modo monedero escolar</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                    Habilita saldos por estudiante y consumo con monedero prepago en el punto de venta.
+                  </Typography>
+                </Box>
+                <Switch checked={posEscolarHabilitado} onChange={(_, v) => setPosEscolarHabilitado(v)} color="primary"
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+              </Box>
+            </Box>
+          </Box>
+        )}
+
+        {/* 9. Métodos que obligan facturar a la DGII */}
+        {canManage && (
+          <Box sx={cardSx}>
+            <Box sx={cardHeaderSx}>
+              <CreditCard size={16} color="#0d9488" />
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Métodos que obligan facturar a la DGII</Typography>
+            </Box>
+            <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="body2" sx={{ color: '#6b7280' }}>
+                Cuando una factura registra un cobro con alguno de estos métodos, no se podrá guardar como borrador: habrá que emitirla a la DGII.
+              </Typography>
+              <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+                {METODOS_PAGO.map((m, i) => (
+                  <Box key={m.value}
+                    sx={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      px: 2, py: 1.25,
+                      borderTop: i === 0 ? 'none' : '1px solid #f3f4f6',
+                    }}>
+                    <Typography variant="body2" sx={{ color: '#1f2937' }}>{m.label}</Typography>
+                    <Switch
+                      checked={metodosObligaDgii.includes(m.value)}
+                      onChange={(_, v) => setMetodosObligaDgii(
+                        v ? [...metodosObligaDgii, m.value] : metodosObligaDgii.filter(x => x !== m.value)
+                      )}
+                      color="primary"
+                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+        )}
 
         {/* Equipo y permisos */}
         <EquipoCard />

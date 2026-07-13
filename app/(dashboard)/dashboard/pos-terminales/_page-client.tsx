@@ -4,6 +4,25 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import {
+  Box,
+  Typography,
+  Button,
+  TextField,
+  MenuItem,
+  Switch,
+  Chip,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '@mui/material';
 
 interface Ref { id: number; nombre: string; }
 interface Terminal {
@@ -20,6 +39,9 @@ interface Terminal {
 }
 
 const EMPTY = { nombre: '', almacenId: 0, impresoraId: 0, listaPreciosId: 0, tipoEcf: 'sin-ncf', mesas: false };
+
+const TEAL = '#0d9488';
+const TEAL_HOVER = '#0f766e';
 
 export default function TerminalesClient({
   terminalesIniciales, almacenes, impresoras, listas,
@@ -101,123 +123,218 @@ export default function TerminalesClient({
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-medium">Terminales de punto de venta</h1>
-          <p className="text-sm text-gray-500">Cada caja física con su almacén, impresora y lista de precios fijos.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/pos" className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Abrir POS</Link>
-          <button onClick={nueva} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">Nueva terminal</button>
-        </div>
-      </div>
+    <Box sx={{ mx: 'auto', maxWidth: 896, p: 3 }}>
+      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography component="h1" sx={{ fontSize: '1.25rem', fontWeight: 500, color: '#111827' }}>
+            Terminales de punto de venta
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280' }}>
+            Cada caja física con su almacén, impresora y lista de precios fijos.
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            component={Link}
+            href="/pos"
+            nativeButton={false}
+            variant="outlined"
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}
+          >
+            Abrir POS
+          </Button>
+          <Button
+            variant="contained"
+            disableElevation
+            onClick={nueva}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 500, bgcolor: TEAL, '&:hover': { bgcolor: TEAL_HOVER } }}
+          >
+            Nueva terminal
+          </Button>
+        </Box>
+      </Box>
 
       {almacenes.length === 0 && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: '8px' }}>
           Necesitas al menos un almacén. Créalo en Inventario → Almacenes.
-        </div>
+        </Alert>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs text-gray-500">
-            <tr>
-              <th className="px-4 py-2.5">Nombre</th>
-              <th className="px-4 py-2.5">Almacén</th>
-              <th className="px-4 py-2.5">Lista</th>
-              <th className="px-4 py-2.5">Comprobante</th>
-              <th className="px-4 py-2.5">Estado</th>
-              <th className="px-4 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody>
+      <Box sx={{ overflow: 'hidden', borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ '& th': { bgcolor: '#f9fafb', color: '#6b7280', fontSize: '0.75rem', fontWeight: 400, borderBottom: '1px solid #f3f4f6' } }}>
+              <TableCell>Nombre</TableCell>
+              <TableCell>Almacén</TableCell>
+              <TableCell>Lista</TableCell>
+              <TableCell>Comprobante</TableCell>
+              <TableCell>Estado</TableCell>
+              <TableCell align="right" />
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {terminales.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Sin terminales. Crea la primera.</td></tr>
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 4, color: '#9ca3af', borderBottom: 'none' }}>
+                  Sin terminales. Crea la primera.
+                </TableCell>
+              </TableRow>
             ) : terminales.map((t) => (
-              <tr key={t.id} className="border-t border-gray-100">
-                <td className="px-4 py-2.5 font-medium">{t.nombre}</td>
-                <td className="px-4 py-2.5 text-gray-600">{t.almacenNombre ?? '—'}</td>
-                <td className="px-4 py-2.5 text-gray-600">{t.listaNombre ?? 'Base'}</td>
-                <td className="px-4 py-2.5 text-gray-600">{t.tipoEcf}</td>
-                <td className="px-4 py-2.5">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${t.activo ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {t.activo ? 'Activa' : 'Inactiva'}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <button onClick={() => editar(t)} className="mr-3 text-blue-600">Editar</button>
-                  {t.activo && <button onClick={() => desactivar(t.id)} className="text-red-600">Desactivar</button>}
-                </td>
-              </tr>
+              <TableRow key={t.id} sx={{ '& td': { borderTop: '1px solid #f3f4f6', borderBottom: 'none' } }}>
+                <TableCell sx={{ fontWeight: 500, color: '#111827' }}>{t.nombre}</TableCell>
+                <TableCell sx={{ color: '#4b5563' }}>{t.almacenNombre ?? '—'}</TableCell>
+                <TableCell sx={{ color: '#4b5563' }}>{t.listaNombre ?? 'Base'}</TableCell>
+                <TableCell sx={{ color: '#4b5563' }}>{t.tipoEcf}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={t.activo ? 'Activa' : 'Inactiva'}
+                    size="small"
+                    sx={{
+                      height: 'auto',
+                      borderRadius: '999px',
+                      fontSize: '0.75rem',
+                      py: 0.25,
+                      bgcolor: t.activo ? '#f0fdf4' : '#f3f4f6',
+                      color: t.activo ? '#15803d' : '#6b7280',
+                      '& .MuiChip-label': { px: 1 },
+                    }}
+                  />
+                </TableCell>
+                <TableCell align="right">
+                  <Button
+                    onClick={() => editar(t)}
+                    variant="text"
+                    size="small"
+                    sx={{ textTransform: 'none', color: TEAL, minWidth: 0, p: 0, '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' } }}
+                  >
+                    Editar
+                  </Button>
+                  {t.activo && (
+                    <Button
+                      onClick={() => desactivar(t.id)}
+                      variant="text"
+                      size="small"
+                      sx={{ textTransform: 'none', color: '#dc2626', minWidth: 0, p: 0, ml: 1.5, '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' } }}
+                    >
+                      Desactivar
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Box>
 
-      {abierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={() => setAbierto(false)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="mb-4 text-base font-medium">{editId ? 'Editar terminal' : 'Nueva terminal'}</h2>
+      <Dialog
+        open={abierto}
+        onClose={() => setAbierto(false)}
+        slotProps={{ paper: { sx: { borderRadius: '12px', width: '100%', maxWidth: 448 } } as object }}
+      >
+        <DialogTitle sx={{ fontSize: '1rem', fontWeight: 500, pb: 1 }}>
+          {editId ? 'Editar terminal' : 'Nueva terminal'}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pb: 1 }}>
+          <TextField
+            label="Nombre"
+            size="small"
+            fullWidth
+            placeholder="Caja Cafetería 1"
+            value={form.nombre}
+            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+            sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          />
 
-            <label className="block text-xs text-gray-500">Nombre</label>
-            <input
-              value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              placeholder="Caja Cafetería 1"
-              className="mb-3 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          <TextField
+            label="Almacén (fijo)"
+            select
+            size="small"
+            fullWidth
+            value={form.almacenId}
+            onChange={(e) => setForm({ ...form, almacenId: Number(e.target.value) })}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          >
+            {almacenes.map((a) => <MenuItem key={a.id} value={a.id}>{a.nombre}</MenuItem>)}
+          </TextField>
+
+          <TextField
+            label="Impresora (opcional)"
+            select
+            size="small"
+            fullWidth
+            value={form.impresoraId}
+            onChange={(e) => setForm({ ...form, impresoraId: Number(e.target.value) })}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          >
+            <MenuItem value={0}>Default del equipo</MenuItem>
+            {impresoras.map((i) => <MenuItem key={i.id} value={i.id}>{i.nombre}</MenuItem>)}
+          </TextField>
+
+          <TextField
+            label="Comprobante por defecto"
+            select
+            size="small"
+            fullWidth
+            value={form.tipoEcf}
+            onChange={(e) => setForm({ ...form, tipoEcf: e.target.value })}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          >
+            <MenuItem value="sin-ncf">Ticket (sin NCF)</MenuItem>
+            <MenuItem value="32">Factura de consumo (e32)</MenuItem>
+            <MenuItem value="31">Crédito fiscal (e31)</MenuItem>
+          </TextField>
+
+          <Box
+            component="label"
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 1,
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              p: 1.5,
+              cursor: 'pointer',
+            }}
+          >
+            <Switch
+              checked={form.mesas}
+              onChange={(e) => setForm({ ...form, mesas: e.target.checked })}
+              size="small"
+              sx={{
+                mt: 0.25,
+                '& .MuiSwitch-switchBase.Mui-checked': { color: TEAL },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: TEAL },
+              }}
             />
-
-            <label className="block text-xs text-gray-500">Almacén (fijo)</label>
-            <select
-              value={form.almacenId} onChange={(e) => setForm({ ...form, almacenId: Number(e.target.value) })}
-              className="mb-3 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-            >
-              {almacenes.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-            </select>
-
-            <label className="block text-xs text-gray-500">Impresora (opcional)</label>
-            <select
-              value={form.impresoraId} onChange={(e) => setForm({ ...form, impresoraId: Number(e.target.value) })}
-              className="mb-3 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-            >
-              <option value={0}>Default del equipo</option>
-              {impresoras.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
-            </select>
-
-            <label className="block text-xs text-gray-500">Comprobante por defecto</label>
-            <select
-              value={form.tipoEcf} onChange={(e) => setForm({ ...form, tipoEcf: e.target.value })}
-              className="mb-5 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-            >
-              <option value="sin-ncf">Ticket (sin NCF)</option>
-              <option value="32">Factura de consumo (e32)</option>
-              <option value="31">Crédito fiscal (e31)</option>
-            </select>
-
-            <label className="mb-5 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3">
-              <input
-                type="checkbox"
-                checked={form.mesas}
-                onChange={(e) => setForm({ ...form, mesas: e.target.checked })}
-                className="mt-0.5"
-              />
-              <span className="text-sm">
-                <span className="font-medium text-gray-800">Modo restaurante (mesas)</span>
-                <span className="mt-0.5 block text-xs text-gray-500">
-                  La terminal opera con salón: mesas, meseros con PIN y comandas abiertas.
-                </span>
-              </span>
-            </label>
-
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setAbierto(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">Cancelar</button>
-              <button onClick={guardar} disabled={guardando} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
-                {guardando ? 'Guardando…' : 'Guardar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>
+                Modo restaurante (mesas)
+              </Typography>
+              <Typography variant="caption" sx={{ display: 'block', color: '#6b7280', mt: 0.25 }}>
+                La terminal opera con salón: mesas, meseros con PIN y comandas abiertas.
+              </Typography>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setAbierto(false)}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            disableElevation
+            onClick={guardar}
+            disabled={guardando}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 500, bgcolor: TEAL, '&:hover': { bgcolor: TEAL_HOVER } }}
+          >
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

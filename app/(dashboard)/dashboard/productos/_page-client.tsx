@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload, PackagePlus, Camera, X } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload, PackagePlus, Camera, X } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
 import MaestrosProductoSection from './MaestrosProductoSection';
@@ -21,6 +21,7 @@ import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
 import Collapse from '@mui/material/Collapse';
 import Switch from '@mui/material/Switch';
+import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
 
 interface Producto {
@@ -263,22 +264,22 @@ export default function ProductosPage() {
       visibleAt: 'md',
       render: p => {
         if (p.tipo !== 'bien' || !p.controlaInventario) {
-          return <span className="text-xs text-gray-400 italic">No aplica</span>;
+          return <Typography component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic' }}>No aplica</Typography>;
         }
         const agotado    = p.stockActual <= 0;
         const bajominimo = !agotado && p.stockActual <= p.stockMinimo;
         return (
-          <div className="flex items-center gap-2">
-            <span className={`font-medium text-sm ${agotado ? 'text-red-600' : bajominimo ? 'text-amber-600' : 'text-green-700'}`}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography component="span" sx={{ fontWeight: 500, fontSize: '0.875rem', color: agotado ? '#dc2626' : bajominimo ? '#d97706' : '#15803d' }}>
               {p.stockActual}
-            </span>
+            </Typography>
             {agotado && (
               <Chip label="Agotado" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', '& .MuiChip-label': { px: 0.75 } }} />
             )}
             {bajominimo && (
               <Chip label="Bajo mínimo" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', '& .MuiChip-label': { px: 0.75 } }} />
             )}
-          </div>
+          </Box>
         );
       },
     },
@@ -459,6 +460,34 @@ export default function ProductosPage() {
               </FormControl>
             </Box>
 
+            {/* Costo de compra — solo para bienes */}
+            {form.tipo === 'bien' && (
+              <MuiTextField
+                label="Costo de compra (DOP)" type="number" placeholder="0.00"
+                value={form.costo} size="small" fullWidth
+                helperText="Usado para calcular margen y costo de ventas. No aparece en la factura."
+                slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+                onChange={(e) => setForm((f) => ({ ...f, costo: e.target.value }))}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
+            )}
+
+            {/* Categoría */}
+            <FormControl size="small" fullWidth>
+              <InputLabel>Categoría</InputLabel>
+              <Select
+                label="Categoría"
+                value={form.categoriaId}
+                onChange={(e) => setForm((f) => ({ ...f, categoriaId: e.target.value }))}
+                sx={{ borderRadius: '8px' }}
+              >
+                <MenuItem value=""><em>Sin categoría</em></MenuItem>
+                {categorias.map((c) => (
+                  <MenuItem key={c.id} value={String(c.id)}>{c.nombre}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
             {/* Unidad de medida */}
             <FormControl size="small" fullWidth>
               <InputLabel>Unidad de medida</InputLabel>
@@ -472,6 +501,59 @@ export default function ProductosPage() {
               </Select>
             </FormControl>
 
+            {/* Control de inventario — solo para bienes */}
+            {form.tipo === 'bien' && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, border: '1px dashed #99f6e4', borderRadius: '8px', p: 2, bgcolor: 'rgba(240,253,250,0.4)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Controlar inventario</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>El stock se descuenta automáticamente al guardar o emitir facturas</Typography>
+                  </Box>
+                  <Switch
+                    checked={form.controlaInventario}
+                    onChange={(e) => setForm((f) => ({ ...f, controlaInventario: e.target.checked }))}
+                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#0d9488' } }}
+                  />
+                </Box>
+
+                {form.controlaInventario && (
+                  <>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                      <MuiTextField
+                        label="Stock actual" type="number" placeholder="0"
+                        value={form.stockActual} size="small" fullWidth
+                        slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                        onChange={(e) => setForm((f) => ({ ...f, stockActual: e.target.value }))}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                      />
+                      <MuiTextField
+                        label="Stock mínimo" type="number" placeholder="0"
+                        value={form.stockMinimo} size="small" fullWidth
+                        helperText="Alerta si el stock baja de este número"
+                        slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                        onChange={(e) => setForm((f) => ({ ...f, stockMinimo: e.target.value }))}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                      />
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                      <Box>
+                        <Typography variant="body2" sx={{ color: '#374151' }}>Permitir venta sin stock</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>Si está desactivado, se bloqueará la factura cuando el stock sea 0</Typography>
+                      </Box>
+                      <Switch
+                        checked={form.permiteVentaSinStock}
+                        onChange={(e) => setForm((f) => ({ ...f, permiteVentaSinStock: e.target.checked }))}
+                        sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#0d9488' } }}
+                      />
+                    </Box>
+                  </>
+                )}
+              </Box>
+            )}
+
+            {/* Imagen del producto */}
+            <ImagenProductoBox imagen={form.imagen} onChange={(v) => setForm((f) => ({ ...f, imagen: v }))} />
+
             {/* Formulario avanzado */}
             <Box>
               <MuiButton
@@ -483,6 +565,12 @@ export default function ProductosPage() {
               </MuiButton>
               <Collapse in={showAvanzado}>
                 <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5, border: '1px dashed #e5e7eb', borderRadius: '8px', p: 2 }}>
+                  <MuiTextField
+                    label="Código de barras (POS)" placeholder="Escanea o escribe el EAN/UPC"
+                    value={form.codigoBarras} size="small" fullWidth
+                    onChange={(e) => setForm((f) => ({ ...f, codigoBarras: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                  />
                   <MuiTextField
                     label="Referencia / SKU" placeholder="SERV-001"
                     value={form.referencia} size="small" fullWidth
@@ -498,6 +586,9 @@ export default function ProductosPage() {
                 </Box>
               </Collapse>
             </Box>
+
+            {/* Atributos (maestros) — solo al editar un producto existente */}
+            {editTarget && <MaestrosProductoSection productId={editTarget.id} />}
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
@@ -553,27 +644,32 @@ function ImagenProductoBox({ imagen, onChange }: { imagen: string; onChange: (v:
   }
 
   return (
-    <div className="space-y-1.5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
       <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151', mb: 0.5 }}>Imagen (opcional)</Typography>
-      <label className="relative flex aspect-square w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300">
-        <input type="file" accept="image/*" className="hidden"
+      <Box component="label" sx={{
+        position: 'relative', display: 'flex', aspectRatio: '1 / 1', width: '100%', maxWidth: 200, cursor: 'pointer',
+        flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.75,
+        borderRadius: '8px', border: '2px dashed #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af',
+        '&:hover': { borderColor: '#d1d5db' },
+      }}>
+        <input type="file" accept="image/*" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         {imagen ? (
           <>
-            <img src={imagen} alt="Producto" className="h-full w-full rounded-lg object-cover" />
-            <button type="button" onClick={(e) => { e.preventDefault(); onChange(''); }}
-              className="absolute right-1.5 top-1.5 rounded-full bg-white/90 p-1 text-gray-600 shadow hover:bg-white">
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <Box component="img" src={imagen} alt="Producto" sx={{ height: '100%', width: '100%', borderRadius: '8px', objectFit: 'cover' }} />
+            <IconButton size="small" onClick={(e) => { e.preventDefault(); onChange(''); }}
+              sx={{ position: 'absolute', right: 6, top: 6, bgcolor: 'rgba(255,255,255,0.9)', color: '#4b5563', p: 0.5, boxShadow: 1, '&:hover': { bgcolor: '#fff' } }}>
+              <X style={{ width: 14, height: 14 }} />
+            </IconButton>
           </>
         ) : (
           <>
-            <Camera className="h-8 w-8" />
-            <span className="text-xs text-center">Selecciona una imagen<br />Tamaño máximo: 800 KB</span>
+            <Camera style={{ width: 32, height: 32 }} />
+            <Box component="span" sx={{ fontSize: '0.75rem', textAlign: 'center' }}>Selecciona una imagen<br />Tamaño máximo: 800 KB</Box>
           </>
         )}
-      </label>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-    </div>
+      </Box>
+      {error && <Typography sx={{ fontSize: '0.75rem', color: '#dc2626' }}>{error}</Typography>}
+    </Box>
   );
 }

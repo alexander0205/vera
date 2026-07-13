@@ -4,12 +4,13 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { ShoppingCart, FileText, Plus, PackagePlus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -135,21 +136,21 @@ const columnsLocales: DataTableColumn<CompraLocal>[] = [
     id: 'fecha',
     header: 'Fecha',
     render: c => (
-      <span className="text-xs text-gray-700 tabular-nums whitespace-nowrap">
+      <Typography component="span" sx={{ fontSize: '0.75rem', color: '#374151', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
         {fmtFechaCorta(c.fecha)}
-      </span>
+      </Typography>
     ),
   },
   {
     id: 'proveedor',
     header: 'Proveedor',
     render: c => (
-      <div className="min-w-0">
-        <div className="text-sm text-gray-900 truncate">{c.proveedorNombre ?? '—'}</div>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.proveedorNombre ?? '—'}</Typography>
         {c.proveedorRnc && (
-          <div className="font-mono text-[11px] text-gray-400">{c.proveedorRnc}</div>
+          <Typography sx={{ fontFamily: 'monospace', fontSize: '11px', color: '#9ca3af' }}>{c.proveedorRnc}</Typography>
         )}
-      </div>
+      </Box>
     ),
   },
   {
@@ -157,7 +158,7 @@ const columnsLocales: DataTableColumn<CompraLocal>[] = [
     header: 'e-NCF',
     visibleAt: 'md',
     render: c => (
-      <span className="font-mono text-xs text-gray-600">{c.referenciaEncf ?? '—'}</span>
+      <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#4b5563' }}>{c.referenciaEncf ?? '—'}</Typography>
     ),
   },
   {
@@ -165,9 +166,9 @@ const columnsLocales: DataTableColumn<CompraLocal>[] = [
     header: 'Monto',
     align: 'right',
     render: c => (
-      <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
+      <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
         {fmtDOP(c.montoTotal)}
-      </span>
+      </Typography>
     ),
   },
 ];
@@ -181,6 +182,8 @@ export default function ComprasPage() {
   const canVerRecibidas = can('compras:ver');
   const canRegistrar    = can('productos:gestionar');
   const canVerLocales   = canRegistrar || can('productos:ver');
+
+  const [tab, setTab] = useState<'recibidas' | 'registradas'>(canVerRecibidas ? 'recibidas' : 'registradas');
 
   const { data, isLoading: swrLoading } = useSWR<ComprasResponse>(
     !permLoading && canVerRecibidas ? '/api/compras' : null,
@@ -215,26 +218,32 @@ export default function ComprasPage() {
     : 'Aquí aparecerán las e-CF que tus proveedores te emitan.';
 
   return (
-    <section className="p-4 sm:p-6 space-y-4">
+    <Box sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Header tipo Alegra */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-            <ShoppingCart className="h-5 w-5 text-teal-600" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900 leading-tight">Compras</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ShoppingCart color="#0d9488" style={{ width: 20, height: 20 }} />
+          </Box>
+          <Box>
+            <Typography component="h1" sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>Compras</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>
               e-CF recibidas de tus proveedores y compras que registras manualmente.
-            </p>
-          </div>
-        </div>
+            </Typography>
+          </Box>
+        </Box>
         {canRegistrar && (
-          <Button size="sm" onClick={() => setShowModal(true)}>
-            <Plus className="h-4 w-4 mr-1.5" /> Nueva compra
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setShowModal(true)}
+            startIcon={<Plus style={{ width: 16, height: 16 }} />}
+            sx={{ flexShrink: 0 }}
+          >
+            Nueva compra
           </Button>
         )}
-      </div>
+      </Box>
 
       <ModalRegistrarCompra
         open={showModal}
@@ -246,23 +255,28 @@ export default function ComprasPage() {
         <Alert severity="error" sx={{ borderRadius: '10px' }}>{data.error}</Alert>
       )}
 
-      <Tabs defaultValue={canVerRecibidas ? 'recibidas' : 'registradas'}>
-        <TabsList>
+      <Box>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           {canVerRecibidas && (
-            <TabsTrigger value="recibidas">Facturas recibidas</TabsTrigger>
+            <Tab value="recibidas" label="Facturas recibidas" />
           )}
           {canVerLocales && (
-            <TabsTrigger value="registradas">
-              Compras registradas
-              {comprasLocales.length > 0 && (
-                <span className="ml-1.5 text-[11px] text-gray-400">({comprasLocales.length})</span>
-              )}
-            </TabsTrigger>
+            <Tab
+              value="registradas"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                  Compras registradas
+                  {comprasLocales.length > 0 && (
+                    <Box component="span" sx={{ ml: 0.75, fontSize: '11px', color: '#9ca3af' }}>({comprasLocales.length})</Box>
+                  )}
+                </Box>
+              }
+            />
           )}
-        </TabsList>
+        </Tabs>
 
-        {canVerRecibidas && (
-          <TabsContent value="recibidas">
+        {canVerRecibidas && tab === 'recibidas' && (
+          <Box sx={{ mt: 2 }}>
             <DataTable<RecepcionEcfDto>
               data={items}
               loading={loading}
@@ -276,26 +290,26 @@ export default function ComprasPage() {
                 hint: emptyHint,
               }}
             />
-          </TabsContent>
+          </Box>
         )}
 
-        {canVerLocales && (
-        <TabsContent value="registradas">
-          <DataTable<CompraLocal>
-            data={comprasLocales}
-            loading={permLoading || localesLoading}
-            columns={columnsLocales}
-            rowHref={c => `/dashboard/compras/local/${c.id}`}
-            title="Compras registradas"
-            emptyState={{
-              icon:  PackagePlus,
-              title: 'No has registrado compras manuales',
-              hint:  'Usa "Nueva compra" para registrar entradas de inventario y actualizar tu stock.',
-            }}
-          />
-        </TabsContent>
+        {canVerLocales && tab === 'registradas' && (
+          <Box sx={{ mt: 2 }}>
+            <DataTable<CompraLocal>
+              data={comprasLocales}
+              loading={permLoading || localesLoading}
+              columns={columnsLocales}
+              rowHref={c => `/dashboard/compras/local/${c.id}`}
+              title="Compras registradas"
+              emptyState={{
+                icon:  PackagePlus,
+                title: 'No has registrado compras manuales',
+                hint:  'Usa "Nueva compra" para registrar entradas de inventario y actualizar tu stock.',
+              }}
+            />
+          </Box>
         )}
-      </Tabs>
-    </section>
+      </Box>
+    </Box>
   );
 }

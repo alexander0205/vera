@@ -1,18 +1,22 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import {
-  PackagePlus, ArrowDownLeft, ArrowUpRight, Wrench, Loader2, Package,
+  PackagePlus, ArrowDownLeft, ArrowUpRight, Wrench, Package,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 
@@ -46,12 +50,12 @@ const TIPO_LABELS: Record<string, string> = {
 };
 
 const TIPO_ICONS: Record<string, React.ReactNode> = {
-  VENTA:          <ArrowUpRight  className="h-3.5 w-3.5" />,
-  ENTRADA:        <ArrowDownLeft className="h-3.5 w-3.5" />,
-  AJUSTE_SALIDA:  <Wrench        className="h-3.5 w-3.5" />,
-  AJUSTE_ENTRADA: <Wrench        className="h-3.5 w-3.5" />,
-  DEVOLUCION:     <ArrowDownLeft className="h-3.5 w-3.5" />,
-  STOCK_INICIAL:  <PackagePlus   className="h-3.5 w-3.5" />,
+  VENTA:          <ArrowUpRight  style={{ width: 14, height: 14 }} />,
+  ENTRADA:        <ArrowDownLeft style={{ width: 14, height: 14 }} />,
+  AJUSTE_SALIDA:  <Wrench        style={{ width: 14, height: 14 }} />,
+  AJUSTE_ENTRADA: <Wrench        style={{ width: 14, height: 14 }} />,
+  DEVOLUCION:     <ArrowDownLeft style={{ width: 14, height: 14 }} />,
+  STOCK_INICIAL:  <PackagePlus   style={{ width: 14, height: 14 }} />,
 };
 
 type TipoAjuste = 'ENTRADA' | 'AJUSTE_SALIDA' | 'AJUSTE_ENTRADA' | 'STOCK_INICIAL';
@@ -135,33 +139,39 @@ export function InventarioPageClient() {
     {
       id: 'tipo',
       header: 'Tipo',
-      render: (m) => (
-        <Badge variant={m.esEntrada ? 'secondary' : 'outline'}
-          className={m.esEntrada
-            ? 'bg-green-50 text-green-700 border-green-200'
-            : m.tipo === 'VENTA'
-              ? 'bg-red-50 text-red-700 border-red-200'
-              : 'bg-amber-50 text-amber-700 border-amber-200'}>
-          <span className="flex items-center gap-1">
-            {TIPO_ICONS[m.tipo]}
-            {TIPO_LABELS[m.tipo] ?? m.tipo}
-          </span>
-        </Badge>
-      ),
+      render: (m) => {
+        const palette = m.esEntrada
+          ? { bg: '#f0fdf4', fg: '#15803d', br: '#bbf7d0' }
+          : m.tipo === 'VENTA'
+            ? { bg: '#fef2f2', fg: '#b91c1c', br: '#fecaca' }
+            : { bg: '#fffbeb', fg: '#b45309', br: '#fde68a' };
+        return (
+          <Chip
+            size="small"
+            label={
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                {TIPO_ICONS[m.tipo]}
+                {TIPO_LABELS[m.tipo] ?? m.tipo}
+              </Box>
+            }
+            sx={{ bgcolor: palette.bg, color: palette.fg, border: `1px solid ${palette.br}` }}
+          />
+        );
+      },
     },
     {
       id: 'producto',
       header: 'Producto',
-      render: (m) => <span className="font-medium">{m.productoNombre ?? '—'}</span>,
+      render: (m) => <Typography component="span" sx={{ fontWeight: 500, fontSize: '0.875rem', color: '#111827' }}>{m.productoNombre ?? '—'}</Typography>,
     },
     {
       id: 'cantidad',
       header: 'Cantidad',
       align: 'right',
       render: (m) => (
-        <span className={`font-medium ${m.esEntrada ? 'text-green-700' : 'text-red-700'}`}>
+        <Typography component="span" sx={{ fontWeight: 500, fontSize: '0.875rem', color: m.esEntrada ? '#15803d' : '#b91c1c' }}>
           {m.esEntrada ? '+' : '-'}{m.cantidad}
-        </span>
+        </Typography>
       ),
     },
     {
@@ -169,9 +179,9 @@ export function InventarioPageClient() {
       header: 'Stock antes → después',
       visibleAt: 'md',
       render: (m) => (
-        <span className="text-sm text-gray-500 whitespace-nowrap">
-          {m.stockAntes} → <strong className="text-gray-800">{m.stockDespues}</strong>
-        </span>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', whiteSpace: 'nowrap' }}>
+          {m.stockAntes} → <Box component="strong" sx={{ color: '#1f2937' }}>{m.stockDespues}</Box>
+        </Typography>
       ),
     },
     {
@@ -179,33 +189,39 @@ export function InventarioPageClient() {
       header: 'Referencia',
       visibleAt: 'lg',
       render: (m) => m.referenciaEncf
-        ? <span className="font-mono text-xs text-blue-700">{m.referenciaEncf}</span>
-        : <span className="text-gray-400 text-xs">{m.motivo ?? '—'}</span>,
+        ? <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#1d4ed8' }}>{m.referenciaEncf}</Typography>
+        : <Typography component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{m.motivo ?? '—'}</Typography>,
     },
     {
       id: 'usuario',
       header: 'Usuario',
       visibleAt: 'lg',
-      render: (m) => <span className="text-sm text-gray-500">{m.usuarioNombre ?? '—'}</span>,
+      render: (m) => <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>{m.usuarioNombre ?? '—'}</Typography>,
     },
     {
       id: 'fecha',
       header: 'Fecha',
       render: (m) => (
-        <span className="text-sm text-gray-500 whitespace-nowrap">
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', whiteSpace: 'nowrap' }}>
           {new Date(m.createdAt).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' })}
-        </span>
+        </Typography>
       ),
     },
   ];
 
   return (
-    <section className="p-6 space-y-6">
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
       {ajusteOk && (
-        <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg p-3">
+        <Box sx={{ bgcolor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '0.875rem', borderRadius: '8px', p: 1.5 }}>
           {ajusteOk}
-          <button className="ml-2 underline text-green-700" onClick={() => setAjusteOk(null)}>OK</button>
-        </div>
+          <Box
+            component="button"
+            onClick={() => setAjusteOk(null)}
+            sx={{ ml: 1, textDecoration: 'underline', color: '#15803d', background: 'none', border: 'none', p: 0, cursor: 'pointer', font: 'inherit' }}
+          >
+            OK
+          </Box>
+        </Box>
       )}
 
       <DataTable<Movimiento>
@@ -245,69 +261,112 @@ export function InventarioPageClient() {
           hint:  'Los movimientos aparecen aquí cuando emites facturas o haces ajustes manuales',
         }}
         headerActions={
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => { setShowAjuste(true); setOpError(null); setAjuste(EMPTY_AJUSTE); }}>
-            <PackagePlus className="h-4 w-4 mr-2" />
+          <Button
+            variant="contained"
+            startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
+            onClick={() => { setShowAjuste(true); setOpError(null); setAjuste(EMPTY_AJUSTE); }}
+          >
             Nuevo ajuste
           </Button>
         }
       />
 
-      <Dialog open={showAjuste} onOpenChange={(o) => { if (!o) setShowAjuste(false); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Registrar movimiento de inventario</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
+      <Dialog
+        open={showAjuste}
+        onClose={() => setShowAjuste(false)}
+        slotProps={{ paper: { sx: { width: '100%', maxWidth: 448 } } as object }}
+      >
+        <DialogTitle>Registrar movimiento de inventario</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          {opError && (
+            <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>
+          )}
+
+          <Box>
+            <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+              Tipo de movimiento
+            </Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                value={ajuste.tipo}
+                onChange={(e) => setAjuste(a => ({ ...a, tipo: e.target.value as TipoAjuste }))}
+              >
+                <MenuItem value="STOCK_INICIAL">Stock inicial (primer registro)</MenuItem>
+                <MenuItem value="ENTRADA">Entrada (compra / reabastecimiento)</MenuItem>
+                <MenuItem value="AJUSTE_ENTRADA">Ajuste entrada (corrección positiva)</MenuItem>
+                <MenuItem value="AJUSTE_SALIDA">Ajuste salida (merma / pérdida)</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+
+          <Box>
+            <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+              Producto
+            </Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                value={ajuste.productoId}
+                onChange={(e) => setAjuste(a => ({ ...a, productoId: e.target.value }))}
+                displayEmpty
+                renderValue={(selected) => selected
+                  ? (productos.find(p => String(p.id) === selected)?.nombre ?? selected)
+                  : <Box component="span" sx={{ color: '#9ca3af' }}>Selecciona un producto...</Box>}
+              >
+                {productos.map(p => <MenuItem key={p.id} value={String(p.id)}>{p.nombre}</MenuItem>)}
+              </Select>
+            </FormControl>
+            {productos.length === 0 && (
+              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#9ca3af' }}>No hay productos tipo bien con control de inventario activo.</Typography>
             )}
+          </Box>
 
-            <div className="space-y-1.5">
-              <Label>Tipo de movimiento</Label>
-              <Select value={ajuste.tipo} onValueChange={(v) => setAjuste(a => ({ ...a, tipo: v as TipoAjuste }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="STOCK_INICIAL">Stock inicial (primer registro)</SelectItem>
-                  <SelectItem value="ENTRADA">Entrada (compra / reabastecimiento)</SelectItem>
-                  <SelectItem value="AJUSTE_ENTRADA">Ajuste entrada (corrección positiva)</SelectItem>
-                  <SelectItem value="AJUSTE_SALIDA">Ajuste salida (merma / pérdida)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <Box>
+            <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+              Cantidad
+            </Typography>
+            <TextField
+              type="number"
+              size="small"
+              fullWidth
+              placeholder="0"
+              slotProps={{ htmlInput: { min: 1, step: 1 } }}
+              value={ajuste.cantidad}
+              onChange={(e) => setAjuste(a => ({ ...a, cantidad: e.target.value }))}
+            />
+          </Box>
 
-            <div className="space-y-1.5">
-              <Label>Producto</Label>
-              <Select value={ajuste.productoId} onValueChange={(v) => setAjuste(a => ({ ...a, productoId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecciona un producto..." /></SelectTrigger>
-                <SelectContent>
-                  {productos.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {productos.length === 0 && (
-                <p className="text-xs text-gray-400">No hay productos tipo bien con control de inventario activo.</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Cantidad</Label>
-              <Input type="number" min={1} step={1} placeholder="0"
-                value={ajuste.cantidad} onChange={(e) => setAjuste(a => ({ ...a, cantidad: e.target.value }))} />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Motivo <span className="text-gray-400 font-normal">(opcional)</span></Label>
-              <Input placeholder="Ej. Compra a proveedor, conteo físico, merma..."
-                value={ajuste.motivo} onChange={(e) => setAjuste(a => ({ ...a, motivo: e.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAjuste(false)} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAjuste} disabled={saving}>
-              {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Registrar movimiento'}
-            </Button>
-          </DialogFooter>
+          <Box>
+            <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+              Motivo <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>(opcional)</Box>
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Ej. Compra a proveedor, conteo físico, merma..."
+              value={ajuste.motivo}
+              onChange={(e) => setAjuste(a => ({ ...a, motivo: e.target.value }))}
+            />
+          </Box>
         </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            onClick={() => setShowAjuste(false)}
+            disabled={saving}
+            sx={{ borderColor: '#d1d5db', color: '#374151' }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAjuste}
+            disabled={saving}
+            startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+          >
+            {saving ? 'Guardando…' : 'Registrar movimiento'}
+          </Button>
+        </DialogActions>
       </Dialog>
-    </section>
+    </Box>
   );
 }

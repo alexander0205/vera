@@ -5,6 +5,9 @@
  */
 import Link from 'next/link';
 import { ChevronRight, Calendar, Download } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
 
 export function ReportShell({
   titulo, descripcion, migaja, desde, hasta, exportHref, children,
@@ -18,48 +21,56 @@ export function ReportShell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="p-4 sm:p-6 max-w-7xl mx-auto">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto' }}>
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm text-gray-500 mb-2">
-        <Link href="/dashboard/reportes" className="hover:text-teal-600">Reportes</Link>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-teal-600 font-medium">{migaja}</span>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, color: '#6b7280' }}>
+        <Link href="/dashboard/reportes" style={{ textDecoration: 'none' }}>
+          <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#0d9488' } }}>
+            Reportes
+          </Typography>
+        </Link>
+        <ChevronRight style={{ width: 14, height: 14 }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>{migaja}</Typography>
+      </Box>
 
       {/* Header + export */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{titulo}</h1>
-          <p className="text-sm text-gray-500 mt-1">{descripcion}</p>
-        </div>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, mb: 3 }}>
+        <Box>
+          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>{titulo}</Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>{descripcion}</Typography>
+        </Box>
         {exportHref && (
-          <a
+          <Button
+            component="a"
             href={exportHref}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors shrink-0"
+            nativeButton={false}
+            variant="contained"
+            disableElevation
+            startIcon={<Download style={{ width: 16, height: 16 }} />}
+            sx={{ px: 2, py: 1, borderRadius: '8px', textTransform: 'none', fontWeight: 500, bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, whiteSpace: 'nowrap', flexShrink: 0 }}
           >
-            <Download className="h-4 w-4" />
             Descargar Excel
-          </a>
+          </Button>
         )}
-      </div>
+      </Box>
 
       {/* Filtro de fecha */}
-      <form method="get" className="bg-white border border-gray-200 rounded-xl p-4 mb-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <input type="date" name="desde" defaultValue={desde} className="bg-transparent border-0 focus:outline-none text-sm" />
-            <span className="text-gray-400">—</span>
-            <input type="date" name="hasta" defaultValue={hasta} className="bg-transparent border-0 focus:outline-none text-sm" />
-          </div>
-          <button type="submit" className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg">
+      <Box component="form" method="get" sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2, mb: 2.5 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, border: '1px solid #d1d5db', borderRadius: '8px', px: 1.5, py: 0.75 }}>
+            <Calendar style={{ width: 16, height: 16, color: '#9ca3af' }} />
+            <Box component="input" type="date" name="desde" defaultValue={desde} sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', color: '#374151' }} />
+            <Typography component="span" sx={{ color: '#9ca3af', fontSize: '0.875rem' }}>—</Typography>
+            <Box component="input" type="date" name="hasta" defaultValue={hasta} sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', color: '#374151' }} />
+          </Box>
+          <Button type="submit" variant="contained" disableElevation sx={{ px: 1.5, py: 0.75, borderRadius: '8px', textTransform: 'none', fontSize: '0.875rem', fontWeight: 500, bgcolor: '#111827', color: '#fff', '&:hover': { bgcolor: '#1f2937' } }}>
             Aplicar
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Box>
+      </Box>
 
       {children}
-    </section>
+    </Box>
   );
 }
 
@@ -72,31 +83,31 @@ export function KpiCard({
   sub?: string;
   tone?: 'default' | 'teal' | 'amber' | 'red' | 'emerald';
 }) {
-  const toneClass = {
-    default: 'text-gray-900',
-    teal: 'text-teal-700',
-    amber: 'text-amber-600',
-    red: 'text-red-600',
-    emerald: 'text-emerald-600',
+  const toneColor = {
+    default: '#111827',
+    teal: '#0f766e',
+    amber: '#d97706',
+    red: '#dc2626',
+    emerald: '#059669',
   }[tone];
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={`font-bold text-lg ${toneClass}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-    </div>
+    <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 0.5 }}>{label}</Typography>
+      <Typography sx={{ fontWeight: 700, fontSize: '1.125rem', color: toneColor, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
+      {sub && <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25, fontVariantNumeric: 'tabular-nums' }}>{sub}</Typography>}
+    </Box>
   );
 }
 
 /** Panel blanco con título — contenedor de charts/tablas. */
 export function Panel({ titulo, children, right }: { titulo: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-gray-900">{titulo}</h2>
+    <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2.5, mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Typography component="h2" sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>{titulo}</Typography>
         {right}
-      </div>
+      </Box>
       {children}
-    </div>
+    </Box>
   );
 }

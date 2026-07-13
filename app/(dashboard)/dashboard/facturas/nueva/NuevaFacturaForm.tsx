@@ -1452,13 +1452,13 @@ export default function NuevaFacturaForm({
                   tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
                 />
-                <div className="mt-4 pt-4 border-t border-gray-100">
+                <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f3f4f6' }}>
                   <ClasificacionFactura
                     docId={initialData?.id}
                     value={clasificacion}
                     onChange={setClasificacion}
                   />
-                </div>
+                </Box>
               </SectionCard>
 
               <SectionCard
