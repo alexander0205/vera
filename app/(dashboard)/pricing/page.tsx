@@ -93,7 +93,7 @@ async function PricingPageInner({
           </p>
           <p className="text-sm text-gray-400">
             ¿Necesitas más de 800 comprobantes o integración personalizada?{' '}
-            <a href="mailto:hola@emitedo.com" className="text-teal-600 underline">
+            <a href="mailto:hola@zero.com.do" className="text-teal-600 underline">
               Contáctanos
             </a>
           </p>

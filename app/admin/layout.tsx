@@ -25,9 +25,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <header className="bg-gray-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <div className="h-7 w-7 bg-teal-500 rounded-lg flex items-center justify-center">
-            <span className="font-black text-xs text-white">e</span>
+            <span className="font-black text-xs text-white">z</span>
           </div>
-          <span className="font-bold text-sm sm:text-base">EmiteDO Admin</span>
+          <span className="font-bold text-sm sm:text-base">Zero Admin</span>
         </div>
         <nav className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm overflow-x-auto -mx-1 px-1 sm:ml-2 order-3 sm:order-2 w-full sm:w-auto">
           <a href="/admin" className="text-gray-300 hover:text-white whitespace-nowrap">Dashboard</a>

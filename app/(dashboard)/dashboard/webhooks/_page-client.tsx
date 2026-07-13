@@ -66,7 +66,7 @@ export default function WebhooksPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Webhooks</h1>
-          <p className="text-sm text-gray-500 mt-1">Notifica a tus sistemas cuando ocurran eventos en EmiteDO</p>
+          <p className="text-sm text-gray-500 mt-1">Notifica a tus sistemas cuando ocurran eventos en Zero</p>
         </div>
         <button onClick={() => setShowNew(true)}
           className="flex items-center gap-2 bg-teal-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">
@@ -86,7 +86,7 @@ export default function WebhooksPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">URL de destino</label>
             <input type="url" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
-              placeholder="https://tusistema.com/webhooks/emitedo"
+              placeholder="https://tusistema.com/webhooks/zero"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
           </div>
           <div>

@@ -146,7 +146,7 @@ export default async function AcceptInvitationPage({
     .where(eq(teams.id, inv.teamId))
     .limit(1);
 
-  const teamName = team?.razonSocial ?? team?.name ?? 'EmiteDO';
+  const teamName = team?.razonSocial ?? team?.name ?? 'Zero';
 
   // ¿Tiene cuenta ya?
   const [existing] = await db
@@ -164,7 +164,7 @@ export default async function AcceptInvitationPage({
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-4">
             <Receipt className="w-7 h-7 text-teal-600" />
-            <span className="text-xl font-bold text-gray-900">EmiteDO</span>
+            <span className="text-xl font-bold text-gray-900">Zero</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Te invitaron a <span className="text-teal-600">{teamName}</span>
@@ -257,8 +257,8 @@ export default async function AcceptInvitationPage({
 
         <p className="text-center text-xs text-gray-400 mt-4">
           ¿Problemas? Contáctanos en{' '}
-          <a href="mailto:soporte@emitedo.com" className="text-teal-600 hover:underline">
-            soporte@emitedo.com
+          <a href="mailto:soporte@zero.com.do" className="text-teal-600 hover:underline">
+            soporte@zero.com.do
           </a>
         </p>
       </div>

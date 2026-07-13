@@ -256,7 +256,7 @@ export default function ReportesPage() {
         <div>
           <p className="text-sm font-medium text-amber-800">Verifica los datos antes de enviar</p>
           <p className="text-xs text-amber-600 mt-1">
-            Los archivos se generan desde los comprobantes registrados en EmiteDO. Asegúrate de que
+            Los archivos se generan desde los comprobantes registrados en Zero. Asegúrate de que
             todos los e-CF del período estén correctamente emitidos y aceptados por la DGII antes de
             enviar el reporte. Los comprobantes anulados aparecen en el 608 automáticamente.
           </p>

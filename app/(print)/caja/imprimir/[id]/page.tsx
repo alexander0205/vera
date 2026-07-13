@@ -175,7 +175,7 @@ export default function ImprimirCajaPage() {
           {/* ENCABEZADO */}
           <div className="flex items-start justify-between border-b-2 border-gray-800 pb-4">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-widest">EmiteDO</p>
+              <p className="text-xs text-gray-500 uppercase tracking-widest">Zero</p>
               <h1 className="text-2xl font-bold text-gray-900 mt-0.5">{teamName}</h1>
             </div>
             <div className="text-right">
@@ -396,7 +396,7 @@ export default function ImprimirCajaPage() {
 
           {/* Pie de página */}
           <p className="text-center text-xs text-gray-400 border-t border-gray-100 pt-3 mt-4">
-            EmiteDO · Cuadre generado el {fmtDatetime(new Date().toISOString())}
+            Zero · Cuadre generado el {fmtDatetime(new Date().toISOString())}
           </p>
 
         </div>

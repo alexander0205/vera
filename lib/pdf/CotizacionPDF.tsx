@@ -1,5 +1,5 @@
 /**
- * Template PDF de Cotización — EmiteDO
+ * Template PDF de Cotización — Zero
  * Mismo layout A4 que FacturaPDF.tsx, sin NCF/QR/DGII.
  * Muestra "Válida hasta {vencimiento}" en la cabecera derecha.
  */
@@ -284,7 +284,7 @@ export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
     <Document
       title={`Cotización ${data.numero}`}
       author={data.emisor.razonSocial}
-      subject="Cotización — EmiteDO"
+      subject="Cotización — Zero"
     >
       <Page size="A4" style={S.page}>
 
@@ -425,7 +425,7 @@ export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
 
         {/* ── Footer ── */}
         <View style={S.footer} fixed>
-          <Text style={S.footerLeft}>Generado por EmiteDO</Text>
+          <Text style={S.footerLeft}>Generado por Zero</Text>
           <Text style={S.footerRight}>
             Esta cotización no es un comprobante fiscal
           </Text>

@@ -506,9 +506,9 @@ function DashboardTopBar({
       {/* Logo — visible en mobile siempre, y en desktop cuando sidebar oculto */}
       <div className={`flex items-center gap-2 mr-1 ${sidebarCollapsed ? '' : 'lg:hidden'}`}>
         <div className="h-6 w-6 bg-teal-600 rounded-md flex items-center justify-center shrink-0">
-          <span className="text-white font-black text-xs">e</span>
+          <span className="text-white font-black text-xs">z</span>
         </div>
-        <span className="text-gray-900 font-bold text-sm">EmiteDO</span>
+        <span className="text-gray-900 font-bold text-sm">Zero</span>
       </div>
 
       {/* Company switcher */}
@@ -627,9 +627,9 @@ function Sidebar({
       <div className="px-4 py-4 border-b border-teal-600/50">
         <div className="flex items-center gap-2">
           <div className="h-7 w-7 bg-white rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-teal-700 font-black text-xs">e</span>
+            <span className="text-teal-700 font-black text-xs">z</span>
           </div>
-          <span className="text-white font-bold text-sm tracking-wide">EmiteDO</span>
+          <span className="text-white font-bold text-sm tracking-wide">Zero</span>
         </div>
       </div>
 
@@ -770,7 +770,7 @@ function Sidebar({
 
       <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
         <span className="text-[11px] text-gray-400">
-          EmiteDO v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
+          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
         </span>
       </div>
     </div>

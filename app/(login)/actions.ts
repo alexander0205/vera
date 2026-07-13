@@ -109,7 +109,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     }
     const OTPAuth = await import('otpauth');
     const totp = new OTPAuth.TOTP({
-      issuer: 'EmiteDO',
+      issuer: 'Zero',
       label: foundUser.email,
       algorithm: 'SHA1',
       digits: 6,
