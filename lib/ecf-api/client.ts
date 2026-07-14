@@ -390,11 +390,16 @@ export interface EmisionResponseDto {
 }
 
 export const emision = {
-  list: (codigoPublico: string, limit?: number) =>
-    request<EmisionResponseDto[]>(
+  list: async (codigoPublico: string, limit?: number) => {
+    // ecf-api migró el listado a un envelope paginado { data, pagination };
+    // compat con ambas versiones (array viejo / objeto nuevo) para tolerar
+    // cualquier orden de deploy. Ver docs/ecf-api-emisiones-paginado.md
+    const res = await request<EmisionResponseDto[] | { data: EmisionResponseDto[] }>(
       'GET',
       `/contribuyentes/${codigoPublico}/emisiones${limit ? `?limit=${limit}` : ''}`,
-    ),
+    );
+    return Array.isArray(res) ? res : res.data;
+  },
 
   /** Endpoint unificado nuevo: POST /contribuyentes/:cp/emisiones/emitir */
   emitirUnified: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>
