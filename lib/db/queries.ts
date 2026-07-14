@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { desc, and, eq, isNull, count, gte, lte, sql, lt, inArray } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
@@ -16,7 +17,9 @@ import { getPlanDocLimit } from '@/lib/config/plans';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
 
-export async function getUser() {
+// React.cache: memoiza por-request. Evita re-ejecutar la resolución de sesión
+// (verifyToken + query users) cuando layout, /api/user y demás la piden varias veces.
+export const getUser = cache(async () => {
   const sessionCookie = (await cookies()).get('session');
   if (!sessionCookie || !sessionCookie.value) {
     return null;
@@ -46,7 +49,7 @@ export async function getUser() {
   }
 
   return user[0];
-}
+});
 
 export async function getTeamByStripeCustomerId(customerId: string) {
   const result = await db
@@ -148,7 +151,7 @@ export async function getTeamForUser() {
 // ─── EmiteDO queries ──────────────────────────────────────────────────────────
 
 /** Retorna el teamId activo desde la sesión, con fallback al primero del usuario */
-export async function getTeamIdForUser(): Promise<number | null> {
+export const getTeamIdForUser = cache(async (): Promise<number | null> => {
   const sessionCookie = (await cookies()).get('session');
   if (!sessionCookie?.value) return null;
   const sessionData = await verifyToken(sessionCookie.value);
@@ -201,7 +204,7 @@ export async function getTeamIdForUser(): Promise<number | null> {
     .where(eq(teamMembers.userId, sessionData.user.id))
     .limit(1);
   return result[0]?.teamId ?? null;
-}
+});
 
 /** Retorna todos los teams del usuario (admin → todos los teams) */
 export async function getUserTeams() {

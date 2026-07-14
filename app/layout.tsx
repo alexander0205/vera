@@ -44,6 +44,9 @@ export default function RootLayout({
         <WebVitals />
         <SWRConfig
           value={{
+            // Evita re-fetch de todos los hooks en cada alt-tab (default SWR: true).
+            revalidateOnFocus: false,
+            dedupingInterval: 30_000,
             fallback: {
               // We do NOT await here
               // Only components that read this data will suspend
