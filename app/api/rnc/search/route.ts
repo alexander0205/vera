@@ -12,11 +12,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { rncPadron } from '@/lib/db/schema';
 import { eq, ilike, or, sql } from 'drizzle-orm';
+import { getUser } from '@/lib/db/queries';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function GET(req: NextRequest) {
+  // El padrón (~780k filas) es caro de buscar; exigir sesión y limitar tasa
+  // evita que un tercero sin login lo use como vector de carga sobre la DB.
+  const user = await getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  }
+
+  const rl = rateLimit(`rnc-search:${user.id}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { results: [], error: 'Demasiadas búsquedas, intenta en un momento' },
+      { status: 429 },
+    );
+  }
+
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? '';
 
-  if (q.length < 2) {
+  // Mínimo 3 caracteres: el índice trigram (pg_trgm) opera sobre 3-gramas.
+  if (q.length < 3) {
     return NextResponse.json({ results: [] });
   }
 
@@ -73,7 +91,12 @@ export async function GET(req: NextRequest) {
       estadoLabel: r.estado === '2' ? 'Activo' : r.estado === '3' ? 'Suspendido' : 'Inactivo',
     }));
 
-    return NextResponse.json({ results: labeled });
+    // El padrón se sincroniza 1 vez/día (cron 4am); cachear en el browser evita
+    // repetir la misma búsqueda mientras el usuario teclea/re-teclea.
+    return NextResponse.json(
+      { results: labeled },
+      { headers: { 'Cache-Control': 'private, max-age=300' } },
+    );
   } catch (err: unknown) {
     console.error('[/api/rnc/search]', err);
     return NextResponse.json({ results: [], error: 'Error en búsqueda' });
