@@ -43,11 +43,11 @@ export async function POST(req: NextRequest) {
     mensaje:  escapeHtml(mensaje),
   };
 
-  const destinatario = process.env.CONTACTO_EMAIL ?? 'ferrerasalexander@gmail.com';
+  const destinatario = process.env.CONTACTO_EMAIL ?? 'hola@zero.com.do';
 
   try {
     await resend.emails.send({
-      from: 'EmiteDO Contacto <noreply@yisraeltech.com>',
+      from: 'Zero Contacto <noreply@zero.com.do>',
       to: destinatario,
       replyTo: email,
       subject: `Nueva solicitud de integración — ${empresa}`,
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
           <h3 style="color:#374151;margin-top:24px;">Mensaje:</h3>
           <div style="background:#f9fafb;border-left:3px solid #0f766e;padding:12px 16px;border-radius:4px;white-space:pre-wrap;">${safe.mensaje}</div>
           <p style="color:#9ca3af;font-size:12px;margin-top:24px;">
-            Enviado desde el formulario de contacto de EmiteDO · IP: ${ip}
+            Enviado desde el formulario de contacto de Zero · IP: ${ip}
           </p>
         </div>
       `,

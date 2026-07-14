@@ -313,7 +313,7 @@ export function FacturaTirillaPDF({ data }: { data: FacturaPDFData }) {
           <Text style={[S.textSmall, S.center]}>Verifique en dgii.gov.do</Text>
         )}
         <Text style={[S.textSmall, S.center, { marginTop: 4 }]}>
-          Generado en www.emitedo.com
+          Generado en zero.com.do
         </Text>
       </Page>
     </Document>

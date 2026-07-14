@@ -642,10 +642,10 @@ function SidebarContent({
             justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <Typography sx={{ color: '#0f766e', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>e</Typography>
+            <Typography sx={{ color: '#0f766e', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>z</Typography>
           </Box>
           <Typography sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '0.01em' }}>
-            EmiteDO
+            Zero
           </Typography>
         </Box>
       </Box>
@@ -877,7 +877,7 @@ function SidebarContent({
 
       <Box sx={{ px: 2, py: 1.25, borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
         <Typography sx={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)' }}>
-          EmiteDO v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
+          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
         </Typography>
       </Box>
     </Box>
@@ -1013,9 +1013,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }}
               >
                 <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>e</Typography>
+                  <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
                 </Box>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary' }}>EmiteDO</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary' }}>Zero</Typography>
               </Box>
             )}
 
@@ -1029,9 +1029,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               }}
             >
               <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>e</Typography>
+                <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
               </Box>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>EmiteDO</Typography>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>Zero</Typography>
             </Box>
 
             {/* Company switcher */}

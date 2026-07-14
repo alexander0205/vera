@@ -9,14 +9,21 @@ import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { MuiProviders } from '@/components/mui-providers';
 
 export const metadata: Metadata = {
-  title: 'EmiteDO — Facturación Electrónica República Dominicana',
+  title: 'Zero — Facturación Electrónica República Dominicana',
   description:
-    'Emite Comprobantes Fiscales Electrónicos (e-CF) de forma rápida y segura. Integrado con la DGII. Cumple con la Ley 32-23.'
+    'Emite Comprobantes Fiscales Electrónicos (e-CF) de forma rápida y segura. Integrado con la DGII. Cumple con la Ley 32-23.',
+  applicationName: 'Zero',
+  appleWebApp: {
+    capable: true,
+    title: 'Zero',
+    statusBarStyle: 'default',
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: '#0d9488',
 };
 
 const inter = Inter({

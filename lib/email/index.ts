@@ -22,14 +22,14 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
   const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
   await resend.emails.send({
-    from: 'EmiteDO <noreply@yisraeltech.com>',
+    from: 'Zero <noreply@zero.com.do>',
     to: email,
-    subject: 'Restablecer contraseña — EmiteDO',
+    subject: 'Restablecer contraseña — Zero',
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
         <h2 style="color: #0f766e;">Restablecer contraseña</h2>
         <p>Hola${safeName ? ` ${safeName}` : ''},</p>
-        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta EmiteDO.</p>
+        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta Zero.</p>
         <p>
           <a href="${escapeHtml(resetUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Restablecer contraseña
@@ -45,14 +45,14 @@ export async function sendEmailVerificationEmail(email: string, token: string, n
   const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
   await resend.emails.send({
-    from: 'EmiteDO <noreply@yisraeltech.com>',
+    from: 'Zero <noreply@zero.com.do>',
     to: email,
-    subject: 'Verificar tu email — EmiteDO',
+    subject: 'Verificar tu email — Zero',
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
         <h2 style="color: #0f766e;">Verifica tu email</h2>
         <p>Hola${safeName ? ` ${safeName}` : ''},</p>
-        <p>Gracias por registrarte en EmiteDO. Confirma tu dirección de email para comenzar.</p>
+        <p>Gracias por registrarte en Zero. Confirma tu dirección de email para comenzar.</p>
         <p>
           <a href="${escapeHtml(verifyUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Verificar email
@@ -74,13 +74,13 @@ export async function sendInvitationEmail(
   const safeInvitedBy = escapeHtml(invitedByName) || 'Alguien';
   const safeTeam = escapeHtml(teamName);
   await resend.emails.send({
-    from: 'EmiteDO <noreply@yisraeltech.com>',
+    from: 'Zero <noreply@zero.com.do>',
     to: email,
-    subject: `Invitación a ${teamName} en EmiteDO`,
+    subject: `Invitación a ${teamName} en Zero`,
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
         <h2 style="color: #0f766e;">Te invitaron a ${safeTeam}</h2>
-        <p>${safeInvitedBy} te ha invitado a colaborar en <strong>${safeTeam}</strong> en EmiteDO.</p>
+        <p>${safeInvitedBy} te ha invitado a colaborar en <strong>${safeTeam}</strong> en Zero.</p>
         <p>
           <a href="${escapeHtml(acceptUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Aceptar invitación
@@ -130,7 +130,7 @@ export async function sendCajaCierreAprobacionEmail(opts: {
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
       <!-- Header -->
       <div style="background:#0f766e;padding:24px 28px;">
-        <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">EmiteDO · Cuadre de caja</p>
+        <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Zero · Cuadre de caja</p>
         <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">Aprobación pendiente</h1>
       </div>
 
@@ -173,7 +173,7 @@ export async function sendCajaCierreAprobacionEmail(opts: {
           </a>
         </div>
         <p style="margin:12px 0 0;text-align:center;font-size:12px;color:#9ca3af;">
-          O accede desde EmiteDO → Caja → Aprobaciones
+          O accede desde Zero → Caja → Aprobaciones
         </p>
       </div>
 
@@ -191,7 +191,7 @@ export async function sendCajaCierreAprobacionEmail(opts: {
   await Promise.allSettled(
     adminEmails.map(({ email, name }) =>
       resend.emails.send({
-        from:    'EmiteDO <noreply@yisraeltech.com>',
+        from:    'Zero <noreply@zero.com.do>',
         to:      email,
         subject: `⚠️ Cierre de caja pendiente — ${numeroCierre} · ${teamName}`,
         html,
@@ -233,13 +233,13 @@ export async function sendCajaCierreAprobadoEmail(opts: {
     </tr>`;
 
   await resend.emails.send({
-    from:    'EmiteDO <noreply@yisraeltech.com>',
+    from:    'Zero <noreply@zero.com.do>',
     to:      cajeroEmail,
     subject: `✓ Cuadre aprobado — ${numeroCierre} · ${teamName}`,
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
         <div style="background:#0f766e;padding:24px 28px;">
-          <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">EmiteDO · Cuadre de caja</p>
+          <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Zero · Cuadre de caja</p>
           <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">✓ Cuadre aprobado</h1>
         </div>
         <div style="padding:28px;">
@@ -271,7 +271,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
           </div>
         </div>
         <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:14px 28px;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">Este correo es una confirmación automática de EmiteDO.</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">Este correo es una confirmación automática de Zero.</p>
         </div>
       </div>`,
   });
@@ -294,13 +294,13 @@ export async function sendCajaCierreRechazadoEmail(opts: {
   const safeUrl  = escapeHtml(appUrl);
 
   await resend.emails.send({
-    from:    'EmiteDO <noreply@yisraeltech.com>',
+    from:    'Zero <noreply@zero.com.do>',
     to:      cajeroEmail,
     subject: `✗ Cuadre rechazado — ${numeroCierre} · ${teamName}`,
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
         <div style="background:#dc2626;padding:24px 28px;">
-          <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">EmiteDO · Cuadre de caja</p>
+          <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Zero · Cuadre de caja</p>
           <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">✗ Cuadre rechazado</h1>
         </div>
         <div style="padding:28px;">
@@ -323,7 +323,7 @@ export async function sendCajaCierreRechazadoEmail(opts: {
           </div>
         </div>
         <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:14px 28px;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">Este correo es una confirmación automática de EmiteDO.</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">Este correo es una confirmación automática de Zero.</p>
         </div>
       </div>`,
   });
@@ -340,7 +340,7 @@ export async function sendInvoiceEmail(
   const safeRazon = escapeHtml(razonSocial);
   const safeMonto = escapeHtml((montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 }));
   await resend.emails.send({
-    from: 'EmiteDO <noreply@yisraeltech.com>',
+    from: 'Zero <noreply@zero.com.do>',
     to: email,
     subject: `Factura ${encf}`,
     html: `

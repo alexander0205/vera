@@ -83,7 +83,7 @@ export default function ApiKeysPage() {
             API Keys
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-            Integra EmiteDO con tus sistemas externos
+            Integra Zero con tus sistemas externos
           </Typography>
         </Box>
         <MuiButton

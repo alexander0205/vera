@@ -276,7 +276,7 @@ export default function ImprimirCajaPage() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.1em',
               }}>
-                EmiteDO
+                Zero
               </Typography>
               <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', mt: 0.25 }}>
                 {teamName}
@@ -768,7 +768,7 @@ export default function ImprimirCajaPage() {
             pt: 1.5,
             mt: 2,
           }}>
-            EmiteDO · Cuadre generado el {fmtDatetime(new Date().toISOString())}
+            Zero · Cuadre generado el {fmtDatetime(new Date().toISOString())}
           </Typography>
 
         </Box>

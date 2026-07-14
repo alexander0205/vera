@@ -472,7 +472,7 @@ function WaitForDgii({
             Plazo típico: {estimated}
           </Typography>
           <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.5, lineHeight: 1.6 }}>
-            Puedes cerrar EmiteDo — te avisaremos por correo y WhatsApp cuando DGII responda.
+            Puedes cerrar Zero — te avisaremos por correo y WhatsApp cuando DGII responda.
             El wizard te llevará automáticamente a la siguiente fase.
           </Typography>
         </Box>
@@ -1028,7 +1028,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <InfoBox color="blue" title="Carga el Formulario de Postulación">
             En el portal DGII hiciste clic en <strong>"Generar archivo"</strong> y descargaste
-            el Formulario de Postulación. Cárgalo aquí — EmiteDo le aplica la Firma Digital automáticamente.
+            el Formulario de Postulación. Cárgalo aquí — Zero le aplica la Firma Digital automáticamente.
           </InfoBox>
 
           {/* Paso 1: Cargar Formulario de Postulación */}
@@ -1200,7 +1200,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
               <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
                 DGII te notificará el resultado por <strong>Buzón de Oficina Virtual</strong>.
-                No cierres sesión en EmiteDO — tu progreso ya está guardado.
+                No cierres sesión en Zero — tu progreso ya está guardado.
               </Typography>
               <Box component="ul" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.875rem', color: '#4b5563', pl: 2, listStyleType: 'disc' }}>
                 <li>Si tu postulación es <strong style={{ color: '#0f766e' }}>aprobada</strong>, DGII habilita el Set de Pruebas en el Portal de Certificación.</li>
@@ -1743,13 +1743,13 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
       {sub === 0 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <InfoBox color="blue" title="¿Cómo funciona el Set de Pruebas?">
-            EmiteDo genera y envía automáticamente todos los e-CF de prueba (10 tipos + RFCE)
+            Zero genera y envía automáticamente todos los e-CF de prueba (10 tipos + RFCE)
             con los datos que completes a continuación. Solo la factura de consumo &lt; RD$250K
             se sube manualmente al portal al final.{' '}
             <DgiiScreenshot
               src="/dgii-guia/paso4-pruebas-simulacion.png"
               alt="Pantalla de Pruebas de Simulación en el portal DGII"
-              caption="El portal DGII muestra un contador por tipo de comprobante. EmiteDo replica esta misma vista en el paso de envío."
+              caption="El portal DGII muestra un contador por tipo de comprobante. Zero replica esta misma vista en el paso de envío."
               label="Ver pantalla en el portal DGII"
             />
           </InfoBox>
@@ -2195,7 +2195,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
       {sub === 0 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <InfoBox color="amber" title="11 representaciones impresas requeridas">
-            DGII necesita aprobar el PDF impreso de cada tipo de comprobante. EmiteDo los genera
+            DGII necesita aprobar el PDF impreso de cada tipo de comprobante. Zero los genera
             automáticamente con los QR correctos — solo descárgalos y súbelos al portal.
           </InfoBox>
 
@@ -2334,7 +2334,7 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
       <InfoBox color="blue" title="Cambio de ambiente: pruebas → producción">
         Hasta ahora trabajaste en el ambiente de <strong>pruebas</strong> de DGII. Para emitir e-CF reales,
         DGII te pide actualizar las 3 URLs del software al ambiente de <strong>producción</strong>.
-        EmiteDo ya tiene las URLs listas — solo cópialas y pégalas en el portal.
+        Zero ya tiene las URLs listas — solo cópialas y pégalas en el portal.
       </InfoBox>
 
       <DgiiScreenshot
@@ -2576,7 +2576,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
             <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>¡Tu habilitación está completa!</Typography>
             <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 1, lineHeight: 1.6 }}>
               Has completado exitosamente el proceso de certificación como Facturador Electrónico.
-              Ya puedes emitir e-CF en producción desde EmiteDo.
+              Ya puedes emitir e-CF en producción desde Zero.
             </Typography>
           </Box>
         </Box>
@@ -2591,7 +2591,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
 
       <InfoBox color="blue" title="¿Qué es la OFV y por qué importa?">
         La <strong>Oficina Virtual (OFV)</strong> es donde DGII te muestra los reportes, consultas y
-        estatus de tus e-CF. <strong>No necesitas entrar ahí para emitir facturas</strong> — EmiteDo
+        estatus de tus e-CF. <strong>No necesitas entrar ahí para emitir facturas</strong> — Zero
         las envía automáticamente en producción. Úsala solo para consultar o ver reportes.
       </InfoBox>
 
@@ -2613,7 +2613,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
             <Zap style={{ width: 16, height: 16, color: '#0d9488' }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>EmiteDo ya está en producción</Typography>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Zero ya está en producción</Typography>
             <Typography sx={{ fontSize: '0.75rem', color: '#0f766e' }}>Cada factura que emitas será real ante DGII</Typography>
           </Box>
         </Box>
@@ -2621,7 +2621,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
 
       <FormControlLabel
         control={<Checkbox checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
-        label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Entiendo que desde ahora cada e-CF que emita en EmiteDo es <strong>real</strong> y se envía directamente a producción DGII</Typography>}
+        label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Entiendo que desde ahora cada e-CF que emita en Zero es <strong>real</strong> y se envía directamente a producción DGII</Typography>}
         sx={{ alignItems: 'flex-start', mx: 0, p: 2, borderRadius: '12px', border: '1px solid #e5e7eb' }}
       />
 
@@ -2708,7 +2708,7 @@ function IntroModal({ onStart }: { onStart: () => void }) {
             Activa tu facturación electrónica
           </Typography>
           <Typography sx={{ fontSize: '1rem', color: '#ccfbf1', mt: 1 }}>
-            EmiteDo te guía paso a paso por el proceso de habilitación ante la DGII.
+            Zero te guía paso a paso por el proceso de habilitación ante la DGII.
           </Typography>
         </Box>
 
@@ -2802,7 +2802,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
             </Box>
             <Box sx={{ flex: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>EmiteDo gestiona todo por mí</Typography>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>Zero gestiona todo por mí</Typography>
                 <Typography component="span" sx={{ fontSize: '11px', fontWeight: 700, bgcolor: '#ccfbf1', color: '#0f766e', px: 1, py: 0.25, borderRadius: '9999px' }}>
                   Recomendado
                 </Typography>

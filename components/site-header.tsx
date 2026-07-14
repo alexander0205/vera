@@ -113,7 +113,7 @@ export async function SiteHeader() {
               <Typography component="span" sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem' }}>E</Typography>
             </Box>
             <Typography component="span" sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
-              Emite<Box component="span" sx={{ color: '#0d9488' }}>DO</Box>
+              Ze<Box component="span" sx={{ color: '#0d9488' }}>ro</Box>
             </Typography>
           </Box>
 

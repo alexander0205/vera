@@ -32,7 +32,7 @@ interface DialogProps {
 
 export function ProximamenteDialog({ open, feature, onClose }: DialogProps) {
   const message = encodeURIComponent(
-    `Hola, estoy interesado en la funcionalidad "${feature}" de EmiteDO. ¿Pueden habilitarla?`,
+    `Hola, estoy interesado en la funcionalidad "${feature}" de Zero. ¿Pueden habilitarla?`,
   );
   const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
 

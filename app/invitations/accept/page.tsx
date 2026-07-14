@@ -92,7 +92,7 @@ export default async function AcceptInvitationPage({
   if (inv.expiresAt < new Date()) return <InvalidInvite msg="Esta invitación expiró. Pide una nueva al administrador." />;
 
   const [team] = await db.select({ name: teams.name, razonSocial: teams.razonSocial }).from(teams).where(eq(teams.id, inv.teamId)).limit(1);
-  const teamName = team?.razonSocial ?? team?.name ?? 'EmiteDO';
+  const teamName = team?.razonSocial ?? team?.name ?? 'Zero';
 
   const [existing] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.email, inv.email)).limit(1);
   const hasAccount = !!existing;
@@ -104,7 +104,7 @@ export default async function AcceptInvitationPage({
         <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mb: 2 }}>
             <Receipt size={28} color="#0d9488" />
-            <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>EmiteDO</Typography>
+            <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>Zero</Typography>
           </Box>
           <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827', mb: 1 }}>
             Te invitaron a <Box component="span" sx={{ color: '#0d9488' }}>{teamName}</Box>
@@ -181,8 +181,8 @@ export default async function AcceptInvitationPage({
 
         <Typography sx={{ textAlign: 'center', fontSize: '0.75rem', color: '#9ca3af', mt: 2 }}>
           ¿Problemas? Contáctanos en{' '}
-          <Box component="a" href="mailto:soporte@emitedo.com" sx={{ color: '#0d9488', '&:hover': { textDecoration: 'underline' } }}>
-            soporte@emitedo.com
+          <Box component="a" href="mailto:soporte@zero.com.do" sx={{ color: '#0d9488', '&:hover': { textDecoration: 'underline' } }}>
+            soporte@zero.com.do
           </Box>
         </Typography>
       </Box>

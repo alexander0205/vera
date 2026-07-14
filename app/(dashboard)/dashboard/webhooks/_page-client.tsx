@@ -82,7 +82,7 @@ export default function WebhooksPage() {
             Webhooks
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-            Notifica a tus sistemas cuando ocurran eventos en EmiteDO
+            Notifica a tus sistemas cuando ocurran eventos en Zero
           </Typography>
         </Box>
         <MuiButton
@@ -118,7 +118,7 @@ export default function WebhooksPage() {
               type="url"
               value={form.url}
               onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
-              placeholder="https://tusistema.com/webhooks/emitedo"
+              placeholder="https://tusistema.com/webhooks/zero"
               size="small"
               fullWidth
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}

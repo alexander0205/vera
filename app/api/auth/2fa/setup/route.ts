@@ -20,7 +20,7 @@ export async function GET() {
   }
 
   const totp = new OTPAuth.TOTP({
-    issuer: 'EmiteDO',
+    issuer: 'Zero',
     label: user.email,
     algorithm: 'SHA1',
     digits: 6,
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   if (!user.twoFactorSecret) return NextResponse.json({ error: 'Setup no iniciado' }, { status: 400 });
 
   const totp = new OTPAuth.TOTP({
-    issuer: 'EmiteDO',
+    issuer: 'Zero',
     label: user.email,
     algorithm: 'SHA1',
     digits: 6,

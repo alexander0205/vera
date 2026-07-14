@@ -230,7 +230,7 @@ export default function CuentasPorCobrarPage() {
         <MuiButton variant="outlined" size="small"
           startIcon={<Archive style={{ width: 14, height: 14 }} />}
           onClick={() => setHistoricaModal(true)}
-          title="Importar factura previa al uso de emitedo (no va a DGII)"
+          title="Importar factura previa al uso de Zero (no va a DGII)"
           sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary', flexShrink: 0 }}>
           Agregar cuenta histórica
         </MuiButton>
@@ -542,7 +542,7 @@ function HistoricaModal({ onClose, onSuccess }: {
       <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
         Agregar cuenta histórica
         <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
-          Factura previa al uso de EmiteDO — solo tracking de cobranza. No se envía a DGII.
+          Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
         </Typography>
       </DialogTitle>
       <DialogContent sx={{ pt: '12px !important' }}>

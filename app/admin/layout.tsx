@@ -24,9 +24,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <Box component="header" sx={{ bgcolor: '#111827', color: '#fff', px: { xs: 2, sm: 3 }, py: { xs: 1.5, sm: 2 }, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, flexShrink: 0 }}>
           <Box sx={{ height: 28, width: 28, bgcolor: '#0d9488', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography sx={{ fontWeight: 900, fontSize: '0.75rem', color: '#fff', lineHeight: 1 }}>e</Typography>
+            <Typography sx={{ fontWeight: 900, fontSize: '0.75rem', color: '#fff', lineHeight: 1 }}>z</Typography>
           </Box>
-          <Typography sx={{ fontWeight: 700, fontSize: { xs: '0.875rem', sm: '1rem' }, color: '#fff' }}>EmiteDO Admin</Typography>
+          <Typography sx={{ fontWeight: 700, fontSize: { xs: '0.875rem', sm: '1rem' }, color: '#fff' }}>Zero Admin</Typography>
         </Box>
         <Box component="nav" sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, overflowX: 'auto', order: { xs: 3, sm: 2 }, width: { xs: '100%', sm: 'auto' }, ml: { sm: 1 } }}>
           {[['Dashboard','/admin'],['Usuarios','/admin/usuarios'],['Empresas','/admin/empresas'],['Logs','/admin/logs']].map(([label, href]) => (

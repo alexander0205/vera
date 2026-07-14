@@ -65,7 +65,7 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
               <Receipt style={{ width: 22, height: 22, color: '#fff' }} />
             </Box>
             <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary' }}>
-              EmiteDO
+              Zero
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary">
@@ -236,10 +236,10 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
           ¿Necesitas ayuda?{' '}
           <Box
             component="a"
-            href="mailto:soporte@emitedo.com"
+            href="mailto:soporte@zero.com.do"
             sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
           >
-            soporte@emitedo.com
+            soporte@zero.com.do
           </Box>
         </Typography>
       </Box>

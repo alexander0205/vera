@@ -82,7 +82,7 @@ async function PricingPageInner({
           </Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af' }}>
             ¿Necesitas más de 800 comprobantes o integración personalizada?{' '}
-            <Box component="a" href="mailto:hola@emitedo.com" sx={{ color: '#0d9488', textDecoration: 'underline' }}>Contáctanos</Box>
+            <Box component="a" href="mailto:hola@zero.com.do" sx={{ color: '#0d9488', textDecoration: 'underline' }}>Contáctanos</Box>
           </Typography>
         </Box>
       </Box>

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   const { desde, hasta } = parseRango(sp.get('desde') ?? undefined, sp.get('hasta') ?? undefined);
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'EmiteDO';
+  wb.creator = 'Zero';
   const ws = wb.addWorksheet('Reporte');
   let filename = 'reporte.xlsx';
 
