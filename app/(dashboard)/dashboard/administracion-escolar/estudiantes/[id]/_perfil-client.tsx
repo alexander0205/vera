@@ -16,6 +16,7 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
+import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 const ESTADOS_EST = [
@@ -128,6 +129,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [loading, setLoading]       = useState(true);
   const [notFound, setNotFound]     = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
+  const [matriculaEditar, setMatriculaEditar] = useState<Matricula | null>(null);
 
   // Edición inline de la tarjeta del estudiante.
   const [editando, setEditando]   = useState(false);
@@ -501,7 +503,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               {matriculas.length === 0 ? (
                 <EmptyBox text="Sin matrículas registradas" />
               ) : (
-                <SimpleTable head={['Período', 'Curso', 'Inscripción', 'Estado']}
+                <SimpleTable head={['Período', 'Curso', 'Inscripción', 'Estado', ...(puedeGestionar ? [''] : [])]}
                   rows={matriculas.map((m) => [
                     m.periodo ?? '—',
                     m.curso ?? '—',
@@ -509,6 +511,12 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                     m.estado === 'activa'
                       ? <Badge key="e" className="bg-teal-50 text-teal-700 border-teal-200">Activa</Badge>
                       : <span key="e" className="capitalize text-gray-600">{m.estado}</span>,
+                    ...(puedeGestionar ? [
+                      <button key="ed" onClick={() => setMatriculaEditar(m)}
+                        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
+                        <Pencil className="h-3 w-3" />Editar
+                      </button>,
+                    ] : []),
                   ])} />
               )}
             </TabsContent>
@@ -546,6 +554,13 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
           </Tabs>
         </div>
       </div>
+
+      <EditarMatriculaDialog
+        matricula={matriculaEditar}
+        open={!!matriculaEditar}
+        onClose={() => setMatriculaEditar(null)}
+        onSaved={cargar}
+      />
 
       {cargoVincularFactura && (
         <VincularFacturaDialog
