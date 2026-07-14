@@ -37,7 +37,7 @@ export async function GET() {
   const [desglose, conciliacion, movimientos, ventasPorMetodo, terminal] = await Promise.all([
     calcularEsperado(teamId, turno),
     getConciliacion(teamId, turno.id),
-    db.select().from(cajaMovimientos).where(and(eq(cajaMovimientos.teamId, teamId), eq(cajaMovimientos.turnoId, turno.id))).orderBy(desc(cajaMovimientos.createdAt)),
+    db.select().from(cajaMovimientos).where(and(eq(cajaMovimientos.teamId, teamId), eq(cajaMovimientos.turnoId, turno.id))).orderBy(desc(cajaMovimientos.createdAt)).limit(500),
     getVentasPorMetodo(teamId, turno.id),
     turno.terminalId ? getTerminal(teamId, turno.terminalId) : Promise.resolve(null),
   ]);

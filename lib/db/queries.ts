@@ -12,6 +12,7 @@ import {
   pagosRecibidos,
 } from './schema';
 import { cookies } from 'next/headers';
+import { unstable_cache } from 'next/cache';
 import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
@@ -254,6 +255,17 @@ export async function getUserTeams() {
 }
 
 export async function getDashboardStats(teamId: number) {
+  // Cache corta por team (30s): el dashboard se visita/refresca seguido y estos
+  // agregados sobre ecf_documents son de los más caros. TTL bajo para que datos
+  // volátiles (secuencias, certificado) no se vean viejos por mucho tiempo.
+  return unstable_cache(
+    () => computeDashboardStats(teamId),
+    ['dashboard-stats', String(teamId)],
+    { revalidate: 30 },
+  )();
+}
+
+async function computeDashboardStats(teamId: number) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
