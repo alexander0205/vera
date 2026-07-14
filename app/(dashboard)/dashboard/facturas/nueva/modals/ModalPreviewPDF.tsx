@@ -25,7 +25,7 @@ export function ModalPreviewPDF({
           <DialogTitle className="text-sm md:text-base font-semibold flex flex-wrap items-center gap-2">
             <span className="truncate">Vista previa — {TIPOS_ECF[tipoEcf as keyof typeof TIPOS_ECF] ?? 'Comprobante'}</span>
             <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-              BORRADOR
+              VISTA PREVIA
             </span>
           </DialogTitle>
         </DialogHeader>
