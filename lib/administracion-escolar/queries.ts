@@ -6,7 +6,7 @@
  * de agregación vive aquí para no repetirla entre rutas.
  */
 import 'server-only';
-import { and, eq, ne, desc, sql, inArray, isNotNull } from 'drizzle-orm';
+import { and, eq, ne, desc, sql, inArray, isNotNull, like } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes,
@@ -30,6 +30,7 @@ export interface EstudianteEnriquecido {
   nombres: string;
   apellidos: string;
   estado: string;
+  sexo: string | null;
   fechaNacimiento: string | null;
   // Derivados
   matriculaActivaId: number | null;
@@ -148,6 +149,7 @@ export async function listarEstudiantesEnriquecidos(
       nombres: e.nombres,
       apellidos: e.apellidos,
       estado: e.estado,
+      sexo: e.sexo,
       fechaNacimiento: e.fechaNacimiento,
       matriculaActivaId: m?.id ?? null,
       periodoActivo: m?.periodo ?? null,
@@ -301,6 +303,33 @@ export async function sincronizarSaldosDesdeFacturas(
       .set({ saldoCentavos: u.saldo, estado: u.estado, updatedAt: new Date() })
       .where(eq(adminEscolarCargos.id, u.id));
   }
+}
+
+/**
+ * Genera el código de estudiante `AAAA-####` ligado al AÑO de su primera
+ * inscripción (inscrito, nunca reinscripción). Secuencia por (team, año): toma
+ * el mayor sufijo existente con ese prefijo y suma 1. Inmutable: se asigna una
+ * sola vez al crear el estudiante con su primera matrícula.
+ *
+ * Nota: sin constraint de unicidad (los códigos legacy podían ser manuales o
+ * nulos). Colisión sólo posible con dos altas simultáneas del mismo año —
+ * aceptable para el volumen actual.
+ */
+export async function generarCodigoEstudiante(teamId: number, anio: number): Promise<string> {
+  const prefijo = `${anio}-`;
+  const rows = await db
+    .select({ codigo: adminEscolarEstudiantes.codigo })
+    .from(adminEscolarEstudiantes)
+    .where(and(
+      eq(adminEscolarEstudiantes.teamId, teamId),
+      like(adminEscolarEstudiantes.codigo, `${prefijo}%`),
+    ));
+  let max = 0;
+  for (const r of rows) {
+    const n = parseInt((r.codigo ?? '').slice(prefijo.length), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${prefijo}${String(max + 1).padStart(4, '0')}`;
 }
 
 /** Deuda viva total (centavos) de un estudiante. */

@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
 
 export interface EstudianteEnriquecido {
   id: number;
@@ -15,6 +14,7 @@ export interface EstudianteEnriquecido {
   nombres: string;
   apellidos: string;
   estado: string;
+  sexo: string | null;
   fechaNacimiento: string | null;
   matriculaActivaId: number | null;
   periodoActivo: string | null;
@@ -60,14 +60,12 @@ function labelCargoPendiente(c: CargoPendiente): string {
 
 interface Props {
   estudiante: EstudianteEnriquecido;
-  onChange: () => void;
 }
 
-export function EstudianteFicha({ estudiante: e, onChange }: Props) {
+export function EstudianteFicha({ estudiante: e }: Props) {
   const router = useRouter();
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
-  const [editOpen, setEditOpen] = useState(false);
   const [cargos, setCargos]   = useState<CargoPendiente[]>([]);
   const [relacion, setRelacion] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,7 +103,8 @@ export function EstudianteFicha({ estudiante: e, onChange }: Props) {
           </p>
         </div>
         {puedeGestionar && (
-          <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setEditOpen(true)}>
+          <Button variant="ghost" size="sm" className="shrink-0"
+            onClick={() => router.push(`/dashboard/administracion-escolar/estudiantes/${e.id}`)}>
             Editar
           </Button>
         )}
@@ -161,13 +160,6 @@ export function EstudianteFicha({ estudiante: e, onChange }: Props) {
           Abrir perfil completo
         </Button>
       </div>
-
-      <EditarEstudianteDialog
-        estudiante={e}
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSaved={onChange}
-      />
     </div>
   );
 }

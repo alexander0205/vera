@@ -5,13 +5,25 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { EditarEstudianteDialog } from '@/components/administracion-escolar/EditarEstudianteDialog';
+import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+
+const ESTADOS_EST = [
+  { value: 'activo', label: 'Activo' },
+  { value: 'inactivo', label: 'Inactivo' },
+  { value: 'retirado', label: 'Retirado' },
+  { value: 'graduado', label: 'Graduado' },
+];
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -21,6 +33,7 @@ interface Estudiante {
   nombres: string;
   apellidos: string;
   estado: string;
+  sexo: string | null;
   fechaNacimiento: string | null;
   deudaCentavos: number;
   dependienteId: number | null;
@@ -114,8 +127,53 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [tutores, setTutores]       = useState<TutorVinculo[]>([]);
   const [loading, setLoading]       = useState(true);
   const [notFound, setNotFound]     = useState(false);
-  const [editOpen, setEditOpen]     = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
+
+  // Edición inline de la tarjeta del estudiante.
+  const [editando, setEditando]   = useState(false);
+  const [editForm, setEditForm]   = useState({ nombres: '', apellidos: '', sexo: '', fechaNacimiento: '', estado: 'activo' });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  function abrirEdicion() {
+    if (!estudiante) return;
+    setEditForm({
+      nombres: estudiante.nombres,
+      apellidos: estudiante.apellidos,
+      sexo: estudiante.sexo ?? '',
+      fechaNacimiento: estudiante.fechaNacimiento ?? '',
+      estado: estudiante.estado,
+    });
+    setEditError(null);
+    setEditando(true);
+  }
+
+  async function guardarEdicion() {
+    if (!estudiante) return;
+    if (!editForm.nombres.trim() || !editForm.apellidos.trim()) {
+      setEditError('Nombres y apellidos son obligatorios'); return;
+    }
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/administracion-escolar/estudiantes/${estudiante.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombres: editForm.nombres, apellidos: editForm.apellidos,
+          sexo: editForm.sexo || null, fechaNacimiento: editForm.fechaNacimiento || null,
+          estado: editForm.estado,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error guardando');
+      await cargar();
+      setEditando(false);
+    } catch (e: unknown) {
+      setEditError(e instanceof Error ? e.message : 'Error guardando');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   // No pone `loading` en true en recargas posteriores: si lo hiciera, el early
   // return de abajo desmontaría <Tabs> en cada refresh (registrar pago, editar,
@@ -194,8 +252,10 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {puedeGestionar && (
-            <Button variant="outline" onClick={() => setEditOpen(true)}>Editar</Button>
+          {puedeGestionar && !editando && (
+            <Button variant="outline" onClick={abrirEdicion}>
+              <Pencil className="h-4 w-4 mr-1.5" />Editar
+            </Button>
           )}
         </div>
       </div>
@@ -204,15 +264,76 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         {/* Columna resumen */}
         <div className="space-y-4">
           <div className="border border-gray-200 rounded-xl bg-white p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-semibold shrink-0">
-                {`${estudiante.nombres[0] ?? ''}${estudiante.apellidos[0] ?? ''}`.toUpperCase()}
+            {editando ? (
+              <div className="space-y-3">
+                {editError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{editError}</div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Nombres *</Label>
+                    <Input autoFocus value={editForm.nombres}
+                      onChange={(ev) => setEditForm((f) => ({ ...f, nombres: ev.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Apellidos *</Label>
+                    <Input value={editForm.apellidos}
+                      onChange={(ev) => setEditForm((f) => ({ ...f, apellidos: ev.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Sexo</Label>
+                    <Select value={editForm.sexo} onValueChange={(v) => setEditForm((f) => ({ ...f, sexo: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectContent>
+                        {SEXOS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Fecha nacimiento</Label>
+                    <Input type="date" value={editForm.fechaNacimiento}
+                      onChange={(ev) => setEditForm((f) => ({ ...f, fechaNacimiento: ev.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5 col-span-2">
+                    <Label>Estado</Label>
+                    <Select value={editForm.estado} onValueChange={(v) => setEditForm((f) => ({ ...f, estado: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ESTADOS_EST.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Código: {estudiante.codigo ?? '—'} · se genera automáticamente, no se edita.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditando(false)} disabled={savingEdit}>Cancelar</Button>
+                  <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={guardarEdicion} disabled={savingEdit}>
+                    {savingEdit ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Guardar'}
+                  </Button>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-gray-900 truncate">{estudiante.nombres} {estudiante.apellidos}</p>
-                <p className="text-xs text-gray-500">Fecha nac.: {fmtFechaCorta(estudiante.fechaNacimiento)}</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-semibold shrink-0">
+                  {`${estudiante.nombres[0] ?? ''}${estudiante.apellidos[0] ?? ''}`.toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-gray-900 truncate">{estudiante.nombres} {estudiante.apellidos}</p>
+                    {estudiante.estado !== 'activo' && (
+                      <Badge variant="outline" className="capitalize text-gray-500 shrink-0">{estudiante.estado}</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {labelSexo(estudiante.sexo)}
+                    {calcularEdad(estudiante.fechaNacimiento) != null ? ` · ${calcularEdad(estudiante.fechaNacimiento)} años` : ''}
+                    {estudiante.fechaNacimiento ? ` · Nac. ${fmtFechaCorta(estudiante.fechaNacimiento)}` : ''}
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="border border-gray-200 rounded-lg p-3">
               <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Balance pendiente</p>
@@ -425,13 +546,6 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
           </Tabs>
         </div>
       </div>
-
-      <EditarEstudianteDialog
-        estudiante={estudiante}
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSaved={cargar}
-      />
 
       {cargoVincularFactura && (
         <VincularFacturaDialog

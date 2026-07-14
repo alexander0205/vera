@@ -4,6 +4,7 @@ import { adminEscolarEstudiantes, dependientes, clients } from '@/lib/db/schema'
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
+import { SEXOS_VALIDOS } from '@/lib/administracion-escolar/estudiante-utils';
 import { eq, and } from 'drizzle-orm';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
@@ -45,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { codigo, nombres, apellidos, fechaNacimiento, estado, dependienteId } = await req.json();
+  const { codigo, nombres, apellidos, sexo, fechaNacimiento, estado, dependienteId } = await req.json();
 
   // dependienteId: null desvincula; si viene un id, debe pertenecer al team.
   if (dependienteId !== undefined && dependienteId !== null) {
@@ -60,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(codigo !== undefined ? { codigo: codigo?.trim() || null } : {}),
       ...(nombres !== undefined ? { nombres: nombres.trim() } : {}),
       ...(apellidos !== undefined ? { apellidos: apellidos.trim() } : {}),
+      ...(sexo !== undefined ? { sexo: SEXOS_VALIDOS.includes(sexo) ? sexo : null } : {}),
       ...(fechaNacimiento !== undefined ? { fechaNacimiento: fechaNacimiento || null } : {}),
       ...(estado !== undefined && ESTADOS.includes(estado) ? { estado } : {}),
       ...(dependienteId !== undefined ? { dependienteId } : {}),

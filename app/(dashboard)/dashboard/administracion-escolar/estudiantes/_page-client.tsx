@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -25,11 +22,11 @@ function iniciales(nombres: string, apellidos: string): string {
   return `${nombres[0] ?? ''}${apellidos[0] ?? ''}`.toUpperCase();
 }
 
-const EMPTY_FORM = { nombres: '', apellidos: '', codigo: '', fechaNacimiento: '' };
-
 export default function EstudiantesClient() {
+  const router = useRouter();
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
+  const irANuevo = () => router.push('/dashboard/administracion-escolar/estudiantes/nuevo');
 
   const [estudiantes, setEstudiantes] = useState<EstudianteEnriquecido[]>([]);
   const [periodoActivo, setPeriodoActivo] = useState<string | null>(null);
@@ -40,12 +37,6 @@ export default function EstudiantesClient() {
   const [query, setQuery]         = useState('');
   const [filtroCurso, setFiltroCurso] = useState<string>('todos');
   const [filtroEstado, setFiltroEstado] = useState<string>('activo');
-
-  // nuevo estudiante
-  const [showForm, setShowForm]   = useState(false);
-  const [form, setForm]           = useState(EMPTY_FORM);
-  const [saving, setSaving]       = useState(false);
-  const [opError, setOpError]     = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -89,34 +80,6 @@ export default function EstudiantesClient() {
   const balancePendiente = estudiantes.reduce((s, e) => s + e.deudaCentavos, 0);
   const morosos = estudiantes.filter((e) => e.deudaCentavos > 0).length;
 
-  async function handleCrear() {
-    if (!form.nombres.trim() || !form.apellidos.trim()) {
-      setOpError('Nombres y apellidos son obligatorios'); return;
-    }
-    setSaving(true);
-    setOpError(null);
-    try {
-      const res = await fetch('/api/administracion-escolar/estudiantes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombres: form.nombres, apellidos: form.apellidos,
-          codigo: form.codigo || null, fechaNacimiento: form.fechaNacimiento || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error creando');
-      setShowForm(false);
-      setForm(EMPTY_FORM);
-      await cargar();
-      if (data.estudiante?.id) setSelectedId(data.estudiante.id);
-    } catch (e: unknown) {
-      setOpError(e instanceof Error ? e.message : 'Error creando');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <section className="p-6 space-y-6">
       {/* Header */}
@@ -126,7 +89,7 @@ export default function EstudiantesClient() {
           <p className="text-sm text-gray-500 mt-1">Matrículas, tutores, pagos y deudas por estudiante</p>
         </div>
         {puedeGestionar && (
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => { setForm(EMPTY_FORM); setOpError(null); setShowForm(true); }}>
+          <Button className="bg-teal-600 hover:bg-teal-700" onClick={irANuevo}>
             <Plus className="h-4 w-4 mr-2" />Nuevo estudiante
           </Button>
         )}
@@ -185,8 +148,7 @@ export default function EstudiantesClient() {
                   {estudiantes.length === 0 ? 'Aún no hay estudiantes registrados' : 'Sin resultados para los filtros'}
                 </p>
                 {estudiantes.length === 0 && puedeGestionar && (
-                  <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm"
-                    onClick={() => { setForm(EMPTY_FORM); setOpError(null); setShowForm(true); }}>
+                  <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={irANuevo}>
                     <Plus className="h-4 w-4 mr-1" />Nuevo estudiante
                   </Button>
                 )}
@@ -246,7 +208,6 @@ export default function EstudiantesClient() {
             <EstudianteFicha
               key={seleccionado.id}
               estudiante={seleccionado}
-              onChange={cargar}
             />
           ) : (
             <div className="border border-dashed border-gray-200 rounded-xl p-8 text-center text-sm text-gray-400 h-full flex items-center justify-center">
@@ -255,48 +216,6 @@ export default function EstudiantesClient() {
           )}
         </div>
       </div>
-
-      {/* Modal nuevo estudiante */}
-      <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Nuevo estudiante</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Nombres *</Label>
-                <Input autoFocus value={form.nombres}
-                  onChange={(e) => setForm((f) => ({ ...f, nombres: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Apellidos *</Label>
-                <Input value={form.apellidos}
-                  onChange={(e) => setForm((f) => ({ ...f, apellidos: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Código</Label>
-                <Input placeholder="Ej: EST-0001" value={form.codigo}
-                  onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fecha nacimiento</Label>
-                <Input type="date" value={form.fechaNacimiento}
-                  onChange={(e) => setForm((f) => ({ ...f, fechaNacimiento: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleCrear} disabled={saving}>
-              {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Crear estudiante'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }

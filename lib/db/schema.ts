@@ -1507,6 +1507,8 @@ export const adminEscolarEstudiantes = pgTable('admin_escolar_estudiantes', {
   nombres:         varchar('nombres', { length: 120 }).notNull(),
   apellidos:       varchar('apellidos', { length: 120 }).notNull(),
   fechaNacimiento: date('fecha_nacimiento'),
+  /** masculino | femenino | otro. Opcional. La edad se deriva de fechaNacimiento. */
+  sexo:            varchar('sexo', { length: 20 }),
   /** activo | inactivo | retirado | graduado */
   estado:          varchar('estado', { length: 20 }).notNull().default('activo'),
   /** Enlace futuro con Contactos (dependientes). Nullable — integración post-MVP. */
