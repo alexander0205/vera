@@ -5,13 +5,14 @@ import {
   adminEscolarMatriculas,
 } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray, isNull } from 'drizzle-orm';
 
 /**
  * Generación masiva de cargos. Crea un cargo por cada matrícula ACTIVA del
  * período (opcionalmente filtrado por curso), para el concepto/mes/año dados.
- * Los duplicados (mismo estudiante+concepto+período+mes) se omiten vía el índice
- * único — se reporta cuántos se crearon y cuántos se saltaron.
+ * Los duplicados de una re-ejecución masiva (mismo estudiante+concepto+período+mes)
+ * se omiten explícitamente. El cargo individual sí permite repetir mes/concepto
+ * cuando la escuela necesita registrar cargos separados.
  */
 export async function POST(req: NextRequest) {
   const auth = await requirePermission('administracion-escolar:gestionar');
@@ -42,7 +43,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ creados: 0, omitidos: 0, total: 0 });
   }
 
-  const values = matriculas.map((m) => ({
+  const existentesWhere = [
+    eq(adminEscolarCargos.teamId, teamId),
+    eq(adminEscolarCargos.periodoId, periodoId),
+    eq(adminEscolarCargos.conceptoId, conceptoId),
+    inArray(adminEscolarCargos.estudianteId, matriculas.map((m) => m.estudianteId)),
+  ];
+  if (mes == null) {
+    existentesWhere.push(isNull(adminEscolarCargos.mes));
+  } else {
+    existentesWhere.push(eq(adminEscolarCargos.mes, mes));
+  }
+
+  const existentes = await db
+    .select({ estudianteId: adminEscolarCargos.estudianteId })
+    .from(adminEscolarCargos)
+    .where(and(...existentesWhere));
+  const estudiantesConCargo = new Set(existentes.map((e) => e.estudianteId));
+  const pendientes = matriculas.filter((m) => !estudiantesConCargo.has(m.estudianteId));
+
+  const values = pendientes.map((m) => ({
     teamId,
     estudianteId: m.estudianteId,
     matriculaId: m.id,
@@ -56,11 +76,11 @@ export async function POST(req: NextRequest) {
     estado: 'pendiente' as const,
   }));
 
-  // onConflictDoNothing sobre el índice anti-duplicado → omite los ya existentes.
-  const creados = await db.insert(adminEscolarCargos)
-    .values(values)
-    .onConflictDoNothing()
-    .returning({ id: adminEscolarCargos.id });
+  const creados = values.length === 0
+    ? []
+    : await db.insert(adminEscolarCargos)
+      .values(values)
+      .returning({ id: adminEscolarCargos.id });
 
   return NextResponse.json({
     creados: creados.length,

@@ -58,28 +58,18 @@ export async function POST(req: NextRequest) {
   }
   if (!anio) return NextResponse.json({ error: 'anio requerido' }, { status: 400 });
 
-  try {
-    const [row] = await db.insert(adminEscolarCargos).values({
-      teamId,
-      estudianteId,
-      matriculaId,
-      periodoId,
-      conceptoId,
-      mes: mes ?? null,
-      anio,
-      montoCentavos,
-      saldoCentavos: montoCentavos,
-      fechaVencimiento: fechaVencimiento || null,
-      estado: 'pendiente',
-    }).returning();
-    return NextResponse.json({ cargo: row });
-  } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
-      return NextResponse.json(
-        { error: 'Ya existe un cargo para este estudiante, concepto, período y mes.' },
-        { status: 409 },
-      );
-    }
-    throw err;
-  }
+  const [row] = await db.insert(adminEscolarCargos).values({
+    teamId,
+    estudianteId,
+    matriculaId,
+    periodoId,
+    conceptoId,
+    mes: mes ?? null,
+    anio,
+    montoCentavos,
+    saldoCentavos: montoCentavos,
+    fechaVencimiento: fechaVencimiento || null,
+    estado: 'pendiente',
+  }).returning();
+  return NextResponse.json({ cargo: row });
 }

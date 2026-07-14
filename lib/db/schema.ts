@@ -1623,9 +1623,7 @@ export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
   index('admin_escolar_cargos_team_idx').on(t.teamId),
   index('admin_escolar_cargos_estudiante_idx').on(t.estudianteId),
   index('admin_escolar_cargos_matricula_idx').on(t.matriculaId),
-  // Anti-duplicado: un cargo por estudiante+concepto+período+mes (mes null→0).
-  uniqueIndex('admin_escolar_cargos_uniq')
-    .on(t.estudianteId, t.conceptoId, t.periodoId, sql`COALESCE(${t.mes}, 0)`),
+  index('admin_escolar_cargos_periodo_idx').on(t.periodoId),
 ]);
 
 /** Pago escolar aplicado a un cargo. Enlace OPCIONAL a factura/pago_recibido,

@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, ChevronDown, ChevronRight, Pencil, CalendarDays, GraduationCap } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
@@ -54,6 +54,7 @@ interface Matricula {
 interface Cargo {
   id: number;
   concepto: string | null;
+  matriculaId: number;
   periodoId: number;
   mes: number | null;
   anio: number;
@@ -409,6 +410,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               <TabsTrigger value="deudas">Deudas</TabsTrigger>
               <TabsTrigger value="pagos">Pagos</TabsTrigger>
               <TabsTrigger value="facturas">Facturas</TabsTrigger>
+              <TabsTrigger value="periodos">Por período</TabsTrigger>
               <TabsTrigger value="matriculas">Matrículas</TabsTrigger>
               <TabsTrigger value="tutores">Tutores</TabsTrigger>
               <TabsTrigger value="historial">Historial</TabsTrigger>
@@ -497,6 +499,13 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               )}
             </TabsContent>
 
+            {/* Vista estructurada por período/curso. Coexiste con las listas
+                globales de arriba: aquí se ordenan cargos, facturas y pagos en
+                el contexto académico donde ocurrieron. */}
+            <TabsContent value="periodos" className="pt-4">
+              <PeriodosAcademicos matriculas={matriculas} cargos={cargos} pagos={pagos} />
+            </TabsContent>
+
             {/* Matrículas */}
             <TabsContent value="matriculas" className="pt-4">
               <h2 className="text-base font-semibold text-gray-900 mb-2">Historial de matrículas</h2>
@@ -577,6 +586,263 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 }
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────
+
+function PeriodosAcademicos({ matriculas, cargos, pagos }: { matriculas: Matricula[]; cargos: Cargo[]; pagos: Pago[] }) {
+  const grupos = construirGruposPeriodo(matriculas, cargos);
+
+  if (grupos.length === 0) {
+    return <EmptyBox text="Sin períodos, cargos o pagos relacionados" />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-semibold text-gray-900">Historial financiero por período</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Facturas, pagos y deuda ordenados por período escolar, curso y mes.
+        </p>
+      </div>
+
+      {grupos.map((grupo) => {
+        const cargosPeriodo = grupo.cargos;
+        const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
+        const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
+        const total = cargosPeriodo.reduce((s, c) => s + c.montoCentavos, 0);
+        const saldo = cargosPeriodo
+          .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+          .reduce((s, c) => s + c.saldoCentavos, 0);
+        const pagado = Math.max(0, total - saldo);
+        const cargosMensuales = cargosPeriodo.filter((c) => c.mes != null);
+        const otrosCargos = cargosPeriodo.filter((c) => c.mes == null);
+
+        return (
+          <div key={grupo.key} className="border border-gray-200 rounded-xl bg-white p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  <CalendarDays className="h-3.5 w-3.5" />Período
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mt-0.5">{grupo.periodo}</h3>
+                <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
+                  <GraduationCap className="h-4 w-4" />
+                  {grupo.curso}
+                  {grupo.estado ? <span className="capitalize">· {grupo.estado}</span> : null}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 min-w-[280px]">
+                <MiniStat label="Facturado" value={fmtDOP(total)} />
+                <MiniStat label="Pagado" value={fmtDOP(pagado)} />
+                <MiniStat label="Pendiente" value={fmtDOP(saldo)} danger={saldo > 0} />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-gray-900 mb-2">Mensualidad</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((mes) => (
+                  <MesAcademico
+                    key={mes}
+                    mes={mes}
+                    cargos={cargosMensuales.filter((c) => c.mes === mes)}
+                    pagos={pagos}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {otrosCargos.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-gray-900 mb-2">Otros cargos del período</p>
+                <SimpleTable head={['Concepto', 'Vencimiento', 'Monto', 'Saldo', 'Factura']}
+                  rows={otrosCargos.map((c) => [
+                    c.concepto ?? '—',
+                    c.fechaVencimiento ? fmtFechaCorta(c.fechaVencimiento) : '—',
+                    fmtDOP(c.montoCentavos),
+                    badgeSaldo(c),
+                    facturaLink(c),
+                  ])} />
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 mb-2">Facturas del período</p>
+                {facturas.length === 0 ? (
+                  <EmptyBox text="Sin facturas vinculadas" />
+                ) : (
+                  <SimpleTable head={['Mes', 'Concepto', 'Factura', 'Estado']}
+                    rows={facturas.map((c) => [
+                      c.mes ? `${MESES[c.mes]} ${c.anio}` : String(c.anio),
+                      c.concepto ?? '—',
+                      facturaLink(c),
+                      c.facturaEstadoPago ?? '—',
+                    ])} />
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900 mb-2">Pagos del período</p>
+                {pagosPeriodo.length === 0 ? (
+                  <EmptyBox text="Sin pagos registrados" />
+                ) : (
+                  <SimpleTable head={['Fecha', 'Mes', 'Concepto', 'Monto']}
+                    rows={pagosPeriodo.map((p) => [
+                      fmtFechaCorta(p.fechaPago),
+                      p.mes ? `${MESES[p.mes]} ${p.anio ?? ''}` : '—',
+                      p.concepto ?? '—',
+                      fmtDOP(p.montoCentavos),
+                    ])} />
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
+  const grupos = new Map<string, {
+    key: string;
+    periodoId: number | null;
+    matriculaId: number | null;
+    periodo: string;
+    curso: string;
+    estado: string | null;
+    fecha: string | null;
+    cargos: Cargo[];
+  }>();
+
+  for (const m of matriculas) {
+    const key = `m-${m.id}`;
+    grupos.set(key, {
+      key,
+      periodoId: m.periodoId,
+      matriculaId: m.id,
+      periodo: m.periodo ?? `Período #${m.periodoId}`,
+      curso: m.curso ?? `Curso #${m.cursoId}`,
+      estado: m.estado,
+      fecha: m.fechaInscripcion,
+      cargos: [],
+    });
+  }
+
+  for (const c of cargos) {
+    let grupo = Array.from(grupos.values()).find((g) => g.matriculaId === c.matriculaId);
+    if (!grupo) {
+      grupo = Array.from(grupos.values()).find((g) => g.periodoId === c.periodoId);
+    }
+    if (!grupo) {
+      const key = `p-${c.periodoId}`;
+      grupo = grupos.get(key);
+      if (!grupo) {
+        grupo = {
+          key,
+          periodoId: c.periodoId,
+          matriculaId: null,
+          periodo: `Período #${c.periodoId}`,
+          curso: 'Curso no disponible',
+          estado: null,
+          fecha: null,
+          cargos: [],
+        };
+        grupos.set(key, grupo);
+      }
+    }
+    grupo.cargos.push(c);
+  }
+
+  return Array.from(grupos.values())
+    .filter((g) => g.matriculaId != null || g.cargos.length > 0)
+    .sort((a, b) => {
+      const fa = a.fecha ?? '0000-00-00';
+      const fb = b.fecha ?? '0000-00-00';
+      if (fa !== fb) return fa < fb ? 1 : -1;
+      return (b.periodoId ?? 0) - (a.periodoId ?? 0);
+    });
+}
+
+function MesAcademico({ mes, cargos, pagos }: { mes: number; cargos: Cargo[]; pagos: Pago[] }) {
+  if (cargos.length === 0) {
+    return (
+      <div className="border border-gray-100 rounded-lg p-3 bg-gray-50/50 min-h-[112px]">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-medium text-gray-700">{MESES[mes]}</p>
+          <Badge variant="outline" className="text-gray-400">Sin cargo</Badge>
+        </div>
+      </div>
+    );
+  }
+
+  const total = cargos.reduce((s, c) => s + c.montoCentavos, 0);
+  const saldo = cargos
+    .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+    .reduce((s, c) => s + c.saldoCentavos, 0);
+  const pagosMes = pagos.filter((p) => p.cargoId != null && cargos.some((c) => c.id === p.cargoId));
+  const estado = estadoMes(cargos);
+  const factura = cargos.find((c) => c.ecfDocumentId != null) ?? null;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-3 min-h-[132px] space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium text-gray-900">{MESES[mes]}</p>
+        <EstadoMesBadge estado={estado} />
+      </div>
+      <div className="text-xs text-gray-500 space-y-1">
+        <div className="flex justify-between gap-2"><span>Total</span><span className="font-medium text-gray-700">{fmtDOP(total)}</span></div>
+        <div className="flex justify-between gap-2"><span>Saldo</span><span className={saldo > 0 ? 'font-medium text-red-600' : 'font-medium text-teal-700'}>{fmtDOP(saldo)}</span></div>
+        {pagosMes.length > 0 && (
+          <div className="flex justify-between gap-2"><span>Pagos</span><span className="font-medium text-gray-700">{pagosMes.length}</span></div>
+        )}
+      </div>
+      {factura ? (
+        <div className="pt-1">{facturaLink(factura)}</div>
+      ) : (
+        <p className="text-xs text-gray-300 pt-1">Sin factura vinculada</p>
+      )}
+    </div>
+  );
+}
+
+function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pendiente' | 'parcial' {
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  const vivos = cargos.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado));
+  if (vivos.length === 0) {
+    const futura = cargos.some((c) => c.fechaVencimiento && c.fechaVencimiento >= hoyIso);
+    return futura ? 'adelantado' : 'pagado';
+  }
+  if (vivos.some((c) => c.estado === 'vencido' || (c.fechaVencimiento && c.fechaVencimiento < hoyIso))) return 'vencido';
+  if (vivos.some((c) => c.estado === 'parcial')) return 'parcial';
+  return 'pendiente';
+}
+
+function EstadoMesBadge({ estado }: { estado: ReturnType<typeof estadoMes> }) {
+  if (estado === 'pagado') return <Badge className="bg-teal-50 text-teal-700 border-teal-200">Pagado</Badge>;
+  if (estado === 'adelantado') return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Adelantado</Badge>;
+  if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
+  if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
+  return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Por vencer</Badge>;
+}
+
+function MiniStat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+  return (
+    <div className="border border-gray-100 rounded-lg p-2">
+      <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">{label}</p>
+      <p className={`text-sm font-semibold truncate ${danger ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
+    </div>
+  );
+}
+
+function facturaLink(cargo: Cargo) {
+  if (!cargo.ecfDocumentId) return <span className="text-gray-300 text-xs">—</span>;
+  const ref = cargo.facturaEncf || cargo.facturaCodigo || `#${cargo.ecfDocumentId}`;
+  return (
+    <Link href={`/dashboard/facturas/${cargo.ecfDocumentId}`}
+      className="inline-flex items-center gap-1 text-xs text-teal-700 hover:text-teal-800 hover:underline">
+      <Receipt className="h-3 w-3" />{ref}
+    </Link>
+  );
+}
 
 function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincular, onFacturar, onRegistrarPago }: {
   cargo: Cargo; puedeGestionar: boolean; puedeFacturar: boolean; puedePagos: boolean;
