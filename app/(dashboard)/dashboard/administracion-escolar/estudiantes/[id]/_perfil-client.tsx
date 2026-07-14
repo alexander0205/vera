@@ -589,44 +589,79 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
 function PeriodosAcademicos({ matriculas, cargos, pagos }: { matriculas: Matricula[]; cargos: Cargo[]; pagos: Pago[] }) {
   const grupos = construirGruposPeriodo(matriculas, cargos);
+  const [periodoActivoKey, setPeriodoActivoKey] = useState<string | null>(null);
+  const grupoActivo = grupos.find((g) => g.key === periodoActivoKey) ?? grupos[0] ?? null;
 
   if (grupos.length === 0) {
     return <EmptyBox text="Sin períodos, cargos o pagos relacionados" />;
   }
+
+  const cargosPeriodo = grupoActivo?.cargos ?? [];
+  const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
+  const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
+  const total = cargosPeriodo.reduce((s, c) => s + c.montoCentavos, 0);
+  const saldo = cargosPeriodo
+    .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+    .reduce((s, c) => s + c.saldoCentavos, 0);
+  const pagado = Math.max(0, total - saldo);
+  const cargosMensuales = cargosPeriodo.filter((c) => c.mes != null);
+  const otrosCargos = cargosPeriodo.filter((c) => c.mes == null);
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-base font-semibold text-gray-900">Historial financiero por período</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Facturas, pagos y deuda ordenados por período escolar, curso y mes.
+          Elige un período para ver facturas, pagos y deuda en su curso correspondiente.
         </p>
       </div>
 
-      {grupos.map((grupo) => {
-        const cargosPeriodo = grupo.cargos;
-        const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
-        const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
-        const total = cargosPeriodo.reduce((s, c) => s + c.montoCentavos, 0);
-        const saldo = cargosPeriodo
-          .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
-          .reduce((s, c) => s + c.saldoCentavos, 0);
-        const pagado = Math.max(0, total - saldo);
-        const cargosMensuales = cargosPeriodo.filter((c) => c.mes != null);
-        const otrosCargos = cargosPeriodo.filter((c) => c.mes == null);
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+        {grupos.map((grupo) => {
+          const grupoSaldo = grupo.cargos
+            .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+            .reduce((s, c) => s + c.saldoCentavos, 0);
+          const activo = grupoActivo?.key === grupo.key;
+          return (
+            <button
+              key={grupo.key}
+              type="button"
+              onClick={() => setPeriodoActivoKey(grupo.key)}
+              className={`text-left border rounded-lg p-3 transition-colors ${
+                activo
+                  ? 'border-gray-400 bg-gray-100 text-gray-900'
+                  : 'border-gray-200 bg-white text-gray-800 hover:border-teal-200 hover:bg-teal-50/40'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{grupo.periodo}</p>
+                  <p className="text-xs text-gray-500 truncate">{grupo.curso}</p>
+                </div>
+                {grupo.estado ? (
+                  <Badge variant="outline" className="capitalize shrink-0">{grupo.estado}</Badge>
+                ) : null}
+              </div>
+              <p className={`text-xs mt-2 ${grupoSaldo > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                Pendiente: {fmtDOP(grupoSaldo)}
+              </p>
+            </button>
+          );
+        })}
+      </div>
 
-        return (
-          <div key={grupo.key} className="border border-gray-200 rounded-xl bg-white p-4 space-y-4">
+      {grupoActivo && (
+          <div className="border border-gray-200 rounded-xl bg-white p-4 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
                   <CalendarDays className="h-3.5 w-3.5" />Período
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mt-0.5">{grupo.periodo}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mt-0.5">{grupoActivo.periodo}</h3>
                 <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
                   <GraduationCap className="h-4 w-4" />
-                  {grupo.curso}
-                  {grupo.estado ? <span className="capitalize">· {grupo.estado}</span> : null}
+                  {grupoActivo.curso}
+                  {grupoActivo.estado ? <span className="capitalize">· {grupoActivo.estado}</span> : null}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2 min-w-[280px]">
@@ -695,8 +730,7 @@ function PeriodosAcademicos({ matriculas, cargos, pagos }: { matriculas: Matricu
               </div>
             </div>
           </div>
-        );
-      })}
+      )}
     </div>
   );
 }
