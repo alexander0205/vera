@@ -7,8 +7,7 @@ export default async function NotasDebitoPage() {
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 
-  const allDocs = await getEcfDocuments(teamId, 500);
-  const notas = allDocs.filter(d => d.tipoEcf === '33');
+  const notas = await getEcfDocuments(teamId, 500, ['33']);
   const padreEmitido = await resolverPadresEmitidos(teamId, notas);
 
   const docs: NotaDebito[] = notas.map(d => ({

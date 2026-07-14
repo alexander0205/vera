@@ -313,11 +313,17 @@ export async function getDashboardStats(teamId: number) {
   };
 }
 
-export async function getEcfDocuments(teamId: number, limit = 50) {
+export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string[]) {
+  // tipos: filtra por tipoEcf en SQL (ej. ['34'] para notas de crédito) en vez
+  // de traer todo y filtrar en JS — así el límite no descarta notas por estar
+  // más allá de la fila N mezcladas con facturas.
+  const where = tipos && tipos.length > 0
+    ? and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.tipoEcf, tipos))
+    : eq(ecfDocuments.teamId, teamId);
   return db
     .select()
     .from(ecfDocuments)
-    .where(eq(ecfDocuments.teamId, teamId))
+    .where(where)
     .orderBy(desc(ecfDocuments.createdAt))
     .limit(limit);
 }
@@ -498,9 +504,12 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
  */
 export async function getCuentasPorCobrar(
   teamId: number,
-  opts: { clientId?: number; soloVencidas?: boolean } = {},
+  opts: { clientId?: number; soloVencidas?: boolean; limit?: number; offset?: number } = {},
 ) {
   const hoy = new Date().toISOString().slice(0, 10);
+  // Techo al dataset (antes cargaba toda la cartera abierta sin límite).
+  const limit  = Math.min(opts.limit ?? 2000, 2000);
+  const offset = Math.max(opts.offset ?? 0, 0);
 
   const rows = await db
     .select({
@@ -578,7 +587,9 @@ export async function getCuentasPorCobrar(
       sql`${ecfDocuments.tipoEcf} != '34'`,
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
     ))
-    .orderBy(desc(ecfDocuments.fechaEmision));
+    .orderBy(desc(ecfDocuments.fechaEmision))
+    .limit(limit)
+    .offset(offset);
 
   // Lista de ND de mora (id, codigo, saldo>0) por factura padre, para distribuir
   // el pago en el frontend/desglose. Un solo query agrupado en memoria.
@@ -672,12 +683,16 @@ export async function getCuentasPorCobrar(
  */
 export async function getPagosListado(
   teamId: number,
-  opts: { desde?: string; hasta?: string; metodo?: string } = {},
+  opts: { desde?: string; hasta?: string; metodo?: string; limit?: number; offset?: number } = {},
 ) {
   const filtros = [eq(pagosRecibidos.teamId, teamId)];
   if (opts.desde)  filtros.push(gte(pagosRecibidos.fechaPago, opts.desde));
   if (opts.hasta)  filtros.push(lte(pagosRecibidos.fechaPago, opts.hasta));
   if (opts.metodo) filtros.push(eq(pagosRecibidos.metodo, opts.metodo));
+
+  // Techo al dataset (antes cargaba el ledger completo del team sin límite).
+  const limit  = Math.min(opts.limit ?? 2000, 2000);
+  const offset = Math.max(opts.offset ?? 0, 0);
 
   const rows = await db
     .select({
@@ -710,7 +725,9 @@ export async function getPagosListado(
     .leftJoin(ecfDocuments, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
     .leftJoin(users, eq(pagosRecibidos.createdBy, users.id))
     .where(and(...filtros))
-    .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id));
+    .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id))
+    .limit(limit)
+    .offset(offset);
 
   // Trazabilidad: cuántos pagos tiene cada factura (para "Pago 2 de 3").
   const pagosPorDoc = new Map<number, number>();

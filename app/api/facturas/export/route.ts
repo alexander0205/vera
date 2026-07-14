@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, users, pagosRecibidos } from '@/lib/db/schema';
 import { and, eq, gte, lte, desc, sql } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 
@@ -74,13 +74,14 @@ export async function GET(req: NextRequest) {
       fechaEmision:         ecfDocuments.fechaEmision,
       createdAt:            ecfDocuments.createdAt,
       // Pagos en cuentas por cobrar (mismo cálculo que el listado de facturas).
-      pagado: sql<number>`coalesce((
-        SELECT SUM(monto_centavos) FROM pagos_recibidos
-        WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
-      ), 0)`,
+      // LEFT JOIN + GROUP BY en vez de subquery correlacionada por fila (antes,
+      // hasta 5000 subqueries por export).
+      pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
     })
     .from(ecfDocuments)
+    .leftJoin(pagosRecibidos, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
     .where(and(...conditions))
+    .groupBy(ecfDocuments.id)
     .orderBy(desc(ecfDocuments.createdAt))
     .limit(5000);
 
