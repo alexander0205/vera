@@ -515,7 +515,7 @@ export default function ConfiguracionPage() {
         <CardContent className="space-y-4">
           <p className="text-sm text-gray-500">
             Cuando una factura registra un cobro con alguno de estos métodos, no se
-            podrá guardar como borrador: habrá que emitirla a la DGII. Útil, por
+            podrá guardar sin emitir: habrá que emitirla a la DGII. Útil, por
             ejemplo, para que toda venta con tarjeta quede fiscalizada.
           </p>
 
@@ -557,7 +557,7 @@ export default function ConfiguracionPage() {
             <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
               <strong>Activo:</strong> las facturas cobradas con{' '}
               {metodosObligaDgii.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
-              no se podrán guardar como borrador — se deben emitir a la DGII.
+              no se podrán guardar sin emitir — se deben emitir a la DGII.
             </div>
           )}
         </CardContent>

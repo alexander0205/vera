@@ -45,7 +45,6 @@ export function ResumenSidebar({
   pagoLineas = [{ metodo: 'efectivo', valor: '' }], setPagoLineas,
 }: Props) {
   const [resumenOpen, setResumenOpen] = useState(true);
-  const [pagoOpen, setPagoOpen]       = useState(true);
 
   // Pago efectivo = suma de las líneas. El saldo pendiente lo resta del total.
   const pagoNum = sumaPagos(pagoLineas);
@@ -143,18 +142,13 @@ export function ResumenSidebar({
       {/* ─── Pago card (sticky aparte) ─── */}
       {showPago && (
       <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setPagoOpen(v => !v)}
-          className="w-full flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 hover:bg-gray-50 transition-colors"
-          aria-expanded={pagoOpen}
-        >
+        {/* Pago siempre abierto: el método de pago debe estar visible sin colapsar. */}
+        <div className="w-full flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
           <CreditCard className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
           <h2 className="text-sm font-semibold text-gray-900 flex-1 text-left">Pago</h2>
-          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${pagoOpen ? '' : '-rotate-90'}`} />
-        </button>
+        </div>
 
-        {pagoOpen && (
+        {(
           <div className="px-4 pb-4 md:px-5 space-y-3">
             {/* Toggle registrar pago */}
             <label className="flex items-center gap-2 cursor-pointer">

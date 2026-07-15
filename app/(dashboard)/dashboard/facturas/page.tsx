@@ -111,7 +111,7 @@ export default function FacturasPage() {
       .then(d => setFacturaMaestros(d.maestros ?? []))
       .catch(() => {});
   }, []);
-  const limit = 50;
+  const limit = 20;
 
   // Reset page on filter change
   useEffect(() => { setPage(1); }, [filterValues]);

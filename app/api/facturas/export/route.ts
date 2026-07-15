@@ -18,7 +18,7 @@ const TIPO_PAGO_LABELS: Record<number, string> = {
 
 // Estado del ciclo de vida e-CF (solo relevante con conexión a DGII).
 const ESTADO_DGII_LABELS: Record<string, string> = {
-  BORRADOR: 'Borrador', EN_PROCESO: 'En proceso', ACEPTADO: 'Aceptado',
+  BORRADOR: 'Sin comprobante', EN_PROCESO: 'En proceso', ACEPTADO: 'Aceptado',
   ACEPTADO_CONDICIONAL: 'Aceptado condicional', RECHAZADO: 'Rechazado',
   ANULADO: 'Anulado', HISTORICA: 'Histórica',
 };

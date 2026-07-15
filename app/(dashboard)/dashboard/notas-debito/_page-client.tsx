@@ -39,7 +39,7 @@ const ESTADO_BADGE: Record<string, { label: string; variant: 'default' | 'second
   ACEPTADO_CONDICIONAL: { label: 'Condicional', variant: 'secondary' },
   EN_PROCESO:           { label: 'En Proceso',  variant: 'outline' },
   RECHAZADO:            { label: 'Rechazado',   variant: 'destructive' },
-  BORRADOR:             { label: 'Borrador',    variant: 'outline' },
+  BORRADOR:             { label: 'Sin emitir',    variant: 'outline' },
   ANULADO:              { label: 'Anulado',     variant: 'secondary' },
 };
 
@@ -54,7 +54,7 @@ const ESTADO_OPTIONS = [
   { value: 'ACEPTADO',             label: 'Aceptado' },
   { value: 'ACEPTADO_CONDICIONAL', label: 'Condicional' },
   { value: 'EN_PROCESO',           label: 'En Proceso' },
-  { value: 'BORRADOR',             label: 'Borrador' },
+  { value: 'BORRADOR',             label: 'Sin emitir' },
   { value: 'RECHAZADO',            label: 'Rechazado' },
   { value: 'ANULADO',              label: 'Anulado' },
 ];
@@ -254,7 +254,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
           <StatCard label="Monto total"    value={fmtDOP(resumen.monto)}      sub="Notas activas"     icon={TrendingUp}  color="orange" />
           <StatCard label="Total notas"    value={String(resumen.count)}       sub="No anuladas"       icon={FileText}    color="gray"   />
           <StatCard label="Enviadas DGII"  value={String(resumen.aceptadas)}   sub="Aceptadas"         icon={CheckCircle} color="green"  />
-          <StatCard label="Pendiente DGII" value={String(resumen.pendientes)}  sub="Borradores listos" icon={Clock}       color="amber"  />
+          <StatCard label="Pendiente DGII" value={String(resumen.pendientes)}  sub="Sin emitir, listas" icon={Clock}       color="amber"  />
         </div>
       )}
 

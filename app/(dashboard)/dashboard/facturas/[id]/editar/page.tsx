@@ -166,7 +166,7 @@ export default async function EditarBorradorPage({
           <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
             <p>
-              Este borrador fue guardado antes de que el sistema almacenara los ítems.
+              Esta factura fue guardada antes de que el sistema almacenara los ítems.
               <strong className="ml-1">Agrega los productos/servicios nuevamente</strong> y haz Vista previa para continuar.
             </p>
           </div>

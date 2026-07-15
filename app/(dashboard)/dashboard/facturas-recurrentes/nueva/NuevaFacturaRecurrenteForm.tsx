@@ -546,7 +546,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
                       <p className="text-[11px] text-gray-500 uppercase tracking-wide">Estado</p>
                       <div className="flex items-center gap-1.5 mt-1 justify-end">
                         <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
-                        <span className="text-sm font-medium text-gray-700">Borrador</span>
+                        <span className="text-sm font-medium text-gray-700">Sin emitir</span>
                       </div>
                     </div>
                     <div className="text-right">

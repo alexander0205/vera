@@ -97,7 +97,7 @@ export function BottomActionBar({
                     className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                     onClick={() => { setShowGuardarMenu(false); onEmitir('borrador'); }}>
                     <FileText className="h-4 w-4 text-gray-600" />
-                    Guardar como borrador
+                    Guardar
                   </button>
                   <button
                     type="button"
