@@ -16,6 +16,7 @@ import { ModuleSwitcher } from '@/components/module-switcher';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { moduleUrl } from '@/lib/config/modules';
 
 // MUI imports
 import Box from '@mui/material/Box';
@@ -586,21 +587,12 @@ function SidebarContent({
     ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
     : null;
 
-  // Grupo Punto de venta — solo visible si posHabilitado y el rol tiene acceso.
-  // Incluye accesos a las entidades COMPARTIDAS entre módulos (productos y
-  // contactos): son las mismas tablas que usa Facturación, así el usuario del
-  // POS las gestiona sin salir a buscar en el menú de Facturación.
-  const posHabilitado = activeTeam?.posHabilitado ?? false;
-  const posCandidatos: NavGroup['children'] = [
-    { href: '/pos',                      label: 'Abrir punto de venta' },
-    { href: '/dashboard/pos-terminales', label: 'Terminales' },
-    { href: '/dashboard/productos',      label: 'Productos y servicios', plusHref: '/dashboard/productos', shared: true },
-    { href: '/dashboard/clientes',       label: 'Contactos', shared: true },
-  ].filter(c => can(c.href));
-
-  const posGroup: NavGroup | null = posHabilitado && posCandidatos.length > 0
-    ? { id: 'pos', label: 'Punto de venta', icon: Store, children: posCandidatos }
-    : null;
+  // Punto de Venta NO es un grupo dentro del nav de Facturación: es OTRO módulo.
+  // Como Alegra ("Ir a Alegra POS"), va como acceso separado al final del nav
+  // que cambia de producto (a /pos). Solo si el usuario tiene el módulo pos.
+  const puedeIrPos = (activeTeam?.posHabilitado ?? false)
+    && (permsLoading || modules.includes('pos'))
+    && can('/pos');
 
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
@@ -618,7 +610,7 @@ function SidebarContent({
     .filter(g => !(sinFacturacion && FACTURACION_ONLY_GROUPS.has(g.id)))
     .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
     .filter(g => g.children.length > 0);
-  const groupsVisibles    = [posGroup, cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
+  const groupsVisibles    = [cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
 
   const defaultOpen = groupsVisibles.reduce((acc, g) => {
     acc[g.id] = g.children.some(c => pathname.startsWith(c.href));
@@ -905,10 +897,33 @@ function SidebarContent({
             </Box>
           );
         })}
+
+        {/* Cambiar de producto: Punto de Venta es OTRO módulo (como "Ir a
+            Alegra POS"). Va separado al final y abre /pos. */}
+        {puedeIrPos && (
+          <>
+            <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />
+            <Box
+              component={Link}
+              href={moduleUrl('pos')}
+              onClick={onClose}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.875,
+                borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
+                color: 'rgba(204,251,241,0.85)', transition: 'all 0.15s',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+              }}
+            >
+              <Store style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Punto de Venta</Box>
+              <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
+            </Box>
+          </>
+        )}
       </Box>
 
       <Box sx={{ px: 2, py: 1.25, borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-        <Typography sx={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)' }}>
+        <Typography className="nav-text" sx={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
           Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
         </Typography>
       </Box>
@@ -960,61 +975,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
       <GlobalSearch />
 
-      {/* Desktop Sidebar — rail de iconos que se expande al pasar el mouse.
-          El aside reserva solo RAIL_WIDTH; el panel interno flota (absolute) y
-          crece a SIDEBAR_WIDTH en hover, así el contenido principal no se
-          reacomoda. Los labels (.nav-text) y los hijos de grupo (.nav-children)
-          se ocultan colapsado y aparecen en hover — animado, sin re-render. */}
-      {sidebarVisible && (
-        <Box
-          component="aside"
-          sx={{
-            width:      RAIL_WIDTH,
-            flexShrink: 0,
-            display:    { xs: 'none', lg: 'block' },
-            position:   'relative',
-          }}
-        >
-          <Box
-            sx={{
-              position:   'absolute',
-              top:        0,
-              left:       0,
-              height:     '100%',
-              width:      RAIL_WIDTH,
-              overflow:   'hidden',
-              zIndex:     30,
-              transition: 'width 0.2s ease, box-shadow 0.2s ease',
-              '& .nav-text':      { opacity: 0, transition: 'opacity 0.12s ease' },
-              '& .nav-children':  { display: 'none' },
-              '&:hover':          { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
-              '&:hover .nav-text':     { opacity: 1 },
-              '&:hover .nav-children': { display: 'block' },
-            }}
-          >
-            <SidebarContent teams={teams} activeTeamId={activeTeamId} />
-          </Box>
-        </Box>
-      )}
-
-      {/* Mobile Drawer */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          display: { xs: 'block', lg: 'none' },
-          '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, boxSizing: 'border-box', border: 'none' },
-        }}
-      >
-        <SidebarContent teams={teams} activeTeamId={activeTeamId} onClose={() => setMobileOpen(false)} />
-      </Drawer>
-
-      {/* Main column */}
+      {/* Columna app: AppBar full-width arriba, luego fila [rail sidebar][contenido].
+          Así el rail vive DEBAJO del header y su expansión en hover flota solo
+          sobre el contenido, nunca tapa el header (antes se veía feo). */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {/* Top bar */}
         <AppBar
@@ -1142,12 +1108,60 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Toolbar>
         </AppBar>
 
-        {/* Page content */}
-        <Box
-          component="main"
-          sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50' }}
-        >
-          {children}
+        {/* Fila: rail sidebar (izquierda) + contenido (derecha) */}
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
+          {/* Desktop Sidebar — rail de iconos que se expande al pasar el mouse.
+              El aside reserva solo RAIL_WIDTH; el panel interno flota (absolute)
+              y crece a SIDEBAR_WIDTH en hover, así el contenido no se reacomoda.
+              Vive debajo del header, por eso su expansión ya no lo tapa. */}
+          {sidebarVisible && (
+            <Box
+              component="aside"
+              sx={{ width: RAIL_WIDTH, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'relative' }}
+            >
+              <Box
+                sx={{
+                  position:   'absolute',
+                  top:        0,
+                  left:       0,
+                  height:     '100%',
+                  width:      RAIL_WIDTH,
+                  overflow:   'hidden',
+                  zIndex:     30,
+                  transition: 'width 0.2s ease, box-shadow 0.2s ease',
+                  '& .nav-text':      { opacity: 0, transition: 'opacity 0.12s ease' },
+                  '& .nav-children':  { display: 'none' },
+                  '&:hover':          { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
+                  '&:hover .nav-text':     { opacity: 1 },
+                  '&:hover .nav-children': { display: 'block' },
+                }}
+              >
+                <SidebarContent teams={teams} activeTeamId={activeTeamId} />
+              </Box>
+            </Box>
+          )}
+
+          {/* Mobile Drawer */}
+          <Drawer
+            variant="temporary"
+            open={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+            ModalProps={{ keepMounted: true }}
+            sx={{
+              display: { xs: 'block', lg: 'none' },
+              '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, boxSizing: 'border-box', border: 'none' },
+            }}
+          >
+            <SidebarContent teams={teams} activeTeamId={activeTeamId} onClose={() => setMobileOpen(false)} />
+          </Drawer>
+
+          {/* Page content */}
+          <Box
+            component="main"
+            sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0 }}
+          >
+            {children}
+          </Box>
         </Box>
       </Box>
     </Box>
