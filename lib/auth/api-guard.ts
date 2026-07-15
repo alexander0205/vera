@@ -11,10 +11,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
-import { teamMembers } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries';
 import { type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { userHasModule, type ModuleKey } from '@/lib/auth/modules';
@@ -43,12 +40,7 @@ export async function requirePermission(permission: Permission): Promise<AuthOk 
     return { ok: false, response: NextResponse.json({ error: 'Sin empresa configurada' }, { status: 403 }) };
   }
 
-  const [m] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-    .limit(1);
-  const teamRole = m?.role ?? null;
+  const teamRole = await getTeamRoleForUser();
 
   if (!(await userCanForTeam(teamId, user.platformRole, teamRole, permission))) {
     return { ok: false, response: NextResponse.json({ error: 'Sin permiso' }, { status: 403 }) };

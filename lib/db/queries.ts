@@ -115,7 +115,10 @@ export async function getActivityLogs() {
     .limit(10);
 }
 
-export async function getTeamForUser() {
+// React.cache: getTeamForUser se llama en el SWR fallback del root layout Y en
+// varias páginas por request. Sin cache era 1 query pesada (carga todos los
+// miembros del team) por cada llamada. Ahora se resuelve una sola vez por request.
+export const getTeamForUser = cache(async () => {
   const user = await getUser();
   if (!user) {
     return null;
@@ -147,7 +150,26 @@ export async function getTeamForUser() {
   });
 
   return result?.team || null;
-}
+});
+
+/**
+ * Rol del usuario en el team activo (clave de team_members.role).
+ * React.cache: api-guard, page-guard, /api/user y los helpers de módulos
+ * consultaban esto por separado en cada request — ahora es 1 sola query.
+ * Devuelve null si no hay sesión/team o el usuario no es miembro.
+ */
+export const getTeamRoleForUser = cache(async (): Promise<string | null> => {
+  const user = await getUser();
+  if (!user) return null;
+  const teamId = await getTeamIdForUser();
+  if (!teamId) return null;
+  const [m] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .limit(1);
+  return m?.role ?? null;
+});
 
 // ─── EmiteDO queries ──────────────────────────────────────────────────────────
 
