@@ -541,6 +541,7 @@ function AmbienteBadge({ ambiente }: { ambiente: string | null }) {
 // ─── Sidebar Content ──────────────────────────────────────────────────────────
 
 const SIDEBAR_WIDTH = 224;
+const RAIL_WIDTH = 68;   // ancho colapsado (solo iconos) del sidebar desktop
 
 function SidebarContent({
   teams,
@@ -650,7 +651,7 @@ function SidebarContent({
           }}>
             <Typography sx={{ color: '#0f766e', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>z</Typography>
           </Box>
-          <Typography sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '0.01em' }}>
+          <Typography className="nav-text" sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>
             Zero
           </Typography>
         </Box>
@@ -661,7 +662,7 @@ function SidebarContent({
 
         {/* Sin plan — bloquear nav */}
         {!hasPlan && (
-          <Box sx={{ mx: 0.5, mt: 0.5, mb: 1.5, borderRadius: '12px', bgcolor: 'rgba(245,158,11,0.2)', border: '1px solid rgba(251,191,36,0.3)', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box className="nav-children" sx={{ mx: 0.5, mt: 0.5, mb: 1.5, borderRadius: '12px', bgcolor: 'rgba(245,158,11,0.2)', border: '1px solid rgba(251,191,36,0.3)', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
               <AlertCircle style={{ width: 16, height: 16, color: '#fcd34d', marginTop: 2, flexShrink: 0 }} />
               <Typography sx={{ fontSize: '0.75rem', color: '#fef3c7', lineHeight: 1.4 }}>
@@ -706,7 +707,7 @@ function SidebarContent({
             }}
           >
             <Plus style={{ width: 16, height: 16, flexShrink: 0 }} />
-            Nueva Factura
+            <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>Nueva Factura</Box>
           </Box>
         )}
 
@@ -733,9 +734,10 @@ function SidebarContent({
           }}
         >
           <Search style={{ width: 16, height: 16, flexShrink: 0 }} />
-          <Box component="span" sx={{ flex: 1, textAlign: 'left' }}>Buscar...</Box>
+          <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>Buscar...</Box>
           <Box
             component="kbd"
+            className="nav-text"
             sx={{
               fontSize:    '0.6875rem',
               bgcolor:     'rgba(255,255,255,0.1)',
@@ -775,7 +777,7 @@ function SidebarContent({
               }}
             >
               <item.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
-              {item.label}
+              <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>{item.label}</Box>
             </Box>
           );
         })}
@@ -811,14 +813,16 @@ function SidebarContent({
                 }}
               >
                 <group.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
-                <Box component="span" sx={{ flex: 1, textAlign: 'left' }}>{group.label}</Box>
-                {isOpen
-                  ? <ChevronUp style={{ width: 14, height: 14, opacity: 0.7 }} />
-                  : <ChevronRight style={{ width: 14, height: 14, opacity: 0.7 }} />
-                }
+                <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>{group.label}</Box>
+                <Box component="span" className="nav-text" sx={{ display: 'flex' }}>
+                  {isOpen
+                    ? <ChevronUp style={{ width: 14, height: 14, opacity: 0.7 }} />
+                    : <ChevronRight style={{ width: 14, height: 14, opacity: 0.7 }} />
+                  }
+                </Box>
               </Box>
 
-              <Collapse in={isOpen} timeout="auto">
+              <Collapse className="nav-children" in={isOpen} timeout="auto">
                 <Box sx={{ ml: 3, pl: 1, borderLeft: '1px solid rgba(255,255,255,0.2)', mt: 0.25, mb: 0.5 }}>
                   {group.children.map(child => {
                     const active = pathname.startsWith(child.href);
@@ -949,18 +953,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <Box sx={{ display: 'flex', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
       <GlobalSearch />
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar — rail de iconos que se expande al pasar el mouse.
+          El aside reserva solo RAIL_WIDTH; el panel interno flota (absolute) y
+          crece a SIDEBAR_WIDTH en hover, así el contenido principal no se
+          reacomoda. Los labels (.nav-text) y los hijos de grupo (.nav-children)
+          se ocultan colapsado y aparecen en hover — animado, sin re-render. */}
       {sidebarVisible && (
         <Box
           component="aside"
           sx={{
-            width:     SIDEBAR_WIDTH,
+            width:      RAIL_WIDTH,
             flexShrink: 0,
-            display:   { xs: 'none', lg: 'flex' },
-            flexDirection: 'column',
+            display:    { xs: 'none', lg: 'block' },
+            position:   'relative',
           }}
         >
-          <SidebarContent teams={teams} activeTeamId={activeTeamId} />
+          <Box
+            sx={{
+              position:   'absolute',
+              top:        0,
+              left:       0,
+              height:     '100%',
+              width:      RAIL_WIDTH,
+              overflow:   'hidden',
+              zIndex:     30,
+              transition: 'width 0.2s ease, box-shadow 0.2s ease',
+              '& .nav-text':      { opacity: 0, transition: 'opacity 0.12s ease' },
+              '& .nav-children':  { display: 'none' },
+              '&:hover':          { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
+              '&:hover .nav-text':     { opacity: 1 },
+              '&:hover .nav-children': { display: 'block' },
+            }}
+          >
+            <SidebarContent teams={teams} activeTeamId={activeTeamId} />
+          </Box>
         </Box>
       )}
 
