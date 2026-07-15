@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Receipt, HandCoins, AlertTriangle } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
@@ -28,13 +27,10 @@ export interface EstudianteEnriquecido {
   ultimoPagoCentavos: number | null;
 }
 
-interface CargoPendiente {
+interface CargoRow {
   id: number;
-  concepto: string | null;
-  mes: number | null;
-  anio: number;
+  montoCentavos: number;
   saldoCentavos: number;
-  fechaVencimiento: string | null;
   estado: string;
 }
 
@@ -45,17 +41,8 @@ interface TutorVinculo {
   responsablePago: boolean;
 }
 
-const MESES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-
 function iniciales(nombres: string, apellidos: string): string {
   return `${nombres[0] ?? ''}${apellidos[0] ?? ''}`.toUpperCase();
-}
-
-function labelCargoPendiente(c: CargoPendiente): string {
-  const concepto = c.concepto ?? 'Cargo';
-  const mes = c.mes ? ` ${MESES[c.mes]}` : '';
-  return `${concepto}${mes}`;
 }
 
 interface Props {
@@ -66,7 +53,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
   const router = useRouter();
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
-  const [cargos, setCargos]   = useState<CargoPendiente[]>([]);
+  const [cargos, setCargos]   = useState<CargoRow[]>([]);
   const [relacion, setRelacion] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -78,16 +65,21 @@ export function EstudianteFicha({ estudiante: e }: Props) {
       fetch(`/api/administracion-escolar/estudiantes/${e.id}/tutores`).then((r) => r.json()),
     ]).then(([c, t]) => {
       if (cancel) return;
-      const pendientes: CargoPendiente[] = (c.cargos ?? []).filter(
-        (x: CargoPendiente) => ['pendiente', 'parcial', 'vencido'].includes(x.estado),
-      );
-      setCargos(pendientes);
+      setCargos((c.cargos ?? []) as CargoRow[]);
       const resp = (t.tutores ?? []).find((x: TutorVinculo) => x.responsablePago);
       setRelacion(resp?.relacion ?? null);
       setLoading(false);
     });
     return () => { cancel = true; };
   }, [e.id]);
+
+  // Totales generales del estudiante (los cargos anulados no cuentan).
+  const totales = useMemo(() => {
+    const vivos = cargos.filter((c) => c.estado !== 'anulado');
+    const deuda = vivos.reduce((s, c) => s + c.montoCentavos, 0);
+    const pendiente = vivos.reduce((s, c) => s + c.saldoCentavos, 0);
+    return { deuda, pendiente, pagado: deuda - pendiente };
+  }, [cargos]);
 
   return (
     <div className="border border-gray-200 rounded-xl bg-white p-5 space-y-4 sticky top-4">
@@ -114,8 +106,8 @@ export function EstudianteFicha({ estudiante: e }: Props) {
       <div className="grid grid-cols-2 gap-2">
         <MiniCard label="Matrícula" value={e.periodoActivo ?? '—'} />
         <MiniCard label="Curso" value={e.cursoActual ?? '—'} />
-        <MiniCard label="Deuda total" value={fmtDOP(e.deudaCentavos)} accent={e.deudaCentavos > 0} />
         <MiniCard label="Último pago" value={e.ultimoPagoFecha ? fmtFechaCorta(e.ultimoPagoFecha) : '—'} />
+        <MiniCard label="Estado" value={e.estado} capitalize />
       </div>
 
       {/* Tutor responsable */}
@@ -126,29 +118,16 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         <Row label="Email" value={e.tutorEmail ?? '—'} />
       </div>
 
-      {/* Pendientes */}
+      {/* Totales generales */}
       <div className="border-t border-gray-100 pt-3">
-        <p className="text-sm font-medium text-gray-900 mb-2">Pendientes</p>
         {loading ? (
           <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-teal-600" /></div>
-        ) : cargos.length === 0 ? (
-          <p className="text-sm text-gray-400 py-1">Sin cargos pendientes</p>
         ) : (
           <div className="space-y-2">
-            {cargos.map((c) => (
-              <div key={c.id} className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-gray-800 flex items-center gap-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${c.estado === 'vencido' ? 'bg-red-500' : 'bg-teal-500'}`} />
-                    <span className="truncate capitalize">{labelCargoPendiente(c)}</span>
-                  </p>
-                  {c.fechaVencimiento && (
-                    <p className="text-xs text-gray-400 ml-3">Vence {fmtFechaCorta(c.fechaVencimiento)}</p>
-                  )}
-                </div>
-                <span className="text-sm font-medium text-gray-900 shrink-0">{fmtDOP(c.saldoCentavos)}</span>
-              </div>
-            ))}
+            <TotalRow icon={Receipt} tone="gray" label="Deuda total" value={fmtDOP(totales.deuda)} />
+            <TotalRow icon={HandCoins} tone="teal" label="Pago total" value={fmtDOP(totales.pagado)} />
+            <TotalRow icon={AlertTriangle} tone="red" label="Pendiente total" value={fmtDOP(totales.pendiente)}
+              muted={totales.pendiente === 0} />
           </div>
         )}
       </div>
@@ -164,11 +143,32 @@ export function EstudianteFicha({ estudiante: e }: Props) {
   );
 }
 
-function MiniCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function MiniCard({ label, value, accent, capitalize }: { label: string; value: string; accent?: boolean; capitalize?: boolean }) {
   return (
     <div className="border border-gray-200 rounded-lg p-2.5">
       <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className={`text-sm font-semibold truncate ${accent ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
+      <p className={`text-sm font-semibold truncate ${accent ? 'text-red-600' : 'text-gray-900'} ${capitalize ? 'capitalize' : ''}`}>{value}</p>
+    </div>
+  );
+}
+
+const TONES = {
+  gray: { box: 'bg-gray-100 text-gray-600', val: 'text-gray-900' },
+  teal: { box: 'bg-teal-100 text-teal-700', val: 'text-teal-700' },
+  red:  { box: 'bg-red-100 text-red-600', val: 'text-red-600' },
+} as const;
+
+function TotalRow({ icon: Icon, tone, label, value, muted }: {
+  icon: typeof Receipt; tone: keyof typeof TONES; label: string; value: string; muted?: boolean;
+}) {
+  const t = TONES[tone];
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${muted ? 'bg-gray-100 text-gray-400' : t.box}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <span className="text-sm text-gray-500 flex-1">{label}</span>
+      <span className={`text-sm font-semibold ${muted ? 'text-gray-400' : t.val}`}>{value}</span>
     </div>
   );
 }
