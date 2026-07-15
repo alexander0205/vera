@@ -3,8 +3,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDgiiReadiness } from '@/lib/hooks/useDgiiReadiness';
+import { ProductoDialog } from '@/components/shared/producto-dialog';
+import { ClienteDialog } from '@/components/shared/cliente-dialog';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText, Star, Plus, Camera, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -1049,7 +1051,8 @@ function Venta({
       )}
 
       {nuevoProductoAbierto && (
-        <NuevoProductoModal
+        <ProductoDialog
+          open
           onClose={() => setNuevoProductoAbierto(false)}
           onCreated={() => { setNuevoProductoAbierto(false); cargarCatalogo(); }}
         />
@@ -1437,78 +1440,14 @@ function ClientePicker({ cliente, onSelect }: {
         </Box>
       )}
       {nuevoAbierto && (
-        <NuevoClienteModal
+        <ClienteDialog
+          open
           nombreInicial={q}
           onClose={() => setNuevoAbierto(false)}
           onCreated={(c) => { setNuevoAbierto(false); setQ(''); cargarClientes(); onSelect(c); }}
         />
       )}
     </Box>
-  );
-}
-
-function NuevoClienteModal({ nombreInicial, onClose, onCreated }: {
-  nombreInicial: string;
-  onClose: () => void;
-  onCreated: (c: ClienteView) => void;
-}) {
-  const [razonSocial, setRazonSocial] = useState(nombreInicial);
-  const [rnc, setRnc] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [email, setEmail] = useState('');
-  const [guardando, setGuardando] = useState(false);
-
-  async function guardar() {
-    if (!razonSocial.trim()) { toast.error('El nombre es obligatorio'); return; }
-    setGuardando(true);
-    const res = await fetch('/api/clientes', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ razonSocial, rnc: rnc || null, telefono: telefono || null, email: email || null }),
-    });
-    setGuardando(false);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) { toast.error(data.error ?? 'No se pudo crear el cliente'); return; }
-    toast.success('Cliente creado');
-    onCreated(data.cliente);
-  }
-
-  return (
-    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 384, m: 2, borderRadius: '12px' } } }}>
-      <Box sx={{ p: 2.5 }}>
-        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Nuevo cliente</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
-        </Box>
-
-        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Nombre / Razón social</Typography>
-        <TextField value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)} autoFocus
-          placeholder="Nombre del cliente" fullWidth sx={{ mb: 1.5 }} />
-
-        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>RNC / Cédula (opcional)</Typography>
-        <TextField value={rnc} onChange={(e) => setRnc(e.target.value)}
-          placeholder="000-0000000-0" fullWidth sx={{ mb: 1.5 }} />
-
-        <Box sx={{ mb: 1.5, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
-          <Box>
-            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Teléfono (opcional)</Typography>
-            <TextField value={telefono} onChange={(e) => setTelefono(e.target.value)} fullWidth />
-          </Box>
-          <Box>
-            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Email (opcional)</Typography>
-            <TextField value={email} onChange={(e) => setEmail(e.target.value)} type="email" fullWidth />
-          </Box>
-        </Box>
-
-        <Button
-          disabled={guardando}
-          onClick={guardar}
-          variant="contained" color="primary" fullWidth
-          sx={{ py: 1.5, fontWeight: 500 }}
-        >
-          {guardando ? 'Creando…' : 'Crear y seleccionar'}
-        </Button>
-      </Box>
-    </Dialog>
   );
 }
 
@@ -2315,95 +2254,6 @@ function NuevaMesaModal({ terminalId, onClose, onCreated }: { terminalId: number
   );
 }
 
-// ─── Crear producto rápido desde el POS ──────────────────────────────────────
+// Crear producto/cliente rápido: modales compartidos en components/shared/
+// (producto-dialog.tsx y cliente-dialog.tsx) — mismos que usa Facturación.
 
-const IMG_MAX_BYTES = 800_000;
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function NuevoProductoModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [nombre, setNombre] = useState('');
-  const [precio, setPrecio] = useState('');
-  const [tasaItbis, setTasaItbis] = useState('0.18');
-  const [imagen, setImagen] = useState('');
-  const [guardando, setGuardando] = useState(false);
-
-  async function handleImagen(file: File) {
-    if (!file.type.startsWith('image/')) { toast.error('Solo se aceptan imágenes'); return; }
-    if (file.size > IMG_MAX_BYTES) { toast.error('Imagen demasiado grande (máx 800 KB)'); return; }
-    setImagen(await fileToBase64(file));
-  }
-
-  async function guardar() {
-    const p = Number(precio);
-    if (!nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
-    if (!precio || isNaN(p) || p < 0) { toast.error('Precio inválido'); return; }
-    setGuardando(true);
-    const res = await fetch('/api/productos', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, precio: p, tasaItbis, tipo: 'bien', imagen: imagen || null }),
-    });
-    setGuardando(false);
-    if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      toast.error(e.error ?? 'No se pudo crear el producto');
-      return;
-    }
-    toast.success('Producto creado');
-    onCreated();
-  }
-
-  return (
-    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 384, m: 2, borderRadius: '12px' } } }}>
-      <Box sx={{ p: 2.5 }}>
-        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Nuevo producto</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
-        </Box>
-
-        <Box component="label" sx={{ position: 'relative', mx: 'auto', mb: 1.5, display: 'flex', height: 80, width: 80, cursor: 'pointer', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: '8px', border: '2px dashed #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af' }}>
-          <Box component="input" type="file" accept="image/*" sx={{ display: 'none' }}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) handleImagen(f); }} />
-          {imagen ? <Box component="img" src={imagen} alt="" sx={{ height: '100%', width: '100%', objectFit: 'cover' }} /> : <Camera style={{ width: 24, height: 24 }} />}
-        </Box>
-
-        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Nombre</Typography>
-        <TextField value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus
-          placeholder="Ej. Café con leche" fullWidth sx={{ mb: 1.5 }} />
-
-        <Box sx={{ mb: 1.5, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
-          <Box>
-            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Precio (DOP)</Typography>
-            <TextField type="number" value={precio} onChange={(e) => setPrecio(e.target.value)}
-              placeholder="0.00" fullWidth slotProps={{ htmlInput: { min: 0, step: 0.01 } }} />
-          </Box>
-          <Box>
-            <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>ITBIS</Typography>
-            <TextField select value={tasaItbis} onChange={(e) => setTasaItbis(e.target.value)} fullWidth>
-              <MenuItem value="0.18">18%</MenuItem>
-              <MenuItem value="0.16">16%</MenuItem>
-              <MenuItem value="0">0%</MenuItem>
-              <MenuItem value="exento">Exento</MenuItem>
-            </TextField>
-          </Box>
-        </Box>
-
-        <Button
-          disabled={guardando}
-          onClick={guardar}
-          variant="contained" color="primary" fullWidth
-          sx={{ py: 1.5, fontWeight: 500 }}
-        >
-          {guardando ? 'Creando…' : 'Crear y agregar al catálogo'}
-        </Button>
-      </Box>
-    </Dialog>
-  );
-}
