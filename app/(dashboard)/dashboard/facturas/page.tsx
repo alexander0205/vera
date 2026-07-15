@@ -14,7 +14,7 @@ import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const ESTADOS = [
-  { value: 'BORRADOR',             label: 'Borrador' },
+  { value: 'BORRADOR',             label: 'Sin comprobante' },
   { value: 'EN_PROCESO',           label: 'En proceso' },
   { value: 'ACEPTADO',             label: 'Aceptado' },
   { value: 'ACEPTADO_CONDICIONAL', label: 'Aceptado condicional' },

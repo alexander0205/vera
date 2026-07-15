@@ -26,7 +26,7 @@ const ESTADO_LABEL: Record<string, { label: string; color: string }> = {
   EN_PROCESO:           { label: 'En Proceso', color: 'bg-blue-100 text-blue-700' },
   RECHAZADO:            { label: 'Rechazada',  color: 'bg-red-100 text-red-700' },
   ANULADO:              { label: 'Anulada',    color: 'bg-gray-200 text-gray-600' },
-  BORRADOR:             { label: 'Borrador',   color: 'bg-gray-100 text-gray-500' },
+  BORRADOR:             { label: 'Sin comprobante',   color: 'bg-gray-100 text-gray-500' },
 };
 
 function fmtDOP(centavos: number): string {
