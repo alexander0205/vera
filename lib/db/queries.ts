@@ -495,7 +495,7 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
  */
 export async function getCuentasPorCobrar(
   teamId: number,
-  opts: { clientId?: number; soloVencidas?: boolean } = {},
+  opts: { clientId?: number; soloVencidas?: boolean; docId?: number } = {},
 ) {
   const hoy = new Date().toISOString().slice(0, 10);
 
@@ -574,6 +574,7 @@ export async function getCuentasPorCobrar(
       // contra su factura padre (restadas vía ncAplicado).
       sql`${ecfDocuments.tipoEcf} != '34'`,
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
+      opts.docId ? eq(ecfDocuments.id, opts.docId) : sql`true`,
     ))
     .orderBy(desc(ecfDocuments.fechaEmision));
 

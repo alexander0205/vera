@@ -17,7 +17,9 @@ import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/est
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
+import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { toast } from 'sonner';
 
 const ESTADOS_EST = [
   { value: 'activo', label: 'Activo' },
@@ -131,6 +133,28 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [notFound, setNotFound]     = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
   const [matriculaEditar, setMatriculaEditar] = useState<Matricula | null>(null);
+
+  // Modal de cobro in-place: reutiliza el PagoModal de Cuentas por Cobrar sin
+  // salir del perfil. El flujo de datos es el mismo (registra en la factura).
+  const [pagoCuenta, setPagoCuenta] = useState<Cuenta | null>(null);
+  const [cargandoPago, setCargandoPago] = useState(false);
+
+  const abrirPago = useCallback(async (ecfDocumentId: number) => {
+    setCargandoPago(true);
+    try {
+      const res = await fetch(`/api/cuentas-por-cobrar/${ecfDocumentId}`);
+      const json = await res.json();
+      if (!res.ok || !json.cuenta) {
+        toast.error(json.error ?? 'No se pudo cargar la factura para cobrar');
+        return;
+      }
+      setPagoCuenta(json.cuenta);
+    } catch {
+      toast.error('No se pudo cargar la factura para cobrar');
+    } finally {
+      setCargandoPago(false);
+    }
+  }, []);
 
   // Edición inline de la tarjeta del estudiante.
   const [editando, setEditando]   = useState(false);
@@ -436,7 +460,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
                         puedeFacturar={puedeFacturar} puedePagos={puedePagos}
                         onVincular={() => setCargoVincularFactura(c)}
-                        onRegistrarPago={() => router.push(`/dashboard/cuentas-por-cobrar?pagar=${c.ecfDocumentId}`)}
+                        onRegistrarPago={() => c.ecfDocumentId && abrirPago(c.ecfDocumentId)}
                         onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
@@ -457,7 +481,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
                         puedeFacturar={puedeFacturar} puedePagos={puedePagos}
                         onVincular={() => setCargoVincularFactura(c)}
-                        onRegistrarPago={() => router.push(`/dashboard/cuentas-por-cobrar?pagar=${c.ecfDocumentId}`)}
+                        onRegistrarPago={() => c.ecfDocumentId && abrirPago(c.ecfDocumentId)}
                         onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
                     ])} />
                 )}
@@ -503,7 +527,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 globales de arriba: aquí se ordenan cargos, facturas y pagos en
                 el contexto académico donde ocurrieron. */}
             <TabsContent value="periodos" className="pt-4">
-              <PeriodosAcademicos matriculas={matriculas} cargos={cargos} pagos={pagos} />
+              <PeriodosAcademicos matriculas={matriculas} cargos={cargos} pagos={pagos} onRegistrarPago={abrirPago} />
             </TabsContent>
 
             {/* Matrículas */}
@@ -581,13 +605,30 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
           onSaved={cargar}
         />
       )}
+
+      {/* Cobro in-place: mismo modal de Cuentas por Cobrar, sin salir del perfil. */}
+      {cargandoPago && !pagoCuenta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
+          <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        </div>
+      )}
+      {pagoCuenta && (
+        <PagoModal
+          cuenta={pagoCuenta}
+          onClose={() => setPagoCuenta(null)}
+          onSuccess={() => { setPagoCuenta(null); cargar(); }}
+        />
+      )}
     </section>
   );
 }
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────
 
-function PeriodosAcademicos({ matriculas, cargos, pagos }: { matriculas: Matricula[]; cargos: Cargo[]; pagos: Pago[] }) {
+function PeriodosAcademicos({ matriculas, cargos, pagos, onRegistrarPago }: {
+  matriculas: Matricula[]; cargos: Cargo[]; pagos: Pago[];
+  onRegistrarPago: (ecfDocumentId: number) => void;
+}) {
   const router = useRouter();
   const grupos = construirGruposPeriodo(matriculas, cargos);
   const [periodoActivoKey, setPeriodoActivoKey] = useState<string | null>(null);
@@ -615,7 +656,7 @@ function PeriodosAcademicos({ matriculas, cargos, pagos }: { matriculas: Matricu
 
   function registrarPago() {
     if (facturaPendiente?.ecfDocumentId) {
-      router.push(`/dashboard/cuentas-por-cobrar?pagar=${facturaPendiente.ecfDocumentId}`);
+      onRegistrarPago(facturaPendiente.ecfDocumentId);
     }
   }
 
@@ -734,7 +775,7 @@ function PeriodosAcademicos({ matriculas, cargos, pagos }: { matriculas: Matricu
             {vista === 'mensualidades' && (
               <MensualidadesTabla cargos={cargosPeriodo.filter((c) => c.mes != null)} pagos={pagos} onAction={(cargo) => {
                 if (cargo?.ecfDocumentId && ['pendiente', 'parcial', 'vencido'].includes(cargo.estado)) {
-                  router.push(`/dashboard/cuentas-por-cobrar?pagar=${cargo.ecfDocumentId}`);
+                  onRegistrarPago(cargo.ecfDocumentId);
                 } else if (cargo && !cargo.ecfDocumentId) {
                   router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`);
                 } else if (cargo?.ecfDocumentId) {
