@@ -41,7 +41,7 @@ type NavGroup = {
   id: string;
   label: string;
   icon: React.ElementType;
-  children: { href: string; label: string; plusHref?: string }[];
+  children: { href: string; label: string; plusHref?: string; shared?: boolean }[];
 };
 
 type NavItem = {
@@ -586,10 +586,15 @@ function SidebarContent({
     : null;
 
   // Grupo Punto de venta — solo visible si posHabilitado y el rol tiene acceso.
+  // Incluye accesos a las entidades COMPARTIDAS entre módulos (productos y
+  // contactos): son las mismas tablas que usa Facturación, así el usuario del
+  // POS las gestiona sin salir a buscar en el menú de Facturación.
   const posHabilitado = activeTeam?.posHabilitado ?? false;
   const posCandidatos: NavGroup['children'] = [
     { href: '/pos',                      label: 'Abrir punto de venta' },
     { href: '/dashboard/pos-terminales', label: 'Terminales' },
+    { href: '/dashboard/productos',      label: 'Productos y servicios', plusHref: '/dashboard/productos', shared: true },
+    { href: '/dashboard/clientes',       label: 'Contactos', shared: true },
   ].filter(c => can(c.href));
 
   const posGroup: NavGroup | null = posHabilitado && posCandidatos.length > 0
@@ -841,10 +846,22 @@ function SidebarContent({
                             whiteSpace:  'nowrap',
                             overflow:    'hidden',
                             textOverflow: 'ellipsis',
+                            display:     'flex',
+                            alignItems:  'center',
+                            gap:         0.75,
                             '&:hover':   { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.08)' },
                           }}
                         >
-                          {child.label}
+                          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{child.label}</Box>
+                          {child.shared && (
+                            <Box
+                              component="span"
+                              title="Compartido con Facturación — mismos productos y contactos en ambos módulos"
+                              sx={{ flexShrink: 0, fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', px: 0.625, py: '1px', borderRadius: '4px', bgcolor: 'rgba(255,255,255,0.16)', color: 'rgba(204,251,241,0.95)' }}
+                            >
+                              Compartido
+                            </Box>
+                          )}
                         </Box>
                         {child.plusHref && can(child.plusHref) && (
                           <Box
