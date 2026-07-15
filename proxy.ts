@@ -1,26 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
+import { moduleForHost } from '@/lib/config/modules';
 
 const protectedRoutes = ['/dashboard', '/pos'];
 
-// ── Routing por subdominio (módulos del producto) ───────────────────────────
-// pos.zero.com.do        → módulo POS        (home interna /pos)
-// facturacion.zero.com.do→ módulo Facturación (home interna /dashboard)
-// Detección: envs POS_HOST/FACTURACION_HOST exactos, o prefijo del hostname
-// ("pos." / "facturacion.") para que pos.localhost:3000 funcione en dev.
-type ModuleHost = 'pos' | 'facturacion' | null;
-
-function moduleForHost(hostHeader: string | null): ModuleHost {
-  if (!hostHeader) return null;
-  const host = hostHeader.toLowerCase();
-  const hostname = host.split(':')[0];
-  if (process.env.POS_HOST && host === process.env.POS_HOST) return 'pos';
-  if (process.env.FACTURACION_HOST && host === process.env.FACTURACION_HOST) return 'facturacion';
-  if (hostname.startsWith('pos.')) return 'pos';
-  if (hostname.startsWith('facturacion.')) return 'facturacion';
-  return null;
-}
+// Routing por subdominio (módulos del producto):
+// pos.zero.com.do → /pos · facturacion.zero.com.do → /dashboard.
+// moduleForHost vive en lib/config/modules.ts (testeable).
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

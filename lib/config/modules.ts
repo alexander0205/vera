@@ -48,3 +48,19 @@ export function sanitizeModules(value: unknown): ModuleKey[] {
   if (!Array.isArray(value)) return [];
   return MODULES.filter(m => value.includes(m));
 }
+
+/**
+ * Módulo que sirve un hostname (routing de subdominios en proxy.ts).
+ * Match exacto contra POS_HOST/FACTURACION_HOST, o por prefijo del hostname
+ * ("pos." / "facturacion.") — así pos.localhost:3000 funciona en dev.
+ */
+export function moduleForHost(hostHeader: string | null | undefined): ModuleKey | null {
+  if (!hostHeader) return null;
+  const host = hostHeader.toLowerCase();
+  const hostname = host.split(':')[0];
+  if (process.env.POS_HOST && host === process.env.POS_HOST) return 'pos';
+  if (process.env.FACTURACION_HOST && host === process.env.FACTURACION_HOST) return 'facturacion';
+  if (hostname.startsWith('pos.')) return 'pos';
+  if (hostname.startsWith('facturacion.')) return 'facturacion';
+  return null;
+}

@@ -10,10 +10,10 @@ const TEST_EMAIL = `test_${Date.now()}@emitedo.test`;
 const TEST_PASS = 'TestPass123!';
 
 // ─── Landing page ─────────────────────────────────────────────────────────────
-test('landing page carga con branding EmiteDO', async ({ page }) => {
+test('landing page carga con branding Zero', async ({ page }) => {
   await page.goto(BASE);
-  await expect(page).toHaveTitle(/EmiteDO/);
-  await expect(page.locator('text=EmiteDO').first()).toBeVisible();
+  await expect(page).toHaveTitle(/Zero/);
+  await expect(page.locator('text=Zero').first()).toBeVisible();
   await expect(page.locator('text=Ley 32-23').first()).toBeVisible();
   await expect(page.locator('text=DGII').first()).toBeVisible();
   await expect(page.locator('text=e-CF').first()).toBeVisible();
