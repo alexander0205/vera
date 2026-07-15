@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:3000';
+const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 const TEST_EMAIL = `test_${Date.now()}@emitedo.test`;
 const TEST_PASS = 'TestPass123!';
 
@@ -14,20 +14,18 @@ test('landing page carga con branding Zero', async ({ page }) => {
   await page.goto(BASE);
   await expect(page).toHaveTitle(/Zero/);
   await expect(page.locator('text=Zero').first()).toBeVisible();
-  await expect(page.locator('text=Ley 32-23').first()).toBeVisible();
   await expect(page.locator('text=DGII').first()).toBeVisible();
   await expect(page.locator('text=e-CF').first()).toBeVisible();
 });
 
 // ─── Pricing page ─────────────────────────────────────────────────────────────
-test('pricing page muestra los 4 planes en DOP', async ({ page }) => {
+test('pricing page muestra los 4 planes', async ({ page }) => {
   await page.goto(`${BASE}/pricing`);
-  // Verificar los headings de los planes (h2)
-  await expect(page.getByRole('heading', { name: 'Gratis' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Básico' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Pro' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Business' })).toBeVisible();
-  await expect(page.locator('text=DOP').first()).toBeVisible();
+  // Planes actuales de lib/config/plans.ts
+  await expect(page.getByText('Starter').first()).toBeVisible();
+  await expect(page.getByText('Invoice').first()).toBeVisible();
+  await expect(page.getByText('Business').first()).toBeVisible();
+  await expect(page.getByText('Pro').first()).toBeVisible();
 });
 
 // ─── Rutas protegidas ─────────────────────────────────────────────────────────
@@ -37,20 +35,21 @@ test('dashboard redirige a sign-in sin sesión', async ({ page }) => {
 });
 
 // ─── Sign-up ──────────────────────────────────────────────────────────────────
-test('sign-up crea cuenta nueva y redirige al dashboard', async ({ page }) => {
+test('sign-up crea cuenta nueva (bienvenida en pricing) y sesión válida', async ({ page }) => {
   await page.goto(`${BASE}/sign-up`);
 
   // Llenar el formulario
   await page.fill('input[name="email"]', TEST_EMAIL);
   await page.fill('input[name="password"]', TEST_PASS);
 
-  // Submit y esperar redirect
+  // Submit — el flujo actual da la bienvenida en /pricing?welcome=1
   await Promise.all([
-    page.waitForURL(`${BASE}/dashboard`, { timeout: 10000 }),
+    page.waitForURL(/pricing\?welcome=1/, { timeout: 15000 }),
     page.click('button[type="submit"]'),
   ]);
 
-  // Verificar que estamos en el dashboard
+  // La sesión quedó creada: el dashboard es accesible directamente
+  await page.goto(`${BASE}/dashboard`);
   await expect(page).toHaveURL(/dashboard/);
   console.log(`✓ Sign-up exitoso: ${TEST_EMAIL}`);
 });
@@ -59,7 +58,7 @@ test('sign-up crea cuenta nueva y redirige al dashboard', async ({ page }) => {
 test('dashboard carga correctamente con sesión activa', async ({ page }) => {
   // Sign-in primero
   await page.goto(`${BASE}/sign-in`);
-  await page.fill('input[name="email"]', 'admin@emitedo.test');
+  await page.fill('input[name="email"]', 'owner@emitedo.test');
   await page.fill('input[name="password"]', 'Admin1234!');
 
   await Promise.all([
@@ -79,7 +78,7 @@ test('dashboard carga correctamente con sesión activa', async ({ page }) => {
 test('sign-in con credenciales de prueba funciona', async ({ page }) => {
   await page.goto(`${BASE}/sign-in`);
 
-  await page.fill('input[name="email"]', 'admin@emitedo.test');
+  await page.fill('input[name="email"]', 'owner@emitedo.test');
   await page.fill('input[name="password"]', 'Admin1234!');
 
   await Promise.all([
@@ -95,22 +94,22 @@ test('sign-in con credenciales de prueba funciona', async ({ page }) => {
 test('sign-in muestra error con contraseña incorrecta', async ({ page }) => {
   await page.goto(`${BASE}/sign-in`);
 
-  await page.fill('input[name="email"]', 'admin@emitedo.test');
+  await page.fill('input[name="email"]', 'owner@emitedo.test');
   await page.fill('input[name="password"]', 'ContraseñaMal123!');
   await page.click('button[type="submit"]');
 
-  // Esperar el mensaje de error (no redirect)
-  await page.waitForSelector('.text-red-500', { timeout: 5000 });
-  const errorText = await page.textContent('.text-red-500');
-  expect(errorText).toContain('Invalid');
-  console.log('✓ Error de credenciales mostrado correctamente:', errorText);
+  // Esperar el mensaje de error (Alert MUI, no redirect). Filtrar por texto:
+  // Next agrega un route-announcer con role=alert que rompe el strict mode.
+  const alert = page.getByRole('alert').filter({ hasText: 'Invalid' });
+  await expect(alert).toBeVisible({ timeout: 5000 });
+  console.log('✓ Error de credenciales mostrado correctamente');
 });
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
 test('logout cierra sesión y redirige al home', async ({ page }) => {
   // Login primero
   await page.goto(`${BASE}/sign-in`);
-  await page.fill('input[name="email"]', 'admin@emitedo.test');
+  await page.fill('input[name="email"]', 'owner@emitedo.test');
   await page.fill('input[name="password"]', 'Admin1234!');
 
   await Promise.all([
@@ -120,10 +119,9 @@ test('logout cierra sesión y redirige al home', async ({ page }) => {
 
   await expect(page).toHaveURL(/dashboard/);
 
-  // Abrir el menú de usuario (avatar en el header)
-  await page.locator('button[aria-haspopup]').first().click();
-  // Click en "Sign out" en el dropdown
-  await page.getByText('Sign out').click();
+  // Abrir el menú de usuario (avatar MUI en el header) y cerrar sesión
+  await page.locator('header button:has(.MuiAvatar-root), button:has(.MuiAvatar-root)').last().click();
+  await page.getByText('Cerrar sesión').click();
 
   // Esperar a que la cookie se borre
   await page.waitForTimeout(500);

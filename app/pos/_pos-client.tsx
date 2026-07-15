@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useDgiiReadiness } from '@/lib/hooks/useDgiiReadiness';
 import { ProductoDialog } from '@/components/shared/producto-dialog';
 import { ClienteDialog } from '@/components/shared/cliente-dialog';
+import { montosRapidos } from '@/lib/pos/montos';
 import Link from 'next/link';
 import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound, Zap } from 'lucide-react';
 import { toast } from 'sonner';
@@ -932,8 +933,6 @@ function Venta({
           </Box>
           {cargando ? (
             <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Cargando catálogo…</Typography>
-          ) : filtrados.length === 0 ? (
-            <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Sin productos para esta terminal.</Typography>
           ) : (
             <Box sx={{ display: 'grid', flex: 1, gridAutoRows: 'max-content', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)', xl: 'repeat(5, 1fr)' }, alignContent: 'start', gap: 1.5, overflow: 'auto', pb: { xs: 12, md: 1.5 } }}>
               {/* Venta simple: monto libre sin producto (patrón Alegra) */}
@@ -951,6 +950,11 @@ function Venta({
                 </Box>
                 <Box component="span" sx={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>Venta simple</Box>
               </ButtonBase>
+              {filtrados.length === 0 && (
+                <Box sx={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center' }}>
+                  <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Sin productos para esta terminal — crea el primero o usa Venta simple.</Typography>
+                </Box>
+              )}
               {filtrados.map((p) => {
                 const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
                 const qty = qtyEnCarrito(p.id);
@@ -1565,20 +1569,6 @@ function EstudiantePicker({ estudiante, onSelect }: {
 }
 
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
-
-/**
- * Montos rápidos de efectivo (patrón Alegra): el total exacto + los
- * redondeos de billete inmediatos (100/500/1000) mayores al total.
- */
-function montosRapidos(totalCentavos: number): number[] {
-  const out = [totalCentavos];
-  for (const paso of [100_00, 500_00, 1000_00]) {
-    const redondeo = Math.ceil(totalCentavos / paso) * paso;
-    if (redondeo > totalCentavos && !out.includes(redondeo)) out.push(redondeo);
-    if (out.length >= 3) break;
-  }
-  return out.slice(0, 3);
-}
 
 function CobroModal({
   total, cobrando, estudiante, onClose, onConfirm,

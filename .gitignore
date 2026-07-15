@@ -58,3 +58,7 @@ scripts/check-user-role.ts
 scripts/check-cert-status.ts
 
 .claire/
+
+# Playwright artifacts
+test-results/
+playwright-report/

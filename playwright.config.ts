@@ -2,13 +2,14 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: ['**/unit/**'],   // tests/unit/** son vitest, no Playwright
   timeout: 30000,
   retries: 0,
   workers: 1, // Secuencial para no interferir entre tests
   reporter: 'list',
 
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000',
     headless: true,
     screenshot: 'only-on-failure',
     video: 'off',

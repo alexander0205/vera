@@ -16,7 +16,7 @@
 
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:3000';
+const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 const EMAIL = `pos_${Date.now()}@emitedo.test`;
 const PASS  = 'TestPass123!';
 
@@ -31,12 +31,15 @@ test('/pos redirige a sign-in sin sesión', async ({ page }) => {
 
 // ─── Flujo completo: signup → sin módulo → activar → vender ─────────────────
 
-test('signup: empresa nueva entra al dashboard', async ({ page }) => {
+test('signup: empresa nueva queda con sesión activa', async ({ page }) => {
   await page.goto(`${BASE}/sign-up`);
   await page.fill('input[name="email"]', EMAIL);
   await page.fill('input[name="password"]', PASS);
   await page.click('button[type="submit"]');
-  await page.waitForURL(/dashboard/, { timeout: 20_000 });
+  // El flujo actual da la bienvenida en /pricing?welcome=1
+  await page.waitForURL(/pricing\?welcome=1/, { timeout: 20_000 });
+  await page.goto(`${BASE}/dashboard`);
+  await expect(page).toHaveURL(/dashboard/);
 });
 
 test('empresa nueva sin módulo POS: /pos → /sin-acceso', async ({ page }) => {
@@ -63,7 +66,7 @@ test('activar módulo POS → auto-provisioning y apertura de turno', async ({ p
 
   // Activa el módulo POS vía el endpoint self-service del perfil (mismo que
   // usa el switch de Configuración; sincroniza modulosHabilitados).
-  const res = await page.request.patch(`${BASE}/api/equipo/perfil`, {
+  const res = await page.request.post(`${BASE}/api/equipo/perfil`, {
     data: { posHabilitado: true },
   });
   expect(res.ok()).toBeTruthy();
