@@ -833,7 +833,7 @@ function SidebarContent({
                           onClick={onClose}
                           sx={{
                             flex:        1,
-                            display:     'block',
+                            minWidth:    0,
                             py:          0.75,
                             px:          1.25,
                             borderRadius: '6px',
