@@ -286,14 +286,15 @@ async function computeDashboardStats(teamId: number) {
             gte(ecfDocuments.createdAt, startOfMonth)
           )
         ),
-      // Ingresos este mes (centavos)
+      // Ingresos este mes (centavos) — excluye ANULADO (no cuenta como ingreso)
       db
         .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
         .from(ecfDocuments)
         .where(
           and(
             eq(ecfDocuments.teamId, teamId),
-            gte(ecfDocuments.createdAt, startOfMonth)
+            gte(ecfDocuments.createdAt, startOfMonth),
+            sql`${ecfDocuments.estado} <> 'ANULADO'`
           )
         ),
       // Secuencias disponibles
