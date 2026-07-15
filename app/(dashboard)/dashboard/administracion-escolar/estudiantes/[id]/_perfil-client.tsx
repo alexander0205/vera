@@ -125,6 +125,8 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [notFound, setNotFound]     = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
   const [matriculaEditar, setMatriculaEditar] = useState<Matricula | null>(null);
+  // Reinscripción: crea una matrícula nueva (período/curso) para el estudiante.
+  const [reinscribirAbierto, setReinscribirAbierto] = useState(false);
   // Período seleccionado en el filtro padre global (null = el primero/activo).
   const [periodoKey, setPeriodoKey] = useState<string | null>(null);
 
@@ -374,9 +376,19 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
       </div>
 
-      {/* Filtro de período — padre global: filtra el detalle de "Por período". */}
-      {grupos.length > 0 && (
-        <PeriodoFiltroBar grupos={grupos} value={grupoActivo?.key ?? null} onChange={setPeriodoKey} />
+      {/* Filtro de período — padre global: filtra el detalle de "Por período".
+          Al lado, la reinscripción crea una matrícula nueva (otro período/curso). */}
+      {(grupos.length > 0 || puedeGestionar) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {grupos.length > 0
+            ? <PeriodoFiltroBar grupos={grupos} value={grupoActivo?.key ?? null} onChange={setPeriodoKey} />
+            : <span className="text-sm text-gray-400">Sin períodos matriculados</span>}
+          {puedeGestionar && (
+            <Button size="sm" variant="outline" onClick={() => setReinscribirAbierto(true)}>
+              <Plus className="h-4 w-4 mr-1.5" />Reinscribir
+            </Button>
+          )}
+        </div>
       )}
 
       {/* Secciones: Por período · Tutores · Historial */}
@@ -404,6 +416,10 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 onAplicarMora={aplicarMora}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
                 onCargoCreado={cargar}
+                onEditarMatricula={(mid) => {
+                  const m = matriculas.find((x) => x.id === mid);
+                  if (m) setMatriculaEditar(m);
+                }}
               />
             ) : (
               <EmptyBox text="Sin períodos, cargos o pagos relacionados" />
@@ -462,6 +478,15 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
         open={!!matriculaEditar}
         onClose={() => setMatriculaEditar(null)}
         onSaved={cargar}
+      />
+
+      {/* Reinscripción: matrícula nueva (otro período/curso) para el estudiante. */}
+      <EditarMatriculaDialog
+        matricula={null}
+        crearParaEstudianteId={estudiante.id}
+        open={reinscribirAbierto}
+        onClose={() => setReinscribirAbierto(false)}
+        onSaved={() => { setReinscribirAbierto(false); cargar(); }}
       />
 
       {cargoVincularFactura && (
@@ -534,7 +559,7 @@ function PeriodoFiltroBar({ grupos, value, onChange }: {
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado }: {
+function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   pagos: Pago[];
   puedeFacturar: boolean;
@@ -546,6 +571,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   onAplicarMora: (ecfDocumentId: number) => void;
   aplicandoMoraFacturaId: number | null;
   onCargoCreado: () => void;
+  onEditarMatricula: (matriculaId: number) => void;
 }) {
   const router = useRouter();
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
@@ -593,6 +619,12 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
             </Badge>
           )}
           <span className="text-sm text-gray-500">· {grupo.curso}</span>
+          {puedeGestionar && grupo.matriculaId && (
+            <button type="button" onClick={() => onEditarMatricula(grupo.matriculaId!)}
+              className="text-gray-400 hover:text-teal-600 transition-colors" title="Editar matrícula (curso/período)">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {puedeGestionar && (

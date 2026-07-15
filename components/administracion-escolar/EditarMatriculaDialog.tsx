@@ -38,9 +38,13 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  /** Si se pasa (y `matricula` es null) el diálogo crea una matrícula nueva
+   *  (reinscripción) para ese estudiante en vez de editar una existente. */
+  crearParaEstudianteId?: number | null;
 }
 
-export function EditarMatriculaDialog({ matricula, open, onClose, onSaved }: Props) {
+export function EditarMatriculaDialog({ matricula, open, onClose, onSaved, crearParaEstudianteId = null }: Props) {
+  const esCrear = !matricula && crearParaEstudianteId != null;
   const { permissions } = usePermissions();
   const puedeConfigurar = permissions.includes('administracion-escolar:configurar');
 
@@ -64,7 +68,8 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved }: Pro
   }, []);
 
   useEffect(() => {
-    if (open && matricula) {
+    if (!open) return;
+    if (matricula) {
       setForm({
         periodoId: String(matricula.periodoId),
         cursoId: String(matricula.cursoId),
@@ -73,12 +78,18 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved }: Pro
         codigoMatricula: matricula.codigoMatricula ?? '',
         notas: matricula.notas ?? '',
       });
-      setError(null);
-      setNuevoPeriodo(null);
-      setNuevoCurso(null);
-      cargarCat();
+    } else if (crearParaEstudianteId != null) {
+      setForm({
+        periodoId: '', cursoId: '',
+        fechaInscripcion: new Date().toISOString().slice(0, 10),
+        estado: 'activa', codigoMatricula: '', notas: '',
+      });
     }
-  }, [open, matricula, cargarCat]);
+    setError(null);
+    setNuevoPeriodo(null);
+    setNuevoCurso(null);
+    cargarCat();
+  }, [open, matricula, crearParaEstudianteId, cargarCat]);
 
   async function crearPeriodoInline() {
     if (!nuevoPeriodo?.trim()) return;
@@ -117,18 +128,28 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved }: Pro
   }
 
   async function guardar() {
-    if (!matricula) return;
+    if (!matricula && !esCrear) return;
     if (!form.periodoId || !form.cursoId) { setError('Período y curso son obligatorios'); return; }
     setSaving(true); setError(null);
     try {
-      const res = await fetch(`/api/administracion-escolar/matriculas/${matricula.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          periodoId: Number(form.periodoId), cursoId: Number(form.cursoId),
-          fechaInscripcion: form.fechaInscripcion || null, estado: form.estado,
-          codigoMatricula: form.codigoMatricula || null, notas: form.notas || null,
-        }),
-      });
+      const res = matricula
+        ? await fetch(`/api/administracion-escolar/matriculas/${matricula.id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              periodoId: Number(form.periodoId), cursoId: Number(form.cursoId),
+              fechaInscripcion: form.fechaInscripcion || null, estado: form.estado,
+              codigoMatricula: form.codigoMatricula || null, notas: form.notas || null,
+            }),
+          })
+        : await fetch('/api/administracion-escolar/matriculas', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              estudianteId: crearParaEstudianteId,
+              periodoId: Number(form.periodoId), cursoId: Number(form.cursoId),
+              fechaInscripcion: form.fechaInscripcion || null, estado: form.estado,
+              codigoMatricula: form.codigoMatricula || null, notas: form.notas || null,
+            }),
+          });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando');
       onSaved();
@@ -141,7 +162,7 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved }: Pro
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Editar matrícula</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{esCrear ? 'Reinscribir estudiante' : 'Editar matrícula'}</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>
@@ -213,7 +234,7 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved }: Pro
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button className="bg-teal-600 hover:bg-teal-700" onClick={guardar} disabled={saving}>
-            {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Guardar cambios'}
+            {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : (esCrear ? 'Crear matrícula' : 'Guardar cambios')}
           </Button>
         </DialogFooter>
       </DialogContent>
