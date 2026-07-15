@@ -28,7 +28,7 @@ type Item = { href: string; label: string; icon: typeof Store; shared?: boolean 
 
 const ITEMS: Item[] = [
   { href: '/pos',                      label: 'Vender',            icon: Store },
-  { href: '/dashboard/pos-terminales', label: 'Terminales',        icon: MonitorSmartphone },
+  { href: '/pos/terminales',           label: 'Terminales',        icon: MonitorSmartphone },
   { href: '/dashboard/productos',      label: 'Productos',         icon: Package, shared: true },
   { href: '/dashboard/clientes',       label: 'Contactos',         icon: Users,   shared: true },
 ];
