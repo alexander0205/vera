@@ -880,7 +880,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               {/* Solo mostrar el nombre fiscal del comprobante si fue emitido a DGII.
                   Borrador/sin-ncf/histórica → genérico, NO el tipo fiscal. */}
               <Box component="span" sx={{ fontWeight: 500, color: '#4b5563' }}>
-                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Borrador' : 'Documento sin comprobante fiscal')}
+                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Sin comprobante fiscal' : 'Documento sin comprobante fiscal')}
               </Box>
               <Box component="span" sx={{ mx: 0.75 }}>·</Box>
               Fecha: {fmtDate(factura.fechaEmision)}

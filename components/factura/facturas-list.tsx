@@ -39,11 +39,22 @@ const TBODY_CELL = {
   borderColor: '#e5e7eb',
 } as const;
 
+// Etiqueta visible por estado (el valor interno BORRADOR se muestra como "Sin
+// comprobante" — decisión de producto: no exponer "borrador" en la UI).
+const ESTADO_LABEL: Record<string, string> = {
+  ACEPTADO:             'Aceptado',
+  ACEPTADO_CONDICIONAL: 'Aceptado condicional',
+  EN_PROCESO:           'En proceso',
+  RECHAZADO:            'Rechazado',
+  BORRADOR:             'Sin comprobante',
+  ANULADO:              'Anulado',
+};
+
 function EstadoBadge({ estado }: { estado: string }) {
   const style = ESTADO_STYLES[estado] ?? { bgcolor: '#f3f4f6', color: '#374151' };
   return (
     <Chip
-      label={estado}
+      label={ESTADO_LABEL[estado] ?? estado}
       size="small"
       sx={{
         height: 20,

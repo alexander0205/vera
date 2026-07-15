@@ -1407,18 +1407,33 @@ function ClientePicker({ cliente, onSelect }: {
   onSelect: (c: ClienteView | null) => void;
 }) {
   const [q, setQ] = useState('');
-  const [todos, setTodos] = useState<ClienteView[]>([]);
+  const [iniciales, setIniciales] = useState<ClienteView[]>([]);
+  const [resultados, setResultados] = useState<ClienteView[]>([]);
   const [abierto, setAbierto] = useState(false);
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const cargarClientes = useCallback(() => {
-    fetch('/api/clientes').then((r) => r.json()).then((d) => setTodos(d.clientes ?? []));
+  // Carga inicial acotada (primeros 100) para poder abrir el dropdown y ojear
+  // sin escribir. Antes traía la tabla COMPLETA de clientes en cada apertura.
+  const cargarIniciales = useCallback(() => {
+    fetch('/api/clientes?limit=100').then((r) => r.json()).then((d) => setIniciales(d.clientes ?? []));
   }, []);
 
-  // Carga la lista completa una sola vez — el dropdown se abre con todos los
-  // clientes disponibles (no hace falta escribir nada), y se filtra al tipear.
-  useEffect(() => { cargarClientes(); }, [cargarClientes]);
+  useEffect(() => { cargarIniciales(); }, [cargarIniciales]);
+
+  // Búsqueda server-side al tipear (índice trigram): encuentra cualquier cliente,
+  // no solo los primeros 100. Debounce 300ms.
+  useEffect(() => {
+    const qq = q.trim();
+    if (qq.length < 2) { setResultados([]); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/clientes?q=${encodeURIComponent(qq)}&limit=50`)
+        .then((r) => r.json())
+        .then((d) => setResultados(d.clientes ?? []))
+        .catch(() => setResultados([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1428,12 +1443,8 @@ function ClientePicker({ cliente, onSelect }: {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const filtrados = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return todos;
-    return todos.filter((c) =>
-      c.razonSocial.toLowerCase().includes(qq) || (c.rnc ?? '').toLowerCase().includes(qq));
-  }, [todos, q]);
+  // Sin texto → lista inicial; con texto → resultados del servidor.
+  const filtrados = q.trim().length >= 2 ? resultados : iniciales;
 
   if (cliente) {
     return (
@@ -1489,7 +1500,7 @@ function ClientePicker({ cliente, onSelect }: {
           open
           nombreInicial={q}
           onClose={() => setNuevoAbierto(false)}
-          onCreated={(c) => { setNuevoAbierto(false); setQ(''); cargarClientes(); onSelect(c); }}
+          onCreated={(c) => { setNuevoAbierto(false); setQ(''); cargarIniciales(); onSelect(c); }}
         />
       )}
     </Box>

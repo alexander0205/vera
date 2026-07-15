@@ -43,7 +43,8 @@ interface Producto {
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
   categoriaId:          number | null;
-  imagen:               string | null;
+  imagen?:              string | null;  // no viene en el listado; se carga al editar
+  tieneImagen?:         boolean;
 }
 
 interface Categoria { id: number; nombre: string; }
@@ -138,7 +139,7 @@ export default function ProductosPage() {
     setShowForm(true);
   }
 
-  function abrirEdicion(p: Producto) {
+  async function abrirEdicion(p: Producto) {
     setEditTarget(p);
     setForm({
       nombre:               p.nombre,
@@ -159,6 +160,18 @@ export default function ProductosPage() {
     });
     setOpError(null);
     setShowForm(true);
+
+    // La imagen (base64) ya no viene en el listado; cargarla del detalle si existe.
+    if (p.tieneImagen && !p.imagen) {
+      try {
+        const res = await fetch(`/api/productos/${p.id}`);
+        if (res.ok) {
+          const detalle = await res.json();
+          const img = detalle?.producto?.imagen ?? detalle?.imagen;
+          if (img) setForm((f) => ({ ...f, imagen: img }));
+        }
+      } catch { /* imagen opcional; ignorar fallo de carga */ }
+    }
   }
 
   async function handleGuardar() {

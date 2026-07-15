@@ -23,7 +23,7 @@ import Typography from '@mui/material/Typography';
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const ESTADOS = [
-  { value: 'BORRADOR',             label: 'Borrador' },
+  { value: 'BORRADOR',             label: 'Sin comprobante' },
   { value: 'EN_PROCESO',           label: 'En proceso' },
   { value: 'ACEPTADO',             label: 'Aceptado' },
   { value: 'ACEPTADO_CONDICIONAL', label: 'Aceptado condicional' },
@@ -120,7 +120,7 @@ export default function FacturasPage() {
       .then(d => setFacturaMaestros(d.maestros ?? []))
       .catch(() => {});
   }, []);
-  const limit = 50;
+  const limit = 20;
 
   // Reset page on filter change
   useEffect(() => { setPage(1); }, [filterValues]);

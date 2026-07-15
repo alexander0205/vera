@@ -7,8 +7,7 @@ export default async function NotasCreditoPage() {
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 
-  const allDocs = await getEcfDocuments(teamId, 500);
-  const notas = allDocs.filter(d => d.tipoEcf === '34');
+  const notas = await getEcfDocuments(teamId, 500, ['34']);
   const padreEmitido = await resolverPadresEmitidos(teamId, notas);
 
   const docs: NotaCredito[] = notas.map(d => ({

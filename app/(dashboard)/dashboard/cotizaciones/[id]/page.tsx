@@ -62,7 +62,7 @@ const ESTADO_CONFIG: Record<string, {
   bg:    string;
   icon:  React.ElementType;
 }> = {
-  borrador:  { label: 'Borrador',  color: '#4b5563', bg: '#f3f4f6', icon: Clock },
+  borrador:  { label: 'Pendiente', color: '#4b5563', bg: '#f3f4f6', icon: Clock },
   enviada:   { label: 'Enviada',   color: '#1d4ed8', bg: '#dbeafe', icon: Mail },
   aceptada:  { label: 'Aceptada',  color: '#15803d', bg: '#dcfce7', icon: CheckCircle },
   rechazada: { label: 'Rechazada', color: '#b91c1c', bg: '#fee2e2', icon: XCircle },

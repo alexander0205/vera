@@ -1085,7 +1085,7 @@ export default function NuevaFacturaForm({
                   ¡{tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} guardada!
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                  La nota quedó como borrador{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
+                  La nota quedó guardada{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
                 </Typography>
               </>
             ) : esSinEcf ? (
@@ -1187,7 +1187,7 @@ export default function NuevaFacturaForm({
                 <Typography variant="body2" sx={{ color: '#134e4a', mb: 1.5 }}>
                   ¿Deseas enviar esta nota a la DGII ahora? Solo es posible si la
                   factura original ya tiene e-CF emitido. También puedes dejarla
-                  como borrador y emitirla después desde su detalle.
+                  guardada y emitirla después desde su detalle.
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                   <Button

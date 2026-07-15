@@ -116,7 +116,7 @@ export function RncSearch({
     const trimmed = v.trim();
     // Si había un valor seleccionado y el usuario vacía el campo → limpiar selección.
     if (trimmed.length === 0 && value && onClear) onClear();
-    if (trimmed.length < 2) { setResults([]); setOpen(false); return; }
+    if (trimmed.length < 3) { setResults([]); setOpen(false); return; }
 
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {

@@ -577,7 +577,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
                             sx={{ height: 8, width: 8, borderRadius: '50%', bgcolor: '#fbbf24', display: 'inline-block' }}
                           />
                           <Typography sx={{ fontSize: '14px', fontWeight: 500, color: 'text.primary' }}>
-                            Borrador
+                            Sin emitir
                           </Typography>
                         </Box>
                       </Box>

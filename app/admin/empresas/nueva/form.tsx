@@ -78,6 +78,8 @@ export function NuevaEmpresaForm({ provincias }: Props) {
     setQuery(q);
     if (timer.current) clearTimeout(timer.current);
     if (!q.trim()) { setResults([]); setOpen(false); return; }
+    // El endpoint exige mínimo 3 caracteres (índice trigram).
+    if (q.trim().length < 3) { setResults([]); setOpen(false); return; }
 
     timer.current = setTimeout(async () => {
       setLoading(true);

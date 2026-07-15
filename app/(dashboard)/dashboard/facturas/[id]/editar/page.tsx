@@ -201,7 +201,7 @@ export default async function EditarBorradorPage({
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', fontSize: '0.875rem', color: '#92400e' }}>
             <AlertTriangle style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0, color: '#f59e0b' }} />
             <p style={{ margin: 0 }}>
-              Este borrador fue guardado antes de que el sistema almacenara los ítems.
+              Esta factura fue guardada antes de que el sistema almacenara los ítems.
               <strong style={{ marginLeft: 4 }}>Agrega los productos/servicios nuevamente</strong> y haz Vista previa para continuar.
             </p>
           </div>

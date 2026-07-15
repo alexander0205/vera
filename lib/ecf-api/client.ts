@@ -389,12 +389,90 @@ export interface EmisionResponseDto {
   createdAt:       string;
 }
 
+/** Fila liviana del listado paginado de emisiones (sin XML/payloads pesados). */
+export interface EmisionResumenDto {
+  id:               string;
+  eNcf:             string;
+  tipoComprobante:  string;
+  formato:          FormatoEmision;
+  ambiente?:        AmbienteEcf;
+  estado:           EstadoEmision;
+  trackId:          string | null;
+  montoTotal:       number;
+  fechaEmision:     string;
+  /** null → nunca se envió a DGII (emisión colgada). */
+  enviadoEn:        string | null;
+  createdAt:        string;
+  urlVerificacion?: string | null;
+  urlPdf?:          string | null;
+  urlXml?:          string | null;
+}
+
+export interface EmisionesPaginationDto {
+  limit:       number;
+  count:       number;
+  orderBy:     'fecha' | 'secuencia';
+  order:       'asc' | 'desc';
+  hasMore:     boolean;
+  /** Solo modo keyset; null si no hay más. */
+  nextCursor:  string | null;
+  /** Solo modo offset. */
+  page?:       number;
+  total?:      number;
+  totalPages?: number;
+}
+
+export interface EmisionesPageDto {
+  data:       EmisionResumenDto[];
+  pagination: EmisionesPaginationDto;
+}
+
+export interface ListEmisionesOpts {
+  /** 1–200, default 50. */
+  limit?:   number;
+  orderBy?: 'fecha' | 'secuencia';
+  order?:   'asc' | 'desc';
+  /** Token keyset (de pagination.nextCursor). Prioridad sobre page. */
+  cursor?:  string;
+  /** Página offset 1-based. Devuelve total/totalPages. */
+  page?:    number;
+  estado?:  EstadoEmision;
+  formato?: FormatoEmision;
+}
+
 export const emision = {
-  list: (codigoPublico: string, limit?: number) =>
-    request<EmisionResponseDto[]>(
+  list: async (codigoPublico: string, limit?: number) => {
+    // ecf-api migró el listado a un envelope paginado { data, pagination };
+    // compat con ambas versiones (array viejo / objeto nuevo) para tolerar
+    // cualquier orden de deploy. Ver docs/ecf-api-emisiones-paginado.md
+    const res = await request<EmisionResponseDto[] | { data: EmisionResponseDto[] }>(
       'GET',
       `/contribuyentes/${codigoPublico}/emisiones${limit ? `?limit=${limit}` : ''}`,
-    ),
+    );
+    return Array.isArray(res) ? res : res.data;
+  },
+
+  /**
+   * Listado paginado y liviano de emisiones (envelope { data, pagination }).
+   * Server-side: limit, orden, filtros (estado/formato) y paginación
+   * cursor (keyset) u offset (page). Preferir cursor salvo que se necesiten
+   * números de página. Ver docs/ecf-api-emisiones-paginado.md
+   */
+  listPaged: (codigoPublico: string, opts: ListEmisionesOpts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.limit != null)   qs.set('limit', String(opts.limit));
+    if (opts.orderBy)         qs.set('orderBy', opts.orderBy);
+    if (opts.order)           qs.set('order', opts.order);
+    if (opts.cursor)          qs.set('cursor', opts.cursor);
+    else if (opts.page != null) qs.set('page', String(opts.page));
+    if (opts.estado)          qs.set('estado', opts.estado);
+    if (opts.formato)         qs.set('formato', opts.formato);
+    const query = qs.toString();
+    return request<EmisionesPageDto>(
+      'GET',
+      `/contribuyentes/${codigoPublico}/emisiones${query ? `?${query}` : ''}`,
+    );
+  },
 
   /** Endpoint unificado nuevo: POST /contribuyentes/:cp/emisiones/emitir */
   emitirUnified: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>

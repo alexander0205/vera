@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const q = new URL(req.url).searchParams.get('q')?.trim();
+  const sp = new URL(req.url).searchParams;
+  const q = sp.get('q')?.trim();
+  // Paginación opcional (compatible: sin params trae hasta 1000).
+  const limit  = Math.min(Number(sp.get('limit'))  || 1000, 1000);
+  const offset = Math.max(Number(sp.get('offset')) || 0, 0);
 
   const rows = await db.select().from(clients)
     .where(
@@ -32,7 +36,9 @@ export async function GET(req: NextRequest) {
           )
         : eq(clients.teamId, teamId)
     )
-    .orderBy(clients.razonSocial);
+    .orderBy(clients.razonSocial)
+    .limit(limit)
+    .offset(offset);
 
   return NextResponse.json({ clientes: rows });
 }

@@ -48,7 +48,12 @@ export default function RootLayout({
           <MuiProviders>
             <SWRConfig
               value={{
+                // Perf (de main): evita re-fetch de todos los hooks en cada
+                // alt-tab (default SWR: true) y dedup 30s.
+                revalidateOnFocus: false,
+                dedupingInterval: 30_000,
                 fallback: {
+                  // No await aquí — solo suspende quien lee estos datos.
                   '/api/user': getUser(),
                   '/api/team': getTeamForUser()
                 }

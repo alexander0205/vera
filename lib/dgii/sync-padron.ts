@@ -20,6 +20,7 @@
 
 import AdmZip from 'adm-zip';
 import iconv from 'iconv-lite';
+import { revalidateTag } from 'next/cache';
 import { client, db } from '@/lib/db/drizzle';
 import { systemSettings } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -148,6 +149,17 @@ export async function syncRncPadron(
       target: systemSettings.key,
       set: { value: syncedAt, updatedAt: new Date() },
     });
+
+  // Invalidar el cache server-side de /api/rnc/search: el padrón cambió, las
+  // búsquedas cacheadas deben recalcularse. (Si se llamara fuera de un contexto
+  // de request, revalidateTag lanzaría; no debe tumbar el sync.)
+  try {
+    // Firma del canary: revalidateTag(tag, profile) — mismo patrón que
+    // lib/dgii/catalogos.ts.
+    (revalidateTag as (tag: string, scope?: string) => void)('rnc-padron', 'max');
+  } catch (e) {
+    console.warn('[sync-padron] revalidateTag falló (no crítico):', e);
+  }
 
   const durationSec = ((Date.now() - started) / 1000).toFixed(1);
   return { inserted: rows.length, total, durationSec, syncedAt };

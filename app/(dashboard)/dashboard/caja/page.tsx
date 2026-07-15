@@ -366,9 +366,11 @@ export default function CajaPage() {
 
   useEffect(() => { fetchTurno(); }, [fetchTurno]);
 
+  // Polling mientras hay cierre pendiente — revisa cada 30 s (cada poll dispara
+  // ~7 queries; 30s reduce a la mitad la carga sin afectar la espera del cajero).
   useEffect(() => {
     if (turno?.estado !== 'CIERRE_SOLICITADO') return;
-    const iv = setInterval(fetchTurno, 15_000);
+    const iv = setInterval(fetchTurno, 30_000);
     return () => clearInterval(iv);
   }, [turno?.estado, fetchTurno]);
 

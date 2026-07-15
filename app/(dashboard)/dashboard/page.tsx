@@ -22,7 +22,7 @@ const ESTADO_CHIP: Record<string, { label: string; color: 'success' | 'warning' 
   ACEPTADO_CONDICIONAL: { label: 'Condicional', color: 'warning'  },
   EN_PROCESO:           { label: 'En proceso',  color: 'info',    variant: 'outlined' },
   RECHAZADO:            { label: 'Rechazado',   color: 'error'    },
-  BORRADOR:             { label: 'Borrador',    color: 'default', variant: 'outlined' },
+  BORRADOR:             { label: 'Sin comprobante', color: 'default', variant: 'outlined' },
   ANULADO:              { label: 'Anulado',     color: 'default'  },
 };
 

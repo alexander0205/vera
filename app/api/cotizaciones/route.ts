@@ -8,7 +8,7 @@ import { db } from '@/lib/db/drizzle';
 import { cotizaciones } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, or, ilike } from 'drizzle-orm';
 
 // GET /api/cotizaciones?q=...
 export async function GET(req: NextRequest) {
@@ -17,21 +17,26 @@ export async function GET(req: NextRequest) {
 
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? '';
 
+  // Filtrar en SQL (antes se filtraba en JS sobre las 100 primeras filas, así que
+  // la búsqueda ignoraba todo lo que estuviera más allá de la fila 100).
+  const where = q
+    ? and(
+        eq(cotizaciones.teamId, teamId),
+        or(
+          ilike(cotizaciones.razonSocialComprador, `%${q}%`),
+          ilike(cotizaciones.numero, `%${q}%`),
+        ),
+      )
+    : eq(cotizaciones.teamId, teamId);
+
   const rows = await db
     .select()
     .from(cotizaciones)
-    .where(eq(cotizaciones.teamId, teamId))
+    .where(where)
     .orderBy(desc(cotizaciones.createdAt))
     .limit(100);
 
-  const filtered = q
-    ? rows.filter(r =>
-        r.razonSocialComprador?.toLowerCase().includes(q.toLowerCase()) ||
-        r.numero.toLowerCase().includes(q.toLowerCase())
-      )
-    : rows;
-
-  return NextResponse.json({ cotizaciones: filtered });
+  return NextResponse.json({ cotizaciones: rows });
 }
 
 // POST /api/cotizaciones

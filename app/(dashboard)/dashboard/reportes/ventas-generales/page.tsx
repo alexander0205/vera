@@ -31,7 +31,7 @@ const ESTADO_LABEL: Record<string, { label: string; bgcolor: string; color: stri
   EN_PROCESO:           { label: 'En Proceso',  bgcolor: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
   RECHAZADO:            { label: 'Rechazada',   bgcolor: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
   ANULADO:              { label: 'Anulada',     bgcolor: '#f9fafb', color: '#4b5563', border: '#d1d5db' },
-  BORRADOR:             { label: 'Borrador',    bgcolor: '#f9fafb', color: '#6b7280', border: '#e5e7eb' },
+  BORRADOR:             { label: 'Sin comprobante', bgcolor: '#f9fafb', color: '#6b7280', border: '#e5e7eb' },
 };
 
 function fmtDOP(centavos: number): string {
