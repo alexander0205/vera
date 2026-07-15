@@ -6,7 +6,7 @@
  * de agregación vive aquí para no repetirla entre rutas.
  */
 import 'server-only';
-import { and, eq, ne, desc, sql, inArray, isNotNull, like } from 'drizzle-orm';
+import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes,
@@ -45,31 +45,101 @@ export interface EstudianteEnriquecido {
   ultimoPagoCentavos: number | null;
 }
 
+export interface ListarEstudiantesOpts {
+  /** Búsqueda por nombre, apellido, código o tutor responsable. */
+  q?: string;
+  /** Filtro por estado del estudiante ('' o 'todos' = sin filtro). */
+  estado?: string;
+  /** Filtro por curso de la matrícula activa (id). */
+  cursoId?: number | null;
+  /** Tamaño de página (default 25). */
+  limit?: number;
+  /** Desplazamiento (default 0). */
+  offset?: number;
+}
+
+export interface ListarEstudiantesResult {
+  estudiantes: EstudianteEnriquecido[];
+  total: number;
+}
+
 /**
- * Listado de estudiantes del team con datos derivados. Un solo viaje por tabla
- * agregada (matrícula activa, tutor responsable, deuda, último pago) y merge en
- * memoria — evita N+1.
+ * Listado paginado de estudiantes del team con datos derivados. El filtrado,
+ * la búsqueda y el orden ocurren en SQL sobre la tabla base (con la matrícula
+ * activa y el tutor responsable en JOIN); solo se enriquece la PÁGINA devuelta
+ * (deuda + último pago por los ids de la página) — así no se traen todos los
+ * estudiantes ni se calcula deuda de golpe. Ver `docs/plan-optimizacion-db.md`.
  */
 export async function listarEstudiantesEnriquecidos(
   teamId: number,
-): Promise<EstudianteEnriquecido[]> {
-  const estudiantes = await db
-    .select()
-    .from(adminEscolarEstudiantes)
-    .where(eq(adminEscolarEstudiantes.teamId, teamId))
-    .orderBy(adminEscolarEstudiantes.apellidos, adminEscolarEstudiantes.nombres);
-
-  if (estudiantes.length === 0) return [];
-  const ids = estudiantes.map((e) => e.id);
+  opts: ListarEstudiantesOpts = {},
+): Promise<ListarEstudiantesResult> {
+  const limit = Math.min(Math.max(opts.limit ?? 25, 1), 200);
+  const offset = Math.max(opts.offset ?? 0, 0);
 
   // Refleja el cobro de las facturas vinculadas (todo el team) antes de sumar la
   // deuda, para que el listado no quede rezagado respecto al perfil.
   await sincronizarSaldosDesdeFacturas(teamId);
 
-  // Matrícula activa + período + curso por estudiante.
+  // Filtros sobre la tabla base (una fila por estudiante). Curso y tutor se
+  // filtran con EXISTS para NO multiplicar filas: un estudiante puede tener
+  // matrícula activa en varios períodos y varios tutores.
+  const filtros = [eq(adminEscolarEstudiantes.teamId, teamId)];
+  const estadoF = opts.estado?.trim();
+  if (estadoF && estadoF !== 'todos') filtros.push(eq(adminEscolarEstudiantes.estado, estadoF));
+  if (opts.cursoId) {
+    filtros.push(exists(db.select({ x: sql`1` }).from(adminEscolarMatriculas).where(and(
+      eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id),
+      eq(adminEscolarMatriculas.teamId, teamId),
+      eq(adminEscolarMatriculas.estado, 'activa'),
+      eq(adminEscolarMatriculas.cursoId, opts.cursoId),
+    ))));
+  }
+  const q = opts.q?.trim();
+  if (q) {
+    const p = `%${q}%`;
+    filtros.push(or(
+      ilike(adminEscolarEstudiantes.nombres, p),
+      ilike(adminEscolarEstudiantes.apellidos, p),
+      ilike(sql`${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos}`, p),
+      ilike(adminEscolarEstudiantes.codigo, p),
+      exists(db.select({ x: sql`1` }).from(adminEscolarEstudianteTutores)
+        .innerJoin(adminEscolarTutores, eq(adminEscolarTutores.id, adminEscolarEstudianteTutores.tutorId))
+        .where(and(
+          eq(adminEscolarEstudianteTutores.estudianteId, adminEscolarEstudiantes.id),
+          eq(adminEscolarEstudianteTutores.teamId, teamId),
+          eq(adminEscolarEstudianteTutores.responsablePago, true),
+          ilike(adminEscolarTutores.nombre, p),
+        ))),
+    )!);
+  }
+  const where = and(...filtros);
+
+  // Conteo total del set filtrado (para la paginación).
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(adminEscolarEstudiantes)
+    .where(where);
+
+  if (total === 0) return { estudiantes: [], total: 0 };
+
+  // Página: solo la tabla base (una fila por estudiante).
+  const base = await db
+    .select()
+    .from(adminEscolarEstudiantes)
+    .where(where)
+    .orderBy(adminEscolarEstudiantes.apellidos, adminEscolarEstudiantes.nombres)
+    .limit(limit)
+    .offset(offset);
+
+  const ids = base.map((e) => e.id);
+
+  // Matrícula activa + período + curso SOLO de la página. Si un estudiante tiene
+  // varias activas (distintos períodos), se muestra la del período más reciente.
   const matriculas = await db
     .select({
       id: adminEscolarMatriculas.id,
+      periodoId: adminEscolarMatriculas.periodoId,
       estudianteId: adminEscolarMatriculas.estudianteId,
       periodo: adminEscolarPeriodos.nombre,
       curso: adminEscolarCursos.nombre,
@@ -81,10 +151,14 @@ export async function listarEstudiantesEnriquecidos(
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.estado, 'activa'),
       inArray(adminEscolarMatriculas.estudianteId, ids),
-    ));
-  const matriculaPorEst = new Map(matriculas.map((m) => [m.estudianteId, m]));
+    ))
+    .orderBy(desc(adminEscolarMatriculas.periodoId));
+  const matriculaPorEst = new Map<number, (typeof matriculas)[number]>();
+  for (const m of matriculas) {
+    if (!matriculaPorEst.has(m.estudianteId)) matriculaPorEst.set(m.estudianteId, m);
+  }
 
-  // Tutor responsable de pago por estudiante.
+  // Tutor responsable de pago SOLO de la página.
   const tutores = await db
     .select({
       estudianteId: adminEscolarEstudianteTutores.estudianteId,
@@ -101,7 +175,7 @@ export async function listarEstudiantesEnriquecidos(
     ));
   const tutorPorEst = new Map(tutores.map((t) => [t.estudianteId, t]));
 
-  // Deuda viva (suma de saldo) + conteo de cargos pendientes por estudiante.
+  // Deuda viva (suma de saldo) + conteo de cargos pendientes SOLO de la página.
   const deudas = await db
     .select({
       estudianteId: adminEscolarCargos.estudianteId,
@@ -117,7 +191,7 @@ export async function listarEstudiantesEnriquecidos(
     .groupBy(adminEscolarCargos.estudianteId);
   const deudaPorEst = new Map(deudas.map((d) => [d.estudianteId, d]));
 
-  // Último pago por estudiante.
+  // Último pago SOLO de la página.
   const pagos = await db
     .select({
       estudianteId: adminEscolarPagos.estudianteId,
@@ -138,7 +212,7 @@ export async function listarEstudiantesEnriquecidos(
     }
   }
 
-  return estudiantes.map((e) => {
+  const estudiantes = base.map((e) => {
     const m = matriculaPorEst.get(e.id);
     const t = tutorPorEst.get(e.id);
     const d = deudaPorEst.get(e.id);
@@ -163,6 +237,43 @@ export async function listarEstudiantesEnriquecidos(
       ultimoPagoCentavos: up?.monto ?? null,
     };
   });
+
+  return { estudiantes, total };
+}
+
+export interface EstadisticasEstudiantes {
+  activos: number;
+  balancePendienteCentavos: number;
+  morosos: number;
+}
+
+/**
+ * Estadísticas globales del team para las tarjetas del listado (independientes
+ * de la página y de los filtros). Asume que `sincronizarSaldosDesdeFacturas` ya
+ * corrió en la misma petición (lo hace el listado antes de llamar aquí).
+ */
+export async function estadisticasEstudiantes(teamId: number): Promise<EstadisticasEstudiantes> {
+  const [act] = await db
+    .select({ n: count() })
+    .from(adminEscolarEstudiantes)
+    .where(and(eq(adminEscolarEstudiantes.teamId, teamId), eq(adminEscolarEstudiantes.estado, 'activo')));
+
+  const [bal] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${adminEscolarCargos.saldoCentavos}), 0)::int`,
+      morosos: sql<number>`COUNT(DISTINCT ${adminEscolarCargos.estudianteId})::int`,
+    })
+    .from(adminEscolarCargos)
+    .where(and(
+      eq(adminEscolarCargos.teamId, teamId),
+      inArray(adminEscolarCargos.estado, [...ESTADOS_DEUDA]),
+    ));
+
+  return {
+    activos: act?.n ?? 0,
+    balancePendienteCentavos: bal?.total ?? 0,
+    morosos: bal?.morosos ?? 0,
+  };
 }
 
 /**

@@ -8,17 +8,37 @@ import {
 } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { listarEstudiantesEnriquecidos, generarCodigoEstudiante } from '@/lib/administracion-escolar/queries';
+import {
+  listarEstudiantesEnriquecidos,
+  estadisticasEstudiantes,
+  generarCodigoEstudiante,
+} from '@/lib/administracion-escolar/queries';
 import { SEXOS_VALIDOS } from '@/lib/administracion-escolar/estudiante-utils';
 import { eq, and } from 'drizzle-orm';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 
-export async function GET() {
+/**
+ * Listado paginado. Params: `q` (búsqueda), `estado`, `cursoId`, `limit`,
+ * `offset`. Devuelve `{ estudiantes, total, stats }` — `stats` es global del
+ * team (no depende de la página ni de los filtros).
+ */
+export async function GET(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-  const estudiantes = await listarEstudiantesEnriquecidos(teamId);
-  return NextResponse.json({ estudiantes });
+  const sp = req.nextUrl.searchParams;
+  const cursoId = Number(sp.get('cursoId')) || null;
+  const limit = Number(sp.get('limit')) || 25;
+  const offset = Number(sp.get('offset')) || 0;
+  const { estudiantes, total } = await listarEstudiantesEnriquecidos(teamId, {
+    q: sp.get('q') ?? undefined,
+    estado: sp.get('estado') ?? undefined,
+    cursoId,
+    limit,
+    offset,
+  });
+  const stats = await estadisticasEstudiantes(teamId);
+  return NextResponse.json({ estudiantes, total, stats });
 }
 
 /**
