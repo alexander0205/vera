@@ -10,6 +10,7 @@ import { db } from '@/lib/db/drizzle';
 import {
   teams, adminEscolarMatriculas, adminEscolarPeriodos, adminEscolarEstudiantes,
   adminEscolarConceptosPago, adminEscolarEstudianteTutores, adminEscolarTutores, clients,
+  dependientes, products,
 } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import NuevaFacturaRecurrenteForm, { type ContextoEscolar } from './NuevaFacturaRecurrenteForm';
@@ -53,6 +54,7 @@ export default async function NuevaFacturaRecurrentePage({ searchParams }: { sea
         estado: adminEscolarMatriculas.estado,
         estudianteNombre: adminEscolarEstudiantes.nombres,
         estudianteApellidos: adminEscolarEstudiantes.apellidos,
+        dependienteId: adminEscolarEstudiantes.dependienteId,
         periodo: adminEscolarPeriodos.nombre,
         fechaInicio: adminEscolarPeriodos.fechaInicio,
         fechaFin: adminEscolarPeriodos.fechaFin,
@@ -62,8 +64,20 @@ export default async function NuevaFacturaRecurrentePage({ searchParams }: { sea
         .innerJoin(adminEscolarPeriodos, eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id))
         .where(and(eq(adminEscolarMatriculas.id, id), eq(adminEscolarMatriculas.teamId, teamId)))
         .limit(1);
-      const [concepto] = await db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre })
+      const [concepto] = await db.select({
+        id: adminEscolarConceptosPago.id,
+        nombre: adminEscolarConceptosPago.nombre,
+        productoId: products.id,
+        productoNombre: products.nombre,
+        productoDescripcion: products.descripcion,
+        productoReferencia: products.referencia,
+        productoPrecio: products.precio,
+        productoTasaItbis: products.tasaItbis,
+        productoTipo: products.tipo,
+        productoUnidadMedida: products.unidadMedida,
+      })
         .from(adminEscolarConceptosPago)
+        .leftJoin(products, eq(adminEscolarConceptosPago.productId, products.id))
         .where(and(
           eq(adminEscolarConceptosPago.teamId, teamId),
           eq(adminEscolarConceptosPago.tipo, 'mensualidad'),
@@ -87,12 +101,33 @@ export default async function NuevaFacturaRecurrentePage({ searchParams }: { sea
           ))
           .limit(1);
         if (tutor?.clientId) {
+          const [beneficiario] = matricula.dependienteId
+            ? await db.select({ id: dependientes.id, nombre: dependientes.nombre, apellido: dependientes.apellido })
+              .from(dependientes)
+              .where(and(
+                eq(dependientes.id, matricula.dependienteId),
+                eq(dependientes.teamId, teamId),
+                eq(dependientes.clientId, tutor.clientId),
+              ))
+              .limit(1)
+            : [];
           contextoEscolar = {
             matriculaId: matricula.id, conceptoId: concepto.id, conceptoNombre: concepto.nombre,
             estudianteNombre: `${matricula.estudianteNombre} ${matricula.estudianteApellidos}`,
             tutorNombre: tutor.nombre, clientId: tutor.clientId,
             clienteRazonSocial: tutor.clienteRazonSocial ?? tutor.nombre,
             periodo: matricula.periodo, fechaInicio: matricula.fechaInicio, fechaFin: matricula.fechaFin,
+            beneficiario: beneficiario ? { id: beneficiario.id, nombre: `${beneficiario.nombre} ${beneficiario.apellido}` } : null,
+            producto: concepto.productoId && concepto.productoNombre && concepto.productoPrecio != null ? {
+              id: concepto.productoId,
+              nombre: concepto.productoNombre,
+              descripcion: concepto.productoDescripcion,
+              referencia: concepto.productoReferencia,
+              precioDOP: concepto.productoPrecio / 100,
+              tasaItbis: concepto.productoTasaItbis as 'exento' | '0.18' | '0.16' | '0',
+              tipo: concepto.productoTipo as 'bien' | 'servicio',
+              unidadMedida: concepto.productoUnidadMedida,
+            } : null,
           };
         }
       }

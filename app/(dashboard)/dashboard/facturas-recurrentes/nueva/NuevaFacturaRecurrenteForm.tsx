@@ -159,6 +159,17 @@ export interface ContextoEscolar {
   periodo: string;
   fechaInicio: string;
   fechaFin: string;
+  beneficiario: { id: number; nombre: string } | null;
+  producto: {
+    id: number;
+    nombre: string;
+    descripcion: string | null;
+    referencia: string | null;
+    precioDOP: number;
+    tasaItbis: ItemLinea['tasaItbis'];
+    tipo: 'bien' | 'servicio';
+    unidadMedida: string | null;
+  } | null;
 }
 
 interface Props {
@@ -216,7 +227,25 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
 
   // ── Items (useReducer compartido) ──────────────────────────────────────────
   const initialItems = useMemo<ItemLinea[] | undefined>(() => {
-    if (!initialPlan?.items) return undefined;
+    if (!initialPlan?.items) {
+      if (!contextoEscolar?.producto) return undefined;
+      const producto = contextoEscolar.producto;
+      return [{
+        id: 1,
+        productoId: producto.id,
+        nombreItem: producto.nombre,
+        referencia: producto.referencia ?? '',
+        descripcionItem: producto.descripcion ?? '',
+        cantidadItem: 1,
+        precioUnitarioItem: producto.precioDOP,
+        descuentoPct: 0,
+        tasaItbis: producto.tasaItbis,
+        indicadorBienoServicio: producto.tipo === 'bien' ? '1' : '2',
+        unidadMedida: producto.unidadMedida ?? '',
+        dependienteId: contextoEscolar.beneficiario?.id ?? null,
+        dependienteNombre: contextoEscolar.beneficiario?.nombre ?? '',
+      }];
+    }
     try {
       const parsed = JSON.parse(initialPlan.items) as Array<Partial<ItemLinea>>;
       if (!Array.isArray(parsed) || !parsed.length) return undefined;
@@ -239,8 +268,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
     } catch {
       return undefined;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [contextoEscolar, initialPlan?.items]);
   const [items, dispatchItems] = useItemsState(initialItems);
 
   // ── Beneficiarios (dependientes del cliente) — igual que en factura ──────────
