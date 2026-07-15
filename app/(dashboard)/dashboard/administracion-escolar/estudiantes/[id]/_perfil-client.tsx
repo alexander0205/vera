@@ -420,6 +420,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                   const m = matriculas.find((x) => x.id === mid);
                   if (m) setMatriculaEditar(m);
                 }}
+                onVincular={setCargoVincularFactura}
               />
             ) : (
               <EmptyBox text="Sin períodos, cargos o pagos relacionados" />
@@ -559,7 +560,7 @@ function PeriodoFiltroBar({ grupos, value, onChange }: {
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula }: {
+function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   pagos: Pago[];
   puedeFacturar: boolean;
@@ -572,6 +573,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   aplicandoMoraFacturaId: number | null;
   onCargoCreado: () => void;
   onEditarMatricula: (matriculaId: number) => void;
+  onVincular: (cargo: Cargo) => void;
 }) {
   const router = useRouter();
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
@@ -702,6 +704,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
                 onRegistrarPago={onRegistrarPago}
                 onAplicarMora={onAplicarMora}
                 onCrearFactura={(cargo) => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
+                onVincular={onVincular}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
               />
             )}
@@ -726,6 +729,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
                         onRegistrarPago={onRegistrarPago}
                         onAplicarMora={onAplicarMora}
                         onCrearFactura={(cargo) => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
+                        onVincular={onVincular}
                         aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
                       />,
                     ];
@@ -844,7 +848,7 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   );
 }
 
-function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, aplicandoMoraFacturaId }: {
+function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, aplicandoMoraFacturaId }: {
   cargos: Cargo[];
   pagos: Pago[];
   mesesAcademicos: ReturnType<typeof mesesDelPeriodo>;
@@ -853,6 +857,7 @@ function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeF
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
+  onVincular: (cargo: Cargo) => void;
   aplicandoMoraFacturaId: number | null;
 }) {
   const rows = mesesAcademicos.map(({ mes, anio }) => {
@@ -907,6 +912,7 @@ function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeF
                     onRegistrarPago={onRegistrarPago}
                     onAplicarMora={onAplicarMora}
                     onCrearFactura={onCrearFactura}
+                    onVincular={onVincular}
                     aplicandoMora={aplicandoMoraFacturaId === r.accion.ecfDocumentId}
                   />
                 ) : <span className="text-gray-300">—</span>}
@@ -922,13 +928,14 @@ function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeF
   );
 }
 
-function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, aplicandoMora }: {
+function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, aplicandoMora }: {
   cargo: Cargo;
   puedePagos: boolean;
   puedeFacturar: boolean;
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
+  onVincular: (cargo: Cargo) => void;
   aplicandoMora: boolean;
 }) {
   const pendiente = ['pendiente', 'parcial', 'vencido'].includes(cargo.estado);
@@ -961,6 +968,11 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, onRegistrarPago, o
         {pendiente && !tieneFactura && puedeFacturar && (
           <DropdownMenuItem onSelect={() => onCrearFactura(cargo)}>
             <Receipt className="h-4 w-4" />Crear factura
+          </DropdownMenuItem>
+        )}
+        {pendiente && !tieneFactura && puedeFacturar && (
+          <DropdownMenuItem onSelect={() => onVincular(cargo)}>
+            <Link2 className="h-4 w-4" />Vincular factura
           </DropdownMenuItem>
         )}
         {tieneFactura && (!pendiente || (!puedePagos && !puedeFacturar)) && (
