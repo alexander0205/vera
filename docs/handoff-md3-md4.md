@@ -49,3 +49,9 @@ Un período escolar no es año calendario. Ejemplo: inicia en agosto 2025 y term
 - `admin_escolar_cargos` es dueño de mes/año y referencia la factura; `ecf_documents` sigue genérica.
 - Una factura puede ser creada en otra fecha y aun así pertenecer a la mensualidad seleccionada.
 - Paso 4 MD2 podrá automatizar sobre estos meses ya validados cuando Alex responda las ocho decisiones de negocio.
+
+## Corrección posterior — períodos duplicados (2026-07-15)
+
+- Causa del perfil duplicado: dos registros de catálogo distintos (`2026-2027` y `2026-2027 pruea`) permitían dos matrículas activas aunque representaban el mismo año escolar.
+- Prevención: migración `0076` crea unicidad case-insensitive de nombre por team; alta/edición de matrícula bloquea períodos con mismo nombre o fechas superpuestas para el mismo estudiante.
+- Limpieza Neon dev (team 2): se conservó período `id=5` `2026-2027`; se eliminó prueba `id=11` `2026-2027 pruea` y su única matrícula. Confirmado antes de borrar: cero cargos, pagos y facturas asociados.

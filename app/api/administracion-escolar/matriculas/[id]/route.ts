@@ -6,6 +6,7 @@ import {
   adminEscolarCursos,
 } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { eq, and } from 'drizzle-orm';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
@@ -22,6 +23,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { teamId } = auth;
   const { id } = await params;
   const { periodoId, cursoId, fechaInscripcion, estado, codigoMatricula, notas } = await req.json();
+  const matriculaId = parseInt(id, 10);
+  const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado })
+    .from(adminEscolarMatriculas)
+    .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
+    .limit(1);
+  if (!actual) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
 
   // Validar período/curso (si vienen) contra el team.
   if (periodoId !== undefined) {
@@ -33,6 +40,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const [cur] = await db.select({ id: adminEscolarCursos.id }).from(adminEscolarCursos)
       .where(and(eq(adminEscolarCursos.id, Number(cursoId)), eq(adminEscolarCursos.teamId, teamId))).limit(1);
     if (!cur) return NextResponse.json({ error: 'Curso no encontrado' }, { status: 404 });
+  }
+  const periodoFinal = periodoId === undefined ? actual.periodoId : Number(periodoId);
+  const estadoFinal = estado !== undefined && ESTADOS.includes(estado) ? estado : actual.estado;
+  if (estadoFinal === 'activa') {
+    const conflicto = await conflictoMatriculaActivaPorPeriodo({
+      teamId, estudianteId: actual.estudianteId, periodoId: periodoFinal, excluirMatriculaId: matriculaId,
+    });
+    if (conflicto) return NextResponse.json({ error: conflicto }, { status: 409 });
   }
 
   try {
@@ -46,9 +61,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(notas !== undefined ? { notas: notas?.trim() || null } : {}),
         updatedAt: new Date(),
       })
-      .where(and(eq(adminEscolarMatriculas.id, parseInt(id)), eq(adminEscolarMatriculas.teamId, teamId)))
+      .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
       .returning();
-    if (!row) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
     return NextResponse.json({ matricula: row });
   } catch (err: unknown) {
     // Choque con el índice parcial: ya hay otra matrícula activa en ese período.

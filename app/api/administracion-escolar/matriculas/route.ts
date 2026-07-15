@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { eq, and, desc } from 'drizzle-orm';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
@@ -53,6 +54,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'estudianteId, periodoId y cursoId son requeridos' }, { status: 400 });
   }
   const estadoNorm = ESTADOS.includes(estado) ? estado : 'activa';
+  if (estadoNorm === 'activa') {
+    const conflicto = await conflictoMatriculaActivaPorPeriodo({ teamId, estudianteId, periodoId });
+    if (conflicto) return NextResponse.json({ error: conflicto }, { status: 409 });
+  }
 
   try {
     const [row] = await db.insert(adminEscolarMatriculas).values({

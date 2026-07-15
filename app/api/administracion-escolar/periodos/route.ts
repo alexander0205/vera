@@ -24,12 +24,19 @@ export async function POST(req: NextRequest) {
   if ((fechaInicio || fechaFin) && !rangoPeriodoEsValido(fechaInicio, fechaFin)) {
     return NextResponse.json({ error: 'Fecha de inicio y fin requeridas; el fin no puede ser anterior al inicio' }, { status: 400 });
   }
-  const [row] = await db.insert(adminEscolarPeriodos).values({
-    teamId,
-    nombre: nombre.trim(),
-    fechaInicio: fechaInicio || null,
-    fechaFin: fechaFin || null,
-    activo: activo ?? true,
-  }).returning();
-  return NextResponse.json({ periodo: row });
+  try {
+    const [row] = await db.insert(adminEscolarPeriodos).values({
+      teamId,
+      nombre: nombre.trim(),
+      fechaInicio: fechaInicio || null,
+      fechaFin: fechaFin || null,
+      activo: activo ?? true,
+    }).returning();
+    return NextResponse.json({ periodo: row });
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
+      return NextResponse.json({ error: 'Ya existe un período con ese nombre.' }, { status: 409 });
+    }
+    throw err;
+  }
 }
