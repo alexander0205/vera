@@ -63,6 +63,7 @@ interface Matricula {
 interface Cargo {
   id: number;
   concepto: string | null;
+  conceptoTipo: string | null;
   matriculaId: number;
   periodoId: number;
   mes: number | null;
@@ -561,7 +562,10 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .reduce((s, c) => s + c.saldoCentavos, 0);
   const pagado = Math.max(0, total - saldo);
-  const otrosCargos = cargosPeriodo.filter((c) => c.mes == null);
+  // Mes solo identifica fecha. La tabla mensual agrupa exclusivamente concepto
+  // mensualidad; uniforme/actividad con mes van a Otros cargos.
+  const mensualidades = cargosPeriodo.filter((c) => c.conceptoTipo === 'mensualidad');
+  const otrosCargos = cargosPeriodo.filter((c) => c.conceptoTipo !== 'mensualidad');
   const proximo = cargosPeriodo
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .sort((a, b) => (a.fechaVencimiento ?? '9999-12-31').localeCompare(b.fechaVencimiento ?? '9999-12-31'))[0] ?? null;
@@ -658,7 +662,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
 
         {vista === 'mensualidades' && (
               <MensualidadesTabla
-                cargos={cargosPeriodo.filter((c) => c.mes != null)}
+                cargos={mensualidades}
                 pagos={pagos}
                 mesesAcademicos={mesesAcademicos}
                 puedePagos={puedePagos}

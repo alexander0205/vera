@@ -21,6 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       id: adminEscolarCargos.id,
       conceptoId: adminEscolarCargos.conceptoId,
       concepto: adminEscolarConceptosPago.nombre,
+      conceptoTipo: adminEscolarConceptosPago.tipo,
       matriculaId: adminEscolarCargos.matriculaId,
       periodoId: adminEscolarCargos.periodoId,
       mes: adminEscolarCargos.mes,
