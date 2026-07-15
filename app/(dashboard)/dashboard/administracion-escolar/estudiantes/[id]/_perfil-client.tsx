@@ -724,7 +724,17 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
         fechaFin={grupo.fechaFin}
       />
       {facturasTutorIncorrecto.length > 0 && (
-        <p className="text-xs text-amber-700">Hay {facturasTutorIncorrecto.length} cargo(s) con factura vinculada a otro contacto. No se muestran para cobrar.</p>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p>Hay {facturasTutorIncorrecto.length} cargo(s) con factura vinculada a otro contacto. No se muestran para cobrar.</p>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+            {facturasTutorIncorrecto.map((cargo) => (
+              <Link key={cargo.id} href={`/dashboard/facturas/${cargo.ecfDocumentId}`}
+                className="font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950">
+                Revisar {cargo.facturaEncf ?? cargo.facturaCodigo ?? `factura #${cargo.ecfDocumentId}`}
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
       <Dialog open={elegirPagoAbierto} onOpenChange={setElegirPagoAbierto}>
         <DialogContent className="max-w-lg">
