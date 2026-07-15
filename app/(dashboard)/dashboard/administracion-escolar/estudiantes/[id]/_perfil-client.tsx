@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, ChevronDown, ChevronRight, Pencil, CalendarDays, GraduationCap, FileText, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
@@ -93,23 +93,8 @@ interface TutorVinculo {
   relacion: string;
   responsablePago: boolean;
 }
-interface Factura {
-  id: number;
-  encf: string;
-  estado: string;
-  montoTotal: number;
-  createdAt: string;
-}
-
 const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-function badgeSaldo(c: Cargo) {
-  if (c.estado === 'pagado') return <Badge className="bg-teal-50 text-teal-700 border-teal-200">Pagado</Badge>;
-  if (c.estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
-  const color = c.estado === 'vencido' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200';
-  return <Badge className={color}>{fmtDOP(c.saldoCentavos)}</Badge>;
-}
 
 // ─── Página ────────────────────────────────────────────────────────────────
 
@@ -125,14 +110,14 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [estudiante, setEstudiante] = useState<Estudiante | null>(null);
   const [matriculas, setMatriculas] = useState<Matricula[]>([]);
   const [cargos, setCargos]         = useState<Cargo[]>([]);
-  const [facturasTutor, setFacturasTutor] = useState<Factura[]>([]);
-  const [facturasLoading, setFacturasLoading] = useState(false);
   const [pagos, setPagos]           = useState<Pago[]>([]);
   const [tutores, setTutores]       = useState<TutorVinculo[]>([]);
   const [loading, setLoading]       = useState(true);
   const [notFound, setNotFound]     = useState(false);
   const [cargoVincularFactura, setCargoVincularFactura] = useState<Cargo | null>(null);
   const [matriculaEditar, setMatriculaEditar] = useState<Matricula | null>(null);
+  // Período seleccionado en el filtro padre global (null = el primero/activo).
+  const [periodoKey, setPeriodoKey] = useState<string | null>(null);
 
   // Modal de cobro in-place: reutiliza el PagoModal de Cuentas por Cobrar sin
   // salir del perfil. El flujo de datos es el mismo (registra en la factura).
@@ -227,24 +212,6 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Facturas del tutor responsable — depende de `tutores`, que ya vive antes
-  // de los early return de abajo (no puede ir después: violaría rules-of-hooks).
-  const responsableClientId = tutores.find((t) => t.responsablePago)?.clientId ?? null;
-  useEffect(() => {
-    if (!responsableClientId) { setFacturasTutor([]); return; }
-    let cancel = false;
-    setFacturasLoading(true);
-    // dependienteId afina a las facturas de ESTE estudiante — si el estudiante
-    // aún no está vinculado a un dependiente, se mantiene el comportamiento
-    // anterior (todas las facturas del tutor, sin poder distinguir por hijo).
-    const dependienteParam = estudiante?.dependienteId ? `&dependienteId=${estudiante.dependienteId}` : '';
-    fetch(`/api/facturas?clientId=${responsableClientId}${dependienteParam}&limit=50`)
-      .then((r) => r.json())
-      .then((data) => { if (!cancel) setFacturasTutor(data.docs ?? []); })
-      .finally(() => { if (!cancel) setFacturasLoading(false); });
-    return () => { cancel = true; };
-  }, [responsableClientId, estudiante?.dependienteId]);
-
   if (loading) {
     return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>;
   }
@@ -259,39 +226,18 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
   const matriculaActiva = matriculas.find((m) => m.estado === 'activa') ?? null;
   const responsable = tutores.find((t) => t.responsablePago) ?? null;
-  const otrosTutores = tutores.filter((t) => !t.responsablePago);
-  const cargosPendientes = cargos.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado));
-  const vencidos = cargosPendientes.filter((c) => c.estado === 'vencido').length;
-  const cargosVinculadosIds = new Set(cargos.map((c) => c.ecfDocumentId).filter((x): x is number => x !== null));
+
+  // Grupos por período para el filtro padre global.
+  const grupos = construirGruposPeriodo(matriculas, cargos);
+  const grupoActivo = grupos.find((g) => g.key === periodoKey) ?? grupos[0] ?? null;
 
   return (
     <section className="p-6 space-y-5">
       <VolverLink />
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{estudiante.nombres} {estudiante.apellidos}</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {estudiante.codigo ?? 'Sin código'}
-            {matriculaActiva?.curso ? ` · ${matriculaActiva.curso}` : ''}
-            {matriculaActiva?.periodo ? ` · Período ${matriculaActiva.periodo}` : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {puedeGestionar && !editando && (
-            <Button variant="outline" onClick={abrirEdicion}>
-              <Pencil className="h-4 w-4 mr-1.5" />Editar
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Columna resumen */}
-        <div className="space-y-4">
-          <div className="border border-gray-200 rounded-xl bg-white p-5 space-y-4">
-            {editando ? (
+      {/* Tarjeta horizontal del estudiante (sin encabezado duplicado) */}
+      <div className="border border-gray-200 rounded-xl bg-white p-4">
+        {editando ? (
               <div className="space-y-3">
                 {editError && (
                   <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{editError}</div>
@@ -342,50 +288,94 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-semibold shrink-0">
-                  {`${estudiante.nombres[0] ?? ''}${estudiante.apellidos[0] ?? ''}`.toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-900 truncate">{estudiante.nombres} {estudiante.apellidos}</p>
-                    {estudiante.estado !== 'activo' && (
-                      <Badge variant="outline" className="capitalize text-gray-500 shrink-0">{estudiante.estado}</Badge>
-                    )}
+              <div className="flex flex-col md:flex-row md:items-center gap-4">
+                {/* Identidad + chips */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="h-14 w-14 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-lg font-semibold shrink-0">
+                    {`${estudiante.nombres[0] ?? ''}${estudiante.apellidos[0] ?? ''}`.toUpperCase()}
                   </div>
-                  <p className="text-xs text-gray-500">
-                    {labelSexo(estudiante.sexo)}
-                    {calcularEdad(estudiante.fechaNacimiento) != null ? ` · ${calcularEdad(estudiante.fechaNacimiento)} años` : ''}
-                    {estudiante.fechaNacimiento ? ` · Nac. ${fmtFechaCorta(estudiante.fechaNacimiento)}` : ''}
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold text-gray-900 truncate">{estudiante.nombres} {estudiante.apellidos}</p>
+                      {estudiante.estado !== 'activo' && (
+                        <Badge variant="outline" className="capitalize text-gray-500 shrink-0">{estudiante.estado}</Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <InfoChip k="Código" v={estudiante.codigo ?? '—'} />
+                      {matriculaActiva?.curso && <InfoChip k="Curso" v={matriculaActiva.curso} />}
+                      {matriculaActiva?.periodo && <InfoChip k="Período" v={matriculaActiva.periodo} />}
+                      <InfoChip k="Sexo · edad" v={`${labelSexo(estudiante.sexo)}${calcularEdad(estudiante.fechaNacimiento) != null ? ` · ${calcularEdad(estudiante.fechaNacimiento)} años` : ''}`} />
+                      <span className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border ${estudiante.deudaCentavos > 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                        <span className="text-[11px] opacity-70">Pendiente</span>
+                        <b className="font-semibold">{estudiante.deudaCentavos > 0 ? fmtDOP(estudiante.deudaCentavos) : 'Al día'}</b>
+                      </span>
+                    </div>
+                  </div>
                 </div>
+                {/* Tutor de pago (compacto) */}
+                <div className="md:border-l md:border-gray-100 md:pl-4 md:min-w-[200px] shrink-0">
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Tutor de pago</p>
+                  {responsable ? (
+                    <div className="mt-0.5">
+                      <p className="font-semibold text-sm text-gray-900 truncate">{responsable.nombre}</p>
+                      <p className="text-xs text-gray-500 capitalize truncate">
+                        {responsable.relacion}{responsable.telefono ? ` · ${responsable.telefono}` : ''}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 mt-0.5">Sin asignar</p>
+                  )}
+                </div>
+                {puedeGestionar && (
+                  <Button variant="outline" size="sm" onClick={abrirEdicion} className="shrink-0 self-start md:self-center">
+                    <Pencil className="h-4 w-4 mr-1.5" />Editar
+                  </Button>
+                )}
               </div>
             )}
 
-            <div className="border border-gray-200 rounded-lg p-3">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Balance pendiente</p>
-              <p className={`text-2xl font-bold ${estudiante.deudaCentavos > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                {fmtDOP(estudiante.deudaCentavos)}
-              </p>
-            </div>
+      </div>
 
-            <div className="space-y-1.5 text-sm">
-              <Row label="Matrícula activa" value={matriculaActiva?.codigoMatricula ?? (matriculaActiva ? `#${matriculaActiva.id}` : '—')} strong />
-              <Row label="Período" value={matriculaActiva?.periodo ?? '—'} strong />
-              <Row label="Curso" value={matriculaActiva?.curso ?? '—'} strong />
-              <Row label="Estado" value={matriculaActiva?.estado ?? '—'} strong capitalize />
-            </div>
+      {/* Filtro de período — padre global: filtra el detalle de "Por período". */}
+      {grupos.length > 0 && (
+        <PeriodoFiltroBar grupos={grupos} value={grupoActivo?.key ?? null} onChange={setPeriodoKey} />
+      )}
 
-            {/* Contacto vinculado (derivado del tutor de pago). Ya no se edita a
-                mano: se establece automáticamente al asignar el tutor responsable
-                de pago, bajo su mismo cliente, para que la factura sea coherente. */}
-            <div className="border-t border-gray-100 pt-3">
+      {/* Secciones: Por período · Tutores · Historial */}
+      <div className="border border-gray-200 rounded-xl bg-white p-4">
+        <Tabs defaultValue="periodo">
+          <TabsList variant="line" className="w-full justify-start border-b border-gray-200 rounded-none px-0">
+            <TabsTrigger value="periodo">Por período</TabsTrigger>
+            <TabsTrigger value="tutores">Tutores</TabsTrigger>
+            <TabsTrigger value="historial">Historial</TabsTrigger>
+          </TabsList>
+
+          {/* Por período — todo lo financiero (cuentas por cobrar, pagos,
+              facturas + acciones), filtrado por el período elegido arriba. */}
+          <TabsContent value="periodo" className="pt-4">
+            {grupoActivo ? (
+              <PeriodoDetalle
+                grupo={grupoActivo}
+                pagos={pagos}
+                puedeFacturar={puedeFacturar}
+                puedePagos={puedePagos}
+                onRegistrarPago={abrirPago}
+              />
+            ) : (
+              <EmptyBox text="Sin períodos, cargos o pagos relacionados" />
+            )}
+          </TabsContent>
+
+          {/* Tutores — gestión + contacto vinculado, separado de lo financiero. */}
+          <TabsContent value="tutores" className="pt-4 space-y-4">
+            <div>
               <p className="text-sm font-medium text-gray-900 mb-2">Contacto vinculado</p>
               {estudiante.dependiente ? (
                 <Link href={`/dashboard/clientes/${estudiante.dependiente.clienteId}/editar`}
-                  className="block border border-gray-200 rounded-lg p-3 hover:border-teal-300 hover:bg-teal-50/40 transition-colors">
-                  <p className="font-semibold text-gray-900">{estudiante.dependiente.clienteRazonSocial}</p>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-teal-700 mt-0.5">
+                  className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 hover:border-teal-300 hover:bg-teal-50/40 transition-colors">
+                  <span className="font-semibold text-gray-900">{estudiante.dependiente.clienteRazonSocial}</span>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-teal-700">
                     <Link2 className="h-3 w-3" />Ver contacto
                   </span>
                 </Link>
@@ -393,199 +383,35 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 <p className="text-sm text-gray-400">Se establece al asignar el tutor de pago.</p>
               )}
             </div>
-
-            {/* Tutor de pago */}
-            <div className="border-t border-gray-100 pt-3">
-              <p className="text-sm font-medium text-gray-900 mb-2">Tutor de pago</p>
-              {responsable ? (
-                <div className="border border-gray-200 rounded-lg p-3">
-                  <p className="font-semibold text-gray-900">{responsable.nombre}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 capitalize">
-                    {responsable.relacion}{responsable.telefono ? ` · ${responsable.telefono}` : ''}
-                  </p>
-                  {responsable.email && <p className="text-xs text-gray-500">{responsable.email}</p>}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400">Sin tutor responsable asignado</p>
-              )}
-            </div>
-
-            {/* Otros tutores */}
-            {otrosTutores.length > 0 && (
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-sm font-medium text-gray-900 mb-2">Otros tutores</p>
-                <div className="space-y-1.5 text-sm">
-                  {otrosTutores.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between gap-2">
-                      <span className="text-gray-700 truncate">{t.nombre}</span>
-                      <span className="text-gray-500 capitalize shrink-0">{t.relacion}</span>
-                    </div>
-                  ))}
-                </div>
+            {puedeGestionar ? (
+              <TutoresPanel estudianteId={estudiante.id} tutores={tutores} onChange={cargar} />
+            ) : (
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 mb-2">Tutores</h2>
+                {tutores.length === 0 ? (
+                  <EmptyBox text="Sin tutores asociados" />
+                ) : (
+                  <SimpleTable head={['Nombre', 'Relación', 'Teléfono', 'Email', 'Responsable']}
+                    rows={tutores.map((t) => [
+                      t.nombre,
+                      <span key="r" className="capitalize">{t.relacion}</span>,
+                      t.telefono ?? '—',
+                      t.email ?? '—',
+                      t.responsablePago
+                        ? <Badge key="p" className="bg-teal-50 text-teal-700 border-teal-200">Pago</Badge>
+                        : <span key="p" className="text-gray-300">—</span>,
+                    ])} />
+                )}
               </div>
             )}
-          </div>
-        </div>
+          </TabsContent>
 
-        {/* Columna tabs */}
-        <div className="lg:col-span-2 border border-gray-200 rounded-xl bg-white p-4">
-          <Tabs defaultValue="periodos">
-            <TabsList variant="line" className="w-full justify-start border-b border-gray-200 rounded-none px-0">
-              <TabsTrigger value="deudas">Deudas</TabsTrigger>
-              <TabsTrigger value="pagos">Pagos</TabsTrigger>
-              <TabsTrigger value="facturas">Facturas</TabsTrigger>
-              <TabsTrigger value="periodos">Por período</TabsTrigger>
-              <TabsTrigger value="matriculas">Matrículas</TabsTrigger>
-              <TabsTrigger value="tutores">Tutores</TabsTrigger>
-              <TabsTrigger value="historial">Historial</TabsTrigger>
-            </TabsList>
-
-            {/* Deudas */}
-            <TabsContent value="deudas" className="pt-4 space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-base font-semibold text-gray-900">Cargos pendientes</h2>
-                  {vencidos > 0 && <Badge className="bg-red-50 text-red-600 border-red-200">{vencidos} vencido{vencidos !== 1 ? 's' : ''}</Badge>}
-                </div>
-                {cargosPendientes.length === 0 ? (
-                  <EmptyBox text="Sin cargos pendientes" />
-                ) : (
-                  <SimpleTable head={['Concepto', 'Mes', 'Vencimiento', 'Monto', 'Saldo', 'Factura']}
-                    rows={cargosPendientes.map((c) => [
-                      c.concepto ?? '—',
-                      c.mes ? MESES[c.mes] : '—',
-                      c.fechaVencimiento ? fmtFechaCorta(c.fechaVencimiento) : '—',
-                      fmtDOP(c.montoCentavos),
-                      badgeSaldo(c),
-                      <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
-                        puedeFacturar={puedeFacturar} puedePagos={puedePagos}
-                        onVincular={() => setCargoVincularFactura(c)}
-                        onRegistrarPago={() => c.ecfDocumentId && abrirPago(c.ecfDocumentId)}
-                        onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
-                    ])} />
-                )}
-              </div>
-
-              <div>
-                <h2 className="text-base font-semibold text-gray-900 mb-2">Todos los cargos</h2>
-                {cargos.length === 0 ? (
-                  <EmptyBox text="Sin cargos registrados" />
-                ) : (
-                  <SimpleTable head={['Concepto', 'Mes', 'Año', 'Monto', 'Saldo', 'Factura']}
-                    rows={cargos.map((c) => [
-                      c.concepto ?? '—',
-                      c.mes ? MESES[c.mes] : '—',
-                      String(c.anio),
-                      fmtDOP(c.montoCentavos),
-                      badgeSaldo(c),
-                      <FacturaCell key="f" cargo={c} puedeGestionar={puedeGestionar}
-                        puedeFacturar={puedeFacturar} puedePagos={puedePagos}
-                        onVincular={() => setCargoVincularFactura(c)}
-                        onRegistrarPago={() => c.ecfDocumentId && abrirPago(c.ecfDocumentId)}
-                        onFacturar={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${c.id}`)} />,
-                    ])} />
-                )}
-              </div>
-            </TabsContent>
-
-            {/* Pagos */}
-            <TabsContent value="pagos" className="pt-4">
-              <h2 className="text-base font-semibold text-gray-900 mb-2">Pagos recientes</h2>
-              {pagos.length === 0 ? (
-                <EmptyBox text="Sin pagos registrados" />
-              ) : (
-                <SimpleTable head={['Fecha', 'Aplicado a', 'Método', 'Monto']}
-                  rows={pagos.map((p) => [
-                    fmtFechaCorta(p.fechaPago),
-                    p.concepto ? `${p.concepto}${p.mes ? ` ${MESES[p.mes]}` : ''}` : 'Sin cargo',
-                    <span key="m" className="capitalize">{p.metodo ?? '—'}</span>,
-                    fmtDOP(p.montoCentavos),
-                  ])} />
-              )}
-            </TabsContent>
-
-            {/* Facturas del tutor — solo lectura, informativo. La deuda real
-                sigue viviendo en los cargos; esto es un reflejo del cliente
-                vinculado al tutor responsable. */}
-            <TabsContent value="facturas" className="pt-4">
-              <h2 className="text-base font-semibold text-gray-900 mb-2">Facturas del tutor</h2>
-              {!responsable?.clientId ? (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>El tutor responsable no está vinculado a un contacto. Vincúlalo en la pestaña Tutores para ver sus facturas aquí.</span>
-                </div>
-              ) : facturasLoading ? (
-                <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div>
-              ) : facturasTutor.length === 0 ? (
-                <EmptyBox text={`Sin facturas registradas para ${responsable.clienteRazonSocial}`} />
-              ) : (
-                <FacturasConLineas facturas={facturasTutor} cargosVinculadosIds={cargosVinculadosIds} />
-              )}
-            </TabsContent>
-
-            {/* Vista estructurada por período/curso. Coexiste con las listas
-                globales de arriba: aquí se ordenan cargos, facturas y pagos en
-                el contexto académico donde ocurrieron. */}
-            <TabsContent value="periodos" className="pt-4">
-              <PeriodosAcademicos matriculas={matriculas} cargos={cargos} pagos={pagos} onRegistrarPago={abrirPago} />
-            </TabsContent>
-
-            {/* Matrículas */}
-            <TabsContent value="matriculas" className="pt-4">
-              <h2 className="text-base font-semibold text-gray-900 mb-2">Historial de matrículas</h2>
-              {matriculas.length === 0 ? (
-                <EmptyBox text="Sin matrículas registradas" />
-              ) : (
-                <SimpleTable head={['Período', 'Curso', 'Inscripción', 'Estado', ...(puedeGestionar ? [''] : [])]}
-                  rows={matriculas.map((m) => [
-                    m.periodo ?? '—',
-                    m.curso ?? '—',
-                    m.fechaInscripcion ? fmtFechaCorta(m.fechaInscripcion) : '—',
-                    m.estado === 'activa'
-                      ? <Badge key="e" className="bg-teal-50 text-teal-700 border-teal-200">Activa</Badge>
-                      : <span key="e" className="capitalize text-gray-600">{m.estado}</span>,
-                    ...(puedeGestionar ? [
-                      <button key="ed" onClick={() => setMatriculaEditar(m)}
-                        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
-                        <Pencil className="h-3 w-3" />Editar
-                      </button>,
-                    ] : []),
-                  ])} />
-              )}
-            </TabsContent>
-
-            {/* Tutores */}
-            <TabsContent value="tutores" className="pt-4">
-              {puedeGestionar ? (
-                <TutoresPanel estudianteId={estudiante.id} tutores={tutores} onChange={cargar} />
-              ) : (
-                <>
-                  <h2 className="text-base font-semibold text-gray-900 mb-2">Tutores</h2>
-                  {tutores.length === 0 ? (
-                    <EmptyBox text="Sin tutores asociados" />
-                  ) : (
-                    <SimpleTable head={['Nombre', 'Relación', 'Teléfono', 'Email', 'Responsable']}
-                      rows={tutores.map((t) => [
-                        t.nombre,
-                        <span key="r" className="capitalize">{t.relacion}</span>,
-                        t.telefono ?? '—',
-                        t.email ?? '—',
-                        t.responsablePago
-                          ? <Badge key="p" className="bg-teal-50 text-teal-700 border-teal-200">Pago</Badge>
-                          : <span key="p" className="text-gray-300">—</span>,
-                      ])} />
-                  )}
-                </>
-              )}
-            </TabsContent>
-
-            {/* Historial */}
-            <TabsContent value="historial" className="pt-4">
-              <h2 className="text-base font-semibold text-gray-900 mb-2">Historial de actividad</h2>
-              <Historial matriculas={matriculas} pagos={pagos} />
-            </TabsContent>
-          </Tabs>
-        </div>
+          {/* Historial */}
+          <TabsContent value="historial" className="pt-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-2">Historial de actividad</h2>
+            <Historial matriculas={matriculas} pagos={pagos} />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <EditarMatriculaDialog
@@ -625,21 +451,57 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────
 
-function PeriodosAcademicos({ matriculas, cargos, pagos, onRegistrarPago }: {
-  matriculas: Matricula[]; cargos: Cargo[]; pagos: Pago[];
+// Barra de período como filtro PADRE global (pills compactas). Al elegir un
+// período, el detalle de "Por período" se filtra a ese período.
+function PeriodoFiltroBar({ grupos, value, onChange }: {
+  grupos: ReturnType<typeof construirGruposPeriodo>;
+  value: string | null;
+  onChange: (key: string) => void;
+}) {
+  const activeKey = value ?? grupos[0]?.key ?? null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mr-1">Período</span>
+      {grupos.map((g) => {
+        const saldo = g.cargos
+          .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
+          .reduce((s, c) => s + c.saldoCentavos, 0);
+        const activo = g.key === activeKey;
+        return (
+          <button
+            key={g.key}
+            type="button"
+            onClick={() => onChange(g.key)}
+            className={`rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+              activo
+                ? 'bg-teal-600 border-teal-600 text-white font-semibold'
+                : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            {g.periodo}
+            <span className={`ml-1.5 text-xs ${activo ? 'text-teal-50' : saldo > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+              {g.curso}{saldo > 0 ? ` · ${fmtDOP(saldo)}` : ''}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Detalle financiero de UN período (el seleccionado en la barra padre):
+// acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
+function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPago }: {
+  grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
+  pagos: Pago[];
+  puedeFacturar: boolean;
+  puedePagos: boolean;
   onRegistrarPago: (ecfDocumentId: number) => void;
 }) {
   const router = useRouter();
-  const grupos = construirGruposPeriodo(matriculas, cargos);
-  const [periodoActivoKey, setPeriodoActivoKey] = useState<string | null>(null);
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
-  const grupoActivo = grupos.find((g) => g.key === periodoActivoKey) ?? grupos[0] ?? null;
 
-  if (grupos.length === 0) {
-    return <EmptyBox text="Sin períodos, cargos o pagos relacionados" />;
-  }
-
-  const cargosPeriodo = grupoActivo?.cargos ?? [];
+  const cargosPeriodo = grupo.cargos;
   const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
   const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
   const total = cargosPeriodo.reduce((s, c) => s + c.montoCentavos, 0);
@@ -667,112 +529,69 @@ function PeriodosAcademicos({ matriculas, cargos, pagos, onRegistrarPago }: {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-semibold text-gray-900">Historial financiero por período</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Seleccione un período para ver el detalle de facturación, pagos y deuda.
-        </p>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-semibold text-gray-900">Período {grupo.periodo}</h3>
+          {grupo.estado && (
+            <Badge className={grupo.estado === 'activa' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
+              {grupo.estado === 'activa' ? 'Activa' : 'Finalizada'}
+            </Badge>
+          )}
+          <span className="text-sm text-gray-500">· {grupo.curso}</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {puedePagos && (
+            <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={registrarPago} disabled={!facturaPendiente?.ecfDocumentId}>
+              <Wallet className="h-4 w-4 mr-1.5" />Registrar pago
+            </Button>
+          )}
+          {puedeFacturar && (
+            <Button size="sm" variant="outline" onClick={crearFactura} disabled={!cargoSinFactura}>
+              <FileText className="h-4 w-4 mr-1.5" />Crear factura
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => window.print()}>
+            <Receipt className="h-4 w-4 mr-1.5" />Estado de cuenta
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-        {grupos.map((grupo) => {
-          const grupoSaldo = grupo.cargos
-            .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
-            .reduce((s, c) => s + c.saldoCentavos, 0);
-          const activo = grupoActivo?.key === grupo.key;
-          return (
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <PeriodoStat icon={Receipt} label="Facturado" value={fmtDOP(total)} detail="Total del período" tone="blue" />
+        <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="teal" />
+        <PeriodoStat icon={AlertTriangle} label="Pendiente" value={fmtDOP(saldo)} detail="Saldo por pagar" tone="red" />
+        <PeriodoStat
+          icon={CalendarDays}
+          label="Próximo vencimiento"
+          value={proximo?.mes ? MESES[proximo.mes] : proximo ? fmtFechaCorta(proximo.fechaVencimiento) : '—'}
+          detail={proximo ? fmtDOP(proximo.saldoCentavos) : 'Sin deuda próxima'}
+          tone="gray"
+        />
+      </div>
+
+      <div>
+        <div className="flex gap-6 border-b border-gray-200 overflow-x-auto">
+          {[
+            ['mensualidades', 'Cuentas por cobrar'],
+            ['otros', 'Otros cargos'],
+            ['facturas', 'Facturas'],
+            ['pagos', 'Pagos'],
+          ].map(([value, label]) => (
             <button
-              key={grupo.key}
+              key={value}
               type="button"
-              onClick={() => setPeriodoActivoKey(grupo.key)}
-              className={`text-left border rounded-lg p-4 min-h-[104px] transition-colors ${
-                activo
-                  ? 'border-gray-400 bg-gray-100 text-gray-900'
-                  : 'border-gray-200 bg-white text-gray-800 hover:border-gray-300 hover:bg-gray-50'
+              onClick={() => setVista(value as typeof vista)}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                vista === value ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-900'
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-base font-semibold truncate">{grupo.periodo}</p>
-                  <p className="text-xs text-gray-500 truncate mt-1">{grupo.curso}</p>
-                </div>
-                {grupo.estado ? (
-                  <Badge className={grupo.estado === 'activa' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
-                    {grupo.estado === 'activa' ? 'Activa' : 'Finalizada'}
-                  </Badge>
-                ) : null}
-              </div>
-              <p className={`text-xs mt-4 font-medium ${grupoSaldo > 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                Pendiente: {fmtDOP(grupoSaldo)}
-              </p>
+              {label}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {grupoActivo && (
-        <div className="border border-gray-200 rounded-xl bg-white p-4 space-y-5">
-          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-semibold text-gray-900">Período {grupoActivo.periodo}</h3>
-                {grupoActivo.estado && (
-                  <Badge className={grupoActivo.estado === 'activa' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-600 border-gray-200'}>
-                    {grupoActivo.estado === 'activa' ? 'Activa' : 'Finalizada'}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-gray-500 mt-1">{grupoActivo.curso}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button className="bg-teal-600 hover:bg-teal-700" onClick={registrarPago} disabled={!facturaPendiente?.ecfDocumentId}>
-                <Wallet className="h-4 w-4 mr-1.5" />Registrar pago
-              </Button>
-              <Button variant="outline" onClick={crearFactura} disabled={!cargoSinFactura}>
-                <FileText className="h-4 w-4 mr-1.5" />Crear factura
-              </Button>
-              <Button variant="outline" onClick={() => window.print()}>
-                <Receipt className="h-4 w-4 mr-1.5" />Estado de cuenta
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            <PeriodoStat icon={Receipt} label="Facturado" value={fmtDOP(total)} detail="Total del período" tone="blue" />
-            <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="teal" />
-            <PeriodoStat icon={AlertTriangle} label="Pendiente" value={fmtDOP(saldo)} detail="Saldo por pagar" tone="red" />
-            <PeriodoStat
-              icon={CalendarDays}
-              label="Próximo vencimiento"
-              value={proximo?.mes ? MESES[proximo.mes] : proximo ? fmtFechaCorta(proximo.fechaVencimiento) : '—'}
-              detail={proximo ? fmtDOP(proximo.saldoCentavos) : 'Sin deuda próxima'}
-              tone="gray"
-            />
-          </div>
-
-          <div>
-            <div className="flex gap-8 border-b border-gray-200">
-              {[
-                ['mensualidades', 'Mensualidades'],
-                ['otros', 'Otros cargos'],
-                ['facturas', 'Facturas'],
-                ['pagos', 'Pagos'],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setVista(value as typeof vista)}
-                  className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
-                    vista === value ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {vista === 'mensualidades' && (
+        {vista === 'mensualidades' && (
               <MensualidadesTabla cargos={cargosPeriodo.filter((c) => c.mes != null)} pagos={pagos} onAction={(cargo) => {
                 if (cargo?.ecfDocumentId && ['pendiente', 'parcial', 'vencido'].includes(cargo.estado)) {
                   onRegistrarPago(cargo.ecfDocumentId);
@@ -827,9 +646,7 @@ function PeriodosAcademicos({ matriculas, cargos, pagos, onRegistrarPago }: {
               )
             )}
           </div>
-        </div>
-      )}
-    </div>
+      </div>
   );
 }
 
@@ -1048,15 +865,6 @@ function EstadoMesBadge({ estado }: { estado: ReturnType<typeof estadoMes> }) {
   return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Por vencer</Badge>;
 }
 
-function MiniStat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
-  return (
-    <div className="border border-gray-100 rounded-lg p-2">
-      <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">{label}</p>
-      <p className={`text-sm font-semibold truncate ${danger ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
-    </div>
-  );
-}
-
 function facturaLink(cargo: Cargo) {
   if (!cargo.ecfDocumentId) return <span className="text-gray-300 text-xs">—</span>;
   const ref = cargo.facturaEncf || cargo.facturaCodigo || `#${cargo.ecfDocumentId}`;
@@ -1125,12 +933,13 @@ function VolverLink() {
   );
 }
 
-function Row({ label, value, strong, capitalize }: { label: string; value: string; strong?: boolean; capitalize?: boolean }) {
+// Chip compacto clave·valor para la tarjeta horizontal del estudiante.
+function InfoChip({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-gray-500">{label}</span>
-      <span className={`text-right truncate ${strong ? 'font-semibold text-gray-900' : 'text-gray-700'} ${capitalize ? 'capitalize' : ''}`}>{value}</span>
-    </div>
+    <span className="inline-flex items-center gap-1.5 text-xs bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
+      <span className="text-gray-400">{k}</span>
+      <b className="font-semibold text-gray-800">{v}</b>
+    </span>
   );
 }
 
@@ -1157,113 +966,6 @@ function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][]
               ))}
             </tr>
           ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-interface LineaFactura {
-  nombreItem: string;
-  cantidadItem: number;
-  precioUnitarioItem: number;
-  dependienteNombre?: string | null;
-}
-
-/**
- * Tabla de facturas con detalle expandible por fila (líneas/productos de cada
- * factura). Reusa GET /api/facturas/[id] — endpoint de detalle ya existente
- * que parsea lineasJson — no se agregó nada al motor de facturación, solo se
- * consume lo que ya expone.
- */
-function FacturasConLineas({ facturas, cargosVinculadosIds }: { facturas: Factura[]; cargosVinculadosIds: Set<number> }) {
-  const [expandidaId, setExpandidaId] = useState<number | null>(null);
-  const [lineasPorFactura, setLineasPorFactura] = useState<Record<number, LineaFactura[]>>({});
-  const [cargandoId, setCargandoId] = useState<number | null>(null);
-
-  async function toggle(id: number) {
-    if (expandidaId === id) { setExpandidaId(null); return; }
-    setExpandidaId(id);
-    if (lineasPorFactura[id]) return;
-    setCargandoId(id);
-    try {
-      const data = await fetch(`/api/facturas/${id}`).then((r) => r.json());
-      setLineasPorFactura((prev) => ({ ...prev, [id]: data.lineas ?? [] }));
-    } finally {
-      setCargandoId(null);
-    }
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-gray-100">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
-            <th className="px-3 py-2 font-medium w-6"></th>
-            <th className="px-3 py-2 font-medium">NCF</th>
-            <th className="px-3 py-2 font-medium">Fecha</th>
-            <th className="px-3 py-2 font-medium">Monto</th>
-            <th className="px-3 py-2 font-medium">Estado</th>
-            <th className="px-3 py-2 font-medium text-right">Cargo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {facturas.map((f) => {
-            const abierta = expandidaId === f.id;
-            return (
-              <Fragment key={f.id}>
-                <tr
-                  onClick={() => toggle(f.id)}
-                  className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer">
-                  <td className="px-3 py-2.5 text-gray-400">
-                    {abierta ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                  </td>
-                  <td className="px-3 py-2.5 text-gray-700">{f.encf}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{fmtFechaCorta(f.createdAt)}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{fmtDOP(f.montoTotal)}</td>
-                  <td className="px-3 py-2.5"><Badge variant="outline" className="text-xs">{f.estado}</Badge></td>
-                  <td className="px-3 py-2.5 text-right">
-                    {cargosVinculadosIds.has(f.id)
-                      ? <Badge className="bg-teal-50 text-teal-700 border-teal-200">Cubre cargo</Badge>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                </tr>
-                {abierta && (
-                  <tr className="border-t border-gray-100 bg-gray-50/50">
-                    <td colSpan={6} className="px-3 py-2">
-                      {cargandoId === f.id ? (
-                        <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
-                      ) : (lineasPorFactura[f.id]?.length ?? 0) === 0 ? (
-                        <p className="text-xs text-gray-400 py-1 pl-6">Sin líneas registradas</p>
-                      ) : (
-                        <table className="w-full text-xs ml-6" style={{ width: 'calc(100% - 1.5rem)' }}>
-                          <thead>
-                            <tr className="text-left text-gray-400">
-                              <th className="py-1 font-medium">Producto/servicio</th>
-                              <th className="py-1 font-medium text-right">Cant.</th>
-                              <th className="py-1 font-medium text-right">Precio</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {lineasPorFactura[f.id].map((l, i) => (
-                              <tr key={i} className="border-t border-gray-100">
-                                <td className="py-1.5 text-gray-700">
-                                  {l.nombreItem}
-                                  {l.dependienteNombre && <span className="text-gray-400"> · {l.dependienteNombre}</span>}
-                                </td>
-                                <td className="py-1.5 text-right text-gray-600">{l.cantidadItem}</td>
-                                <td className="py-1.5 text-right text-gray-600">RD${Number(l.precioUnitarioItem).toFixed(2)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            );
-          })}
         </tbody>
       </table>
     </div>
