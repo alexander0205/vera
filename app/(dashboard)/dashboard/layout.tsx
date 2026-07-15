@@ -560,7 +560,7 @@ function SidebarContent({
 
   // Permisos efectivos (con overrides por empresa). null mientras carga →
   // canAccessHref usa el fallback estático del rol.
-  const { permissions, isLoading: permsLoading } = usePermissions();
+  const { permissions, modules, isLoading: permsLoading } = usePermissions();
   const permSet = useMemo(
     () => (permsLoading ? null : new Set<string>(permissions)),
     [permsLoading, permissions],
@@ -606,8 +606,16 @@ function SidebarContent({
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
+  // Grupos que pertenecen SOLO a Facturación: si el usuario no tiene ese módulo
+  // (p.ej. un cajero solo-POS) no deben aparecer aunque un href suelto no esté
+  // gateado por permiso. Inventario/Configuración quedan (traen entidades
+  // compartidas como Productos). null en modules = aún cargando → no ocultar.
+  const FACTURACION_ONLY_GROUPS = new Set(['ingresos', 'compras']);
+  const sinFacturacion = !permsLoading && !modules.includes('facturacion');
+
   const topItemsVisibles  = TOP_ITEMS.filter(item => can(item.href));
   const staticGroupsVis   = GROUPS
+    .filter(g => !(sinFacturacion && FACTURACION_ONLY_GROUPS.has(g.id)))
     .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
     .filter(g => g.children.length > 0);
   const groupsVisibles    = [posGroup, cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);

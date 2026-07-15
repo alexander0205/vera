@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 import {
   FileText, Plus, Hash, AlertTriangle, TrendingUp, Package, Users,
 } from 'lucide-react';
-import { getTeamIdForUser, getDashboardStats, getEcfDocuments, getCuentasPorCobrar } from '@/lib/db/queries';
+import { getTeamIdForUser, getDashboardStats, getEcfDocuments, getCuentasPorCobrar, getUser, getTeamRoleForUser } from '@/lib/db/queries';
+import { getUserModules } from '@/lib/auth/modules';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 import { OnboardingChecklist } from '@/components/onboarding-checklist';
 import Box from '@mui/material/Box';
@@ -29,6 +30,15 @@ const ESTADO_CHIP: Record<string, { label: string; color: 'success' | 'warning' 
 export default async function DashboardPage() {
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
+
+  // Usuario solo-POS (sin acceso a Facturación): el panel de facturación no le
+  // sirve — mandarlo directo a su módulo. Si no tiene POS tampoco, /sin-acceso.
+  const user = await getUser();
+  const teamRole = await getTeamRoleForUser();
+  const modules = await getUserModules(teamId, user?.platformRole, teamRole);
+  if (!modules.includes('facturacion')) {
+    redirect(modules.includes('pos') ? '/pos' : '/sin-acceso');
+  }
 
   const [stats, recentDocs, ar] = await Promise.all([
     getDashboardStats(teamId),
