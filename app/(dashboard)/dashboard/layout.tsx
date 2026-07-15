@@ -659,9 +659,11 @@ function SidebarContent({
           }}>
             <Typography sx={{ color: '#0f766e', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>z</Typography>
           </Box>
-          <Typography className="nav-text" sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>
-            Zero
-          </Typography>
+          {/* Identidad del producto: "Zero Facturación" (como Alegra Contabilidad). */}
+          <Box className="nav-text" sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+            <Typography sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '0.01em' }}>Zero</Typography>
+            <Typography sx={{ color: 'rgba(204,251,241,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Facturación</Typography>
+          </Box>
         </Box>
       </Box>
 

@@ -54,7 +54,11 @@ export function PosNavRail() {
           <Box sx={{ width: 28, height: 28, bgcolor: '#fff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Store style={{ width: 16, height: 16, color: '#0f766e' }} />
           </Box>
-          <Typography className="nav-text" sx={{ color: '#fff', fontWeight: 700, fontSize: '0.875rem' }}>Punto de venta</Typography>
+          {/* Identidad del producto: "Zero Punto de Venta" (como Alegra POS). */}
+          <Box className="nav-text" sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+            <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.875rem' }}>Zero</Typography>
+            <Typography sx={{ color: 'rgba(204,251,241,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Punto de Venta</Typography>
+          </Box>
         </Box>
 
         {/* Items */}
