@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarCargos, ecfDocuments } from '@/lib/db/schema';
+import { adminEscolarCargos, adminEscolarEstudianteTutores, adminEscolarTutores, ecfDocuments } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // La factura debe existir y ser del team.
   const [factura] = await db
-    .select({ id: ecfDocuments.id })
+    .select({ id: ecfDocuments.id, clientId: ecfDocuments.clientId })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
     .limit(1);
@@ -49,6 +49,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .limit(1);
       if (!cargo) throw new HttpError(404, 'Cargo no encontrado');
       if (cargo.estado === 'anulado') throw new HttpError(400, 'El cargo está anulado');
+
+      // Una factura escolar debe pertenecer al cliente del tutor responsable.
+      // Sin este guard, un ID de factura válido del mismo team podía quedar
+      // enlazado accidentalmente al cargo de otro estudiante/tutor.
+      const [responsable] = await tx
+        .select({ clientId: adminEscolarTutores.clientId })
+        .from(adminEscolarEstudianteTutores)
+        .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+        .where(and(
+          eq(adminEscolarEstudianteTutores.teamId, teamId),
+          eq(adminEscolarEstudianteTutores.estudianteId, cargo.estudianteId),
+          eq(adminEscolarEstudianteTutores.responsablePago, true),
+        ))
+        .limit(1);
+      if (!responsable?.clientId) {
+        throw new HttpError(400, 'El estudiante no tiene un tutor responsable vinculado a un contacto');
+      }
+      if (factura.clientId !== responsable.clientId) {
+        throw new HttpError(400, 'La factura pertenece a un contacto distinto al tutor responsable del estudiante');
+      }
 
       // Solo vincula. El cobro se hace luego en la factura; el saldo/estado del
       // cargo se refleja de la factura al leer el perfil (sincronización).

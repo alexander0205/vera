@@ -71,6 +71,7 @@ interface Cargo {
   fechaVencimiento: string | null;
   estado: string;
   ecfDocumentId: number | null;
+  facturaClientId: number | null;
   facturaEncf: string | null;
   facturaCodigo: string | null;
   facturaEstadoPago: string | null;
@@ -396,6 +397,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 puedePagos={puedePagos}
                 puedeGestionar={puedeGestionar}
                 estudianteId={estudiante.id}
+                tutorClientId={responsable?.clientId ?? null}
                 onRegistrarPago={abrirPago}
                 onAplicarMora={aplicarMora}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
@@ -530,13 +532,14 @@ function PeriodoFiltroBar({ grupos, value, onChange }: {
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado }: {
+function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   pagos: Pago[];
   puedeFacturar: boolean;
   puedePagos: boolean;
   puedeGestionar: boolean;
   estudianteId: number;
+  tutorClientId: number | null;
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   aplicandoMoraFacturaId: number | null;
@@ -546,6 +549,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
   const [crearCargoAbierto, setCrearCargoAbierto] = useState(false);
   const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
+  const [elegirPagoAbierto, setElegirPagoAbierto] = useState(false);
 
   const cargosPeriodo = grupo.cargos;
   const mesesAcademicos = mesesDelPeriodo(grupo.fechaInicio, grupo.fechaFin);
@@ -560,14 +564,18 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   const proximo = cargosPeriodo
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .sort((a, b) => (a.fechaVencimiento ?? '9999-12-31').localeCompare(b.fechaVencimiento ?? '9999-12-31'))[0] ?? null;
-  const facturaPendiente = cargosPeriodo.find((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && c.ecfDocumentId);
+  const facturasPendientesPago = cargosPeriodo.filter((c) => (
+    ['pendiente', 'parcial', 'vencido'].includes(c.estado)
+    && c.ecfDocumentId
+    && (tutorClientId == null || c.facturaClientId === tutorClientId)
+  ));
+  const facturasTutorIncorrecto = cargosPeriodo.filter((c) => (
+    ['pendiente', 'parcial', 'vencido'].includes(c.estado)
+    && c.ecfDocumentId
+    && tutorClientId != null
+    && c.facturaClientId !== tutorClientId
+  ));
   const cargosSinFactura = cargosPeriodo.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && !c.ecfDocumentId);
-
-  function registrarPago() {
-    if (facturaPendiente?.ecfDocumentId) {
-      onRegistrarPago(facturaPendiente.ecfDocumentId);
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -588,7 +596,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
             </Button>
           )}
           {puedePagos && (
-            <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={registrarPago} disabled={!facturaPendiente?.ecfDocumentId}>
+            <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={() => setElegirPagoAbierto(true)} disabled={facturasPendientesPago.length === 0}>
               <Wallet className="h-4 w-4 mr-1.5" />Registrar pago
             </Button>
           )}
@@ -715,6 +723,24 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
         fechaInicio={grupo.fechaInicio}
         fechaFin={grupo.fechaFin}
       />
+      {facturasTutorIncorrecto.length > 0 && (
+        <p className="text-xs text-amber-700">Hay {facturasTutorIncorrecto.length} cargo(s) con factura vinculada a otro contacto. No se muestran para cobrar.</p>
+      )}
+      <Dialog open={elegirPagoAbierto} onOpenChange={setElegirPagoAbierto}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>¿Qué deuda deseas cobrar?</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-500">Solo aparecen facturas pendientes del tutor de pago actual.</p>
+          <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+            {facturasPendientesPago.map((cargo) => (
+              <button key={cargo.id} type="button" onClick={() => { setElegirPagoAbierto(false); onRegistrarPago(cargo.ecfDocumentId!); }}
+                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-teal-50/50">
+                <span><span className="block text-sm font-medium text-gray-900">{cargo.concepto ?? 'Cargo'}</span><span className="block text-xs text-gray-500">{cargo.mes ? `${MESES[cargo.mes]} ${cargo.anio}` : cargo.anio} · {cargo.facturaEncf ?? cargo.facturaCodigo ?? `#${cargo.ecfDocumentId}`}</span></span>
+                <span className="text-sm font-semibold text-red-600">{fmtDOP(cargo.saldoCentavos)}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={elegirFacturaAbierto} onOpenChange={setElegirFacturaAbierto}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>¿Qué cargo deseas facturar?</DialogTitle></DialogHeader>

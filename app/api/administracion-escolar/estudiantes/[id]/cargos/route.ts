@@ -30,6 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       fechaVencimiento: adminEscolarCargos.fechaVencimiento,
       estado: adminEscolarCargos.estado,
       ecfDocumentId: adminEscolarCargos.ecfDocumentId,
+      facturaClientId: ecfDocuments.clientId,
       facturaEncf: ecfDocuments.encf,
       facturaCodigo: ecfDocuments.codigo,
       facturaEstadoPago: ecfDocuments.estadoPago,
