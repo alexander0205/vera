@@ -148,13 +148,27 @@ export interface InitialPlan {
   notas:        string | null;
 }
 
+export interface ContextoEscolar {
+  matriculaId: number;
+  conceptoId: number;
+  conceptoNombre: string;
+  estudianteNombre: string;
+  tutorNombre: string;
+  clientId: number;
+  clienteRazonSocial: string;
+  periodo: string;
+  fechaInicio: string;
+  fechaFin: string;
+}
+
 interface Props {
   initialPerfil: EmpresaPerfil | null;
   /** Si se pasa, el form opera en modo edición (PUT en lugar de POST). */
   initialPlan?: InitialPlan;
+  contextoEscolar?: ContextoEscolar;
 }
 
-export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan }: Props) {
+export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan, contextoEscolar }: Props) {
   const router = useRouter();
   const empresa = initialPerfil;
   const isEdit = Boolean(initialPlan);
@@ -175,11 +189,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
       ? String(initialPlan.diasParaPago)
       : (defaultDias != null && defaultDias > 0 ? String(defaultDias) : '5'),
   ); // solo aplica si tipoPago=2 (crédito)
-  const [frecuencia, setFrecuencia]     = useState(initialPlan?.frecuencia ?? 'mensual');
-  const [nombre, setNombre]             = useState(initialPlan?.nombre ?? '');
+  const [frecuencia, setFrecuencia]     = useState(initialPlan?.frecuencia ?? (contextoEscolar ? 'mensual' : 'mensual'));
+  const [nombre, setNombre]             = useState(initialPlan?.nombre ?? (contextoEscolar ? `${contextoEscolar.conceptoNombre} — ${contextoEscolar.estudianteNombre}` : ''));
   const [descripcion, setDescripcion]   = useState(initialPlan?.descripcion ?? '');
-  const [fechaInicio, setFechaInicio]   = useState(initialPlan?.fechaInicio ?? '');
-  const [fechaFin, setFechaFin]         = useState(initialPlan?.fechaFin ?? '');
+  const [fechaInicio, setFechaInicio]   = useState(initialPlan?.fechaInicio ?? contextoEscolar?.fechaInicio ?? '');
+  const [fechaFin, setFechaFin]         = useState(initialPlan?.fechaFin ?? contextoEscolar?.fechaFin ?? '');
 
   const regla = TIPO_ECF_REGLAS[tipoEcf];
 
@@ -188,8 +202,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   // Esto garantiza que un Guardar antes de que termine la hidratación no borre el
   // clientId del plan (la hidratación luego enriquece con razonSocial/email/etc.).
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(
-    initialPlan?.clientId
-      ? { id: initialPlan.clientId, razonSocial: 'Cargando…', rnc: null, email: null, telefono: null }
+    initialPlan?.clientId || contextoEscolar?.clientId
+      ? {
+        id: initialPlan?.clientId ?? contextoEscolar!.clientId,
+        razonSocial: contextoEscolar?.clienteRazonSocial ?? 'Cargando…', rnc: null, email: null, telefono: null,
+      }
       : null
   );
   const [rncManual, setRncManual]             = useState('');
@@ -483,6 +500,12 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
             dependienteId:      item.dependienteId ?? null,
             dependienteNombre:  item.dependienteNombre || undefined,
           })),
+          ...(contextoEscolar && {
+            contextoEscolar: {
+              matriculaId: contextoEscolar.matriculaId,
+              conceptoId: contextoEscolar.conceptoId,
+            },
+          }),
         }),
       });
       const data = await res.json();
@@ -499,6 +522,13 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   return (
     <div className="bg-[#eef0f7] min-h-full flex flex-col">
       <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
+
+        {contextoEscolar && !isEdit && (
+          <div className="mb-4 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">
+            Mensualidad de <b>{contextoEscolar.estudianteNombre}</b> · {contextoEscolar.periodo}. Tutor responsable: <b>{contextoEscolar.tutorNombre}</b>.
+            Al guardar, plan queda ligado a esta matrícula; cron creará factura y cargo del mismo mes.
+          </div>
+        )}
 
         {/* Back nav */}
         <div className="flex items-center gap-3 mb-4">

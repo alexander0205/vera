@@ -1,10 +1,12 @@
 # Plan — Facturación automática mensual + mora (Administración Escolar)
 
 > Origen: audio de Alex (transcripción `transcripciones/whatsapp_ptt_2026-07-14_170343.md`, MD2 paso 4).
-> Estado: **PLANIFICACIÓN — requiere decisiones de negocio de Alex antes de implementar.**
+> Estado: **IMPLEMENTADO EN DEV — decisiones de Alex cerradas 2026-07-15.**
 > Rama: `feature/administracion-escolar`.
 >
 > **⚠️ ACTUALIZACIÓN 2026-07-15:** al investigar el código se descubrió que el motor **ya tiene** casi toda la infraestructura: facturación recurrente (`facturasRecurrentes` + cron `/api/cron/facturas-recurrentes` diario 8am, schema diseñado "para colegios") y mora automática (`aplicarRecargosMoraVencidos` + cron `/api/cron/recargos-mora` diario 9am + config por team `recargoMora*`). El paso 3 (mora manual desde cargos) ya está implementado; el paso 4 es **integración**, no build. Ver el handoff autoritativo con instrucciones y decisiones: **`docs/handoff-md2-pasos-3-4.md`**. Este documento queda como contexto histórico del plan original.
+
+> **Cierre:** Alex aprobó enfoque A: una recurrente por matrícula. Día, vencimiento, pago y mora se definen en formulario recurrente existente; auto-generación queda BORRADOR interno, nunca DGII; solo mensualidad; tutor responsable obligatorio. Migración dev `0077` aplicada y E2E UI pasado. El handoff contiene diseño final.
 
 ## Objetivo (lo que pidió Alex)
 

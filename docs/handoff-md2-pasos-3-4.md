@@ -12,7 +12,7 @@ MD2 sale de la transcripción `transcripciones/whatsapp_ptt_2026-07-14_170343.md
 | 1 | Registrar pago in-place en el perfil (reusa PagoModal de CxC) | ✅ HECHO + pusheado |
 | 2 | Rediseño del perfil (tarjeta horizontal, período filtro-padre, 3 secciones, compacto 14") | ✅ HECHO + pusheado (`21dbbe9`) |
 | 3 | **Cargo por mora** (manual, por cargo) | ✅ HECHO — pendiente revisión visual/E2E |
-| 4 | **Facturación automática mensual** + vencimiento + mora | ⏳ PENDIENTE — mayormente ya existe en el motor |
+| 4 | **Facturación automática mensual** + vencimiento + mora | ✅ IMPLEMENTADO + migrado dev + E2E UI |
 
 ## ⚠️ Orden de EJECUCIÓN: **3 antes que 4**
 
@@ -57,6 +57,24 @@ Descubierto al investigar. Los pasos 3 y 4 son **integración**, no construcció
 ---
 
 ## PASO 4 — Facturación automática mensual — instrucciones + decisiones
+
+### Decisiones de Alex — 2026-07-15 (cerradas)
+
+- **Arquitectura:** enfoque A. Una factura recurrente por matrícula/estudiante.
+- **Día de cobro, condición de pago, vencimiento y mora:** se deciden en el formulario existente de factura recurrente, por plan. No se agregó configuración escolar duplicada.
+- **DGII:** la generación automática crea solo BORRADORES internos; no envía a DGII.
+- **Alcance:** solo mensualidades; inscripción, uniformes y cargos manuales siguen manuales.
+- **Tutor:** siempre tutor responsable con `clientId`; sin él no se puede configurar el plan.
+- **Matrícula:** al configurar mensualidad se crea y vincula su plan; luego se puede pausar/editar desde Facturas recurrentes.
+
+### Implementación nueva (0077 aplicada a Neon dev)
+
+- `admin_escolar_matriculas.factura_recurrente_id` + `concepto_mensualidad_id`: FK unidireccionales desde escuela; el motor genérico no recibe campos escolares.
+- Perfil del estudiante, por período: botón **Configurar mensualidad** abre formulario recurrente ya prellenado con matrícula, tutor y fechas académicas. Al guardar valida: matrícula activa, concepto `mensualidad`, tutor correcto, frecuencia mensual y fechas dentro del período.
+- `generarFacturaDeRecurrente` crea borrador y refleja/crea el cargo del mismo mes, vinculado a `ecfDocumentId`. Reintentos son idempotentes.
+- Vencimiento ahora parte de la fecha del período generado, no del día tardío en que corra cron.
+- Migración `0077` aplicada a Neon dev: columnas, FKs e índice único verificados. Producción la corre el usuario.
+- E2E UI: perfil → período con fechas → **Configurar mensualidad** → formulario prellenado. Períodos sin fechas bloquean acción para no crear planes huérfanos.
 
 **Objetivo (audio):** la factura mensual se genera automática al cerrar el mes; el plazo de vencimiento viene de config por negocio; si no se paga entra a CxC; mora cada X días.
 

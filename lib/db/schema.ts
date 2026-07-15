@@ -1568,6 +1568,10 @@ export const adminEscolarMatriculas = pgTable('admin_escolar_matriculas', {
   fechaInscripcion: date('fecha_inscripcion'),
   /** activa | finalizada | retirada | anulada */
   estado:           varchar('estado', { length: 20 }).notNull().default('activa'),
+  /** Plan genérico que genera la mensualidad automática de esta matrícula. */
+  facturaRecurrenteId: integer('factura_recurrente_id').references(() => facturasRecurrentes.id),
+  /** Concepto escolar que recibirá cada cargo generado por el plan. */
+  conceptoMensualidadId: integer('concepto_mensualidad_id').references(() => adminEscolarConceptosPago.id),
   notas:            text('notas'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
@@ -1575,6 +1579,7 @@ export const adminEscolarMatriculas = pgTable('admin_escolar_matriculas', {
   index('admin_escolar_matriculas_team_idx').on(t.teamId),
   index('admin_escolar_matriculas_estudiante_idx').on(t.estudianteId),
   index('admin_escolar_matriculas_periodo_idx').on(t.periodoId),
+  uniqueIndex('admin_escolar_matriculas_factura_recurrente_uniq').on(t.facturaRecurrenteId),
 ]);
 
 /** Concepto de cargo escolar. `recurrente` = mensualidad (genera por mes). */

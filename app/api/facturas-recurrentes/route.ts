@@ -5,10 +5,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { facturasRecurrentes, clients } from '@/lib/db/schema';
+import {
+  facturasRecurrentes, clients,
+  adminEscolarMatriculas, adminEscolarPeriodos, adminEscolarConceptosPago,
+  adminEscolarEstudianteTutores, adminEscolarTutores,
+} from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, isNull } from 'drizzle-orm';
 
 // GET /api/facturas-recurrentes?page=1&limit=50
 export async function GET(req: NextRequest) {
@@ -59,6 +63,81 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
+  // Contexto opcional del módulo escolar. El plan sigue siendo genérico; la FK
+  // vive en matrícula. Esto fuerza tutor correcto + mensualidad + calendario.
+  const contextoEscolar = body.contextoEscolar as { matriculaId?: number; conceptoId?: number } | undefined;
+  if (contextoEscolar) {
+    const escolarAuth = await requirePermission('administracion-escolar:gestionar');
+    if (!escolarAuth.ok) return escolarAuth.response;
+    if (!Number.isInteger(contextoEscolar.matriculaId) || !Number.isInteger(contextoEscolar.conceptoId)) {
+      return NextResponse.json({ error: 'Contexto de matrícula inválido' }, { status: 400 });
+    }
+    const matriculaId = contextoEscolar.matriculaId as number;
+    const conceptoId = contextoEscolar.conceptoId as number;
+    if (body.frecuencia && body.frecuencia !== 'mensual') {
+      return NextResponse.json({ error: 'La facturación automática escolar debe ser mensual' }, { status: 422 });
+    }
+    if (!body.fechaFin) {
+      return NextResponse.json({ error: 'La facturación escolar debe finalizar con el período académico' }, { status: 422 });
+    }
+
+    const [matricula] = await db
+      .select({
+        id: adminEscolarMatriculas.id,
+        estudianteId: adminEscolarMatriculas.estudianteId,
+        estado: adminEscolarMatriculas.estado,
+        facturaRecurrenteId: adminEscolarMatriculas.facturaRecurrenteId,
+        fechaInicio: adminEscolarPeriodos.fechaInicio,
+        fechaFin: adminEscolarPeriodos.fechaFin,
+      })
+      .from(adminEscolarMatriculas)
+      .innerJoin(adminEscolarPeriodos, eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id))
+      .where(and(
+        eq(adminEscolarMatriculas.id, matriculaId),
+        eq(adminEscolarMatriculas.teamId, teamId),
+      ))
+      .limit(1);
+    if (!matricula || matricula.estado !== 'activa') {
+      return NextResponse.json({ error: 'La matrícula activa no fue encontrada' }, { status: 404 });
+    }
+    if (matricula.facturaRecurrenteId) {
+      return NextResponse.json({ error: 'Esta matrícula ya tiene facturación automática configurada' }, { status: 409 });
+    }
+    if (!matricula.fechaInicio || !matricula.fechaFin ||
+        body.fechaInicio < matricula.fechaInicio || body.fechaInicio > matricula.fechaFin ||
+        body.fechaFin > matricula.fechaFin || body.fechaFin < body.fechaInicio) {
+      return NextResponse.json({ error: 'Las fechas deben estar dentro del período académico' }, { status: 422 });
+    }
+
+    const [[concepto], [responsable]] = await Promise.all([
+      db.select({ id: adminEscolarConceptosPago.id })
+        .from(adminEscolarConceptosPago)
+        .where(and(
+          eq(adminEscolarConceptosPago.id, conceptoId),
+          eq(adminEscolarConceptosPago.teamId, teamId),
+          eq(adminEscolarConceptosPago.tipo, 'mensualidad'),
+          eq(adminEscolarConceptosPago.activo, true),
+        ))
+        .limit(1),
+      db.select({ clientId: adminEscolarTutores.clientId })
+        .from(adminEscolarEstudianteTutores)
+        .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+        .where(and(
+          eq(adminEscolarEstudianteTutores.teamId, teamId),
+          eq(adminEscolarEstudianteTutores.estudianteId, matricula.estudianteId),
+          eq(adminEscolarEstudianteTutores.responsablePago, true),
+        ))
+        .limit(1),
+    ]);
+    if (!concepto) return NextResponse.json({ error: 'Concepto de mensualidad no encontrado' }, { status: 422 });
+    if (!responsable?.clientId) {
+      return NextResponse.json({ error: 'El estudiante no tiene tutor responsable vinculado a un contacto' }, { status: 422 });
+    }
+    if (body.clientId !== responsable.clientId) {
+      return NextResponse.json({ error: 'La factura debe pertenecer al tutor responsable del estudiante' }, { status: 422 });
+    }
+  }
+
   if (!body.nombre?.trim())        return NextResponse.json({ error: 'El nombre es obligatorio' }, { status: 422 });
   if (!body.fechaInicio)           return NextResponse.json({ error: 'La fecha de inicio es obligatoria' }, { status: 422 });
   if (!body.proximaEmision)        return NextResponse.json({ error: 'La próxima emisión es obligatoria' }, { status: 422 });
@@ -74,9 +153,7 @@ export async function POST(req: NextRequest) {
     ? (body.diaCobro != null ? Math.min(31, Math.max(1, parseInt(body.diaCobro))) : null)
     : null;
 
-  const [row] = await db
-    .insert(facturasRecurrentes)
-    .values({
+  const values = {
       teamId,
       clientId:       body.clientId ?? null,
       nombre:         body.nombre.trim(),
@@ -93,8 +170,36 @@ export async function POST(req: NextRequest) {
       items:          body.items ? JSON.stringify(body.items) : '[]',
       notas:          body.notas ?? null,
       totalEstimado:  Math.round((body.totalEstimado ?? 0) * 100),
+  };
+
+  const [row] = contextoEscolar
+    ? await db.transaction(async (tx) => {
+      const [matriculaBloqueada] = await tx.select({ facturaRecurrenteId: adminEscolarMatriculas.facturaRecurrenteId })
+        .from(adminEscolarMatriculas)
+        .where(and(
+          eq(adminEscolarMatriculas.id, contextoEscolar.matriculaId as number),
+          eq(adminEscolarMatriculas.teamId, teamId),
+        ))
+        .for('update')
+        .limit(1);
+      if (!matriculaBloqueada || matriculaBloqueada.facturaRecurrenteId) {
+        throw new Error('La matrícula ya tiene facturación automática configurada');
+      }
+      const [plan] = await tx.insert(facturasRecurrentes).values(values).returning();
+      await tx.update(adminEscolarMatriculas)
+        .set({
+          facturaRecurrenteId: plan.id,
+          conceptoMensualidadId: contextoEscolar.conceptoId as number,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(adminEscolarMatriculas.id, contextoEscolar.matriculaId as number),
+          eq(adminEscolarMatriculas.teamId, teamId),
+          isNull(adminEscolarMatriculas.facturaRecurrenteId),
+        ));
+      return [plan];
     })
-    .returning();
+    : await db.insert(facturasRecurrentes).values(values).returning();
 
   return NextResponse.json({ facturaRecurrente: row }, { status: 201 });
 }

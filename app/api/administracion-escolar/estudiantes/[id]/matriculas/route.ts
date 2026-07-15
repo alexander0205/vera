@@ -25,6 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       codigoMatricula: adminEscolarMatriculas.codigoMatricula,
       fechaInscripcion: adminEscolarMatriculas.fechaInscripcion,
       estado: adminEscolarMatriculas.estado,
+      facturaRecurrenteId: adminEscolarMatriculas.facturaRecurrenteId,
       notas: adminEscolarMatriculas.notas,
     })
     .from(adminEscolarMatriculas)

@@ -57,6 +57,7 @@ interface Matricula {
   codigoMatricula: string | null;
   fechaInscripcion: string | null;
   estado: string;
+  facturaRecurrenteId: number | null;
   notas: string | null;
 }
 interface Cargo {
@@ -595,6 +596,16 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
               <Plus className="h-4 w-4 mr-1.5" />Agregar cargo
             </Button>
           )}
+          {puedeFacturar && grupo.matriculaId && (
+            <Button size="sm" variant="outline" onClick={() => router.push(
+              grupo.facturaRecurrenteId
+                ? `/dashboard/facturas-recurrentes/${grupo.facturaRecurrenteId}`
+                : `/dashboard/facturas-recurrentes/nueva?matriculaId=${grupo.matriculaId}`,
+            )} disabled={!grupo.facturaRecurrenteId && (!grupo.fechaInicio || !grupo.fechaFin)}>
+              <FileText className="h-4 w-4 mr-1.5" />
+              {grupo.facturaRecurrenteId ? 'Gestionar mensualidad' : 'Configurar mensualidad'}
+            </Button>
+          )}
           {puedePagos && (
             <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={() => setElegirPagoAbierto(true)} disabled={facturasPendientesPago.length === 0}>
               <Wallet className="h-4 w-4 mr-1.5" />Registrar pago
@@ -937,6 +948,7 @@ function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
     fecha: string | null;
     fechaInicio: string | null;
     fechaFin: string | null;
+    facturaRecurrenteId: number | null;
     cargos: Cargo[];
   }>();
 
@@ -952,6 +964,7 @@ function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
       fecha: m.fechaInscripcion,
       fechaInicio: m.periodoFechaInicio,
       fechaFin: m.periodoFechaFin,
+      facturaRecurrenteId: m.facturaRecurrenteId,
       cargos: [],
     });
   }
@@ -975,6 +988,7 @@ function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
           fecha: null,
           fechaInicio: null,
           fechaFin: null,
+          facturaRecurrenteId: null,
           cargos: [],
         };
         grupos.set(key, grupo);
