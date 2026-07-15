@@ -975,12 +975,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
       <GlobalSearch />
 
-      {/* Columna app: AppBar full-width arriba, luego fila [rail sidebar][contenido].
-          Así el rail vive DEBAJO del header y su expansión en hover flota solo
-          sobre el contenido, nunca tapa el header (antes se veía feo). */}
+      {/* Arquitectura idéntica al Punto de Venta: rail full-height a la izquierda
+          (mismo menú que se abre/cierra al pasar el mouse) + columna de contenido
+          (header + página) a la derecha. */}
+      {sidebarVisible && (
+        <Box
+          component="aside"
+          sx={{ width: RAIL_WIDTH, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'relative' }}
+        >
+          <Box
+            sx={{
+              position:   'absolute',
+              top:        0,
+              left:       0,
+              height:     '100%',
+              width:      RAIL_WIDTH,
+              overflow:   'hidden',
+              zIndex:     40,
+              transition: 'width 0.2s ease, box-shadow 0.2s ease',
+              '& .nav-text':      { opacity: 0, transition: 'opacity 0.12s ease' },
+              '& .nav-children':  { display: 'none' },
+              '&:hover':          { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
+              '&:hover .nav-text':     { opacity: 1 },
+              '&:hover .nav-children': { display: 'block' },
+            }}
+          >
+            <SidebarContent teams={teams} activeTeamId={activeTeamId} />
+          </Box>
+        </Box>
+      )}
+
+      {/* Mobile Drawer */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: 'block', lg: 'none' },
+          '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, boxSizing: 'border-box', border: 'none' },
+        }}
+      >
+        <SidebarContent teams={teams} activeTeamId={activeTeamId} onClose={() => setMobileOpen(false)} />
+      </Drawer>
+
+      {/* Columna de contenido: header (barra) + página */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {/* Top bar */}
         <AppBar
@@ -1108,60 +1150,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Toolbar>
         </AppBar>
 
-        {/* Fila: rail sidebar (izquierda) + contenido (derecha) */}
-        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
-          {/* Desktop Sidebar — rail de iconos que se expande al pasar el mouse.
-              El aside reserva solo RAIL_WIDTH; el panel interno flota (absolute)
-              y crece a SIDEBAR_WIDTH en hover, así el contenido no se reacomoda.
-              Vive debajo del header, por eso su expansión ya no lo tapa. */}
-          {sidebarVisible && (
-            <Box
-              component="aside"
-              sx={{ width: RAIL_WIDTH, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'relative' }}
-            >
-              <Box
-                sx={{
-                  position:   'absolute',
-                  top:        0,
-                  left:       0,
-                  height:     '100%',
-                  width:      RAIL_WIDTH,
-                  overflow:   'hidden',
-                  zIndex:     30,
-                  transition: 'width 0.2s ease, box-shadow 0.2s ease',
-                  '& .nav-text':      { opacity: 0, transition: 'opacity 0.12s ease' },
-                  '& .nav-children':  { display: 'none' },
-                  '&:hover':          { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
-                  '&:hover .nav-text':     { opacity: 1 },
-                  '&:hover .nav-children': { display: 'block' },
-                }}
-              >
-                <SidebarContent teams={teams} activeTeamId={activeTeamId} />
-              </Box>
-            </Box>
-          )}
-
-          {/* Mobile Drawer */}
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={() => setMobileOpen(false)}
-            ModalProps={{ keepMounted: true }}
-            sx={{
-              display: { xs: 'block', lg: 'none' },
-              '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, boxSizing: 'border-box', border: 'none' },
-            }}
-          >
-            <SidebarContent teams={teams} activeTeamId={activeTeamId} onClose={() => setMobileOpen(false)} />
-          </Drawer>
-
-          {/* Page content */}
-          <Box
-            component="main"
-            sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0 }}
-          >
-            {children}
-          </Box>
+        {/* Page content */}
+        <Box
+          component="main"
+          sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0 }}
+        >
+          {children}
         </Box>
       </Box>
     </Box>
