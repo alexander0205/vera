@@ -3,6 +3,8 @@
 > Origen: audio de Alex (transcripción `transcripciones/whatsapp_ptt_2026-07-14_170343.md`, MD2 paso 4).
 > Estado: **PLANIFICACIÓN — requiere decisiones de negocio de Alex antes de implementar.**
 > Rama: `feature/administracion-escolar`.
+>
+> **⚠️ ACTUALIZACIÓN 2026-07-15:** al investigar el código se descubrió que el motor **ya tiene** casi toda la infraestructura: facturación recurrente (`facturasRecurrentes` + cron `/api/cron/facturas-recurrentes` diario 8am, schema diseñado "para colegios") y mora automática (`aplicarRecargosMoraVencidos` + cron `/api/cron/recargos-mora` diario 9am + config por team `recargoMora*`). El paso 3 (mora manual desde cargos) ya está implementado; el paso 4 es **integración**, no build. Ver el handoff autoritativo con instrucciones y decisiones: **`docs/handoff-md2-pasos-3-4.md`**. Este documento queda como contexto histórico del plan original.
 
 ## Objetivo (lo que pidió Alex)
 

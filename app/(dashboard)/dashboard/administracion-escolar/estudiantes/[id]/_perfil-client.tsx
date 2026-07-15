@@ -18,6 +18,7 @@ import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
 import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { toast } from 'sonner';
 
@@ -123,6 +124,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   // salir del perfil. El flujo de datos es el mismo (registra en la factura).
   const [pagoCuenta, setPagoCuenta] = useState<Cuenta | null>(null);
   const [cargandoPago, setCargandoPago] = useState(false);
+  const [aplicandoMoraFacturaId, setAplicandoMoraFacturaId] = useState<number | null>(null);
 
   const abrirPago = useCallback(async (ecfDocumentId: number) => {
     setCargandoPago(true);
@@ -209,6 +211,33 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
       setLoading(false);
     }
   }, [id]);
+
+  // La mora pertenece al motor de facturación: crea una ND tipo 33 sobre la
+  // factura del cargo. El perfil escolar nunca calcula ni persiste mora propia.
+  const aplicarMora = useCallback(async (ecfDocumentId: number) => {
+    setAplicandoMoraFacturaId(ecfDocumentId);
+    try {
+      const res = await fetch(`/api/facturas/${ecfDocumentId}/nota-debito-mora`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        toast.info(data.error ?? 'Ya existe un cargo por mora para esta factura');
+        return;
+      }
+      if (!res.ok) {
+        if (res.status === 422) {
+          toast.error(data.error ?? 'La factura no tiene saldo o el porcentaje de mora es cero');
+          return;
+        }
+        throw new Error(data.error ?? 'No se pudo generar el cargo por mora');
+      }
+      toast.success('Cargo por mora generado');
+      await cargar();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo generar el cargo por mora');
+    } finally {
+      setAplicandoMoraFacturaId(null);
+    }
+  }, [cargar]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -361,6 +390,8 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 puedeFacturar={puedeFacturar}
                 puedePagos={puedePagos}
                 onRegistrarPago={abrirPago}
+                onAplicarMora={aplicarMora}
+                aplicandoMoraFacturaId={aplicandoMoraFacturaId}
               />
             ) : (
               <EmptyBox text="Sin períodos, cargos o pagos relacionados" />
@@ -491,12 +522,14 @@ function PeriodoFiltroBar({ grupos, value, onChange }: {
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPago }: {
+function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   pagos: Pago[];
   puedeFacturar: boolean;
   puedePagos: boolean;
   onRegistrarPago: (ecfDocumentId: number) => void;
+  onAplicarMora: (ecfDocumentId: number) => void;
+  aplicandoMoraFacturaId: number | null;
 }) {
   const router = useRouter();
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
@@ -592,20 +625,21 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPa
         </div>
 
         {vista === 'mensualidades' && (
-              <MensualidadesTabla cargos={cargosPeriodo.filter((c) => c.mes != null)} pagos={pagos} onAction={(cargo) => {
-                if (cargo?.ecfDocumentId && ['pendiente', 'parcial', 'vencido'].includes(cargo.estado)) {
-                  onRegistrarPago(cargo.ecfDocumentId);
-                } else if (cargo && !cargo.ecfDocumentId) {
-                  router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`);
-                } else if (cargo?.ecfDocumentId) {
-                  router.push(`/dashboard/facturas/${cargo.ecfDocumentId}`);
-                }
-              }} />
+              <MensualidadesTabla
+                cargos={cargosPeriodo.filter((c) => c.mes != null)}
+                pagos={pagos}
+                puedePagos={puedePagos}
+                puedeFacturar={puedeFacturar}
+                onRegistrarPago={onRegistrarPago}
+                onAplicarMora={onAplicarMora}
+                onCrearFactura={(cargo) => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
+                aplicandoMoraFacturaId={aplicandoMoraFacturaId}
+              />
             )}
 
             {vista === 'otros' && (
               otrosCargos.length === 0 ? <EmptyBox text="Sin otros cargos" /> : (
-                <SimpleTable head={['Concepto', 'Vencimiento', 'Monto', 'Pagado', 'Pendiente', 'Factura']}
+                <SimpleTable head={['Concepto', 'Vencimiento', 'Monto', 'Pagado', 'Pendiente', 'Factura', 'Acción']}
                   rows={otrosCargos.map((c) => {
                     const pagadoCargo = Math.max(0, c.montoCentavos - c.saldoCentavos);
                     return [
@@ -615,6 +649,16 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPa
                       fmtDOP(pagadoCargo),
                       <span key="saldo" className={c.saldoCentavos > 0 ? 'text-red-600 font-medium' : 'text-teal-700 font-medium'}>{fmtDOP(c.saldoCentavos)}</span>,
                       facturaLink(c),
+                      <CargoActionsMenu
+                        key="acciones"
+                        cargo={c}
+                        puedePagos={puedePagos}
+                        puedeFacturar={puedeFacturar}
+                        onRegistrarPago={onRegistrarPago}
+                        onAplicarMora={onAplicarMora}
+                        onCrearFactura={(cargo) => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
+                        aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
+                      />,
                     ];
                   })} />
               )
@@ -674,10 +718,15 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   );
 }
 
-function MensualidadesTabla({ cargos, pagos, onAction }: {
+function MensualidadesTabla({ cargos, pagos, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, aplicandoMoraFacturaId }: {
   cargos: Cargo[];
   pagos: Pago[];
-  onAction: (cargo: Cargo | null) => void;
+  puedePagos: boolean;
+  puedeFacturar: boolean;
+  onRegistrarPago: (ecfDocumentId: number) => void;
+  onAplicarMora: (ecfDocumentId: number) => void;
+  onCrearFactura: (cargo: Cargo) => void;
+  aplicandoMoraFacturaId: number | null;
 }) {
   const rows = Array.from({ length: 12 }, (_, i) => {
     const mes = i + 1;
@@ -718,15 +767,17 @@ function MensualidadesTabla({ cargos, pagos, onAction }: {
               </td>
               <td className="px-3 py-2.5">{r.factura ? facturaLink(r.factura) : <span className="text-gray-400">—</span>}</td>
               <td className="px-3 py-2.5 text-right">
-                <button
-                  type="button"
-                  onClick={() => onAction(r.accion ?? null)}
-                  disabled={!r.accion}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30"
-                  title="Acción del mes"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
+                {r.accion ? (
+                  <CargoActionsMenu
+                    cargo={r.accion}
+                    puedePagos={puedePagos}
+                    puedeFacturar={puedeFacturar}
+                    onRegistrarPago={onRegistrarPago}
+                    onAplicarMora={onAplicarMora}
+                    onCrearFactura={onCrearFactura}
+                    aplicandoMora={aplicandoMoraFacturaId === r.accion.ecfDocumentId}
+                  />
+                ) : <span className="text-gray-300">—</span>}
               </td>
             </tr>
           ))}
@@ -737,6 +788,57 @@ function MensualidadesTabla({ cargos, pagos, onAction }: {
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-teal-600 text-white">1</span>
       </div>
     </div>
+  );
+}
+
+function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, aplicandoMora }: {
+  cargo: Cargo;
+  puedePagos: boolean;
+  puedeFacturar: boolean;
+  onRegistrarPago: (ecfDocumentId: number) => void;
+  onAplicarMora: (ecfDocumentId: number) => void;
+  onCrearFactura: (cargo: Cargo) => void;
+  aplicandoMora: boolean;
+}) {
+  const pendiente = ['pendiente', 'parcial', 'vencido'].includes(cargo.estado);
+  const tieneFactura = cargo.ecfDocumentId != null;
+  const tieneAccion = (pendiente && tieneFactura && (puedePagos || puedeFacturar)) || (pendiente && !tieneFactura && puedeFacturar) || tieneFactura;
+  if (!tieneAccion) return <span className="text-gray-300 text-xs">—</span>;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Acciones de ${cargo.concepto ?? 'cargo'}`}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 data-[state=open]:bg-gray-100"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        {pendiente && tieneFactura && puedePagos && (
+          <DropdownMenuItem onSelect={() => onRegistrarPago(cargo.ecfDocumentId!)}>
+            <Wallet className="h-4 w-4" />Registrar pago
+          </DropdownMenuItem>
+        )}
+        {pendiente && tieneFactura && puedeFacturar && (
+          <DropdownMenuItem disabled={aplicandoMora} onSelect={() => onAplicarMora(cargo.ecfDocumentId!)}>
+            <AlertTriangle className="h-4 w-4" />{aplicandoMora ? 'Generando mora…' : 'Cargo por mora'}
+          </DropdownMenuItem>
+        )}
+        {pendiente && !tieneFactura && puedeFacturar && (
+          <DropdownMenuItem onSelect={() => onCrearFactura(cargo)}>
+            <Receipt className="h-4 w-4" />Crear factura
+          </DropdownMenuItem>
+        )}
+        {tieneFactura && (!pendiente || (!puedePagos && !puedeFacturar)) && (
+          <DropdownMenuItem onSelect={() => window.location.assign(`/dashboard/facturas/${cargo.ecfDocumentId}`)}>
+            <Receipt className="h-4 w-4" />Ver factura
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
