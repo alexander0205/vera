@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import { PosNavRail } from '@/components/pos-nav-rail';
 
-export const metadata = { title: 'Punto de venta' };
+export const metadata = { title: 'Zero Punto de Venta' };
 
 export default function PosLayout({ children }: { children: React.ReactNode }) {
   // El <Toaster> vive en el layout raíz (app/layout.tsx). No montar otro aquí:
