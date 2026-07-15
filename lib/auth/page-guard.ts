@@ -20,6 +20,7 @@ import { and, eq } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
 
 /**
  * Verifica el permiso. Si falla:
@@ -78,6 +79,31 @@ export async function requirePermissionAny(perms: Permission[]): Promise<void> {
 
   const ok = perms.some(perm => userCan(u?.platformRole, m?.role, perm));
   if (!ok) redirect('/dashboard');
+}
+
+/**
+ * Gate de módulo a nivel de página. Verifica que el usuario tenga acceso al
+ * módulo (empresa ∩ rol). Si falla redirige a la ruta indicada (default:
+ * /sin-acceso, que muestra el switcher de módulos disponibles).
+ */
+export async function requireModule(
+  mod: ModuleKey,
+  fallback = '/sin-acceso',
+): Promise<void> {
+  const user = await getUser();
+  if (!user) redirect('/sign-in');
+
+  const teamId = await getTeamIdForUser();
+  if (!teamId) redirect('/dashboard/empresas');
+
+  const [m] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
+    .limit(1);
+
+  const mods = await getUserModules(teamId, user.platformRole, m?.role);
+  if (!mods.includes(mod)) redirect(fallback);
 }
 
 /**

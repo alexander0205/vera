@@ -12,6 +12,7 @@ import {
   PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
+import { ModuleSwitcher } from '@/components/module-switcher';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -1036,6 +1037,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Company switcher */}
             <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={handleSwitch} />
+
+            {/* Module switcher (Facturación ↔ POS) */}
+            <ModuleSwitcher current="facturacion" />
 
             {/* DGII ambiente badge */}
             <AmbienteBadge ambiente={dgiiAmbiente} />

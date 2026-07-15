@@ -6,6 +6,13 @@ import { NewUser } from '@/lib/db/schema';
 const key = new TextEncoder().encode(process.env.AUTH_SECRET);
 const SALT_ROUNDS = 10;
 
+// SSO entre subdominios de módulo (pos.* / facturacion.*): en prod la cookie
+// vive en el dominio raíz (SESSION_COOKIE_DOMAIN=".zero.com.do"). Sin env →
+// host-only (dev). Mismo valor que usa proxy.ts al refrescar la cookie.
+const cookieDomain = process.env.SESSION_COOKIE_DOMAIN
+  ? { domain: process.env.SESSION_COOKIE_DOMAIN }
+  : {};
+
 export async function hashPassword(password: string) {
   return hash(password, SALT_ROUNDS);
 }
@@ -52,6 +59,7 @@ export async function setSession(user: NewUser, activeTeamId?: number) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
+    ...cookieDomain,
   });
 }
 
@@ -71,5 +79,6 @@ export async function setActiveTeam(teamId: number) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
+    ...cookieDomain,
   });
 }

@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 // Shape canónico del estado — todo opcional para permitir merges parciales
 export const HabilitacionStateSchema = z.object({
@@ -137,8 +137,16 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  // Fix: al confirmar la fase final, sellar habilitacionCompletadoAt (antes
+  // nunca se escribía y GET reportaba completado:false para siempre).
+  const finalizado = (merged.finalizado as { acknowledged?: boolean } | undefined)?.acknowledged === true;
+
   await db.update(teams)
-    .set({ habilitacionState: JSON.stringify(merged), updatedAt: new Date() })
+    .set({
+      habilitacionState: JSON.stringify(merged),
+      ...(finalizado ? { habilitacionCompletadoAt: sql`COALESCE(${teams.habilitacionCompletadoAt}, NOW())` } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(teams.id, teamId));
 
   return NextResponse.json({ ok: true, state: merged });

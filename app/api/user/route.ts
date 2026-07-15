@@ -4,6 +4,7 @@ import { users, teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { ALL_PERMISSIONS, type Permission } from '@/lib/config/roles';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
+import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
 
 export async function GET() {
   const user = await getUser();
@@ -31,7 +32,13 @@ export async function GET() {
       ? [...ALL_PERMISSIONS]
       : (teamId ? await getEffectivePermissions(teamId, teamRole) : []);
 
-  return Response.json({ ...safe, teamRole, permissions });
+  // Módulos accesibles para este usuario en el team activo (módulos de la
+  // empresa ∩ permisos modulo:* del rol). El module-switcher usa esto.
+  const modules: ModuleKey[] = teamId
+    ? await getUserModules(teamId, user.platformRole, teamRole)
+    : [];
+
+  return Response.json({ ...safe, teamRole, permissions, modules });
 }
 
 export async function PATCH(req: Request) {

@@ -150,6 +150,37 @@ async function toggleCajaHabilitada(formData: FormData) {
   revalidatePath(`/admin/empresas/${teamId}`);
 }
 
+// ─── Server Action: toggle módulo del producto (facturación/pos) ─────────────
+// Escribe modulosHabilitados directamente (override manual del admin de
+// plataforma). Cuando el billing por módulo esté activo, la fuente normal es
+// Stripe y esto pasa a editar modulosOverride; por ahora es el único camino.
+
+async function toggleModulo(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId = parseInt(formData.get('teamId') as string);
+  const modulo = formData.get('modulo') as string;
+  const habilitar = formData.get('habilitar') === '1';
+  if (isNaN(teamId) || !['facturacion', 'pos'].includes(modulo)) return;
+
+  const [t] = await db.select({ mods: teams.modulosHabilitados }).from(teams).where(eq(teams.id, teamId)).limit(1);
+  if (!t) return;
+  const current = Array.isArray(t.mods) ? (t.mods as string[]) : [];
+  const next = habilitar
+    ? Array.from(new Set([...current, modulo]))
+    : current.filter(m => m !== modulo);
+
+  // Compat legacy: posHabilitado sigue reflejando el módulo pos hasta retirar
+  // su último consumidor.
+  await db.update(teams).set({
+    modulosHabilitados: next,
+    ...(modulo === 'pos' ? { posHabilitado: habilitar } : {}),
+  }).where(eq(teams.id, teamId));
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
 // ─── Server Action: cancelar invitación ──────────────────────────────────────
 
 async function cancelarInvitacion(formData: FormData) {
@@ -330,6 +361,50 @@ export default async function EmpresaDetailPage({
           <ToggleRight style={{ width: 16, height: 16, color: '#9ca3af' }} />
           <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Módulos</Typography>
         </Box>
+        {/* Módulos del producto (facturación / POS) — override manual admin */}
+        {(['facturacion', 'pos'] as const).map(mod => {
+          const mods = Array.isArray(team.modulosHabilitados) ? (team.modulosHabilitados as string[]) : [];
+          const activo = mods.includes(mod);
+          const label = mod === 'facturacion' ? 'Facturación' : 'Punto de Venta';
+          const desc = mod === 'facturacion'
+            ? 'Dashboard de facturas, e-CF, clientes, cotizaciones y reportes (facturacion.zero.com.do).'
+            : 'Terminal de venta, turnos de caja e inventario en piso (pos.zero.com.do).';
+          return (
+            <Box key={mod} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f3f4f6' }}>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>{label}</Typography>
+                <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>{desc}</Typography>
+              </Box>
+              <form action={toggleModulo}>
+                <input type="hidden" name="teamId" value={teamId} />
+                <input type="hidden" name="modulo" value={mod} />
+                <input type="hidden" name="habilitar" value={activo ? '0' : '1'} />
+                <Button
+                  type="submit"
+                  variant="outlined"
+                  size="small"
+                  disableElevation
+                  startIcon={activo
+                    ? <ToggleRight style={{ width: 16, height: 16 }} />
+                    : <ToggleLeft  style={{ width: 16, height: 16 }} />}
+                  sx={{
+                    textTransform: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 500,
+                    fontSize: '0.8125rem',
+                    ...(activo
+                      ? { bgcolor: '#f0fdfa', color: '#0f766e', borderColor: '#99f6e4', '&:hover': { bgcolor: '#ccfbf1', borderColor: '#5eead4' } }
+                      : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
+                    ),
+                  }}
+                >
+                  {activo ? 'Habilitado' : 'Deshabilitado'}
+                </Button>
+              </form>
+            </Box>
+          );
+        })}
+
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1 }}>
           <Box>
             <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Cuadre de Caja</Typography>

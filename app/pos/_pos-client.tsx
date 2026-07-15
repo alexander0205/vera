@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useDgiiReadiness } from '@/lib/hooks/useDgiiReadiness';
 import Link from 'next/link';
 import { ArrowLeft, LogOut, FileText, Star, Plus, Camera, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
@@ -222,13 +223,15 @@ function Apertura({ terminales }: { terminales: TerminalProp[] }) {
     router.refresh();
   }
 
+  // Con ensurePosDefaults (server) siempre hay al menos una terminal; este
+  // fallback solo cubre el caso extremo de todas desactivadas manualmente.
   if (terminales.length === 0) {
     return (
       <Box sx={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', p: 3 }}>
         <Box sx={{ maxWidth: 448, textAlign: 'center' }}>
-          <Typography component="h1" sx={{ fontSize: 20, fontWeight: 500 }}>No hay terminales configuradas</Typography>
+          <Typography component="h1" sx={{ fontSize: 20, fontWeight: 500 }}>Todas las terminales están inactivas</Typography>
           <Typography sx={{ mt: 1, fontSize: 14, color: '#6b7280' }}>
-            Pide a un administrador que cree una terminal de punto de venta antes de vender.
+            Activa una terminal en Configuración → Terminales POS para vender.
           </Typography>
         </Box>
       </Box>
@@ -1103,6 +1106,14 @@ function CarritoPanel({
   const [abrirCobro, setAbrirCobro] = useState(false);
   const [panelDescuento, setPanelDescuento] = useState(false);
 
+  // Gate DGII: sin conexión DGII lista, el POS solo emite tickets sin NCF.
+  // Oculta e31/e32 del selector y fuerza sin-ncf si la terminal traía otro
+  // default (defensa adicional en /api/ecf/emitir).
+  const { ready: dgiiReady } = useDgiiReadiness();
+  useEffect(() => {
+    if (!dgiiReady && tipoEcf !== 'sin-ncf') onSelectTipoEcf('sin-ncf');
+  }, [dgiiReady, tipoEcf, onSelectTipoEcf]);
+
   // F2: abre el cobro desde el panel si hay ítems en el carrito.
   useEffect(() => {
     if (cobroDirecto) {
@@ -1149,8 +1160,8 @@ function CarritoPanel({
               sx={{ '& .MuiInputBase-root': { height: 44 } }}
             >
               <MenuItem value="sin-ncf">Ticket (sin NCF)</MenuItem>
-              <MenuItem value="32">Consumo (e32)</MenuItem>
-              <MenuItem value="31">Crédito fiscal (e31)</MenuItem>
+              {dgiiReady && <MenuItem value="32">Consumo (e32)</MenuItem>}
+              {dgiiReady && <MenuItem value="31">Crédito fiscal (e31)</MenuItem>}
             </TextField>
           </Box>
         </Box>

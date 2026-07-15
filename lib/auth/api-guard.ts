@@ -17,6 +17,7 @@ import { teamMembers } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { userHasModule, type ModuleKey } from '@/lib/auth/modules';
 
 type SessionUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 
@@ -54,4 +55,28 @@ export async function requirePermission(permission: Permission): Promise<AuthOk 
   }
 
   return { ok: true, user, teamId, teamRole };
+}
+
+/**
+ * Como requirePermission, pero además exige acceso al módulo del producto
+ * (empresa con módulo activo ∩ permiso modulo:* del rol). Para endpoints
+ * que pertenecen a un módulo comercializable (ej. todo /api/pos → 'pos').
+ */
+export async function requireModuleAndPermission(
+  mod: ModuleKey,
+  permission: Permission,
+): Promise<AuthOk | AuthErr> {
+  const auth = await requirePermission(permission);
+  if (!auth.ok) return auth;
+
+  if (!(await userHasModule(auth.teamId, auth.user.platformRole, auth.teamRole, mod))) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Módulo no disponible', code: 'MODULO_NO_DISPONIBLE', modulo: mod },
+        { status: 403 },
+      ),
+    };
+  }
+  return auth;
 }
