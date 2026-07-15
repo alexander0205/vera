@@ -3,6 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { adminEscolarPeriodos } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { rangoPeriodoEsValido } from '@/lib/administracion-escolar/periodo-utils';
 import { eq, desc } from 'drizzle-orm';
 
 export async function GET() {
@@ -20,6 +21,9 @@ export async function POST(req: NextRequest) {
   const { teamId } = auth;
   const { nombre, fechaInicio, fechaFin, activo } = await req.json();
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 });
+  if ((fechaInicio || fechaFin) && !rangoPeriodoEsValido(fechaInicio, fechaFin)) {
+    return NextResponse.json({ error: 'Fecha de inicio y fin requeridas; el fin no puede ser anterior al inicio' }, { status: 400 });
+  }
   const [row] = await db.insert(adminEscolarPeriodos).values({
     teamId,
     nombre: nombre.trim(),

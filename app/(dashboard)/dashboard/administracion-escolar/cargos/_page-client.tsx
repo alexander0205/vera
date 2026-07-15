@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { AlertTriangle, CalendarDays, Loader2, Plus, Receipt, Search, Wallet } from 'lucide-react';
 
 interface Cargo {
@@ -33,7 +34,7 @@ interface Cargo {
   fechaVencimiento: string | null;
   estado: string;
 }
-interface Periodo { id: number; nombre: string; activo: boolean; }
+interface Periodo { id: number; nombre: string; fechaInicio: string | null; fechaFin: string | null; activo: boolean; }
 interface Curso { id: number; nombre: string; activo: boolean; }
 interface Concepto { id: number; nombre: string; tipo: string; recurrente: boolean; activo: boolean; }
 interface Matricula { id: number; estudianteId: number; periodoId: number; cursoId: number; estado: string; }
@@ -60,6 +61,19 @@ const EMPTY_FORM = {
   monto: '',
   fechaVencimiento: hoy(),
 };
+
+function mesInicial(periodo: Periodo | undefined): MesDelPeriodo | null {
+  if (!periodo) return null;
+  const meses = mesesDelPeriodo(periodo.fechaInicio, periodo.fechaFin);
+  const hoy = new Date();
+  return meses.find((m) => m.mes === hoy.getMonth() + 1 && m.anio === hoy.getFullYear()) ?? meses[0] ?? null;
+}
+
+function perteneceMes(periodo: Periodo | undefined, mes: string, anio: string) {
+  if (!periodo) return false;
+  return mesesDelPeriodo(periodo.fechaInicio, periodo.fechaFin)
+    .some((m) => m.mes === Number(mes) && m.anio === Number(anio));
+}
 
 function toCentavos(value: string): number {
   const n = Number.parseFloat(value.replace(',', '.'));
@@ -160,6 +174,8 @@ export default function CargosClient() {
   const cursosActivos = useMemo(() => cursos.filter((c) => c.activo !== false), [cursos]);
   const conceptosActivos = useMemo(() => conceptos.filter((c) => c.activo !== false), [conceptos]);
   const conceptoSeleccionado = conceptos.find((c) => String(c.id) === form.conceptoId) ?? null;
+  const periodoForm = periodos.find((p) => String(p.id) === form.periodoId);
+  const mesesForm = mesesDelPeriodo(periodoForm?.fechaInicio, periodoForm?.fechaFin);
 
   const filtrados = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -186,11 +202,13 @@ export default function CargosClient() {
   function abrirGenerar() {
     const periodoActivo = periodos.find((p) => p.activo);
     const mensualidad = conceptosActivos.find((c) => c.tipo === 'mensualidad') ?? conceptosActivos[0];
+    const primerMes = mesInicial(periodoActivo);
     setForm({
       ...EMPTY_FORM,
       periodoId: periodoActivo ? String(periodoActivo.id) : '',
       conceptoId: mensualidad ? String(mensualidad.id) : '',
-      mes: mensualidad?.tipo === 'mensualidad' ? String(new Date().getMonth() + 1) : '',
+      mes: mensualidad?.tipo === 'mensualidad' ? String(primerMes?.mes ?? '') : '',
+      anio: String(primerMes?.anio ?? new Date().getFullYear()),
     });
     setResultado(null);
     setOpError(null);
@@ -242,6 +260,8 @@ export default function CargosClient() {
     [estudiantes],
   );
   const conceptoIndSel = conceptos.find((c) => String(c.id) === formInd.conceptoId) ?? null;
+  const periodoInd = periodos.find((p) => String(p.id) === formInd.periodoId);
+  const mesesInd = mesesDelPeriodo(periodoInd?.fechaInicio, periodoInd?.fechaFin);
 
   // Estudiantes con matrícula activa en el período (y curso, si se filtró) elegido.
   const estudiantesDelCurso = useMemo(() => {
@@ -260,10 +280,11 @@ export default function CargosClient() {
 
   function abrirIndividual() {
     const periodoActivo = periodos.find((p) => p.activo);
+    const primerMes = mesInicial(periodoActivo);
     setFormInd({
       periodoId: periodoActivo ? String(periodoActivo.id) : '',
       cursoId: 'todos', estudianteId: '', matriculaId: '',
-      conceptoId: '', mes: '', anio: String(new Date().getFullYear()), monto: '', fechaVencimiento: hoy(),
+      conceptoId: '', mes: '', anio: String(primerMes?.anio ?? new Date().getFullYear()), monto: '', fechaVencimiento: hoy(),
     });
     setQueryEst('');
     setErrInd(null);
@@ -437,7 +458,15 @@ export default function CargosClient() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Período *</Label>
-                <Select value={form.periodoId} onValueChange={(v) => setForm((f) => ({ ...f, periodoId: v }))}>
+                <Select value={form.periodoId} onValueChange={(v) => {
+                  const periodo = periodos.find((p) => String(p.id) === v);
+                  const siguiente = mesInicial(periodo);
+                  setForm((f) => ({
+                    ...f,
+                    periodoId: v,
+                    ...(perteneceMes(periodo, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) }),
+                  }));
+                }}>
                   <SelectTrigger><SelectValue placeholder="Período" /></SelectTrigger>
                   <SelectContent>
                     {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
@@ -460,7 +489,14 @@ export default function CargosClient() {
               <Label>Concepto *</Label>
               <Select value={form.conceptoId} onValueChange={(v) => {
                 const concepto = conceptos.find((c) => String(c.id) === v);
-                setForm((f) => ({ ...f, conceptoId: v, mes: concepto?.tipo === 'mensualidad' ? (f.mes || String(new Date().getMonth() + 1)) : '' }));
+                const siguiente = mesInicial(periodoForm);
+                setForm((f) => ({
+                  ...f,
+                  conceptoId: v,
+                  ...(concepto?.tipo === 'mensualidad'
+                    ? (perteneceMes(periodoForm, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
+                    : { mes: '' }),
+                }));
               }}>
                 <SelectTrigger><SelectValue placeholder="Concepto" /></SelectTrigger>
                 <SelectContent>
@@ -469,23 +505,16 @@ export default function CargosClient() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Mes</Label>
-                <Select value={form.mes || 'sin-mes'} onValueChange={(v) => setForm((f) => ({ ...f, mes: v === 'sin-mes' ? '' : v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sin-mes">Sin mes</SelectItem>
-                    {MESES.slice(1).map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+            {conceptoSeleccionado?.tipo === 'mensualidad' ? (
+              <MesAcademicoSelect periodo={periodoForm} meses={mesesForm} mes={form.mes} anio={form.anio}
+                onChange={(seleccion) => setForm((f) => ({ ...f, mes: String(seleccion.mes), anio: String(seleccion.anio) }))} />
+            ) : (
               <div className="space-y-1.5">
                 <Label>Año *</Label>
                 <Input type="number" value={form.anio}
                   onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} />
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -526,7 +555,17 @@ export default function CargosClient() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Período *</Label>
-                <Select value={formInd.periodoId} onValueChange={(v) => setFormInd((f) => ({ ...f, periodoId: v, estudianteId: '', matriculaId: '' }))}>
+                <Select value={formInd.periodoId} onValueChange={(v) => {
+                  const periodo = periodos.find((p) => String(p.id) === v);
+                  const siguiente = mesInicial(periodo);
+                  setFormInd((f) => ({
+                    ...f,
+                    periodoId: v,
+                    estudianteId: '',
+                    matriculaId: '',
+                    ...(perteneceMes(periodo, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) }),
+                  }));
+                }}>
                   <SelectTrigger><SelectValue placeholder="Período" /></SelectTrigger>
                   <SelectContent>
                     {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
@@ -578,7 +617,14 @@ export default function CargosClient() {
               <Label>Concepto *</Label>
               <Select value={formInd.conceptoId} onValueChange={(v) => {
                 const concepto = conceptos.find((c) => String(c.id) === v);
-                setFormInd((f) => ({ ...f, conceptoId: v, mes: concepto?.tipo === 'mensualidad' ? (f.mes || String(new Date().getMonth() + 1)) : '' }));
+                const siguiente = mesInicial(periodoInd);
+                setFormInd((f) => ({
+                  ...f,
+                  conceptoId: v,
+                  ...(concepto?.tipo === 'mensualidad'
+                    ? (perteneceMes(periodoInd, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
+                    : { mes: '' }),
+                }));
               }}>
                 <SelectTrigger><SelectValue placeholder="Concepto" /></SelectTrigger>
                 <SelectContent>
@@ -587,23 +633,16 @@ export default function CargosClient() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Mes</Label>
-                <Select value={formInd.mes || 'sin-mes'} onValueChange={(v) => setFormInd((f) => ({ ...f, mes: v === 'sin-mes' ? '' : v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sin-mes">Sin mes</SelectItem>
-                    {MESES.slice(1).map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+            {conceptoIndSel?.tipo === 'mensualidad' ? (
+              <MesAcademicoSelect periodo={periodoInd} meses={mesesInd} mes={formInd.mes} anio={formInd.anio}
+                onChange={(seleccion) => setFormInd((f) => ({ ...f, mes: String(seleccion.mes), anio: String(seleccion.anio) }))} />
+            ) : (
               <div className="space-y-1.5">
                 <Label>Año *</Label>
                 <Input type="number" value={formInd.anio}
                   onChange={(e) => setFormInd((f) => ({ ...f, anio: e.target.value }))} />
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -628,6 +667,40 @@ export default function CargosClient() {
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+function MesAcademicoSelect({ periodo, meses, mes, anio, onChange }: {
+  periodo: Periodo | undefined;
+  meses: MesDelPeriodo[];
+  mes: string;
+  anio: string;
+  onChange: (mes: MesDelPeriodo) => void;
+}) {
+  if (!periodo) {
+    return <p className="text-xs text-gray-400">Elige un período para seleccionar la mensualidad.</p>;
+  }
+  if (meses.length === 0) {
+    return (
+      <p className="text-xs text-amber-700">
+        Configura fecha de inicio y fin del período antes de crear una mensualidad.
+      </p>
+    );
+  }
+  const value = `${anio}-${String(mes).padStart(2, '0')}`;
+  return (
+    <div className="space-y-1.5">
+      <Label>Mes de la mensualidad *</Label>
+      <Select value={value} onValueChange={(v) => {
+        const seleccionado = meses.find((m) => m.key === v);
+        if (seleccionado) onChange(seleccionado);
+      }}>
+        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {meses.map((m) => <SelectItem key={m.key} value={m.key}>{MESES[m.mes]} {m.anio}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

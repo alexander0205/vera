@@ -11,15 +11,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
 import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import { CrearCargoEstudianteDialog } from '@/components/administracion-escolar/CrearCargoEstudianteDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { toast } from 'sonner';
 
 const ESTADOS_EST = [
@@ -47,6 +50,8 @@ interface Matricula {
   id: number;
   periodoId: number;
   periodo: string | null;
+  periodoFechaInicio: string | null;
+  periodoFechaFin: string | null;
   cursoId: number;
   curso: string | null;
   codigoMatricula: string | null;
@@ -389,9 +394,12 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 pagos={pagos}
                 puedeFacturar={puedeFacturar}
                 puedePagos={puedePagos}
+                puedeGestionar={puedeGestionar}
+                estudianteId={estudiante.id}
                 onRegistrarPago={abrirPago}
                 onAplicarMora={aplicarMora}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
+                onCargoCreado={cargar}
               />
             ) : (
               <EmptyBox text="Sin períodos, cargos o pagos relacionados" />
@@ -522,19 +530,25 @@ function PeriodoFiltroBar({ grupos, value, onChange }: {
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId }: {
+function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   pagos: Pago[];
   puedeFacturar: boolean;
   puedePagos: boolean;
+  puedeGestionar: boolean;
+  estudianteId: number;
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   aplicandoMoraFacturaId: number | null;
+  onCargoCreado: () => void;
 }) {
   const router = useRouter();
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
+  const [crearCargoAbierto, setCrearCargoAbierto] = useState(false);
+  const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
 
   const cargosPeriodo = grupo.cargos;
+  const mesesAcademicos = mesesDelPeriodo(grupo.fechaInicio, grupo.fechaFin);
   const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
   const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
   const total = cargosPeriodo.reduce((s, c) => s + c.montoCentavos, 0);
@@ -547,17 +561,11 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPa
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .sort((a, b) => (a.fechaVencimiento ?? '9999-12-31').localeCompare(b.fechaVencimiento ?? '9999-12-31'))[0] ?? null;
   const facturaPendiente = cargosPeriodo.find((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && c.ecfDocumentId);
-  const cargoSinFactura = cargosPeriodo.find((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && !c.ecfDocumentId);
+  const cargosSinFactura = cargosPeriodo.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && !c.ecfDocumentId);
 
   function registrarPago() {
     if (facturaPendiente?.ecfDocumentId) {
       onRegistrarPago(facturaPendiente.ecfDocumentId);
-    }
-  }
-
-  function crearFactura() {
-    if (cargoSinFactura) {
-      router.push(`/dashboard/facturas/nueva?desdeCargo=${cargoSinFactura.id}`);
     }
   }
 
@@ -574,13 +582,18 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPa
           <span className="text-sm text-gray-500">· {grupo.curso}</span>
         </div>
         <div className="flex flex-wrap gap-2">
+          {puedeGestionar && (
+            <Button size="sm" variant="outline" onClick={() => setCrearCargoAbierto(true)} disabled={!grupo.matriculaId}>
+              <Plus className="h-4 w-4 mr-1.5" />Agregar cargo
+            </Button>
+          )}
           {puedePagos && (
             <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={registrarPago} disabled={!facturaPendiente?.ecfDocumentId}>
               <Wallet className="h-4 w-4 mr-1.5" />Registrar pago
             </Button>
           )}
           {puedeFacturar && (
-            <Button size="sm" variant="outline" onClick={crearFactura} disabled={!cargoSinFactura}>
+            <Button size="sm" variant="outline" onClick={() => setElegirFacturaAbierto(true)} disabled={cargosSinFactura.length === 0}>
               <FileText className="h-4 w-4 mr-1.5" />Crear factura
             </Button>
           )}
@@ -628,6 +641,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPa
               <MensualidadesTabla
                 cargos={cargosPeriodo.filter((c) => c.mes != null)}
                 pagos={pagos}
+                mesesAcademicos={mesesAcademicos}
                 puedePagos={puedePagos}
                 puedeFacturar={puedeFacturar}
                 onRegistrarPago={onRegistrarPago}
@@ -690,7 +704,36 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, onRegistrarPa
               )
             )}
           </div>
-      </div>
+      <CrearCargoEstudianteDialog
+        open={crearCargoAbierto}
+        onClose={() => setCrearCargoAbierto(false)}
+        onSaved={onCargoCreado}
+        estudianteId={estudianteId}
+        matriculaId={grupo.matriculaId}
+        periodoId={grupo.periodoId}
+        periodoNombre={grupo.periodo}
+        fechaInicio={grupo.fechaInicio}
+        fechaFin={grupo.fechaFin}
+      />
+      <Dialog open={elegirFacturaAbierto} onOpenChange={setElegirFacturaAbierto}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>¿Qué cargo deseas facturar?</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-500">Selecciona el cargo. Facturas abrirá con tutor, beneficiario y producto prellenados.</p>
+          <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+            {cargosSinFactura.map((cargo) => (
+              <button key={cargo.id} type="button" onClick={() => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
+                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-teal-50/50">
+                <span>
+                  <span className="block text-sm font-medium text-gray-900">{cargo.concepto ?? 'Cargo'}</span>
+                  <span className="block text-xs text-gray-500">{cargo.mes ? `${MESES[cargo.mes]} ${cargo.anio}` : cargo.anio}{cargo.fechaVencimiento ? ` · vence ${fmtFechaCorta(cargo.fechaVencimiento)}` : ''}</span>
+                </span>
+                <span className="text-sm font-semibold text-red-600">{fmtDOP(cargo.saldoCentavos)}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -718,9 +761,10 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   );
 }
 
-function MensualidadesTabla({ cargos, pagos, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, aplicandoMoraFacturaId }: {
+function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, aplicandoMoraFacturaId }: {
   cargos: Cargo[];
   pagos: Pago[];
+  mesesAcademicos: ReturnType<typeof mesesDelPeriodo>;
   puedePagos: boolean;
   puedeFacturar: boolean;
   onRegistrarPago: (ecfDocumentId: number) => void;
@@ -728,9 +772,8 @@ function MensualidadesTabla({ cargos, pagos, puedePagos, puedeFacturar, onRegist
   onCrearFactura: (cargo: Cargo) => void;
   aplicandoMoraFacturaId: number | null;
 }) {
-  const rows = Array.from({ length: 12 }, (_, i) => {
-    const mes = i + 1;
-    const cargosMes = cargos.filter((c) => c.mes === mes);
+  const rows = mesesAcademicos.map(({ mes, anio }) => {
+    const cargosMes = cargos.filter((c) => c.mes === mes && c.anio === anio);
     const total = cargosMes.reduce((s, c) => s + c.montoCentavos, 0);
     const saldo = cargosMes
       .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
@@ -738,8 +781,14 @@ function MensualidadesTabla({ cargos, pagos, puedePagos, puedeFacturar, onRegist
     const pagado = Math.max(0, total - saldo);
     const factura = cargosMes.find((c) => c.ecfDocumentId != null) ?? null;
     const accion = cargosMes.find((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado)) ?? factura;
-    return { mes, cargosMes, total, saldo, pagado, factura, accion, estado: estadoMes(cargosMes) };
+    return { mes, anio, cargosMes, total, saldo, pagado, factura, accion, estado: estadoMes(cargosMes) };
   });
+
+  if (mesesAcademicos.length === 0) {
+    return (
+      <EmptyBox text="Este período no tiene fechas de inicio y fin. Configúralas para ver sus meses académicos." />
+    );
+  }
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-100 mt-3">
@@ -757,8 +806,8 @@ function MensualidadesTabla({ cargos, pagos, puedePagos, puedeFacturar, onRegist
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.mes} className="border-t border-gray-100 hover:bg-gray-50/60">
-              <td className="px-3 py-2.5 font-medium text-gray-900">{MESES[r.mes]}</td>
+            <tr key={`${r.anio}-${r.mes}`} className="border-t border-gray-100 hover:bg-gray-50/60">
+              <td className="px-3 py-2.5 font-medium text-gray-900">{MESES[r.mes]} {r.anio}</td>
               <td className="px-3 py-2.5"><EstadoMesBadge estado={r.estado} /></td>
               <td className="px-3 py-2.5 text-right text-gray-700">{fmtDOP(r.total)}</td>
               <td className="px-3 py-2.5 text-right text-gray-700">{fmtDOP(r.pagado)}</td>
@@ -784,8 +833,7 @@ function MensualidadesTabla({ cargos, pagos, puedePagos, puedeFacturar, onRegist
         </tbody>
       </table>
       <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100 text-xs text-gray-500">
-        <span>Mostrando 12 de 12 meses</span>
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-teal-600 text-white">1</span>
+        <span>Mostrando {rows.length} de {rows.length} meses académicos</span>
       </div>
     </div>
   );
@@ -851,6 +899,8 @@ function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
     curso: string;
     estado: string | null;
     fecha: string | null;
+    fechaInicio: string | null;
+    fechaFin: string | null;
     cargos: Cargo[];
   }>();
 
@@ -864,6 +914,8 @@ function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
       curso: m.curso ?? `Curso #${m.cursoId}`,
       estado: m.estado,
       fecha: m.fechaInscripcion,
+      fechaInicio: m.periodoFechaInicio,
+      fechaFin: m.periodoFechaFin,
       cargos: [],
     });
   }
@@ -885,6 +937,8 @@ function construirGruposPeriodo(matriculas: Matricula[], cargos: Cargo[]) {
           curso: 'Curso no disponible',
           estado: null,
           fecha: null,
+          fechaInicio: null,
+          fechaFin: null,
           cargos: [],
         };
         grupos.set(key, grupo);

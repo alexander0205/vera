@@ -3,8 +3,10 @@ import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarCargos,
   adminEscolarMatriculas,
+  adminEscolarPeriodos,
 } from '@/lib/db/schema';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { eq, and, inArray, isNull } from 'drizzle-orm';
 
 /**
@@ -20,11 +22,24 @@ export async function POST(req: NextRequest) {
   const { teamId } = auth;
   const { periodoId, cursoId, conceptoId, mes, anio, montoCentavos, fechaVencimiento } = await req.json();
 
-  if (!periodoId || !conceptoId || !anio) {
+  if (!periodoId || !conceptoId || !Number.isInteger(anio)) {
     return NextResponse.json({ error: 'periodoId, conceptoId y anio son requeridos' }, { status: 400 });
   }
   if (!Number.isInteger(montoCentavos) || montoCentavos <= 0) {
     return NextResponse.json({ error: 'montoCentavos debe ser un entero positivo' }, { status: 400 });
+  }
+  if (mes != null && (!Number.isInteger(mes) || mes < 1 || mes > 12)) {
+    return NextResponse.json({ error: 'mes debe estar entre 1 y 12' }, { status: 400 });
+  }
+
+  const [periodo] = await db
+    .select({ fechaInicio: adminEscolarPeriodos.fechaInicio, fechaFin: adminEscolarPeriodos.fechaFin })
+    .from(adminEscolarPeriodos)
+    .where(and(eq(adminEscolarPeriodos.id, periodoId), eq(adminEscolarPeriodos.teamId, teamId)))
+    .limit(1);
+  if (!periodo) return NextResponse.json({ error: 'Período no encontrado' }, { status: 404 });
+  if (mes != null && !mesPerteneceAlPeriodo(periodo.fechaInicio, periodo.fechaFin, mes, anio)) {
+    return NextResponse.json({ error: 'El mes seleccionado no pertenece al calendario de este período' }, { status: 400 });
   }
 
   const where = [

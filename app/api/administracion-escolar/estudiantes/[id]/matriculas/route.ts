@@ -18,6 +18,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       id: adminEscolarMatriculas.id,
       periodoId: adminEscolarMatriculas.periodoId,
       periodo: adminEscolarPeriodos.nombre,
+      periodoFechaInicio: adminEscolarPeriodos.fechaInicio,
+      periodoFechaFin: adminEscolarPeriodos.fechaFin,
       cursoId: adminEscolarMatriculas.cursoId,
       curso: adminEscolarCursos.nombre,
       codigoMatricula: adminEscolarMatriculas.codigoMatricula,
