@@ -23,7 +23,7 @@ const ESTADO_BADGE: Record<string, { label: string; variant: 'default' | 'second
   ACEPTADO_CONDICIONAL: { label: 'Condicional', variant: 'secondary' },
   EN_PROCESO:           { label: 'En Proceso',  variant: 'outline' },
   RECHAZADO:            { label: 'Rechazado',   variant: 'destructive' },
-  BORRADOR:             { label: 'Borrador',    variant: 'outline' },
+  BORRADOR:             { label: 'Sin comprobante', variant: 'outline' },
   ANULADO:              { label: 'Anulado',     variant: 'secondary' },
 };
 

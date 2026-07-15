@@ -48,7 +48,7 @@ const ESTADO_CONFIG: Record<string, {
   className: string;
   icon: React.ElementType;
 }> = {
-  borrador:  { label: 'Borrador',  className: 'border-gray-300 text-gray-600',        icon: Clock },
+  borrador:  { label: 'Pendiente',  className: 'border-gray-300 text-gray-600',        icon: Clock },
   enviada:   { label: 'Enviada',   className: 'bg-blue-100 text-blue-700',             icon: Mail },
   aceptada:  { label: 'Aceptada',  className: 'bg-green-100 text-green-700',           icon: CheckCircle },
   rechazada: { label: 'Rechazada', className: 'bg-red-100 text-red-700',               icon: XCircle },
