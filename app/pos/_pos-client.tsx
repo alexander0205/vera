@@ -163,17 +163,20 @@ function totalesCarrito(items: LineaCarrito[], descuento: DescuentoAplicado | nu
 
 const MONEY = { fontVariantNumeric: 'tabular-nums' } as const;
 
-/** Botón de acción del header/nav: ícono solo en móvil, ícono + texto en ≥sm. */
+/** Botón de acción del header/nav: ícono solo en móvil, ícono + texto en ≥sm.
+ *  Dimensionado touch/tablet: altura mínima 48px para dedo. */
 const iconActionSx = {
   flexShrink: 0,
   minWidth: 0,
   color: '#4b5563',
   borderColor: '#e5e7eb',
   bgcolor: '#fff',
-  fontWeight: 500,
-  width: { xs: 40, sm: 'auto' },
-  height: { xs: 40, sm: 'auto' },
-  px: { xs: 0, sm: 1.5 },
+  fontWeight: 600,
+  fontSize: 15,
+  borderRadius: '10px',
+  width: { xs: 48, sm: 'auto' },
+  height: { xs: 48, sm: 48 },
+  px: { xs: 0, sm: 2 },
   py: { xs: 0, sm: 1 },
   gap: 0.75,
   '&:hover': { bgcolor: '#f9fafb', borderColor: '#e5e7eb' },
@@ -821,9 +824,9 @@ function Venta({
             order: { xs: 3, sm: 0 },
             width: { xs: '100%', sm: 'auto' },
             flex: { sm: 1 },
-            maxWidth: { sm: 320, md: 384 },
+            maxWidth: { sm: 380, md: 460 },
             mx: { sm: 1.5 },
-            '& .MuiInputBase-root': { height: { xs: 44, sm: 40 } },
+            '& .MuiInputBase-root': { height: { xs: 52, sm: 52 }, fontSize: 16, borderRadius: '10px' },
           }}
         />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1 } }}>
@@ -923,32 +926,32 @@ function Venta({
                 flexShrink: 0, minWidth: 0, gap: 0.75,
                 alignSelf: dispNuevo === 'abajo' ? 'flex-end' : 'auto',
                 ...(dispNuevo === 'pill'
-                  ? { borderRadius: '8px', px: 2, py: 1 }
-                  : { width: 40, height: 40, p: 0, borderRadius: '9999px' }),
+                  ? { borderRadius: '10px', px: 2.5, py: 1.5 }
+                  : { width: 48, height: 48, p: 0, borderRadius: '9999px' }),
               }}
             >
-              <Plus style={{ width: dispNuevo === 'pill' ? 16 : 20, height: dispNuevo === 'pill' ? 16 : 20 }} />
-              {dispNuevo === 'pill' && <Box component="span" sx={{ fontSize: 14, fontWeight: 500 }}>Nuevo producto</Box>}
+              <Plus style={{ width: dispNuevo === 'pill' ? 18 : 22, height: dispNuevo === 'pill' ? 18 : 22 }} />
+              {dispNuevo === 'pill' && <Box component="span" sx={{ fontSize: 15, fontWeight: 600 }}>Nuevo producto</Box>}
             </Button>
           </Box>
           {cargando ? (
             <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Cargando catálogo…</Typography>
           ) : (
-            <Box sx={{ display: 'grid', flex: 1, gridAutoRows: 'max-content', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)', xl: 'repeat(5, 1fr)' }, alignContent: 'start', gap: 1.5, overflow: 'auto', pb: { xs: 12, md: 1.5 } }}>
+            <Box sx={{ display: 'grid', flex: 1, gridAutoRows: 'max-content', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', xl: 'repeat(4, 1fr)' }, alignContent: 'start', gap: 2, overflow: 'auto', pb: { xs: 12, md: 1.5 } }}>
               {/* Venta simple: monto libre sin producto (patrón Alegra) */}
               <ButtonBase
                 onClick={() => setVentaSimpleAbierta(true)}
                 sx={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
-                  borderRadius: '12px', border: '1px dashed #d1d5db', bgcolor: '#fff', minHeight: 140,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5,
+                  borderRadius: '16px', border: '2px dashed #d1d5db', bgcolor: '#fff', minHeight: 180,
                   '&:hover': { borderColor: '#2dd4bf', bgcolor: '#f0fdfa' },
                   '&:active': { transform: 'scale(0.97)' },
                 }}
               >
-                <Box sx={{ display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#f3f4f6' }}>
-                  <Zap style={{ width: 22, height: 22, color: '#0d9488' }} />
+                <Box sx={{ display: 'flex', height: 60, width: 60, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#f3f4f6' }}>
+                  <Zap style={{ width: 28, height: 28, color: '#0d9488' }} />
                 </Box>
-                <Box component="span" sx={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>Venta simple</Box>
+                <Box component="span" sx={{ fontSize: 17, fontWeight: 700, color: '#374151' }}>Venta simple</Box>
               </ButtonBase>
               {filtrados.length === 0 && (
                 <Box sx={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center' }}>
@@ -1000,15 +1003,15 @@ function Venta({
                         <Star style={{ width: 24, height: 24, color: p.favorito ? '#fbbf24' : '#9ca3af', fill: p.favorito ? '#fbbf24' : 'none' }} />
                       </Box>
                     </Box>
-                    <Box sx={{ display: 'flex', flex: 1, flexDirection: 'column', justifyContent: 'space-between', p: 1.75 }}>
+                    <Box sx={{ display: 'flex', flex: 1, flexDirection: 'column', justifyContent: 'space-between', p: 2 }}>
                       <Box>
-                        <Box sx={{ fontSize: { xs: 16, sm: 18 }, fontWeight: 600, lineHeight: 1.2 }}>{p.nombre}</Box>
+                        <Box sx={{ fontSize: { xs: 17, sm: 19 }, fontWeight: 700, lineHeight: 1.25 }}>{p.nombre}</Box>
                         <Box sx={{ mt: 0.5, fontSize: 14, color: '#9ca3af' }}>
                           {p.referencia ? p.referencia + ' · ' : ''}
                           {p.controlaInventario ? (agotado ? 'agotado' : `${p.stockAlmacen} disp.`) : ''}
                         </Box>
                       </Box>
-                      <Box sx={{ mt: 0.75, fontSize: 20, fontWeight: 700, color: '#111827', ...MONEY }}>{fmt(p.precio)}</Box>
+                      <Box sx={{ mt: 1, fontSize: 24, fontWeight: 800, color: '#111827', ...MONEY }}>{fmt(p.precio)}</Box>
                     </Box>
                   </ButtonBase>
                 );
@@ -1189,7 +1192,7 @@ function CarritoPanel({
               value={listaPreciosId}
               onChange={(e) => onSelectLista(e.target.value === 'general' ? 'general' : Number(e.target.value))}
               fullWidth
-              sx={{ '& .MuiInputBase-root': { height: 44 } }}
+              sx={{ '& .MuiInputBase-root': { height: 52, fontSize: 16 } }}
             >
               <MenuItem value="general">General (precio base)</MenuItem>
               {listas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
@@ -1202,7 +1205,7 @@ function CarritoPanel({
               value={tipoEcf}
               onChange={(e) => onSelectTipoEcf(e.target.value)}
               fullWidth
-              sx={{ '& .MuiInputBase-root': { height: 44 } }}
+              sx={{ '& .MuiInputBase-root': { height: 52, fontSize: 16 } }}
             >
               <MenuItem value="sin-ncf">Ticket (sin NCF)</MenuItem>
               {dgiiReady && <MenuItem value="32">Consumo (e32)</MenuItem>}
@@ -1252,18 +1255,18 @@ function CarritoPanel({
           carrito.map((c) => {
             const desc = descuentoLinea(c, descuentoAplicado);
             return (
-              <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #f3f4f6', py: 1.5 }}>
-                <Box sx={{ minWidth: 0, lineHeight: 1.2 }}>
-                  <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 16, fontWeight: 500 }}>{c.nombre}</Box>
-                  <Box sx={{ mt: 0.25, display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 14, color: '#9ca3af' }}>
+              <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #f3f4f6', py: 1.75 }}>
+                <Box sx={{ minWidth: 0, lineHeight: 1.25 }}>
+                  <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 18, fontWeight: 600 }}>{c.nombre}</Box>
+                  <Box sx={{ mt: 0.25, display: 'flex', alignItems: 'center', gap: 0.5, fontSize: 15, color: '#9ca3af' }}>
                     <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(c.id, cents)} />
                     {desc > 0 && <Box component="span" sx={{ color: '#059669' }}>−{descuentoAplicado!.pct}%</Box>}
                   </Box>
                 </Box>
-                <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1 }}>
-                  <ButtonBase onClick={() => cambiarQty(c.id, -1)} sx={{ display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 24, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>−</ButtonBase>
-                  <Box component="span" sx={{ width: 28, textAlign: 'center', fontSize: 18, fontWeight: 600, ...MONEY }}>{c.qty}</Box>
-                  <ButtonBase onClick={() => cambiarQty(c.id, 1)} sx={{ display: 'flex', height: 44, width: 44, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 24, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>+</ButtonBase>
+                <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 1.25 }}>
+                  <ButtonBase onClick={() => cambiarQty(c.id, -1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>−</ButtonBase>
+                  <Box component="span" sx={{ width: 34, textAlign: 'center', fontSize: 20, fontWeight: 700, ...MONEY }}>{c.qty}</Box>
+                  <ButtonBase onClick={() => cambiarQty(c.id, 1)} sx={{ display: 'flex', height: 52, width: 52, alignItems: 'center', justifyContent: 'center', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 28, color: '#4b5563', '&:active': { bgcolor: '#f9fafb' } }}>+</ButtonBase>
                 </Box>
               </Box>
             );
@@ -1283,7 +1286,7 @@ function CarritoPanel({
           <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#059669' }}><Box component="span">Descuento</Box><Box component="span" sx={MONEY}>−{fmt(totales.descuentoTotal)}</Box></Box>
         )}
         <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}><Box component="span">ITBIS</Box><Box component="span" sx={MONEY}>{fmt(totales.itbis)}</Box></Box>
-        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}><Box component="span" sx={{ fontSize: 18, fontWeight: 600 }}>Total</Box><Box component="span" sx={{ fontSize: 24, fontWeight: 700, ...MONEY }}>{fmt(totales.total)}</Box></Box>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}><Box component="span" sx={{ fontSize: 20, fontWeight: 700 }}>Total</Box><Box component="span" sx={{ fontSize: 30, fontWeight: 800, ...MONEY }}>{fmt(totales.total)}</Box></Box>
         {tipoEcf === '31' && !cliente?.rnc && carrito.length > 0 && (
           <Typography sx={{ mb: 1, textAlign: 'center', fontSize: 14, fontWeight: 500, color: '#d97706' }}>Carga el RNC del comprador para el crédito fiscal</Typography>
         )}
@@ -1293,7 +1296,7 @@ function CarritoPanel({
           variant="contained"
           fullWidth
           disableElevation
-          sx={{ borderRadius: '12px', bgcolor: '#10b981', py: 2, fontSize: 18, fontWeight: 600, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' }, ...MONEY }}
+          sx={{ borderRadius: '14px', bgcolor: '#10b981', py: 2.5, fontSize: 22, fontWeight: 700, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' }, ...MONEY }}
         >
           Cobrar {fmt(totales.total)}
         </Button>
