@@ -6,7 +6,7 @@ import { useDgiiReadiness } from '@/lib/hooks/useDgiiReadiness';
 import { ProductoDialog } from '@/components/shared/producto-dialog';
 import { ClienteDialog } from '@/components/shared/cliente-dialog';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -326,6 +326,20 @@ function Venta({
   const [tipoEcf, setTipoEcf] = useState<string>(terminal?.tipoEcf ?? 'sin-ncf');
   const [cliente, setCliente] = useState<ClienteView | null>(null);
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
+  const [ventaSimpleAbierta, setVentaSimpleAbierta] = useState(false);
+
+  /** Venta simple: línea de monto libre sin producto de catálogo (id negativo). */
+  function agregarVentaSimple(concepto: string, precioCentavos: number, tasaItbis: string) {
+    const id = -Date.now();  // sintético — nunca colisiona con ids de catálogo
+    setCarrito((prev) => [...prev, {
+      id, nombre: concepto || 'Venta simple', referencia: null, codigoBarras: null,
+      precio: precioCentavos, tasaItbis, tipo: 'servicio',
+      controlaInventario: false, permiteVentaSinStock: true, favorito: false,
+      stockAlmacen: null, categoriaId: null, categoriaNombre: null, imagen: null,
+      qty: 1,
+    }]);
+    setVentaSimpleAbierta(false);
+  }
   const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
   const [cierreAbierto, setCierreAbierto] = useState(false);
   const [aparcadas, setAparcadas] = useState<VentaAparcada[]>([]);
@@ -640,7 +654,9 @@ function Venta({
         descuentoMonto:         descCentavos > 0 ? descCentavos / 100 : undefined,
         tasaItbis:              tasaFloat(c.tasaItbis) as 0 | 0.16 | 0.18,
         indicadorBienoServicio: (c.tipo === 'bien' ? 1 : 2) as 1 | 2,
-        productoId:             c.id,
+        // Venta simple usa ids sintéticos negativos — sin producto de catálogo
+        // ni descuento de inventario.
+        productoId:             c.id > 0 ? c.id : (undefined as unknown as number),
       };
     });
 
@@ -660,7 +676,7 @@ function Venta({
 
     // Persistir las líneas (detalle de venta + ticket). Forma compatible con ItemLinea[].
     const lineasBase = carrito.map((c, i) => ({
-      id: i + 1, productoId: c.id, nombreItem: c.nombre, referencia: c.referencia ?? '',
+      id: i + 1, productoId: c.id > 0 ? c.id : 0, nombreItem: c.nombre, referencia: c.referencia ?? '',
       descripcionItem: '', cantidadItem: c.qty, precioUnitarioItem: precioLinea(c) / 100,
       descuentoPct: (descuentoAplicado?.ids.has(c.id) ? descuentoAplicado.pct : 0),
       tasaItbis: c.tasaItbis, indicadorBienoServicio: c.tipo === 'bien' ? '1' : '2',
@@ -920,6 +936,21 @@ function Venta({
             <Typography sx={{ fontSize: 14, color: '#6b7280' }}>Sin productos para esta terminal.</Typography>
           ) : (
             <Box sx={{ display: 'grid', flex: 1, gridAutoRows: 'max-content', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)', xl: 'repeat(5, 1fr)' }, alignContent: 'start', gap: 1.5, overflow: 'auto', pb: { xs: 12, md: 1.5 } }}>
+              {/* Venta simple: monto libre sin producto (patrón Alegra) */}
+              <ButtonBase
+                onClick={() => setVentaSimpleAbierta(true)}
+                sx={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                  borderRadius: '12px', border: '1px dashed #d1d5db', bgcolor: '#fff', minHeight: 140,
+                  '&:hover': { borderColor: '#2dd4bf', bgcolor: '#f0fdfa' },
+                  '&:active': { transform: 'scale(0.97)' },
+                }}
+              >
+                <Box sx={{ display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#f3f4f6' }}>
+                  <Zap style={{ width: 22, height: 22, color: '#0d9488' }} />
+                </Box>
+                <Box component="span" sx={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>Venta simple</Box>
+              </ButtonBase>
               {filtrados.map((p) => {
                 const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
                 const qty = qtyEnCarrito(p.id);
@@ -1055,6 +1086,13 @@ function Venta({
           open
           onClose={() => setNuevoProductoAbierto(false)}
           onCreated={() => { setNuevoProductoAbierto(false); cargarCatalogo(); }}
+        />
+      )}
+
+      {ventaSimpleAbierta && (
+        <VentaSimpleModal
+          onClose={() => setVentaSimpleAbierta(false)}
+          onAgregar={agregarVentaSimple}
         />
       )}
 
@@ -1528,6 +1566,20 @@ function EstudiantePicker({ estudiante, onSelect }: {
 
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
 
+/**
+ * Montos rápidos de efectivo (patrón Alegra): el total exacto + los
+ * redondeos de billete inmediatos (100/500/1000) mayores al total.
+ */
+function montosRapidos(totalCentavos: number): number[] {
+  const out = [totalCentavos];
+  for (const paso of [100_00, 500_00, 1000_00]) {
+    const redondeo = Math.ceil(totalCentavos / paso) * paso;
+    if (redondeo > totalCentavos && !out.includes(redondeo)) out.push(redondeo);
+    if (out.length >= 3) break;
+  }
+  return out.slice(0, 3);
+}
+
 function CobroModal({
   total, cobrando, estudiante, onClose, onConfirm,
 }: {
@@ -1691,8 +1743,25 @@ function CobroModal({
                     input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
                     htmlInput: { min: 0, step: 0.01 },
                   }}
-                  sx={{ mb: 1.5, '& input': { fontSize: 18, py: 1.25 } }}
+                  sx={{ mb: 1, '& input': { fontSize: 18, py: 1.25 } }}
                 />
+                {/* Montos rápidos: exacto + redondeos comunes de billetes */}
+                <Box sx={{ mb: 1.5, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                  {montosRapidos(totalCobrar).map((mc) => (
+                    <ButtonBase
+                      key={mc}
+                      onClick={() => setRecibido((mc / 100).toFixed(2))}
+                      sx={{
+                        borderRadius: '8px', border: '1px solid', py: 0.875, fontSize: 12, ...MONEY,
+                        borderColor: recibidoCentavos === mc ? '#0d9488' : '#e5e7eb',
+                        bgcolor: recibidoCentavos === mc ? '#f0fdfa' : 'transparent',
+                        color: recibidoCentavos === mc ? '#0f766e' : '#4b5563',
+                      }}
+                    >
+                      {fmt(mc)}
+                    </ButtonBase>
+                  ))}
+                </Box>
                 {recibidoCentavos > 0 && !faltaEfectivo && (
                   <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'space-between', borderRadius: '8px', bgcolor: '#f0fdf4', p: 1.5, color: '#15803d' }}>
                     <Box component="span" sx={{ fontSize: 14 }}>Cambio</Box>
@@ -2256,4 +2325,61 @@ function NuevaMesaModal({ terminalId, onClose, onCreated }: { terminalId: number
 
 // Crear producto/cliente rápido: modales compartidos en components/shared/
 // (producto-dialog.tsx y cliente-dialog.tsx) — mismos que usa Facturación.
+
+// ─── Venta simple (monto libre, sin producto de catálogo) ────────────────────
+
+function VentaSimpleModal({ onClose, onAgregar }: {
+  onClose: () => void;
+  onAgregar: (concepto: string, precioCentavos: number, tasaItbis: string) => void;
+}) {
+  const [concepto, setConcepto] = useState('');
+  const [monto, setMonto] = useState('');
+  const [tasaItbis, setTasaItbis] = useState('0.18');
+
+  function agregar() {
+    const p = Number(monto);
+    if (!monto || isNaN(p) || p <= 0) { toast.error('Monto inválido'); return; }
+    onAgregar(concepto.trim(), Math.round(p * 100), tasaItbis);
+  }
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 384, m: 2, borderRadius: '12px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Venta simple</Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+        </Box>
+
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Monto (DOP)</Typography>
+        <TextField
+          type="number" value={monto} autoFocus
+          onChange={(e) => setMonto(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }}
+          placeholder="0.00" fullWidth
+          slotProps={{
+            input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
+            htmlInput: { min: 0, step: 0.01 },
+          }}
+          sx={{ mb: 1.5, '& input': { fontSize: 18, py: 1.25 } }}
+        />
+
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Concepto (opcional)</Typography>
+        <TextField value={concepto} onChange={(e) => setConcepto(e.target.value)}
+          placeholder="Venta simple" fullWidth sx={{ mb: 1.5 }} />
+
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>ITBIS</Typography>
+        <TextField select value={tasaItbis} onChange={(e) => setTasaItbis(e.target.value)} fullWidth sx={{ mb: 2 }}>
+          <MenuItem value="0.18">18%</MenuItem>
+          <MenuItem value="0.16">16%</MenuItem>
+          <MenuItem value="0">0%</MenuItem>
+          <MenuItem value="exento">Exento</MenuItem>
+        </TextField>
+
+        <Button onClick={agregar} variant="contained" color="primary" fullWidth sx={{ py: 1.5, fontWeight: 500 }}>
+          Agregar al carrito
+        </Button>
+      </Box>
+    </Dialog>
+  );
+}
 
