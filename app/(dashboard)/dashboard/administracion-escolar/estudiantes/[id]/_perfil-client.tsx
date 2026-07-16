@@ -624,6 +624,14 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
     && c.facturaClientId !== tutorClientId
   ));
   const cargosSinFactura = cargosPeriodo.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && !c.ecfDocumentId);
+  // "Crear factura" respeta la sub-vista activa: en Cuentas por cobrar solo
+  // ofrece mensualidades; en Otros cargos solo los que no son mensualidad. Así
+  // una factura no mezcla mensualidades con uniformes/actividades.
+  const cargosSinFacturaVista = vista === 'otros'
+    ? cargosSinFactura.filter((c) => c.conceptoTipo !== 'mensualidad')
+    : vista === 'mensualidades'
+      ? cargosSinFactura.filter((c) => c.conceptoTipo === 'mensualidad')
+      : cargosSinFactura;
 
   return (
     <div className="space-y-4">
@@ -655,7 +663,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
             </Button>
           )}
           {puedeFacturar && (
-            <Button size="sm" variant="outline" onClick={() => setElegirFacturaAbierto(true)} disabled={cargosSinFactura.length === 0}>
+            <Button size="sm" variant="outline" onClick={() => setElegirFacturaAbierto(true)} disabled={cargosSinFacturaVista.length === 0}>
               <FileText className="h-4 w-4 mr-1.5" />Crear factura
             </Button>
           )}
@@ -810,7 +818,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
       <ElegirCargosFacturarDialog
         open={elegirFacturaAbierto}
         onOpenChange={setElegirFacturaAbierto}
-        cargos={cargosSinFactura}
+        cargos={cargosSinFacturaVista}
         onConfirm={(ids) => router.push(
           ids.length > 1
             ? `/dashboard/facturas/nueva?desdeCargos=${ids.join(',')}`
@@ -1058,12 +1066,7 @@ function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestion
           <td colSpan={7} className="px-3 py-0">
             <MesPanel
               r={r}
-              puedePagos={puedePagos}
-              puedeFacturar={puedeFacturar}
               puedeGestionar={puedeGestionar}
-              onRegistrarPago={onRegistrarPago}
-              onCrearFactura={onCrearFactura}
-              onVincular={onVincular}
               onAgregarCargoMes={onAgregarCargoMes}
             />
           </td>
@@ -1074,23 +1077,16 @@ function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestion
 }
 
 // Panel del mes: historial de abonos (qué se pagó, cuándo, método) con el saldo
-// restante, y las acciones del mes —incluida la de pagar/facturar por adelantado
-// un mes futuro y agregar un cargo directamente a este mes.
-function MesPanel({ r, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onCrearFactura, onVincular, onAgregarCargoMes }: {
+// restante, y la única acción propia del panel: agregar un cargo a este mes.
+// Registrar pago / facturar / vincular viven SOLO en el menú ⋮ de la fila
+// (CargoActionsMenu) para no duplicar acciones.
+function MesPanel({ r, puedeGestionar, onAgregarCargoMes }: {
   r: MesRow;
-  puedePagos: boolean;
-  puedeFacturar: boolean;
   puedeGestionar: boolean;
-  onRegistrarPago: (ecfDocumentId: number) => void;
-  onCrearFactura: (cargo: Cargo) => void;
-  onVincular: (cargo: Cargo) => void;
   onAgregarCargoMes?: (mes: number, anio: number) => void;
 }) {
   const ahora = new Date();
   const esFuturo = r.anio > ahora.getFullYear() || (r.anio === ahora.getFullYear() && r.mes > ahora.getMonth() + 1);
-  const accion = r.accion;
-  const pendiente = accion != null && ['pendiente', 'parcial', 'vencido'].includes(accion.estado);
-  const tieneFactura = accion?.ecfDocumentId != null;
   const sinCargo = r.cargosMes.length === 0;
 
   return (
@@ -1126,48 +1122,19 @@ function MesPanel({ r, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPag
       ) : (
         <p className="px-3 py-3 text-xs text-gray-400">
           {sinCargo
-            ? (esFuturo ? 'Mes aún no generado. Puedes agregar el cargo y cobrarlo por adelantado.' : 'Sin cargo generado para este mes.')
+            ? (esFuturo ? 'Mes aún no generado. Puedes agregar el cargo y cobrarlo por adelantado desde el menú de acciones.' : 'Sin cargo generado para este mes.')
             : 'Sin pagos registrados aún.'}
         </p>
       )}
-      {(pendiente || (puedeGestionar && onAgregarCargoMes)) && (
-        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1.5 border-t border-gray-100 px-3 py-2">
-          {puedeGestionar && onAgregarCargoMes && (
-            <button
-              type="button"
-              onClick={() => onAgregarCargoMes(r.mes, r.anio)}
-              className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-teal-700"
-            >
-              <Plus className="h-3.5 w-3.5" />Agregar cargo
-            </button>
-          )}
-          {pendiente && !tieneFactura && puedeFacturar && (
-            <button
-              type="button"
-              onClick={() => onVincular(accion!)}
-              className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-teal-700"
-            >
-              <Link2 className="h-3.5 w-3.5" />Vincular factura
-            </button>
-          )}
-          {pendiente && !tieneFactura && puedeFacturar && (
-            <button
-              type="button"
-              onClick={() => onCrearFactura(accion!)}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-teal-600 hover:text-teal-700"
-            >
-              <Receipt className="h-3.5 w-3.5" />{esFuturo ? 'Facturar por adelantado' : 'Generar factura'}
-            </button>
-          )}
-          {pendiente && tieneFactura && puedePagos && (
-            <button
-              type="button"
-              onClick={() => onRegistrarPago(accion!.ecfDocumentId!)}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-teal-600 hover:text-teal-700"
-            >
-              <Wallet className="h-3.5 w-3.5" />{esFuturo ? 'Pagar por adelantado' : 'Registrar pago'}
-            </button>
-          )}
+      {puedeGestionar && onAgregarCargoMes && (
+        <div className="flex justify-end border-t border-gray-100 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => onAgregarCargoMes(r.mes, r.anio)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700"
+          >
+            <Plus className="h-3.5 w-3.5" />Agregar cargo a {MESES[r.mes]}
+          </button>
         </div>
       )}
     </div>
