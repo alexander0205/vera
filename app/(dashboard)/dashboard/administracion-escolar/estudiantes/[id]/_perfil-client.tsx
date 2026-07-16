@@ -578,8 +578,10 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   const router = useRouter();
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
   const [crearCargoAbierto, setCrearCargoAbierto] = useState(false);
+  // Mes preseleccionado al agregar cargo desde el panel de un mes específico.
+  // null = flujo general (elige el mes en el diálogo).
+  const [cargoMesInicial, setCargoMesInicial] = useState<{ mes: number; anio: number } | null>(null);
   const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
-  const [elegirPagoAbierto, setElegirPagoAbierto] = useState(false);
 
   const cargosPeriodo = grupo.cargos;
   const mesesAcademicos = mesesDelPeriodo(grupo.fechaInicio, grupo.fechaFin);
@@ -597,11 +599,6 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   const proximo = cargosPeriodo
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .sort((a, b) => (a.fechaVencimiento ?? '9999-12-31').localeCompare(b.fechaVencimiento ?? '9999-12-31'))[0] ?? null;
-  const facturasPendientesPago = cargosPeriodo.filter((c) => (
-    ['pendiente', 'parcial', 'vencido'].includes(c.estado)
-    && c.ecfDocumentId
-    && (tutorClientId == null || c.facturaClientId === tutorClientId)
-  ));
   const facturasTutorIncorrecto = cargosPeriodo.filter((c) => (
     ['pendiente', 'parcial', 'vencido'].includes(c.estado)
     && c.ecfDocumentId
@@ -642,11 +639,6 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
             )} disabled={!grupo.facturaRecurrenteId && (!grupo.fechaInicio || !grupo.fechaFin)}>
               <FileText className="h-4 w-4 mr-1.5" />
               {grupo.facturaRecurrenteId ? 'Gestionar mensualidad' : 'Configurar mensualidad'}
-            </Button>
-          )}
-          {puedePagos && (
-            <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={() => setElegirPagoAbierto(true)} disabled={facturasPendientesPago.length === 0}>
-              <Wallet className="h-4 w-4 mr-1.5" />Registrar pago
             </Button>
           )}
           {puedeFacturar && (
@@ -701,10 +693,12 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
                 mesesAcademicos={mesesAcademicos}
                 puedePagos={puedePagos}
                 puedeFacturar={puedeFacturar}
+                puedeGestionar={puedeGestionar}
                 onRegistrarPago={onRegistrarPago}
                 onAplicarMora={onAplicarMora}
                 onCrearFactura={(cargo) => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
                 onVincular={onVincular}
+                onAgregarCargoMes={grupo.matriculaId ? (mes, anio) => { setCargoMesInicial({ mes, anio }); setCrearCargoAbierto(true); } : undefined}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
               />
             )}
@@ -765,7 +759,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
           </div>
       <CrearCargoEstudianteDialog
         open={crearCargoAbierto}
-        onClose={() => setCrearCargoAbierto(false)}
+        onClose={() => { setCrearCargoAbierto(false); setCargoMesInicial(null); }}
         onSaved={onCargoCreado}
         estudianteId={estudianteId}
         matriculaId={grupo.matriculaId}
@@ -773,6 +767,8 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
         periodoNombre={grupo.periodo}
         fechaInicio={grupo.fechaInicio}
         fechaFin={grupo.fechaFin}
+        mesInicial={cargoMesInicial?.mes ?? null}
+        anioInicial={cargoMesInicial?.anio ?? null}
       />
       {facturasTutorIncorrecto.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -787,21 +783,6 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
           </div>
         </div>
       )}
-      <Dialog open={elegirPagoAbierto} onOpenChange={setElegirPagoAbierto}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>¿Qué deuda deseas cobrar?</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-500">Solo aparecen facturas pendientes del tutor de pago actual.</p>
-          <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
-            {facturasPendientesPago.map((cargo) => (
-              <button key={cargo.id} type="button" onClick={() => { setElegirPagoAbierto(false); onRegistrarPago(cargo.ecfDocumentId!); }}
-                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-teal-50/50">
-                <span><span className="block text-sm font-medium text-gray-900">{cargo.concepto ?? 'Cargo'}</span><span className="block text-xs text-gray-500">{cargo.mes ? `${MESES[cargo.mes]} ${cargo.anio}` : cargo.anio} · {cargo.facturaEncf ?? cargo.facturaCodigo ?? `#${cargo.ecfDocumentId}`}</span></span>
-                <span className="text-sm font-semibold text-red-600">{fmtDOP(cargo.saldoCentavos)}</span>
-              </button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
       <Dialog open={elegirFacturaAbierto} onOpenChange={setElegirFacturaAbierto}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>¿Qué cargo deseas facturar?</DialogTitle></DialogHeader>
@@ -848,16 +829,18 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   );
 }
 
-function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, aplicandoMoraFacturaId }: {
+function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAgregarCargoMes, aplicandoMoraFacturaId }: {
   cargos: Cargo[];
   pagos: Pago[];
   mesesAcademicos: ReturnType<typeof mesesDelPeriodo>;
   puedePagos: boolean;
   puedeFacturar: boolean;
+  puedeGestionar: boolean;
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
   onVincular: (cargo: Cargo) => void;
+  onAgregarCargoMes?: (mes: number, anio: number) => void;
   aplicandoMoraFacturaId: number | null;
 }) {
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
@@ -903,13 +886,11 @@ function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeF
           {rows.map((r) => {
             const key = `${r.anio}-${r.mes}`;
             const abierto = expandidos.has(key);
-            const puedeDesplegar = r.pagosMes.length > 0;
             return (
               <MesFila
                 key={key}
                 r={r}
                 abierto={abierto}
-                puedeDesplegar={puedeDesplegar}
                 onToggle={() => setExpandidos((prev) => {
                   const next = new Set(prev);
                   if (next.has(key)) next.delete(key); else next.add(key);
@@ -917,10 +898,12 @@ function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeF
                 })}
                 puedePagos={puedePagos}
                 puedeFacturar={puedeFacturar}
+                puedeGestionar={puedeGestionar}
                 onRegistrarPago={onRegistrarPago}
                 onAplicarMora={onAplicarMora}
                 onCrearFactura={onCrearFactura}
                 onVincular={onVincular}
+                onAgregarCargoMes={onAgregarCargoMes}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
               />
             );
@@ -941,35 +924,34 @@ type MesRow = {
   estado: ReturnType<typeof estadoMes>;
 };
 
-// Fila de un mes + subfila desplegable con el historial de pagos (abonos).
-function MesFila({ r, abierto, puedeDesplegar, onToggle, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, aplicandoMoraFacturaId }: {
+// Fila de un mes + panel desplegable del mes: historial de abonos y las
+// acciones contextuales de ese mes (agregar cargo). Todos los meses son
+// clickeables —incluso sin cargo o con factura impaga— para configurarlos ahí.
+function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAgregarCargoMes, aplicandoMoraFacturaId }: {
   r: MesRow;
   abierto: boolean;
-  puedeDesplegar: boolean;
   onToggle: () => void;
   puedePagos: boolean;
   puedeFacturar: boolean;
+  puedeGestionar: boolean;
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
   onVincular: (cargo: Cargo) => void;
+  onAgregarCargoMes?: (mes: number, anio: number) => void;
   aplicandoMoraFacturaId: number | null;
 }) {
   return (
     <>
       <tr
-        className={`border-t border-gray-100 ${puedeDesplegar ? 'cursor-pointer hover:bg-gray-50/60' : 'hover:bg-gray-50/40'}`}
-        onClick={puedeDesplegar ? onToggle : undefined}
+        className="cursor-pointer border-t border-gray-100 hover:bg-gray-50/60"
+        onClick={onToggle}
       >
         <td className="px-3 py-2.5 font-medium text-gray-900">
           <span className="inline-flex items-center gap-1.5">
-            {puedeDesplegar ? (
-              <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${abierto ? 'rotate-90' : ''}`} />
-            ) : (
-              <span className="inline-block w-3.5" />
-            )}
+            <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${abierto ? 'rotate-90' : ''}`} />
             {MESES[r.mes]} {r.anio}
-            {puedeDesplegar && (
+            {r.pagosMes.length > 0 && (
               <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
                 {r.pagosMes.length} {r.pagosMes.length === 1 ? 'pago' : 'pagos'}
               </span>
@@ -998,10 +980,14 @@ function MesFila({ r, abierto, puedeDesplegar, onToggle, puedePagos, puedeFactur
           ) : <span className="text-gray-300">—</span>}
         </td>
       </tr>
-      {abierto && puedeDesplegar && (
+      {abierto && (
         <tr className="bg-gray-50/40">
           <td colSpan={7} className="px-3 py-0">
-            <HistorialPagosMes pagos={r.pagosMes} saldo={r.saldo} pagado={r.pagado} />
+            <MesPanel
+              r={r}
+              puedeGestionar={puedeGestionar}
+              onAgregarCargoMes={onAgregarCargoMes}
+            />
           </td>
         </tr>
       )}
@@ -1009,38 +995,59 @@ function MesFila({ r, abierto, puedeDesplegar, onToggle, puedePagos, puedeFactur
   );
 }
 
-// Subtabla de abonos de un mes: qué se pagó, cuándo y por qué método, más el
-// saldo restante. Es el "historial de pagos" desplegable que pidió el negocio.
-function HistorialPagosMes({ pagos, saldo, pagado }: { pagos: Pago[]; saldo: number; pagado: number }) {
+// Panel del mes: historial de abonos (qué se pagó, cuándo, método) con el saldo
+// restante, y la acción de agregar un cargo directamente a este mes.
+function MesPanel({ r, puedeGestionar, onAgregarCargoMes }: {
+  r: MesRow;
+  puedeGestionar: boolean;
+  onAgregarCargoMes?: (mes: number, anio: number) => void;
+}) {
   return (
     <div className="my-2 rounded-lg border border-gray-200 bg-white">
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
         <span className="text-xs font-semibold text-gray-700">Historial de pagos</span>
         <span className="text-xs text-gray-500">
-          Abonado <b className="text-teal-700">{fmtDOP(pagado)}</b>
-          {saldo > 0 && <> · Pendiente <b className="text-red-600">{fmtDOP(saldo)}</b></>}
+          Abonado <b className="text-teal-700">{fmtDOP(r.pagado)}</b>
+          {r.saldo > 0 && <> · Pendiente <b className="text-red-600">{fmtDOP(r.saldo)}</b></>}
         </span>
       </div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-left text-[11px] text-gray-400">
-            <th className="px-3 py-1.5 font-medium">Fecha</th>
-            <th className="px-3 py-1.5 font-medium">Método</th>
-            <th className="px-3 py-1.5 font-medium">Referencia</th>
-            <th className="px-3 py-1.5 font-medium text-right">Monto</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pagos.map((p) => (
-            <tr key={p.id} className="border-t border-gray-100">
-              <td className="px-3 py-1.5 text-gray-700">{fmtFechaCorta(p.fechaPago)}</td>
-              <td className="px-3 py-1.5 capitalize text-gray-700">{p.metodo ?? '—'}</td>
-              <td className="px-3 py-1.5 text-gray-500">{p.referencia ?? '—'}</td>
-              <td className="px-3 py-1.5 text-right font-medium text-gray-900">{fmtDOP(p.montoCentavos)}</td>
+      {r.pagosMes.length > 0 ? (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-[11px] text-gray-400">
+              <th className="px-3 py-1.5 font-medium">Fecha</th>
+              <th className="px-3 py-1.5 font-medium">Método</th>
+              <th className="px-3 py-1.5 font-medium">Referencia</th>
+              <th className="px-3 py-1.5 font-medium text-right">Monto</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {r.pagosMes.map((p) => (
+              <tr key={p.id} className="border-t border-gray-100">
+                <td className="px-3 py-1.5 text-gray-700">{fmtFechaCorta(p.fechaPago)}</td>
+                <td className="px-3 py-1.5 capitalize text-gray-700">{p.metodo ?? '—'}</td>
+                <td className="px-3 py-1.5 text-gray-500">{p.referencia ?? '—'}</td>
+                <td className="px-3 py-1.5 text-right font-medium text-gray-900">{fmtDOP(p.montoCentavos)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="px-3 py-3 text-xs text-gray-400">
+          {r.cargosMes.length === 0 ? 'Sin cargo generado para este mes.' : 'Sin pagos registrados aún.'}
+        </p>
+      )}
+      {puedeGestionar && onAgregarCargoMes && (
+        <div className="flex justify-end border-t border-gray-100 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => onAgregarCargoMes(r.mes, r.anio)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700"
+          >
+            <Plus className="h-3.5 w-3.5" />Agregar cargo a {MESES[r.mes]}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

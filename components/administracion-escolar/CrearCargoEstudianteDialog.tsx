@@ -26,6 +26,10 @@ interface Props {
   periodoNombre: string;
   fechaInicio: string | null;
   fechaFin: string | null;
+  // Cuando se abre desde el panel de un mes específico, el mes viene prefijado
+  // y bloqueado (agregar cargo individual por mes).
+  mesInicial?: number | null;
+  anioInicial?: number | null;
 }
 
 function hoy() { return new Date().toISOString().slice(0, 10); }
@@ -37,6 +41,7 @@ function montoACentavos(valor: string) {
 
 export function CrearCargoEstudianteDialog({
   open, onClose, onSaved, estudianteId, matriculaId, periodoId, periodoNombre, fechaInicio, fechaFin,
+  mesInicial = null, anioInicial = null,
 }: Props) {
   const [conceptos, setConceptos] = useState<Concepto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,15 +50,20 @@ export function CrearCargoEstudianteDialog({
   const [form, setForm] = useState({ conceptoId: '', mes: '', anio: '', monto: '', fechaVencimiento: hoy() });
   const meses = useMemo(() => mesesDelPeriodo(fechaInicio, fechaFin), [fechaInicio, fechaFin]);
   const concepto = conceptos.find((c) => String(c.id) === form.conceptoId) ?? null;
+  // Mes bloqueado: se abrió desde el panel de un mes concreto y ese mes existe
+  // en el calendario académico del período.
+  const mesBloqueado = mesInicial != null && meses.some((m) => m.mes === mesInicial && (anioInicial == null || m.anio === anioInicial));
 
   useEffect(() => {
     if (!open) return;
     const actual = new Date();
-    const mesInicial = meses.find((m) => m.mes === actual.getMonth() + 1 && m.anio === actual.getFullYear()) ?? meses[0] ?? null;
+    const preseleccion = mesInicial != null
+      ? (meses.find((m) => m.mes === mesInicial && (anioInicial == null || m.anio === anioInicial)) ?? null)
+      : (meses.find((m) => m.mes === actual.getMonth() + 1 && m.anio === actual.getFullYear()) ?? meses[0] ?? null);
     setForm({
       conceptoId: '',
-      mes: mesInicial ? String(mesInicial.mes) : '',
-      anio: String(mesInicial?.anio ?? actual.getFullYear()),
+      mes: preseleccion ? String(preseleccion.mes) : '',
+      anio: String(preseleccion?.anio ?? anioInicial ?? actual.getFullYear()),
       monto: '',
       fechaVencimiento: hoy(),
     });
@@ -67,7 +77,7 @@ export function CrearCargoEstudianteDialog({
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los conceptos'))
       .finally(() => setLoading(false));
-  }, [open, meses]);
+  }, [open, meses, mesInicial, anioInicial]);
 
   async function guardar() {
     if (!matriculaId || !periodoId) {
@@ -114,7 +124,11 @@ export function CrearCargoEstudianteDialog({
   return (
     <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Agregar cargo · {periodoNombre}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>
+          Agregar cargo · {mesBloqueado
+            ? new Intl.DateTimeFormat('es-DO', { month: 'long', year: 'numeric' }).format(new Date(Number(form.anio), (mesInicial ?? 1) - 1, 1))
+            : periodoNombre}
+        </DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
           {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           {loading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div> : <>
@@ -128,7 +142,7 @@ export function CrearCargoEstudianteDialog({
             {concepto?.tipo === 'mensualidad' && (
               meses.length ? <div className="space-y-1.5">
                 <Label>Mes de mensualidad *</Label>
-                <Select value={`${form.anio}-${String(form.mes).padStart(2, '0')}`} onValueChange={(value) => {
+                <Select value={`${form.anio}-${String(form.mes).padStart(2, '0')}`} disabled={mesBloqueado} onValueChange={(value) => {
                   const seleccionado = meses.find((m) => m.key === value);
                   if (seleccionado) setForm((f) => ({ ...f, mes: String(seleccionado.mes), anio: String(seleccionado.anio) }));
                 }}>
