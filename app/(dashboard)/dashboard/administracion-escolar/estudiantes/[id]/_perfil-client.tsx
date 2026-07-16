@@ -11,7 +11,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, ChevronRight } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
@@ -582,7 +581,6 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   // Mes preseleccionado al agregar cargo desde el panel de un mes específico.
   // null = flujo general (elige el mes en el diálogo).
   const [cargoMesInicial, setCargoMesInicial] = useState<{ mes: number; anio: number } | null>(null);
-  const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
   const [cobroConsolidadoAbierto, setCobroConsolidadoAbierto] = useState(false);
 
   const cargosPeriodo = grupo.cargos;
@@ -623,15 +621,6 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
     && tutorClientId != null
     && c.facturaClientId !== tutorClientId
   ));
-  const cargosSinFactura = cargosPeriodo.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && !c.ecfDocumentId);
-  // "Crear factura" respeta la sub-vista activa: en Cuentas por cobrar solo
-  // ofrece mensualidades; en Otros cargos solo los que no son mensualidad. Así
-  // una factura no mezcla mensualidades con uniformes/actividades.
-  const cargosSinFacturaVista = vista === 'otros'
-    ? cargosSinFactura.filter((c) => c.conceptoTipo !== 'mensualidad')
-    : vista === 'mensualidades'
-      ? cargosSinFactura.filter((c) => c.conceptoTipo === 'mensualidad')
-      : cargosSinFactura;
 
   return (
     <div className="space-y-4">
@@ -660,11 +649,6 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
             )} disabled={!grupo.facturaRecurrenteId && (!grupo.fechaInicio || !grupo.fechaFin)}>
               <FileText className="h-4 w-4 mr-1.5" />
               {grupo.facturaRecurrenteId ? 'Gestionar mensualidad' : 'Configurar mensualidad'}
-            </Button>
-          )}
-          {puedeFacturar && (
-            <Button size="sm" variant="outline" onClick={() => setElegirFacturaAbierto(true)} disabled={cargosSinFacturaVista.length === 0}>
-              <FileText className="h-4 w-4 mr-1.5" />Crear factura
             </Button>
           )}
           {puedePagos && facturasConsolidables.length >= 2 && (
@@ -815,74 +799,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
           </div>
         </div>
       )}
-      <ElegirCargosFacturarDialog
-        open={elegirFacturaAbierto}
-        onOpenChange={setElegirFacturaAbierto}
-        cargos={cargosSinFacturaVista}
-        onConfirm={(ids) => router.push(
-          ids.length > 1
-            ? `/dashboard/facturas/nueva?desdeCargos=${ids.join(',')}`
-            : `/dashboard/facturas/nueva?desdeCargo=${ids[0]}`,
-        )}
-      />
     </div>
-  );
-}
-
-// Selector de cargos a facturar. Multi-select: si se eligen varios, la factura
-// los cubre todos (un mes por línea) y un solo cobro los salda (N cargos → 1
-// factura). Resuelve el caso "facturar/pagar varios meses de una vez".
-function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  cargos: Cargo[];
-  onConfirm: (ids: number[]) => void;
-}) {
-  const [sel, setSel] = useState<Set<number>>(new Set());
-  useEffect(() => { if (open) setSel(new Set(cargos.map((c) => c.id))); }, [open, cargos]);
-
-  const seleccionados = cargos.filter((c) => sel.has(c.id));
-  const ids = seleccionados.map((c) => c.id);
-  const total = seleccionados.reduce((s, c) => s + c.saldoCentavos, 0);
-
-  function toggle(id: number) {
-    setSel((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>¿Qué cargos deseas facturar?</DialogTitle></DialogHeader>
-        <p className="text-sm text-gray-500">
-          Marca uno o varios. Si eliges varios, se crea <b>una sola factura</b> que los cubre
-          (un mes por línea) y un único cobro los salda.
-        </p>
-        <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
-          {cargos.map((cargo) => (
-            <label key={cargo.id} className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-teal-50/50">
-              <input type="checkbox" checked={sel.has(cargo.id)} onChange={() => toggle(cargo.id)}
-                className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-gray-900">{cargo.concepto ?? 'Cargo'}</span>
-                <span className="block text-xs text-gray-500">{cargo.mes ? `${MESES[cargo.mes]} ${cargo.anio}` : cargo.anio}{cargo.fechaVencimiento ? ` · vence ${fmtFechaCorta(cargo.fechaVencimiento)}` : ''}</span>
-              </span>
-              <span className="shrink-0 text-sm font-semibold text-red-600">{fmtDOP(cargo.saldoCentavos)}</span>
-            </label>
-          ))}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700" disabled={ids.length === 0}
-            onClick={() => { onConfirm(ids); onOpenChange(false); }}>
-            {ids.length > 1 ? `Facturar ${ids.length} en una factura (${fmtDOP(total)})` : 'Facturar cargo'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
