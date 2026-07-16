@@ -144,6 +144,7 @@ export default function FacturaRecurrenteDetallePage() {
   const [error, setError]     = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
   const [generandoPeriodo, setGenerandoPeriodo] = useState<string | null>(null);
+  const [generandoTodos, setGenerandoTodos] = useState(false);
   const [canOperate, setCanOperate] = useState(true);
   const didLoad = useRef(false);
 
@@ -201,6 +202,38 @@ export default function FacturaRecurrenteDetallePage() {
       toast.error('Error de conexión al generar la factura');
     } finally {
       if (periodo) setGenerandoPeriodo(null); else setGenerando(false);
+    }
+  }
+
+  // Genera EN SECUENCIA todos los períodos pendientes (sin factura). Sirve para
+  // adelantar varios meses de golpe (p.ej. un padre que paga 6 meses juntos):
+  // se crean N facturas borrador que luego se cobran juntas con "Cobrar varias".
+  async function generarPendientes(fechas: string[]) {
+    if (!id || fechas.length === 0) return;
+    setGenerandoTodos(true);
+    let ok = 0;
+    let ultimoError: string | null = null;
+    try {
+      for (const periodo of fechas) {
+        try {
+          const res = await fetch(`/api/facturas-recurrentes/${id}/generar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ periodo }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (res.ok) ok += 1;
+          else if (res.status !== 409) ultimoError = json.error ?? 'Error generando';
+          // 409 = ya generada: se ignora y se sigue.
+        } catch {
+          ultimoError = 'Error de conexión';
+        }
+      }
+      if (ok > 0) toast.success(`${ok} factura(s) generada(s)`);
+      if (ultimoError) toast.error(ultimoError);
+      cargar();
+    } finally {
+      setGenerandoTodos(false);
     }
   }
 
@@ -286,9 +319,23 @@ export default function FacturaRecurrenteDetallePage() {
         title="Calendario de pagos"
         icon={<CalendarClock className="h-4 w-4 text-teal-600" />}
         action={
-          <Button variant="ghost" size="sm" onClick={cargar} className="text-gray-500">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            {canOperate && data.periodos.filter((p) => !p.factura).length > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={generandoTodos}
+                onClick={() => generarPendientes(data.periodos.filter((p) => !p.factura).map((p) => p.fecha))}
+              >
+                {generandoTodos
+                  ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generando…</>
+                  : <><Zap className="h-3.5 w-3.5 mr-1.5" /> Generar pendientes ({data.periodos.filter((p) => !p.factura).length})</>}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={cargar} className="text-gray-500">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
         }
       >
         {fr.estado !== 'activa' && (

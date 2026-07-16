@@ -130,8 +130,14 @@ export async function generarFacturaDeRecurrente(
     if (Array.isArray(items) && items.length > 0) {
       const totales = calcularTotales(items);
       // calcularTotales devuelve DOP; la columna montoTotal/totalItbis es en centavos.
-      montoTotal = Math.round(totales.montoTotal * 100);
-      totalItbis = Math.round(totales.totalItbis * 100);
+      const mt = Math.round(totales.montoTotal * 100);
+      const ti = Math.round(totales.totalItbis * 100);
+      // Guard: items con shape legacy/incompleto (p.ej. `precioUnitario` en vez
+      // de `precioUnitarioItem`) hacen que calcularTotales devuelva NaN. En ese
+      // caso caemos a `totalEstimado` (ya en centavos) en vez de insertar NaN y
+      // romper con "invalid input syntax for type integer: NaN".
+      if (Number.isFinite(mt)) montoTotal = mt;
+      if (Number.isFinite(ti)) totalItbis = ti;
     }
   } catch {
     // fallback a totalEstimado si el JSON es inválido
