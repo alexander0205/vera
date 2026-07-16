@@ -20,6 +20,7 @@ import { VincularFacturaDialog } from '@/components/administracion-escolar/Vincu
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
 import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import { CrearCargoEstudianteDialog } from '@/components/administracion-escolar/CrearCargoEstudianteDialog';
+import { CobroConsolidadoDialog, type FacturaConsolidable } from '@/components/administracion-escolar/CobroConsolidadoDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
@@ -582,6 +583,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   // null = flujo general (elige el mes en el diálogo).
   const [cargoMesInicial, setCargoMesInicial] = useState<{ mes: number; anio: number } | null>(null);
   const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
+  const [cobroConsolidadoAbierto, setCobroConsolidadoAbierto] = useState(false);
 
   const cargosPeriodo = grupo.cargos;
   const mesesAcademicos = mesesDelPeriodo(grupo.fechaInicio, grupo.fechaFin);
@@ -599,6 +601,22 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   const proximo = cargosPeriodo
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .sort((a, b) => (a.fechaVencimiento ?? '9999-12-31').localeCompare(b.fechaVencimiento ?? '9999-12-31'))[0] ?? null;
+  // Facturas cobrables del tutor de pago actual: base del cobro consolidado
+  // (un pago que salda varias) y del reparto en cascada.
+  const facturasPendientesPago = cargosPeriodo.filter((c) => (
+    ['pendiente', 'parcial', 'vencido'].includes(c.estado)
+    && c.ecfDocumentId
+    && (tutorClientId == null || c.facturaClientId === tutorClientId)
+  ));
+  const facturasConsolidables: FacturaConsolidable[] = facturasPendientesPago.map((c) => ({
+    ecfDocumentId: c.ecfDocumentId!,
+    ref: c.facturaEncf ?? c.facturaCodigo ?? `#${c.ecfDocumentId}`,
+    concepto: c.concepto,
+    mes: c.mes,
+    anio: c.anio,
+    saldoCentavos: c.saldoCentavos,
+    fechaVencimiento: c.fechaVencimiento,
+  }));
   const facturasTutorIncorrecto = cargosPeriodo.filter((c) => (
     ['pendiente', 'parcial', 'vencido'].includes(c.estado)
     && c.ecfDocumentId
@@ -639,6 +657,11 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
           {puedeFacturar && (
             <Button size="sm" variant="outline" onClick={() => setElegirFacturaAbierto(true)} disabled={cargosSinFactura.length === 0}>
               <FileText className="h-4 w-4 mr-1.5" />Crear factura
+            </Button>
+          )}
+          {puedePagos && facturasConsolidables.length >= 2 && (
+            <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={() => setCobroConsolidadoAbierto(true)}>
+              <Wallet className="h-4 w-4 mr-1.5" />Cobrar varias
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={() => window.print()}>
@@ -764,6 +787,12 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
         fechaFin={grupo.fechaFin}
         mesInicial={cargoMesInicial?.mes ?? null}
         anioInicial={cargoMesInicial?.anio ?? null}
+      />
+      <CobroConsolidadoDialog
+        open={cobroConsolidadoAbierto}
+        onClose={() => setCobroConsolidadoAbierto(false)}
+        onSaved={onCargoCreado}
+        facturas={facturasConsolidables}
       />
       {facturasTutorIncorrecto.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
