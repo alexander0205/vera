@@ -11,6 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, ChevronRight } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
@@ -19,7 +20,6 @@ import { VincularFacturaDialog } from '@/components/administracion-escolar/Vincu
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
 import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import { CrearCargoEstudianteDialog } from '@/components/administracion-escolar/CrearCargoEstudianteDialog';
-import { CobroConsolidadoDialog, type FacturaConsolidable } from '@/components/administracion-escolar/CobroConsolidadoDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
@@ -581,7 +581,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   // Mes preseleccionado al agregar cargo desde el panel de un mes específico.
   // null = flujo general (elige el mes en el diálogo).
   const [cargoMesInicial, setCargoMesInicial] = useState<{ mes: number; anio: number } | null>(null);
-  const [cobroConsolidadoAbierto, setCobroConsolidadoAbierto] = useState(false);
+  const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
 
   const cargosPeriodo = grupo.cargos;
   const mesesAcademicos = mesesDelPeriodo(grupo.fechaInicio, grupo.fechaFin);
@@ -599,28 +599,21 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   const proximo = cargosPeriodo
     .filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado))
     .sort((a, b) => (a.fechaVencimiento ?? '9999-12-31').localeCompare(b.fechaVencimiento ?? '9999-12-31'))[0] ?? null;
-  // Facturas cobrables del tutor de pago actual: base del cobro consolidado
-  // (un pago que salda varias) y del reparto en cascada.
-  const facturasPendientesPago = cargosPeriodo.filter((c) => (
-    ['pendiente', 'parcial', 'vencido'].includes(c.estado)
-    && c.ecfDocumentId
-    && (tutorClientId == null || c.facturaClientId === tutorClientId)
-  ));
-  const facturasConsolidables: FacturaConsolidable[] = facturasPendientesPago.map((c) => ({
-    ecfDocumentId: c.ecfDocumentId!,
-    ref: c.facturaEncf ?? c.facturaCodigo ?? `#${c.ecfDocumentId}`,
-    concepto: c.concepto,
-    mes: c.mes,
-    anio: c.anio,
-    saldoCentavos: c.saldoCentavos,
-    fechaVencimiento: c.fechaVencimiento,
-  }));
   const facturasTutorIncorrecto = cargosPeriodo.filter((c) => (
     ['pendiente', 'parcial', 'vencido'].includes(c.estado)
     && c.ecfDocumentId
     && tutorClientId != null
     && c.facturaClientId !== tutorClientId
   ));
+  const cargosSinFactura = cargosPeriodo.filter((c) => ['pendiente', 'parcial', 'vencido'].includes(c.estado) && !c.ecfDocumentId);
+  // "Crear factura" respeta la sub-vista activa: en Cuentas por cobrar solo
+  // ofrece mensualidades; en Otros cargos solo los que no son mensualidad. Así
+  // una factura no mezcla mensualidades con uniformes/actividades.
+  const cargosSinFacturaVista = vista === 'otros'
+    ? cargosSinFactura.filter((c) => c.conceptoTipo !== 'mensualidad')
+    : vista === 'mensualidades'
+      ? cargosSinFactura.filter((c) => c.conceptoTipo === 'mensualidad')
+      : cargosSinFactura;
 
   return (
     <div className="space-y-4">
@@ -651,9 +644,9 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
               {grupo.facturaRecurrenteId ? 'Gestionar mensualidad' : 'Configurar mensualidad'}
             </Button>
           )}
-          {puedePagos && facturasConsolidables.length >= 2 && (
-            <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={() => setCobroConsolidadoAbierto(true)}>
-              <Wallet className="h-4 w-4 mr-1.5" />Cobrar varias
+          {puedeFacturar && (
+            <Button size="sm" variant="outline" onClick={() => setElegirFacturaAbierto(true)} disabled={cargosSinFacturaVista.length === 0}>
+              <FileText className="h-4 w-4 mr-1.5" />Facturar varios meses
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={() => window.print()}>
@@ -780,12 +773,6 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
         mesInicial={cargoMesInicial?.mes ?? null}
         anioInicial={cargoMesInicial?.anio ?? null}
       />
-      <CobroConsolidadoDialog
-        open={cobroConsolidadoAbierto}
-        onClose={() => setCobroConsolidadoAbierto(false)}
-        onSaved={onCargoCreado}
-        facturas={facturasConsolidables}
-      />
       {facturasTutorIncorrecto.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <p>Hay {facturasTutorIncorrecto.length} cargo(s) con factura vinculada a otro contacto. No se muestran para cobrar.</p>
@@ -799,7 +786,76 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
           </div>
         </div>
       )}
+      <ElegirCargosFacturarDialog
+        open={elegirFacturaAbierto}
+        onOpenChange={setElegirFacturaAbierto}
+        cargos={cargosSinFacturaVista}
+        onConfirm={(ids) => router.push(
+          ids.length > 1
+            ? `/dashboard/facturas/nueva?desdeCargos=${ids.join(',')}`
+            : `/dashboard/facturas/nueva?desdeCargo=${ids[0]}`,
+        )}
+      />
     </div>
+  );
+}
+
+// Selector de cargos a facturar en UNA sola factura (factura mayor). Se marca
+// uno o varios meses/cargos y se crea una única factura que los cubre (un mes
+// por línea). Luego esa factura se cobra normal: los abonos se acumulan en su
+// historial hasta saldarla. Resuelve "pagar varios meses de golpe".
+function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  cargos: Cargo[];
+  onConfirm: (ids: number[]) => void;
+}) {
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  useEffect(() => { if (open) setSel(new Set(cargos.map((c) => c.id))); }, [open, cargos]);
+
+  const seleccionados = cargos.filter((c) => sel.has(c.id));
+  const ids = seleccionados.map((c) => c.id);
+  const total = seleccionados.reduce((s, c) => s + c.saldoCentavos, 0);
+
+  function toggle(id: number) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Facturar varios meses en una sola factura</DialogTitle></DialogHeader>
+        <p className="text-sm text-gray-500">
+          Marca los meses/cargos a incluir. Se crea <b>una sola factura</b> que los cubre
+          (un mes por línea). Luego la cobras normal: puedes abonar en partes y los
+          pagos se acumulan en su historial hasta saldarla.
+        </p>
+        <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+          {cargos.map((cargo) => (
+            <label key={cargo.id} className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-teal-50/50">
+              <input type="checkbox" checked={sel.has(cargo.id)} onChange={() => toggle(cargo.id)}
+                className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-gray-900">{cargo.concepto ?? 'Cargo'}</span>
+                <span className="block text-xs text-gray-500">{cargo.mes ? `${MESES[cargo.mes]} ${cargo.anio}` : cargo.anio}{cargo.fechaVencimiento ? ` · vence ${fmtFechaCorta(cargo.fechaVencimiento)}` : ''}</span>
+              </span>
+              <span className="shrink-0 text-sm font-semibold text-red-600">{fmtDOP(cargo.saldoCentavos)}</span>
+            </label>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700" disabled={ids.length === 0}
+            onClick={() => { onConfirm(ids); onOpenChange(false); }}>
+            {ids.length > 1 ? `Facturar ${ids.length} en una factura (${fmtDOP(total)})` : 'Facturar cargo'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
