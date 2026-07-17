@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit, syncPagoMirror } from '@/lib/db/queries';
-import { getTurnoAbierto } from '@/lib/caja/core';
+import { requireTurnoAbierto } from '@/lib/caja/guard';
 import { METODOS_PAGO_SET } from '@/lib/pagos/metodos';
 import { eq, and } from 'drizzle-orm';
 
@@ -76,11 +76,15 @@ export async function POST(
   let fecha = body.fecha ? String(body.fecha).slice(0, 10) : null;
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) fecha = new Date().toISOString().slice(0, 10);
 
-  // Cuadre de caja: si el cajero tiene un turno ABIERTO, el cobro se atribuye a
-  // él para que el efectivo entre en el esperado del cierre. Solo ABIERTO — un
-  // turno con CIERRE_SOLICITADO ya tiene el esperado congelado.
-  const turno = await getTurnoAbierto(teamId, user.id);
-  const turnoCajaId = turno?.estado === 'ABIERTO' ? turno.id : null;
+  // Cuadre de caja: sin turno ABIERTO no se cobra. El cobro se atribuye al turno
+  // para que el efectivo entre en el esperado del cierre; aceptarlo sin turno
+  // metía dinero que ningún cierre reclama. Solo ABIERTO — un turno con
+  // CIERRE_SOLICITADO ya tiene el esperado congelado.
+  const guardCaja = await requireTurnoAbierto(teamId, user.id);
+  if (!guardCaja.ok) {
+    return NextResponse.json({ error: guardCaja.error, code: guardCaja.code }, { status: 409 });
+  }
+  const turnoCajaId = guardCaja.turno?.id ?? null;
 
   // ── SPLIT: varias líneas de método en una sola operación ─────────────────────
   if (Array.isArray(body.pagos)) {

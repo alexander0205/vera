@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import useSWR from 'swr';
+import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import {
   LayoutDashboard, Users, Package,
   Settings, Activity, Shield, Menu as MenuIcon, Plus, ChevronDown, ChevronRight,
@@ -63,6 +64,8 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
       { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
+      { href: '/dashboard/pagos/links',          label: 'Links de pago' },
+      { href: '/dashboard/pagos/pasarelas',      label: 'Pasarelas de pago' },
       { href: '/dashboard/notas-credito',        label: 'Notas de crédito',     plusHref: '/dashboard/notas-credito/nueva' },
       { href: '/dashboard/notas-debito',         label: 'Notas de débito',      plusHref: '/dashboard/notas-debito/nueva' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
@@ -127,6 +130,8 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/facturas/nueva':        'facturas:crear',
   '/dashboard/cuentas-por-cobrar':    'facturas:ver',
   '/dashboard/pagos':                 'pagos:ver',
+  '/dashboard/pagos/links':           'pagos:ver',
+  '/dashboard/pagos/pasarelas':       'configuracion:ver',
   '/dashboard/notas-credito':         'facturas:ver',
   '/dashboard/cotizaciones':          'cotizaciones:ver',
   '/dashboard/cotizaciones/nueva':    'cotizaciones:gestionar',
@@ -922,9 +927,23 @@ function SidebarContent({
         )}
       </Box>
 
+      {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es
+          el mismo gesto. Evita un item más en el menú para algo que se mira de
+          vez en cuando. */}
       <Box sx={{ px: 2, py: 1.25, borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-        <Typography className="nav-text" sx={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>
-          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
+        <Typography
+          component={Link}
+          href="/dashboard/novedades"
+          onClick={onClose}
+          title="Ver qué hay de nuevo"
+          className="nav-text"
+          sx={{
+            fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
+            textDecoration: 'none', transition: 'color 0.15s',
+            '&:hover': { color: 'rgba(204,251,241,0.9)' },
+          }}
+        >
+          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
         </Typography>
       </Box>
     </Box>
@@ -967,6 +986,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const dgiiAmbiente = ambienteData?.ambiente ?? null;
   const teams: Team[] = empresaData?.teams ?? [];
   const activeTeamId  = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
+  // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
+  const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
 
   function handleSwitch(teamId: number) {
     setActiveTeamOverride(teamId);
@@ -1104,6 +1125,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* DGII ambiente badge */}
             <AmbienteBadge ambiente={dgiiAmbiente} />
+
+            {/* Turno de caja — solo aparece cuando queda poco para el límite */}
+            {cajaHabilitada && <TurnoCountdown />}
 
             <Box sx={{ flex: 1 }} />
 

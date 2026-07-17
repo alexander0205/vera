@@ -70,7 +70,7 @@ function precioLinea(it: LineaCarrito): number {
 }
 
 interface ListaPrecio { id: number; nombre: string; }
-interface ClienteView { id: number; razonSocial: string; rnc: string | null; email: string | null; }
+interface ClienteView { id: number; razonSocial: string; rnc: string | null; email: string | null; dependientes?: string[]; }
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
@@ -1481,9 +1481,18 @@ function ClientePicker({ cliente, onSelect }: {
           ) : (
             filtrados.map((r) => (
               <Box component="button" key={r.id} onClick={() => { onSelect(r); setQ(''); setAbierto(false); }}
-                sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', border: 'none', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, '&:hover': { bgcolor: '#f9fafb' } }}>
-                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.razonSocial}</Box>
-                <Box component="span" sx={{ fontSize: 12, color: '#9ca3af' }}>{r.rnc ?? ''}</Box>
+                sx={{ display: 'block', width: '100%', border: 'none', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, '&:hover': { bgcolor: '#f9fafb' } }}>
+                <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
+                  <Box component="span" title={r.razonSocial} sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.razonSocial}</Box>
+                  <Box component="span" sx={{ flexShrink: 0, fontFamily: 'monospace', fontSize: 12, color: '#9ca3af' }}>{r.rnc ?? '—'}</Box>
+                </Box>
+                {!!r.dependientes?.length && (
+                  <Box component="span" sx={{ display: 'block', mt: 0.5, pt: 0.5, borderTop: '1px solid #e5e7eb' }}>
+                    {r.dependientes.map((d) => (
+                      <Box component="span" key={d} title={d} sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#2563eb' }}>{d}</Box>
+                    ))}
+                  </Box>
+                )}
               </Box>
             ))
           )}

@@ -142,6 +142,10 @@ export default function ConfiguracionPage() {
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
+  // null = sin límite. Es el estado real por defecto: la función nace apagada.
+  const [cajaLimiteHoras, setCajaLimiteHoras]           = useState<number | null>(null);
+  const [cajaAvisoMinutos, setCajaAvisoMinutos]         = useState(60);
+  const [cajaGraciaHoras, setCajaGraciaHoras]           = useState<number | null>(2);
   // Módulo punto de venta (POS)
   const [posHabilitado, setPosHabilitado]               = useState(false);
   const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
@@ -174,6 +178,9 @@ export default function ConfiguracionPage() {
         setRecargoActivo(d.recargoMoraActivo ?? false);
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
         setCajaHabilitada(d.cajaHabilitada ?? false);
+        setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
+        setCajaAvisoMinutos(d.cajaAvisoMinutos ?? 60);
+        setCajaGraciaHoras(d.cajaGraciaHoras ?? null);
         // Módulo POS
         setPosHabilitado(d.posHabilitado ?? false);
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
@@ -201,6 +208,9 @@ export default function ConfiguracionPage() {
           // Gracia eliminada del config: la mora aplica al vencer.
           recargoMoraDiasGracia: 0,
           cajaHabilitada,
+          cajaLimiteHoras,
+          cajaAvisoMinutos,
+          cajaGraciaHoras,
           posHabilitado,
           posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
@@ -471,9 +481,104 @@ export default function ConfiguracionPage() {
                 sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
             </Box>
             {cajaHabilitada && (
-              <Alert severity="info" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
-                <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero debe abrir su turno antes de emitir. Los cierres con descuadre requieren aprobación de un admin u owner.
-              </Alert>
+              <>
+                {/* Límite de duración del turno */}
+                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' } }}>
+                  <Box>
+                    <Typography variant="body2" component="label" htmlFor="caja-limite" sx={{ fontWeight: 500, color: '#1f2937' }}>
+                      Límite del turno (horas)
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25, mb: 0.75 }}>
+                      Vacío = sin límite ni avisos.
+                    </Typography>
+                    <TextField
+                      id="caja-limite"
+                      type="number"
+                      size="small"
+                      fullWidth
+                      placeholder="8"
+                      value={cajaLimiteHoras ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value.trim();
+                        setCajaLimiteHoras(v === '' ? null : parseInt(v, 10));
+                      }}
+                      slotProps={{ htmlInput: { min: 1, max: 24 } }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    />
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" component="label" htmlFor="caja-aviso" sx={{ fontWeight: 500, color: '#1f2937' }}>
+                      Avisar desde (min antes)
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25, mb: 0.75 }}>
+                      Cuándo aparece el contador arriba.
+                    </Typography>
+                    <TextField
+                      id="caja-aviso"
+                      type="number"
+                      size="small"
+                      fullWidth
+                      placeholder="60"
+                      value={cajaAvisoMinutos}
+                      onChange={(e) => setCajaAvisoMinutos(parseInt(e.target.value, 10) || 60)}
+                      slotProps={{ htmlInput: { min: 5, max: 240 } }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    />
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" component="label" htmlFor="caja-gracia" sx={{ fontWeight: 500, color: '#1f2937' }}>
+                      Gracia antes de bloquear (h)
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25, mb: 0.75 }}>
+                      Vacío o 0 = nunca bloquea, solo avisa.
+                    </Typography>
+                    <TextField
+                      id="caja-gracia"
+                      type="number"
+                      size="small"
+                      fullWidth
+                      placeholder="2"
+                      value={cajaGraciaHoras ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value.trim();
+                        setCajaGraciaHoras(v === '' ? null : parseInt(v, 10));
+                      }}
+                      slotProps={{ htmlInput: { min: 0, max: 12 } }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    />
+                  </Box>
+                </Box>
+
+                <Alert severity="info" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+                  <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
+                  debe abrir su turno antes de emitir o cobrar. Los cierres con descuadre requieren
+                  aprobación de un admin u owner.
+                </Alert>
+
+                {cajaLimiteHoras ? (
+                  <Alert severity={cajaGraciaHoras ? 'warning' : 'info'} sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+                    {cajaGraciaHoras ? (
+                      <>
+                        <strong>Bloqueo activo:</strong> el contador aparece a las{' '}
+                        {cajaLimiteHoras}h menos {cajaAvisoMinutos} min. A las {cajaLimiteHoras}h el
+                        turno vence, y a las {cajaLimiteHoras + cajaGraciaHoras}h el cajero{' '}
+                        <strong>no podrá facturar ni cobrar</strong> hasta cerrar caja.
+                      </>
+                    ) : (
+                      <>
+                        <strong>Solo avisa:</strong> el contador aparece a las {cajaLimiteHoras}h menos{' '}
+                        {cajaAvisoMinutos} min y el turno vence a las {cajaLimiteHoras}h, pero el cajero
+                        puede seguir facturando indefinidamente.
+                      </>
+                    )}
+                  </Alert>
+                ) : (
+                  <Alert severity="info" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+                    Sin límite de duración: los turnos pueden quedar abiertos indefinidamente y no se
+                    muestra contador.
+                  </Alert>
+                )}
+              </>
             )}
           </Box>
         </Box>

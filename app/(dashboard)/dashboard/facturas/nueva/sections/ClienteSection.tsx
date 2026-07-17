@@ -12,6 +12,50 @@ import { getCampoHint } from '@/lib/factura/validator/ui-helpers';
 import { Autocomplete } from '../components/Autocomplete';
 import type { Cliente } from '../utils/types';
 
+const CLIENTE_DROPDOWN_W = 520;
+
+/**
+ * Opción del dropdown: el contacto arriba (nombre + RNC/cédula) y, separados por
+ * una línea, sus dependientes, uno por fila. El contacto va primero porque es a
+ * quien se le factura.
+ * Se listan TODOS los dependientes, no solo el que matcheó: buscando al padre se
+ * ve la familia, y buscando al hijo se confirma que el contacto es el correcto.
+ */
+function renderClienteOption(c: Cliente) {
+  const deps = c.dependientes ?? [];
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.5 }}>
+        <Typography
+          variant="body2"
+          title={c.razonSocial}
+          sx={{ minWidth: 0, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {c.razonSocial}
+        </Typography>
+        <Typography variant="caption" sx={{ flexShrink: 0, fontFamily: 'monospace', color: 'text.secondary' }}>
+          {c.rnc || '—'}
+        </Typography>
+      </Box>
+      {deps.length > 0 && (
+        <Box component="ul" sx={{ mt: 0.5, pt: 0.5, m: 0, pl: 0, listStyle: 'none', borderTop: '1px solid #e5e7eb' }}>
+          {deps.map((d) => (
+            <Typography
+              key={d}
+              component="li"
+              variant="caption"
+              title={d}
+              sx={{ display: 'block', color: '#2563eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {d}
+            </Typography>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 interface Props {
   clienteSeleccionado: Cliente | null;
   buscarClientes: (q: string) => Promise<Cliente[]>;
@@ -47,21 +91,15 @@ export function ClienteSection({
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
         <Box sx={{ flex: 1, minWidth: 200, position: 'relative' }}>
           <Autocomplete<Cliente>
-            placeholder="Buscar cliente por nombre, RNC o email…"
+            placeholder="Buscar cliente por nombre, RNC o beneficiario…"
             value={clienteSeleccionado?.razonSocial ?? ''}
             onSearch={buscarClientes}
             onSelect={onSelectCliente}
             onClear={onClearCliente}
             onCreate={onOpenNuevoCliente}
             createLabel="Nuevo contacto"
-            renderOption={(c) => (
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>{c.razonSocial}</Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {[c.rnc, c.email].filter(Boolean).join(' · ')}
-                </Typography>
-              </Box>
-            )}
+            dropdownMinWidth={CLIENTE_DROPDOWN_W}
+            renderOption={renderClienteOption}
           />
           {/* Clear button — visible when a client is selected */}
           {clienteSeleccionado && (

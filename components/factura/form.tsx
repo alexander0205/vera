@@ -41,6 +41,8 @@ interface ClienteResult {
   razonSocial: string;
   rnc:         string | null;
   email:       string | null;
+  /** Todos los dependientes del cliente. */
+  dependientes?: string[];
 }
 
 /**
@@ -108,7 +110,7 @@ export function ClienteSearch() {
         value={query}
         onChange={e => handleInput(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
-        placeholder="Nombre o RNC del cliente..."
+        placeholder="Nombre, RNC o beneficiario del cliente..."
         sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
         slotProps={{
           input: {
@@ -176,8 +178,30 @@ export function ClienteSearch() {
                   '&:hover': { bgcolor: '#f9fafb' },
                 }}
               >
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{c.razonSocial}</Typography>
-                {c.rnc && <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>RNC: {c.rnc}</Typography>}
+                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.5 }}>
+                  <Typography
+                    title={c.razonSocial}
+                    sx={{ minWidth: 0, fontSize: '0.875rem', fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {c.razonSocial}
+                  </Typography>
+                  <Typography sx={{ flexShrink: 0, fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280' }}>
+                    {c.rnc || '—'}
+                  </Typography>
+                </Box>
+                {!!c.dependientes?.length && (
+                  <Box sx={{ mt: 0.5, pt: 0.5, borderTop: '1px solid #e5e7eb' }}>
+                    {c.dependientes.map((d) => (
+                      <Typography
+                        key={d}
+                        title={d}
+                        sx={{ fontSize: '0.75rem', color: '#2563eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {d}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
               </Box>
             ))
           )}

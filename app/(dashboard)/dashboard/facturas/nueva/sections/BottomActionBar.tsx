@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, FileText, Loader2, Mail, Printer } from 'lucide-react';
+import { ChevronDown, CreditCard, FileText, Loader2, Mail, Printer } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ItemLinea } from '../utils/types';
 import Box from '@mui/material/Box';
@@ -18,7 +18,7 @@ interface Props {
   // Full invoice mode (optional — omit for simple mode)
   loadingPreview?: boolean;
   onVistaPrevia?: () => void;
-  onEmitir?: (modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) => void;
+  onEmitir?: (modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar' }) => void;
 }
 
 export function BottomActionBar({
@@ -119,6 +119,15 @@ export function BottomActionBar({
                       {item.label}
                     </Box>
                   ))}
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'cobrar' }); }}
+                    sx={{ ...menuItemSx, color: '#0f766e', borderTop: '1px solid #f3f4f6', '&:hover': { bgcolor: '#f0fdfa' } }}
+                  >
+                    <CreditCard size={16} color="#0d9488" />
+                    Guardar y generar link de pago
+                  </Box>
                 </Box>
               )}
             </Box>

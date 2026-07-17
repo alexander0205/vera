@@ -31,6 +31,17 @@ interface DependienteOpt {
 /** Ancho del dropdown de productos — más ancho que la celda para layout tipo tabla. */
 const PRODUCTO_DROPDOWN_W = 460;
 
+/**
+ * sx de los inputs numéricos de la línea. Las flechas del spinner se ocultan:
+ * en una tabla de factura invitan a errores de un clic y roban ancho a la celda.
+ */
+const inputNumeroSx = {
+  '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' },
+  '& input[type=number]': { MozAppearance: 'textfield' },
+  '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+};
+
 /** Fila del dropdown de productos: código (referencia) · nombre + descripción · precio/ITBIS. */
 function renderProductoOption(p: Producto) {
   return (
@@ -263,7 +274,7 @@ export function ItemsTable({
                   placeholder="0.00"
                   value={item.precioUnitarioItem || ''}
                   onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                  sx={inputNumeroSx}
                   slotProps={{ htmlInput: { min: 0, step: 0.01, inputMode: 'decimal', style: { textAlign: 'right' } } }}
                 />
               </Box>
@@ -290,7 +301,7 @@ export function ItemsTable({
                     const n = parseFloat(e.target.value);
                     onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
                   }}
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                  sx={inputNumeroSx}
                   slotProps={{ htmlInput: { min: 0.01, step: 'any', inputMode: 'decimal', style: { textAlign: 'center' } } }}
                 />
               </Box>
@@ -320,7 +331,7 @@ export function ItemsTable({
                     placeholder="0"
                     value={item.descuentoPct || ''}
                     onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    sx={inputNumeroSx}
                     slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, inputMode: 'decimal', style: { textAlign: 'center', paddingRight: '1.5rem' } } }}
                   />
                   <Typography
@@ -609,7 +620,7 @@ export function ItemsTable({
                     placeholder="0.00"
                     value={item.precioUnitarioItem || ''}
                     onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    sx={inputNumeroSx}
                     slotProps={{ htmlInput: { min: 0, step: 0.01, style: { textAlign: 'right' } } }}
                   />
                 </TableCell>
@@ -624,7 +635,7 @@ export function ItemsTable({
                       placeholder="0"
                       value={item.descuentoPct || ''}
                       onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                      sx={inputNumeroSx}
                       slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, style: { textAlign: 'center', paddingRight: '1.25rem' } } }}
                     />
                     <Typography
@@ -697,7 +708,7 @@ export function ItemsTable({
                       // permitir 0 explícito, NaN/blank → 0; submit valida > 0
                       onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
                     }}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                    sx={inputNumeroSx}
                     slotProps={{ htmlInput: { min: 0.01, step: 'any', style: { textAlign: 'center' } } }}
                   />
                 </TableCell>

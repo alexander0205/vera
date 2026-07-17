@@ -119,6 +119,19 @@ export const teams = pgTable('teams', {
   // Toggle por empresa. Si está activo: aparece el grupo "Caja" en el sidebar,
   // el badge de estado en el header, y no se puede facturar sin turno abierto.
   cajaHabilitada:         boolean('caja_habilitada').notNull().default(false),
+  // Duración máxima de un turno abierto, en horas. NULL = SIN LÍMITE: sin
+  // contador, sin avisos, sin bloqueo. Default NULL a propósito — la función
+  // nace apagada y se activa por empresa desde /admin/empresas/[id]. Un default
+  // con número bloquearía a los cajeros con turnos largos el día del deploy.
+  cajaLimiteHoras:        integer('caja_limite_horas'),
+  // Minutos antes del límite en que aparece el contador y empiezan los avisos.
+  // Antes de esa ventana no se muestra nada: un contador visible todo el día se
+  // vuelve parte del decorado y nadie lo mira. Solo aplica si hay límite.
+  cajaAvisoMinutos:       integer('caja_aviso_minutos').notNull().default(60),
+  // Horas de tolerancia tras el límite. Pasadas, el cajero NO puede facturar ni
+  // cobrar hasta cerrar caja. La gracia evita que el corte caiga a mitad de una
+  // venta: al llegar, lleva horas de avisos. NULL/0 = nunca bloquea (solo avisa).
+  cajaGraciaHoras:        integer('caja_gracia_horas'),
 
   // ── Módulo Punto de Venta (POS) ───────────────────────────────────────────
   // Toggle por empresa. Si está activo: aparece el POS full-screen y sus terminales.
@@ -248,7 +261,11 @@ export const dependientes = pgTable('dependientes', {
   nombre: varchar('nombre', { length: 120 }).notNull(),
   apellido: varchar('apellido', { length: 120 }).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-}, (t) => [index('dependientes_client_idx').on(t.clientId)]);
+}, (t) => [
+  index('dependientes_client_idx').on(t.clientId),
+  // Búsqueda de clientes por beneficiario (EXISTS en GET /api/clientes?q=).
+  index('dependientes_team_client_idx').on(t.teamId, t.clientId),
+]);
 
 // ─── POS — Monedero escolar del estudiante (Fase 2) ──────────────────────────
 // Saldo prepago por estudiante (un dependiente). El acudiente recarga; el
@@ -778,6 +795,78 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   index('pagos_team_doc_idx').on(t.teamId, t.ecfDocumentId),
   index('pagos_team_fecha_idx').on(t.teamId, t.fechaPago),
   index('pagos_turno_idx').on(t.turnoCajaId),
+]);
+
+// ─── Pasarelas de pago (links de pago — CardNet / Azul) ───────────────────────
+
+/**
+ * Credenciales de comercio por empresa. Cada tenant conecta SU cuenta de la
+ * pasarela. Los secretos (`authKey`, `apiKey`) se guardan cifrados AES-256-GCM
+ * con lib/crypto/cert.ts (mismo esquema que el P12). NUNCA texto plano.
+ */
+export const paymentProviderConfig = pgTable('payment_provider_config', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  /** 'cardnet' | 'azul' */
+  provider:   varchar('provider', { length: 20 }).notNull(),
+  merchantId: varchar('merchant_id', { length: 50 }),
+  terminalId: varchar('terminal_id', { length: 50 }),
+  /** Encrypted (jsonb: {iv, ciphered, tag}) — AuthKey / clave de firma. */
+  authKey:    jsonb('auth_key'),
+  /** Encrypted (jsonb) — API key adicional si el proveedor la usa. */
+  apiKey:     jsonb('api_key'),
+  /** 'sandbox' | 'prod' */
+  ambiente:   varchar('ambiente', { length: 10 }).notNull().default('sandbox'),
+  enabled:    boolean('enabled').notNull().default(false),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('ppc_team_provider_uq').on(t.teamId, t.provider),
+]);
+
+/**
+ * Intención de cobro = link de pago. Exactamente uno de `ecfDocumentId` /
+ * `cotizacionId` está seteado. `ordenId` es la llave de idempotencia frente a
+ * la pasarela y frente a callbacks duplicados: un link jamás registra el pago
+ * dos veces. Nada se pierde: el pago solo se marca tras verificación server-side.
+ */
+export const paymentLinks = pgTable('payment_links', {
+  id:            serial('id').primaryKey(),
+  /** Token público en la URL (pay.zero.com.do/{token}). */
+  token:         varchar('token', { length: 40 }).notNull().unique(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  provider:      varchar('provider', { length: 20 }).notNull(),
+  ecfDocumentId: integer('ecf_document_id').references(() => ecfDocuments.id),
+  cotizacionId:  integer('cotizacion_id').references(() => cotizaciones.id),
+  /** Monto total a cobrar, centavos DOP. */
+  montoCentavos: integer('monto_centavos').notNull(),
+  /** ITBIS incluido en el total, centavos. */
+  itbisCentavos: integer('itbis_centavos').notNull().default(0),
+  currency:      varchar('currency', { length: 3 }).notNull().default('DOP'),
+  /** OrdenId/OrderNumber enviado al proveedor — idempotencia. */
+  ordenId:       varchar('orden_id', { length: 50 }).notNull(),
+  /** pendiente | procesando | pagado | fallido | expirado | cancelado */
+  estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  /** SESSION uuid de CardNet. */
+  sessionId:     varchar('session_id', { length: 64 }),
+  /** session-key para GET /sessions/{id}?sk= */
+  sessionKey:    varchar('session_key', { length: 128 }),
+  /** AuthorizationCode / RetrievalReferenceNumber de la pasarela. */
+  providerRef:   varchar('provider_ref', { length: 64 }),
+  /** Tarjeta enmascarada devuelta por la pasarela. */
+  cardMask:      varchar('card_mask', { length: 25 }),
+  /** Pago registrado en pagos_recibidos (evita doble inserción). */
+  pagoRecibidoId: integer('pago_recibido_id').references(() => pagosRecibidos.id),
+  expiresAt:     timestamp('expires_at'),
+  paidAt:        timestamp('paid_at'),
+  createdBy:     integer('created_by').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('paylink_team_estado_idx').on(t.teamId, t.estado),
+  index('paylink_ecf_idx').on(t.ecfDocumentId),
+  index('paylink_cotiz_idx').on(t.cotizacionId),
+  uniqueIndex('paylink_orden_uq').on(t.teamId, t.ordenId),
 ]);
 
 // ─── Relaciones ───────────────────────────────────────────────────────────────

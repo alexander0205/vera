@@ -39,7 +39,8 @@ interface Turno {
   aprobadoAt:              string | null;
 }
 interface Persona { name: string | null; email: string }
-interface PagoMetodo { metodo: string; totalCentavos: number }
+/** `esEfectivo`: sólo ese método llega a la gaveta y entra al cuadre. */
+interface PagoMetodo { metodo: string; totalCentavos: number; esEfectivo: boolean }
 interface Movimiento {
   id: number;
   tipo: string;
@@ -49,6 +50,23 @@ interface Movimiento {
   motivo: string | null;
   createdAt: string;
 }
+/** Comprobante que amerita revisión: anulado, o con saldo sin cobrar. */
+interface Excepcion {
+  id:                number;
+  codigo:            string | null;
+  encf:              string | null;
+  estado:            string;
+  cliente:           string | null;
+  totalCentavos:     number;
+  pagadoCentavos:    number;
+  pendienteCentavos: number;
+}
+interface Resumen {
+  cantidadCobros:       number;
+  cantidadComprobantes: number;
+  cantidadAnulados:     number;
+  cantidadConPendiente: number;
+}
 interface Detalle {
   turno:                Turno;
   cajero:               Persona | null;
@@ -57,6 +75,11 @@ interface Detalle {
   pagos:                PagoMetodo[];
   totalCobrosCentavos:  number;
   movimientos:          Movimiento[];
+  resumen:              Resumen;
+  excepciones:          Excepcion[];
+  hayMasExcepciones:    boolean;
+  totalFacturadoCentavos: number;
+  totalPendienteCentavos: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -161,7 +184,14 @@ export default function ImprimirCajaPage() {
     );
   }
 
-  const { turno, cajero, aprobador, teamName, pagos, totalCobrosCentavos, movimientos } = data;
+  const {
+    turno, cajero, aprobador, teamName, pagos, totalCobrosCentavos, movimientos,
+    excepciones = [], hayMasExcepciones = false,
+    totalFacturadoCentavos = 0, totalPendienteCentavos = 0,
+  } = data;
+  const resumen = data.resumen ?? {
+    cantidadCobros: 0, cantidadComprobantes: 0, cantidadAnulados: 0, cantidadConPendiente: 0,
+  };
   const diff = turno.diferenciaCentavos ?? 0;
   const cuadra = diff === 0;
 
@@ -431,6 +461,13 @@ export default function ImprimirCajaPage() {
                       <TableRow key={p.metodo} sx={{ borderBottom: '1px solid #f3f4f6' }}>
                         <TableCell sx={{ color: '#374151', py: 1, px: 2, border: 'none' }}>
                           {p.metodo}
+                          {/* Sólo el efectivo llega a la gaveta: marcarlo evita
+                              cuadrar contra un total que incluye tarjeta. */}
+                          {p.esEfectivo && (
+                            <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', color: '#9ca3af' }}>
+                              · entra al cuadre
+                            </Box>
+                          )}
                         </TableCell>
                         <TableCell align="right" sx={{
                           fontWeight: 600,
@@ -474,6 +511,153 @@ export default function ImprimirCajaPage() {
               </Box>
             )}
           </Box>
+
+          {/* COMPROBANTES — en números. Un turno puede tener cientos; volcarlos
+              haría una hoja de decenas de páginas que nadie revisa. */}
+          <Box sx={{ breakInside: 'avoid' }}>
+            <Typography sx={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#6b7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              mb: 1,
+            }}>
+              Comprobantes del turno ({resumen.cantidadComprobantes})
+            </Typography>
+            <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+              <Table size="small" sx={{ fontSize: '0.875rem' }}>
+                <TableBody>
+                  {[
+                    { label: 'Facturado', value: `DOP ${fmt(totalFacturadoCentavos)}`, alerta: false },
+                    { label: 'Anulados', value: String(resumen.cantidadAnulados), alerta: false },
+                    {
+                      label: `Facturado sin cobrar (${resumen.cantidadConPendiente})`,
+                      value: `DOP ${fmt(totalPendienteCentavos)}`,
+                      alerta: totalPendienteCentavos > 0,
+                    },
+                  ].map(row => (
+                    <TableRow key={row.label} sx={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <TableCell sx={{ color: '#374151', py: 1, px: 2, border: 'none' }}>
+                        {row.label}
+                      </TableCell>
+                      <TableCell align="right" sx={{
+                        fontWeight: 600,
+                        fontVariantNumeric: 'tabular-nums',
+                        color: row.alerta ? '#b45309' : '#111827',
+                        py: 1,
+                        px: 2,
+                        border: 'none',
+                      }}>
+                        {row.value}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+            {totalPendienteCentavos > 0 && (
+              <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: '#6b7280' }}>
+                DOP {fmt(totalPendienteCentavos)} se facturaron y no se cobraron. No afectan el
+                cuadre de efectivo de abajo — ahí solo entra el dinero que se recibió.
+              </Typography>
+            )}
+          </Box>
+
+          {/* REQUIEREN REVISIÓN — sólo anulados y saldos sin cobrar. El resto
+              son ventas cobradas completas: ya están sumadas arriba. */}
+          {excepciones.length > 0 && (
+            <Box sx={{ breakInside: 'avoid' }}>
+              <Typography sx={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: '#6b7280',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                mb: 1,
+              }}>
+                Requieren revisión ({resumen.cantidadAnulados + resumen.cantidadConPendiente})
+              </Typography>
+              <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                <Table size="small" sx={{ fontSize: '0.875rem' }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                      {[
+                        { label: 'Comprobante', align: 'left' as const },
+                        { label: 'Cliente', align: 'left' as const },
+                        { label: 'Total', align: 'right' as const },
+                        { label: 'Cobrado', align: 'right' as const },
+                        { label: 'Sin cobrar', align: 'right' as const },
+                      ].map(h => (
+                        <TableCell key={h.label} align={h.align} sx={{
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: '#6b7280',
+                          textTransform: 'uppercase',
+                          py: 1,
+                          px: 1.5,
+                        }}>
+                          {h.label}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {excepciones.map(d => {
+                      const anulado = d.estado === 'ANULADO';
+                      const cellSx = {
+                        py: 0.75, px: 1.5, border: 'none',
+                        color: anulado ? '#9ca3af' : 'inherit',
+                        borderBottom: '1px solid #f3f4f6',
+                      };
+                      return (
+                        <TableRow key={d.id}>
+                          <TableCell sx={{ ...cellSx, fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            <Box component="span" sx={{
+                              textDecoration: anulado ? 'line-through' : 'none',
+                              color: anulado ? 'inherit' : '#374151',
+                            }}>
+                              {d.encf || d.codigo || '—'}
+                            </Box>
+                            {anulado && (
+                              <Box component="span" sx={{
+                                ml: 0.5, borderRadius: '4px', bgcolor: '#fef2f2',
+                                px: 0.5, py: '2px', fontSize: '10px',
+                                fontFamily: 'inherit', color: '#b91c1c',
+                              }}>
+                                anulado
+                              </Box>
+                            )}
+                          </TableCell>
+                          <TableCell sx={cellSx}>{d.cliente || '—'}</TableCell>
+                          <TableCell align="right" sx={{ ...cellSx, fontVariantNumeric: 'tabular-nums' }}>
+                            {fmt(d.totalCentavos)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ ...cellSx, fontVariantNumeric: 'tabular-nums' }}>
+                            {fmt(d.pagadoCentavos)}
+                          </TableCell>
+                          <TableCell align="right" sx={{
+                            ...cellSx,
+                            fontVariantNumeric: 'tabular-nums',
+                            ...(!anulado && d.pendienteCentavos > 0
+                              ? { fontWeight: 600, color: '#b45309' }
+                              : {}),
+                          }}>
+                            {d.pendienteCentavos > 0 ? fmt(d.pendienteCentavos) : '—'}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Box>
+              {hayMasExcepciones && (
+                <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: '#6b7280' }}>
+                  Se muestran las {excepciones.length} de mayor monto. Hay más — revísalas en Facturas.
+                </Typography>
+              )}
+            </Box>
+          )}
 
           {/* CUADRE DE EFECTIVO */}
           <Box>

@@ -19,6 +19,7 @@ import { descontarInventario } from '@/lib/inventario/descuento';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -157,6 +158,15 @@ export async function POST(
         { status: 422 },
       );
     }
+
+    // ── Cuadre de caja ────────────────────────────────────────────────────────
+    // Mismo bloqueo que /api/ecf/emitir: esta ruta también manda a la DGII, así
+    // que sin turno ABIERTO era la vía para emitir por fuera del cuadre.
+    const guardCaja = await requireTurnoAbierto(teamId, user.id, configCaja(team));
+    if (!guardCaja.ok) {
+      return NextResponse.json({ error: guardCaja.error, code: guardCaja.code }, { status: 409 });
+    }
+    const turnoCaja = guardCaja.turno;
 
     // ─── Pre-flight: validar campos obligatorios para el tipoEcf seleccionado ──
     const regla = REGLAS[tipoEcf];
@@ -576,6 +586,9 @@ export async function POST(
           ecfApiEmisionId: resultado.id,
           fechaEmision:    new Date(resultado.fechaEmision),
           stockDescontado: true,
+          // Atar al turno que la emitió. Un borrador viejo pudo nacer sin turno
+          // (o con el de otro cajero); lo que cuadra es quién la mandó a DGII.
+          ...(turnoCaja ? { turnoCajaId: turnoCaja.id } : {}),
           // Persistir el NCF modificado/código realmente enviados a DGII
           ...(ncfModFinal ? { ncfModificado: ncfModFinal } : {}),
           ...(codModFinal !== undefined ? { codigoModificacion: codModFinal } : {}),

@@ -54,7 +54,9 @@ export async function proxy(request: NextRequest) {
           expires: expiresInOneDay.toISOString()
         }),
         httpOnly: true,
-        secure: true,
+        // Debe coincidir con setSession: en dev (http://localhost) secure=true
+        // hace que el navegador no reenvíe la cookie y la sesión se "cae".
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         expires: expiresInOneDay,
         // SSO entre subdominios (pos.* / facturacion.*): cookie a nivel de

@@ -30,7 +30,7 @@ import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago, recalcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
-import { getTurnoAbierto } from '@/lib/caja/core';
+import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
 import { labelMetodo } from '@/lib/pagos/metodos';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
@@ -511,11 +511,15 @@ export async function POST(request: NextRequest) {
 
     // ── MODO BORRADOR ──────────────────────────────────────────────────────────
     if (data.modo === 'borrador') {
-      // Cuadre de caja: si el cajero tiene un turno ABIERTO, el borrador y su
-      // cobro se atribuyen al turno para que el efectivo entre en el esperado
-      // del cierre (los borradores no pasan por el bloqueo de emisión).
-      const turnoBorrador = await getTurnoAbierto(teamId, user.id);
-      const turnoBorradorId = turnoBorrador?.estado === 'ABIERTO' ? turnoBorrador.id : null;
+      // Cuadre de caja: sin turno ABIERTO no se guarda ni un borrador. El
+      // borrador puede llevar cobro (el POS cobra en borrador), así que dejarlo
+      // pasar metía efectivo fuera del cuadre. Con turno, se le atribuye para
+      // que entre en el esperado del cierre.
+      const guard = await requireTurnoAbierto(teamId, user.id, configCaja(team));
+      if (!guard.ok) {
+        return NextResponse.json({ error: guard.error, code: guard.code }, { status: 409 });
+      }
+      const turnoBorradorId = guard.turno?.id ?? null;
 
       // Config empresa: si la factura registra un pago con un método marcado como
       // "obliga DGII", no se puede guardar como borrador — debe emitirse a la DGII.
@@ -931,16 +935,14 @@ export async function POST(request: NextRequest) {
     // Si la empresa tiene el módulo habilitado, no se puede facturar sin un turno
     // de caja ABIERTO. La venta (y sus pagos) se atan al turno para la
     // conciliación efectivo↔comprobante del cierre.
-    let turnoCaja: Awaited<ReturnType<typeof getTurnoAbierto>> = null;
-    if (team.cajaHabilitada) {
-      turnoCaja = await getTurnoAbierto(teamId, user.id);
-      if (!turnoCaja || turnoCaja.estado !== 'ABIERTO') {
-        return NextResponse.json(
-          { error: 'Debes abrir un turno de caja antes de facturar.', code: 'CAJA_SIN_TURNO' },
-          { status: 409 },
-        );
-      }
+    const guardEmision = await requireTurnoAbierto(teamId, user.id, configCaja(team));
+    if (!guardEmision.ok) {
+      return NextResponse.json(
+        { error: guardEmision.error, code: guardEmision.code },
+        { status: 409 },
+      );
     }
+    const turnoCaja = guardEmision.turno;
 
     // Obtener/registrar contribuyente en ecf-api
     let codigoPublico: string;

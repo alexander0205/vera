@@ -845,7 +845,7 @@ export default function NuevaFacturaForm({
     }
   }
 
-  async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
+  async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar' }) {
     // Traza anti-duplicados: identifica el botón y la secuencia de clicks de este
     // montaje. Se loguea aquí (consola) y se manda al server (`_traza`) para ligar
     // cada submit con el documento creado y diagnosticar las facturas duplicadas.
@@ -1002,6 +1002,11 @@ export default function NuevaFacturaForm({
         setCorreoEncf(data.encf ?? '');
         setEmailEnviar(emailManual || clienteSeleccionado?.email || '');
         setShowEnviarCorreo(true);
+        return;
+      }
+      if (opts?.andThen === 'cobrar' && data.documentoId) {
+        // Abre el detalle con el modal de link de pago (elige pasarela allí).
+        router.push(`${detalleBase}/${data.documentoId}?cobrar=1`);
         return;
       }
       setResultado(data);

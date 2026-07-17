@@ -62,3 +62,5 @@ scripts/check-cert-status.ts
 # Playwright artifacts
 test-results/
 playwright-report/
+
+.release-notes.md

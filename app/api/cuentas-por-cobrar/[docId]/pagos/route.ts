@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getUser, getTeamIdForUser, getPagosDocumento, registrarPagoFacturaConMora } from '@/lib/db/queries';
 import { getSaldoFavorCliente, getNotasCreditoDisponibles } from '@/lib/facturas/notas-credito';
-import { getTurnoAbierto } from '@/lib/caja/core';
+import { requireTurnoAbierto } from '@/lib/caja/guard';
 import { METODO_PAGO_VALUES_VALIDOS, METODO_SALDO_FAVOR, METODO_NOTA_CREDITO, labelMetodo } from '@/lib/pagos/metodos';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers, ecfDocuments, teams } from '@/lib/db/schema';
@@ -258,9 +258,13 @@ export async function POST(
       }
     }
 
-    // Cuadre de caja: atribuir el cobro al turno ABIERTO del cajero (si lo hay).
-    const turno = await getTurnoAbierto(teamId, user.id);
-    const turnoCajaId = turno?.estado === 'ABIERTO' ? turno.id : null;
+    // Cuadre de caja: sin turno ABIERTO no se cobra. El cobro se atribuye al
+    // turno para que el efectivo entre en el esperado del cierre.
+    const guardCaja = await requireTurnoAbierto(teamId, user.id);
+    if (!guardCaja.ok) {
+      return NextResponse.json({ error: guardCaja.error, code: guardCaja.code }, { status: 409 });
+    }
+    const turnoCajaId = guardCaja.turno?.id ?? null;
 
     const result = await registrarPagoFacturaConMora({
       teamId,

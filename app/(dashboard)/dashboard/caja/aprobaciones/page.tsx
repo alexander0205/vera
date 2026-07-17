@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CheckCircle, XCircle, Clock, Loader2, AlertTriangle, Printer } from 'lucide-react';
+import { CheckCircle, CheckCircle2, XCircle, Clock, Loader2, AlertTriangle, Printer, ChevronDown } from 'lucide-react';
+import { DetalleTurno } from '@/components/caja/DetalleTurno';
 import { toast } from 'sonner';
 import { fmtDOP } from '@/lib/utils/format';
 import Box from '@mui/material/Box';
@@ -91,6 +92,8 @@ export default function AprobacionesPage() {
   const [loading, setLoading]       = useState(true);
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [modal, setModal]           = useState<{ id: number; tipo: 'aprobar' | 'rechazar' } | null>(null);
+  /** Qué turnos tienen el detalle desplegado, por id. */
+  const [abierto, setAbierto]       = useState<Record<number, boolean>>({});
   const [procesando, setProcesando] = useState<number | null>(null);
 
   const fetchPendientes = useCallback(async () => {
@@ -148,8 +151,12 @@ export default function AprobacionesPage() {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {pendientes.map(p => {
             const diferencia = p.diferenciaCentavos ?? 0;
+            // Tres casos, no dos: sin el caso "cuadra" un cierre exacto caía en
+            // el else y se pintaba "Faltante: RD$0.00" en rojo con alerta. Un
+            // rojo que miente cuando todo está bien enseña a ignorar el rojo.
             const isSobrante = diferencia > 0;
-            const dur = duracion(p.aperturaAt, p.cierreSolicitadoAt);
+            const cuadra     = diferencia === 0;
+            const dur        = duracion(p.aperturaAt, p.cierreSolicitadoAt);
 
             return (
               <Card key={p.id} elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
@@ -193,17 +200,46 @@ export default function AprobacionesPage() {
 
                   {/* Diferencia */}
                   <Alert
-                    severity={isSobrante ? 'info' : 'error'}
-                    icon={<AlertTriangle style={{ width: 16, height: 16 }} />}
+                    severity={cuadra ? 'success' : isSobrante ? 'info' : 'error'}
+                    icon={cuadra
+                      ? <CheckCircle2 style={{ width: 16, height: 16 }} />
+                      : <AlertTriangle style={{ width: 16, height: 16 }} />}
                     sx={{ borderRadius: '8px' }}
                   >
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {isSobrante ? 'Sobrante' : 'Faltante'}: {isSobrante ? '+' : ''}{fmtDOP(diferencia)}
+                      {cuadra
+                        ? 'Cuadra exacto'
+                        : `${isSobrante ? 'Sobrante' : 'Faltante'}: ${isSobrante ? '+' : ''}${fmtDOP(diferencia)}`}
                     </Typography>
                     {p.cierreObs && (
                       <Typography variant="caption" sx={{ fontStyle: 'italic', display: 'block', mt: 0.25 }}>"{p.cierreObs}"</Typography>
                     )}
                   </Alert>
+
+                  {/* Detalle — lo que se hizo en el turno. Colapsado por defecto:
+                      quien solo mira la diferencia no paga las consultas. */}
+                  <Box>
+                    <MuiButton
+                      type="button"
+                      size="small"
+                      onClick={() => setAbierto(a => ({ ...a, [p.id]: !a[p.id] }))}
+                      aria-expanded={!!abierto[p.id]}
+                      startIcon={
+                        <ChevronDown
+                          style={{
+                            width: 16,
+                            height: 16,
+                            transition: 'transform 0.2s',
+                            transform: abierto[p.id] ? 'rotate(180deg)' : 'none',
+                          }}
+                        />
+                      }
+                      sx={{ textTransform: 'none', fontWeight: 500, color: '#0f766e', '&:hover': { color: '#115e59', bgcolor: 'transparent' } }}
+                    >
+                      {abierto[p.id] ? 'Ocultar detalle' : 'Ver qué se hizo en el turno'}
+                    </MuiButton>
+                    {abierto[p.id] && <DetalleTurno turnoId={p.id} />}
+                  </Box>
 
                   {/* Acciones */}
                   <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
