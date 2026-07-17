@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Calendar, Download, ChevronRight } from 'lucide-react';
+import { Download, ChevronRight } from 'lucide-react';
+import { DateRangeFilter } from '@/components/reportes/date-range-filter';
 import { getUser, getTeamIdForUser, getVentasGenerales } from '@/lib/db/queries';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { db } from '@/lib/db/drizzle';
@@ -106,33 +107,8 @@ export default async function VentasGeneralesPage({
         </a>
       </div>
 
-      {/* Filtros */}
-      <form method="get" className="bg-white border border-gray-200 rounded-xl p-4 mb-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <input
-              type="date"
-              name="desde"
-              defaultValue={desdeStr}
-              className="bg-transparent border-0 focus:outline-none text-sm"
-            />
-            <span className="text-gray-400">—</span>
-            <input
-              type="date"
-              name="hasta"
-              defaultValue={hastaStr}
-              className="bg-transparent border-0 focus:outline-none text-sm"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg"
-          >
-            Aplicar
-          </button>
-        </div>
-      </form>
+      {/* Filtros — navegación client-side (no recarga el layout) */}
+      <DateRangeFilter desde={desdeStr} hasta={hastaStr} />
 
       {/* Stat cards — fórmula: Brutas − Notas crédito = Antes impuestos + Impuestos = Después impuestos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
