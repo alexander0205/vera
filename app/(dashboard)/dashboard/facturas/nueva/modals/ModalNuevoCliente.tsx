@@ -40,7 +40,9 @@ export function ModalNuevoCliente({ open, onClose, onCreated }: {
         tipoId:   form.tipoId,
       };
       const res  = await fetch('/api/clientes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
+      // Respuesta puede venir sin body (ej. 401/500) → no reventar con JSON.parse.
+      const data = await res.json().catch(() => ({} as Record<string, unknown>));
+      if (res.status === 401) { setError('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
       if (!res.ok) {
         const fieldErrors = data?.detalles?.fieldErrors as Record<string, string[]> | undefined;
         if (fieldErrors) {

@@ -26,7 +26,16 @@ export const getUser = cache(async () => {
     return null;
   }
 
-  const sessionData = await verifyToken(sessionCookie.value);
+  // Cookie inválida/expirada/firmada con otro secreto → tratar como no-sesión.
+  // verifyToken lanza (JWSSignatureVerificationFailed); sin este catch, cualquier
+  // ruta que use getUser respondía 500 sin body y el cliente veía
+  // "Unexpected end of JSON input" en vez de un 401 limpio → redirigir a login.
+  let sessionData: Awaited<ReturnType<typeof verifyToken>> | null = null;
+  try {
+    sessionData = await verifyToken(sessionCookie.value);
+  } catch {
+    return null;
+  }
   if (
     !sessionData ||
     !sessionData.user ||
