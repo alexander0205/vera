@@ -166,7 +166,7 @@ export function ItemsTable({
                   value={item.precioUnitarioItem || ''}
                   placeholder="0.00"
                   onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                  className="h-11 text-sm text-right"
+                  className="h-11 text-sm text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <div>
@@ -180,7 +180,7 @@ export function ItemsTable({
                     const n = parseFloat(e.target.value);
                     onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
                   }}
-                  className="h-11 text-sm text-center"
+                  className="h-11 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
             </div>
@@ -196,9 +196,9 @@ export function ItemsTable({
                     value={item.descuentoPct || ''}
                     placeholder="0"
                     onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                    className="h-11 text-sm text-center pr-6"
+                    className="h-11 text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-600">%</span>
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
                 </div>
               </div>
               <div>
@@ -400,7 +400,7 @@ export function ItemsTable({
                     value={item.precioUnitarioItem || ''}
                     placeholder="0.00"
                     onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                    className="h-9 text-sm text-right"
+                    className="h-9 text-sm text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </td>
                 <td className="px-2 py-2">
@@ -410,9 +410,9 @@ export function ItemsTable({
                       value={item.descuentoPct || ''}
                       placeholder="0"
                       onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                      className="h-9 text-sm text-center pr-5"
+                      className="h-9 text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-600">%</span>
+                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
                   </div>
                 </td>
                 <td className="px-2 py-2">
@@ -451,7 +451,7 @@ export function ItemsTable({
                       // permitir 0 explícito, NaN/blank → 0; submit valida > 0
                       onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
                     }}
-                    className="h-9 text-sm text-center"
+                    className="h-9 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </td>
                 <td className="px-2 py-2 text-right">
