@@ -4,6 +4,17 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.4.0 — 2026-07-17
+
+### Nuevo
+
+- **reportes**: contabilizar ventas sin-ncf y corregir borde de fechas
+  - Reportes gerenciales (KPIs, tendencia, por-producto/cliente/tipo/usuario, ventas generales, cuentas por cobrar) ahora cuentan las ventas sin-ncf (tickets del POS sin comprobante fiscal) ademas de los e-CF emitidos a la DGII. Nuevo predicado pVentaValida en lib/reportes/shared.ts.
+  - por-producto deja de leer la MV (stale hasta 6h) y calcula en vivo.
+  - 606/607/609 filtran solo e-CF emitido a DGII (antes incluian borradores); ITBIS a pagar sigue solo-DGII. maestros y dashboard admin incluyen sin-ncf.
+  - Fix TZ: pRango compara fecha_emision::date contra la fecha calendario RD para no clipar el primer dia del rango (fecha_emision es hora-pared naive).
+  - Nuevo dashboard admin con visibilidad global (facturacion, modulos, top empresas, cartera, actividad).
+
 ## v1.3.1 — 2026-07-17
 
 ### Arreglado
