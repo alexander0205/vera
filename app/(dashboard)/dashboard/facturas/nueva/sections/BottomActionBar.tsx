@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { ChevronDown, FileText, Loader2, Mail, Printer } from 'lucide-react';
+import { ChevronDown, CreditCard, FileText, Loader2, Mail, Printer } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ItemLinea } from '../utils/types';
 
@@ -16,7 +16,7 @@ interface Props {
   // Full invoice mode (optional — omit for simple mode)
   loadingPreview?: boolean;
   onVistaPrevia?: () => void;
-  onEmitir?: (modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) => void;
+  onEmitir?: (modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar' }) => void;
 }
 
 export function BottomActionBar({
@@ -112,6 +112,13 @@ export function BottomActionBar({
                     onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'correo' }); }}>
                     <Mail className="h-4 w-4 text-gray-600" />
                     Guardar y enviar por correo
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-teal-700 hover:bg-teal-50 transition-colors border-t border-gray-100"
+                    onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'cobrar' }); }}>
+                    <CreditCard className="h-4 w-4 text-teal-600" />
+                    Guardar y generar link de pago
                   </button>
                 </div>
               )}

@@ -27,7 +27,28 @@
   ],
   "pendiente": {
     "titulo": "",
-    "cambios": []
+    "cambios": [
+      {
+        "tipo": "nuevo",
+        "titulo": "Cobra con tarjeta enviando un link",
+        "detalle": "Desde una factura puedes generar un link de pago y mandarlo por WhatsApp, correo o mostrarlo como código QR. Tu cliente paga con tarjeta desde su teléfono y el cobro queda registrado solo, sin que tengas que anotarlo a mano."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Guarda la factura y cobra en un solo paso",
+        "detalle": "Al guardar una factura puedes elegir «Guardar y generar link de pago» y el link aparece al instante, listo para enviar. También puedes generarlo después desde la factura."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Mira en qué va cada link que enviaste",
+        "detalle": "Hay una pantalla nueva con todos los links de pago: cuál se pagó, cuál sigue esperando y por cuánto. Antes no había forma de saber si el cliente ya había pagado sin revisar factura por factura."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "La sesión ya no se cierra sola",
+        "detalle": "En algunos casos el sistema perdía la sesión y mostraba un error raro al guardar. Ahora, si la sesión vence, te lleva al inicio de sesión con un mensaje claro."
+      }
+    ]
   },
   "versiones": [
     {
