@@ -1,0 +1,65 @@
+name: Release
+
+# Una publicación por cada push a main, sin excepción. La versión que se ve en el
+# sidebar sale de package.json en build time, así que bumpearlo aquí basta para
+# que el número de abajo suba solo en el próximo deploy.
+on:
+  push:
+    branches: [main]
+
+# Si entran dos pushes seguidos, que no compitan por el tag ni por el push a main.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # commitear el bump + crear el tag y la release
+
+jobs:
+  release:
+    name: Publicar versión
+    runs-on: ubuntu-latest
+    # El propio job commitea a main. Sin esto se llamaría a sí mismo para siempre.
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # el generador necesita el historial y los tags
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Calcular versión y redactar notas
+        id: notas
+        run: |
+          node scripts/release-notes.mjs --write
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Las notas se redactan solas, pero si el redactor tocó algo conviene verlo
+      # en el log: significa que un commit traía un nombre de cliente o un correo.
+      - name: Avisar si hubo redacción
+        run: |
+          if grep -qE '\[(cliente|correo|documento|e-NCF)\]' .release-notes.md; then
+            echo "::warning::Las notas traían datos de clientes y se redactaron. Revisa el estilo de los commits."
+          fi
+
+      - name: Commitear bump + changelog
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json CHANGELOG.md
+          git commit -m "chore(release): v${{ steps.notas.outputs.version }} [skip ci]"
+          git tag "v${{ steps.notas.outputs.version }}"
+          git push origin main --follow-tags
+
+      - name: Publicar release en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.notas.outputs.version }}"
+          name: "v${{ steps.notas.outputs.version }}"
+          body_path: .release-notes.md

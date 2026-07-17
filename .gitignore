@@ -58,3 +58,4 @@ scripts/check-user-role.ts
 scripts/check-cert-status.ts
 
 .claire/
+.release-notes.md
