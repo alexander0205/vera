@@ -31,7 +31,8 @@ interface Turno {
   aprobadoAt:              string | null;
 }
 interface Persona { name: string | null; email: string }
-interface PagoMetodo { metodo: string; totalCentavos: number }
+/** `esEfectivo`: sólo ese método llega a la gaveta y entra al cuadre. */
+interface PagoMetodo { metodo: string; totalCentavos: number; esEfectivo: boolean }
 interface Movimiento {
   id: number;
   tipo: string;
@@ -41,6 +42,23 @@ interface Movimiento {
   motivo: string | null;
   createdAt: string;
 }
+/** Comprobante que amerita revisión: anulado, o con saldo sin cobrar. */
+interface Excepcion {
+  id:                number;
+  codigo:            string | null;
+  encf:              string | null;
+  estado:            string;
+  cliente:           string | null;
+  totalCentavos:     number;
+  pagadoCentavos:    number;
+  pendienteCentavos: number;
+}
+interface Resumen {
+  cantidadCobros:       number;
+  cantidadComprobantes: number;
+  cantidadAnulados:     number;
+  cantidadConPendiente: number;
+}
 interface Detalle {
   turno:                Turno;
   cajero:               Persona | null;
@@ -49,6 +67,11 @@ interface Detalle {
   pagos:                PagoMetodo[];
   totalCobrosCentavos:  number;
   movimientos:          Movimiento[];
+  resumen:              Resumen;
+  excepciones:          Excepcion[];
+  hayMasExcepciones:    boolean;
+  totalFacturadoCentavos: number;
+  totalPendienteCentavos: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -126,7 +149,14 @@ export default function ImprimirCajaPage() {
     );
   }
 
-  const { turno, cajero, aprobador, teamName, pagos, totalCobrosCentavos, movimientos } = data;
+  const {
+    turno, cajero, aprobador, teamName, pagos, totalCobrosCentavos, movimientos,
+    excepciones = [], hayMasExcepciones = false,
+    totalFacturadoCentavos = 0, totalPendienteCentavos = 0,
+  } = data;
+  const resumen = data.resumen ?? {
+    cantidadCobros: 0, cantidadComprobantes: 0, cantidadAnulados: 0, cantidadConPendiente: 0,
+  };
   const diff = turno.diferenciaCentavos ?? 0;
   const cuadra = diff === 0;
 
@@ -253,7 +283,14 @@ export default function ImprimirCajaPage() {
                 <tbody className="divide-y divide-gray-100">
                   {pagos.map(p => (
                     <tr key={p.metodo}>
-                      <td className="px-4 py-2 text-gray-700">{p.metodo}</td>
+                      <td className="px-4 py-2 text-gray-700">
+                        {p.metodo}
+                        {/* Sólo el efectivo llega a la gaveta: marcarlo evita
+                            cuadrar contra un total que incluye tarjeta. */}
+                        {p.esEfectivo && (
+                          <span className="ml-1.5 text-xs text-gray-400">· entra al cuadre</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-right font-semibold tabular-nums text-gray-900">
                         DOP {fmt(p.totalCentavos)}
                       </td>
@@ -271,6 +308,99 @@ export default function ImprimirCajaPage() {
               </table>
             )}
           </div>
+
+          {/* COMPROBANTES — en números. Un turno puede tener cientos; volcarlos
+              haría una hoja de decenas de páginas que nadie revisa. */}
+          <div className="break-inside-avoid">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+              Comprobantes del turno ({resumen.cantidadComprobantes})
+            </h2>
+            <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+              <tbody className="divide-y divide-gray-100">
+                <tr>
+                  <td className="px-4 py-2 text-gray-700">Facturado</td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-gray-900">
+                    DOP {fmt(totalFacturadoCentavos)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-2 text-gray-700">Anulados</td>
+                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-gray-900">
+                    {resumen.cantidadAnulados}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-2 text-gray-700">
+                    Facturado sin cobrar ({resumen.cantidadConPendiente})
+                  </td>
+                  <td className={`px-4 py-2 text-right font-semibold tabular-nums ${
+                    totalPendienteCentavos > 0 ? 'text-amber-700' : 'text-gray-900'
+                  }`}>
+                    DOP {fmt(totalPendienteCentavos)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            {totalPendienteCentavos > 0 && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                DOP {fmt(totalPendienteCentavos)} se facturaron y no se cobraron. No afectan el
+                cuadre de efectivo de abajo — ahí solo entra el dinero que se recibió.
+              </p>
+            )}
+          </div>
+
+          {/* REQUIEREN REVISIÓN — sólo anulados y saldos sin cobrar. El resto
+              son ventas cobradas completas: ya están sumadas arriba. */}
+          {excepciones.length > 0 && (
+            <div className="break-inside-avoid">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+                Requieren revisión ({resumen.cantidadAnulados + resumen.cantidadConPendiente})
+              </h2>
+              <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Comprobante</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Cliente</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Total</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Cobrado</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Sin cobrar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {excepciones.map(d => {
+                    const anulado = d.estado === 'ANULADO';
+                    return (
+                      <tr key={d.id} className={anulado ? 'text-gray-400' : ''}>
+                        <td className="px-3 py-1.5 font-mono text-xs">
+                          <span className={anulado ? 'line-through' : 'text-gray-700'}>
+                            {d.encf || d.codigo || '—'}
+                          </span>
+                          {anulado && (
+                            <span className="ml-1 rounded bg-red-50 px-1 py-0.5 text-[10px] font-sans text-red-700">
+                              anulado
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-1.5">{d.cliente || '—'}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmt(d.totalCentavos)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmt(d.pagadoCentavos)}</td>
+                        <td className={`px-3 py-1.5 text-right tabular-nums ${
+                          !anulado && d.pendienteCentavos > 0 ? 'font-semibold text-amber-700' : ''
+                        }`}>
+                          {d.pendienteCentavos > 0 ? fmt(d.pendienteCentavos) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {hayMasExcepciones && (
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Se muestran las {excepciones.length} de mayor monto. Hay más — revísalas en Facturas.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* CUADRE DE EFECTIVO */}
           <div>

@@ -55,7 +55,7 @@ function precioLinea(it: LineaCarrito): number {
 }
 
 interface ListaPrecio { id: number; nombre: string; }
-interface ClienteView { id: number; razonSocial: string; rnc: string | null; email: string | null; }
+interface ClienteView { id: number; razonSocial: string; rnc: string | null; email: string | null; dependientes?: string[]; }
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
@@ -1335,9 +1335,18 @@ function ClientePicker({ cliente, onSelect }: {
           ) : (
             filtrados.map((r) => (
               <button key={r.id} onClick={() => { onSelect(r); setQ(''); setAbierto(false); }}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50">
-                <span className="truncate">{r.razonSocial}</span>
-                <span className="text-xs text-gray-400">{r.rnc ?? ''}</span>
+                className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate" title={r.razonSocial}>{r.razonSocial}</span>
+                  <span className="shrink-0 font-mono text-xs text-gray-400">{r.rnc ?? '—'}</span>
+                </span>
+                {!!r.dependientes?.length && (
+                  <span className="mt-1 block border-t border-gray-200 pt-1">
+                    {r.dependientes.map((d) => (
+                      <span key={d} className="block truncate text-xs text-blue-600" title={d}>{d}</span>
+                    ))}
+                  </span>
+                )}
               </button>
             ))
           )}

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CheckCircle, XCircle, Clock, Loader2, AlertTriangle, Printer } from 'lucide-react';
+import { CheckCircle, CheckCircle2, XCircle, Clock, Loader2, AlertTriangle, Printer, ChevronDown } from 'lucide-react';
+import { DetalleTurno } from '@/components/caja/DetalleTurno';
 import { toast } from 'sonner';
 import { fmtDOP } from '@/lib/utils/format';
 
@@ -88,6 +89,8 @@ export default function AprobacionesPage() {
   const [loading, setLoading]               = useState(true);
   const [pendientes, setPendientes]         = useState<Pendiente[]>([]);
   const [modal, setModal]                   = useState<{ id: number; tipo: 'aprobar' | 'rechazar' } | null>(null);
+  /** Qué turnos tienen el detalle desplegado, por id. */
+  const [abierto, setAbierto]               = useState<Record<number, boolean>>({});
   const [procesando, setProcesando]         = useState<number | null>(null);
 
   const fetchPendientes = useCallback(async () => {
@@ -153,7 +156,11 @@ export default function AprobacionesPage() {
         <div className="space-y-4">
           {pendientes.map(p => {
             const diferencia  = p.diferenciaCentavos ?? 0;
+            // Tres casos, no dos: sin el caso "cuadra" un cierre exacto caía en
+            // el else y se pintaba "Faltante: RD$0.00" en rojo con alerta. Un
+            // rojo que miente cuando todo está bien enseña a ignorar el rojo.
             const isSobrante  = diferencia > 0;
+            const cuadra      = diferencia === 0;
             const dur         = duracion(p.aperturaAt, p.cierreSolicitadoAt);
 
             return (
@@ -194,17 +201,38 @@ export default function AprobacionesPage() {
 
                 {/* Diferencia */}
                 <div className={`flex items-start gap-2 rounded-xl p-3 text-sm ${
-                  isSobrante ? 'bg-sky-50 text-sky-800' : 'bg-red-50 text-red-800'
+                  cuadra     ? 'bg-emerald-50 text-emerald-800'
+                  : isSobrante ? 'bg-sky-50 text-sky-800'
+                             : 'bg-red-50 text-red-800'
                 }`}>
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  {cuadra
+                    ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                    : <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />}
                   <div>
                     <p className="font-semibold">
-                      {isSobrante ? 'Sobrante' : 'Faltante'}: {isSobrante ? '+' : ''}{fmtDOP(diferencia)}
+                      {cuadra
+                        ? 'Cuadra exacto'
+                        : `${isSobrante ? 'Sobrante' : 'Faltante'}: ${isSobrante ? '+' : ''}${fmtDOP(diferencia)}`}
                     </p>
                     {p.cierreObs && (
                       <p className="text-xs opacity-80 mt-1">"{p.cierreObs}"</p>
                     )}
                   </div>
+                </div>
+
+                {/* Detalle — lo que se hizo en el turno. Colapsado por defecto:
+                    quien solo mira la diferencia no paga las consultas. */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setAbierto(a => ({ ...a, [p.id]: !a[p.id] }))}
+                    aria-expanded={!!abierto[p.id]}
+                    className="flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform ${abierto[p.id] ? 'rotate-180' : ''}`} />
+                    {abierto[p.id] ? 'Ocultar detalle' : 'Ver qué se hizo en el turno'}
+                  </button>
+                  {abierto[p.id] && <DetalleTurno turnoId={p.id} />}
                 </div>
 
                 {/* Acciones */}

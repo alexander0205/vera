@@ -119,6 +119,19 @@ export const teams = pgTable('teams', {
   // Toggle por empresa. Si está activo: aparece el grupo "Caja" en el sidebar,
   // el badge de estado en el header, y no se puede facturar sin turno abierto.
   cajaHabilitada:         boolean('caja_habilitada').notNull().default(false),
+  // Duración máxima de un turno abierto, en horas. NULL = SIN LÍMITE: sin
+  // contador, sin avisos, sin bloqueo. Default NULL a propósito — la función
+  // nace apagada y se activa por empresa desde /admin/empresas/[id]. Un default
+  // con número bloquearía a los cajeros con turnos largos el día del deploy.
+  cajaLimiteHoras:        integer('caja_limite_horas'),
+  // Minutos antes del límite en que aparece el contador y empiezan los avisos.
+  // Antes de esa ventana no se muestra nada: un contador visible todo el día se
+  // vuelve parte del decorado y nadie lo mira. Solo aplica si hay límite.
+  cajaAvisoMinutos:       integer('caja_aviso_minutos').notNull().default(60),
+  // Horas de tolerancia tras el límite. Pasadas, el cajero NO puede facturar ni
+  // cobrar hasta cerrar caja. La gracia evita que el corte caiga a mitad de una
+  // venta: al llegar, lleva horas de avisos. NULL/0 = nunca bloquea (solo avisa).
+  cajaGraciaHoras:        integer('caja_gracia_horas'),
 
   // ── Módulo Punto de Venta (POS) ───────────────────────────────────────────
   // Toggle por empresa. Si está activo: aparece el POS full-screen y sus terminales.
@@ -239,7 +252,11 @@ export const dependientes = pgTable('dependientes', {
   nombre: varchar('nombre', { length: 120 }).notNull(),
   apellido: varchar('apellido', { length: 120 }).notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-}, (t) => [index('dependientes_client_idx').on(t.clientId)]);
+}, (t) => [
+  index('dependientes_client_idx').on(t.clientId),
+  // Búsqueda de clientes por beneficiario (EXISTS en GET /api/clientes?q=).
+  index('dependientes_team_client_idx').on(t.teamId, t.clientId),
+]);
 
 // ─── POS — Monedero escolar del estudiante (Fase 2) ──────────────────────────
 // Saldo prepago por estudiante (un dependiente). El acudiente recarga; el
