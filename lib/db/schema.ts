@@ -788,6 +788,78 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   index('pagos_turno_idx').on(t.turnoCajaId),
 ]);
 
+// ─── Pasarelas de pago (links de pago — CardNet / Azul) ───────────────────────
+
+/**
+ * Credenciales de comercio por empresa. Cada tenant conecta SU cuenta de la
+ * pasarela. Los secretos (`authKey`, `apiKey`) se guardan cifrados AES-256-GCM
+ * con lib/crypto/cert.ts (mismo esquema que el P12). NUNCA texto plano.
+ */
+export const paymentProviderConfig = pgTable('payment_provider_config', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  /** 'cardnet' | 'azul' */
+  provider:   varchar('provider', { length: 20 }).notNull(),
+  merchantId: varchar('merchant_id', { length: 50 }),
+  terminalId: varchar('terminal_id', { length: 50 }),
+  /** Encrypted (jsonb: {iv, ciphered, tag}) — AuthKey / clave de firma. */
+  authKey:    jsonb('auth_key'),
+  /** Encrypted (jsonb) — API key adicional si el proveedor la usa. */
+  apiKey:     jsonb('api_key'),
+  /** 'sandbox' | 'prod' */
+  ambiente:   varchar('ambiente', { length: 10 }).notNull().default('sandbox'),
+  enabled:    boolean('enabled').notNull().default(false),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('ppc_team_provider_uq').on(t.teamId, t.provider),
+]);
+
+/**
+ * Intención de cobro = link de pago. Exactamente uno de `ecfDocumentId` /
+ * `cotizacionId` está seteado. `ordenId` es la llave de idempotencia frente a
+ * la pasarela y frente a callbacks duplicados: un link jamás registra el pago
+ * dos veces. Nada se pierde: el pago solo se marca tras verificación server-side.
+ */
+export const paymentLinks = pgTable('payment_links', {
+  id:            serial('id').primaryKey(),
+  /** Token público en la URL (pay.zero.com.do/{token}). */
+  token:         varchar('token', { length: 40 }).notNull().unique(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  provider:      varchar('provider', { length: 20 }).notNull(),
+  ecfDocumentId: integer('ecf_document_id').references(() => ecfDocuments.id),
+  cotizacionId:  integer('cotizacion_id').references(() => cotizaciones.id),
+  /** Monto total a cobrar, centavos DOP. */
+  montoCentavos: integer('monto_centavos').notNull(),
+  /** ITBIS incluido en el total, centavos. */
+  itbisCentavos: integer('itbis_centavos').notNull().default(0),
+  currency:      varchar('currency', { length: 3 }).notNull().default('DOP'),
+  /** OrdenId/OrderNumber enviado al proveedor — idempotencia. */
+  ordenId:       varchar('orden_id', { length: 50 }).notNull(),
+  /** pendiente | procesando | pagado | fallido | expirado | cancelado */
+  estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  /** SESSION uuid de CardNet. */
+  sessionId:     varchar('session_id', { length: 64 }),
+  /** session-key para GET /sessions/{id}?sk= */
+  sessionKey:    varchar('session_key', { length: 128 }),
+  /** AuthorizationCode / RetrievalReferenceNumber de la pasarela. */
+  providerRef:   varchar('provider_ref', { length: 64 }),
+  /** Tarjeta enmascarada devuelta por la pasarela. */
+  cardMask:      varchar('card_mask', { length: 25 }),
+  /** Pago registrado en pagos_recibidos (evita doble inserción). */
+  pagoRecibidoId: integer('pago_recibido_id').references(() => pagosRecibidos.id),
+  expiresAt:     timestamp('expires_at'),
+  paidAt:        timestamp('paid_at'),
+  createdBy:     integer('created_by').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('paylink_team_estado_idx').on(t.teamId, t.estado),
+  index('paylink_ecf_idx').on(t.ecfDocumentId),
+  index('paylink_cotiz_idx').on(t.cotizacionId),
+  uniqueIndex('paylink_orden_uq').on(t.teamId, t.ordenId),
+]);
+
 // ─── Relaciones ───────────────────────────────────────────────────────────────
 
 export const teamsRelations = relations(teams, ({ many }) => ({

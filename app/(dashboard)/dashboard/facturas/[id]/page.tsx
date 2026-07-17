@@ -27,6 +27,7 @@ import {
 import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
+import { CobrarLinkButton } from '@/components/pagos/CobrarLinkButton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
@@ -407,6 +408,14 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // ?emitir=1 → abrir el modal Enviar a DGII al cargar (flujo post-crear nota:
   // "¿emitir ahora o dejar borrador?"). Solo una vez y solo si aún es emitible.
   // window.location en vez de useSearchParams para no requerir Suspense boundary.
+  // ?cobrar=1 → abrir el flujo de link de pago al cargar (viene de "Guardar y
+  // generar link de pago" en Nueva factura).
+  const [autoCobrar, setAutoCobrar] = useState(false);
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('cobrar') === '1') setAutoCobrar(true);
+  }, []);
+
   const [autoEmitirDone, setAutoEmitirDone] = useState(false);
   useEffect(() => {
     if (autoEmitirDone || !factura) return;
@@ -1677,6 +1686,20 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               initial={factura.pago}
               totalDOP={factura.montos.montoTotalDOP}
             />
+          )}
+
+          {/* Cobro en línea: link de pago (CardNet/Azul/Simulador). Disponible en
+              cualquier factura (borrador o emitida) que no sea NC y no esté pagada. */}
+          {!esNc && !factura.pago?.recibido && (
+            <div className="mt-3">
+              <CobrarLinkButton
+                ecfDocumentId={factura.id}
+                telefonoCliente={factura.comprador?.telefono ?? null}
+                className="w-full"
+                autoOpen={autoCobrar}
+                onPagado={() => window.location.reload()}
+              />
+            </div>
           )}
         </aside>
       </div>
