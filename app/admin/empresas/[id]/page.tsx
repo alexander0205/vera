@@ -141,6 +141,39 @@ async function toggleCajaHabilitada(formData: FormData) {
   revalidatePath(`/admin/empresas/${teamId}`);
 }
 
+// ─── Server Action: límite de duración del turno de caja ─────────────────────
+
+async function guardarLimiteCaja(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId = parseInt(formData.get('teamId') as string);
+  if (isNaN(teamId)) return;
+
+  // Vacío = sin límite. Se acota al mismo rango que valida /api/equipo/perfil
+  // para que el admin no pueda guardar un valor que la empresa no podría.
+  const rawHoras = (formData.get('limiteHoras') as string ?? '').trim();
+  const horas = rawHoras === '' ? null : Math.min(24, Math.max(1, parseInt(rawHoras, 10)));
+  const rawAviso = (formData.get('avisoMinutos') as string ?? '').trim();
+  const aviso = Math.min(240, Math.max(5, parseInt(rawAviso, 10) || 60));
+
+  // Vacío = nunca bloquea (solo avisa). 0 es un valor válido y significa lo mismo.
+  const rawGracia = (formData.get('graciaHoras') as string ?? '').trim();
+  const graciaNum = parseInt(rawGracia, 10);
+  const gracia = rawGracia === '' || isNaN(graciaNum) ? null : Math.min(12, Math.max(0, graciaNum));
+
+  await db
+    .update(teams)
+    .set({
+      cajaLimiteHoras: horas != null && isNaN(horas) ? null : horas,
+      cajaAvisoMinutos: aviso,
+      cajaGraciaHoras: gracia,
+    })
+    .where(eq(teams.id, teamId));
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
 // ─── Server Action: cancelar invitación ──────────────────────────────────────
 
 async function cancelarInvitacion(formData: FormData) {
@@ -319,6 +352,61 @@ export default async function EmpresaDetailPage({
             </button>
           </form>
         </div>
+
+        {/* Límite de duración del turno — solo aplica con el módulo activo */}
+        {team.cajaHabilitada && (
+          <form action={guardarLimiteCaja} className="border-t border-gray-100 pt-3 mt-1">
+            <input type="hidden" name="teamId" value={teamId} />
+            <p className="text-sm font-medium text-gray-800">Límite del turno</p>
+            <p className="text-xs text-gray-400 mt-0.5 mb-2">
+              Pasado el límite + la gracia, el cajero no puede facturar ni cobrar hasta cerrar caja.
+              Gracia vacía o 0 = solo avisa. La empresa también puede ajustarlo desde su configuración.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-gray-500">
+                Horas
+                <input
+                  type="number"
+                  name="limiteHoras"
+                  min={1}
+                  max={24}
+                  defaultValue={team.cajaLimiteHoras ?? ''}
+                  placeholder="sin límite"
+                  className="mt-1 block w-28 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800"
+                />
+              </label>
+              <label className="text-xs text-gray-500">
+                Avisar desde (min)
+                <input
+                  type="number"
+                  name="avisoMinutos"
+                  min={5}
+                  max={240}
+                  defaultValue={team.cajaAvisoMinutos ?? 60}
+                  className="mt-1 block w-32 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800"
+                />
+              </label>
+              <label className="text-xs text-gray-500">
+                Gracia (h)
+                <input
+                  type="number"
+                  name="graciaHoras"
+                  min={0}
+                  max={12}
+                  defaultValue={team.cajaGraciaHoras ?? ''}
+                  placeholder="no bloquea"
+                  className="mt-1 block w-28 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-800"
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Guardar
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Integración ecf-api — incluye tab Habilitación */}

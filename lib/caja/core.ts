@@ -41,6 +41,23 @@ function esEfectivo(metodo: string | null | undefined): boolean {
 
 // ─── Consultas ────────────────────────────────────────────────────────────────
 
+/**
+ * Minutos que lleva abierto un turno, calculados EN POSTGRES.
+ *
+ * `apertura_at` es `timestamp` sin zona y se llena con el NOW() de la DB; el
+ * driver lo parsea como hora local del proceso, así que restarlo en JS se va por
+ * la diferencia de TZ (medido en dev: 4 horas). Postgres escribió ese valor y
+ * sabe en qué TZ lo hizo — que reste él.
+ */
+export async function getMinutosAbierto(turnoId: number): Promise<number | null> {
+  const rows = await db.execute<{ min: number }>(sql`
+    SELECT FLOOR(EXTRACT(EPOCH FROM (NOW() - apertura_at)) / 60)::int AS min
+    FROM caja_turnos WHERE id = ${turnoId}
+  `);
+  const row = rows[0] as { min: number } | undefined;
+  return row ? Number(row.min) : null;
+}
+
 /** Turno vivo (ABIERTO o CIERRE_SOLICITADO) del cajero, o null. */
 export async function getTurnoAbierto(
   teamId: number,

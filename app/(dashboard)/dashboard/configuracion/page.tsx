@@ -148,6 +148,10 @@ export default function ConfiguracionPage() {
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
+  // null = sin límite. Es el estado real por defecto: la función nace apagada.
+  const [cajaLimiteHoras, setCajaLimiteHoras]           = useState<number | null>(null);
+  const [cajaAvisoMinutos, setCajaAvisoMinutos]         = useState(60);
+  const [cajaGraciaHoras, setCajaGraciaHoras]           = useState<number | null>(2);
   // Módulo punto de venta (POS)
   const [posHabilitado, setPosHabilitado]               = useState(false);
   const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
@@ -178,6 +182,9 @@ export default function ConfiguracionPage() {
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
+        setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
+        setCajaAvisoMinutos(d.cajaAvisoMinutos ?? 60);
+        setCajaGraciaHoras(d.cajaGraciaHoras ?? null);
         // Módulo POS
         setPosHabilitado(d.posHabilitado ?? false);
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
@@ -209,6 +216,9 @@ export default function ConfiguracionPage() {
           // Gracia eliminada del config: la mora aplica al vencer.
           recargoMoraDiasGracia: 0,
           cajaHabilitada,
+          cajaLimiteHoras,
+          cajaAvisoMinutos,
+          cajaGraciaHoras,
           posHabilitado,
           posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
@@ -675,11 +685,105 @@ export default function ConfiguracionPage() {
           </div>
 
           {cajaHabilitada && (
-            <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-700">
-              <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
-              debe abrir su turno antes de emitir. Los cierres con descuadre requieren aprobación
-              de un admin u owner.
-            </div>
+            <>
+              {/* Límite de duración del turno */}
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="caja-limite" className="text-sm font-medium text-gray-800">
+                    Límite del turno (horas)
+                  </label>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-1.5">
+                    Vacío = sin límite ni avisos.
+                  </p>
+                  <Input
+                    id="caja-limite"
+                    type="number"
+                    min={1}
+                    max={24}
+                    className="h-9 text-sm"
+                    placeholder="8"
+                    value={cajaLimiteHoras ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      setCajaLimiteHoras(v === '' ? null : parseInt(v, 10));
+                    }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="caja-aviso" className="text-sm font-medium text-gray-800">
+                    Avisar desde (min antes)
+                  </label>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-1.5">
+                    Cuándo aparece el contador arriba.
+                  </p>
+                  <Input
+                    id="caja-aviso"
+                    type="number"
+                    min={5}
+                    max={240}
+                    className="h-9 text-sm"
+                    placeholder="60"
+                    value={cajaAvisoMinutos}
+                    onChange={(e) => setCajaAvisoMinutos(parseInt(e.target.value, 10) || 60)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="caja-gracia" className="text-sm font-medium text-gray-800">
+                    Gracia antes de bloquear (h)
+                  </label>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-1.5">
+                    Vacío o 0 = nunca bloquea, solo avisa.
+                  </p>
+                  <Input
+                    id="caja-gracia"
+                    type="number"
+                    min={0}
+                    max={12}
+                    className="h-9 text-sm"
+                    placeholder="2"
+                    value={cajaGraciaHoras ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      setCajaGraciaHoras(v === '' ? null : parseInt(v, 10));
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-700">
+                <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
+                debe abrir su turno antes de emitir o cobrar. Los cierres con descuadre requieren
+                aprobación de un admin u owner.
+              </div>
+
+              {cajaLimiteHoras ? (
+                <div className={`rounded-lg border px-4 py-3 text-xs ${
+                  cajaGraciaHoras
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-gray-50 border-gray-200 text-gray-600'
+                }`}>
+                  {cajaGraciaHoras ? (
+                    <>
+                      <strong>Bloqueo activo:</strong> el contador aparece a las{' '}
+                      {cajaLimiteHoras}h menos {cajaAvisoMinutos} min. A las {cajaLimiteHoras}h el
+                      turno vence, y a las {cajaLimiteHoras + cajaGraciaHoras}h el cajero{' '}
+                      <strong>no podrá facturar ni cobrar</strong> hasta cerrar caja.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Solo avisa:</strong> el contador aparece a las {cajaLimiteHoras}h menos{' '}
+                      {cajaAvisoMinutos} min y el turno vence a las {cajaLimiteHoras}h, pero el cajero
+                      puede seguir facturando indefinidamente.
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-xs text-gray-600">
+                  Sin límite de duración: los turnos pueden quedar abiertos indefinidamente y no se
+                  muestra contador.
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>}

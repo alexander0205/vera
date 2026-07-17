@@ -33,6 +33,12 @@ const schema = z.object({
   recargoMoraDiasGracia: z.number().int().min(0).max(365).optional(),
   // Módulo cuadre de caja
   cajaHabilitada:        z.boolean().optional(),
+  // Límite de duración del turno (horas). null = sin límite.
+  cajaLimiteHoras:       z.number().int().min(1).max(24).nullable().optional(),
+  // Minutos antes del límite en que aparece el contador y empiezan los avisos.
+  cajaAvisoMinutos:      z.number().int().min(5).max(240).optional(),
+  // Horas de gracia tras el límite antes de bloquear. null/0 = nunca bloquea.
+  cajaGraciaHoras:       z.number().int().min(0).max(12).nullable().optional(),
   // Módulo punto de venta (POS)
   posHabilitado:         z.boolean().optional(),
   posEscolarHabilitado:  z.boolean().optional(),
@@ -99,6 +105,9 @@ export async function POST(req: NextRequest) {
     ...(data.recargoMoraDiasGracia !== undefined && { recargoMoraDiasGracia: data.recargoMoraDiasGracia }),
     // Módulo caja
     ...(data.cajaHabilitada !== undefined && { cajaHabilitada: data.cajaHabilitada }),
+    ...(data.cajaLimiteHoras  !== undefined && { cajaLimiteHoras: data.cajaLimiteHoras }),
+    ...(data.cajaAvisoMinutos !== undefined && { cajaAvisoMinutos: data.cajaAvisoMinutos }),
+    ...(data.cajaGraciaHoras  !== undefined && { cajaGraciaHoras: data.cajaGraciaHoras }),
     // Módulo POS
     ...(data.posHabilitado        !== undefined && { posHabilitado: data.posHabilitado }),
     ...(data.posEscolarHabilitado !== undefined && { posEscolarHabilitado: data.posEscolarHabilitado }),
@@ -145,6 +154,9 @@ export async function GET(_req: NextRequest) {
     recargoMoraDiasGracia: team.recargoMoraDiasGracia,
     // Módulo caja
     cajaHabilitada:        team.cajaHabilitada,
+    cajaLimiteHoras:       team.cajaLimiteHoras,
+    cajaAvisoMinutos:      team.cajaAvisoMinutos,
+    cajaGraciaHoras:       team.cajaGraciaHoras,
     // Módulo POS
     posHabilitado:         team.posHabilitado,
     posEscolarHabilitado:  team.posEscolarHabilitado,

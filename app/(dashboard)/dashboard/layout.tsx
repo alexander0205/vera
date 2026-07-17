@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import useSWR from 'swr';
+import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import {
   LayoutDashboard, Users, Package,
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
@@ -464,6 +465,7 @@ function DashboardTopBar({
   user,
   plan,
   dgiiAmbiente,
+  cajaHabilitada,
   onMenuClick,
   onToggleSidebar,
   sidebarCollapsed,
@@ -474,6 +476,7 @@ function DashboardTopBar({
   user: UserInfo | null;
   plan: string | null;
   dgiiAmbiente: string | null;
+  cajaHabilitada: boolean;
   onMenuClick: () => void;
   onToggleSidebar: () => void;
   sidebarCollapsed: boolean;
@@ -516,6 +519,9 @@ function DashboardTopBar({
 
       {/* Ambiente DGII — solo visible cuando no es Producción */}
       <AmbienteBadge ambiente={dgiiAmbiente} />
+
+      {/* Turno de caja — solo aparece cuando queda poco para el límite */}
+      {cajaHabilitada && <TurnoCountdown />}
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -844,6 +850,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const plan = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.planName ?? null;
+  // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
+  const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -874,6 +882,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           user={user ?? null}
           plan={plan}
           dgiiAmbiente={dgiiAmbiente}
+          cajaHabilitada={cajaHabilitada}
           onMenuClick={() => setSidebarOpen(true)}
           onToggleSidebar={toggleSidebar}
           sidebarCollapsed={sidebarCollapsed}

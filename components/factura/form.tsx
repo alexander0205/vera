@@ -21,6 +21,8 @@ interface ClienteResult {
   razonSocial: string;
   rnc:         string | null;
   email:       string | null;
+  /** Todos los dependientes del cliente. */
+  dependientes?: string[];
 }
 
 /**
@@ -86,7 +88,7 @@ export function ClienteSearch() {
           value={query}
           onChange={e => handleInput(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
-          placeholder="Nombre o RNC del cliente..."
+          placeholder="Nombre, RNC o beneficiario del cliente..."
           className="w-full pl-10 pr-10 py-2.5 text-base md:text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
         />
         {loading ? (
@@ -115,8 +117,19 @@ export function ClienteSearch() {
                 onClick={() => select(c)}
                 className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
               >
-                <div className="font-medium text-gray-900">{c.razonSocial}</div>
-                {c.rnc && <div className="text-xs text-gray-500">RNC: {c.rnc}</div>}
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="min-w-0 truncate font-medium text-gray-900" title={c.razonSocial}>
+                    {c.razonSocial}
+                  </div>
+                  <div className="shrink-0 font-mono text-xs text-gray-500">{c.rnc || '—'}</div>
+                </div>
+                {!!c.dependientes?.length && (
+                  <div className="mt-1 border-t border-gray-200 pt-1">
+                    {c.dependientes.map((d) => (
+                      <div key={d} className="truncate text-xs text-blue-600" title={d}>{d}</div>
+                    ))}
+                  </div>
+                )}
               </button>
             ))
           )}

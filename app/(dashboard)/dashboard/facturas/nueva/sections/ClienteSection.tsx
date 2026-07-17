@@ -10,6 +10,38 @@ import { getCampoHint } from '@/lib/factura/validator/ui-helpers';
 import { Autocomplete } from '../components/Autocomplete';
 import type { Cliente } from '../utils/types';
 
+const CLIENTE_DROPDOWN_W = 520;
+
+/**
+ * Opción del dropdown: el contacto arriba (nombre + RNC/cédula) y, separados por
+ * una línea, sus dependientes, uno por fila. El contacto va primero porque es a
+ * quien se le factura.
+ * Se listan TODOS los dependientes, no solo el que matcheó: buscando al padre se
+ * ve la familia, y buscando al hijo se confirma que el contacto es el correcto.
+ */
+function renderClienteOption(c: Cliente) {
+  const deps = c.dependientes ?? [];
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="min-w-0 truncate font-medium" title={c.razonSocial}>
+          {c.razonSocial}
+        </p>
+        <span className="shrink-0 font-mono text-xs text-gray-500">{c.rnc || '—'}</span>
+      </div>
+      {deps.length > 0 && (
+        <ul className="mt-1 border-t border-gray-200 pt-1">
+          {deps.map((d) => (
+            <li key={d} className="truncate text-xs text-blue-600" title={d}>
+              {d}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   clienteSeleccionado: Cliente | null;
   buscarClientes: (q: string) => Promise<Cliente[]>;
@@ -44,19 +76,15 @@ export function ClienteSection({
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1 min-w-[200px] relative">
           <Autocomplete<Cliente>
-            placeholder="Buscar cliente por nombre, RNC o email…"
+            placeholder="Buscar cliente por nombre, RNC o beneficiario…"
             value={clienteSeleccionado?.razonSocial ?? ''}
             onSearch={buscarClientes}
             onSelect={onSelectCliente}
             onClear={onClearCliente}
             onCreate={onOpenNuevoCliente}
             createLabel="Nuevo contacto"
-            renderOption={(c) => (
-              <div>
-                <p className="font-medium">{c.razonSocial}</p>
-                <p className="text-xs text-gray-600">{[c.rnc, c.email].filter(Boolean).join(' · ')}</p>
-              </div>
-            )}
+            dropdownMinWidth={CLIENTE_DROPDOWN_W}
+            renderOption={renderClienteOption}
           />
           {/* Botón limpiar — visible cuando hay cliente seleccionado */}
           {clienteSeleccionado && (
