@@ -778,10 +778,17 @@ function Sidebar({
         })}
       </nav>
 
+      {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es
+          el mismo gesto. Evita un item más en el menú para algo que se mira de
+          vez en cuando. */}
       <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
-        <span className="text-[11px] text-gray-400">
-          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
-        </span>
+        <Link
+          href="/dashboard/novedades"
+          className="text-[11px] text-gray-400 hover:text-teal-700 transition-colors"
+          title="Ver qué hay de nuevo"
+        >
+          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
+        </Link>
       </div>
     </div>
   );

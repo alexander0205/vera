@@ -1,0 +1,78 @@
+{
+  "_comentario": [
+    "Novedades que ven los CLIENTES en /dashboard/novedades.",
+    "",
+    "Esto NO es el CHANGELOG.md. Aquel es técnico y sale solo de los commits; este",
+    "se escribe a mano, porque quien lo lee dirige un colegio o una empresa y no le",
+    "importa qué archivo se tocó. Le importa qué cambia en su día.",
+    "",
+    "── CÓMO SE USA ──",
+    "Mientras trabajas, agrega tus cambios a `pendiente.cambios`. NO pongas número",
+    "de versión: al momento de escribir todavía no se sabe cuál toca. El release lo",
+    "asigna solo y mueve el bloque a `versiones`.",
+    "",
+    "OBLIGATORIO: si `pendiente.cambios` está vacío, el release FALLA. Toda subida",
+    "a producción tiene que decirle al cliente qué cambió.",
+    "Si el cambio de verdad no se ve (refactor, dependencias), escribe igual una",
+    "línea honesta: 'Mejoras internas de rendimiento'.",
+    "",
+    "── CÓMO SE ESCRIBE ──",
+    "  · titulo  — qué gana el cliente, en sus palabras. No el nombre técnico.",
+    "  · detalle — 1-2 frases. Qué pasaba antes y qué pasa ahora.",
+    "  · tipo    — nuevo | mejora | arreglo",
+    "",
+    "Prohibido: nombres de colegios, personas, correos, RNC. Nombres de archivos,",
+    "endpoints o tablas. La prueba: léelo en voz alta a alguien que no es de",
+    "sistemas. Si no lo entiende, está mal escrito."
+  ],
+  "pendiente": {
+    "titulo": "",
+    "cambios": []
+  },
+  "versiones": [
+    {
+      "version": "1.2.0",
+      "fecha": "2026-07-17",
+      "titulo": "Novedades del sistema",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Ahora puedes ver qué hay de nuevo",
+          "detalle": "Abajo a la izquierda, donde aparece la versión del sistema, hay un enlace a Novedades. Ahí te contamos en cada actualización qué cambió y qué gana tu equipo, sin tecnicismos."
+        }
+      ]
+    },
+    {
+      "version": "1.1.0",
+      "fecha": "2026-07-17",
+      "titulo": "Control de caja y búsqueda por estudiante",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Busca al padre por el nombre del hijo",
+          "detalle": "Cuando un padre llega a pagar, ya no hace falta recordar su nombre. Escribe el nombre del estudiante y aparece el contacto al que hay que facturarle. El sistema te muestra por cuál beneficiario apareció, para que no haya dudas."
+        },
+        {
+          "tipo": "nuevo",
+          "titulo": "Nadie mueve dinero sin abrir caja",
+          "detalle": "Antes se podía guardar una factura o registrar un cobro sin tener la caja abierta, y ese dinero no entraba en ningún cuadre. Ahora hay que abrir caja primero — incluido el administrador y el dueño. Así todo lo que se cobra queda dentro de un cierre."
+        },
+        {
+          "tipo": "mejora",
+          "titulo": "El cierre de caja ahora muestra todo lo que pasó",
+          "detalle": "Al revisar un cierre ves cuánto se cobró en efectivo y cuánto por tarjeta o transferencia, y cuál de esos montos debería estar físicamente en la gaveta. También ves lo que se facturó y quedó sin cobrar, que antes no aparecía por ningún lado."
+        },
+        {
+          "tipo": "arreglo",
+          "titulo": "Un cierre exacto ya no se ve como si faltara dinero",
+          "detalle": "Cuando el conteo cuadraba perfecto, la pantalla mostraba «Faltante: RD$0.00» en rojo con señal de alerta. Ahora dice «Cuadra exacto» en verde, y el rojo queda para cuando de verdad falta o sobra."
+        },
+        {
+          "tipo": "nuevo",
+          "titulo": "Aviso para cerrar la caja a tiempo",
+          "detalle": "Si tu empresa lo activa, el cajero ve un contador cuando se acerca la hora de cerrar y recibe recordatorios. Pasado el tiempo permitido no puede seguir facturando hasta cerrar caja. Se configura empresa por empresa; si no se activa, nada cambia."
+        }
+      ]
+    }
+  ]
+}

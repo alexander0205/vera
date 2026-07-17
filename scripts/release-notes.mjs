@@ -183,6 +183,73 @@ export function construirNotas(commits) {
   return { md: md.trim() || '_Sin cambios visibles para el usuario._', avisos: [...avisos] };
 }
 
+// ─── Novedades para el cliente ───────────────────────────────────────────────
+
+const RUTA_NOVEDADES = 'content/novedades.json';
+
+/**
+ * Promueve `pendiente` a una versión con número y fecha.
+ *
+ * FALLA si no hay novedades escritas. Es a propósito: sin esto, la regla "toda
+ * subida le explica al cliente qué cambió" dura tres semanas. El único lugar
+ * donde se puede hacer cumplir es aquí, donde duele — el release no sale.
+ *
+ * El autor no elige el número: cuando escribe la novedad todavía no se sabe si
+ * el push será patch o minor. Escribe en `pendiente` y el número se asigna solo.
+ */
+export function promoverNovedades(doc, version, fecha) {
+  const pend = doc.pendiente ?? { titulo: '', cambios: [] };
+  const cambios = pend.cambios ?? [];
+
+  if (cambios.length === 0) {
+    throw new Error(
+      `Falta la novedad para v${version}.\n\n` +
+      `Toda subida a producción tiene que decirle al cliente qué cambió.\n` +
+      `Agrega al menos una entrada en ${RUTA_NOVEDADES} → "pendiente.cambios":\n\n` +
+      `  {\n` +
+      `    "tipo": "nuevo",            // nuevo | mejora | arreglo\n` +
+      `    "titulo": "Qué gana el cliente, en sus palabras",\n` +
+      `    "detalle": "Qué pasaba antes y qué pasa ahora."\n` +
+      `  }\n\n` +
+      `Si el cambio no se ve (refactor, dependencias), escribe igual una línea\n` +
+      `honesta: "Mejoras internas de rendimiento".`
+    );
+  }
+
+  const sinTitulo = !pend.titulo || !pend.titulo.trim();
+  const nueva = {
+    version,
+    fecha,
+    // Sin título propio, el de la única novedad sirve; con varias, uno genérico.
+    titulo: sinTitulo
+      ? (cambios.length === 1 ? cambios[0].titulo : 'Mejoras del sistema')
+      : pend.titulo.trim(),
+    cambios,
+  };
+
+  return {
+    ...doc,
+    pendiente: { titulo: '', cambios: [] },
+    versiones: [nueva, ...(doc.versiones ?? [])],
+  };
+}
+
+/** Las notas del cliente no pasan por el redactor de commits, pero igual se revisan. */
+function validarNovedades(cambios) {
+  const problemas = [];
+  for (const c of cambios) {
+    const texto = `${c.titulo} ${c.detalle}`;
+    const { tocadas } = redactar(texto);
+    if (tocadas.length) {
+      problemas.push(`"${c.titulo}" contiene datos que no pueden publicarse (${tocadas.join(', ')})`);
+    }
+    if (!['nuevo', 'mejora', 'arreglo'].includes(c.tipo)) {
+      problemas.push(`"${c.titulo}" tiene tipo inválido: "${c.tipo}" (usa nuevo | mejora | arreglo)`);
+    }
+  }
+  return problemas;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 function main() {
@@ -215,9 +282,20 @@ function main() {
   const fecha = new Date().toISOString().slice(0, 10);
   const entrada = `## v${version} — ${fecha}\n\n${md}\n`;
 
+  // Novedades del cliente: se valida SIEMPRE, aunque no se escriba. Así el error
+  // sale en el dry-run y en el CI antes de tocar un archivo — no a medio release
+  // con el package.json ya bumpeado.
+  const docNov = JSON.parse(readFileSync(RUTA_NOVEDADES, 'utf8'));
+  const novedadesPromovidas = promoverNovedades(docNov, version, fecha);
+  const problemas = validarNovedades(novedadesPromovidas.versiones[0].cambios);
+  if (problemas.length) {
+    throw new Error(`Las novedades no pueden publicarse:\n  - ${problemas.join('\n  - ')}`);
+  }
+
   if (escribir) {
     pkg.version = version;
     writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+    writeFileSync(RUTA_NOVEDADES, JSON.stringify(novedadesPromovidas, null, 2) + '\n');
 
     const cabecera = `# Changelog\n\nTodos los cambios publicados en producción. Una entrada por cada push a main.\nNo se publican nombres de clientes, correos ni documentos: las notas se redactan\nautomáticamente (ver scripts/release-notes.mjs).\n\n`;
     const previo = existsSync('CHANGELOG.md')
