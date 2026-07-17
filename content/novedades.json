@@ -26,16 +26,22 @@
     "sistemas. Si no lo entiende, está mal escrito."
   ],
   "pendiente": {
-    "titulo": "Novedades del sistema",
-    "cambios": [
-      {
-        "tipo": "nuevo",
-        "titulo": "Ahora puedes ver qué hay de nuevo",
-        "detalle": "Abajo a la izquierda, donde aparece la versión del sistema, hay un enlace a Novedades. Ahí te contamos en cada actualización qué cambió y qué gana tu equipo, sin tecnicismos."
-      }
-    ]
+    "titulo": "",
+    "cambios": []
   },
   "versiones": [
+    {
+      "version": "1.2.0",
+      "fecha": "2026-07-17",
+      "titulo": "Novedades del sistema",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Ahora puedes ver qué hay de nuevo",
+          "detalle": "Abajo a la izquierda, donde aparece la versión del sistema, hay un enlace a Novedades. Ahí te contamos en cada actualización qué cambió y qué gana tu equipo, sin tecnicismos."
+        }
+      ]
+    },
     {
       "version": "1.1.0",
       "fecha": "2026-07-17",
