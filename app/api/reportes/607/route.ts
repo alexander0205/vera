@@ -36,7 +36,7 @@ import { NextRequest } from 'next/server';
 import { getTeamIdForUser, getTeamProfile } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
-import { and, eq, gte, lt, inArray, notInArray } from 'drizzle-orm';
+import { and, eq, gte, lt, inArray } from 'drizzle-orm';
 
 // Tipos de e-CF de ventas/emisiones
 const TIPOS_607 = ['31', '32', '33', '34', '44', '45', '46'];
@@ -84,7 +84,8 @@ export async function GET(req: NextRequest) {
         inArray(ecfDocuments.tipoEcf, TIPOS_607),
         gte(ecfDocuments.fechaEmision, desde),
         lt(ecfDocuments.fechaEmision, hasta),
-        notInArray(ecfDocuments.estado, ['ANULADO', 'RECHAZADO']),
+        // Solo e-CF emitidos a la DGII (excluye BORRADOR, RECHAZADO, ANULADO).
+        inArray(ecfDocuments.estado, ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO']),
       )
     ),
   ]);
