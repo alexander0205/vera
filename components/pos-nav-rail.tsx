@@ -17,7 +17,7 @@ import Typography from '@mui/material/Typography';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Store, MonitorSmartphone, Package, Users, FileText, LayoutGrid,
+  Store, Clock, Wallet, Undo2, Users, Package, Settings, FileText, LayoutGrid,
 } from 'lucide-react';
 import { moduleUrl } from '@/lib/config/modules';
 
@@ -26,11 +26,16 @@ const OPEN = 224;
 
 type Item = { href: string; label: string; icon: typeof Store; shared?: boolean };
 
+// Navegación del módulo POS. Todo vive bajo /pos (shell del POS) para no saltar
+// a Facturación. Contactos e Inventario son entidades COMPARTIDAS (mismas tablas).
 const ITEMS: Item[] = [
-  { href: '/pos',                      label: 'Vender',            icon: Store },
-  { href: '/pos/terminales',           label: 'Terminales',        icon: MonitorSmartphone },
-  { href: '/dashboard/productos',      label: 'Productos',         icon: Package, shared: true },
-  { href: '/dashboard/clientes',       label: 'Contactos',         icon: Users,   shared: true },
+  { href: '/pos',              label: 'Vender',              icon: Store },
+  { href: '/pos/turnos',       label: 'Turnos',              icon: Clock },
+  { href: '/pos/caja',         label: 'Gestión de efectivo', icon: Wallet },
+  { href: '/pos/devoluciones', label: 'Devoluciones',        icon: Undo2 },
+  { href: '/pos/contactos',    label: 'Contactos',           icon: Users,   shared: true },
+  { href: '/pos/inventario',   label: 'Inventario',          icon: Package, shared: true },
+  { href: '/pos/configuracion', label: 'Configuración',      icon: Settings },
 ];
 
 export function PosNavRail() {
