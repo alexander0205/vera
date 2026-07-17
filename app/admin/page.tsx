@@ -94,7 +94,7 @@ export default async function AdminDashboard() {
         total: count(),
         verificados: sql<number>`count(*) filter (where ${users.emailVerified})`,
         con2fa: sql<number>`count(*) filter (where ${users.twoFactorEnabled})`,
-        nuevosMes: sql<number>`count(*) filter (where ${users.createdAt} >= ${startOfMonth})`,
+        nuevosMes: sql<number>`count(*) filter (where ${users.createdAt} >= ${startOfMonth.toISOString()})`,
       })
       .from(users),
 
@@ -108,7 +108,7 @@ export default async function AdminDashboard() {
         caja: sql<number>`count(*) filter (where ${teams.cajaHabilitada})`,
         escolar: sql<number>`count(*) filter (where ${teams.posEscolarHabilitado})`,
         recargo: sql<number>`count(*) filter (where ${teams.recargoMoraActivo})`,
-        nuevasMes: sql<number>`count(*) filter (where ${teams.createdAt} >= ${startOfMonth})`,
+        nuevasMes: sql<number>`count(*) filter (where ${teams.createdAt} >= ${startOfMonth.toISOString()})`,
       })
       .from(teams),
 
@@ -132,12 +132,12 @@ export default async function AdminDashboard() {
     // Agregados globales del mes / hoy sobre e-CF emitidos
     db
       .select({
-        emitidosMes: sql<number>`count(*) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth})`,
-        montoMes: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth}),0)`,
-        itbisMes: sql<number>`coalesce(sum(${ecfDocuments.totalItbis}) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth}),0)`,
-        emitidosHoy: sql<number>`count(*) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfDay})`,
+        emitidosMes: sql<number>`count(*) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth.toISOString()})`,
+        montoMes: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth.toISOString()}),0)`,
+        itbisMes: sql<number>`coalesce(sum(${ecfDocuments.totalItbis}) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth.toISOString()}),0)`,
+        emitidosHoy: sql<number>`count(*) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfDay.toISOString()})`,
         montoTotalHist: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}) filter (where ${VENTA}),0)`,
-        empresasFacturandoMes: sql<number>`count(distinct ${ecfDocuments.teamId}) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth})`,
+        empresasFacturandoMes: sql<number>`count(distinct ${ecfDocuments.teamId}) filter (where ${VENTA} and ${ecfDocuments.createdAt} >= ${startOfMonth.toISOString()})`,
       })
       .from(ecfDocuments),
 
@@ -199,7 +199,7 @@ export default async function AdminDashboard() {
     db
       .select({ id: teams.id, name: teams.name, razonSocial: teams.razonSocial, vence: teams.certVencimiento })
       .from(teams)
-      .where(and(sql`${teams.certVencimiento} is not null`, sql`${teams.certVencimiento} <= ${in60Days}`))
+      .where(and(sql`${teams.certVencimiento} is not null`, sql`${teams.certVencimiento} <= ${in60Days.toISOString()}`))
       .orderBy(teams.certVencimiento)
       .limit(8),
   ]);
