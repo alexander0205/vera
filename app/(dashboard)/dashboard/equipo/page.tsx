@@ -25,6 +25,17 @@ import {
 } from 'lucide-react';
 import { ROLES as ROLE_DEFS } from '@/lib/config/roles';
 
+/** Módulos que otorga un rol de sistema (según sus permisos modulo:*). Para
+ *  roles custom sin catálogo estático devuelve null (no se muestra el hint). */
+function modulosDeRol(roleKey: string): { facturacion: boolean; pos: boolean } | null {
+  const def = ROLE_DEFS.find(r => r.key === roleKey);
+  if (!def) return null;
+  return {
+    facturacion: def.permissions.includes('modulo:facturacion'),
+    pos:         def.permissions.includes('modulo:pos'),
+  };
+}
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface Member {
@@ -840,6 +851,26 @@ export default function EquipoPage() {
                     {resolveRoleCfg(invRole, data?.roles).descripcion}
                   </Typography>
                 )}
+                {/* Acceso a módulos que otorga el rol elegido — así el owner ve
+                    de una si el empleado entra a POS, Facturación o ambos. */}
+                {(() => {
+                  const m = modulosDeRol(invRole);
+                  if (!m) return null;
+                  const chips = [
+                    ...(m.facturacion ? [{ label: 'Facturación', bg: '#eff6ff', fg: '#1d4ed8' }] : []),
+                    ...(m.pos ? [{ label: 'Punto de Venta', bg: '#f0fdfa', fg: '#0f766e' }] : []),
+                  ];
+                  return (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
+                      <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Acceso:</Typography>
+                      {chips.length === 0
+                        ? <Typography sx={{ fontSize: '0.75rem', color: '#b91c1c' }}>Ningún módulo</Typography>
+                        : chips.map(c => (
+                            <Box key={c.label} component="span" sx={{ fontSize: '0.6875rem', fontWeight: 600, px: 0.875, py: '2px', borderRadius: '6px', bgcolor: c.bg, color: c.fg }}>{c.label}</Box>
+                          ))}
+                    </Box>
+                  );
+                })()}
               </FormControl>
             </DialogContent>
 

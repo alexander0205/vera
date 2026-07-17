@@ -66,7 +66,7 @@ export type Permission =
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
-export type RoleKey = 'owner' | 'admin' | 'user' | 'lector';
+export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
 // Roles legacy (contador/vendedor/member) fueron remapeados a 'user' en la
 // migración 0051; LEGACY_ROLE_MAP los normaliza por si quedan datos viejos.
@@ -189,6 +189,20 @@ export const ROLES: RoleDef[] = [
       'modulo:facturacion',
     ],
     ui: { color: 'text-sky-600 bg-sky-50 border-sky-200', icon: 'Eye' },
+  },
+  {
+    key:         'cajero',
+    label:       'Cajero (solo POS)',
+    description: 'Solo Punto de Venta: vende, cobra, opera caja y usa productos/contactos. No entra a Facturación.',
+    invitable:   true,
+    permissions: [
+      'clientes:ver', 'clientes:gestionar',
+      'productos:ver',
+      'caja:ver', 'caja:operar',
+      'pos:vender',
+      'modulo:pos',
+    ],
+    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200', icon: 'Store' },
   },
 ];
 

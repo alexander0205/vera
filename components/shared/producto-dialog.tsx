@@ -12,7 +12,7 @@
  * está la pantalla dashboard/productos — este modal enlaza el caso rápido.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -20,8 +20,11 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
-import { Camera, X, Package, Wrench } from 'lucide-react';
+import Switch from '@mui/material/Switch';
+import { Camera, X, Package, Wrench, Store, Star } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface CategoriaOpt { id: number; nombre: string }
 
 export interface ProductoCreado {
   id?: number;
@@ -51,6 +54,25 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
   const [tasaItbis, setTasaItbis] = useState('0.18');
   const [imagen, setImagen]       = useState('');
   const [guardando, setGuardando] = useState(false);
+  // POS: visibilidad en la grilla, favorito y categoría (sección de la grilla).
+  const [visiblePos, setVisiblePos] = useState(tipoInicial === 'bien');
+  const [favorito, setFavorito]     = useState(false);
+  const [categoriaId, setCategoriaId] = useState<number | ''>('');
+  const [categorias, setCategorias]   = useState<CategoriaOpt[]>([]);
+  const [tocóVisible, setTocóVisible] = useState(false);
+
+  // Cargar categorías al abrir (para la sección del POS).
+  useEffect(() => {
+    if (!open) return;
+    fetch('/api/categorias').then(r => r.json()).then(d => setCategorias(d.categorias ?? [])).catch(() => {});
+  }, [open]);
+
+  // Default inteligente: bien → visible en POS; servicio → no. Solo mientras el
+  // usuario no lo haya tocado manualmente.
+  function cambiarTipo(val: 'bien' | 'servicio') {
+    setTipo(val);
+    if (!tocóVisible) setVisiblePos(val === 'bien');
+  }
 
   async function handleImagen(file: File) {
     if (!file.type.startsWith('image/')) { toast.error('Solo se aceptan imágenes'); return; }
@@ -65,7 +87,11 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
     setGuardando(true);
     const res = await fetch('/api/productos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, precio: p, tasaItbis, tipo, imagen: imagen || null }),
+      body: JSON.stringify({
+        nombre, precio: p, tasaItbis, tipo, imagen: imagen || null,
+        visiblePos, posFavorito: favorito,
+        categoriaId: categoriaId === '' ? null : categoriaId,
+      }),
     });
     setGuardando(false);
     if (!res.ok) {
@@ -75,7 +101,7 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
     }
     const data = await res.json().catch(() => ({}));
     toast.success(tipo === 'servicio' ? 'Servicio creado' : 'Producto creado');
-    setNombre(''); setPrecio(''); setImagen('');
+    setNombre(''); setPrecio(''); setImagen(''); setCategoriaId(''); setFavorito(false);
     onCreated(data?.producto);
   }
 
@@ -98,7 +124,7 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
               key={val}
               component="button"
               type="button"
-              onClick={() => setTipo(val)}
+              onClick={() => cambiarTipo(val)}
               sx={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75,
                 py: 0.875, borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -138,6 +164,34 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
               <MenuItem value="0">0%</MenuItem>
               <MenuItem value="exento">Exento</MenuItem>
             </TextField>
+          </Box>
+        </Box>
+
+        {/* Categoría — sección/chip en la grilla del POS */}
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Categoría (sección del POS)</Typography>
+        <TextField select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value === '' ? '' : Number(e.target.value))} fullWidth sx={{ mb: 1.5 }}>
+          <MenuItem value="">Sin categoría</MenuItem>
+          {categorias.map(c => <MenuItem key={c.id} value={c.id}>{c.nombre}</MenuItem>)}
+        </TextField>
+
+        {/* POS: visible en mostrador + favorito */}
+        <Box sx={{ mb: 1.5, borderRadius: '10px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, borderBottom: '1px solid #f3f4f6' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Store style={{ width: 16, height: 16, color: '#0d9488' }} />
+              <Box>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Mostrar en Punto de Venta</Typography>
+                <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>Aparece en la grilla de la caja.</Typography>
+              </Box>
+            </Box>
+            <Switch checked={visiblePos} onChange={(_, v) => { setVisiblePos(v); setTocóVisible(true); }} color="primary" />
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, opacity: visiblePos ? 1 : 0.5, pointerEvents: visiblePos ? 'auto' : 'none' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Star style={{ width: 16, height: 16, color: '#fbbf24' }} />
+              <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Favorito (se muestra primero)</Typography>
+            </Box>
+            <Switch checked={favorito} onChange={(_, v) => setFavorito(v)} color="primary" />
           </Box>
         </Box>
 
