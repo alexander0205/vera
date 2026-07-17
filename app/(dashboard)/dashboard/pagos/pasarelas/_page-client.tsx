@@ -92,6 +92,17 @@ const PROVIDERS = ALL_PROVIDERS.filter((p) => {
   return true;
 });
 
+/**
+ * Ambientes elegibles. En producción solo 'prod': una pasarela en sandbox no
+ * cobra dinero real, así que dejarla elegible ahí es una trampa. En dev se
+ * pueden usar los dos. El servidor lo fuerza igual (no confiamos en el select).
+ */
+const ES_PROD = process.env.NODE_ENV === 'production';
+const AMBIENTES: { value: 'sandbox' | 'prod'; label: string }[] = ES_PROD
+  ? [{ value: 'prod', label: 'Producción' }]
+  : [{ value: 'sandbox', label: 'Sandbox' }, { value: 'prod', label: 'Producción' }];
+const AMBIENTE_DEFAULT: 'sandbox' | 'prod' = ES_PROD ? 'prod' : 'sandbox';
+
 export default function PasarelasClient() {
   const { data, mutate } = useSWR<{ configs: ConfigRow[] }>('/api/pagos/pasarelas', fetcher);
   const configs = data?.configs ?? [];
@@ -130,7 +141,7 @@ function ProviderCard({ providerKey, label, hint, current, onSaved }: {
   const [terminalId, setTerminalId] = useState('');
   const [authKey, setAuthKey]       = useState(''); // CardNet AuthKey / Azul Auth1
   const [auth2, setAuth2]           = useState(''); // Azul Auth2
-  const [ambiente, setAmbiente]     = useState<'sandbox' | 'prod'>('sandbox');
+  const [ambiente, setAmbiente]     = useState<'sandbox' | 'prod'>(AMBIENTE_DEFAULT);
   const [enabled, setEnabled]       = useState(false);
   const [saving, setSaving]         = useState(false);
 
@@ -138,7 +149,9 @@ function ProviderCard({ providerKey, label, hint, current, onSaved }: {
     if (current) {
       setMerchantId(current.merchantId ?? '');
       setTerminalId(current.terminalId ?? '');
-      setAmbiente(current.ambiente === 'prod' ? 'prod' : 'sandbox');
+      // En producción no ofrecemos sandbox: si hay una config vieja en sandbox,
+      // el select la muestra como Producción (y al guardar queda corregida).
+      setAmbiente(ES_PROD ? 'prod' : (current.ambiente === 'prod' ? 'prod' : 'sandbox'));
       setEnabled(current.enabled);
     }
   }, [current]);
@@ -256,9 +269,9 @@ function ProviderCard({ providerKey, label, hint, current, onSaved }: {
             <label className="text-sm flex items-center gap-2">
               Ambiente:
               <select value={ambiente} onChange={(e) => setAmbiente(e.target.value as 'sandbox' | 'prod')}
-                className="border rounded px-2 py-1 text-sm">
-                <option value="sandbox">Sandbox</option>
-                <option value="prod">Producción</option>
+                disabled={AMBIENTES.length === 1}
+                className="border rounded px-2 py-1 text-sm disabled:bg-slate-100 disabled:text-slate-500">
+                {AMBIENTES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
             </label>
           )}

@@ -36,6 +36,11 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Datos inválidos', detalle: parsed.error.flatten() }, { status: 400 });
   }
 
-  await upsertProviderConfig({ teamId: auth.teamId, ...parsed.data });
+  // En producción no existe el sandbox: una pasarela apuntando ahí no cobra
+  // dinero real. La UI ya no lo ofrece, pero el select es del cliente — esto es
+  // lo que de verdad lo impide.
+  const ambiente = process.env.NODE_ENV === 'production' ? 'prod' : parsed.data.ambiente;
+
+  await upsertProviderConfig({ teamId: auth.teamId, ...parsed.data, ambiente });
   return NextResponse.json({ ok: true });
 }
