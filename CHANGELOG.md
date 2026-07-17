@@ -4,6 +4,27 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.3.0 — 2026-07-17
+
+### Nuevo
+
+- **pagos**: links de pago con CardNet y Azul
+  - lib/pagos: clientes CardNet (sesión + 3DS hosted) y Azul (Payment Page + AuthHash), config por empresa con secretos cifrados (AES-256-GCM).
+  - Solo integraciones hosted: nunca tocamos la tarjeta (sin alcance PCI).
+  - El resultado se verifica server-side (CardNet reconsulta la sesión; Azul valida la firma de respuesta); nunca se marca pagado por el redirect.
+  - marcarLinkPagado es idempotente y a prueba de pérdida: persiste el cobro antes de tocar el ledger y reconcilia aparte, así un callback repetido o un fallo al registrar no duplica ni pierde el pago.
+  - Cotización pagada no auto-emite e-CF: una falla en DGII perdería el cobro.
+  - Azul queda oculto tras NEXT_PUBLIC_AZUL_ENABLED (falta verificar E2E con Auth1/Auth2 reales). El simulador no existe en producción.
+
+### Arreglado
+
+- **facturas**: quitar flechas del spinner en las líneas de la factura
+- **auth**: la sesión se caía en dev y devolvía 500 sin cuerpo
+
+### Documentación
+
+- **novedades**: novedades del cliente para links de pago
+
 ## v1.2.0 — 2026-07-17
 
 ### Nuevo
