@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, ChevronRight, Ban } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
@@ -135,6 +135,8 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   const [pagoCuenta, setPagoCuenta] = useState<Cuenta | null>(null);
   const [cargandoPago, setCargandoPago] = useState(false);
   const [aplicandoMoraFacturaId, setAplicandoMoraFacturaId] = useState<number | null>(null);
+  const [cargoAnular, setCargoAnular] = useState<Cargo | null>(null);
+  const [anulando, setAnulando] = useState(false);
 
   const abrirPago = useCallback(async (ecfDocumentId: number) => {
     setCargandoPago(true);
@@ -248,6 +250,27 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
       setAplicandoMoraFacturaId(null);
     }
   }, [cargar]);
+
+  // Anula un cargo puesto por error (soft-delete en el backend). El backend
+  // bloquea (409) los cargos con factura vinculada: hay que desvincular primero.
+  // La confirmación vive en un modal propio (ConfirmarAnularDialog), no en el
+  // window.confirm nativo del navegador.
+  const confirmarAnular = useCallback(async () => {
+    if (!cargoAnular) return;
+    setAnulando(true);
+    try {
+      const res = await fetch(`/api/administracion-escolar/cargos/${cargoAnular.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'No se pudo anular el cargo');
+      toast.success('Cargo anulado');
+      setCargoAnular(null);
+      await cargar();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo anular el cargo');
+    } finally {
+      setAnulando(false);
+    }
+  }, [cargar, cargoAnular]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -421,6 +444,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                   if (m) setMatriculaEditar(m);
                 }}
                 onVincular={setCargoVincularFactura}
+                onAnular={setCargoAnular}
               />
             ) : (
               <EmptyBox text="Sin períodos, cargos o pagos relacionados" />
@@ -514,7 +538,51 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
           onSuccess={() => { setPagoCuenta(null); cargar(); }}
         />
       )}
+
+      <ConfirmarAnularDialog
+        cargo={cargoAnular}
+        anulando={anulando}
+        onCancel={() => { if (!anulando) setCargoAnular(null); }}
+        onConfirm={confirmarAnular}
+      />
     </section>
+  );
+}
+
+// Confirmación de anular un cargo, con la estética de la app (Dialog + Button)
+// en vez del window.confirm nativo del navegador.
+function ConfirmarAnularDialog({ cargo, anulando, onCancel, onConfirm }: {
+  cargo: Cargo | null;
+  anulando: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const label = cargo
+    ? `${cargo.concepto ?? 'Cargo'}${cargo.mes ? ` · ${MESES[cargo.mes]} ${cargo.anio}` : ''}`
+    : '';
+  return (
+    <Dialog open={!!cargo} onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
+              <Ban className="h-5 w-5" />
+            </span>
+            <DialogTitle>Anular cargo</DialogTitle>
+          </div>
+        </DialogHeader>
+        <div className="space-y-2 text-sm text-gray-600">
+          <p>Vas a anular <span className="font-medium text-gray-900">{label}</span>{cargo ? <> por <span className="font-medium text-gray-900">{fmtDOP(cargo.montoCentavos)}</span></> : null}.</p>
+          <p>Dejará de contar en la deuda del estudiante. Esta acción no se puede deshacer.</p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={anulando}>Cancelar</Button>
+          <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={onConfirm} disabled={anulando}>
+            {anulando ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Anulando…</> : 'Anular cargo'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -560,7 +628,7 @@ function PeriodoFiltroBar({ grupos, value, onChange }: {
 
 // Detalle financiero de UN período (el seleccionado en la barra padre):
 // acciones, resumen y sub-vistas (mensualidades, otros cargos, facturas, pagos).
-function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular }: {
+function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestionar, estudianteId, tutorClientId, onRegistrarPago, onAplicarMora, aplicandoMoraFacturaId, onCargoCreado, onEditarMatricula, onVincular, onAnular }: {
   grupo: NonNullable<ReturnType<typeof construirGruposPeriodo>[number]>;
   pagos: Pago[];
   puedeFacturar: boolean;
@@ -574,6 +642,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   onCargoCreado: () => void;
   onEditarMatricula: (matriculaId: number) => void;
   onVincular: (cargo: Cargo) => void;
+  onAnular: (cargo: Cargo) => void;
 }) {
   const router = useRouter();
   const [vista, setVista] = useState<'mensualidades' | 'otros' | 'facturas' | 'pagos'>('mensualidades');
@@ -583,7 +652,10 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
   const [cargoMesInicial, setCargoMesInicial] = useState<{ mes: number; anio: number } | null>(null);
   const [elegirFacturaAbierto, setElegirFacturaAbierto] = useState(false);
 
-  const cargosPeriodo = grupo.cargos;
+  // Los cargos anulados (puestos por error) no cuentan en NINGÚN cálculo del
+  // período: ni Facturado, ni Pagado, ni saldo, ni las tablas. Se filtran acá,
+  // en el origen, para que un anulado no aparezca como "pagado/adelantado".
+  const cargosPeriodo = grupo.cargos.filter((c) => c.estado !== 'anulado');
   const mesesAcademicos = mesesDelPeriodo(grupo.fechaInicio, grupo.fechaFin);
   const pagosPeriodo = pagos.filter((p) => p.cargoId != null && cargosPeriodo.some((c) => c.id === p.cargoId));
   const facturas = cargosPeriodo.filter((c) => c.ecfDocumentId != null);
@@ -701,6 +773,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
                 onAplicarMora={onAplicarMora}
                 onCrearFactura={(cargo) => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
                 onVincular={onVincular}
+                onAnular={onAnular}
                 onAgregarCargoMes={grupo.matriculaId ? (mes, anio) => { setCargoMesInicial({ mes, anio }); setCrearCargoAbierto(true); } : undefined}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
               />
@@ -723,10 +796,12 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
                         cargo={c}
                         puedePagos={puedePagos}
                         puedeFacturar={puedeFacturar}
+                        puedeGestionar={puedeGestionar}
                         onRegistrarPago={onRegistrarPago}
                         onAplicarMora={onAplicarMora}
                         onCrearFactura={(cargo) => router.push(`/dashboard/facturas/nueva?desdeCargo=${cargo.id}`)}
                         onVincular={onVincular}
+                        onAnular={onAnular}
                         aplicandoMora={aplicandoMoraFacturaId === c.ecfDocumentId}
                       />,
                     ];
@@ -1028,7 +1103,7 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   );
 }
 
-function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAgregarCargoMes, aplicandoMoraFacturaId }: {
+function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAgregarCargoMes, aplicandoMoraFacturaId }: {
   cargos: Cargo[];
   pagos: Pago[];
   mesesAcademicos: ReturnType<typeof mesesDelPeriodo>;
@@ -1039,6 +1114,7 @@ function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeF
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
   onVincular: (cargo: Cargo) => void;
+  onAnular: (cargo: Cargo) => void;
   onAgregarCargoMes?: (mes: number, anio: number) => void;
   aplicandoMoraFacturaId: number | null;
 }) {
@@ -1102,6 +1178,7 @@ function MensualidadesTabla({ cargos, pagos, mesesAcademicos, puedePagos, puedeF
                 onAplicarMora={onAplicarMora}
                 onCrearFactura={onCrearFactura}
                 onVincular={onVincular}
+                onAnular={onAnular}
                 onAgregarCargoMes={onAgregarCargoMes}
                 aplicandoMoraFacturaId={aplicandoMoraFacturaId}
               />
@@ -1126,7 +1203,7 @@ type MesRow = {
 // Fila de un mes + panel desplegable del mes: historial de abonos y las
 // acciones contextuales de ese mes (agregar cargo). Todos los meses son
 // clickeables —incluso sin cargo o con factura impaga— para configurarlos ahí.
-function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAgregarCargoMes, aplicandoMoraFacturaId }: {
+function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestionar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, onAgregarCargoMes, aplicandoMoraFacturaId }: {
   r: MesRow;
   abierto: boolean;
   onToggle: () => void;
@@ -1137,6 +1214,7 @@ function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestion
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
   onVincular: (cargo: Cargo) => void;
+  onAnular: (cargo: Cargo) => void;
   onAgregarCargoMes?: (mes: number, anio: number) => void;
   aplicandoMoraFacturaId: number | null;
 }) {
@@ -1170,10 +1248,13 @@ function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestion
               cargo={r.accion}
               puedePagos={puedePagos}
               puedeFacturar={puedeFacturar}
+              puedeGestionar={puedeGestionar}
+              mesTieneFactura={!!r.factura}
               onRegistrarPago={onRegistrarPago}
               onAplicarMora={onAplicarMora}
               onCrearFactura={onCrearFactura}
               onVincular={onVincular}
+              onAnular={onAnular}
               aplicandoMora={aplicandoMoraFacturaId === r.accion.ecfDocumentId}
             />
           ) : <span className="text-gray-300">—</span>}
@@ -1259,19 +1340,28 @@ function MesPanel({ r, puedeGestionar, onAgregarCargoMes }: {
   );
 }
 
-function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, aplicandoMora }: {
+function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, puedeGestionar, mesTieneFactura, onRegistrarPago, onAplicarMora, onCrearFactura, onVincular, onAnular, aplicandoMora }: {
   cargo: Cargo;
   puedePagos: boolean;
   puedeFacturar: boolean;
+  puedeGestionar: boolean;
+  /** Solo mensualidades: el MES ya tiene una factura en otro de sus cargos.
+   *  Bloquea "Anular cargo" aunque este cargo suelto no tenga factura. */
+  mesTieneFactura?: boolean;
   onRegistrarPago: (ecfDocumentId: number) => void;
   onAplicarMora: (ecfDocumentId: number) => void;
   onCrearFactura: (cargo: Cargo) => void;
   onVincular: (cargo: Cargo) => void;
+  onAnular: (cargo: Cargo) => void;
   aplicandoMora: boolean;
 }) {
   const pendiente = ['pendiente', 'parcial', 'vencido'].includes(cargo.estado);
   const tieneFactura = cargo.ecfDocumentId != null;
-  const tieneAccion = (pendiente && tieneFactura && (puedePagos || puedeFacturar)) || (pendiente && !tieneFactura && puedeFacturar) || tieneFactura;
+  // Anular solo cargos SIN factura (el backend bloquea el resto): el cobro vive
+  // en la factura. También se oculta si el MES ya tiene factura en otro cargo
+  // (mensualidad duplicada) — borrar la factura es otro flujo, no "anular cargo".
+  const puedeAnular = puedeGestionar && cargo.estado !== 'anulado' && !tieneFactura && !mesTieneFactura;
+  const tieneAccion = (pendiente && tieneFactura && (puedePagos || puedeFacturar)) || (pendiente && !tieneFactura && puedeFacturar) || tieneFactura || puedeAnular;
   if (!tieneAccion) return <span className="text-gray-300 text-xs">—</span>;
 
   return (
@@ -1309,6 +1399,14 @@ function CargoActionsMenu({ cargo, puedePagos, puedeFacturar, onRegistrarPago, o
         {tieneFactura && (!pendiente || (!puedePagos && !puedeFacturar)) && (
           <DropdownMenuItem onSelect={() => window.location.assign(`/dashboard/facturas/${cargo.ecfDocumentId}`)}>
             <Receipt className="h-4 w-4" />Ver factura
+          </DropdownMenuItem>
+        )}
+        {puedeAnular && (
+          <DropdownMenuItem
+            onSelect={() => onAnular(cargo)}
+            className="text-red-600 focus:text-red-600"
+          >
+            <Ban className="h-4 w-4" />Anular cargo
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
