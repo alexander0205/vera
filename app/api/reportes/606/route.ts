@@ -93,8 +93,10 @@ export async function GET(req: NextRequest) {
     ),
   ]);
 
-  // 606 excluye anulados — los anulados van en el 608
-  const compras = docs.filter(d => d.estado !== 'ANULADO');
+  // 606 solo incluye e-CF emitidos a la DGII (excluye BORRADOR, RECHAZADO,
+  // ANULADO). Los anulados van en el 608.
+  const EMITIDOS = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'];
+  const compras = docs.filter(d => EMITIDOS.includes(d.estado));
 
   const teamRnc = (team?.rnc ?? '').replace(/\D/g, '');
   const periodo = `${anio}${mes}`;

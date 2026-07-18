@@ -4,7 +4,8 @@
  * server. Reutilizado por todos los reportes analíticos.
  */
 import Link from 'next/link';
-import { ChevronRight, Calendar, Download } from 'lucide-react';
+import { ChevronRight, Download } from 'lucide-react';
+import { DateRangeFilter } from './date-range-filter';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -54,20 +55,8 @@ export function ReportShell({
         )}
       </Box>
 
-      {/* Filtro de fecha */}
-      <Box component="form" method="get" sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2, mb: 2.5 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, border: '1px solid #d1d5db', borderRadius: '8px', px: 1.5, py: 0.75 }}>
-            <Calendar style={{ width: 16, height: 16, color: '#9ca3af' }} />
-            <Box component="input" type="date" name="desde" defaultValue={desde} sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', color: '#374151' }} />
-            <Typography component="span" sx={{ color: '#9ca3af', fontSize: '0.875rem' }}>—</Typography>
-            <Box component="input" type="date" name="hasta" defaultValue={hasta} sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', color: '#374151' }} />
-          </Box>
-          <Button type="submit" variant="contained" disableElevation sx={{ px: 1.5, py: 0.75, borderRadius: '8px', textTransform: 'none', fontSize: '0.875rem', fontWeight: 500, bgcolor: '#111827', color: '#fff', '&:hover': { bgcolor: '#1f2937' } }}>
-            Aplicar
-          </Button>
-        </Box>
-      </Box>
+      {/* Filtro de fecha — navegación client-side (no recarga el layout) */}
+      <DateRangeFilter desde={desde} hasta={hasta} />
 
       {children}
     </Box>

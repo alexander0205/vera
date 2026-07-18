@@ -17,6 +17,7 @@ import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
+import { pRango, pVentaValida, pNotaCredito, pVentaEstados } from '@/lib/reportes/shared';
 
 // React.cache: memoiza por-request. Evita re-ejecutar la resolución de sesión
 // (verifyToken + query users) cuando layout, /api/user y demás la piden varias veces.
@@ -390,11 +391,9 @@ export async function getVentasGenerales(
   desde: Date,
   hasta: Date,
 ) {
-  const TIPOS_VENTA = ['31', '32', '33', '44', '45'] as const; // facturas/notas débito/regímenes esp/gubernamental
-  const TIPO_NOTA_CREDITO = '34';
-
   const [ventaRows, notaRows, docs] = await Promise.all([
-    // Agregados ventas (excluyendo notas crédito y borradores/rechazos)
+    // Agregados ventas: e-CF emitido a DGII + tickets sin-ncf (venta real sin
+    // comprobante). Excluye NC, borradores de e-CF y anulados/rechazados.
     db
       .select({
         brutas: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
@@ -402,28 +401,16 @@ export async function getVentasGenerales(
         count:  count(),
       })
       .from(ecfDocuments)
-      .where(and(
-        eq(ecfDocuments.teamId, teamId),
-        gte(ecfDocuments.fechaEmision, desde),
-        lte(ecfDocuments.fechaEmision, hasta),
-        sql`${ecfDocuments.tipoEcf} IN (${sql.join(TIPOS_VENTA.map(t => sql`${t}`), sql`, `)})`,
-        sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
-      )),
+      .where(and(pRango(teamId, desde, hasta), pVentaValida)),
 
-    // Notas crédito (resta)
+    // Notas crédito (resta) — solo las emitidas a DGII.
     db
       .select({
         total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
         count: count(),
       })
       .from(ecfDocuments)
-      .where(and(
-        eq(ecfDocuments.teamId, teamId),
-        gte(ecfDocuments.fechaEmision, desde),
-        lte(ecfDocuments.fechaEmision, hasta),
-        eq(ecfDocuments.tipoEcf, TIPO_NOTA_CREDITO),
-        sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
-      )),
+      .where(and(pRango(teamId, desde, hasta), pNotaCredito, pVentaEstados)),
 
     // Lista de documentos en el rango (limitada a 100 para la tabla)
     db
@@ -440,10 +427,10 @@ export async function getVentasGenerales(
       })
       .from(ecfDocuments)
       .where(and(
-        eq(ecfDocuments.teamId, teamId),
-        gte(ecfDocuments.fechaEmision, desde),
-        lte(ecfDocuments.fechaEmision, hasta),
-        sql`${ecfDocuments.estado} != 'BORRADOR'`,
+        pRango(teamId, desde, hasta),
+        // Muestra ventas reales (e-CF emitido + tickets sin-ncf) y notas; oculta
+        // solo los borradores de e-CF sin emitir (BOR-…).
+        sql`NOT (${ecfDocuments.estado} = 'BORRADOR' AND ${ecfDocuments.tipoEcf} <> 'sin-ncf')`,
       ))
       .orderBy(desc(ecfDocuments.fechaEmision))
       .limit(100),

@@ -4,8 +4,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import { Calendar, Download, ChevronRight } from 'lucide-react';
+import { Download, ChevronRight } from 'lucide-react';
+import { DateRangeFilter } from '@/components/reportes/date-range-filter';
 import { getUser, getTeamIdForUser, getVentasGenerales } from '@/lib/db/queries';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { db } from '@/lib/db/drizzle';
@@ -114,42 +114,8 @@ export default async function VentasGeneralesPage({
         </Button>
       </Box>
 
-      {/* Filtros */}
-      <Box
-        component="form"
-        method="get"
-        sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2, mb: 2.5 }}
-      >
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, border: '1px solid #d1d5db', borderRadius: '8px', px: 1.5, py: 0.75 }}>
-            <Calendar size={16} color="#9ca3af" />
-            <Box
-              component="input"
-              type="date"
-              name="desde"
-              defaultValue={desdeStr}
-              sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', color: '#374151' }}
-            />
-            <Typography sx={{ color: '#9ca3af', fontSize: '0.875rem' }}>—</Typography>
-            <Box
-              component="input"
-              type="date"
-              name="hasta"
-              defaultValue={hastaStr}
-              sx={{ bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', color: '#374151' }}
-            />
-          </Box>
-          <Button
-            type="submit"
-            variant="contained"
-            disableElevation
-            size="small"
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#111827', '&:hover': { bgcolor: '#1f2937' } }}
-          >
-            Aplicar
-          </Button>
-        </Box>
-      </Box>
+      {/* Filtros — navegación client-side (no recarga el layout) */}
+      <DateRangeFilter desde={desdeStr} hasta={hastaStr} />
 
       {/* Stat cards */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(5, 1fr)' }, gap: 1.5, mb: 3 }}>

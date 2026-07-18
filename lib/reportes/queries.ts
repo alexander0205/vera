@@ -18,7 +18,7 @@ import { ecfDocuments, pagosRecibidos, users } from '@/lib/db/schema';
 import { diasVencido } from '@/lib/utils/format';
 import {
   VENTA_ESTADOS, TIPOS_VENTA, TIPO_NOTA_CREDITO, TIPO_ECF_NOMBRE,
-  pRango, pVentaEstados, pTiposVenta, pNotaCredito,
+  pRango, pVentaEstados, pTiposVenta, pNotaCredito, pVentaValida,
   truncFecha, parseLineas, claveProducto,
   type Granularidad,
 } from './shared';
@@ -42,7 +42,7 @@ export async function getKpis(teamId: number, desde: Date, hasta: Date): Promise
       brutas: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
       itbis:  sql<number>`coalesce(sum(${ecfDocuments.totalItbis}), 0)`,
       n:      count(),
-    }).from(ecfDocuments).where(and(pRango(teamId, desde, hasta), pTiposVenta, pVentaEstados)),
+    }).from(ecfDocuments).where(and(pRango(teamId, desde, hasta), pVentaValida)),
 
     db.select({
       total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
@@ -66,9 +66,12 @@ export async function getKpis(teamId: number, desde: Date, hasta: Date): Promise
           (d.fecha_limite_pago IS NOT NULL AND d.fecha_limite_pago::date < current_date) AS vencido
         FROM ecf_documents d
         WHERE d.team_id = ${teamId}
-          AND d.estado IN ('ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO')
+          -- Cobrable = e-CF de venta emitido a DGII, o ticket sin-ncf no anulado.
+          AND (
+            (d.tipo_ecf IN ('31','32','33','44','45') AND d.estado IN ('ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'))
+            OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO','RECHAZADO'))
+          )
           AND d.estado_pago IN ('PENDIENTE','PARCIAL')
-          AND d.tipo_ecf IN ('31','32','33','44','45')
       ) t
       WHERE saldo > 0
     `),
@@ -117,7 +120,7 @@ export async function getTendencia(
     n:        count(),
   })
     .from(ecfDocuments)
-    .where(and(pRango(teamId, desde, hasta), pTiposVenta, pVentaEstados))
+    .where(and(pRango(teamId, desde, hasta), pVentaValida))
     .groupBy(bucket)
     .orderBy(bucket);
 
@@ -144,24 +147,12 @@ export interface FilaProducto {
 export async function getIngresosPorProducto(
   teamId: number, desde: Date, hasta: Date,
 ): Promise<FilaProducto[]> {
-  // Intento 1: vista materializada (rápida). Si no existe, fallback en vivo.
-  try {
-    const mv = await db.execute(sql`
-      SELECT clave, nombre, referencia,
-             sum(unidades)::double precision AS unidades,
-             sum(base_cents)::bigint AS ingresos,
-             count(distinct ecf_document_id)::int AS num_facturas
-      FROM mv_reportes_ventas_lineas
-      WHERE team_id = ${teamId}
-        AND fecha >= ${desde.toISOString().slice(0, 10)}
-        AND fecha <= ${hasta.toISOString().slice(0, 10)}
-      GROUP BY clave, nombre, referencia
-      ORDER BY ingresos DESC
-    `);
-    return armarPareto(mv as unknown as RawProducto[]);
-  } catch {
-    return getIngresosPorProductoLive(teamId, desde, hasta);
-  }
+  // Siempre en vivo: expande lineas_json directo de ecf_documents. Antes leía la
+  // vista materializada `mv_reportes_ventas_lineas` (refrescada por cron cada 6h),
+  // lo que dejaba este reporte hasta 6h desfasado respecto a KPIs / ventas
+  // generales (que consultan en vivo). El volumen es chico, así que el costo del
+  // cálculo en vivo es despreciable y los datos quedan siempre consistentes.
+  return getIngresosPorProductoLive(teamId, desde, hasta);
 }
 
 interface RawProducto {
@@ -195,7 +186,7 @@ async function getIngresosPorProductoLive(
     lineasJson: ecfDocuments.lineasJson,
   })
     .from(ecfDocuments)
-    .where(and(pRango(teamId, desde, hasta), pTiposVenta, pVentaEstados));
+    .where(and(pRango(teamId, desde, hasta), pVentaValida));
 
   const acc = new Map<string, { nombre: string; referencia: string | null; unidades: number; ingresos: number; facturas: Set<number> }>();
   for (const d of docs) {
@@ -234,7 +225,7 @@ export async function getIngresosPorCliente(
     n:        count(),
   })
     .from(ecfDocuments)
-    .where(and(pRango(teamId, desde, hasta), pTiposVenta, pVentaEstados))
+    .where(and(pRango(teamId, desde, hasta), pVentaValida))
     .groupBy(sql`coalesce(nullif(${ecfDocuments.razonSocialComprador}, ''), 'Consumidor Final')`, ecfDocuments.rncComprador)
     .orderBy(desc(sql`sum(${ecfDocuments.montoTotal})`))
     .limit(limit);
@@ -296,9 +287,12 @@ export async function getAgingCxC(teamId: number): Promise<AgingResumen> {
            ), 0) AS saldo
     FROM ecf_documents d
     WHERE d.team_id = ${teamId}
-      AND d.estado IN ('ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO')
+      -- Cobrable = e-CF de venta emitido a DGII, o ticket sin-ncf no anulado.
+      AND (
+        (d.tipo_ecf IN ('31','32','33','44','45') AND d.estado IN ('ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'))
+        OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO','RECHAZADO'))
+      )
       AND d.estado_pago IN ('PENDIENTE','PARCIAL')
-      AND d.tipo_ecf IN ('31','32','33','44','45')
     ORDER BY d.fecha_limite_pago NULLS LAST
   `);
 
@@ -386,7 +380,7 @@ export async function getVentasPorTipo(
     n:        count(),
   })
     .from(ecfDocuments)
-    .where(and(pRango(teamId, desde, hasta), pVentaEstados))
+    .where(and(pRango(teamId, desde, hasta), pVentaValida))
     .groupBy(ecfDocuments.tipoEcf)
     .orderBy(desc(sql`sum(${ecfDocuments.montoTotal})`));
 
@@ -420,7 +414,7 @@ export async function getVentasPorUsuario(
   })
     .from(ecfDocuments)
     .leftJoin(users, eq(users.id, ecfDocuments.createdBy))
-    .where(and(pRango(teamId, desde, hasta), pTiposVenta, pVentaEstados))
+    .where(and(pRango(teamId, desde, hasta), pVentaValida))
     .groupBy(ecfDocuments.createdBy, users.name, users.email)
     .orderBy(desc(sql`sum(${ecfDocuments.montoTotal})`));
 
