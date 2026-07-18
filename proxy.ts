@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
 import { moduleForHost } from '@/lib/config/modules';
 
-const protectedRoutes = ['/dashboard', '/pos'];
+const protectedRoutes = ['/dashboard', '/pos', '/cuenta'];
 
 // Routing por subdominio (módulos del producto):
 // pos.zero.com.do → /pos · facturacion.zero.com.do → /dashboard.

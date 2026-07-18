@@ -103,8 +103,8 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
-      { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
-      { href: '/dashboard/equipo/permisos', label: 'Roles y permisos' },
+      // Usuarios, roles y plan viven en el área de Administración (/cuenta):
+      // son del negocio, no de Facturación. Se llega por el switcher de módulo.
       { href: '/dashboard/api-keys',      label: 'API Keys' },
       { href: '/dashboard/webhooks',      label: 'Webhooks' },
       { href: '/dashboard/impresoras',    label: 'Impresoras' },

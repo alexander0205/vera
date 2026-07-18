@@ -17,7 +17,8 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import { LayoutGrid, FileText, Store, Check } from 'lucide-react';
+import Divider from '@mui/material/Divider';
+import { LayoutGrid, FileText, Store, Check, Building2 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
   MODULE_LABELS, MODULE_DESCRIPTIONS, moduleUrl, type ModuleKey,
@@ -32,8 +33,9 @@ export function ModuleSwitcher({ current }: { current: ModuleKey }) {
   const { modules } = usePermissions();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
-  // Un solo módulo (o cargando) → no hay a dónde cambiar.
-  if (modules.length < 2) return null;
+  // Con un solo módulo igual se muestra: desde aquí se entra a Administración.
+  // Sin ninguno (o cargando) no hay nada que ofrecer.
+  if (modules.length === 0) return null;
 
   return (
     <>
@@ -89,6 +91,26 @@ export function ModuleSwitcher({ current }: { current: ModuleKey }) {
             </MenuItem>
           );
         })}
+
+        {/* Administración del negocio — NO es un módulo facturable (toda empresa
+            la necesita), pero vive en su propio espacio como los demás. */}
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem
+          component="a"
+          href="/cuenta"
+          onClick={() => setAnchor(null)}
+          sx={{ gap: 1.5, py: 1.25, mx: 0.75, borderRadius: '8px' }}
+        >
+          <Box sx={{ width: 34, height: 34, borderRadius: '10px', bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Building2 style={{ width: 17, height: 17 }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>Administración</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'normal' }}>
+              Mi empresa, usuarios, roles y plan
+            </Typography>
+          </Box>
+        </MenuItem>
       </Menu>
     </>
   );

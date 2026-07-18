@@ -264,13 +264,37 @@ test('E2 · reportes con filtro de fechas (DateRangeFilter)', async ({ page }) =
   await shot(page, 'E2-reporte-ventas-generales');
 });
 
+// ─── F. Administración del negocio (área propia) ─────────────────────────────
+
+test('F1 · Administración: landing y secciones del negocio', async ({ page }) => {
+  await login(page, DUENO);
+
+  await page.goto(`${BASE}/cuenta`);
+  await expect(page.getByRole('heading', { name: 'Administración' })).toBeVisible({ timeout: 20_000 });
+  await shot(page, 'F1-administracion-landing');
+
+  // Cada sección abre dentro del área (no rebota a Facturación ni al POS)
+  for (const [ruta, texto] of [
+    ['/cuenta/usuarios', /Equipo|Usuarios|Miembros/i],
+    ['/cuenta/roles',    /Roles|Permisos/i],
+    ['/cuenta/plan',     /Plan|Suscripción/i],
+    ['/cuenta/empresas', /empresas/i],
+    ['/cuenta/empresa',  /empresa|Configuración/i],
+  ] as const) {
+    await page.goto(`${BASE}${ruta}`);
+    await expect(page.getByText(texto).first()).toBeVisible({ timeout: 20_000 });
+    expect(page.url()).toContain('/cuenta');
+  }
+  await shot(page, 'F1-administracion-usuarios');
+});
+
 test('E3 · sin errores JS en las pantallas clave', async ({ page }) => {
   const errores: string[] = [];
   page.on('pageerror', e => errores.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errores.push(`[console] ${m.text()}`); });
 
   await login(page, DUENO);
-  for (const r of ['/dashboard', '/pos', '/dashboard/productos', '/dashboard/clientes', '/pos/configuracion']) {
+  for (const r of ['/dashboard', '/pos', '/dashboard/productos', '/dashboard/clientes', '/pos/configuracion', '/cuenta', '/cuenta/usuarios']) {
     await page.goto(`${BASE}${r}`);
     await page.waitForLoadState('domcontentloaded');
   }
