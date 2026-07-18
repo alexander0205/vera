@@ -824,6 +824,9 @@ function Venta({
             order: { xs: 3, sm: 0 },
             width: { xs: '100%', sm: 'auto' },
             flex: { sm: 1 },
+            // minWidth evita que los botones del header lo aplasten a nada en
+            // tablet; con flexWrap del header baja a su propia fila si no cabe.
+            minWidth: { sm: 260 },
             maxWidth: { sm: 380, md: 460 },
             mx: { sm: 1.5 },
             '& .MuiInputBase-root': { height: { xs: 52, sm: 52 }, fontSize: 16, borderRadius: '10px' },

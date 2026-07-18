@@ -64,3 +64,6 @@ test-results/
 playwright-report/
 
 .release-notes.md
+
+# Capturas de QA (evidencia local, no versionar)
+test-results/
