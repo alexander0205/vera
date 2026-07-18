@@ -790,6 +790,12 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
         open={elegirFacturaAbierto}
         onOpenChange={setElegirFacturaAbierto}
         cargos={cargosSinFacturaVista}
+        estudianteId={estudianteId}
+        matriculaId={grupo.matriculaId}
+        periodoId={grupo.periodoId}
+        mesesAcademicos={mesesAcademicos}
+        soloTipo={vista === 'otros' ? 'otros' : vista === 'mensualidades' ? 'mensualidad' : null}
+        onCargoCreado={onCargoCreado}
         onConfirm={(ids) => router.push(
           ids.length > 1
             ? `/dashboard/facturas/nueva?desdeCargos=${ids.join(',')}`
@@ -804,18 +810,52 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
 // uno o varios meses/cargos y se crea una única factura que los cubre (un mes
 // por línea). Luego esa factura se cobra normal: los abonos se acumulan en su
 // historial hasta saldarla. Resuelve "pagar varios meses de golpe".
-function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm }: {
+//
+// Extra: permite crear un cargo nuevo aplicándolo a varios meses de una vez
+// (concepto + monto + meses). Al crearlos, se refrescan y entran a la lista ya
+// marcados, listos para incluirlos en la misma factura.
+function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, estudianteId, matriculaId, periodoId, mesesAcademicos, soloTipo, onCargoCreado }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   cargos: Cargo[];
   onConfirm: (ids: number[]) => void;
+  estudianteId: number;
+  matriculaId: number | null;
+  periodoId: number | null;
+  mesesAcademicos: ReturnType<typeof mesesDelPeriodo>;
+  soloTipo: 'mensualidad' | 'otros' | null;
+  onCargoCreado: () => void;
 }) {
   const [sel, setSel] = useState<Set<number>>(new Set());
   useEffect(() => { if (open) setSel(new Set(cargos.map((c) => c.id))); }, [open, cargos]);
 
+  // ── Crear cargo para varios meses ──────────────────────────────────────────
+  const [mostrarCrear, setMostrarCrear] = useState(false);
+  const [conceptos, setConceptos] = useState<{ id: number; nombre: string; tipo: string }[]>([]);
+  const [conceptoId, setConceptoId] = useState('');
+  const [monto, setMonto] = useState('');
+  const [mesesCargo, setMesesCargo] = useState<Set<string>>(new Set());
+  const [creando, setCreando] = useState(false);
+  const [errorCrear, setErrorCrear] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) { setMostrarCrear(false); setErrorCrear(null); setMonto(''); setMesesCargo(new Set()); setConceptoId(''); return; }
+    fetch('/api/administracion-escolar/conceptos')
+      .then((r) => r.json())
+      .then((d: { conceptos?: { id: number; nombre: string; tipo: string; activo?: boolean }[] }) => {
+        const lista = (d.conceptos ?? []).filter((c) => c.activo !== false && (
+          soloTipo === 'mensualidad' ? c.tipo === 'mensualidad'
+            : soloTipo === 'otros' ? c.tipo !== 'mensualidad'
+              : true));
+        setConceptos(lista);
+      })
+      .catch(() => setConceptos([]));
+  }, [open, soloTipo]);
+
   const seleccionados = cargos.filter((c) => sel.has(c.id));
   const ids = seleccionados.map((c) => c.id);
   const total = seleccionados.reduce((s, c) => s + c.saldoCentavos, 0);
+  const montoCentavos = Math.round((parseFloat(monto.replace(',', '.')) || 0) * 100);
 
   function toggle(id: number) {
     setSel((prev) => {
@@ -823,6 +863,50 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm }: {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+  function toggleMes(key: string) {
+    setMesesCargo((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  async function crearCargos() {
+    if (!matriculaId || !periodoId) { setErrorCrear('El período no tiene una matrícula válida'); return; }
+    if (!conceptoId || montoCentavos <= 0) { setErrorCrear('Concepto y monto son obligatorios'); return; }
+    if (mesesCargo.size === 0) { setErrorCrear('Selecciona al menos un mes'); return; }
+    setCreando(true);
+    setErrorCrear(null);
+    try {
+      for (const key of mesesCargo) {
+        const m = mesesAcademicos.find((x) => x.key === key);
+        if (!m) continue;
+        const res = await fetch('/api/administracion-escolar/cargos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            estudianteId, matriculaId, periodoId, conceptoId: Number(conceptoId),
+            mes: m.mes, anio: m.anio, montoCentavos,
+            fechaVencimiento: `${m.anio}-${String(m.mes).padStart(2, '0')}-05`,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error ?? 'No se pudo crear el cargo');
+        }
+      }
+      // Refresca la lista: los nuevos cargos entran y quedan marcados (el effect
+      // de arriba re-selecciona todos al cambiar `cargos`).
+      setMonto('');
+      setMesesCargo(new Set());
+      setMostrarCrear(false);
+      onCargoCreado();
+    } catch (e: unknown) {
+      setErrorCrear(e instanceof Error ? e.message : 'Error creando los cargos');
+    } finally {
+      setCreando(false);
+    }
   }
 
   return (
@@ -834,8 +918,69 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm }: {
           (un mes por línea). Luego la cobras normal: puedes abonar en partes y los
           pagos se acumulan en su historial hasta saldarla.
         </p>
-        <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
-          {cargos.map((cargo) => (
+
+        {/* Crear cargo para varios meses de una vez */}
+        {matriculaId != null && mesesAcademicos.length > 0 && (
+          <div className="rounded-lg border border-gray-200">
+            {!mostrarCrear ? (
+              <button type="button" onClick={() => setMostrarCrear(true)}
+                className="flex w-full items-center gap-1.5 px-3 py-2 text-sm font-medium text-teal-600 hover:text-teal-700">
+                <Plus className="h-4 w-4" />Agregar un cargo a varios meses
+              </button>
+            ) : (
+              <div className="space-y-3 p-3">
+                {errorCrear && <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{errorCrear}</div>}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Concepto</Label>
+                    <Select value={conceptoId} onValueChange={setConceptoId}>
+                      <SelectTrigger><SelectValue placeholder="Concepto" /></SelectTrigger>
+                      <SelectContent>
+                        {conceptos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Monto por mes (RD$)</Label>
+                    <Input type="number" step="0.01" value={monto} onChange={(e) => setMonto(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Meses afectados</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {mesesAcademicos.map((m) => {
+                      const activo = mesesCargo.has(m.key);
+                      return (
+                        <button key={m.key} type="button" onClick={() => toggleMes(m.key)}
+                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${activo ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                          {MESES[m.mes]} {m.anio}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">
+                    {mesesCargo.size > 0 && montoCentavos > 0
+                      ? `${mesesCargo.size} cargo(s) · ${fmtDOP(montoCentavos * mesesCargo.size)} total`
+                      : 'Elige concepto, monto y meses'}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setMostrarCrear(false)} disabled={creando}>Cancelar</Button>
+                    <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={crearCargos} disabled={creando}>
+                      {creando ? <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Creando…</> : 'Crear cargos'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+          {cargos.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-gray-400">Sin cargos por facturar. Agrega uno arriba.</p>
+          ) : cargos.map((cargo) => (
             <label key={cargo.id} className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-teal-50/50">
               <input type="checkbox" checked={sel.has(cargo.id)} onChange={() => toggle(cargo.id)}
                 className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
