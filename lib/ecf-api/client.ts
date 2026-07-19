@@ -108,6 +108,21 @@ export interface EcfApiErrorBody {
   eNcf?:       string;
   formato?:    string;
   dgii?:       EcfApiDgiiDetail;
+
+  // ── Contrato de reintento seguro (ecf-api ≥ 2026-07-18) ──────────────────
+  // Presentes en TODOS los 503 de emisión. Permiten decidir si el e-NCF quedó
+  // quemado o se puede reenviar, sin adivinar.
+  /** id de la emisión en ecf-api. `null` = no se creó ninguna fila (nada existe). */
+  emisionId?:           string | null;
+  /** ¿Se llegó a emitir? En 503 siempre false. En 201 no aplica (si hay 201, se emitió). */
+  emitido?:             boolean;
+  /** Lo que la DGII dijo sobre si consumió la secuencia. `null` = no se sabe. */
+  secuenciaUtilizada?:  boolean | null;
+  /** true = Vera puede reenviar el MISMO e-NCF. false = número quemado, usar el siguiente. */
+  puedeReintentar?:     boolean;
+  /** true = envío incierto: NO dar por emitido ni reintentar a ciegas; consultar estado-dgii. */
+  requiereVerificacion?: boolean;
+
   [k: string]: unknown;
 }
 
@@ -387,6 +402,14 @@ export interface EmisionResponseDto {
   /** URL del endpoint que consulta el estado en DGII. */
   urlEstadoDgii?:  string | null;
   createdAt:       string;
+
+  // ── Contrato de reintento seguro (ecf-api ≥ 2026-07-18) ──────────────────
+  /** Lo que la DGII dijo sobre si consumió la secuencia. `null` = no se sabe. */
+  secuenciaUtilizada?:   boolean | null;
+  /** true = se puede reenviar el MISMO e-NCF (p.ej. RECHAZADO sin quemar número). */
+  puedeReintentar?:      boolean;
+  /** true = envío incierto: NO dar por emitido ni reintentar; consultar estado-dgii. */
+  requiereVerificacion?: boolean;
 }
 
 /** Fila liviana del listado paginado de emisiones (sin XML/payloads pesados). */
