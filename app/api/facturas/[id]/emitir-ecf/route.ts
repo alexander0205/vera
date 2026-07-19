@@ -468,7 +468,16 @@ export async function POST(
     let encfAsignado: string;
     let sequenceConsumedId: number | null;
     let fechaVencimientoSecuencia: string | null;
-    if (/^E\d{10,12}$/.test(doc.encf ?? '') && !doc.ecfApiEmisionId) {
+    // Reintento con el MISMO e-NCF si el documento ya tiene uno reservado.
+    // Es seguro: el gate de arriba ya rechazó todo documento en estado DGII
+    // (EN_PROCESO/ACEPTADO/RECHAZADO/ANULADO), así que aquí el comprobante
+    // nunca se emitió con éxito. Y el e-NCF es clave única en la DGII: si por
+    // alguna razón sí llegó, reenviarlo no duplica — la DGII responde código 75
+    // ("ya utilizado"), que es la confirmación. El duplicado nace de NO
+    // reintentar, porque fuerza un N+1 y deja el anterior huérfano.
+    // NOTA: no se condiciona a `ecfApiEmisionId` porque ahora lo guardamos
+    // también en los fallos (para trazabilidad); usarlo aquí rompería el reuso.
+    if (/^E\d{10,12}$/.test(doc.encf ?? '')) {
       encfAsignado = doc.encf!;
       sequenceConsumedId = null;
       fechaVencimientoSecuencia = null;
@@ -488,7 +497,21 @@ export async function POST(
       sequenceConsumedId = acquired.sequenceId;
       fechaVencimientoSecuencia = acquired.fechaVencimiento;
       console.log(`[emitir-ecf] eNCF asignado: ${encfAsignado} para doc #${docId}`);
+
+      // RESERVA: persistir el e-NCF ANTES de enviar. Si el envío falla, el
+      // documento conserva su número y el reintento lo REUSA (rama de arriba)
+      // en vez de quemar el siguiente. Sin esto cada fallo abría un hueco
+      // permanente en la secuencia.
+      await db
+        .update(ecfDocuments)
+        .set({ encf: encfAsignado, updatedAt: new Date() })
+        .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)));
     }
+
+    // Clave de idempotencia: ligada al doc + e-NCF. Si el reintento manda la
+    // misma clave, ecf-api devuelve la emisión existente con 201 en vez de
+    // crear otra o responder 409 ECFA_NCF_DUPLICADO.
+    const idempotencyKey = `vera-${teamId}-${docId}-${encfAsignado}`;
 
     // Build mapper payload
     const tipoPago = (doc.tipoPago ?? 1) as 1 | 2 | 3 | 4;
@@ -522,35 +545,128 @@ export async function POST(
         ...(fmt ? { formato: fmt } : {}),
         payload: payloadFields,
       };
-      resultado = await emision.emitirUnified(codigoPublico, wrappedBody);
+      resultado = await emision.emitirUnified(codigoPublico, wrappedBody, {
+        'Idempotency-Key': idempotencyKey,
+      });
     } catch (err) {
       console.error('[emitir-ecf ecf-api]', err);
       if (err instanceof EcfApiError) {
         const resolved = resolveEcfApiError(err);
+
+        // ── Contrato de reintento seguro de ecf-api ──────────────────────────
+        // Los 503 de emisión traen emisionId / puedeReintentar / requiereVerificacion.
+        const b = err.body ?? {};
+        const emisionId           = typeof b.emisionId === 'string' ? b.emisionId : null;
+        const puedeReintentar     = b.puedeReintentar;
+        const requiereVerificacion = b.requiereVerificacion === true;
+
+        // Si ecf-api creó fila, guardamos su id: sin él no podemos consultar
+        // el estado real después (y quedaría huérfana como las 60 actuales).
+        if (emisionId) {
+          await db
+            .update(ecfDocuments)
+            .set({ ecfApiEmisionId: emisionId, updatedAt: new Date() })
+            .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
+            .catch((e) => console.error('[emitir-ecf] no se pudo guardar emisionId', e));
+        }
+
+        // ── VERIFICACIÓN antes de rendirse ──────────────────────────────────
+        // Un timeout NO significa que DGII lo rechazara: puede haberlo aceptado
+        // y habérsenos perdido la respuesta. Si nos rendimos a ciegas, el
+        // usuario re-factura y el cliente termina con DOS comprobantes fiscales
+        // por una sola venta. Preguntamos el estado real antes de decidir.
+        if (emisionId) {
+          // `/estado-dgii` solo aplica a comprobantes con trackId (asíncronos).
+          // Para RFCE (tipo 32, síncrono) lanza error → caemos al registro plano
+          // `/emisiones/{id}`, que sí expone el estado real. Sin este fallback la
+          // verificación no serviría justo para el tipo que más se factura.
+          const verificado =
+            (await emision.consultarEstado(emisionId).catch(() => null)) ??
+            (await emision.get(emisionId).catch((e) => {
+              console.error('[emitir-ecf] verificación de estado falló', e);
+              return null;
+            }));
+
+          const est = String(verificado?.estado ?? '').toUpperCase();
+          // Recuperamos solo con prueba de que llegó: trackId (asíncronos) o
+          // estado aceptado (RFCE síncrono). ERROR/PENDIENTE sin nada = no llegó.
+          const llego = !!verificado && (
+            !!verificado.trackId ||
+            ['ACEPTADO', 'ACEPTADO_CONDICIONAL'].includes(est)
+          );
+          if (verificado && llego && ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'ENVIADO', 'PENDIENTE'].includes(est)) {
+            // SÍ llegó a la DGII. Seguimos por el camino de éxito en vez de
+            // devolver error: se registra el comprobante y no se re-factura.
+            console.warn(`[emitir-ecf] recuperado por verificación: ${verificado.eNcf} estado=${est} trackId=${verificado.trackId}`);
+            resultado = verificado;
+          }
+        }
+
+        // Número QUEMADO → soltar la reserva para que el próximo intento tome
+        // el siguiente e-NCF. Si puedeReintentar es true (o desconocido), el
+        // documento conserva su e-NCF y el reintento lo reusa.
+        if (!resultado && puedeReintentar === false) {
+          await db
+            .update(ecfDocuments)
+            .set({ encf: `BOR-${docId}-${Date.now().toString(36)}`, updatedAt: new Date() })
+            .where(and(eq(ecfDocuments.id, docId), eq(ecfDocuments.teamId, teamId)))
+            .catch((e) => console.error('[emitir-ecf] no se pudo soltar la reserva', e));
+          console.warn(`[emitir-ecf] eNCF ${encfAsignado} QUEMADO (puedeReintentar=false) doc #${docId}`);
+        }
+
+        // Solo devolvemos error si la verificación NO lo recuperó.
+        if (!resultado) {
+          return NextResponse.json(
+            {
+              // `puedeReintentar: true` manda sobre `requiereVerificacion`: para
+              // RFCE (sin trackId y con la consulta de DGII rota) reenviar el
+              // MISMO e-NCF ES la verificación — o lo acepta, o responde código
+              // 75 ("ya utilizado"), que confirma que ya estaba.
+              error:        puedeReintentar === true
+                ? `No se pudo enviar a la DGII. El comprobante ${encfAsignado} quedó reservado — reintenta y se usará el mismo número.`
+                : requiereVerificacion
+                ? 'El envío quedó en estado incierto. No se puede dar por emitida ni reintentar sin verificar: consulta el estado antes de continuar.'
+                : resolved.mensaje,
+              code:         resolved.code,
+              action:       puedeReintentar === true ? 'retry-same-ncf'
+                          : requiereVerificacion ? 'verificar-estado'
+                          : puedeReintentar === false ? 'reintentar-nuevo-ncf'
+                          : resolved.action,
+              statusEcfApi: err.status,
+              // Contrato de reintento — para que la UI decida sin adivinar.
+              encf:                 encfAsignado,
+              emisionId,
+              emitido:              b.emitido === true,
+              secuenciaUtilizada:   b.secuenciaUtilizada ?? null,
+              puedeReintentar:      puedeReintentar ?? true,
+              requiereVerificacion,
+              ...(resolved.dgiiDetalle ? { dgii: resolved.dgiiDetalle } : {}),
+              ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: err.humanMessage } : {}),
+            },
+            { status: resolved.proxyStatus },
+          );
+        }
+      }
+      // Fallo de red/timeout sin respuesta de ecf-api. El e-NCF queda RESERVADO
+      // en el documento: el reintento lo reusa y viaja con la misma
+      // Idempotency-Key, así que no se duplica ni se abre un hueco.
+      if (!resultado) {
+        const raw = err instanceof Error ? err.message : 'Error desconocido';
+        const esTimeout = /timeout|econnreset|etimedout|aborted/i.test(raw);
         return NextResponse.json(
           {
-            error:        resolved.mensaje,
-            code:         resolved.code,
-            action:       resolved.action,
-            statusEcfApi: err.status,
-            ...(resolved.dgiiDetalle ? { dgii: resolved.dgiiDetalle } : {}),
-            ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: err.humanMessage } : {}),
+            error: esTimeout
+              ? `Tiempo de espera agotado al comunicarse con el servicio de firma. El comprobante ${encfAsignado} quedó reservado — reintenta y se usará el mismo número.`
+              : `No se pudo enviar el comprobante. ${encfAsignado} quedó reservado — reintenta y se usará el mismo número.`,
+            action: 'retry-same-ncf',
+            encf: encfAsignado,
+            puedeReintentar: true,
+            requiereVerificacion: false,
+            ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: raw } : {}),
           },
-          { status: resolved.proxyStatus },
+          { status: 502 },
         );
       }
-      const raw = err instanceof Error ? err.message : 'Error desconocido';
-      const esTimeout = /timeout|econnreset|etimedout|aborted/i.test(raw);
-      return NextResponse.json(
-        {
-          error: esTimeout
-            ? 'Tiempo de espera agotado al comunicarse con el servicio de firma. Reintenta.'
-            : 'No se pudo enviar el comprobante. Intenta de nuevo.',
-          action: 'retry-later',
-          ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: raw } : {}),
-        },
-        { status: 502 },
-      );
     }
 
     // Map estado
