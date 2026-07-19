@@ -468,7 +468,16 @@ export async function POST(
     let encfAsignado: string;
     let sequenceConsumedId: number | null;
     let fechaVencimientoSecuencia: string | null;
-    if (/^E\d{10,12}$/.test(doc.encf ?? '') && !doc.ecfApiEmisionId) {
+    // Reintento con el MISMO e-NCF si el documento ya tiene uno reservado.
+    // Es seguro: el gate de arriba ya rechazó todo documento en estado DGII
+    // (EN_PROCESO/ACEPTADO/RECHAZADO/ANULADO), así que aquí el comprobante
+    // nunca se emitió con éxito. Y el e-NCF es clave única en la DGII: si por
+    // alguna razón sí llegó, reenviarlo no duplica — la DGII responde código 75
+    // ("ya utilizado"), que es la confirmación. El duplicado nace de NO
+    // reintentar, porque fuerza un N+1 y deja el anterior huérfano.
+    // NOTA: no se condiciona a `ecfApiEmisionId` porque ahora lo guardamos
+    // también en los fallos (para trazabilidad); usarlo aquí rompería el reuso.
+    if (/^E\d{10,12}$/.test(doc.encf ?? '')) {
       encfAsignado = doc.encf!;
       sequenceConsumedId = null;
       fechaVencimientoSecuencia = null;
@@ -609,11 +618,18 @@ export async function POST(
         if (!resultado) {
           return NextResponse.json(
             {
-              error:        requiereVerificacion
+              // `puedeReintentar: true` manda sobre `requiereVerificacion`: para
+              // RFCE (sin trackId y con la consulta de DGII rota) reenviar el
+              // MISMO e-NCF ES la verificación — o lo acepta, o responde código
+              // 75 ("ya utilizado"), que confirma que ya estaba.
+              error:        puedeReintentar === true
+                ? `No se pudo enviar a la DGII. El comprobante ${encfAsignado} quedó reservado — reintenta y se usará el mismo número.`
+                : requiereVerificacion
                 ? 'El envío quedó en estado incierto. No se puede dar por emitida ni reintentar sin verificar: consulta el estado antes de continuar.'
                 : resolved.mensaje,
               code:         resolved.code,
-              action:       requiereVerificacion ? 'verificar-estado'
+              action:       puedeReintentar === true ? 'retry-same-ncf'
+                          : requiereVerificacion ? 'verificar-estado'
                           : puedeReintentar === false ? 'reintentar-nuevo-ncf'
                           : resolved.action,
               statusEcfApi: err.status,
