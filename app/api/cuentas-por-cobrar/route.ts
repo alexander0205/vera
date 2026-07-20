@@ -2,12 +2,18 @@
  * GET /api/cuentas-por-cobrar
  *   ?clientId=123        — filtrar por cliente
  *   &soloVencidas=true   — solo facturas vencidas
+ *   &search=texto        — razón social o RNC del comprador
+ *   &tipoDoc=factura|nota-debito
+ *   &estado=vencidas|al-dia
+ *   &orden=reciente|antiguo|monto|vencimiento
+ *   &limit=25&offset=0   — paginación server-side
  *
- * Lista facturas crédito con saldo pendiente.
+ * Lista facturas con saldo pendiente. Filtra, ordena y pagina en servidor; los
+ * totales cubren toda la cartera filtrada, no solo la página devuelta.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser, getCuentasPorCobrar } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getCuentasPorCobrar, type OrdenCartera } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -31,14 +37,30 @@ export async function GET(req: NextRequest) {
   }
 
   const url = new URL(req.url);
-  const clientIdStr    = url.searchParams.get('clientId');
-  const soloVencidas   = url.searchParams.get('soloVencidas') === 'true';
+  const sp = url.searchParams;
 
-  const clientId = clientIdStr ? parseInt(clientIdStr) : undefined;
+  const clientIdStr  = sp.get('clientId');
+  const clientId     = clientIdStr ? parseInt(clientIdStr) : undefined;
+  const soloVencidas = sp.get('soloVencidas') === 'true';
+
+  const limitRaw  = parseInt(sp.get('limit') ?? '');
+  const offsetRaw = parseInt(sp.get('offset') ?? '');
+
+  // Whitelist: cualquier valor fuera de estos se ignora (no llega al SQL).
+  const tipoDocRaw = sp.get('tipoDoc');
+  const estadoRaw  = sp.get('estado');
+  const ordenRaw   = sp.get('orden');
+  const ORDENES: OrdenCartera[] = ['reciente', 'antiguo', 'monto', 'vencimiento'];
 
   const data = await getCuentasPorCobrar(teamId, {
     clientId: clientId && !isNaN(clientId) ? clientId : undefined,
     soloVencidas,
+    search:  sp.get('search') ?? undefined,
+    tipoDoc: tipoDocRaw === 'factura' || tipoDocRaw === 'nota-debito' ? tipoDocRaw : undefined,
+    estado:  estadoRaw === 'vencidas' || estadoRaw === 'al-dia' ? estadoRaw : undefined,
+    orden:   ORDENES.includes(ordenRaw as OrdenCartera) ? (ordenRaw as OrdenCartera) : undefined,
+    limit:   Number.isFinite(limitRaw)  ? limitRaw  : undefined,
+    offset:  Number.isFinite(offsetRaw) ? offsetRaw : undefined,
   });
 
   return NextResponse.json(data);

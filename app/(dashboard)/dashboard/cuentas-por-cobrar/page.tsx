@@ -22,22 +22,52 @@ interface Totales {
 
 // ─── Componente principal ──────────────────────────────────────────────────────
 
+// Al agrupar por cliente se piden más filas de una vez: agrupar solo la página
+// visible daría grupos partidos. Igual hay techo — el aviso lo dice si se corta.
+const PAGE_SIZE          = 25;
+const PAGE_SIZE_AGRUPADO = 500;
+
 export default function CuentasPorCobrarPage() {
   const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  // Filtros 100% client-side sobre el dataset cargado (AR es acotado).
+  // Filtros, orden y paginación son server-side: el saldo se calcula en SQL, así
+  // que filtrar en memoria mostraría totales de la página en vez de la cartera.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    cliente: '', tipoDoc: '', estado: '', agrupar: '',
+    cliente: '', tipoDoc: '', estado: '', agrupar: '', orden: '',
   });
+  const [page, setPage] = useState(1);
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
+
+  const agrupar  = filterValues.agrupar === 'cliente';
+  const pageSize = agrupar ? PAGE_SIZE_AGRUPADO : PAGE_SIZE;
+
+  // La búsqueda dispara un fetch por tecla; se espera a que el usuario pare.
+  const [busqueda, setBusqueda] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBusqueda(filterValues.cliente ?? ''), 300);
+    return () => clearTimeout(t);
+  }, [filterValues.cliente]);
+
+  // Cualquier cambio de filtro invalida la página actual.
+  useEffect(() => {
+    setPage(1);
+  }, [busqueda, filterValues.tipoDoc, filterValues.estado, filterValues.orden, agrupar]);
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/cuentas-por-cobrar');
+      const sp = new URLSearchParams({
+        limit:  String(pageSize),
+        offset: String((page - 1) * pageSize),
+        ...(busqueda.trim()        && { search:  busqueda.trim() }),
+        ...(filterValues.tipoDoc   && { tipoDoc: filterValues.tipoDoc }),
+        ...(filterValues.estado    && { estado:  filterValues.estado }),
+        ...(filterValues.orden     && { orden:   filterValues.orden }),
+      });
+      const res = await fetch(`/api/cuentas-por-cobrar?${sp}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error cargando');
       setData(json);
@@ -46,49 +76,29 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, busqueda, filterValues.tipoDoc, filterValues.estado, filterValues.orden]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
   // Deep-link `?pagar=<docId>`: al llegar desde otro módulo (p. ej. un cargo
-  // escolar) abre directo el modal de cobro de esa factura. Se consume una vez.
+  // escolar) abre directo el modal de cobro de esa factura. Se pide por id — con
+  // la lista paginada la factura puede no estar en la página cargada.
   const [pagarConsumido, setPagarConsumido] = useState(false);
   useEffect(() => {
-    if (!data || pagarConsumido) return;
+    if (pagarConsumido) return;
     const pagarId = new URLSearchParams(window.location.search).get('pagar');
     if (!pagarId) return;
-    const cuenta = data.cuentas.find((c) => String(c.id) === pagarId);
-    if (cuenta) { setPagoModal(cuenta); setPagarConsumido(true); }
-  }, [data, pagarConsumido]);
+    setPagarConsumido(true);
+    fetch(`/api/cuentas-por-cobrar/${pagarId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.cuenta) setPagoModal(j.cuenta); })
+      .catch(() => {});
+  }, [pagarConsumido]);
 
-  const agrupar = filterValues.agrupar === 'cliente';
-
-  // ── Filtrado client-side: cliente (texto), tipo de documento, vencimiento ──
-  const cuentasFiltradas = useMemo(() => {
-    let rows = data?.cuentas ?? [];
-    const q = (filterValues.cliente ?? '').trim().toLowerCase();
-    if (q) {
-      rows = rows.filter(c =>
-        (c.razonSocialComprador ?? 'consumidor final').toLowerCase().includes(q) ||
-        (c.rncComprador ?? '').toLowerCase().includes(q),
-      );
-    }
-    if (filterValues.tipoDoc === 'factura')      rows = rows.filter(c => c.saldoFactura > 0);
-    else if (filterValues.tipoDoc === 'nota-debito') rows = rows.filter(c => c.moraSaldo > 0);
-
-    if (filterValues.estado === 'vencidas')   rows = rows.filter(c => c.vencida);
-    else if (filterValues.estado === 'al-dia') rows = rows.filter(c => !c.vencida);
-
-    return rows;
-  }, [data, filterValues.cliente, filterValues.tipoDoc, filterValues.estado]);
-
-  // Totales reactivos al filtro (las tarjetas reflejan lo que se ve en la tabla).
-  const totales: Totales = useMemo(() => ({
-    pendiente:     cuentasFiltradas.reduce((s, c) => s + c.saldo, 0),
-    vencido:       cuentasFiltradas.filter(c => c.vencida).reduce((s, c) => s + c.saldo, 0),
-    count:         cuentasFiltradas.length,
-    countVencidas: cuentasFiltradas.filter(c => c.vencida).length,
-  }), [cuentasFiltradas]);
+  const cuentas = data?.cuentas ?? [];
+  // Totales del servidor: cubren toda la cartera filtrada, no solo esta página.
+  const totales: Totales = data?.totales ?? { pendiente: 0, vencido: 0, count: 0, countVencidas: 0 };
+  const truncadoAlAgrupar = agrupar && totales.count > cuentas.length;
 
   const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
     {
@@ -223,12 +233,28 @@ export default function CuentasPorCobrarPage() {
         </div>
       )}
 
+      {truncadoAlAgrupar && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+          <span>
+            Agrupando las primeras {cuentas.length} de {totales.count} cuentas. Filtra para
+            reducir la cartera y ver los grupos completos.
+          </span>
+        </div>
+      )}
+
       {/* Tabla reutilizable con filtros + agrupación */}
       <DataTable<Cuenta>
-        data={cuentasFiltradas}
+        data={cuentas}
         loading={loading}
         error={error}
         columns={columns}
+        pagination={agrupar ? undefined : {
+          page,
+          pageSize,
+          total: totales.count,
+          onPageChange: setPage,
+        }}
         filters={[
           { type: 'search', id: 'cliente', placeholder: 'Buscar cliente o RNC…' },
           {
@@ -249,6 +275,17 @@ export default function CuentasPorCobrarPage() {
             options: [
               { value: 'vencidas', label: 'Solo vencidas' },
               { value: 'al-dia',   label: 'Solo al día' },
+            ],
+          },
+          {
+            type: 'select',
+            id: 'orden',
+            label: 'Ordenar',
+            placeholder: 'Más recientes',
+            options: [
+              { value: 'vencimiento', label: 'Vencidas primero' },
+              { value: 'monto',       label: 'Mayor saldo' },
+              { value: 'antiguo',     label: 'Más antiguas' },
             ],
           },
           {
