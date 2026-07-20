@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2,
+  X, Wallet, Loader2, Archive, Wallet2, PanelRightOpen,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
@@ -61,6 +62,7 @@ export default function CuentasPorCobrarPage() {
   });
   const [page, setPage] = useState(1);
   const [cubeta, setCubeta] = useState<Cubeta | null>(null);
+  const [detalle, setDetalle] = useState<Cuenta | null>(null);
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
 
@@ -214,7 +216,8 @@ export default function CuentasPorCobrarPage() {
   ], []);
 
   const rowActions = (c: Cuenta): RowAction[] => [
-    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c) },
+    { icon: PanelRightOpen, title: 'Ver detalle',    onClick: () => setDetalle(c),   primary: true },
+    { icon: Wallet2,        title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true },
   ];
 
   return (
@@ -405,6 +408,16 @@ export default function CuentasPorCobrarPage() {
             : 'Todas las facturas a crédito están saldadas.',
         }}
       />
+
+      {/* Panel lateral de detalle — se cierra al abrir el cobro para no apilar
+          dos capas encima de la lista. */}
+      {detalle && (
+        <DetallePanel
+          cuenta={detalle}
+          onClose={() => setDetalle(null)}
+          onCobrar={(c) => { setDetalle(null); setPagoModal(c); }}
+        />
+      )}
 
       {/* Modal registrar pago */}
       {pagoModal && (

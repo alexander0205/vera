@@ -26,9 +26,11 @@ export interface Cuenta {
   montoTotal:           number;
   totalItbis:           number;
   pagado:               number;
+  // Crédito de notas de crédito ya descontado del saldo de la factura.
+  ncAplicado:           number;
   // saldo = saldoFactura + moraSaldo (TOTAL combinado a cobrar).
   saldo:                number;
-  // Saldo SOLO de la factura (montoTotal − pagado).
+  // Saldo SOLO de la factura (montoTotal − pagado − ncAplicado).
   saldoFactura:         number;
   // Saldo combinado de las ND de mora atadas a esta factura.
   moraSaldo:            number;
