@@ -5,14 +5,15 @@ import {
   adminEscolarConceptosPago,
   ecfDocuments,
 } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { eq, and, desc } from 'drizzle-orm';
 
 /** Cargos de un estudiante (más reciente primero). */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   // Refleja el cobro de las facturas vinculadas en el saldo/estado de cada cargo.
   await sincronizarSaldosDesdeFacturas(teamId, parseInt(id));

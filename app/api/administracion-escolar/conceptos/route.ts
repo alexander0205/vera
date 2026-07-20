@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarConceptosPago, products } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, asc, and } from 'drizzle-orm';
 
 const TIPOS = ['inscripcion', 'mensualidad', 'uniforme', 'actividad', 'otro'];
 
 export async function GET() {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const rows = await db
     .select({
       id: adminEscolarConceptosPago.id,
@@ -29,7 +29,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('administracion-escolar:configurar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { nombre, tipo, recurrente, activo, productId } = await req.json();

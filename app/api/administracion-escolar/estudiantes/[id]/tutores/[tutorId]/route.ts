@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudianteTutores } from '@/lib/db/schema';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
 /** Desvincula un tutor de un estudiante (no borra el tutor). */
@@ -9,7 +9,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; tutorId: string }> },
 ) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id, tutorId } = await params;

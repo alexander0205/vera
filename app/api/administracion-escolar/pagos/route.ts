@@ -6,12 +6,13 @@ import {
   adminEscolarEstudiantes,
   adminEscolarConceptosPago,
 } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and, desc } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const estudianteId = req.nextUrl.searchParams.get('estudianteId');
 
   const where = [eq(adminEscolarPagos.teamId, teamId)];

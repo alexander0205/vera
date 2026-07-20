@@ -6,14 +6,14 @@ import {
   adminEscolarConceptosPago,
   adminEscolarPeriodos,
 } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { eq, and, desc } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const sp = req.nextUrl.searchParams;
   const periodoId = sp.get('periodoId');
   const estado = sp.get('estado');
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { estudianteId, matriculaId, periodoId, conceptoId, mes, anio, montoCentavos, fechaVencimiento } = await req.json();

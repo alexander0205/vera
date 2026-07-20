@@ -6,8 +6,7 @@ import {
   adminEscolarPeriodos,
   adminEscolarCursos,
 } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import {
   listarEstudiantesEnriquecidos,
   estadisticasEstudiantes,
@@ -24,8 +23,9 @@ const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
  * team (no depende de la página ni de los filtros).
  */
 export async function GET(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const sp = req.nextUrl.searchParams;
   const cursoId = Number(sp.get('cursoId')) || null;
   const limit = Number(sp.get('limit')) || 25;
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
  * `matricula`, el estudiante se crea sin código (se le asignará al inscribirlo).
  */
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { nombres, apellidos, sexo, fechaNacimiento, estado, matricula } = await req.json();

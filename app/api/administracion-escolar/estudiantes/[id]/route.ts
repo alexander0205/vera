@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudiantes, dependientes, clients } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { SEXOS_VALIDOS } from '@/lib/administracion-escolar/estudiante-utils';
 import { eq, and } from 'drizzle-orm';
@@ -10,8 +9,9 @@ import { eq, and } from 'drizzle-orm';
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   const [estudiante] = await db.select().from(adminEscolarEstudiantes)
     .where(and(eq(adminEscolarEstudiantes.id, parseInt(id)), eq(adminEscolarEstudiantes.teamId, teamId)))
@@ -42,7 +42,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
@@ -74,7 +74,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarCargos, adminEscolarEstudianteTutores, adminEscolarTutores, ecfDocuments } from '@/lib/db/schema';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
 /**
@@ -19,7 +19,7 @@ class HttpError extends Error {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:pagos');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:pagos');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;

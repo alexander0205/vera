@@ -10,7 +10,7 @@ import {
   clients,
   dependientes,
 } from '@/lib/db/schema';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
 /**
@@ -26,7 +26,9 @@ import { eq, and } from 'drizzle-orm';
  * entidades genéricas no saben nada de este flujo. Ver regla de Alex.
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:pagos');
+  // 'pagos' y no 'ver': el prefill devuelve los datos fiscales del tutor
+  // responsable (RNC, email, teléfono) para armar la factura del cargo.
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:pagos');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;

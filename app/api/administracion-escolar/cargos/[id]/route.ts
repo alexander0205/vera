@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarCargos, ecfDocuments } from '@/lib/db/schema';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
 /**
@@ -11,7 +11,7 @@ import { eq, and } from 'drizzle-orm';
  * solo guarda la referencia al documento fiscal que lo cubre.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
  *  - Un cargo ya `anulado` es no-op idempotente.
  */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;

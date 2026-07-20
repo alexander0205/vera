@@ -7,16 +7,16 @@ import {
   clients,
   dependientes,
 } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
 const RELACIONES = ['padre', 'madre', 'tutor', 'cuidador', 'otro'];
 
 /** Tutores asociados a un estudiante. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   const estudianteId = parseInt(id);
   const rows = await db
@@ -47,7 +47,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 /** Asocia un tutor existente al estudiante. Si responsablePago=true, se quita
  *  la marca de cualquier otro tutor del mismo estudiante (solo uno responsable). */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;

@@ -5,7 +5,7 @@ import {
   adminEscolarMatriculas,
   adminEscolarPeriodos,
 } from '@/lib/db/schema';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { eq, and, inArray, isNull } from 'drizzle-orm';
 
@@ -17,7 +17,7 @@ import { eq, and, inArray, isNull } from 'drizzle-orm';
  * cuando la escuela necesita registrar cargos separados.
  */
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { periodoId, cursoId, conceptoId, mes, anio, montoCentavos, fechaVencimiento } = await req.json();

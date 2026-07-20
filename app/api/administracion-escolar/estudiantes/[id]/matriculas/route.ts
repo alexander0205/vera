@@ -5,13 +5,14 @@ import {
   adminEscolarPeriodos,
   adminEscolarCursos,
 } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and, desc } from 'drizzle-orm';
 
 /** Historial de matrículas de un estudiante (más reciente primero). */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const { id } = await params;
   const rows = await db
     .select({

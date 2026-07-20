@@ -6,16 +6,16 @@ import {
   adminEscolarPeriodos,
   adminEscolarCursos,
 } from '@/lib/db/schema';
-import { getTeamIdForUser } from '@/lib/db/queries';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { eq, and, desc } from 'drizzle-orm';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
 
 export async function GET(req: NextRequest) {
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
   const periodoId = req.nextUrl.searchParams.get('periodoId');
 
   const where = [eq(adminEscolarMatriculas.teamId, teamId)];
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { estudianteId, periodoId, cursoId, codigoMatricula, fechaInscripcion, estado, notas } = await req.json();

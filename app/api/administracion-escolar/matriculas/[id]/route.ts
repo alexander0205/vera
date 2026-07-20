@@ -5,7 +5,7 @@ import {
   adminEscolarPeriodos,
   adminEscolarCursos,
 } from '@/lib/db/schema';
-import { requirePermission } from '@/lib/auth/api-guard';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { eq, and } from 'drizzle-orm';
 
@@ -18,7 +18,7 @@ const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
  * matrícula ya creada no lo regenera.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission('administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
