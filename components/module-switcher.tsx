@@ -30,7 +30,11 @@ const ICONS: Record<ModuleKey, typeof FileText> = {
   escolar: GraduationCap,
 };
 
-export function ModuleSwitcher({ current }: { current: ModuleKey }) {
+/**
+ * `current` puede ser null en áreas que no son un módulo del catálogo (p. ej.
+ * Administración): ahí el botón solo dice "Ir a…" y no marca ninguno activo.
+ */
+export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
   const { modules } = usePermissions();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
@@ -54,7 +58,7 @@ export function ModuleSwitcher({ current }: { current: ModuleKey }) {
           '&:hover': { bgcolor: 'action.hover' },
         }}
       >
-        {MODULE_LABELS[current]}
+        {current ? MODULE_LABELS[current] : 'Ir a…'}
       </Button>
       <Menu
         anchorEl={anchor}

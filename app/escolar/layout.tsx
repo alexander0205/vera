@@ -1,6 +1,8 @@
 import Box from '@mui/material/Box';
 import { EscolarNavRail } from '@/components/escolar-nav-rail';
+import { ModuleHeader } from '@/components/module-header';
 import { requireModule, requirePermission } from '@/lib/auth/page-guard';
+import { getUser } from '@/lib/db/queries';
 
 export const metadata = { title: 'Zero Administración Escolar' };
 
@@ -18,12 +20,16 @@ export const metadata = { title: 'Zero Administración Escolar' };
 export default async function EscolarLayout({ children }: { children: React.ReactNode }) {
   await requireModule('escolar', '/dashboard');
   await requirePermission('administracion-escolar:ver');
+  const user = await getUser();
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f9fafb', color: '#111827' }}>
       <EscolarNavRail />
-      <Box sx={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
-        {children}
+      <Box sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <ModuleHeader current="escolar" user={user ?? null} />
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          {children}
+        </Box>
       </Box>
     </Box>
   );
