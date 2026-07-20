@@ -469,7 +469,11 @@ export default function EquipoPage() {
       {/* Miembros activos */}
       <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
         <Box sx={{ px: 3, pt: 2.5, pb: 1.5 }}>
+          {/* component="div": Typography por defecto renderiza <p>, y el Chip
+              de MUI es un <div> — anidarlo dentro de <p> es HTML inválido y
+              React lo reporta como error en consola. */}
           <Typography
+            component="div"
             sx={{
               fontSize: '0.875rem',
               fontWeight: 600,

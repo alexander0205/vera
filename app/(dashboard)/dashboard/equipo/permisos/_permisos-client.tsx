@@ -114,7 +114,10 @@ function RolesList({ roles, onSelect, onCreate }: {
   onCreate: () => void;
 }) {
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    // La página se renderiza directo dentro del área de contenido (que no trae
+    // padding propio): sin esto el título quedaba pegado al borde superior y
+    // las tarjetas sangraban hasta el borde derecho.
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: { xs: 2, sm: 3 } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box>
           <Typography variant="h1" sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827' }}>

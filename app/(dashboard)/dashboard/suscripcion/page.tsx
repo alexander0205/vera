@@ -114,7 +114,9 @@ export default async function SuscripcionPage() {
   ];
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 800 }}>
+    // mx auto: con la columna de 800px anclada a la izquierda quedaba medio
+    // viewport vacío en pantallas anchas. Centrada se lee como página de ajustes.
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 800, mx: 'auto' }}>
       <Box sx={{ mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
           Suscripción
