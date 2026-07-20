@@ -22,12 +22,15 @@ import { sql } from 'drizzle-orm';
 const PREFIJO = 'SEEDCXC';
 
 async function limpiar(teamId: number) {
-  await db.execute(sql`
-    DELETE FROM pagos_recibidos WHERE ecf_document_id IN (
-      SELECT id FROM ecf_documents
-      WHERE team_id = ${teamId} AND (encf LIKE ${PREFIJO + '%'} OR codigo LIKE ${PREFIJO + '%'})
-    )
-  `);
+  // Orden importa: todo lo que referencia ecf_documents por FK debe irse antes,
+  // o el DELETE final falla. cobranza_* se agregó en la migración 0082.
+  const docsSeed = sql`
+    SELECT id FROM ecf_documents
+    WHERE team_id = ${teamId} AND (encf LIKE ${PREFIJO + '%'} OR codigo LIKE ${PREFIJO + '%'})
+  `;
+  await db.execute(sql`DELETE FROM cobranza_eventos      WHERE ecf_document_id IN (${docsSeed})`);
+  await db.execute(sql`DELETE FROM cobranza_seguimiento  WHERE ecf_document_id IN (${docsSeed})`);
+  await db.execute(sql`DELETE FROM pagos_recibidos       WHERE ecf_document_id IN (${docsSeed})`);
   const borrados = await db.execute(sql`
     DELETE FROM ecf_documents
     WHERE team_id = ${teamId} AND (encf LIKE ${PREFIJO + '%'} OR codigo LIKE ${PREFIJO + '%'})
@@ -60,7 +63,7 @@ async function limpiar(teamId: number) {
 
   async function doc(o: {
     slug: string; tipoEcf?: string; estado?: string; estadoPago?: string;
-    monto: number; diasVence?: number | null; cliente?: string; rnc?: string;
+    monto: number; diasVence?: number | null; cliente?: string; rnc?: string; email?: string;
     moraOrigenId?: number; ncfModificado?: string; origenDocumentoId?: number;
     codigoModificacion?: number; creditoGeneradoCents?: number;
   }): Promise<number> {
@@ -74,14 +77,17 @@ async function limpiar(teamId: number) {
       INSERT INTO ecf_documents (
         team_id, encf, codigo, tipo_ecf, estado, estado_pago,
         monto_total, total_itbis, fecha_emision, fecha_limite_pago,
-        razon_social_comprador, rnc_comprador, tipo_pago,
+        razon_social_comprador, rnc_comprador, email_comprador, tipo_pago,
         mora_origen_id, ncf_modificado, origen_documento_id,
         codigo_modificacion, credito_generado_cents
       ) VALUES (
         ${teamId}, ${encf}, ${encf}, ${o.tipoEcf ?? '31'},
         ${o.estado ?? 'ACEPTADO'}, ${o.estadoPago ?? 'PENDIENTE'},
         ${o.monto}, 0, now() - interval '60 days', ${fechaLimite ?? null},
-        ${o.cliente ?? '[PRUEBA] Cliente Cartera'}, ${o.rnc ?? '131000000'}, 2,
+        ${o.cliente ?? '[PRUEBA] Cliente Cartera'}, ${o.rnc ?? '131000000'},
+        -- .invalid es un TLD reservado por IANA: nunca resuelve, así que probar
+        -- recordatorios con estos datos no puede alcanzar a nadie real.
+        ${o.email ?? null}, 2,
         ${o.moraOrigenId ?? null}, ${o.ncfModificado ?? null}, ${o.origenDocumentoId ?? null},
         ${o.codigoModificacion ?? null}, ${o.creditoGeneradoCents ?? null}
       ) RETURNING id
@@ -100,9 +106,9 @@ async function limpiar(teamId: number) {
   await doc({ slug: 'ALDIA',    monto: 100_00, diasVence: 10 });
   await doc({ slug: 'HOY',      monto: 200_00, diasVence: 0 });
   await doc({ slug: 'VENC1',    monto: 300_00, diasVence: -1 });    // cubeta 1-30
-  await doc({ slug: 'VENC45',   monto: 400_00, diasVence: -45 });   // cubeta 31-60
+  await doc({ slug: 'VENC45',   monto: 400_00, diasVence: -45, email: 'cartera1@ejemplo.invalid' });   // cubeta 31-60
   await doc({ slug: 'VENC75',   monto: 450_00, diasVence: -75 });   // cubeta 61-90
-  await doc({ slug: 'VENC100',  monto: 500_00, diasVence: -100 });  // cubeta 90+
+  await doc({ slug: 'VENC100',  monto: 500_00, diasVence: -100, email: 'cartera2@ejemplo.invalid' });  // cubeta 90+
   await doc({ slug: 'SINFECHA', monto: 600_00, diasVence: null });
 
   // ── Pago parcial ─────────────────────────────────────────────────────────
@@ -153,7 +159,7 @@ async function limpiar(teamId: number) {
   await pago(pagada, 700_00);
 
   // ── Segundo cliente, para búsqueda y agrupación ──────────────────────────
-  await doc({ slug: 'OTROCLI', monto: 850_00, diasVence: -7, cliente: '[PRUEBA] Ferreteria Zuleta SRL', rnc: '401555777' });
+  await doc({ slug: 'OTROCLI', monto: 850_00, diasVence: -7, cliente: '[PRUEBA] Ferreteria Zuleta SRL', rnc: '401555777', email: 'zuleta@ejemplo.invalid' });
 
   const total = await db.execute(sql`
     SELECT COUNT(*) AS n FROM ecf_documents

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2, PanelRightOpen,
+  X, Wallet, Loader2, Archive, Wallet2, PanelRightOpen, Download,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
@@ -116,6 +116,20 @@ export default function CuentasPorCobrarPage() {
   }, [page, pageSize, busqueda, cubeta, filterValues.tipoDoc, filterValues.estado, filterValues.orden]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Exporta lo que se está viendo: mismos filtros, sin la paginación (el
+  // archivo trae toda la cartera filtrada, no la página).
+  const exportHref = (() => {
+    const sp = new URLSearchParams({
+      ...(busqueda.trim()      && { search:  busqueda.trim() }),
+      ...(filterValues.tipoDoc && { tipoDoc: filterValues.tipoDoc }),
+      ...(filterValues.estado  && { estado:  filterValues.estado }),
+      ...(filterValues.orden   && { orden:   filterValues.orden }),
+      ...(cubeta               && { cubeta }),
+    });
+    const q = sp.toString();
+    return `/api/cuentas-por-cobrar/export${q ? `?${q}` : ''}`;
+  })();
 
   // Deep-link `?pagar=<docId>`: al llegar desde otro módulo (p. ej. un cargo
   // escolar) abre directo el modal de cobro de esa factura. Se pide por id — con
@@ -231,6 +245,14 @@ export default function CuentasPorCobrarPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={exportHref}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
+            title="Descargar en Excel la cartera con los filtros activos"
+          >
+            <Download className="h-4 w-4" />
+            Exportar
+          </a>
           <button
             onClick={() => setHistoricaModal(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"

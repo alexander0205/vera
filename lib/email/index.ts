@@ -324,6 +324,56 @@ export async function sendCajaCierreRechazadoEmail(opts: {
   });
 }
 
+/**
+ * Recordatorio de pago de una cuenta por cobrar.
+ *
+ * Tono neutro a propósito: es un aviso de saldo, no una gestión de cobro
+ * agresiva. Quien decide el tono real es la empresa en el comentario interno,
+ * no este correo.
+ */
+export async function sendRecordatorioCobroEmail(opts: {
+  email:        string;
+  cliente:      string;
+  emisor:       string;
+  documento:    string;
+  saldoCents:   number;
+  fechaLimite:  string | null;
+  diasVencido:  number;
+}) {
+  const safeCliente = escapeHtml(opts.cliente);
+  const safeEmisor  = escapeHtml(opts.emisor);
+  const safeDoc     = escapeHtml(opts.documento);
+  const safeSaldo   = escapeHtml(
+    (opts.saldoCents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 }),
+  );
+  const vencida = opts.diasVencido > 0;
+  const linea = vencida
+    ? `Este documento venció hace ${opts.diasVencido} día${opts.diasVencido !== 1 ? 's' : ''}.`
+    : opts.fechaLimite
+      ? `Su fecha de vencimiento es el ${escapeHtml(opts.fechaLimite)}.`
+      : '';
+
+  await resend.emails.send({
+    from: 'Zero <noreply@zero.com.do>',
+    to: opts.email,
+    subject: `Recordatorio de pago · ${opts.documento}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto;">
+        <h2 style="color:#0f766e;">Recordatorio de pago</h2>
+        <p>Estimado/a ${safeCliente},</p>
+        <p>
+          Le recordamos que el documento <strong>${safeDoc}</strong> tiene un
+          saldo pendiente de <strong>DOP ${safeSaldo}</strong>. ${linea}
+        </p>
+        <p style="color:#6b7280;font-size:14px;">
+          Si ya realizó el pago, por favor ignore este mensaje.
+        </p>
+        <p style="color:#6b7280;font-size:14px;">${safeEmisor}</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendInvoiceEmail(
   email: string,
   encf: string,
