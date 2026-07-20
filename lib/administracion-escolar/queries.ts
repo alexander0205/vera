@@ -104,7 +104,10 @@ export async function listarEstudiantesEnriquecidos(
       ilike(sql`${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos}`, p),
       ilike(adminEscolarEstudiantes.codigo, p),
       exists(db.select({ x: sql`1` }).from(adminEscolarEstudianteTutores)
-        .innerJoin(adminEscolarTutores, eq(adminEscolarTutores.id, adminEscolarEstudianteTutores.tutorId))
+        .innerJoin(adminEscolarTutores, and(
+          eq(adminEscolarTutores.id, adminEscolarEstudianteTutores.tutorId),
+          eq(adminEscolarTutores.teamId, teamId),
+        ))
         .where(and(
           eq(adminEscolarEstudianteTutores.estudianteId, adminEscolarEstudiantes.id),
           eq(adminEscolarEstudianteTutores.teamId, teamId),
@@ -145,8 +148,14 @@ export async function listarEstudiantesEnriquecidos(
       curso: adminEscolarCursos.nombre,
     })
     .from(adminEscolarMatriculas)
-    .leftJoin(adminEscolarPeriodos, eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id))
-    .leftJoin(adminEscolarCursos, eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id))
+    .leftJoin(adminEscolarPeriodos, and(
+      eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id),
+      eq(adminEscolarPeriodos.teamId, teamId),
+    ))
+    .leftJoin(adminEscolarCursos, and(
+      eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id),
+      eq(adminEscolarCursos.teamId, teamId),
+    ))
     .where(and(
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.estado, 'activa'),
@@ -167,7 +176,10 @@ export async function listarEstudiantesEnriquecidos(
       email: adminEscolarTutores.email,
     })
     .from(adminEscolarEstudianteTutores)
-    .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+    .innerJoin(adminEscolarTutores, and(
+      eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id),
+      eq(adminEscolarTutores.teamId, teamId),
+    ))
     .where(and(
       eq(adminEscolarEstudianteTutores.teamId, teamId),
       eq(adminEscolarEstudianteTutores.responsablePago, true),

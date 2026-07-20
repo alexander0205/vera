@@ -30,8 +30,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       notas: adminEscolarMatriculas.notas,
     })
     .from(adminEscolarMatriculas)
-    .leftJoin(adminEscolarPeriodos, eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id))
-    .leftJoin(adminEscolarCursos, eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id))
+    .leftJoin(adminEscolarPeriodos, and(
+      eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id),
+      eq(adminEscolarPeriodos.teamId, teamId),
+    ))
+    .leftJoin(adminEscolarCursos, and(
+      eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id),
+      eq(adminEscolarCursos.teamId, teamId),
+    ))
     .where(and(
       eq(adminEscolarMatriculas.teamId, teamId),
       eq(adminEscolarMatriculas.estudianteId, parseInt(id)),

@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
+import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
 import { eq, and, desc } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
@@ -40,8 +41,14 @@ export async function GET(req: NextRequest) {
       estado: adminEscolarCargos.estado,
     })
     .from(adminEscolarCargos)
-    .leftJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
-    .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .leftJoin(adminEscolarEstudiantes, and(
+      eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id),
+      eq(adminEscolarEstudiantes.teamId, teamId),
+    ))
+    .leftJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, teamId),
+    ))
     .where(and(...where))
     .orderBy(desc(adminEscolarCargos.anio), desc(adminEscolarCargos.mes), desc(adminEscolarCargos.id));
   return NextResponse.json({ cargos: rows });
@@ -62,6 +69,16 @@ export async function POST(req: NextRequest) {
   if (mes != null && (!Number.isInteger(mes) || mes < 1 || mes > 12)) {
     return NextResponse.json({ error: 'mes debe estar entre 1 y 12' }, { status: 400 });
   }
+
+  // Los ids vienen del cliente: sin esto se podría colgar un cargo propio del
+  // estudiante o el concepto de OTRO colegio, y el join del listado terminaría
+  // mostrando su nombre.
+  const ajeno = await validarPertenencia(teamId, {
+    estudiante: estudianteId,
+    matricula:  matriculaId,
+    concepto:   conceptoId,
+  });
+  if (ajeno) return NextResponse.json({ error: ajeno }, { status: 404 });
 
   const [periodo] = await db
     .select({ fechaInicio: adminEscolarPeriodos.fechaInicio, fechaFin: adminEscolarPeriodos.fechaFin })

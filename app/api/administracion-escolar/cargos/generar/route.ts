@@ -7,6 +7,7 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
+import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
 import { eq, and, inArray, isNull } from 'drizzle-orm';
 
 /**
@@ -31,6 +32,11 @@ export async function POST(req: NextRequest) {
   if (mes != null && (!Number.isInteger(mes) || mes < 1 || mes > 12)) {
     return NextResponse.json({ error: 'mes debe estar entre 1 y 12' }, { status: 400 });
   }
+
+  // El concepto viene del cliente. cursoId no hace falta validarlo: solo filtra
+  // matrículas que ya están acotadas al team.
+  const ajeno = await validarPertenencia(teamId, { concepto: conceptoId });
+  if (ajeno) return NextResponse.json({ error: ajeno }, { status: 404 });
 
   const [periodo] = await db
     .select({ fechaInicio: adminEscolarPeriodos.fechaInicio, fechaFin: adminEscolarPeriodos.fechaFin })

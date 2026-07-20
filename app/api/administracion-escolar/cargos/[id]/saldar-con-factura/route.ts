@@ -56,7 +56,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const [responsable] = await tx
         .select({ clientId: adminEscolarTutores.clientId })
         .from(adminEscolarEstudianteTutores)
-        .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+        .innerJoin(adminEscolarTutores, and(
+          eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id),
+          eq(adminEscolarTutores.teamId, teamId),
+        ))
         .where(and(
           eq(adminEscolarEstudianteTutores.teamId, teamId),
           eq(adminEscolarEstudianteTutores.estudianteId, cargo.estudianteId),

@@ -21,6 +21,10 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import {
+  MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS, sanitizeModules,
+  withDependencies, dependentsOf, type ModuleKey,
+} from '@/lib/config/modules';
 
 // ─── Server Action: invitar usuario ──────────────────────────────────────────
 
@@ -161,16 +165,19 @@ async function toggleModulo(formData: FormData) {
   if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
 
   const teamId = parseInt(formData.get('teamId') as string);
-  const modulo = formData.get('modulo') as string;
+  const modulo = formData.get('modulo') as ModuleKey;
   const habilitar = formData.get('habilitar') === '1';
-  if (isNaN(teamId) || !['facturacion', 'pos'].includes(modulo)) return;
+  if (isNaN(teamId) || !MODULES.includes(modulo)) return;
 
   const [t] = await db.select({ mods: teams.modulosHabilitados }).from(teams).where(eq(teams.id, teamId)).limit(1);
   if (!t) return;
-  const current = Array.isArray(t.mods) ? (t.mods as string[]) : [];
+  const current = sanitizeModules(t.mods);
+  // Activar arrastra dependencias (escolar cobra con facturas → necesita
+  // Facturación); desactivar arrastra a los que dependen de él, si no el
+  // módulo dependiente queda encendido pero roto.
   const next = habilitar
-    ? Array.from(new Set([...current, modulo]))
-    : current.filter(m => m !== modulo);
+    ? withDependencies([...current, modulo])
+    : current.filter(m => m !== modulo && !dependentsOf(modulo).includes(m));
 
   // Compat legacy: posHabilitado sigue reflejando el módulo pos hasta retirar
   // su último consumidor.
@@ -394,14 +401,15 @@ export default async function EmpresaDetailPage({
           <ToggleRight style={{ width: 16, height: 16, color: '#9ca3af' }} />
           <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Módulos</Typography>
         </Box>
-        {/* Módulos del producto (facturación / POS) — override manual admin */}
-        {(['facturacion', 'pos'] as const).map(mod => {
+        {/* Módulos del producto — override manual del admin de plataforma.
+            Se recorre el catálogo (MODULES) para que un módulo nuevo aparezca
+            aquí solo: Administración Escolar no se vende por Stripe, así que
+            este toggle es su ÚNICA vía de activación. */}
+        {MODULES.map(mod => {
           const mods = Array.isArray(team.modulosHabilitados) ? (team.modulosHabilitados as string[]) : [];
           const activo = mods.includes(mod);
-          const label = mod === 'facturacion' ? 'Facturación' : 'Punto de Venta';
-          const desc = mod === 'facturacion'
-            ? 'Dashboard de facturas, e-CF, clientes, cotizaciones y reportes (facturacion.zero.com.do).'
-            : 'Terminal de venta, turnos de caja e inventario en piso (pos.zero.com.do).';
+          const label = MODULE_LABELS[mod];
+          const desc = MODULE_DESCRIPTIONS[mod];
           return (
             <Box key={mod} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f3f4f6' }}>
               <Box>

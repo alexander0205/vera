@@ -34,7 +34,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       responsablePago: adminEscolarEstudianteTutores.responsablePago,
     })
     .from(adminEscolarEstudianteTutores)
-    .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+    .innerJoin(adminEscolarTutores, and(
+      eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id),
+      eq(adminEscolarTutores.teamId, teamId),
+    ))
     .leftJoin(clients, eq(adminEscolarTutores.clientId, clients.id))
     .where(and(
       eq(adminEscolarEstudianteTutores.teamId, teamId),

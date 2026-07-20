@@ -39,7 +39,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id),
       eq(pagosRecibidos.teamId, teamId),
     ))
-    .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .leftJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, teamId),
+    ))
     .where(and(
       eq(adminEscolarCargos.teamId, teamId),
       eq(adminEscolarCargos.estudianteId, parseInt(id)),

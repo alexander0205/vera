@@ -36,9 +36,18 @@ export async function GET(req: NextRequest) {
       createdAt: adminEscolarPagos.createdAt,
     })
     .from(adminEscolarPagos)
-    .leftJoin(adminEscolarEstudiantes, eq(adminEscolarPagos.estudianteId, adminEscolarEstudiantes.id))
-    .leftJoin(adminEscolarCargos, eq(adminEscolarPagos.cargoId, adminEscolarCargos.id))
-    .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .leftJoin(adminEscolarEstudiantes, and(
+      eq(adminEscolarPagos.estudianteId, adminEscolarEstudiantes.id),
+      eq(adminEscolarEstudiantes.teamId, teamId),
+    ))
+    .leftJoin(adminEscolarCargos, and(
+      eq(adminEscolarPagos.cargoId, adminEscolarCargos.id),
+      eq(adminEscolarCargos.teamId, teamId),
+    ))
+    .leftJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, teamId),
+    ))
     .where(and(...where))
     .orderBy(desc(adminEscolarPagos.fechaPago), desc(adminEscolarPagos.id));
   return NextResponse.json({ pagos: rows });

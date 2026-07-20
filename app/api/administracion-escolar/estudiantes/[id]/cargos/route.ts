@@ -38,7 +38,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       facturaEstadoPago: ecfDocuments.estadoPago,
     })
     .from(adminEscolarCargos)
-    .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .leftJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, teamId),
+    ))
     .leftJoin(ecfDocuments, eq(adminEscolarCargos.ecfDocumentId, ecfDocuments.id))
     .where(and(
       eq(adminEscolarCargos.teamId, teamId),

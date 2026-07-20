@@ -52,7 +52,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       productTipo:    products.tipo,
     })
     .from(adminEscolarCargos)
-    .leftJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .leftJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, teamId),
+    ))
     .leftJoin(products, eq(adminEscolarConceptosPago.productId, products.id))
     .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, teamId)))
     .limit(1);
@@ -94,7 +97,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       telefono:    clients.telefono,
     })
     .from(adminEscolarEstudianteTutores)
-    .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+    .innerJoin(adminEscolarTutores, and(
+      eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id),
+      eq(adminEscolarTutores.teamId, teamId),
+    ))
     .leftJoin(clients, eq(adminEscolarTutores.clientId, clients.id))
     .where(and(
       eq(adminEscolarEstudianteTutores.estudianteId, row.estudianteId),

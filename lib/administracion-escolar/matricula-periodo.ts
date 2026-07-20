@@ -46,7 +46,10 @@ export async function conflictoMatriculaActivaPorPeriodo({
     fechaInicio: adminEscolarPeriodos.fechaInicio,
     fechaFin: adminEscolarPeriodos.fechaFin,
   }).from(adminEscolarMatriculas)
-    .innerJoin(adminEscolarPeriodos, eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id))
+    .innerJoin(adminEscolarPeriodos, and(
+      eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id),
+      eq(adminEscolarPeriodos.teamId, teamId),
+    ))
     .where(and(...condiciones));
 
   const conflicto = existentes.find((m) => (

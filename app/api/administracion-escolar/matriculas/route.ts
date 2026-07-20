@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
+import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
 import { eq, and, desc } from 'drizzle-orm';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
@@ -37,9 +38,18 @@ export async function GET(req: NextRequest) {
       notas: adminEscolarMatriculas.notas,
     })
     .from(adminEscolarMatriculas)
-    .leftJoin(adminEscolarEstudiantes, eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id))
-    .leftJoin(adminEscolarPeriodos, eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id))
-    .leftJoin(adminEscolarCursos, eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id))
+    .leftJoin(adminEscolarEstudiantes, and(
+      eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id),
+      eq(adminEscolarEstudiantes.teamId, teamId),
+    ))
+    .leftJoin(adminEscolarPeriodos, and(
+      eq(adminEscolarMatriculas.periodoId, adminEscolarPeriodos.id),
+      eq(adminEscolarPeriodos.teamId, teamId),
+    ))
+    .leftJoin(adminEscolarCursos, and(
+      eq(adminEscolarMatriculas.cursoId, adminEscolarCursos.id),
+      eq(adminEscolarCursos.teamId, teamId),
+    ))
     .where(and(...where))
     .orderBy(desc(adminEscolarMatriculas.fechaInscripcion), desc(adminEscolarMatriculas.id));
   return NextResponse.json({ matriculas: rows });
@@ -53,6 +63,15 @@ export async function POST(req: NextRequest) {
   if (!estudianteId || !periodoId || !cursoId) {
     return NextResponse.json({ error: 'estudianteId, periodoId y cursoId son requeridos' }, { status: 400 });
   }
+  // Los tres ids vienen del cliente: hay que confirmar que son de este colegio
+  // antes de crear la matrícula.
+  const ajeno = await validarPertenencia(teamId, {
+    estudiante: estudianteId,
+    periodo:    periodoId,
+    curso:      cursoId,
+  });
+  if (ajeno) return NextResponse.json({ error: ajeno }, { status: 404 });
+
   const estadoNorm = ESTADOS.includes(estado) ? estado : 'activa';
   if (estadoNorm === 'activa') {
     const conflicto = await conflictoMatriculaActivaPorPeriodo({ teamId, estudianteId, periodoId });

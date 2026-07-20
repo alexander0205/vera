@@ -91,7 +91,10 @@ export async function reflejarFacturaRecurrenteEnCargo(args: {
   const [huerfano] = await db
     .select({ id: adminEscolarCargos.id })
     .from(adminEscolarCargos)
-    .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .innerJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, matricula.teamId),
+    ))
     .where(and(
       eq(adminEscolarCargos.matriculaId, matricula.id),
       eq(adminEscolarCargos.mes, mes),
