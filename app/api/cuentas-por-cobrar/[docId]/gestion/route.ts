@@ -20,7 +20,8 @@ import { teamMembers, ecfDocuments } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import {
-  getGestionCuenta, registrarEvento, guardarSeguimiento, cerrarPromesa, CANALES,
+  getGestionCuenta, registrarEvento, guardarSeguimiento, cerrarPromesa,
+  evaluarPromesasVencidas, CANALES,
 } from '@/lib/cobranza/seguimiento';
 
 const ISO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -91,6 +92,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
   const { docId: raw } = await params;
   const ctx = await contexto(raw, 'facturas:ver');
   if ('error' in ctx) return ctx.error;
+
+  // Las promesas vencidas se resuelven aquí, al abrir la cuenta, no por cron.
+  // Es idempotente (solo toca las que siguen en 'pendiente') y son dos UPDATE
+  // indexados por team. Corre ANTES de leer para que el panel muestre el estado
+  // ya evaluado y no el de la visita anterior.
+  //
+  // Compromiso conocido: una promesa que nadie abre nunca se marca. Hoy no
+  // importa porque el estado solo se consume en esta pantalla; el día que haya
+  // un aviso automático de "promesa incumplida" habrá que moverlo a un cron.
+  // No se deja fallar la lectura si la evaluación revienta.
+  try {
+    await evaluarPromesasVencidas(ctx.teamId);
+  } catch (e) {
+    console.error('[gestion] no se pudieron evaluar las promesas vencidas', e);
+  }
 
   return NextResponse.json(await getGestionCuenta(ctx.teamId, ctx.docId));
 }

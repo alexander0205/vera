@@ -22,6 +22,35 @@
 - **Protocolo de DB:** avisar host + nombre de DB y **esperar confirmación
   explícita** antes de correr cualquier script contra Neon, incluso de solo lectura.
 
+### Topología de la rama — leer antes de planear el merge
+
+Esta rama **no sale de `main`, sale de `feature/administracion-escolar`**, y
+escolar **todavía no está en `main`**. Los números:
+
+```
+HEAD vs main:      142 commits
+  de escolar:      124
+  de contabilidad:  18
+```
+
+**Consecuencia:** hoy no se puede subir contabilidad a `main` sin arrastrar los
+124 commits de escolar. A nivel de git están pegadas.
+
+No era la intención de Darian — pidió que contabilidad se desarrollara *pensando
+en que* escolar estuviera, no *con escolar dentro*. Una sesión anterior lo tomó
+como comodidad y lo documentó como decisión sin confirmarlo.
+
+**El acoplamiento de código es casi cero:** de los 33 archivos que toca
+contabilidad, el único que roza escolar es `lib/administracion-escolar/origen-factura.ts`,
+creado por contabilidad misma, y ya degrada solo si las tablas no existen (`42P01`).
+
+**Darian decidió (2026-07-20): opción A.** La rama se queda como está; escolar
+entra a `main` primero y contabilidad va detrás. **No intentar extraer los 18
+commits de contabilidad a una rama limpia sobre `main`** — se descartó.
+
+Consecuencia a tener presente: **contabilidad no puede desplegarse antes que
+escolar.** Si el merge de escolar se atrasa mucho, esto se reabre.
+
 ### Decisiones ya tomadas (no reabrir sin preguntar)
 
 1. **Colisión de nombre "Contabilidad"** → *convivir*. El módulo fiscal que llegó
@@ -46,8 +75,16 @@
 | 2 | Antigüedad de saldos (1-30/31-60/61-90/90+), "por vencer", métricas | ✅ Hecho | `c95bb4b` |
 | 3 | Panel lateral de detalle + timeline con datos ya existentes | ✅ Hecho | `f2a151c` |
 | 4 | Seguimiento de cobranza + promesas de pago + notas internas → **migración 0082** | ✅ Hecho (migración aplicada) | `8f7ec81` |
-| 5 | Recordatorios individual/masivo + exportar cartera | ✅ Hecho | `c35d354` |
+| 5 | Recordatorios individual/masivo + exportar cartera | ✅ Hecho (UI cableada 2026-07-20) | `c35d354` + pendiente commit |
 | 6 | Validar casos reales + trazabilidad | ✅ Hecho | `f008345` |
+
+> ⚠️ **Lección: "hecho" significa que el usuario puede usarlo.** Las etapas 4 y 5
+> se dieron por terminadas con el backend escrito y sin conectar. El barrido del
+> 2026-07-20 encontró **tres piezas huérfanas**: el endpoint de recordatorios
+> (sin ninguna UI — la funcionalidad era inalcanzable desde la aplicación),
+> `evaluarPromesasVencidas` (sin caller: las promesas vencidas no se marcaban
+> nunca) y `getMetricasPromesas` (sin caller). Las tres quedaron conectadas.
+> **Antes de marcar una etapa, verificar que haya un camino desde la UI.**
 
 **El Paso 1 del plan está completo.** Lo siguiente es el Paso 2 (catálogo de
 cuentas contables), que es donde arranca el motor contable de verdad.
@@ -128,14 +165,20 @@ tarjetas clicables que filtran la lista.
   siga calculando sobre `cartera` completa: al elegir una cubeta las demás
   conservan su monto. Los stats de arriba sí reflejan la cubeta activa.
 
-> ⚠️ **`getAgingCxC` (lib/reportes/queries.ts) no resta las notas de crédito.**
-> Usa además otra definición de cobrable: solo e-CF aceptados, y cuenta las ND
-> de mora como filas propias en vez de agruparlas en su factura padre.
-> Medido en el team 9: **RD$78,295 en el reporte de antigüedad contra RD$77,245
-> en cuentas por cobrar** — RD$1,050 de diferencia, que corresponde exacto a las
-> tres NC sembradas (300 + 250 + 500) que el reporte no descuenta.
-> Son dos pantallas que le dan números distintos al mismo usuario para lo mismo.
-> **Pendiente de decidir con Alex si se corrige el reporte.**
+> ✅ **RESUELTO (2026-07-20).** `getAgingCxC` tenía consulta propia: no restaba
+> las notas de crédito, usaba otra definición de cobrable (solo e-CF aceptados) y
+> contaba las ND de mora como filas propias. Medido antes: **RD$78,295 contra
+> RD$77,245** en cuentas por cobrar.
+>
+> **Corrección del dato viejo:** este doc afirmaba que los RD$1,050 correspondían
+> "exacto a las tres NC sembradas (300+250+500)". **Es falso.** Cotejado tras el
+> arreglo, las NC aplicadas suman **RD$550** — dos de las tres, porque la tercera
+> es una variante sin efecto monetario. El resto de la brecha venía de las otras
+> dos causas. La coincidencia con 1,050 era casualidad.
+>
+> Ahora `getAgingCxC` delega en `getCuentasPorCobrar`. Verificado en el team 9:
+> ambas dan **RD$77,245 y 67 filas**, diferencia RD$0.00, y las cubetas suman al
+> total.
 
 ### Etapas 3-6 — `f2a151c`, `8f7ec81`, `c35d354`, `f008345`
 
@@ -154,12 +197,11 @@ tarjetas clicables que filtran la lista.
 - **Etapa 6** — Origen escolar en el detalle (consulta del lado escolar, no de
   cobranza) y `scripts/validar-cartera.ts` con 37 comprobaciones.
 
-> ⚠️ **La rama de Neon de contabilidad NO tiene las tablas `admin_escolar_*`.**
-> Se creó desde un estado anterior a las migraciones escolares 0074-0081, aunque
-> el código de esta rama sí las incluye. **El módulo de Administración Escolar
-> está inoperativo en esta base.** El origen escolar del panel captura el error
-> 42P01 y degrada a vacío, pero cualquier pantalla escolar dará error hasta que
-> se apliquen esas migraciones aquí.
+> ✅ **RESUELTO (2026-07-20).** La branch de Neon de contabilidad se creó desde un
+> estado anterior a las migraciones escolares 0074-0081, así que no tenía ninguna
+> tabla `admin_escolar_*` y el módulo escolar estaba inoperativo en esa base.
+> Aplicadas las 8 en orden con los `scripts/apply-migration-00XX.ts` versionados;
+> las 10 tablas existen y las 2 de cobranza (0082) quedaron intactas.
 
 > ⚠️ **El envío real de recordatorios nunca se probó.** Llamaría a Resend y
 > saldría hacia afuera. Solo se validó la previsualización y las guardas.
@@ -260,39 +302,56 @@ texto y traza de red.
 
 ### A. Bloquean o esperan a alguien
 
-- [ ] **Respuesta de Alex sobre el hotfix de fecha UTC.** ¿Se despliega aparte a
-      `main` o se queda dentro de esta rama? Ya está mergeado aquí; la rama
-      `hotfix/vencimiento-fecha-utc` sigue intacta sobre `main` por si lo quiere
-      suelto (3 commits, listo para push).
-- [ ] **Nada se ha pusheado.** Todo el trabajo es local. Decidir cuándo subir.
-- [ ] **Decidir si se corrige `getAgingCxC`.** No resta las notas de crédito, así
-      que el reporte de antigüedad y la pantalla de cobros dan cifras distintas
-      (medido: RD$78,295 contra RD$77,245 en el team 9). Afecta también a
-      `/api/reportes/export?report=cuentas-por-cobrar`. Toca un reporte que ya
-      está en producción — no tocarlo sin visto bueno.
+- [x] **Hotfix de fecha UTC** → **Darian decidió (2026-07-20): se queda dentro de
+      esta rama, no se despliega aparte.** La rama `hotfix/vencimiento-fecha-utc`
+      queda como respaldo pero no se sube.
+- [ ] **Nada se ha pusheado.** **Darian decidió: se pushea cuando toda la fase 1
+      esté sólida**, no antes.
+- [x] **`getAgingCxC` corregido** (2026-07-20). Delega en `getCuentasPorCobrar`,
+      así que hay una sola definición de saldo y de cobrable. El detalle y el
+      impacto (RD$78,295 → RD$77,245 en el team 9) quedaron documentados en
+      `docs/notas-pr-contabilidad-paso1.md` para que Alex lo vea al revisar el PR.
+      Si más adelante lo quiere distinto, revertir es aislado: una sola función.
 
 ### B. Entorno
 
-- [ ] **Aplicar las migraciones escolares 0074-0081 a la branch de Neon de
-      contabilidad.** Hoy no hay ninguna tabla `admin_escolar_*` y el módulo
-      escolar está inoperativo en esta base.
-- [ ] **Confirmar contra la base de producción si `fecha_limite_pago` está
-      realmente vacía.** De eso depende si el bug de mora llegó a cobrar de más
-      a algún cliente. En la base de dev solo 1 documento de 100+ tiene correo y
-      casi ninguno tiene fecha límite, pero eso no dice nada de producción.
+- [x] **Migraciones escolares 0074-0081 aplicadas** a la branch de Neon de
+      contabilidad (2026-07-20, con confirmación de Darian). Las 10 tablas
+      `admin_escolar_*` existen; las 2 de cobranza intactas. Base y código
+      alineados.
+- [x] **`fecha_limite_pago` en producción** → Darian no tiene acceso a esa parte.
+      Movido a las notas del PR como consideración para Alex, con la consulta de
+      solo lectura ya escrita.
 
 ### C. Verificación que falta
 
-- [ ] **Probar un envío real de recordatorio** contra un correo propio antes de
-      soltarlo a clientes. La previsualización y las guardas están verificadas;
-      el envío real nunca se ejecutó (llamaría a Resend y saldría hacia afuera).
-- [ ] **Validar con el usuario el compromiso de "agrupar por cliente"**: pide 500
-      filas y oculta la paginación, con aviso si la cartera excede eso.
+- [x] **Envío real de recordatorio probado** (2026-07-20, con confirmación
+      explícita de Darian). Se puso su correo en `SEEDCXC-VENC45`, se envió a ese
+      único destinatario y se revirtió el dato después. Resultado: 1 enviado, 0
+      fallidos; Resend aceptó; el evento `contacto`/`correo` quedó en el historial
+      de gestión con usuario y fecha RD. **El correo de Darian ya NO está en la
+      base** (revertido a `cartera1@ejemplo.invalid`).
+- [x] **"Agrupar por cliente" validado con el usuario** (2026-07-20): 500 alcanza
+      para el volumen actual. El aviso de truncado ya existe y muestra cifras
+      exactas. Sin trabajo pendiente.
 
-### D. Mejoras opcionales
+### D. Piezas huérfanas encontradas en el barrido (2026-07-20)
 
-- [ ] Enganchar `evaluarPromesasVencidas` a un cron, si se quiere que las
-      promesas se marquen solas sin que alguien abra la cuenta.
+- [x] **UI de recordatorios construida.** `components/cuentas-por-cobrar/RecordatoriosModal.tsx`
+      + acción por fila (menú de 3 puntos) y acción masiva sobre la selección.
+      Refleja el contrato de dos pasos: previsualiza, y solo envía tras
+      confirmación explícita. El tope de 50 se corta en la UI con aviso en vez de
+      dejar que la API rechace el lote entero.
+- [x] **`evaluarPromesasVencidas` enganchado** — **sin cron**, al GET de
+      `/api/cuentas-por-cobrar/[docId]/gestion`. Verificado en vivo: una promesa
+      con fecha pasada pasó sola de `pendiente` a `incumplida`. El compromiso (una
+      promesa que nadie abre no se marca) y cuándo haría falta el cron están en
+      las notas del PR.
+- [x] **`getMetricasPromesas` conectada.** Se devuelve en `/api/cuentas-por-cobrar`
+      y se muestra como tira sobre la antigüedad. **No sigue el filtro activo** —
+      es del team completo, porque una promesa incumplida no deja de serlo porque
+      el usuario mire otra cubeta. Solo aparece si hay promesas: un team que nunca
+      registró una no gana nada con una tarjeta en cero permanente.
 
 ### E. Entregable pendiente — briefing para Alex
 

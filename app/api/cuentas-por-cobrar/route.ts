@@ -21,6 +21,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { getMetricasPromesas } from '@/lib/cobranza/seguimiento';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -56,17 +57,23 @@ export async function GET(req: NextRequest) {
   const cubetaRaw  = sp.get('cubeta');
   const ORDENES: OrdenCartera[] = ['reciente', 'antiguo', 'monto', 'vencimiento'];
 
-  const data = await getCuentasPorCobrar(teamId, {
-    clientId: clientId && !isNaN(clientId) ? clientId : undefined,
-    soloVencidas,
-    search:  sp.get('search') ?? undefined,
-    tipoDoc: tipoDocRaw === 'factura' || tipoDocRaw === 'nota-debito' ? tipoDocRaw : undefined,
-    estado:  estadoRaw === 'vencidas' || estadoRaw === 'al-dia' ? estadoRaw : undefined,
-    orden:   ORDENES.includes(ordenRaw as OrdenCartera) ? (ordenRaw as OrdenCartera) : undefined,
-    cubeta:  CUBETAS_ANTIGUEDAD.includes(cubetaRaw as CubetaAntiguedad) ? (cubetaRaw as CubetaAntiguedad) : undefined,
-    limit:   Number.isFinite(limitRaw)  ? limitRaw  : undefined,
-    offset:  Number.isFinite(offsetRaw) ? offsetRaw : undefined,
-  });
+  // Las métricas de promesas son del team completo, no de la cartera filtrada:
+  // "cuánto me prometieron y no llegó" no cambia porque el usuario filtre por
+  // cubeta. Por eso van aparte del CTE y no dependen de `opts`.
+  const [data, promesas] = await Promise.all([
+    getCuentasPorCobrar(teamId, {
+      clientId: clientId && !isNaN(clientId) ? clientId : undefined,
+      soloVencidas,
+      search:  sp.get('search') ?? undefined,
+      tipoDoc: tipoDocRaw === 'factura' || tipoDocRaw === 'nota-debito' ? tipoDocRaw : undefined,
+      estado:  estadoRaw === 'vencidas' || estadoRaw === 'al-dia' ? estadoRaw : undefined,
+      orden:   ORDENES.includes(ordenRaw as OrdenCartera) ? (ordenRaw as OrdenCartera) : undefined,
+      cubeta:  CUBETAS_ANTIGUEDAD.includes(cubetaRaw as CubetaAntiguedad) ? (cubetaRaw as CubetaAntiguedad) : undefined,
+      limit:   Number.isFinite(limitRaw)  ? limitRaw  : undefined,
+      offset:  Number.isFinite(offsetRaw) ? offsetRaw : undefined,
+    }),
+    getMetricasPromesas(teamId),
+  ]);
 
-  return NextResponse.json(data);
+  return NextResponse.json({ ...data, promesas });
 }
