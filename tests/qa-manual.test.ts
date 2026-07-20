@@ -285,7 +285,18 @@ test('F1 · Administración: landing y secciones del negocio', async ({ page }) 
     await expect(page.getByText(texto).first()).toBeVisible({ timeout: 20_000 });
     expect(page.url()).toContain('/cuenta');
   }
-  await shot(page, 'F1-administracion-usuarios');
+});
+
+test('F2 · Usuarios: muestra a qué módulos entra cada quien', async ({ page }) => {
+  await login(page, DUENO);
+  await page.goto(`${BASE}/cuenta/usuarios`);
+
+  // Esperar a que la lista de miembros esté pintada (no el spinner)
+  await expect(page.getByText(DUENO).first()).toBeVisible({ timeout: 20_000 });
+  // El dueño entra a todo → se listan sus módulos
+  await expect(page.getByText('Acceso a:').first()).toBeVisible();
+  await expect(page.getByText('Facturación').first()).toBeVisible();
+  await shot(page, 'F2-usuarios-modulos');
 });
 
 test('E3 · sin errores JS en las pantallas clave', async ({ page }) => {

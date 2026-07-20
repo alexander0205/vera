@@ -563,6 +563,44 @@ export default function EquipoPage() {
                   <Typography component="p" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
                     Miembro desde {formatFecha(m.joinedAt)}
                   </Typography>
+
+                  {/* Módulos a los que entra este usuario (según su rol). El
+                      owner siempre entra a todo. Deja ver de un vistazo quién
+                      usa Facturación, quién el POS o ambos. */}
+                  {(() => {
+                    const mods = isOwner
+                      ? { facturacion: true, pos: true }
+                      : modulosDeRol(m.role);
+                    if (!mods) return null;
+                    const activos = [
+                      mods.facturacion && 'Facturación',
+                      mods.pos && 'Punto de Venta',
+                    ].filter(Boolean) as string[];
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
+                        <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>
+                          Acceso a:
+                        </Typography>
+                        {activos.length === 0 ? (
+                          <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#b45309' }}>
+                            ningún módulo
+                          </Typography>
+                        ) : activos.map(nombre => (
+                          <Box
+                            key={nombre}
+                            component="span"
+                            sx={{
+                              fontSize: '0.6875rem', fontWeight: 600, px: 0.875, py: '2px',
+                              borderRadius: '6px', bgcolor: '#f0fdfa', color: '#0f766e',
+                              border: '1px solid #99f6e4',
+                            }}
+                          >
+                            {nombre}
+                          </Box>
+                        ))}
+                      </Box>
+                    );
+                  })()}
                 </Box>
 
                 {/* Acciones */}

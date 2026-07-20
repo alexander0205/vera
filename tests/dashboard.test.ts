@@ -23,14 +23,16 @@ test('dashboard home carga con stats', async ({ page }) => {
   await login(page);
   await expect(page).toHaveURL(/dashboard/);
 
-  // Stats cards actuales (app/(dashboard)/dashboard/page.tsx)
-  await expect(page.getByText('Ingresos del mes')).toBeVisible();
-  await expect(page.getByText('Total histórico')).toBeVisible();
-  // exact:true — sin esto matchea el link oculto "Secuencias NCF" del sidebar
-  await expect(page.getByText('Secuencias', { exact: true }).first()).toBeVisible();
+  // Stats cards actuales (app/(dashboard)/dashboard/page.tsx).
+  // Scope a <main>: el rail lateral tiene labels con el mismo texto ocultos
+  // mientras está colapsado, y sin acotar el locator los matchea a ellos.
+  const contenido = page.getByRole('main');
+  await expect(contenido.getByText('Ingresos del mes')).toBeVisible();
+  await expect(contenido.getByText('Total histórico')).toBeVisible();
+  await expect(contenido.getByText('Secuencias', { exact: true }).first()).toBeVisible();
 
   // Botón Nueva Factura
-  await expect(page.getByRole('link', { name: /Nueva Factura/i }).first()).toBeVisible();
+  await expect(contenido.getByRole('link', { name: /Nueva Factura/i }).first()).toBeVisible();
   console.log('✓ Dashboard home con stats carga correctamente');
 });
 
