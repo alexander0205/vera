@@ -11,13 +11,14 @@ export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
 
-const ESTADO_CLS: Record<string, string> = {
-  ACEPTADO:             'bg-emerald-50 text-emerald-700 border-emerald-200',
-  ACEPTADO_CONDICIONAL: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  EN_PROCESO:           'bg-blue-50 text-blue-700 border-blue-200',
-  RECHAZADO:            'bg-red-50 text-red-700 border-red-200',
-  ANULADO:              'bg-gray-100 text-gray-600 border-gray-200',
-  BORRADOR:             'bg-amber-50 text-amber-700 border-amber-200',
+/** Etiqueta y color en lenguaje de contabilidad (no el estado técnico). */
+const ESTADO_UI: Record<string, { label: string; cls: string }> = {
+  ACEPTADO:             { label: 'Válido',              cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  ACEPTADO_CONDICIONAL: { label: 'Válido (observado)',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  EN_PROCESO:           { label: 'Esperando DGII',      cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  RECHAZADO:            { label: 'Rechazado',           cls: 'bg-red-50 text-red-700 border-red-200' },
+  ANULADO:              { label: 'Anulado',             cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  BORRADOR:             { label: 'Apartado',            cls: 'bg-amber-50 text-amber-700 border-amber-200' },
 };
 
 function dop(cents: number) {
@@ -171,8 +172,8 @@ export default async function SecuenciasPage({
                   <td className="px-4 py-3 font-mono text-xs text-gray-900 whitespace-nowrap">{f.encf}</td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">e{f.tipoEcf}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border ${ESTADO_CLS[f.estado] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                      {f.estado === 'BORRADOR' ? 'Reservado' : f.estado.replace('_', ' ').toLowerCase()}
+                    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border ${ESTADO_UI[f.estado]?.cls ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                      {ESTADO_UI[f.estado]?.label ?? f.estado}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fecha(f.fechaEmision)}</td>

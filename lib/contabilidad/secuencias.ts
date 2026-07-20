@@ -19,41 +19,14 @@ import { emision, type EmisionResponseDto } from '@/lib/ecf-api/client';
 import { getTeamProfile } from '@/lib/db/queries';
 
 // ─── Taxonomía de estados ────────────────────────────────────────────────────
-
-/**
- * Estado efectivo de un número de secuencia. Los cinco primeros vienen del
- * documento local; el resto se deducen al cruzar con el proveedor.
- */
-export type EstadoNcf =
-  | 'ACEPTADO'              // la DGII lo aceptó
-  | 'ACEPTADO_CONDICIONAL'  // aceptado con observaciones
-  | 'EN_PROCESO'            // enviado, esperando veredicto
-  | 'RECHAZADO'             // la DGII lo rechazó
-  | 'ANULADO'               // anulado (va en el 608)
-  | 'RESERVADO'             // e-NCF tomado, factura aún en borrador
-  | 'FALLIDO'               // se intentó, NUNCA llegó a la DGII
-  | 'NO_GENERADO'           // número consumido, sin rastro en ninguna fuente
-  | 'EN_DGII_SIN_REGISTRO'  // ⚠️ existe en la DGII pero no en este sistema
-  | 'SIN_USAR';             // número aún no consumido
-
-export const ESTADO_NCF_META: Record<EstadoNcf, { label: string; tone: 'ok' | 'warn' | 'error' | 'muted'; ayuda: string }> = {
-  ACEPTADO:             { label: 'Aceptado',            tone: 'ok',    ayuda: 'La DGII lo recibió y aceptó. Comprobante fiscal válido.' },
-  ACEPTADO_CONDICIONAL: { label: 'Aceptado condicional', tone: 'ok',   ayuda: 'Aceptado por la DGII con observaciones. Es válido.' },
-  EN_PROCESO:           { label: 'En proceso',          tone: 'warn',  ayuda: 'Enviado a la DGII, esperando veredicto final.' },
-  RECHAZADO:            { label: 'Rechazado',           tone: 'error', ayuda: 'La DGII lo rechazó. No es válido; hay que emitir otro.' },
-  ANULADO:              { label: 'Anulado',             tone: 'muted', ayuda: 'Comprobante anulado. Se reporta en el formato 608.' },
-  RESERVADO:            { label: 'Reservado',           tone: 'warn',  ayuda: 'Número tomado para una factura aún en borrador. No se ha enviado.' },
-  FALLIDO:              { label: 'Fallido',             tone: 'error', ayuda: 'Se intentó emitir pero NUNCA llegó a la DGII. El número quedó sin usar fiscalmente.' },
-  NO_GENERADO:          { label: 'No generado',         tone: 'error', ayuda: 'El número se consumió de la secuencia pero no dejó rastro. Suele ser un error de validación antes de enviar.' },
-  EN_DGII_SIN_REGISTRO: { label: 'En DGII sin registro', tone: 'error', ayuda: '⚠️ La DGII tiene este comprobante pero el sistema no. Requiere revisión.' },
-  SIN_USAR:             { label: 'Sin usar',            tone: 'muted', ayuda: 'Número disponible, todavía no se ha consumido.' },
-};
-
-/** Estados que representan un problema — alimentan el filtro "solo errores". */
-export const ESTADOS_ERROR: EstadoNcf[] = ['RECHAZADO', 'FALLIDO', 'NO_GENERADO', 'EN_DGII_SIN_REGISTRO'];
-
-/** Estados con valor fiscal (llegaron a la DGII y cuentan). */
-export const ESTADOS_FISCALES: EstadoNcf[] = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'];
+// Vive en ./estados (sin imports de servidor) para que la puedan consumir tanto
+// esta capa como los componentes de cliente.
+export {
+  ESTADO_NCF_META, VEREDICTO_META, ESTADOS_ERROR, ESTADOS_FISCALES,
+} from './estados';
+export type { EstadoNcf, Veredicto, EstadoMeta } from './estados';
+import { ESTADOS_ERROR, ESTADOS_FISCALES } from './estados';
+import type { EstadoNcf } from './estados';
 
 // ─── Helpers de formato e-NCF ────────────────────────────────────────────────
 
