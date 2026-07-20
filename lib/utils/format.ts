@@ -5,6 +5,16 @@
 const TZ_RD = 'America/Santo_Domingo';
 
 /**
+ * Fecha calendario de un instante en República Dominicana, como `YYYY-MM-DD`.
+ *
+ * `en-CA` produce el formato ISO `YYYY-MM-DD` de forma nativa. Recibe el
+ * instante por parámetro para poder fijarlo en las pruebas sin tocar el reloj.
+ */
+export function fechaRD(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: TZ_RD });
+}
+
+/**
  * Fecha calendario de HOY en República Dominicana, como `YYYY-MM-DD`.
  *
  * Único origen de "hoy" para vencimientos y mora. No usar
@@ -12,28 +22,31 @@ const TZ_RD = 'America/Santo_Domingo';
  * hora RD ya avanzó al día siguiente y una factura que vence hoy se marcaba
  * vencida esa misma noche) ni `new Date()` a secas en servidor (el proceso de
  * producción corre en UTC, mismo desfase).
- *
- * `en-CA` produce el formato ISO `YYYY-MM-DD` de forma nativa.
  */
 export function hoyRD(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: TZ_RD });
+  return fechaRD(new Date());
 }
 
 /**
  * Días vencidos desde una fecha límite hasta hoy. 0 si futuro o nulo.
  * Compara fechas calendario RD, así el corte del día es medianoche en RD y no
  * en UTC (ver `hoyRD`).
+ *
+ * `hoy` es inyectable para las pruebas; en producción siempre se omite.
  */
-export function diasVencido(fechaLimite: string | null | undefined): number {
+export function diasVencido(
+  fechaLimite: string | null | undefined,
+  hoy: string = hoyRD(),
+): number {
   if (!fechaLimite) return 0;
   // Ambas fechas se parsean como UTC-medianoche: el desfase se cancela en la
   // resta y el resultado es la diferencia real en días calendario.
-  const [hy, hm, hd] = hoyRD().split('-').map(Number);
+  const [hy, hm, hd] = hoy.split('-').map(Number);
   const [y, m, d] = fechaLimite.split('T')[0].split('-').map(Number);
   if (!y || !m || !d) return 0;
-  const hoy    = Date.UTC(hy, hm - 1, hd);
-  const limite = Date.UTC(y, m - 1, d);
-  const diff = Math.floor((hoy - limite) / 86400000);
+  const hoyMs    = Date.UTC(hy, hm - 1, hd);
+  const limiteMs = Date.UTC(y, m - 1, d);
+  const diff = Math.floor((hoyMs - limiteMs) / 86400000);
   return diff > 0 ? diff : 0;
 }
 
