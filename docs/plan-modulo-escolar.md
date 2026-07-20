@@ -60,7 +60,7 @@ _Descartado:_ Dropear tabla y ruta en el mismo merge. Descartada hasta comprobar
 
 Nada la referencia (schema.ts:1490 lo admite: 'aún no ligado a matrícula'). Es una tabla y dos rutas CRUD sin consumidor. Borrarla obliga a tocar la migración base de Darian; dejarla visible vende una funcionalidad que no existe.
 
-_Descartado:_ Borrarla del schema y de 0075_administracion_escolar_tablas.sql. Descartada: rompe la idempotencia de la migración de Darian y hay que preguntarle si tiene la fase 2 a medias.
+_Descartado:_ Borrarla del schema y de 0079_administracion_escolar_tablas.sql. Descartada: rompe la idempotencia de la migración de Darian y hay que preguntarle si tiene la fase 2 a medias.
 
 ## Hallazgos que bloquean el merge
 
@@ -167,7 +167,7 @@ _Descartado:_ Borrarla del schema y de 0075_administracion_escolar_tablas.sql. D
   - _Arreglo:_ Añadir eq(adminEscolarConceptosPago.teamId, teamId) y eq(products.teamId, teamId) en las condiciones ON de los leftJoin de las líneas 53-54. Se vuelve redundante una vez arreglado el nº1, pero es la defensa en profundidad correcta y cuesta dos líneas.
 
 - **[permisos]** `/tmp/vera-escolar/lib/config/roles.ts`
-  - No existe gate de módulo. Ningún endpoint escolar comprueba teams.modulosHabilitados ni equivalente — de hecho ese concepto no existe en esta rama: no hay permiso 'modulo:administracion-escolar' ni helper requireModule. El único gate es 'administracion-escolar:ver' en el layout de páginas. Agravante: la migración /tmp/vera-escolar/lib/db/migrations/0070_administracion_escolar_permisos.sql reparte los cuatro permisos escolares a TODOS los teams existentes mediante CROSS JOIN sobre team_roles, sin distinguir colegios de empresas normales; y lib/config/roles.ts:128,149,169,189 hace lo mismo para los teams nuevos vía seedSystemRoles. Es decir, toda empresa del sistema — incluidas las que jamás contratarán el módulo escolar — nace con permiso para consumir sus 25 endpoints.
+  - No existe gate de módulo. Ningún endpoint escolar comprueba teams.modulosHabilitados ni equivalente — de hecho ese concepto no existe en esta rama: no hay permiso 'modulo:administracion-escolar' ni helper requireModule. El único gate es 'administracion-escolar:ver' en el layout de páginas. Agravante: la migración /tmp/vera-escolar/lib/db/migrations/0074_administracion_escolar_permisos.sql reparte los cuatro permisos escolares a TODOS los teams existentes mediante CROSS JOIN sobre team_roles, sin distinguir colegios de empresas normales; y lib/config/roles.ts:128,149,169,189 hace lo mismo para los teams nuevos vía seedSystemRoles. Es decir, toda empresa del sistema — incluidas las que jamás contratarán el módulo escolar — nace con permiso para consumir sus 25 endpoints.
   - _Arreglo:_ Parte obligatoria del port: (a) migración nueva que añada 'escolar' como valor válido de teams.modulos_habilitados y otorgue 'modulo:escolar' solo a los teams que corresponda, siguiendo el estilo del INSERT ... ON CONFLICT DO NOTHING de 0071_modulos.sql de la rama destino; (b) aplicar requireModule('escolar') a las 25 rutas, no solo al layout; (c) NO repartir 'administracion-escolar:*' por CROSS JOIN a todos los teams — condicionarlo a los que tengan el módulo activo.
 
 - **[correctitud]** `/tmp/vera-escolar/app/api/administracion-escolar/estudiantes/[id]/route.ts`
@@ -291,13 +291,13 @@ _Descartado:_ Borrarla del schema y de 0075_administracion_escolar_tablas.sql. D
 **Pasos:**
 
 - Renombrar preservando el orden relativo (obligatorio: 0075 dropea un índice creado por 0071 y 0077 referencia su tabla): permisos→0074, tablas→0075, integracion_facturas→0076, tutor_imagen→0077, estudiante_sexo→0078, cargos_mismo_mes→0079, periodos_unicos→0080, facturacion_recurrente→0081. Los 8 son idempotentes (IF NOT EXISTS / NOT EXISTS) y ninguno se referencia por nombre desde código, así que renombrar es seguro.
-- Editar 0074_administracion_escolar_permisos.sql: hoy reparte los 4 permisos a TODOS los teams por CROSS JOIN. Condicionar el INSERT a los teams cuyo modulos_habilitados contenga 'escolar', igual que 0071_modulos.sql condiciona por tr.key.
+- Editar 0078_administracion_escolar_permisos.sql: hoy reparte los 4 permisos a TODOS los teams por CROSS JOIN. Condicionar el INSERT a los teams cuyo modulos_habilitados contenga 'escolar', igual que 0071_modulos.sql condiciona por tr.key.
 - Crear lib/db/migrations/0082_escolar_modulo.sql en el estilo de 0071_modulos.sql: (a) comentario de cabecera documentando que 'escolar' es valor válido de teams.modulos_habilitados y que implica 'facturacion'; (b) INSERT ... SELECT ... ON CONFLICT DO NOTHING de 'modulo:escolar' para los roles admin/user de los teams escolares; (c) UPDATE explícito y nominal de modulos_habilitados para los tenants que son colegios — NO un UPDATE masivo.
 - Crear lib/db/migrations/0083_escolar_integridad.sql con los constraints que faltan (ver fase 6): unique parcial de cargos, índice+unique de dependiente_id, CHECKs de montos y mes, y los UNIQUE (team_id, id) + FKs compuestas de las tablas padre.
 - Alinear lib/db/schema.ts con el SQL en los 3 índices en drift, o un pnpm db:generate los borrará: admin_escolar_matriculas_activa_uniq (unique parcial WHERE estado='activa', ausente en :1578-1583), admin_escolar_periodos_team_nombre_uniq (ausente en :1471-1473), y admin_escolar_matriculas_factura_recurrente_uniq (declarado NO parcial en :1582 pero creado PARCIAL en el SQL).
 - Actualizar la referencia obsoleta de docs/plan-optimizacion-db.md:14 ('última: 0069_reportes_rollups.sql').
 
-**Archivos:** `lib/db/migrations/0074_administracion_escolar_permisos.sql`, `lib/db/migrations/0075_administracion_escolar_tablas.sql`, `lib/db/migrations/0082_escolar_modulo.sql`, `lib/db/migrations/0083_escolar_integridad.sql`, `lib/db/schema.ts`, `docs/plan-optimizacion-db.md`
+**Archivos:** `lib/db/migrations/0078_administracion_escolar_permisos.sql`, `lib/db/migrations/0079_administracion_escolar_tablas.sql`, `lib/db/migrations/0082_escolar_modulo.sql`, `lib/db/migrations/0083_escolar_integridad.sql`, `lib/db/schema.ts`, `docs/plan-optimizacion-db.md`
 
 **Verificación:** pnpm db:generate sobre una DB limpia con las migraciones aplicadas no propone ningún DROP INDEX (prueba de que el drift se cerró). Aplicar 0074→0083 en orden sobre una DB vacía y comprobar que las 10 tablas quedan con todas las columnas que schema.ts espera (sexo, imagen, product_id, ecf_document_id, factura_recurrente_id).
 

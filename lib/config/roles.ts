@@ -3,9 +3,9 @@
  * ║  FUENTE DE VERDAD — Roles y permisos de EmiteDO                 ║
  * ║                                                                  ║
  * ║  Para agregar un rol nuevo:                                      ║
- * ║  1. Agregar entrada en ROLES array                               ║
- * ║  2. Agregar al enum roleEnum en lib/db/schema.ts                 ║
- * ║  3. El resto del sistema lo lee de aquí                          ║
+ * ║  1. Agregar entrada en ROLES array y a RoleKey                   ║
+ * ║  2. El resto del sistema lo lee de aquí — listTeamRoles siembra  ║
+ * ║     los roles de sistema que falten en cada empresa              ║
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
@@ -65,9 +65,14 @@ export type Permission =
   | 'modulo:pos'
   | 'modulo:escolar'
   // Suscripción / billing
-  | 'suscripcion:gestionar';
+  | 'suscripcion:gestionar'
+  // Administración escolar
+  | 'administracion-escolar:ver'
+  | 'administracion-escolar:gestionar'
+  | 'administracion-escolar:configurar'
+  | 'administracion-escolar:pagos';
 
-export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero';
+export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
 // Roles legacy (contador/vendedor/member) fueron remapeados a 'user' en la
 // migración 0051; LEGACY_ROLE_MAP los normaliza por si quedan datos viejos.
@@ -125,8 +130,9 @@ export const ROLES: RoleDef[] = [
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'pos:vender', 'pos:configurar',
-      'modulo:facturacion', 'modulo:pos',
+      'modulo:facturacion', 'modulo:pos', 'modulo:escolar',
       'suscripcion:gestionar',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
   },
@@ -147,8 +153,9 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'pos:vender', 'pos:configurar',
-      'modulo:facturacion', 'modulo:pos',
+      'modulo:facturacion', 'modulo:pos', 'modulo:escolar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -167,6 +174,8 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'equipo:ver',
       'caja:ver', 'caja:operar',
+      // Sin permisos de Administración Escolar: un vendedor no matricula
+      // estudiantes. El colegio se atiende con 'personal-escolar'.
       'pos:vender',
       'modulo:facturacion', 'modulo:pos',
     ],
@@ -188,6 +197,9 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'caja:ver',
       'modulo:facturacion',
+      // Sin 'modulo:escolar': ver el colegio en solo lectura solo aplica si el
+      // dueño le abre el módulo a este rol.
+      'administracion-escolar:ver',
     ],
     ui: { color: 'text-sky-600 bg-sky-50 border-sky-200', icon: 'Eye' },
   },
@@ -204,6 +216,21 @@ export const ROLES: RoleDef[] = [
       'modulo:pos',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200', icon: 'Store' },
+  },
+  {
+    key:         'personal-escolar',
+    label:       'Personal del colegio',
+    description: 'Solo Administración Escolar: estudiantes, tutores, matrículas y cobros del colegio. No entra a Facturación ni al POS.',
+    invitable:   true,
+    permissions: [
+      // Los cargos escolares se cobran con facturas y los tutores son
+      // contactos: necesita verlos, aunque no entre al módulo de Facturación.
+      'clientes:ver', 'clientes:gestionar',
+      'facturas:ver',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:pagos',
+      'modulo:escolar',
+    ],
+    ui: { color: 'text-indigo-600 bg-indigo-50 border-indigo-200', icon: 'GraduationCap' },
   },
 ];
 
@@ -276,6 +303,12 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   ]},
   { module: 'Suscripción', icon: 'CreditCard', permissions: [
     { key: 'suscripcion:gestionar', label: 'Gestionar plan y pagos' },
+  ]},
+  { module: 'Administración escolar', icon: 'GraduationCap', permissions: [
+    { key: 'administracion-escolar:ver',         label: 'Ver estudiantes, matrículas, cargos y pagos' },
+    { key: 'administracion-escolar:gestionar',    label: 'Crear / editar estudiantes, tutores, cursos y matrículas' },
+    { key: 'administracion-escolar:configurar',   label: 'Configurar períodos, cursos, materias y conceptos' },
+    { key: 'administracion-escolar:pagos',        label: 'Registrar pagos escolares' },
   ]},
 ];
 

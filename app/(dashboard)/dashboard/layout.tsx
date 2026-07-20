@@ -11,6 +11,7 @@ import {
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
   PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store, BookOpen,
+  GraduationCap,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleSwitcher } from '@/components/module-switcher';
@@ -153,6 +154,9 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   // Compras — owner/admin (e-CF de proveedores) o productos:gestionar (compras manuales)
   '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
+
+  // Administración Escolar no vive aquí: es otro módulo, con su propio nav en
+  // /escolar. Desde este sidebar solo se ofrece el salto (ver puedeIrEscolar).
 
   // Caja
   '/dashboard/caja':                  'caja:operar',
@@ -608,6 +612,11 @@ function SidebarContent({
     && (permsLoading || modules.includes('pos'))
     && can('/pos');
 
+  // Mismo trato para Administración Escolar. A diferencia del POS no tiene
+  // flag propio en teams: manda `modules` (empresa ∩ rol), así que mientras
+  // cargan los permisos NO se muestra — es opt-in y la mayoría no lo tiene.
+  const puedeIrEscolar = !permsLoading && modules.includes('escolar');
+
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
@@ -930,6 +939,28 @@ function SidebarContent({
             >
               <Store style={{ width: 16, height: 16, flexShrink: 0 }} />
               <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Punto de Venta</Box>
+              <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
+            </Box>
+          </>
+        )}
+
+        {/* Administración Escolar: también otro módulo. */}
+        {puedeIrEscolar && (
+          <>
+            {!puedeIrPos && <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />}
+            <Box
+              component={Link}
+              href={moduleUrl('escolar')}
+              onClick={onClose}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.875,
+                borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
+                color: 'rgba(204,251,241,0.85)', transition: 'all 0.15s',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+              }}
+            >
+              <GraduationCap style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Administración Escolar</Box>
               <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
             </Box>
           </>

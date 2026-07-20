@@ -4,11 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  Wallet, Loader2, Archive, Wallet2,
+  Wallet, Archive, Wallet2,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
+// PagoModal vive fuera: lo reusa el perfil del estudiante (módulo escolar).
+import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import MuiButton from '@mui/material/Button';
@@ -19,31 +20,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
 import CircularProgress from '@mui/material/CircularProgress';
-
-interface Cuenta {
-  id:                   number;
-  clientId:             number | null;
-  encf:                 string;
-  codigo:               string | null;
-  tipoEcf:              string;
-  fechaEmision:         string;
-  fechaLimitePago:      string | null;
-  rncComprador:         string | null;
-  razonSocialComprador: string | null;
-  emailComprador:       string | null;
-  estado:               string;
-  montoTotal:           number;
-  totalItbis:           number;
-  pagado:               number;
-  saldo:                number;
-  saldoFactura:         number;
-  moraSaldo:            number;
-  moraNotas?:           { id: number; codigo: string | null; saldo: number }[];
-  vencida:              boolean;
-  diasVencido:          number;
-}
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
@@ -95,6 +72,17 @@ export default function CuentasPorCobrarPage() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Deep-link `?pagar=<docId>`: al llegar desde otro módulo (p. ej. un cargo
+  // escolar) abre directo el modal de cobro de esa factura. Se consume una vez.
+  const [pagarConsumido, setPagarConsumido] = useState(false);
+  useEffect(() => {
+    if (!data || pagarConsumido) return;
+    const pagarId = new URLSearchParams(window.location.search).get('pagar');
+    if (!pagarId) return;
+    const cuenta = data.cuentas.find((c) => String(c.id) === pagarId);
+    if (cuenta) { setPagoModal(cuenta); setPagarConsumido(true); }
+  }, [data, pagarConsumido]);
 
   const agrupar = filterValues.agrupar === 'cliente';
 
@@ -334,157 +322,7 @@ export default function CuentasPorCobrarPage() {
   );
 }
 
-// ─── Modal: registrar pago ───────────────────────────────────────────────────
-
-function PagoModal({ cuenta, onClose, onSuccess }: {
-  cuenta: Cuenta; onClose: () => void; onSuccess: () => void;
-}) {
-  const today    = new Date().toISOString().slice(0, 10);
-  const saldoDOP = cuenta.saldo / 100;
-  const totalDOP = saldoDOP;
-  const pagadoDOP = 0;
-  const [fecha, setFecha]         = useState(today);
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  // Cuando el pago se bloquea por método que obliga DGII sobre factura no emitida,
-  // el backend devuelve el link al detalle para emitirla primero.
-  const [emitirUrl, setEmitirUrl] = useState<string | null>(null);
-
-  // Notas de crédito del cliente usables como pago (voucher por código, uso parcial).
-  const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
-
-  useEffect(() => {
-    if (!cuenta.clientId) { setNotasCredito([]); return; }
-    let vivo = true;
-    fetch(`/api/clientes/${cuenta.clientId}/notas-credito-disponibles`)
-      .then(r => r.json())
-      .then(j => { if (vivo) setNotasCredito(Array.isArray(j.notas) ? j.notas : []); })
-      .catch(() => { if (vivo) setNotasCredito([]); });
-    return () => { vivo = false; };
-  }, [cuenta.clientId]);
-
-  // Una o varias líneas (1 línea = pago normal). AR usa referencia.
-  const [lineas, setLineas] = useState<PagoLinea[]>([
-    { metodo: 'transferencia', valor: '', referencia: '' },
-  ]);
-
-  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!valido) return;
-    setGuardando(true);
-    setError(null);
-    setEmitirUrl(null);
-    try {
-      const pagos = lineas
-        .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
-        .map(l => ({
-          montoDOP:      parseFloat(l.valor),
-          metodo:        l.metodo,
-          referencia:    l.referencia?.trim() || undefined,
-          notaCreditoId: l.notaCreditoId ?? undefined,
-        }));
-      const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaPago: fecha, pagos }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setEmitirUrl(typeof json.emitirUrl === 'string' ? json.emitirUrl : null);
-        throw new Error(json.error ?? 'Error al registrar pago');
-      }
-      onSuccess();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error desconocido');
-    } finally {
-      setGuardando(false);
-    }
-  }
-
-  return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth
-      slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
-      <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
-        Registrar pago
-        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
-          {cuenta.codigo ?? `Factura #${cuenta.id}`}
-        </Typography>
-      </DialogTitle>
-      <DialogContent sx={{ pt: '12px !important' }}>
-        <Box component="form" id="pago-form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* Resumen de saldo */}
-          <Box sx={{ bgcolor: 'grey.50', borderRadius: '8px', p: 1.5 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Saldo factura</Typography>
-              <Typography variant="caption" sx={{ color: 'text.primary' }}>{fmtDOP(cuenta.saldoFactura)}</Typography>
-            </Box>
-            {cuenta.moraSaldo > 0 && (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>Mora</Typography>
-                <Typography variant="caption" sx={{ color: '#ea580c' }}>{fmtDOP(cuenta.moraSaldo)}</Typography>
-              </Box>
-            )}
-            <Divider sx={{ my: 0.75 }} />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Total a cobrar</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>{fmtDOP(cuenta.saldo)}</Typography>
-            </Box>
-            {cuenta.moraSaldo > 0 && (
-              <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.5 }}>
-                El pago cubre primero la factura; el resto se aplica a la mora.
-              </Typography>
-            )}
-          </Box>
-
-          {/* Fecha */}
-          <MuiTextField
-            label="Fecha *" type="date" value={fecha} size="small" fullWidth required
-            onChange={e => setFecha(e.target.value)}
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-          />
-
-          <PagoMetodos
-            lineas={lineas}
-            onChange={setLineas}
-            total={totalDOP}
-            yaPagado={pagadoDOP}
-            disabled={guardando}
-            showReferencia
-            notasCredito={notasCredito}
-          />
-
-          {error && (
-            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
-              {error}
-              {emitirUrl && (
-                <Box
-                  component={Link}
-                  href={emitirUrl}
-                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 1, fontWeight: 600, color: '#991b1b', textDecoration: 'underline', textUnderlineOffset: 2, '&:hover': { color: '#7f1d1d' } }}
-                >
-                  Ir a emitir la factura →
-                </Box>
-              )}
-            </Alert>
-          )}
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-        <MuiButton variant="outlined" onClick={onClose} sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
-        <MuiButton type="submit" form="pago-form" variant="contained" disableElevation
-          disabled={guardando || !valido}
-          startIcon={guardando ? <CircularProgress size={14} color="inherit" /> : undefined}
-          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-          Registrar pago
-        </MuiButton>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-// ─── Modal: agregar cuenta histórica ─────────────────────────────────────────
+// ─── Modal: agregar cuenta histórica (factura previa, no DGII) ──────────────
 
 function HistoricaModal({ onClose, onSuccess }: {
   onClose: () => void; onSuccess: () => void;
