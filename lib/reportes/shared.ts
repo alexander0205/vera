@@ -11,7 +11,7 @@
  *  - Todo query va scopeado por `teamId` (multi-tenant).
  *  - Estados de venta válidos: ACEPTADO | ACEPTADO_CONDICIONAL | EN_PROCESO.
  */
-import { sql, and, eq, gte, lte, type SQL } from 'drizzle-orm';
+import { sql, and, eq, type SQL } from 'drizzle-orm';
 import { ecfDocuments } from '@/lib/db/schema';
 
 // ─── Constantes de dominio ───────────────────────────────────────────────────
@@ -49,24 +49,54 @@ export const TIPO_ECF_NOMBRE: Record<string, string> = {
   '45': 'Gubernamental',
   '46': 'Exportación',
   '47': 'Pago exterior',
+  'sin-ncf': 'Sin NCF (ticket)',
 };
 
 // ─── Predicados SQL reutilizables ────────────────────────────────────────────
 
-/** WHERE base: team + rango de fecha de emisión. */
+/** Fecha calendario RD (YYYY-MM-DD) de un Date. */
+function rdDate(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Santo_Domingo' });
+}
+
+/** WHERE base: team + rango de fecha de emisión.
+ *
+ * `fecha_emision` es un `timestamp` SIN zona que guarda la hora-pared. Comparar
+ * la columna contra un `Date` corre el borde: pg serializa el Date en UTC, así
+ * que `desde` (medianoche RD) llega como 04:00 y excluía los documentos fechados
+ * justo a las 00:00 → se perdía el PRIMER día del rango. Filtramos por la fecha
+ * calendario RD (`::date`) para un rango inclusivo día-a-día, igual que espera el
+ * usuario y como se muestra en la UI. */
 export function pRango(teamId: number, desde: Date, hasta: Date): SQL {
   return and(
     eq(ecfDocuments.teamId, teamId),
-    gte(ecfDocuments.fechaEmision, desde),
-    lte(ecfDocuments.fechaEmision, hasta),
+    sql`${ecfDocuments.fechaEmision}::date >= ${rdDate(desde)}`,
+    sql`${ecfDocuments.fechaEmision}::date <= ${rdDate(hasta)}`,
   )!;
 }
 
-/** Solo estados de venta válidos. */
+/** Solo estados de venta válidos (e-CF emitido a DGII). */
 export const pVentaEstados: SQL = sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`;
 
-/** Solo tipos e-CF de venta (excluye NC). */
+/** Solo tipos e-CF de venta a la DGII (excluye NC y sin-ncf). */
 export const pTiposVenta: SQL = sql`${ecfDocuments.tipoEcf} IN ('31', '32', '33', '44', '45')`;
+
+/**
+ * Venta que "cuenta" en reportes GERENCIALES (ingresos, por-producto, ventas
+ * generales, KPIs). Incluye dos familias:
+ *   1. e-CF de venta emitido a la DGII (tipos 31/32/33/44/45, estado aceptado/
+ *      condicional/en-proceso), y
+ *   2. tickets `sin-ncf` (venta real sin comprobante fiscal — default del POS,
+ *      no va a DGII, no consume secuencia, vive en estado BORRADOR). Se cuentan
+ *      mientras no estén anulados/rechazados.
+ *
+ * NO usar en reportes FISCALES DGII (606/607/609, ITBIS a pagar): esos deben
+ * seguir con `pTiposVenta` + `pVentaEstados` porque sin-ncf no se declara.
+ */
+export const pVentaValida: SQL = sql`(
+  (${ecfDocuments.tipoEcf} IN ('31', '32', '33', '44', '45') AND ${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'))
+  OR (${ecfDocuments.tipoEcf} = 'sin-ncf' AND ${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO'))
+)`;
 
 /** Es nota de crédito. */
 export const pNotaCredito: SQL = eq(ecfDocuments.tipoEcf, TIPO_NOTA_CREDITO);

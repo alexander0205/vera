@@ -965,6 +965,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
   }, [runId]);
 
   const [dupRunId, setDupRunId] = useState<string | null>(null);
+  const [reemitting, setReemit] = useState(false);
 
   async function handleUpload() {
     if (!file) return;
@@ -1020,6 +1021,31 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
       setDupRunId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al borrar la corrida previa');
+    }
+  }
+
+  // Re-emitir la corrida previa SIN borrarla ni re-subir el Excel. Reusa el
+  // runId duplicado, re-emite sus casos y lo adopta como corrida activa.
+  async function handleReemitirDuplicado() {
+    const targetRunId = dupRunId ?? runId;
+    if (!targetRunId) return;
+    setReemit(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/runs/${targetRunId}/emitir-todos`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al re-emitir la corrida');
+      setDupRunId(null);
+      setFile(null);
+      persistUpdate(s => ({
+        ...s,
+        step2: { runId: targetRunId, status: data.status, lastChecked: new Date().toISOString() },
+      }));
+      setRun(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al re-emitir la corrida');
+    } finally {
+      setReemit(false);
     }
   }
 
@@ -1142,6 +1168,17 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
               </div>
             </div>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleReemitirDuplicado}
+                disabled={reemitting}
+                className="flex-1 text-[11px] text-teal-600 hover:text-teal-700 disabled:text-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-1 py-1.5 border border-teal-200 rounded-md hover:bg-teal-50"
+                title="Re-emite todos los casos de esta corrida sin borrarla"
+              >
+                {reemitting
+                  ? <><Loader2 className="w-3 h-3 animate-spin" /> Re-emitiendo…</>
+                  : <><RotateCcw className="w-3 h-3" /> Re-emitir</>}
+              </button>
               <button
                 type="button"
                 onClick={handleForgetRun}
@@ -1272,13 +1309,27 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
           <div className="flex-1">
             <p className="text-[11px] text-red-700">{error}</p>
             {dupRunId && (
-              <button
-                type="button"
-                onClick={handleDeleteDuplicate}
-                className="mt-2 text-[11px] bg-red-600 hover:bg-red-700 text-white font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
-              >
-                <X className="w-3 h-3" /> Borrar corrida previa y reintentar
-              </button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleReemitirDuplicado}
+                  disabled={reemitting}
+                  className="text-[11px] bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
+                  title="Reusa la corrida previa y re-emite sus casos sin borrarla ni re-subir el Excel"
+                >
+                  {reemitting
+                    ? <><Loader2 className="w-3 h-3 animate-spin" /> Re-emitiendo…</>
+                    : <><RotateCcw className="w-3 h-3" /> Re-emitir sin borrar</>}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteDuplicate}
+                  disabled={reemitting}
+                  className="text-[11px] bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
+                >
+                  <X className="w-3 h-3" /> Borrar corrida previa y reintentar
+                </button>
+              </div>
             )}
           </div>
         </div>

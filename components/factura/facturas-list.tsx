@@ -13,6 +13,16 @@ const ESTADO_STYLES: Record<string, string> = {
   ANULADO:              'bg-gray-100 text-gray-500 line-through',
 };
 
+// Etiqueta visible por estado (el valor interno BORRADOR se muestra como "Sin comprobante").
+const ESTADO_LABEL: Record<string, string> = {
+  ACEPTADO:             'Aceptado',
+  ACEPTADO_CONDICIONAL: 'Aceptado condicional',
+  EN_PROCESO:           'En proceso',
+  RECHAZADO:            'Rechazado',
+  BORRADOR:             'Sin comprobante',
+  ANULADO:              'Anulado',
+};
+
 function EstadoBadge({ estado }: { estado: string }) {
   return (
     <span
@@ -20,7 +30,7 @@ function EstadoBadge({ estado }: { estado: string }) {
         ESTADO_STYLES[estado] ?? 'bg-gray-100 text-gray-700'
       }`}
     >
-      {estado}
+      {ESTADO_LABEL[estado] ?? estado}
     </span>
   );
 }

@@ -26,7 +26,7 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 mb-2">
             <Receipt className="w-7 h-7 text-teal-600" />
-            <span className="text-xl font-bold text-gray-900">EmiteDO</span>
+            <span className="text-xl font-bold text-gray-900">Zero</span>
           </div>
           <p className="text-sm text-gray-500">
             {mode === 'signin' ? 'Inicia sesión en tu cuenta' : 'Crea tu cuenta'}
@@ -128,8 +128,8 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
         {/* Soporte */}
         <p className="text-center text-xs text-gray-400 mt-6">
           ¿Necesitas ayuda?{' '}
-          <a href="mailto:soporte@emitedo.com" className="text-teal-600 hover:underline">
-            soporte@emitedo.com
+          <a href="mailto:soporte@zero.com.do" className="text-teal-600 hover:underline">
+            soporte@zero.com.do
           </a>
         </p>
       </div>

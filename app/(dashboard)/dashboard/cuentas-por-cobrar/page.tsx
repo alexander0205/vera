@@ -185,7 +185,7 @@ export default function CuentasPorCobrarPage() {
           <button
             onClick={() => setHistoricaModal(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
-            title="Importar factura previa al uso de emitedo (no va a DGII)"
+            title="Importar factura previa al uso de Zero (no va a DGII)"
           >
             <Archive className="h-4 w-4" />
             Agregar cuenta histórica
@@ -388,7 +388,7 @@ function HistoricaModal({
           <div>
             <h2 className="text-base font-semibold text-gray-900">Agregar cuenta histórica</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              Factura previa al uso de EmiteDO — solo tracking de cobranza. No se envía a DGII.
+              Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">

@@ -27,6 +27,7 @@ import {
 import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
+import { CobrarLinkButton } from '@/components/pagos/CobrarLinkButton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
@@ -407,6 +408,14 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // ?emitir=1 → abrir el modal Enviar a DGII al cargar (flujo post-crear nota:
   // "¿emitir ahora o dejar borrador?"). Solo una vez y solo si aún es emitible.
   // window.location en vez de useSearchParams para no requerir Suspense boundary.
+  // ?cobrar=1 → abrir el flujo de link de pago al cargar (viene de "Guardar y
+  // generar link de pago" en Nueva factura).
+  const [autoCobrar, setAutoCobrar] = useState(false);
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('cobrar') === '1') setAutoCobrar(true);
+  }, []);
+
   const [autoEmitirDone, setAutoEmitirDone] = useState(false);
   useEffect(() => {
     if (autoEmitirDone || !factura) return;
@@ -833,7 +842,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               {/* Solo mostrar el nombre fiscal del comprobante si fue emitido a DGII.
                   Borrador/sin-ncf/histórica → genérico, NO el tipo fiscal. */}
               <span className="font-medium text-gray-600">
-                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Borrador' : 'Documento sin comprobante fiscal')}
+                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Sin comprobante' : 'Documento sin comprobante fiscal')}
               </span>
               <span className="mx-1.5">·</span>
               Fecha: {fmtDate(factura.fechaEmision)}
@@ -1017,7 +1026,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                     className="flex items-center gap-2 cursor-pointer"
                   >
                     <FileText className="h-4 w-4 text-gray-500" />
-                    Editar borrador
+                    Editar
                   </Link>
                 </DropdownMenuItem>
               )}
@@ -1115,7 +1124,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm text-amber-900">
                 La factura original ya fue emitida a la DGII. Esta nota sigue como
-                borrador — puedes enviarla cuando quieras (no es obligatorio).
+                sin emitir — puedes enviarla cuando quieras (no es obligatorio).
               </p>
               {canEmitir && (
                 <button
@@ -1502,7 +1511,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 <h2 className="text-sm font-semibold text-gray-900">Estado DGII</h2>
               </div>
               <p className="text-xs text-gray-500 mb-3 leading-snug">
-                No emitida a la DGII. Es un registro {esBorrador ? 'borrador' : 'histórico'} sin e-CF.
+                No emitida a la DGII. Es un registro {esBorrador ? 'sin comprobante' : 'histórico'} sin e-CF.
                 Genera un e-CF para enviarla a la DGII.
               </p>
               <div className="flex flex-col gap-2">
@@ -1570,7 +1579,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <li key={nc.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 pb-2 last:pb-0">
                     <div className="min-w-0 flex-1">
                       <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-teal-700 hover:underline truncate block">
-                        {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Borrador #${nc.id}`)}
+                        {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Sin comprobante #${nc.id}`)}
                       </Link>
                       <div className="text-[10px] text-gray-500 mt-0.5 flex gap-1.5 flex-wrap items-center">
                         <span className={nc.tipoEcf === '34' ? 'text-teal-700 font-medium' : 'text-orange-700 font-medium'}>
@@ -1678,6 +1687,20 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               totalDOP={factura.montos.montoTotalDOP}
             />
           )}
+
+          {/* Cobro en línea: link de pago (CardNet/Azul/Simulador). Disponible en
+              cualquier factura (borrador o emitida) que no sea NC y no esté pagada. */}
+          {!esNc && !factura.pago?.recibido && (
+            <div className="mt-3">
+              <CobrarLinkButton
+                ecfDocumentId={factura.id}
+                telefonoCliente={factura.comprador?.telefono ?? null}
+                className="w-full"
+                autoOpen={autoCobrar}
+                onPagado={() => window.location.reload()}
+              />
+            </div>
+          )}
         </aside>
       </div>
 
@@ -1721,7 +1744,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   asChild
                 >
                   <Link href={`/dashboard/facturas/${factura.id}/editar`}>
-                    {esBorrador ? 'Editar borrador' : 'Editar'}
+                    {'Editar'}
                   </Link>
                 </Button>
               ) : (

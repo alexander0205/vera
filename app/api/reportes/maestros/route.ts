@@ -1,13 +1,15 @@
 /**
  * GET /api/reportes/maestros?maestroId=&desde=&hasta=
  * Agrega ventas por valor de un maestro de factura: # facturas + total (centavos).
- * Excluye ANULADO. Gate: reportes:ver.
+ * Cuenta ventas reales: e-CF emitido a DGII + tickets sin-ncf (pVentaValida).
+ * Gate: reportes:ver.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, facturaMaestroValores, maestroValores, maestros, maestroTargets } from '@/lib/db/schema';
 import { getPermisoContext, ctxCan } from '@/lib/auth/permiso';
+import { pVentaValida } from '@/lib/reportes/shared';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
@@ -37,7 +39,8 @@ export async function GET(req: NextRequest) {
   const conds = [
     eq(facturaMaestroValores.maestroId, maestroId),
     eq(ecfDocuments.teamId, ctx.teamId),
-    sql`${ecfDocuments.estado} <> 'ANULADO'`,
+    // Venta contabilizable: e-CF emitido a DGII + ticket sin-ncf no anulado.
+    pVentaValida,
   ];
   if (desde) conds.push(gte(ecfDocuments.createdAt, new Date(desde)));
   if (hasta) conds.push(lte(ecfDocuments.createdAt, new Date(hasta + 'T23:59:59')));

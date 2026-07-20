@@ -5,11 +5,24 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { clients } from '@/lib/db/schema';
+import { clients, dependientes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, ilike, or, and } from 'drizzle-orm';
+import { eq, ilike, or, and, inArray, sql } from 'drizzle-orm';
 import { clienteSchema } from '@/lib/clientes/schema';
+
+/**
+ * Condición ILIKE sobre un dependiente: nombre, apellido o el nombre completo.
+ * El nombre completo permite buscar "Juan Pérez" aunque esté partido en dos columnas.
+ */
+function matchDependiente(term: string) {
+  const like = `%${term}%`;
+  return or(
+    ilike(dependientes.nombre, like),
+    ilike(dependientes.apellido, like),
+    ilike(sql`${dependientes.nombre} || ' ' || ${dependientes.apellido}`, like),
+  );
+}
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -17,8 +30,14 @@ export async function GET(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const q = new URL(req.url).searchParams.get('q')?.trim();
+  const sp = new URL(req.url).searchParams;
+  const q = sp.get('q')?.trim();
+  // Paginación opcional (compatible: sin params trae hasta 1000).
+  const limit  = Math.min(Number(sp.get('limit'))  || 1000, 1000);
+  const offset = Math.max(Number(sp.get('offset')) || 0, 0);
 
+  // La búsqueda también matchea por dependiente/beneficiario: en colegios el
+  // acudiente se busca por el nombre del hijo, no por el suyo.
   const rows = await db.select().from(clients)
     .where(
       q
@@ -28,13 +47,45 @@ export async function GET(req: NextRequest) {
               ilike(clients.razonSocial, `%${q}%`),
               ilike(clients.rnc, `%${q}%`),
               ilike(clients.email, `%${q}%`),
+              sql`EXISTS (
+                SELECT 1 FROM ${dependientes}
+                WHERE ${dependientes.clientId} = ${clients.id}
+                  AND ${dependientes.teamId} = ${teamId}
+                  AND ${matchDependiente(q)}
+              )`,
             )
           )
         : eq(clients.teamId, teamId)
     )
-    .orderBy(clients.razonSocial);
+    .orderBy(clients.razonSocial)
+    .limit(limit)
+    .offset(offset);
 
-  return NextResponse.json({ clientes: rows });
+  // TODOS los dependientes de cada cliente devuelto — no solo los que matchearon.
+  // Buscando al padre se ven sus hijos, y buscando al hijo se ve la familia
+  // completa: el cajero confirma que es el contacto correcto sin abrir la ficha.
+  let porCliente: Record<number, string[]> = {};
+  if (q && rows.length) {
+    const deps = await db.select({
+        clientId: dependientes.clientId,
+        nombre:   dependientes.nombre,
+        apellido: dependientes.apellido,
+      })
+      .from(dependientes)
+      .where(and(
+        eq(dependientes.teamId, teamId),
+        inArray(dependientes.clientId, rows.map(r => r.id)),
+      ))
+      .orderBy(dependientes.nombre);
+    porCliente = deps.reduce<Record<number, string[]>>((acc, d) => {
+      (acc[d.clientId] ??= []).push(`${d.nombre} ${d.apellido}`);
+      return acc;
+    }, {});
+  }
+
+  const clientes = rows.map(r => ({ ...r, dependientes: porCliente[r.id] ?? [] }));
+
+  return NextResponse.json({ clientes });
 }
 
 export async function POST(req: NextRequest) {

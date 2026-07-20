@@ -60,7 +60,7 @@ export default function ApiKeysPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">API Keys</h1>
-          <p className="text-sm text-gray-500 mt-1">Integra EmiteDO con tus sistemas externos</p>
+          <p className="text-sm text-gray-500 mt-1">Integra Zero con tus sistemas externos</p>
         </div>
         <button onClick={() => setShowNew(true)}
           className="flex items-center gap-2 bg-teal-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">

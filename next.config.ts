@@ -11,7 +11,7 @@ const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://api.stripe.com https://ecf-api.yisraeltech.com https://ecf-api.yisraelschool.com; frame-src https://js.stripe.com; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://api.stripe.com https://ecf-api.zero.com.do; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',

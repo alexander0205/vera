@@ -41,6 +41,23 @@ function esEfectivo(metodo: string | null | undefined): boolean {
 
 // ─── Consultas ────────────────────────────────────────────────────────────────
 
+/**
+ * Minutos que lleva abierto un turno, calculados EN POSTGRES.
+ *
+ * `apertura_at` es `timestamp` sin zona y se llena con el NOW() de la DB; el
+ * driver lo parsea como hora local del proceso, así que restarlo en JS se va por
+ * la diferencia de TZ (medido en dev: 4 horas). Postgres escribió ese valor y
+ * sabe en qué TZ lo hizo — que reste él.
+ */
+export async function getMinutosAbierto(turnoId: number): Promise<number | null> {
+  const rows = await db.execute<{ min: number }>(sql`
+    SELECT FLOOR(EXTRACT(EPOCH FROM (NOW() - apertura_at)) / 60)::int AS min
+    FROM caja_turnos WHERE id = ${turnoId}
+  `);
+  const row = rows[0] as { min: number } | undefined;
+  return row ? Number(row.min) : null;
+}
+
 /** Turno vivo (ABIERTO o CIERRE_SOLICITADO) del cajero, o null. */
 export async function getTurnoAbierto(
   teamId: number,
@@ -84,16 +101,21 @@ export async function calcularEsperado(
   turno: CajaTurno,
   executor: typeof db = db,
 ): Promise<DesgloseEsperado> {
-  // Ventas en efectivo: pagos del turno con método efectivo.
+  // Ventas en efectivo: pagos del turno con método efectivo. Se excluyen los
+  // pagos de comprobantes ANULADOS — al anular una factura su cobro deja de ser
+  // real, aunque la fila pagos_recibidos siga existiendo (anulaciones legacy no
+  // la borraban). Sin este filtro el esperado se infla con cobros fantasma.
   const [pagoAgg] = await executor
     .select({
       total: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
     })
     .from(pagosRecibidos)
+    .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
     .where(and(
       eq(pagosRecibidos.teamId, teamId),
       eq(pagosRecibidos.turnoCajaId, turno.id),
       sql`lower(${pagosRecibidos.metodo}) IN ('efectivo', 'cash')`,
+      sql`${ecfDocuments.estado} <> 'ANULADO'`,
     ));
   const ventasEfectivo = Number(pagoAgg?.total ?? 0);
 
@@ -148,9 +170,12 @@ export async function getVentasPorMetodo(
       total:  sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
     })
     .from(pagosRecibidos)
+    .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
     .where(and(
       eq(pagosRecibidos.teamId, teamId),
       eq(pagosRecibidos.turnoCajaId, turnoId),
+      // Excluye cobros de comprobantes anulados (ver calcularEsperado).
+      sql`${ecfDocuments.estado} <> 'ANULADO'`,
     ))
     .groupBy(sql`lower(${pagosRecibidos.metodo})`);
 

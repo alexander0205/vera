@@ -6,6 +6,8 @@ export interface Cliente {
   rnc:         string | null;
   email:       string | null;
   telefono:    string | null;
+  /** Todos los dependientes del cliente. Solo viene en resultados de búsqueda. */
+  dependientes?: string[];
 }
 
 export interface Producto {

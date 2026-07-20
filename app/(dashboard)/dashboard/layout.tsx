@@ -4,12 +4,13 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import useSWR from 'swr';
+import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import {
   LayoutDashboard, Users, Package,
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, GraduationCap, Store,
+  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, GraduationCap, Store, BookOpen,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -43,6 +44,8 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
       { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
+      { href: '/dashboard/pagos/links',          label: 'Links de pago' },
+      { href: '/dashboard/pagos/pasarelas',      label: 'Pasarelas de pago' },
       { href: '/dashboard/notas-credito',        label: 'Notas de crédito',     plusHref: '/dashboard/notas-credito/nueva' },
       { href: '/dashboard/notas-debito',         label: 'Notas de débito',      plusHref: '/dashboard/notas-debito/nueva' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
@@ -84,6 +87,15 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: 'contabilidad',
+    label: 'Contabilidad',
+    icon: BookOpen,
+    children: [
+      { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
+      { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
+    ],
+  },
+  {
     id: 'configuracion',
     label: 'Configuración',
     icon: Settings,
@@ -121,6 +133,8 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/facturas/nueva':        'facturas:crear',
   '/dashboard/cuentas-por-cobrar':    'facturas:ver',
   '/dashboard/pagos':                 'pagos:ver',
+  '/dashboard/pagos/links':           'pagos:ver',
+  '/dashboard/pagos/pasarelas':       'configuracion:ver',
   '/dashboard/notas-credito':         'facturas:ver',
   '/dashboard/cotizaciones':          'cotizaciones:ver',
   '/dashboard/cotizaciones/nueva':    'cotizaciones:gestionar',
@@ -483,6 +497,7 @@ function DashboardTopBar({
   user,
   plan,
   dgiiAmbiente,
+  cajaHabilitada,
   onMenuClick,
   onToggleSidebar,
   sidebarCollapsed,
@@ -493,6 +508,7 @@ function DashboardTopBar({
   user: UserInfo | null;
   plan: string | null;
   dgiiAmbiente: string | null;
+  cajaHabilitada: boolean;
   onMenuClick: () => void;
   onToggleSidebar: () => void;
   sidebarCollapsed: boolean;
@@ -525,9 +541,9 @@ function DashboardTopBar({
       {/* Logo — visible en mobile siempre, y en desktop cuando sidebar oculto */}
       <div className={`flex items-center gap-2 mr-1 ${sidebarCollapsed ? '' : 'lg:hidden'}`}>
         <div className="h-6 w-6 bg-teal-600 rounded-md flex items-center justify-center shrink-0">
-          <span className="text-white font-black text-xs">e</span>
+          <span className="text-white font-black text-xs">z</span>
         </div>
-        <span className="text-gray-900 font-bold text-sm">EmiteDO</span>
+        <span className="text-gray-900 font-bold text-sm">Zero</span>
       </div>
 
       {/* Company switcher */}
@@ -535,6 +551,9 @@ function DashboardTopBar({
 
       {/* Ambiente DGII — solo visible cuando no es Producción */}
       <AmbienteBadge ambiente={dgiiAmbiente} />
+
+      {/* Turno de caja — solo aparece cuando queda poco para el límite */}
+      {cajaHabilitada && <TurnoCountdown />}
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -646,9 +665,9 @@ function Sidebar({
       <div className="px-4 py-4 border-b border-teal-600/50">
         <div className="flex items-center gap-2">
           <div className="h-7 w-7 bg-white rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-teal-700 font-black text-xs">e</span>
+            <span className="text-teal-700 font-black text-xs">z</span>
           </div>
-          <span className="text-white font-bold text-sm tracking-wide">EmiteDO</span>
+          <span className="text-white font-bold text-sm tracking-wide">Zero</span>
         </div>
       </div>
 
@@ -787,10 +806,17 @@ function Sidebar({
         })}
       </nav>
 
+      {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es
+          el mismo gesto. Evita un item más en el menú para algo que se mira de
+          vez en cuando. */}
       <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
-        <span className="text-[11px] text-gray-400">
-          EmiteDO v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'}
-        </span>
+        <Link
+          href="/dashboard/novedades"
+          className="text-[11px] text-gray-400 hover:text-teal-700 transition-colors"
+          title="Ver qué hay de nuevo"
+        >
+          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
+        </Link>
       </div>
     </div>
   );
@@ -863,6 +889,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const plan = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.planName ?? null;
+  // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
+  const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -893,6 +921,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           user={user ?? null}
           plan={plan}
           dgiiAmbiente={dgiiAmbiente}
+          cajaHabilitada={cajaHabilitada}
           onMenuClick={() => setSidebarOpen(true)}
           onToggleSidebar={toggleSidebar}
           sidebarCollapsed={sidebarCollapsed}

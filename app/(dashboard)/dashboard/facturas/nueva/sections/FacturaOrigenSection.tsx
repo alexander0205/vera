@@ -115,7 +115,7 @@ export function FacturaOrigenSection({
       {/* Factura sin comprobante fiscal → nota interna, sin e-NCF que referenciar. */}
       {padreSeleccionado && esPadreSinNcf && (
         <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
-          <p className="text-[11px] text-gray-500">Sin comprobante fiscal — nota interna, solo borrador.</p>
+          <p className="text-[11px] text-gray-500">Sin comprobante fiscal — nota interna.</p>
           <div className="sm:max-w-sm">
             <Label className="text-xs text-gray-600 uppercase tracking-wide">Motivo</Label>
             <Select value={motivoNota || undefined} onValueChange={setMotivoNota}>

@@ -13,6 +13,7 @@ import { parseRango, METODO_LABEL, type Granularidad } from '@/lib/reportes/shar
 import {
   getTendencia, getIngresosPorProducto, getIngresosPorCliente,
   getIngresosPorMetodo, getAgingCxC,
+  getVentasPorTipo, getVentasPorUsuario, getPagosPorUsuario,
 } from '@/lib/reportes/queries';
 
 export const maxDuration = 60;
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
   const { desde, hasta } = parseRango(sp.get('desde') ?? undefined, sp.get('hasta') ?? undefined);
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'EmiteDO';
+  wb.creator = 'Zero';
   const ws = wb.addWorksheet('Reporte');
   let filename = 'reporte.xlsx';
 
@@ -98,6 +99,41 @@ export async function GET(req: NextRequest) {
         encf: f.encf, cliente: f.cliente, vence: f.fechaLimite ?? '', dias: f.diasVencido, cubeta: f.cubeta, saldo: f.saldoCents / 100,
       }));
       filename = 'cuentas_por_cobrar.xlsx';
+      break;
+    }
+    case 'por-tipo': {
+      const rows = await getVentasPorTipo(teamId, desde, hasta);
+      ws.columns = [
+        { header: 'Tipo e-CF', key: 'tipo', width: 12 },
+        { header: 'Nombre', key: 'nombre', width: 30 },
+        { header: 'Facturas', key: 'n', width: 12 },
+        { header: 'ITBIS', key: 'itbis', width: 16, style: { numFmt: DOP } },
+        { header: 'Total', key: 'total', width: 18, style: { numFmt: DOP } },
+      ];
+      rows.forEach(r => ws.addRow({ tipo: `e${r.tipoEcf}`, nombre: r.nombre, n: r.numFacturas, itbis: r.itbisCents / 100, total: r.ingresosCents / 100 }));
+      filename = 'ingresos_por_tipo.xlsx';
+      break;
+    }
+    case 'por-usuario': {
+      const rows = await getVentasPorUsuario(teamId, desde, hasta);
+      ws.columns = [
+        { header: 'Usuario', key: 'nombre', width: 32 },
+        { header: 'Facturas', key: 'n', width: 12 },
+        { header: 'Facturado', key: 'total', width: 18, style: { numFmt: DOP } },
+      ];
+      rows.forEach(r => ws.addRow({ nombre: r.nombre, n: r.numFacturas, total: r.ingresosCents / 100 }));
+      filename = 'ventas_por_usuario.xlsx';
+      break;
+    }
+    case 'por-usuario-pago': {
+      const rows = await getPagosPorUsuario(teamId, desde, hasta);
+      ws.columns = [
+        { header: 'Usuario', key: 'nombre', width: 32 },
+        { header: 'Pagos', key: 'n', width: 12 },
+        { header: 'Cobrado', key: 'total', width: 18, style: { numFmt: DOP } },
+      ];
+      rows.forEach(r => ws.addRow({ nombre: r.nombre, n: r.numPagos, total: r.totalCents / 100 }));
+      filename = 'cobros_por_usuario.xlsx';
       break;
     }
     default:

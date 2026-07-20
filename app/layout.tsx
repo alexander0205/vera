@@ -7,14 +7,21 @@ import { Toaster } from 'sonner';
 import { WebVitals } from './(dashboard)/dashboard/_web-vitals';
 
 export const metadata: Metadata = {
-  title: 'EmiteDO — Facturación Electrónica República Dominicana',
+  title: 'Zero — Facturación Electrónica República Dominicana',
   description:
-    'Emite Comprobantes Fiscales Electrónicos (e-CF) de forma rápida y segura. Integrado con la DGII. Cumple con la Ley 32-23.'
+    'Emite Comprobantes Fiscales Electrónicos (e-CF) de forma rápida y segura. Integrado con la DGII. Cumple con la Ley 32-23.',
+  applicationName: 'Zero',
+  appleWebApp: {
+    capable: true,
+    title: 'Zero',
+    statusBarStyle: 'default',
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: '#0d9488',
 };
 
 const inter = Inter({
@@ -37,6 +44,9 @@ export default function RootLayout({
         <WebVitals />
         <SWRConfig
           value={{
+            // Evita re-fetch de todos los hooks en cada alt-tab (default SWR: true).
+            revalidateOnFocus: false,
+            dedupingInterval: 30_000,
             fallback: {
               // We do NOT await here
               // Only components that read this data will suspend

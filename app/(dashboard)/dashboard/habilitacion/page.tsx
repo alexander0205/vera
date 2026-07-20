@@ -437,7 +437,7 @@ function WaitForDgii({
             Plazo típico: {estimated}
           </p>
           <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-            Puedes cerrar EmiteDo — te avisaremos por correo y WhatsApp cuando DGII responda.
+            Puedes cerrar Zero — te avisaremos por correo y WhatsApp cuando DGII responda.
             El wizard te llevará automáticamente a la siguiente fase.
           </p>
         </div>
@@ -994,7 +994,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
         <div className="space-y-4">
           <InfoBox color="blue" title="Carga el Formulario de Postulación">
             En el portal DGII hiciste clic en <strong>"Generar archivo"</strong> y descargaste
-            el Formulario de Postulación. Cárgalo aquí — EmiteDo le aplica la Firma Digital automáticamente.
+            el Formulario de Postulación. Cárgalo aquí — Zero le aplica la Firma Digital automáticamente.
           </InfoBox>
 
           {/* Paso 1: Cargar Formulario de Postulación */}
@@ -1178,7 +1178,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             <div className="space-y-2.5">
               <p className="text-sm text-gray-700">
                 DGII te notificará el resultado por <strong>Buzón de Oficina Virtual</strong>.
-                No cierres sesión en EmiteDO — tu progreso ya está guardado.
+                No cierres sesión en Zero — tu progreso ya está guardado.
               </p>
               <ul className="space-y-1.5 text-sm text-gray-600 pl-4 list-disc">
                 <li>Si tu postulación es <strong className="text-teal-700">aprobada</strong>, DGII habilita el Set de Pruebas en el Portal de Certificación.</li>
@@ -1731,13 +1731,13 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
       {sub === 0 && (
         <div className="space-y-4">
           <InfoBox color="blue" title="¿Cómo funciona el Set de Pruebas?">
-            EmiteDo genera y envía automáticamente todos los e-CF de prueba (10 tipos + RFCE)
+            Zero genera y envía automáticamente todos los e-CF de prueba (10 tipos + RFCE)
             con los datos que completes a continuación. Solo la factura de consumo &lt; RD$250K
             se sube manualmente al portal al final.{' '}
             <DgiiScreenshot
               src="/dgii-guia/paso4-pruebas-simulacion.png"
               alt="Pantalla de Pruebas de Simulación en el portal DGII"
-              caption="El portal DGII muestra un contador por tipo de comprobante. EmiteDo replica esta misma vista en el paso de envío."
+              caption="El portal DGII muestra un contador por tipo de comprobante. Zero replica esta misma vista en el paso de envío."
               label="Ver pantalla en el portal DGII"
             />
           </InfoBox>
@@ -2224,7 +2224,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
       {sub === 0 && (
         <div className="space-y-5">
           <InfoBox color="amber" title="11 representaciones impresas requeridas">
-            DGII necesita aprobar el PDF impreso de cada tipo de comprobante. EmiteDo los genera
+            DGII necesita aprobar el PDF impreso de cada tipo de comprobante. Zero los genera
             automáticamente con los QR correctos — solo descárgalos y súbelos al portal.
           </InfoBox>
 
@@ -2375,7 +2375,7 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
       <InfoBox color="blue" title="Cambio de ambiente: pruebas → producción">
         Hasta ahora trabajaste en el ambiente de <strong>pruebas</strong> de DGII. Para emitir e-CF reales,
         DGII te pide actualizar las 3 URLs del software al ambiente de <strong>producción</strong>.
-        EmiteDo ya tiene las URLs listas — solo cópialas y pégalas en el portal.
+        Zero ya tiene las URLs listas — solo cópialas y pégalas en el portal.
       </InfoBox>
 
       <DgiiScreenshot
@@ -2626,7 +2626,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
             <h3 className="text-xl font-bold text-gray-900">¡Tu habilitación está completa!</h3>
             <p className="text-sm text-gray-600 mt-2 leading-relaxed">
               Has completado exitosamente el proceso de certificación como Facturador Electrónico.
-              Ya puedes emitir e-CF en producción desde EmiteDo.
+              Ya puedes emitir e-CF en producción desde Zero.
             </p>
           </div>
         </div>
@@ -2641,7 +2641,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
 
       <InfoBox color="blue" title="¿Qué es la OFV y por qué importa?">
         La <strong>Oficina Virtual (OFV)</strong> es donde DGII te muestra los reportes, consultas y
-        estatus de tus e-CF. <strong>No necesitas entrar ahí para emitir facturas</strong> — EmiteDo
+        estatus de tus e-CF. <strong>No necesitas entrar ahí para emitir facturas</strong> — Zero
         las envía automáticamente en producción. Úsala solo para consultar o ver reportes.
       </InfoBox>
 
@@ -2667,7 +2667,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
             <Zap className="h-4 w-4 text-teal-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-teal-900">EmiteDo ya está en producción</p>
+            <p className="text-sm font-semibold text-teal-900">Zero ya está en producción</p>
             <p className="text-xs text-teal-700">Cada factura que emitas será real ante DGII</p>
           </div>
         </div>
@@ -2681,7 +2681,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
           className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600"
         />
         <span className="text-sm text-gray-700">
-          Entiendo que desde ahora cada e-CF que emita en EmiteDo es <strong>real</strong> y se envía
+          Entiendo que desde ahora cada e-CF que emita en Zero es <strong>real</strong> y se envía
           directamente a producción DGII
         </span>
       </label>
@@ -2769,7 +2769,7 @@ function IntroModal({ onStart }: { onStart: () => void }) {
             Activa tu facturación electrónica
           </h2>
           <p className="text-base text-teal-100 mt-2">
-            EmiteDo te guía paso a paso por el proceso de habilitación ante la DGII.
+            Zero te guía paso a paso por el proceso de habilitación ante la DGII.
           </p>
         </div>
 
@@ -2864,7 +2864,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-base font-bold text-gray-900">EmiteDo gestiona todo por mí</p>
+                <p className="text-base font-bold text-gray-900">Zero gestiona todo por mí</p>
                 <span className="text-[11px] font-bold bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">
                   Recomendado
                 </span>

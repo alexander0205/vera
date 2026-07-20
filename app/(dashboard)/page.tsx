@@ -13,7 +13,7 @@ export default function HomePage() {
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 mb-6">
               <Receipt className="h-8 w-8 text-teal-600" />
-              <span className="text-2xl font-bold text-gray-900">EmiteDO</span>
+              <span className="text-2xl font-bold text-gray-900">Zero</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">
               Facturación Electrónica DGII

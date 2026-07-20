@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { desc, and, eq, isNull, count, gte, lte, sql, lt, inArray } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
@@ -11,18 +12,31 @@ import {
   pagosRecibidos,
 } from './schema';
 import { cookies } from 'next/headers';
+import { unstable_cache } from 'next/cache';
 import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
+import { pRango, pVentaValida, pNotaCredito, pVentaEstados } from '@/lib/reportes/shared';
 
-export async function getUser() {
+// React.cache: memoiza por-request. Evita re-ejecutar la resolución de sesión
+// (verifyToken + query users) cuando layout, /api/user y demás la piden varias veces.
+export const getUser = cache(async () => {
   const sessionCookie = (await cookies()).get('session');
   if (!sessionCookie || !sessionCookie.value) {
     return null;
   }
 
-  const sessionData = await verifyToken(sessionCookie.value);
+  // Cookie inválida/expirada/firmada con otro secreto → tratar como no-sesión.
+  // verifyToken lanza (JWSSignatureVerificationFailed); sin este catch, cualquier
+  // ruta que use getUser respondía 500 sin body y el cliente veía
+  // "Unexpected end of JSON input" en vez de un 401 limpio → redirigir a login.
+  let sessionData: Awaited<ReturnType<typeof verifyToken>> | null = null;
+  try {
+    sessionData = await verifyToken(sessionCookie.value);
+  } catch {
+    return null;
+  }
   if (
     !sessionData ||
     !sessionData.user ||
@@ -46,7 +60,7 @@ export async function getUser() {
   }
 
   return user[0];
-}
+});
 
 export async function getTeamByStripeCustomerId(customerId: string) {
   const result = await db
@@ -148,7 +162,7 @@ export async function getTeamForUser() {
 // ─── EmiteDO queries ──────────────────────────────────────────────────────────
 
 /** Retorna el teamId activo desde la sesión, con fallback al primero del usuario */
-export async function getTeamIdForUser(): Promise<number | null> {
+export const getTeamIdForUser = cache(async (): Promise<number | null> => {
   const sessionCookie = (await cookies()).get('session');
   if (!sessionCookie?.value) return null;
   const sessionData = await verifyToken(sessionCookie.value);
@@ -201,7 +215,7 @@ export async function getTeamIdForUser(): Promise<number | null> {
     .where(eq(teamMembers.userId, sessionData.user.id))
     .limit(1);
   return result[0]?.teamId ?? null;
-}
+});
 
 /** Retorna todos los teams del usuario (admin → todos los teams) */
 export async function getUserTeams() {
@@ -251,6 +265,17 @@ export async function getUserTeams() {
 }
 
 export async function getDashboardStats(teamId: number) {
+  // Cache corta por team (30s): el dashboard se visita/refresca seguido y estos
+  // agregados sobre ecf_documents son de los más caros. TTL bajo para que datos
+  // volátiles (secuencias, certificado) no se vean viejos por mucho tiempo.
+  return unstable_cache(
+    () => computeDashboardStats(teamId),
+    ['dashboard-stats', String(teamId)],
+    { revalidate: 30 },
+  )();
+}
+
+async function computeDashboardStats(teamId: number) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -271,14 +296,15 @@ export async function getDashboardStats(teamId: number) {
             gte(ecfDocuments.createdAt, startOfMonth)
           )
         ),
-      // Ingresos este mes (centavos)
+      // Ingresos este mes (centavos) — excluye ANULADO (no cuenta como ingreso)
       db
         .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
         .from(ecfDocuments)
         .where(
           and(
             eq(ecfDocuments.teamId, teamId),
-            gte(ecfDocuments.createdAt, startOfMonth)
+            gte(ecfDocuments.createdAt, startOfMonth),
+            sql`${ecfDocuments.estado} <> 'ANULADO'`
           )
         ),
       // Secuencias disponibles
@@ -310,11 +336,17 @@ export async function getDashboardStats(teamId: number) {
   };
 }
 
-export async function getEcfDocuments(teamId: number, limit = 50) {
+export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string[]) {
+  // tipos: filtra por tipoEcf en SQL (ej. ['34'] para notas de crédito) en vez
+  // de traer todo y filtrar en JS — así el límite no descarta notas por estar
+  // más allá de la fila N mezcladas con facturas.
+  const where = tipos && tipos.length > 0
+    ? and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.tipoEcf, tipos))
+    : eq(ecfDocuments.teamId, teamId);
   return db
     .select()
     .from(ecfDocuments)
-    .where(eq(ecfDocuments.teamId, teamId))
+    .where(where)
     .orderBy(desc(ecfDocuments.createdAt))
     .limit(limit);
 }
@@ -337,11 +369,9 @@ export async function getVentasGenerales(
   desde: Date,
   hasta: Date,
 ) {
-  const TIPOS_VENTA = ['31', '32', '33', '44', '45'] as const; // facturas/notas débito/regímenes esp/gubernamental
-  const TIPO_NOTA_CREDITO = '34';
-
   const [ventaRows, notaRows, docs] = await Promise.all([
-    // Agregados ventas (excluyendo notas crédito y borradores/rechazos)
+    // Agregados ventas: e-CF emitido a DGII + tickets sin-ncf (venta real sin
+    // comprobante). Excluye NC, borradores de e-CF y anulados/rechazados.
     db
       .select({
         brutas: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
@@ -349,28 +379,16 @@ export async function getVentasGenerales(
         count:  count(),
       })
       .from(ecfDocuments)
-      .where(and(
-        eq(ecfDocuments.teamId, teamId),
-        gte(ecfDocuments.fechaEmision, desde),
-        lte(ecfDocuments.fechaEmision, hasta),
-        sql`${ecfDocuments.tipoEcf} IN (${sql.join(TIPOS_VENTA.map(t => sql`${t}`), sql`, `)})`,
-        sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
-      )),
+      .where(and(pRango(teamId, desde, hasta), pVentaValida)),
 
-    // Notas crédito (resta)
+    // Notas crédito (resta) — solo las emitidas a DGII.
     db
       .select({
         total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
         count: count(),
       })
       .from(ecfDocuments)
-      .where(and(
-        eq(ecfDocuments.teamId, teamId),
-        gte(ecfDocuments.fechaEmision, desde),
-        lte(ecfDocuments.fechaEmision, hasta),
-        eq(ecfDocuments.tipoEcf, TIPO_NOTA_CREDITO),
-        sql`${ecfDocuments.estado} IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')`,
-      )),
+      .where(and(pRango(teamId, desde, hasta), pNotaCredito, pVentaEstados)),
 
     // Lista de documentos en el rango (limitada a 100 para la tabla)
     db
@@ -387,10 +405,10 @@ export async function getVentasGenerales(
       })
       .from(ecfDocuments)
       .where(and(
-        eq(ecfDocuments.teamId, teamId),
-        gte(ecfDocuments.fechaEmision, desde),
-        lte(ecfDocuments.fechaEmision, hasta),
-        sql`${ecfDocuments.estado} != 'BORRADOR'`,
+        pRango(teamId, desde, hasta),
+        // Muestra ventas reales (e-CF emitido + tickets sin-ncf) y notas; oculta
+        // solo los borradores de e-CF sin emitir (BOR-…).
+        sql`NOT (${ecfDocuments.estado} = 'BORRADOR' AND ${ecfDocuments.tipoEcf} <> 'sin-ncf')`,
       ))
       .orderBy(desc(ecfDocuments.fechaEmision))
       .limit(100),
@@ -495,9 +513,12 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
  */
 export async function getCuentasPorCobrar(
   teamId: number,
-  opts: { clientId?: number; soloVencidas?: boolean; docId?: number } = {},
+  opts: { clientId?: number; soloVencidas?: boolean; docId?: number; limit?: number; offset?: number } = {},
 ) {
   const hoy = new Date().toISOString().slice(0, 10);
+  // Techo al dataset (antes cargaba toda la cartera abierta sin límite).
+  const limit  = Math.min(opts.limit ?? 2000, 2000);
+  const offset = Math.max(opts.offset ?? 0, 0);
 
   const rows = await db
     .select({
@@ -576,7 +597,9 @@ export async function getCuentasPorCobrar(
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
       opts.docId ? eq(ecfDocuments.id, opts.docId) : sql`true`,
     ))
-    .orderBy(desc(ecfDocuments.fechaEmision));
+    .orderBy(desc(ecfDocuments.fechaEmision))
+    .limit(limit)
+    .offset(offset);
 
   // Lista de ND de mora (id, codigo, saldo>0) por factura padre, para distribuir
   // el pago en el frontend/desglose. Un solo query agrupado en memoria.
@@ -670,12 +693,16 @@ export async function getCuentasPorCobrar(
  */
 export async function getPagosListado(
   teamId: number,
-  opts: { desde?: string; hasta?: string; metodo?: string } = {},
+  opts: { desde?: string; hasta?: string; metodo?: string; limit?: number; offset?: number } = {},
 ) {
   const filtros = [eq(pagosRecibidos.teamId, teamId)];
   if (opts.desde)  filtros.push(gte(pagosRecibidos.fechaPago, opts.desde));
   if (opts.hasta)  filtros.push(lte(pagosRecibidos.fechaPago, opts.hasta));
   if (opts.metodo) filtros.push(eq(pagosRecibidos.metodo, opts.metodo));
+
+  // Techo al dataset (antes cargaba el ledger completo del team sin límite).
+  const limit  = Math.min(opts.limit ?? 2000, 2000);
+  const offset = Math.max(opts.offset ?? 0, 0);
 
   const rows = await db
     .select({
@@ -708,7 +735,9 @@ export async function getPagosListado(
     .leftJoin(ecfDocuments, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
     .leftJoin(users, eq(pagosRecibidos.createdBy, users.id))
     .where(and(...filtros))
-    .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id));
+    .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id))
+    .limit(limit)
+    .offset(offset);
 
   // Trazabilidad: cuántos pagos tiene cada factura (para "Pago 2 de 3").
   const pagosPorDoc = new Map<number, number>();

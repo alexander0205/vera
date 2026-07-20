@@ -108,6 +108,21 @@ export interface EcfApiErrorBody {
   eNcf?:       string;
   formato?:    string;
   dgii?:       EcfApiDgiiDetail;
+
+  // ── Contrato de reintento seguro (ecf-api ≥ 2026-07-18) ──────────────────
+  // Presentes en TODOS los 503 de emisión. Permiten decidir si el e-NCF quedó
+  // quemado o se puede reenviar, sin adivinar.
+  /** id de la emisión en ecf-api. `null` = no se creó ninguna fila (nada existe). */
+  emisionId?:           string | null;
+  /** ¿Se llegó a emitir? En 503 siempre false. En 201 no aplica (si hay 201, se emitió). */
+  emitido?:             boolean;
+  /** Lo que la DGII dijo sobre si consumió la secuencia. `null` = no se sabe. */
+  secuenciaUtilizada?:  boolean | null;
+  /** true = Vera puede reenviar el MISMO e-NCF. false = número quemado, usar el siguiente. */
+  puedeReintentar?:     boolean;
+  /** true = envío incierto: NO dar por emitido ni reintentar a ciegas; consultar estado-dgii. */
+  requiereVerificacion?: boolean;
+
   [k: string]: unknown;
 }
 
@@ -387,14 +402,100 @@ export interface EmisionResponseDto {
   /** URL del endpoint que consulta el estado en DGII. */
   urlEstadoDgii?:  string | null;
   createdAt:       string;
+
+  // ── Contrato de reintento seguro (ecf-api ≥ 2026-07-18) ──────────────────
+  /** Lo que la DGII dijo sobre si consumió la secuencia. `null` = no se sabe. */
+  secuenciaUtilizada?:   boolean | null;
+  /** true = se puede reenviar el MISMO e-NCF (p.ej. RECHAZADO sin quemar número). */
+  puedeReintentar?:      boolean;
+  /** true = envío incierto: NO dar por emitido ni reintentar; consultar estado-dgii. */
+  requiereVerificacion?: boolean;
+}
+
+/** Fila liviana del listado paginado de emisiones (sin XML/payloads pesados). */
+export interface EmisionResumenDto {
+  id:               string;
+  eNcf:             string;
+  tipoComprobante:  string;
+  formato:          FormatoEmision;
+  ambiente?:        AmbienteEcf;
+  estado:           EstadoEmision;
+  trackId:          string | null;
+  montoTotal:       number;
+  fechaEmision:     string;
+  /** null → nunca se envió a DGII (emisión colgada). */
+  enviadoEn:        string | null;
+  createdAt:        string;
+  urlVerificacion?: string | null;
+  urlPdf?:          string | null;
+  urlXml?:          string | null;
+}
+
+export interface EmisionesPaginationDto {
+  limit:       number;
+  count:       number;
+  orderBy:     'fecha' | 'secuencia';
+  order:       'asc' | 'desc';
+  hasMore:     boolean;
+  /** Solo modo keyset; null si no hay más. */
+  nextCursor:  string | null;
+  /** Solo modo offset. */
+  page?:       number;
+  total?:      number;
+  totalPages?: number;
+}
+
+export interface EmisionesPageDto {
+  data:       EmisionResumenDto[];
+  pagination: EmisionesPaginationDto;
+}
+
+export interface ListEmisionesOpts {
+  /** 1–200, default 50. */
+  limit?:   number;
+  orderBy?: 'fecha' | 'secuencia';
+  order?:   'asc' | 'desc';
+  /** Token keyset (de pagination.nextCursor). Prioridad sobre page. */
+  cursor?:  string;
+  /** Página offset 1-based. Devuelve total/totalPages. */
+  page?:    number;
+  estado?:  EstadoEmision;
+  formato?: FormatoEmision;
 }
 
 export const emision = {
-  list: (codigoPublico: string, limit?: number) =>
-    request<EmisionResponseDto[]>(
+  list: async (codigoPublico: string, limit?: number) => {
+    // ecf-api migró el listado a un envelope paginado { data, pagination };
+    // compat con ambas versiones (array viejo / objeto nuevo) para tolerar
+    // cualquier orden de deploy. Ver docs/ecf-api-emisiones-paginado.md
+    const res = await request<EmisionResponseDto[] | { data: EmisionResponseDto[] }>(
       'GET',
       `/contribuyentes/${codigoPublico}/emisiones${limit ? `?limit=${limit}` : ''}`,
-    ),
+    );
+    return Array.isArray(res) ? res : res.data;
+  },
+
+  /**
+   * Listado paginado y liviano de emisiones (envelope { data, pagination }).
+   * Server-side: limit, orden, filtros (estado/formato) y paginación
+   * cursor (keyset) u offset (page). Preferir cursor salvo que se necesiten
+   * números de página. Ver docs/ecf-api-emisiones-paginado.md
+   */
+  listPaged: (codigoPublico: string, opts: ListEmisionesOpts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.limit != null)   qs.set('limit', String(opts.limit));
+    if (opts.orderBy)         qs.set('orderBy', opts.orderBy);
+    if (opts.order)           qs.set('order', opts.order);
+    if (opts.cursor)          qs.set('cursor', opts.cursor);
+    else if (opts.page != null) qs.set('page', String(opts.page));
+    if (opts.estado)          qs.set('estado', opts.estado);
+    if (opts.formato)         qs.set('formato', opts.formato);
+    const query = qs.toString();
+    return request<EmisionesPageDto>(
+      'GET',
+      `/contribuyentes/${codigoPublico}/emisiones${query ? `?${query}` : ''}`,
+    );
+  },
 
   /** Endpoint unificado nuevo: POST /contribuyentes/:cp/emisiones/emitir */
   emitirUnified: (codigoPublico: string, dto: unknown, extraHeaders?: Record<string, string>) =>

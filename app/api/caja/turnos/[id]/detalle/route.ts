@@ -1,8 +1,22 @@
 /**
- * GET /api/caja/turnos/[id]/detalle — datos completos de un turno para impresión.
+ * GET /api/caja/turnos/[id]/detalle — qué pasó en un turno, para revisar el cierre.
  *
- * Devuelve: turno, cajero, aprobador, desglose de cobros por método,
- * movimientos del turno y nombre del equipo.
+ * Devuelve AGREGADOS, no el listado completo: un turno de colegio en día de pago
+ * puede tener cientos de comprobantes, y volcarlos haría la hoja inservible (y la
+ * consulta cara). Lo que se manda:
+ *
+ *   pagos      — totales por método. Sólo el efectivo entra al cuadre; el resto
+ *                se cobró pero nunca pasó por la gaveta.
+ *   resumen    — conteos y totales: facturado, pendiente, cuántos anulados.
+ *   excepciones— SOLO lo que hay que mirar fila por fila: anulados y lo que quedó
+ *                a crédito. Las ventas cobradas completas son la mayoría y no
+ *                dicen nada. Acotado a EXCEPCIONES_MAX; si hay más se informa.
+ *
+ * Ojo con `facturado` vs `totalCobros`: son conjuntos distintos y no tienen por
+ * qué coincidir. Un cobro de cuenta por cobrar suma a `totalCobros` aunque su
+ * factura sea de otro turno; una venta a crédito suma a `facturado` sin aportar
+ * un peso. Esa diferencia es justo lo que el owner necesita ver y antes no
+ * aparecía en ninguna parte.
  *
  * Accesible para cualquier miembro con caja:ver del equipo.
  */
@@ -14,8 +28,11 @@ import { labelMetodo } from '@/lib/pagos/metodos';
 import { db } from '@/lib/db/drizzle';
 import {
   cajaTurnos, cajaMovimientos, pagosRecibidos,
-  users, teams,
+  ecfDocuments, users, teams,
 } from '@/lib/db/schema';
+
+/** Máximo de excepciones (anulados / a crédito) que se listan. */
+const EXCEPCIONES_MAX = 20;
 
 export async function GET(
   _req: NextRequest,
@@ -49,6 +66,9 @@ export async function GET(
     teamRows,
     movimientos,
     pagosPorMetodo,
+    cobrosCountRows,
+    resumenRows,
+    excepcionesRows,
   ] = await Promise.all([
     // Cajero
     db.select({ name: users.name, email: users.email })
@@ -80,18 +100,74 @@ export async function GET(
       ))
       .orderBy(cajaMovimientos.createdAt),
 
-    // Pagos del turno agrupados por método
+    // Pagos del turno agrupados por método. Se excluyen los cobros de
+    // comprobantes ANULADOS (su fila pagos_recibidos puede seguir viva tras la
+    // anulación) para que el desglose cuadre con lib/caja/core.
     db.select({
         metodo: pagosRecibidos.metodo,
         total:  sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
         cuenta: pagosRecibidos.cuenta,
       })
       .from(pagosRecibidos)
+      .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
       .where(and(
         eq(pagosRecibidos.teamId, teamId),
         eq(pagosRecibidos.turnoCajaId, turnoId),
+        sql`${ecfDocuments.estado} <> 'ANULADO'`,
       ))
       .groupBy(pagosRecibidos.metodo, pagosRecibidos.cuenta),
+
+    // Cuántos cobros hubo. Sólo el conteo: un turno de colegio en día de pago
+    // puede tener cientos, y listarlos uno por uno haría la hoja inservible.
+    db.execute<{ n: number }>(sql`
+      SELECT count(*)::int AS n
+      FROM pagos_recibidos p
+      JOIN ecf_documents d ON d.id = p.ecf_document_id
+      WHERE p.team_id = ${teamId} AND p.turno_caja_id = ${turnoId}
+        AND d.estado <> 'ANULADO'
+    `),
+
+    // Resumen agregado de los comprobantes del turno, en una sola pasada.
+    // `pagado` sale de un subselect por documento; GREATEST evita que un
+    // sobrepago reste del pendiente de otro.
+    db.execute<{
+      cantidad: number; anulados: number; facturado: number; pendiente: number; con_pendiente: number;
+    }>(sql`
+      SELECT
+        count(*)::int                                                        AS cantidad,
+        count(*) FILTER (WHERE estado = 'ANULADO')::int                      AS anulados,
+        coalesce(sum(monto_total) FILTER (WHERE estado <> 'ANULADO'), 0)::bigint AS facturado,
+        coalesce(sum(GREATEST(0, monto_total - pagado))
+                 FILTER (WHERE estado <> 'ANULADO'), 0)::bigint              AS pendiente,
+        count(*) FILTER (WHERE estado <> 'ANULADO' AND monto_total - pagado > 0)::int AS con_pendiente
+      FROM (
+        SELECT d.id, d.estado, d.monto_total,
+               coalesce((SELECT sum(p.monto_centavos) FROM pagos_recibidos p
+                         WHERE p.ecf_document_id = d.id), 0) AS pagado
+        FROM ecf_documents d
+        WHERE d.team_id = ${teamId} AND d.turno_caja_id = ${turnoId}
+      ) t
+    `),
+
+    // Sólo las EXCEPCIONES: anulados y lo que quedó a crédito. Es lo único que
+    // el owner necesita revisar fila por fila; las ventas cobradas completas no
+    // le dicen nada y son la mayoría. Acotado — si hay más, se dice cuántas.
+    db.execute<{
+      id: number; codigo: string | null; encf: string | null; estado: string;
+      cliente: string | null; monto_total: number; pagado: number;
+    }>(sql`
+      SELECT id, codigo, encf, estado, razon_social_comprador AS cliente, monto_total, pagado
+      FROM (
+        SELECT d.id, d.codigo, d.encf, d.estado, d.razon_social_comprador, d.monto_total,
+               coalesce((SELECT sum(p.monto_centavos) FROM pagos_recibidos p
+                         WHERE p.ecf_document_id = d.id), 0) AS pagado
+        FROM ecf_documents d
+        WHERE d.team_id = ${teamId} AND d.turno_caja_id = ${turnoId}
+      ) t
+      WHERE estado = 'ANULADO' OR monto_total - pagado > 0
+      ORDER BY (monto_total - pagado) DESC
+      LIMIT ${EXCEPCIONES_MAX + 1}
+    `),
   ]);
 
   const cajero   = cajeroRows[0]   ?? null;
@@ -99,22 +175,67 @@ export async function GET(
   const teamRow  = teamRows[0];
   const teamName = teamRow?.nombreComercial || teamRow?.razonSocial || `Equipo #${teamId}`;
 
-  // Calcular desglose de efectivo manualmente desde los pagos
+  // Sólo el efectivo llega a la gaveta, así que es lo único que el conteo físico
+  // del cierre puede desmentir. Tarjeta/transferencia se cobran igual pero no
+  // entran al esperado: hay que poder distinguirlos de un vistazo.
+  const esEfectivo = (m: string | null) => ['efectivo', 'cash'].includes((m ?? '').toLowerCase());
+
   const efectivoCentavos = pagosPorMetodo
-    .filter(p => ['efectivo', 'cash'].includes((p.metodo ?? '').toLowerCase()))
+    .filter(p => esEfectivo(p.metodo))
     .reduce((s, p) => s + Number(p.total), 0);
 
   // Consolidar por etiqueta legible (fuente única lib/pagos/metodos; une efectivo/cash)
-  const pagosConsolidados = new Map<string, number>();
+  const pagosConsolidados = new Map<string, { total: number; efectivo: boolean }>();
   for (const p of pagosPorMetodo) {
     const key = labelMetodo(p.metodo);
-    pagosConsolidados.set(key, (pagosConsolidados.get(key) ?? 0) + Number(p.total));
+    const prev = pagosConsolidados.get(key);
+    pagosConsolidados.set(key, {
+      total: (prev?.total ?? 0) + Number(p.total),
+      efectivo: prev?.efectivo || esEfectivo(p.metodo),
+    });
   }
   const pagos = Array.from(pagosConsolidados.entries())
-    .map(([metodo, total]) => ({ metodo, totalCentavos: total }))
+    .map(([metodo, v]) => ({ metodo, totalCentavos: v.total, esEfectivo: v.efectivo }))
     .sort((a, b) => b.totalCentavos - a.totalCentavos);  // mayor a menor
 
   const totalCobrosCentavos = pagos.reduce((s, p) => s + p.totalCentavos, 0);
+  // Lo cobrado que NO llega a la gaveta (tarjeta, transferencia…).
+  const otrosMetodosCentavos = totalCobrosCentavos - efectivoCentavos;
+
+  // Agregados: los calcula Postgres en una pasada, no se traen las filas.
+  const r = (resumenRows as unknown as Array<{
+    cantidad: number; anulados: number; facturado: string | number;
+    pendiente: string | number; con_pendiente: number;
+  }>)[0];
+  const resumen = {
+    cantidadCobros:      Number((cobrosCountRows as unknown as Array<{ n: number }>)[0]?.n ?? 0),
+    cantidadComprobantes: Number(r?.cantidad ?? 0),
+    cantidadAnulados:    Number(r?.anulados ?? 0),
+    cantidadConPendiente: Number(r?.con_pendiente ?? 0),
+  };
+  const totalFacturadoCentavos = Number(r?.facturado ?? 0);
+  const totalPendienteCentavos = Number(r?.pendiente ?? 0);
+
+  // Se pidió EXCEPCIONES_MAX + 1 para saber si hay más sin traerlas todas.
+  const filas = excepcionesRows as unknown as Array<{
+    id: number; codigo: string | null; encf: string | null; estado: string;
+    cliente: string | null; monto_total: string | number; pagado: string | number;
+  }>;
+  const hayMasExcepciones = filas.length > EXCEPCIONES_MAX;
+  const excepciones = filas.slice(0, EXCEPCIONES_MAX).map(d => {
+    const total = Number(d.monto_total ?? 0);
+    const pagado = Number(d.pagado ?? 0);
+    return {
+      id: d.id,
+      codigo: d.codigo,
+      encf: d.encf,
+      estado: d.estado,
+      cliente: d.cliente,
+      totalCentavos: total,
+      pagadoCentavos: pagado,
+      pendienteCentavos: Math.max(0, total - pagado),
+    };
+  });
 
   return NextResponse.json({
     turno,
@@ -123,6 +244,16 @@ export async function GET(
     teamName,
     pagos,
     totalCobrosCentavos,
+    // El efectivo es lo único que el conteo físico puede desmentir; el resto se
+    // cobró pero nunca pasó por la gaveta. Separarlos evita que el owner busque
+    // en efectivo un dinero que entró por tarjeta.
+    efectivoCentavos,
+    otrosMetodosCentavos,
     movimientos,
+    resumen,
+    excepciones,
+    hayMasExcepciones,
+    totalFacturadoCentavos,
+    totalPendienteCentavos,
   });
 }

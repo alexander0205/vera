@@ -152,7 +152,7 @@ export function CompactHeader({
         {/* Estado */}
         <div className="ml-auto flex items-center gap-1.5 text-xs">
           <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
-          <span className="font-medium text-gray-700">Borrador</span>
+          <span className="font-medium text-gray-700">Sin emitir</span>
         </div>
       </div>
 

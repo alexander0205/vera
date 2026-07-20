@@ -9,7 +9,7 @@ import { db } from '@/lib/db/drizzle';
 import { products } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, ilike, or, and } from 'drizzle-orm';
+import { eq, ilike, or, and, sql, getTableColumns } from 'drizzle-orm';
 
 const productoSchema = z.object({
   nombre:               z.string().min(1, 'El nombre es obligatorio').max(255),
@@ -62,9 +62,21 @@ export async function GET(req: NextRequest) {
     whereCondition = and(eq(products.teamId, teamId), eq(products.tipo, tipo)) as typeof whereCondition;
   }
 
-  const rows = await db.select().from(products)
+  // Paginación opcional (compatible: sin params trae hasta 1000).
+  const limit  = Math.min(Number(params.get('limit'))  || 1000, 1000);
+  const offset = Math.max(Number(params.get('offset')) || 0, 0);
+
+  // Excluir la columna `imagen` del listado: es un data-URL base64 (hasta ~800KB
+  // por fila) que la tabla no muestra. Se carga on-demand al editar vía [id].
+  const { imagen, ...cols } = getTableColumns(products);
+
+  const rows = await db
+    .select({ ...cols, tieneImagen: sql<boolean>`${products.imagen} IS NOT NULL` })
+    .from(products)
     .where(whereCondition)
-    .orderBy(products.nombre);
+    .orderBy(products.nombre)
+    .limit(limit)
+    .offset(offset);
 
   const result = rows.map((p) => ({
     ...p,

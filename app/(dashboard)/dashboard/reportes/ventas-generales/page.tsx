@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Calendar, Download, ChevronRight } from 'lucide-react';
+import { Download, ChevronRight } from 'lucide-react';
+import { DateRangeFilter } from '@/components/reportes/date-range-filter';
 import { getUser, getTeamIdForUser, getVentasGenerales } from '@/lib/db/queries';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { db } from '@/lib/db/drizzle';
@@ -26,7 +27,7 @@ const ESTADO_LABEL: Record<string, { label: string; color: string }> = {
   EN_PROCESO:           { label: 'En Proceso', color: 'bg-blue-100 text-blue-700' },
   RECHAZADO:            { label: 'Rechazada',  color: 'bg-red-100 text-red-700' },
   ANULADO:              { label: 'Anulada',    color: 'bg-gray-200 text-gray-600' },
-  BORRADOR:             { label: 'Borrador',   color: 'bg-gray-100 text-gray-500' },
+  BORRADOR:             { label: 'Sin comprobante',   color: 'bg-gray-100 text-gray-500' },
 };
 
 function fmtDOP(centavos: number): string {
@@ -106,33 +107,8 @@ export default async function VentasGeneralesPage({
         </a>
       </div>
 
-      {/* Filtros */}
-      <form method="get" className="bg-white border border-gray-200 rounded-xl p-4 mb-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <input
-              type="date"
-              name="desde"
-              defaultValue={desdeStr}
-              className="bg-transparent border-0 focus:outline-none text-sm"
-            />
-            <span className="text-gray-400">—</span>
-            <input
-              type="date"
-              name="hasta"
-              defaultValue={hastaStr}
-              className="bg-transparent border-0 focus:outline-none text-sm"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg"
-          >
-            Aplicar
-          </button>
-        </div>
-      </form>
+      {/* Filtros — navegación client-side (no recarga el layout) */}
+      <DateRangeFilter desde={desdeStr} hasta={hastaStr} />
 
       {/* Stat cards — fórmula: Brutas − Notas crédito = Antes impuestos + Impuestos = Después impuestos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">

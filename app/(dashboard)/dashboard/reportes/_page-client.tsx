@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet } from 'lucide-react';
+import { Download, BarChart3, AlertTriangle, TrendingUp, FileX, Globe, Loader2, LineChart, ChevronRight, LayoutDashboard, Package, Wallet, Receipt, Users, HandCoins, UserCircle } from 'lucide-react';
 
 type ReporteId = '606' | '607' | '608' | '609';
 
@@ -82,6 +82,34 @@ const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React
     descripcion: 'Antigüedad de saldos (aging) de tu cartera abierta y facturas vencidas.',
     icon: Wallet,
     color: 'bg-amber-50 text-amber-600',
+  },
+  {
+    href: '/dashboard/reportes/por-tipo',
+    titulo: 'Por tipo de comprobante',
+    descripcion: 'Desglose por tipo de e-CF DGII: e31 crédito fiscal, e32 consumo, notas, etc.',
+    icon: Receipt,
+    color: 'bg-cyan-50 text-cyan-600',
+  },
+  {
+    href: '/dashboard/reportes/por-cliente',
+    titulo: 'Ingresos por cliente',
+    descripcion: 'Ranking de clientes por facturación en el período.',
+    icon: UserCircle,
+    color: 'bg-violet-50 text-violet-600',
+  },
+  {
+    href: '/dashboard/reportes/por-usuario',
+    titulo: 'Ventas por usuario',
+    descripcion: 'Quién emitió cada factura. Ranking por monto facturado.',
+    icon: Users,
+    color: 'bg-blue-50 text-blue-600',
+  },
+  {
+    href: '/dashboard/reportes/por-usuario-pago',
+    titulo: 'Cobros por usuario',
+    descripcion: 'Quién registró cada pago recibido. Ranking por monto cobrado.',
+    icon: HandCoins,
+    color: 'bg-rose-50 text-rose-600',
   },
   {
     href: '/dashboard/reportes/ventas-generales',
@@ -228,7 +256,7 @@ export default function ReportesPage() {
         <div>
           <p className="text-sm font-medium text-amber-800">Verifica los datos antes de enviar</p>
           <p className="text-xs text-amber-600 mt-1">
-            Los archivos se generan desde los comprobantes registrados en EmiteDO. Asegúrate de que
+            Los archivos se generan desde los comprobantes registrados en Zero. Asegúrate de que
             todos los e-CF del período estén correctamente emitidos y aceptados por la DGII antes de
             enviar el reporte. Los comprobantes anulados aparecen en el 608 automáticamente.
           </p>

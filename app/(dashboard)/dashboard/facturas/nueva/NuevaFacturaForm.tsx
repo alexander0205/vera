@@ -963,7 +963,7 @@ export default function NuevaFacturaForm({
     }
   }
 
-  async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' }) {
+  async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar' }) {
     // Traza anti-duplicados: identifica el botón y la secuencia de clicks de este
     // montaje. Se loguea aquí (consola) y se manda al server (`_traza`) para ligar
     // cada submit con el documento creado y diagnosticar las facturas duplicadas.
@@ -1122,6 +1122,11 @@ export default function NuevaFacturaForm({
         setShowEnviarCorreo(true);
         return;
       }
+      if (opts?.andThen === 'cobrar' && data.documentoId) {
+        // Abre el detalle con el modal de link de pago (elige pasarela allí).
+        router.push(`${detalleBase}/${data.documentoId}?cobrar=1`);
+        return;
+      }
       setResultado(data);
     } catch {
       setError('Error de conexión. Intenta de nuevo.');
@@ -1193,7 +1198,7 @@ export default function NuevaFacturaForm({
                   ¡{tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} guardada!
                 </h2>
                 <p className="text-gray-500 mb-6">
-                  La nota quedó como borrador{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
+                  La nota quedó guardada{tipoEcf === '34' ? ' y ya reduce el saldo de la factura original' : ''}.
                 </p>
               </>
             ) : esSinEcf ? (
@@ -1282,7 +1287,7 @@ export default function NuevaFacturaForm({
                 <p className="text-sm text-teal-900 mb-3">
                   ¿Deseas enviar esta nota a la DGII ahora? Solo es posible si la
                   factura original ya tiene e-CF emitido. También puedes dejarla
-                  como borrador y emitirla después desde su detalle.
+                  guardada y emitirla después desde su detalle.
                 </p>
                 <div className="flex gap-3 flex-wrap">
                   <Button
@@ -1297,7 +1302,7 @@ export default function NuevaFacturaForm({
                     variant="outline"
                     onClick={() => router.push(`${detalleBase}/${resultado.documentoId}`)}
                   >
-                    Dejar como borrador
+                    Guardar sin emitir
                   </Button>
                 </div>
                 {padreNota && !padreNota.conEcfReal && !ncfModificadoValido && (
@@ -1528,7 +1533,7 @@ export default function NuevaFacturaForm({
             loading={loading}
             loadingPreview={loadingPreview}
             primaryBtnClass={docAccent.primaryBtnClass}
-            primaryLabel={tipoEcf === 'sin-ncf' ? 'Guardar factura' : esPadreSinNcf ? 'Guardar borrador' : 'Emitir e-CF'}
+            primaryLabel={tipoEcf === 'sin-ncf' ? 'Guardar factura' : esPadreSinNcf ? 'Guardar' : 'Emitir e-CF'}
             loadingPrimaryLabel={(tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}

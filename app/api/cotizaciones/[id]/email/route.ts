@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   try {
     await resend.emails.send({
-      from:    'EmiteDO <noreply@yisraeltech.com>',
+      from:    'Zero <noreply@zero.com.do>',
       to:      targetEmail,
       subject: `Cotización ${cot.numero}`,
       html: `

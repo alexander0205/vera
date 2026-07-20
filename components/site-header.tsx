@@ -57,10 +57,10 @@ export async function SiteHeader() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
             <div className="h-8 w-8 rounded-lg bg-teal-600 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">E</span>
+              <span className="text-white font-bold text-sm">Z</span>
             </div>
             <span className="text-xl font-bold text-gray-900">
-              Emite<span className="text-teal-600">DO</span>
+              Ze<span className="text-teal-600">ro</span>
             </span>
           </Link>
 
