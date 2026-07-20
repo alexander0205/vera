@@ -10,7 +10,7 @@ import {
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store,
+  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store, BookOpen,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -72,6 +72,15 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/compras',      label: 'Facturas recibidas', plusHref: '/dashboard/compras/nueva' },
       { href: '/dashboard/gastos/nueva', label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
+    ],
+  },
+  {
+    id: 'contabilidad',
+    label: 'Contabilidad',
+    icon: BookOpen,
+    children: [
+      { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
+      { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
     ],
   },
   {
