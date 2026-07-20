@@ -465,8 +465,8 @@ export default function NuevaFacturaForm({
         ? `${origenCargos.length} cargos vinculados a la factura. Registra el cobro en la factura.`
         : 'Cargo vinculado a la factura. Registra el cobro en la factura.');
       router.push(estudianteId
-        ? `/dashboard/administracion-escolar/estudiantes/${estudianteId}`
-        : '/dashboard/administracion-escolar/estudiantes');
+        ? `/escolar/estudiantes/${estudianteId}`
+        : '/escolar/estudiantes');
     } catch (e) {
       setSaldandoCargo(false);
       toast.error(e instanceof Error ? e.message : 'No se pudo vincular el cargo');

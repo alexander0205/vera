@@ -143,7 +143,7 @@ export default async function NuevaFacturaRecurrentePage({ searchParams }: { sea
         <p className="text-sm text-gray-600">
           La matrícula requiere período con fechas, concepto activo de mensualidad y tutor responsable vinculado a un contacto.
         </p>
-        <Link href="/dashboard/administracion-escolar/estudiantes" className="text-sm text-teal-700 hover:underline">
+        <Link href="/escolar/estudiantes" className="text-sm text-teal-700 hover:underline">
           Volver a estudiantes
         </Link>
       </section>

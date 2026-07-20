@@ -39,7 +39,7 @@ export default function EstudiantesClient() {
   const router = useRouter();
   const { permissions } = usePermissions();
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
-  const irANuevo = () => router.push('/dashboard/administracion-escolar/estudiantes/nuevo');
+  const irANuevo = () => router.push('/escolar/estudiantes/nuevo');
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
 

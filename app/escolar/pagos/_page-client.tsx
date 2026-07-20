@@ -158,7 +158,7 @@ export default function PagosEscolaresClient() {
                     <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2.5 text-gray-600">{fmtFechaCorta(p.fechaPago)}</td>
                       <td className="px-3 py-2.5">
-                        <Link href={`/dashboard/administracion-escolar/estudiantes/${p.estudianteId}`}
+                        <Link href={`/escolar/estudiantes/${p.estudianteId}`}
                           className="font-medium text-gray-900 hover:text-teal-600">
                           {p.estudiante} {p.estudianteApellidos}
                         </Link>

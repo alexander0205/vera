@@ -400,9 +400,9 @@ export default function CargosClient() {
               {sinCatalogos && (
                 <p className="text-sm text-gray-400 mt-2">
                   Primero crea conceptos en{' '}
-                  <Link href="/dashboard/administracion-escolar/configuracion" className="text-teal-600 hover:underline">Configuración</Link>
+                  <Link href="/escolar/configuracion" className="text-teal-600 hover:underline">Configuración</Link>
                   {' '}y matrículas activas en{' '}
-                  <Link href="/dashboard/administracion-escolar/matriculas" className="text-teal-600 hover:underline">Matrículas</Link>.
+                  <Link href="/escolar/matriculas" className="text-teal-600 hover:underline">Matrículas</Link>.
                 </p>
               )}
             </div>
@@ -424,7 +424,7 @@ export default function CargosClient() {
                   {filtrados.map((c) => (
                     <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2.5">
-                        <Link href={`/dashboard/administracion-escolar/estudiantes/${c.estudianteId}`}
+                        <Link href={`/escolar/estudiantes/${c.estudianteId}`}
                           className="font-medium text-gray-900 hover:text-teal-600">
                           {c.estudiante} {c.estudianteApellidos}
                         </Link>

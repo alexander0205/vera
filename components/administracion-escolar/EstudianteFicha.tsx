@@ -96,7 +96,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         </div>
         {puedeGestionar && (
           <Button variant="ghost" size="sm" className="shrink-0"
-            onClick={() => router.push(`/dashboard/administracion-escolar/estudiantes/${e.id}`)}>
+            onClick={() => router.push(`/escolar/estudiantes/${e.id}`)}>
             Editar
           </Button>
         )}
@@ -135,7 +135,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
       {/* Acciones — el cobro se hace por-cargo en el perfil (va a la factura). */}
       <div className="border-t border-gray-100 pt-3 space-y-2">
         <Button className="w-full bg-teal-600 hover:bg-teal-700"
-          onClick={() => router.push(`/dashboard/administracion-escolar/estudiantes/${e.id}`)}>
+          onClick={() => router.push(`/escolar/estudiantes/${e.id}`)}>
           Abrir perfil completo
         </Button>
       </div>

@@ -1609,7 +1609,7 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
 
 function VolverLink() {
   return (
-    <Link href="/dashboard/administracion-escolar/estudiantes"
+    <Link href="/escolar/estudiantes"
       className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-teal-600 transition-colors">
       <ArrowLeft className="h-4 w-4" />Volver a estudiantes
     </Link>

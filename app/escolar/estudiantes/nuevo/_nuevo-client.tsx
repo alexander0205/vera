@@ -125,7 +125,7 @@ export default function NuevoEstudianteClient() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error creando estudiante');
-      router.push(`/dashboard/administracion-escolar/estudiantes/${data.estudiante.id}`);
+      router.push(`/escolar/estudiantes/${data.estudiante.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error creando estudiante');
       setSaving(false);
@@ -134,7 +134,7 @@ export default function NuevoEstudianteClient() {
 
   return (
     <section className="p-6 max-w-2xl mx-auto space-y-5">
-      <Link href="/dashboard/administracion-escolar/estudiantes"
+      <Link href="/escolar/estudiantes"
         className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-teal-600 transition-colors">
         <ArrowLeft className="h-4 w-4" />Volver a estudiantes
       </Link>

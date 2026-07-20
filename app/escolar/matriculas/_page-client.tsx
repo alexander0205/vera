@@ -229,9 +229,9 @@ export default function MatriculasClient() {
               {sinCatalogos && (
                 <p className="text-sm text-gray-400 mt-2">
                   Primero crea estudiantes activos en{' '}
-                  <Link href="/dashboard/administracion-escolar/estudiantes" className="text-teal-600 hover:underline">Estudiantes</Link>
+                  <Link href="/escolar/estudiantes" className="text-teal-600 hover:underline">Estudiantes</Link>
                   {' '}y períodos/cursos en{' '}
-                  <Link href="/dashboard/administracion-escolar/configuracion" className="text-teal-600 hover:underline">Configuración</Link>.
+                  <Link href="/escolar/configuracion" className="text-teal-600 hover:underline">Configuración</Link>.
                 </p>
               )}
             </div>
@@ -252,7 +252,7 @@ export default function MatriculasClient() {
                   {filtradas.map((m) => (
                     <tr key={m.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2.5">
-                        <Link href={`/dashboard/administracion-escolar/estudiantes/${m.estudianteId}`}
+                        <Link href={`/escolar/estudiantes/${m.estudianteId}`}
                           className="font-medium text-gray-900 hover:text-teal-600">
                           {m.estudiante} {m.estudianteApellidos}
                         </Link>
