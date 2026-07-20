@@ -15,6 +15,7 @@ import { verifyToken } from '@/lib/auth/session';
 import { getPlanDocLimit } from '@/lib/config/plans';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
+import { hoyRD } from '@/lib/utils/format';
 
 export async function getUser() {
   const sessionCookie = (await cookies()).get('session');
@@ -497,7 +498,7 @@ export async function getCuentasPorCobrar(
   teamId: number,
   opts: { clientId?: number; soloVencidas?: boolean } = {},
 ) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
 
   const rows = await db
     .select({

@@ -7,7 +7,7 @@ import {
   X, Wallet, Loader2, Archive, Wallet2,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 
 interface Cuenta {
@@ -350,7 +350,7 @@ function PagoModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyRD();
   // saldo = saldoFactura + moraSaldo (combinado). Montos en DOP.
   const saldoDOP        = cuenta.saldo / 100;        // combinado, disponible a abonar
   // El repeater valida contra (total − yaPagado). Con yaPagado=0, el cap es el
@@ -524,11 +524,13 @@ function HistoricaModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyRD();
+  // Vencimiento sugerido: 15 días desde hoy (RD). Se opera en UTC sobre la
+  // fecha calendario RD para que sumar días no arrastre desfase de zona.
   const vencDefault = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 15);
-    return d.toISOString().slice(0, 10);
+    const [y, m, d] = today.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + 15));
+    return dt.toISOString().slice(0, 10);
   })();
 
   const [encf, setEncf]               = useState('');

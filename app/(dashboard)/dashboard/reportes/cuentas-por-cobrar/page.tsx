@@ -2,7 +2,7 @@ import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { getAgingCxC } from '@/lib/reportes/queries';
 import { ReportShell, KpiCard, Panel } from '@/components/reportes/report-shell';
 import { AgingChart } from '@/components/reportes/charts';
@@ -21,7 +21,7 @@ export default async function CuentasPorCobrarPage() {
   if (!teamId) redirect('/sign-in');
 
   const aging = await getAgingCxC(teamId);
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
 
   return (
     <ReportShell
