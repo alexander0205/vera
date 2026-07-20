@@ -7,6 +7,7 @@
  */
 import 'server-only';
 import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists } from 'drizzle-orm';
+import { repartirCobro, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarEstudiantes,
@@ -297,13 +298,25 @@ export async function estadisticasEstudiantes(teamId: number): Promise<Estadisti
  * un sistema de cobro paralelo. Ver [[no-contaminar-entidades-genericas]].
  *
  * N:1 — una factura puede cubrir VARIOS cargos (incluso de distintos estudiantes,
- * p. ej. la factura de un tutor con varios hijos). El cobro se REPARTE entre sus
- * cargos: a cada uno le toca una porción proporcional del total de la factura
- * (según su monto; las porciones suman el total → sin doble conteo) y el pagado
- * se aplica en CASCADA por vencimiento (los más viejos primero → estados limpios).
- * Generaliza el 1:1 (un cargo → su porción = total de la factura).
+ * p. ej. la factura de un tutor con varios hijos). Lo que se REPARTE es lo
+ * COBRADO, en cascada por vencimiento (los más viejos primero), y el tope de
+ * cada cargo es su propio `montoCentavos`:
  *
- * Cargos ya `anulado` (anulación escolar manual) no se tocan.
+ *     saldo del cargo = montoCentavos − lo que le tocó del cobro
+ *
+ * Se reparte el cobro y no el total de la factura a propósito: la factura suele
+ * valer MÁS que la suma de sus cargos (lleva ITBIS, y puede traer líneas que no
+ * son del colegio). Repartiendo el total, un cargo de 1,000 dentro de una
+ * factura de 1,180 arrastraba una deuda de 180 que no existe.
+ *
+ * Lo cobrado = pagos recibidos + notas de crédito aplicadas. Sin las NC, una
+ * nota que ya redujo la factura dejaba el cargo mostrando deuda fantasma.
+ *
+ * Anular la FACTURA no perdona la deuda: el documento se anula, pero el colegio
+ * sigue teniendo su acreencia. El cargo vuelve a estar sin facturar
+ * (ecfDocumentId = null, saldo completo) para poder re-facturarlo. El estado
+ * `anulado` queda solo para la anulación escolar manual, que esta función no
+ * toca.
  */
 export async function sincronizarSaldosDesdeFacturas(
   teamId: number,
@@ -342,9 +355,29 @@ export async function sincronizarSaldosDesdeFacturas(
       ne(adminEscolarCargos.estado, 'anulado'),
     ));
 
-  // 3. Info de cada factura + total cobrado (ledger pagos_recibidos).
+  // 3. Info de cada factura + lo COBRADO = pagos recibidos + notas de crédito.
   const facturas = await db
-    .select({ id: ecfDocuments.id, montoTotal: ecfDocuments.montoTotal, estadoPago: ecfDocuments.estadoPago })
+    .select({
+      id: ecfDocuments.id,
+      montoTotal: ecfDocuments.montoTotal,
+      estadoPago: ecfDocuments.estadoPago,
+      // Crédito aplicado por NC (tipo 34) atadas a esta factura. Mismas reglas
+      // que getCuentasPorCobrar: solo las del modelo viejo (las nuevas generan
+      // saldo a favor del cliente), sin anuladas/rechazadas, y el código 2
+      // (corrige texto) no mueve dinero.
+      ncAplicado: sql<number>`COALESCE((
+        SELECT SUM(nc.monto_total) FROM ecf_documents nc
+        WHERE nc.team_id = ecf_documents.team_id
+          AND nc.tipo_ecf = '34'
+          AND nc.credito_generado_cents IS NULL
+          AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+          AND nc.codigo_modificacion IS DISTINCT FROM 2
+          AND (
+            nc.origen_documento_id = ecf_documents.id
+            OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf)
+          )
+      ), 0)::int`,
+    })
     .from(ecfDocuments)
     .where(and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.id, facturaIds)));
   const facturaById = new Map(facturas.map((f) => [f.id, f]));
@@ -361,7 +394,7 @@ export async function sincronizarSaldosDesdeFacturas(
 
   const hoy = new Date().toISOString().slice(0, 10);
 
-  // 4. Agrupar cargos por factura y repartir cobro (proporcional + cascada).
+  // 4. Agrupar cargos por factura y repartir lo cobrado en cascada.
   const porFactura = new Map<number, typeof cargos>();
   for (const c of cargos) {
     if (c.ecfDocumentId == null) continue;
@@ -370,62 +403,55 @@ export async function sincronizarSaldosDesdeFacturas(
     porFactura.set(c.ecfDocumentId, arr);
   }
 
-  const updates: { id: number; saldo: number; estado: string }[] = [];
+  const updates: SaldoCalculado[] = [];
+
+  const porId = new Map(cargos.map(c => [c.id, c]));
 
   for (const [fid, grupo] of porFactura) {
     const f = facturaById.get(fid);
     if (!f) continue;
-    // Cascada: vencimiento más viejo primero, luego id (sin venc va al final).
-    grupo.sort((a, b) => {
-      const va = a.fechaVencimiento ?? '9999-12-31';
-      const vb = b.fechaVencimiento ?? '9999-12-31';
-      if (va !== vb) return va < vb ? -1 : 1;
-      return a.id - b.id;
-    });
-
-    const sumMonto = grupo.reduce((s, c) => s + c.montoCentavos, 0);
-    // Porción de cada cargo sobre el total de la factura. El último absorbe el
-    // redondeo para que las porciones sumen exactamente montoTotal.
-    const shares: number[] = [];
-    let acc = 0;
-    grupo.forEach((c, i) => {
-      if (i === grupo.length - 1) {
-        shares.push(f.montoTotal - acc);
-      } else {
-        const s = sumMonto > 0 ? Math.round((f.montoTotal * c.montoCentavos) / sumMonto) : 0;
-        shares.push(s);
-        acc += s;
-      }
-    });
 
     const anulada = f.estadoPago === 'ANULADA';
-    const pagadaTotal = f.estadoPago === 'PAGADA' || f.estadoPago === 'GRATUITA';
-    let restante = pagadoById.get(fid) ?? 0;
+    // Factura sin importe: no dice nada sobre el cobro, así que no se toca
+    // nada (si no, marcaría todos sus cargos como pagados).
+    if (!anulada && f.montoTotal <= 0) continue;
 
-    grupo.forEach((c, i) => {
-      const share = shares[i];
-      const aplicado = Math.min(restante, share);
-      restante -= aplicado;
-      let saldo = Math.max(0, share - aplicado);
-      let estado: string;
-      if (anulada) { estado = 'anulado'; }
-      else if (pagadaTotal) { estado = 'pagado'; saldo = 0; }
-      else if (saldo === 0) { estado = 'pagado'; }
-      else if (aplicado > 0) { estado = 'parcial'; }
-      else if (c.fechaVencimiento && c.fechaVencimiento < hoy) { estado = 'vencido'; }
-      else { estado = 'pendiente'; }
-      if (saldo !== c.saldoCentavos || estado !== c.estado) {
-        updates.push({ id: c.id, saldo, estado });
-      }
+    // Lo cobrado incluye las NC: ya redujeron lo que la familia debe.
+    const cobrado = (pagadoById.get(fid) ?? 0) + Number(f.ncAplicado ?? 0);
+
+    const calculados = repartirCobro(grupo, cobrado, hoy, {
+      facturaAnulada: anulada,
+      facturaSaldada: f.estadoPago === 'PAGADA' || f.estadoPago === 'GRATUITA',
     });
+
+    for (const r of calculados) {
+      const actual = porId.get(r.id);
+      if (!actual) continue;
+      const cambia = r.saldo !== actual.saldoCentavos
+        || r.estado !== actual.estado
+        || (r.desvincular && actual.ecfDocumentId != null);
+      if (cambia) updates.push(r);
+    }
   }
 
-  // 5. Persistir solo los cambios.
-  for (const u of updates) {
-    await db.update(adminEscolarCargos)
-      .set({ saldoCentavos: u.saldo, estado: u.estado, updatedAt: new Date() })
-      .where(eq(adminEscolarCargos.id, u.id));
-  }
+  // 5. Persistir solo los cambios, todo o nada: a medias quedarían saldos que
+  //    no cuadran con la factura.
+  if (updates.length === 0) return;
+  await db.transaction(async (tx) => {
+    for (const u of updates) {
+      await tx.update(adminEscolarCargos)
+        .set({
+          saldoCentavos: u.saldo,
+          estado: u.estado,
+          ...(u.desvincular ? { ecfDocumentId: null } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(adminEscolarCargos.id, u.id),
+          eq(adminEscolarCargos.teamId, teamId),
+        ));
+    }
+  });
 }
 
 /**
