@@ -170,6 +170,11 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
 
+  // Contabilidad — el grupo llegó de main sin gate: cualquiera con dashboard
+  // veía secuencias y consulta de e-NCF. Se gatea junto con el motor contable.
+  '/dashboard/contabilidad/secuencias':   'contabilidad:ver',
+  '/dashboard/contabilidad/consulta-ncf': 'contabilidad:ver',
+
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
