@@ -507,8 +507,8 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
 export type OrdenCartera = 'reciente' | 'antiguo' | 'monto' | 'vencimiento';
 
 const ORDEN_CARTERA_SQL: Record<OrdenCartera, string> = {
-  reciente:    'fecha_emision DESC',
-  antiguo:     'fecha_emision ASC',
+  reciente:    'fecha_emision_ts DESC',
+  antiguo:     'fecha_emision_ts ASC',
   monto:       'saldo DESC',
   // Vencidas primero y las más atrasadas arriba; las que no vencen, al final.
   vencimiento: 'vencida DESC, fecha_limite_date ASC NULLS LAST',
@@ -561,7 +561,17 @@ export async function getCuentasPorCobrar(
   const cte = sql`
     WITH base AS (
       SELECT
-        d.id, d.encf, d.codigo, d.tipo_ecf, d.fecha_emision, d.fecha_limite_pago,
+        d.id, d.encf, d.codigo, d.tipo_ecf, d.fecha_limite_pago,
+        -- db.execute crudo NO parsea timestamp a Date: devuelve el string de pg
+        -- ('2026-06-28 00:00:00'), y fmtFechaCorta parte por 'T' → salía
+        -- "28 00:00:00/06/2026". Se entrega ya como YYYY-MM-DD.
+        -- fecha_emision es timestamp SIN zona que guarda la hora-pared RD, así
+        -- que NO lleva AT TIME ZONE: convertirla correría el día.
+        to_char(d.fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
+        -- El timestamp crudo se conserva solo para ordenar: sobre el texto
+        -- YYYY-MM-DD el orden sería cronológico igual, pero empataría todas las
+        -- facturas del mismo día al perder la hora.
+        d.fecha_emision AS fecha_emision_ts,
         d.rnc_comprador, d.razon_social_comprador, d.email_comprador,
         d.client_id, d.estado, d.monto_total, d.total_itbis,
         -- fecha_limite_pago es varchar(10); ''::date lanza en Postgres, así que
@@ -649,7 +659,7 @@ export async function getCuentasPorCobrar(
 
   interface CarteraRow {
     id: number; encf: string; codigo: string | null; tipo_ecf: string;
-    fecha_emision: Date; fecha_limite_pago: string | null;
+    fecha_emision: string; fecha_limite_pago: string | null;
     rnc_comprador: string | null; razon_social_comprador: string | null;
     email_comprador: string | null; client_id: number | null;
     estado: string; monto_total: number; total_itbis: number;

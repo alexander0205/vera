@@ -50,10 +50,14 @@ export default function CuentasPorCobrarPage() {
     return () => clearTimeout(t);
   }, [filterValues.cliente]);
 
-  // Cualquier cambio de filtro invalida la página actual.
-  useEffect(() => {
+  // Cualquier cambio de filtro invalida la página actual. Se resetea en el mismo
+  // handler que cambia el filtro (no en un efecto aparte): si no, estando en la
+  // página 2 el cambio disparaba DOS consultas — una con el offset viejo y otra
+  // tras el reset. React agrupa ambos setState en un solo render.
+  const cambiarFiltros = useCallback((v: Record<string, string>) => {
+    setFilterValues(v);
     setPage(1);
-  }, [busqueda, filterValues.tipoDoc, filterValues.estado, filterValues.orden, agrupar]);
+  }, []);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -299,7 +303,7 @@ export default function CuentasPorCobrarPage() {
           },
         ]}
         filterValues={filterValues}
-        onFilterChange={setFilterValues}
+        onFilterChange={cambiarFiltros}
         rowActions={rowActions}
         groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
