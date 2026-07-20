@@ -46,7 +46,9 @@ const REPARTO: Record<string, string[]> = {
   lector: ['administracion-escolar:ver'],
 };
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require', max: 1 });
+// La DB local de desarrollo (docker) no habla SSL; las remotas sí lo exigen.
+const esLocal = /localhost|127\.0\.0\.1/.test(process.env.POSTGRES_URL ?? '');
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: esLocal ? false : 'require', max: 1 });
 
 (async () => {
   const [team] = await sql<{ id: number; name: string; modulos: string[] | null }[]>`
@@ -69,9 +71,13 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require', max: 1 });
   const modulos = ['facturacion', 'pos', 'escolar'].filter(m => actuales.has(m));
 
   await sql.begin(async tx => {
+    // sql.json y no JSON.stringify: pasar la cadena hace que postgres.js la
+    // mande como jsonb ya serializado y el ::jsonb quede de adorno, guardando
+    // la CADENA '["facturacion"]' en vez del array. Al releerla, sanitizeModules
+    // ve algo que no es array y devuelve [] — la empresa se queda sin módulos.
     await tx`
       UPDATE teams
-      SET modulos_override = ${JSON.stringify(modulos)}::jsonb, updated_at = now()
+      SET modulos_override = ${sql.json(modulos)}, updated_at = now()
       WHERE id = ${teamId}
     `;
 
