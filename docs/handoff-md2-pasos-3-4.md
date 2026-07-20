@@ -18,6 +18,16 @@ MD2 sale de la transcripción `transcripciones/whatsapp_ptt_2026-07-14_170343.md
 
 La numeración de la documentación NO es el orden de ejecución. El **paso 3 ya está implementado**; sigue el **paso 4** (automatización, más grande y necesita decisiones de Alex). El paso 4 automatiza lo que el paso 3 permite forzar manualmente.
 
+## 🔎 PENDIENTE DE CONSULTAR CON ALEX (no bloqueante) — observación arquitectónica
+
+**Dependencia invertida genérico → escolar.** Al implementar el paso 4, `lib/cobranza/recurrente.ts` (motor **genérico** de facturación recurrente) quedó **importando** `lib/administracion-escolar/facturacion-recurrente.ts` (`reflejarFacturaRecurrenteEnCargo`). Esto **invierte la dirección de dependencia que Alex exige** ("el genérico nunca conoce lo vertical"). Detalles:
+- El schema SÍ respeta la regla (FK unidireccional matrícula→`facturas_recurrentes`, migración 0077); la inversión es solo a **nivel de código**.
+- Es funcionalmente correcto e **idempotente**, y hace **no-op** para recurrentes no escolares (busca la matrícula por `facturaRecurrenteId`; si no hay `conceptoMensualidadId`, retorna).
+- Costo menor: 1 query indexada por generación de recurrente, incluso para las NO escolares.
+- **Alternativa más limpia** (a evaluar): un hook/evento que el módulo escolar registre en el motor, o que lo escolar **envuelva** a `generarFacturaDeRecurrente` en vez de que el motor llame hacia adentro.
+
+**Estado: dejado tal cual, a propósito, hasta decidir con Alex.** No cambiar sin su visto bueno. Verificado E2E funcionando (2026-07-15) pese a la observación.
+
 ---
 
 ## Infraestructura del motor que YA EXISTE (clave — no reconstruir)
