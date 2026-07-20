@@ -255,19 +255,85 @@ texto y traza de red.
 
 ## Pendientes abiertos
 
-- [ ] **Decidir si se corrige `getAgingCxC`** para que no sobreestime la cartera
-      (ver el aviso en la Etapa 2). Hoy el reporte y la pantalla de cobros dan
-      números distintos. Afecta también a
-      `/api/reportes/export?report=cuentas-por-cobrar`.
+> **Palabra clave para retomar en otra sesión: `RETOMAR-CONTABILIDAD`.**
+> Con eso, leer este archivo entero antes de tocar nada.
+
+### A. Bloquean o esperan a alguien
+
+- [ ] **Respuesta de Alex sobre el hotfix de fecha UTC.** ¿Se despliega aparte a
+      `main` o se queda dentro de esta rama? Ya está mergeado aquí; la rama
+      `hotfix/vencimiento-fecha-utc` sigue intacta sobre `main` por si lo quiere
+      suelto (3 commits, listo para push).
+- [ ] **Nada se ha pusheado.** Todo el trabajo es local. Decidir cuándo subir.
+- [ ] **Decidir si se corrige `getAgingCxC`.** No resta las notas de crédito, así
+      que el reporte de antigüedad y la pantalla de cobros dan cifras distintas
+      (medido: RD$78,295 contra RD$77,245 en el team 9). Afecta también a
+      `/api/reportes/export?report=cuentas-por-cobrar`. Toca un reporte que ya
+      está en producción — no tocarlo sin visto bueno.
+
+### B. Entorno
+
 - [ ] **Aplicar las migraciones escolares 0074-0081 a la branch de Neon de
-      contabilidad**, o el módulo escolar seguirá inoperativo aquí.
-- [ ] **Probar un envío real de recordatorio** con un correo propio antes de
-      soltarlo a clientes. La previsualización está verificada; el envío no.
+      contabilidad.** Hoy no hay ninguna tabla `admin_escolar_*` y el módulo
+      escolar está inoperativo en esta base.
+- [ ] **Confirmar contra la base de producción si `fecha_limite_pago` está
+      realmente vacía.** De eso depende si el bug de mora llegó a cobrar de más
+      a algún cliente. En la base de dev solo 1 documento de 100+ tiene correo y
+      casi ninguno tiene fecha límite, pero eso no dice nada de producción.
+
+### C. Verificación que falta
+
+- [ ] **Probar un envío real de recordatorio** contra un correo propio antes de
+      soltarlo a clientes. La previsualización y las guardas están verificadas;
+      el envío real nunca se ejecutó (llamaría a Resend y saldría hacia afuera).
+- [ ] **Validar con el usuario el compromiso de "agrupar por cliente"**: pide 500
+      filas y oculta la paginación, con aviso si la cartera excede eso.
+
+### D. Mejoras opcionales
+
 - [ ] Enganchar `evaluarPromesasVencidas` a un cron, si se quiere que las
       promesas se marquen solas sin que alguien abra la cuenta.
-- [ ] Respuesta de Alex sobre el hotfix: ¿se despliega aparte a main o se queda aquí?
-- [ ] Confirmar contra la base de **producción** si `fecha_limite_pago` está
-      realmente vacía. De eso depende si el bug de mora llegó a cobrar de más.
-- [ ] Al agrupar por cliente se piden 500 filas y se oculta la paginación, con un
-      aviso si la cartera excede eso. Solución de compromiso — validar con el usuario
-      que le sirve.
+
+### E. Entregable pendiente — briefing para Alex
+
+- [ ] **Preparar la explicación para que Darian le presente el módulo a Alex.**
+      Debe cubrir dos cosas distintas:
+
+  **1. Guion de prueba en la UI** (`/dashboard/cuentas-por-cobrar`, team 9, con
+  `npx tsx scripts/seed-cartera-escenarios.ts 9` corrido):
+  - Las 4 tarjetas de arriba y las 5 cubetas de antigüedad; comprobar que las
+    cubetas suman el total.
+  - Clic en una cubeta filtra; segundo clic lo quita; las demás cubetas
+    conservan su monto (a propósito).
+  - Paginación: los totales de arriba son de **toda** la cartera, no de la
+    página. Es el arreglo central de la Etapa 1.
+  - Filtros y orden; búsqueda con debounce.
+  - Panel de detalle (icono de panel en cada fila): el desglose *explica* el
+    saldo — total, pagado, notas de crédito, saldo de factura, mora.
+  - Gestión de cobro: registrar contacto, nota y promesa; cerrar la promesa;
+    fijar próxima acción.
+  - Exportar: el archivo respeta los filtros activos y trae toda la cartera.
+  - Casos sembrados que valen la pena enseñar: `SEEDCXC-CONMORA` (mora que
+    ignora una ND anulada), `SEEDCXC-CONNCID` (nota de crédito restando),
+    `SEEDCXC-VENC100` (cubeta +90), `SEEDCXC-SALDADAMORA` (factura saldada que
+    sigue en cartera solo por su mora).
+
+  **2. Qué debe entender Darian para defenderlo**, en lenguaje llano:
+  - Qué es la fórmula del saldo y por qué `saldoFactura` y `saldo` son dos cosas
+    distintas (mora aparte).
+  - Por qué el saldo se bajó a SQL: antes el `LIMIT` cortaba antes de descartar
+    las filas sin saldo, y con más de 2000 documentos abiertos la cartera se
+    truncaba en silencio.
+  - Qué NO hace este módulo: **no genera asientos contables todavía**. El Paso 1
+    es cartera; el motor contable arranca en el Paso 2.
+  - Los dos hallazgos que le tocan a Alex decidir: el bug de fecha UTC y la
+    discrepancia de `getAgingCxC`.
+  - Que la migración 0082 ya está aplicada en la branch de contabilidad, y que
+    crea dos tablas nuevas sin tocar ninguna existente.
+
+## Siguiente trabajo de desarrollo
+
+**Paso 2 del plan: catálogo de cuentas contables.** Nada empezado. No existe
+ninguna tabla de asientos ni de catálogo en el schema. Ver
+`docs/plan-contabilidad-vera.md` desde "Paso 2". La primera migración libre es
+la **0083** (la 0082 ya se usó).
