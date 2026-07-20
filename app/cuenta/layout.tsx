@@ -1,6 +1,5 @@
-import Box from '@mui/material/Box';
 import { CuentaNavRail } from '@/components/cuenta-nav-rail';
-import { ModuleHeader } from '@/components/module-header';
+import { ModuleShell } from '@/components/module-shell';
 import { getUser } from '@/lib/db/queries';
 
 export const metadata = { title: 'Zero Administración' };
@@ -17,14 +16,14 @@ export default async function CuentaLayout({ children }: { children: React.React
   const user = await getUser();
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f9fafb', color: '#111827' }}>
-      <CuentaNavRail />
-      <Box sx={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <ModuleHeader current={null} titulo="Administración" user={user ?? null} />
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          {children}
-        </Box>
-      </Box>
-    </Box>
+    <ModuleShell
+      current={null}
+      titulo="Administración"
+      user={user ?? null}
+      rail={<CuentaNavRail />}
+      railMovil={<CuentaNavRail variant="drawer" />}
+    >
+      {children}
+    </ModuleShell>
   );
 }

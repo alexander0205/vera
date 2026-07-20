@@ -14,7 +14,8 @@ import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { Search } from 'lucide-react';
+import IconButton from '@mui/material/IconButton';
+import { Menu as MenuIcon, Search } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleSwitcher } from '@/components/module-switcher';
 import { ProfileDropdown, type UserInfo } from '@/components/profile-dropdown';
@@ -24,12 +25,15 @@ export function ModuleHeader({
   current,
   titulo,
   user,
+  onAbrirMenu,
 }: {
   /** Módulo en el que estamos: marca el activo en el switcher. */
   current: ModuleKey | null;
   /** Nombre del área cuando no es un módulo del catálogo (p. ej. Administración). */
   titulo?: string;
   user: UserInfo | null;
+  /** Abre el cajón de navegación. Solo se muestra por debajo de md. */
+  onAbrirMenu?: () => void;
 }) {
   return (
     <>
@@ -47,6 +51,17 @@ export function ModuleHeader({
         }}
       >
         <Toolbar variant="dense" sx={{ height: 56, minHeight: 56, gap: 1, px: { xs: 1.5, sm: 2 } }}>
+          {onAbrirMenu && (
+            <IconButton
+              onClick={onAbrirMenu}
+              size="small"
+              aria-label="Abrir menú"
+              sx={{ display: { md: 'none' }, color: 'text.secondary' }}
+            >
+              <MenuIcon style={{ width: 20, height: 20 }} />
+            </IconButton>
+          )}
+
           {titulo && (
             <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: 'text.primary' }}>
               {titulo}
