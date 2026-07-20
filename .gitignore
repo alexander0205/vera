@@ -59,3 +59,12 @@ scripts/check-cert-status.ts
 
 .claire/
 .release-notes.md
+
+# scratch de sesiones de trabajo (temporales de codex + transcripciones de audio)
+.codex_tmp/
+transcripciones/
+
+# docs de trabajo en curso (borradores locales, no parte del producto)
+docs/plan-contabilidad-vera.md
+docs/mini-plan-contabilidad-asientos-reportes.md
+docs/mockup-cuentas-por-cobrar-paso-1.html
