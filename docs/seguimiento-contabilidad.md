@@ -44,10 +44,13 @@
 | — | Merge del fix de fecha RD | ✅ Hecho | `95ed505` |
 | 1 | Saldo a SQL, filtros/orden/paginación server-side, totales sobre toda la cartera | ✅ Hecho | `8ea7410` + `9c0e597` |
 | 2 | Antigüedad de saldos (1-30/31-60/61-90/90+), "por vencer", métricas | ✅ Hecho | `c95bb4b` |
-| 3 | Panel lateral de detalle + timeline con datos ya existentes | ⬜ Siguiente | — |
-| 4 | Seguimiento de cobranza + promesas de pago + notas internas → **migración 0082** | ⬜ **Primer toque de DB** | — |
-| 5 | Recordatorios individual/masivo + exportar cartera | ⬜ | — |
-| 6 | Validar casos reales + trazabilidad | ⬜ | — |
+| 3 | Panel lateral de detalle + timeline con datos ya existentes | ✅ Hecho | `f2a151c` |
+| 4 | Seguimiento de cobranza + promesas de pago + notas internas → **migración 0082** | ✅ Hecho (migración aplicada) | `8f7ec81` |
+| 5 | Recordatorios individual/masivo + exportar cartera | ✅ Hecho | `c35d354` |
+| 6 | Validar casos reales + trazabilidad | ✅ Hecho | `f008345` |
+
+**El Paso 1 del plan está completo.** Lo siguiente es el Paso 2 (catálogo de
+cuentas contables), que es donde arranca el motor contable de verdad.
 
 Después del Paso 1 vienen los Pasos 2-6 del plan (catálogo de cuentas, cuentas
 automáticas, asientos, notas/anulaciones/mora/retenciones, reportes contables).
@@ -133,6 +136,33 @@ tarjetas clicables que filtran la lista.
 > tres NC sembradas (300 + 250 + 500) que el reporte no descuenta.
 > Son dos pantallas que le dan números distintos al mismo usuario para lo mismo.
 > **Pendiente de decidir con Alex si se corrige el reporte.**
+
+### Etapas 3-6 — `f2a151c`, `8f7ec81`, `c35d354`, `f008345`
+
+- **Etapa 3** — Panel lateral con el desglose que *explica* el saldo (total,
+  pagado, NC, mora) y el historial de movimientos. `lib/cobranza/detalle.ts` no
+  recalcula el saldo: usa las mismas condiciones del CTE de cartera, si
+  divergieran el desglose no cuadraría con el total mostrado arriba.
+- **Etapa 4** — Migración **0082 aplicada**: `cobranza_eventos` (log de
+  contactos, notas y promesas) + `cobranza_seguimiento` (estado: responsable y
+  próxima acción). El estado de una promesa se persiste, no se deriva: si mañana
+  el cliente paga, la promesa incumplida de ayer sigue habiendo sido incumplida.
+  `evaluarPromesasVencidas` marca cumplidas **antes** que incumplidas.
+- **Etapa 5** — Export a Excel con los filtros de la pantalla y ruta propia
+  (`/api/cuentas-por-cobrar/export`), más recordatorios por correo en **dos
+  pasos**: sin `confirmar: true` solo previsualiza. Tope de 50 por lote.
+- **Etapa 6** — Origen escolar en el detalle (consulta del lado escolar, no de
+  cobranza) y `scripts/validar-cartera.ts` con 37 comprobaciones.
+
+> ⚠️ **La rama de Neon de contabilidad NO tiene las tablas `admin_escolar_*`.**
+> Se creó desde un estado anterior a las migraciones escolares 0074-0081, aunque
+> el código de esta rama sí las incluye. **El módulo de Administración Escolar
+> está inoperativo en esta base.** El origen escolar del panel captura el error
+> 42P01 y degrada a vacío, pero cualquier pantalla escolar dará error hasta que
+> se apliquen esas migraciones aquí.
+
+> ⚠️ **El envío real de recordatorios nunca se probó.** Llamaría a Resend y
+> saldría hacia afuera. Solo se validó la previsualización y las guardas.
 
 ## Trampas encontradas (no volver a tropezar)
 
@@ -227,7 +257,14 @@ texto y traza de red.
 
 - [ ] **Decidir si se corrige `getAgingCxC`** para que no sobreestime la cartera
       (ver el aviso en la Etapa 2). Hoy el reporte y la pantalla de cobros dan
-      números distintos.
+      números distintos. Afecta también a
+      `/api/reportes/export?report=cuentas-por-cobrar`.
+- [ ] **Aplicar las migraciones escolares 0074-0081 a la branch de Neon de
+      contabilidad**, o el módulo escolar seguirá inoperativo aquí.
+- [ ] **Probar un envío real de recordatorio** con un correo propio antes de
+      soltarlo a clientes. La previsualización está verificada; el envío no.
+- [ ] Enganchar `evaluarPromesasVencidas` a un cron, si se quiere que las
+      promesas se marquen solas sin que alguien abra la cuenta.
 - [ ] Respuesta de Alex sobre el hotfix: ¿se despliega aparte a main o se queda aquí?
 - [ ] Confirmar contra la base de **producción** si `fecha_limite_pago` está
       realmente vacía. De eso depende si el bug de mora llegó a cobrar de más.
