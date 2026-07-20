@@ -43,8 +43,8 @@
 | 0 | Documentar lógica de saldo + permisos `contabilidad:*` | ✅ Hecho | `93cd76c` |
 | — | Merge del fix de fecha RD | ✅ Hecho | `95ed505` |
 | 1 | Saldo a SQL, filtros/orden/paginación server-side, totales sobre toda la cartera | ✅ Hecho | `8ea7410` + `9c0e597` |
-| 2 | Antigüedad de saldos (1-30/31-60/61-90/90+), "por vencer", métricas | ⬜ Siguiente | — |
-| 3 | Panel lateral de detalle + timeline con datos ya existentes | ⬜ | — |
+| 2 | Antigüedad de saldos (1-30/31-60/61-90/90+), "por vencer", métricas | ✅ Hecho | `c95bb4b` |
+| 3 | Panel lateral de detalle + timeline con datos ya existentes | ⬜ Siguiente | — |
 | 4 | Seguimiento de cobranza + promesas de pago + notas internas → **migración 0082** | ⬜ **Primer toque de DB** | — |
 | 5 | Recordatorios individual/masivo + exportar cartera | ⬜ | — |
 | 6 | Validar casos reales + trazabilidad | ⬜ | — |
@@ -115,6 +115,25 @@ Por eso esta query no depende del `hoyRD()` de JS.
 
 ---
 
+### Etapa 2 — `c95bb4b`
+
+Cubetas de antigüedad (`porVencer`, `d1a30`, `d31a60`, `d61a90`, `d90mas`) como
+tarjetas clicables que filtran la lista.
+
+- Se calculan **dentro del CTE de cartera**, no reusando `getAgingCxC`.
+- El filtro de cubeta vive en un CTE aparte (`filtrada`) para que el desglose se
+  siga calculando sobre `cartera` completa: al elegir una cubeta las demás
+  conservan su monto. Los stats de arriba sí reflejan la cubeta activa.
+
+> ⚠️ **`getAgingCxC` (lib/reportes/queries.ts) no resta las notas de crédito.**
+> Usa además otra definición de cobrable: solo e-CF aceptados, y cuenta las ND
+> de mora como filas propias en vez de agruparlas en su factura padre.
+> Medido en el team 9: **RD$78,295 en el reporte de antigüedad contra RD$77,245
+> en cuentas por cobrar** — RD$1,050 de diferencia, que corresponde exacto a las
+> tres NC sembradas (300 + 250 + 500) que el reporte no descuenta.
+> Son dos pantallas que le dan números distintos al mismo usuario para lo mismo.
+> **Pendiente de decidir con Alex si se corrige el reporte.**
+
 ## Trampas encontradas (no volver a tropezar)
 
 1. **`fecha_limite_pago` es `varchar(10)`, no `date`.** `''::date` lanza excepción
@@ -148,30 +167,30 @@ Por eso esta query no depende del `hoyRD()` de JS.
 
 ## Datos de prueba en la DB
 
-Sembrados en **team 11** (`Distribuidora García SRL`, RNC ficticio `130123456` —
-data de demo, no cliente real). Todo con prefijo **`SEEDCXC`** en `encf` y `codigo`.
+Script versionado: **`scripts/seed-cartera-escenarios.ts`**.
 
-29 documentos que cubren: al día, vence hoy, vencidas a 1/45/100 días, sin fecha,
-pago parcial, ND de mora (activa + anulada + ya cobrada), factura saldada que sólo
-arrastra mora, y las **5 variantes de nota de crédito** (por `origen_documento_id`,
-por `ncf_modificado`, código 2 "corrige texto", anulada, modelo nuevo con
-`credito_generado_cents`, y NC mayor que el saldo), más anuladas/rechazadas/pagadas.
-
-Para borrarlos:
-
-```sql
-DELETE FROM pagos_recibidos WHERE ecf_document_id IN
-  (SELECT id FROM ecf_documents WHERE team_id=11 AND (encf LIKE 'SEEDCXC%' OR codigo LIKE 'SEEDCXC%'));
-DELETE FROM ecf_documents WHERE team_id=11 AND (encf LIKE 'SEEDCXC%' OR codigo LIKE 'SEEDCXC%');
+```bash
+npx tsx scripts/seed-cartera-escenarios.ts 9            # siembra (idempotente)
+npx tsx scripts/seed-cartera-escenarios.ts 9 --limpiar  # solo borra
 ```
 
-**Ojo:** uno de los documentos tiene `encf = 'E310000099001'` (se renombró a
-propósito para probar el vínculo por `ncf_modificado`), por eso la limpieza debe
-buscar también por `codigo`.
+Sembrado actualmente en **team 9** (`COLEGIO ANDRES BELLO`, 31 docs) y en
+**team 11** (`Distribuidora García SRL`, 29 docs). Todo lleva el prefijo
+**`SEEDCXC`** en `encf` y `codigo`, así que no se mezcla con los datos reales.
 
-> El script de siembra fue temporal y se borró. Si se va a seguir con las Etapas
-> 2-6 conviene versionarlo como `scripts/seed-cartera-escenarios.ts` en vez de
-> regenerarlo cada vez. **Está pendiente de decidir con el usuario.**
+Cubre: al día, vence hoy, vencidas a 1/45/75/100 días (una por cubeta de
+antigüedad), sin fecha, pago parcial, ND de mora (activa + anulada + ya cobrada),
+factura saldada que sólo arrastra mora, las **5 variantes de nota de crédito**
+(por `origen_documento_id`, por `ncf_modificado`, código 2 "corrige texto",
+anulada, modelo nuevo con `credito_generado_cents`, y NC mayor que el saldo), y
+anuladas/rechazadas/pagadas.
+
+**Ojo:** uno de los documentos tiene `encf = 'E310000099001'` (renombrado a
+propósito para probar el vínculo por `ncf_modificado`), por eso la limpieza busca
+también por `codigo`.
+
+**Por qué el team 9:** el usuario de auto-login solo pertenece a los teams 2, 7,
+9 y 10. Sembrar en el 11 dejaba los escenarios invisibles desde la UI.
 
 ## Cómo se verificó la Etapa 1
 
@@ -206,10 +225,9 @@ texto y traza de red.
 
 ## Pendientes abiertos
 
-- [ ] **Ver vencidas y mora en la UI.** Los datos sembrados están en el team 11 y
-      el usuario de auto-login no pertenece a ese team. O se le agrega como
-      miembro, o se siembran unos pocos escenarios en el team 9.
-- [ ] Decidir si el script de siembra se versiona en `scripts/`.
+- [ ] **Decidir si se corrige `getAgingCxC`** para que no sobreestime la cartera
+      (ver el aviso en la Etapa 2). Hoy el reporte y la pantalla de cobros dan
+      números distintos.
 - [ ] Respuesta de Alex sobre el hotfix: ¿se despliega aparte a main o se queda aquí?
 - [ ] Confirmar contra la base de **producción** si `fecha_limite_pago` está
       realmente vacía. De eso depende si el bug de mora llegó a cobrar de más.
