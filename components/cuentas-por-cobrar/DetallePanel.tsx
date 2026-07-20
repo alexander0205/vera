@@ -8,7 +8,10 @@ import {
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import type { DetalleCuenta, EventoCartera } from '@/lib/cobranza/detalle';
+import type { OrigenEscolarFactura } from '@/lib/administracion-escolar/origen-factura';
 import { GestionCobro } from '@/components/cuentas-por-cobrar/GestionCobro';
+
+const MESES = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 /** Icono y color por tipo de evento del timeline. */
 const EVENTO_UI: Record<EventoCartera['tipo'], {
@@ -28,6 +31,7 @@ export function DetallePanel({
   onCobrar: (c: Cuenta) => void;
 }) {
   const [detalle, setDetalle] = useState<DetalleCuenta | null>(null);
+  const [origenEscolar, setOrigenEscolar] = useState<OrigenEscolarFactura[]>([]);
   const [actual, setActual]   = useState<Cuenta>(cuenta);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -45,6 +49,7 @@ export function DetallePanel({
       .then(j => {
         if (!vivo) return;
         setDetalle(j);
+        setOrigenEscolar(j.origenEscolar ?? []);
         if (j.cuenta) setActual(j.cuenta);
       })
       .catch(e => { if (vivo) setError(e instanceof Error ? e.message : 'Error'); })
@@ -123,6 +128,36 @@ export function DetallePanel({
               )}
             </div>
           </section>
+
+          {/* Origen escolar — solo aparece si la factura cubre cargos de un
+              colegio. Responde "de dónde salió esta deuda" sin salir del panel. */}
+          {origenEscolar.length > 0 && (
+            <section className="px-4 py-3 border-b border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Origen escolar
+              </h3>
+              <ul className="space-y-1.5">
+                {origenEscolar.map(o => (
+                  <li key={o.cargoId} className="text-sm">
+                    <p className="text-gray-900">
+                      {o.estudiante}
+                      {o.codigoEstudiante && (
+                        <span className="text-gray-400 font-mono text-xs"> · {o.codigoEstudiante}</span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      {[
+                        o.concepto,
+                        o.mes ? `${MESES[o.mes]} ${o.anio}` : String(o.anio),
+                        o.curso,
+                        o.periodo,
+                      ].filter(Boolean).join(' · ')}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* Timeline */}
           <section className="px-4 py-3">

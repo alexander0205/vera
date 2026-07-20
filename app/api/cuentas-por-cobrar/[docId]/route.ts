@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, getCuentasPorCobrar } from '@/lib/db/queries';
 import { getDetalleCuenta } from '@/lib/cobranza/detalle';
+import { getOrigenEscolarDeFactura } from '@/lib/administracion-escolar/origen-factura';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -44,6 +45,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ docI
   }
   // El detalle se pide igual aunque la cuenta ya no esté en cartera (saldada
   // mientras el panel estaba abierto): el historial sigue siendo válido.
-  const detalle = await getDetalleCuenta(teamId, id);
-  return NextResponse.json({ cuenta, ...detalle });
+  // El origen escolar se pide aparte y por su propio módulo: cobranza no
+  // importa las tablas escolares (ver lib/administracion-escolar/origen-factura).
+  const [detalle, origenEscolar] = await Promise.all([
+    getDetalleCuenta(teamId, id),
+    getOrigenEscolarDeFactura(teamId, id),
+  ]);
+  return NextResponse.json({ cuenta, ...detalle, origenEscolar });
 }
