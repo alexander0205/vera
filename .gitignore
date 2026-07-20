@@ -58,3 +58,6 @@ scripts/check-user-role.ts
 scripts/check-cert-status.ts
 
 .claire/
+
+# scratch de sesiones de trabajo (temporales de codex, no parte del producto)
+.codex_tmp/
