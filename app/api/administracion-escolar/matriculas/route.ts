@@ -65,25 +65,29 @@ export async function POST(req: NextRequest) {
   }
   // Los tres ids vienen del cliente: hay que confirmar que son de este colegio
   // antes de crear la matrícula.
-  const ajeno = await validarPertenencia(teamId, {
+  const refs = await validarPertenencia(teamId, {
     estudiante: estudianteId,
     periodo:    periodoId,
     curso:      cursoId,
   });
-  if (ajeno) return NextResponse.json({ error: ajeno }, { status: 404 });
+  if (!refs.ok) return NextResponse.json({ error: refs.error }, { status: 404 });
+  // Ids ya normalizados: son los que se comprobaron contra el team.
+  const estudianteIdOk = refs.ids.estudiante!;
+  const periodoIdOk    = refs.ids.periodo!;
+  const cursoIdOk      = refs.ids.curso!;
 
   const estadoNorm = ESTADOS.includes(estado) ? estado : 'activa';
   if (estadoNorm === 'activa') {
-    const conflicto = await conflictoMatriculaActivaPorPeriodo({ teamId, estudianteId, periodoId });
+    const conflicto = await conflictoMatriculaActivaPorPeriodo({ teamId, estudianteId: estudianteIdOk, periodoId: periodoIdOk });
     if (conflicto) return NextResponse.json({ error: conflicto }, { status: 409 });
   }
 
   try {
     const [row] = await db.insert(adminEscolarMatriculas).values({
       teamId,
-      estudianteId,
-      periodoId,
-      cursoId,
+      estudianteId: estudianteIdOk,
+      periodoId:    periodoIdOk,
+      cursoId:      cursoIdOk,
       codigoMatricula: codigoMatricula?.trim() || null,
       fechaInscripcion: fechaInscripcion || null,
       estado: estadoNorm,

@@ -10,23 +10,38 @@ import { eq, and } from 'drizzle-orm';
  * El cargo sigue siendo la fuente de verdad de la deuda (saldoCentavos); esto
  * solo guarda la referencia al documento fiscal que lo cubre.
  */
+/**
+ * DESVINCULA el cargo de su factura (ecfDocumentId = null).
+ *
+ * Solo desvincula. VINCULAR va por POST /cargos/[id]/saldar-con-factura, que
+ * además comprueba que la factura sea del cliente del tutor responsable del
+ * estudiante. Aquí se aceptaba también vincular, con un permiso más laxo
+ * ('gestionar' en vez de 'pagos') y sin esa comprobación: era una segunda
+ * puerta, más débil, al mismo campo — bastaba con mandar el id de cualquier
+ * factura del team para colgarla del cargo de otro estudiante y, de paso,
+ * mostrar sus pagos en el perfil equivocado.
+ */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:pagos');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { ecfDocumentId } = await req.json();
+  const cargoId = parseInt(id, 10);
+  if (!Number.isInteger(cargoId) || cargoId <= 0) {
+    return NextResponse.json({ error: 'Cargo inválido' }, { status: 400 });
+  }
 
-  if (ecfDocumentId !== null && ecfDocumentId !== undefined) {
-    const [factura] = await db.select({ id: ecfDocuments.id }).from(ecfDocuments)
-      .where(and(eq(ecfDocuments.id, ecfDocumentId), eq(ecfDocuments.teamId, teamId)))
-      .limit(1);
-    if (!factura) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
+  const { ecfDocumentId } = await req.json().catch(() => ({}));
+  if (ecfDocumentId != null) {
+    return NextResponse.json(
+      { error: 'Para vincular una factura usa /cargos/[id]/saldar-con-factura; aquí solo se desvincula.' },
+      { status: 400 },
+    );
   }
 
   const [row] = await db.update(adminEscolarCargos)
-    .set({ ecfDocumentId: ecfDocumentId ?? null, updatedAt: new Date() })
-    .where(and(eq(adminEscolarCargos.id, parseInt(id)), eq(adminEscolarCargos.teamId, teamId)))
+    .set({ ecfDocumentId: null, updatedAt: new Date() })
+    .where(and(eq(adminEscolarCargos.id, cargoId), eq(adminEscolarCargos.teamId, teamId)))
     .returning();
   if (!row) return NextResponse.json({ error: 'Cargo no encontrado' }, { status: 404 });
   return NextResponse.json({ cargo: row });

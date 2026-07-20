@@ -35,13 +35,16 @@ export async function POST(req: NextRequest) {
 
   // El concepto viene del cliente. cursoId no hace falta validarlo: solo filtra
   // matrículas que ya están acotadas al team.
-  const ajeno = await validarPertenencia(teamId, { concepto: conceptoId });
-  if (ajeno) return NextResponse.json({ error: ajeno }, { status: 404 });
+  const refs = await validarPertenencia(teamId, { concepto: conceptoId, periodo: periodoId });
+  if (!refs.ok) return NextResponse.json({ error: refs.error }, { status: 404 });
+  // A partir de aquí se usan los ids normalizados, no los crudos del JSON.
+  const periodoIdOk = refs.ids.periodo!;
+  const conceptoIdOk = refs.ids.concepto!;
 
   const [periodo] = await db
     .select({ fechaInicio: adminEscolarPeriodos.fechaInicio, fechaFin: adminEscolarPeriodos.fechaFin })
     .from(adminEscolarPeriodos)
-    .where(and(eq(adminEscolarPeriodos.id, periodoId), eq(adminEscolarPeriodos.teamId, teamId)))
+    .where(and(eq(adminEscolarPeriodos.id, periodoIdOk), eq(adminEscolarPeriodos.teamId, teamId)))
     .limit(1);
   if (!periodo) return NextResponse.json({ error: 'Período no encontrado' }, { status: 404 });
   if (mes != null && !mesPerteneceAlPeriodo(periodo.fechaInicio, periodo.fechaFin, mes, anio)) {
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
 
   const where = [
     eq(adminEscolarMatriculas.teamId, teamId),
-    eq(adminEscolarMatriculas.periodoId, periodoId),
+    eq(adminEscolarMatriculas.periodoId, periodoIdOk),
     eq(adminEscolarMatriculas.estado, 'activa'),
   ];
   if (cursoId) where.push(eq(adminEscolarMatriculas.cursoId, cursoId));
@@ -66,8 +69,8 @@ export async function POST(req: NextRequest) {
 
   const existentesWhere = [
     eq(adminEscolarCargos.teamId, teamId),
-    eq(adminEscolarCargos.periodoId, periodoId),
-    eq(adminEscolarCargos.conceptoId, conceptoId),
+    eq(adminEscolarCargos.periodoId, periodoIdOk),
+    eq(adminEscolarCargos.conceptoId, conceptoIdOk),
     inArray(adminEscolarCargos.estudianteId, matriculas.map((m) => m.estudianteId)),
   ];
   if (mes == null) {
@@ -87,8 +90,8 @@ export async function POST(req: NextRequest) {
     teamId,
     estudianteId: m.estudianteId,
     matriculaId: m.id,
-    periodoId,
-    conceptoId,
+    periodoId: periodoIdOk,
+    conceptoId: conceptoIdOk,
     mes: mes ?? null,
     anio,
     montoCentavos,

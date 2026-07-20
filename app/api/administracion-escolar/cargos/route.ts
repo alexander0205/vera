@@ -73,29 +73,32 @@ export async function POST(req: NextRequest) {
   // Los ids vienen del cliente: sin esto se podría colgar un cargo propio del
   // estudiante o el concepto de OTRO colegio, y el join del listado terminaría
   // mostrando su nombre.
-  const ajeno = await validarPertenencia(teamId, {
+  const refs = await validarPertenencia(teamId, {
     estudiante: estudianteId,
     matricula:  matriculaId,
     concepto:   conceptoId,
+    periodo:    periodoId,
   });
-  if (ajeno) return NextResponse.json({ error: ajeno }, { status: 404 });
+  if (!refs.ok) return NextResponse.json({ error: refs.error }, { status: 404 });
 
   const [periodo] = await db
     .select({ fechaInicio: adminEscolarPeriodos.fechaInicio, fechaFin: adminEscolarPeriodos.fechaFin })
     .from(adminEscolarPeriodos)
-    .where(and(eq(adminEscolarPeriodos.id, periodoId), eq(adminEscolarPeriodos.teamId, teamId)))
+    .where(and(eq(adminEscolarPeriodos.id, refs.ids.periodo!), eq(adminEscolarPeriodos.teamId, teamId)))
     .limit(1);
   if (!periodo) return NextResponse.json({ error: 'Período no encontrado' }, { status: 404 });
   if (mes != null && !mesPerteneceAlPeriodo(periodo.fechaInicio, periodo.fechaFin, mes, anio)) {
     return NextResponse.json({ error: 'El mes seleccionado no pertenece al calendario de este período' }, { status: 400 });
   }
 
+  // Se insertan los ids YA normalizados por validarPertenencia, no los crudos
+  // del JSON: son los mismos que se comprobaron contra el team.
   const [row] = await db.insert(adminEscolarCargos).values({
     teamId,
-    estudianteId,
-    matriculaId,
-    periodoId,
-    conceptoId,
+    estudianteId: refs.ids.estudiante!,
+    matriculaId:  refs.ids.matricula!,
+    periodoId:    refs.ids.periodo!,
+    conceptoId:   refs.ids.concepto!,
     mes: mes ?? null,
     anio,
     montoCentavos,
