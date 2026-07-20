@@ -42,7 +42,7 @@
 |---|---|---|---|
 | 0 | Documentar lógica de saldo + permisos `contabilidad:*` | ✅ Hecho | `93cd76c` |
 | — | Merge del fix de fecha RD | ✅ Hecho | `95ed505` |
-| 1 | Saldo a SQL, filtros/orden/paginación server-side, totales sobre toda la cartera | ✅ Hecho | `8ea7410` |
+| 1 | Saldo a SQL, filtros/orden/paginación server-side, totales sobre toda la cartera | ✅ Hecho | `8ea7410` + `9c0e597` |
 | 2 | Antigüedad de saldos (1-30/31-60/61-90/90+), "por vencer", métricas | ⬜ Siguiente | — |
 | 3 | Panel lateral de detalle + timeline con datos ya existentes | ⬜ | — |
 | 4 | Seguimiento de cobranza + promesas de pago + notas internas → **migración 0082** | ⬜ **Primer toque de DB** | — |
@@ -181,16 +181,34 @@ buscar también por `codigo`.
   variantes de NC, exclusiones, totales, filtros, orden y paginación. 33/33.
 - Typecheck limpio; `npm run test:unit` 13/13.
 
-**No verificado:** nada se probó en el navegador. La página de cuentas por cobrar
-cambió bastante (paginación, filtros server-side, aviso al agrupar) y **no se
-abrió la app ni una vez**. Eso queda pendiente.
+**En el navegador** (team 9, 50 cuentas): paginación 1-25 / 26-50 sin solape,
+totales de toda la cartera intactos al cambiar de página, orden por saldo
+descendente, búsqueda con debounce (5 teclas → 1 consulta), agrupar por cliente
+pidiendo 500 filas y ocultando la paginación. Sin errores de consola.
+
+Abrir el navegador encontró **dos bugs que los tests no podían ver** (`9c0e597`),
+ambos en bordes que la query por sí sola no cubre:
+
+1. La columna Emisión mostraba `28 00:00:00/06/2026`. `db.execute` crudo **no
+   parsea `timestamp` a `Date`** como sí hace el select tipado de drizzle:
+   devuelve el string de pg separado por espacio, y `fmtFechaCorta` parte por la
+   `T` de ISO. Se resolvió entregándola formateada con `to_char` desde SQL.
+2. Cambiar un filtro estando en la página 2 disparaba **dos** consultas, porque
+   el reset de página vivía en un `useEffect` aparte. Se movió al mismo handler.
+
+**Sigue sin verificarse en navegador:** los escenarios de vencidas y mora. El
+usuario de auto-login solo pertenece a los teams 2, 7, 9 y 10, y los datos
+sembrados están en el **team 11**. En la UI solo se pudo ver cartera al día.
+Los screenshots del panel agotan el tiempo de espera; la verificación fue por
+texto y traza de red.
 
 ---
 
 ## Pendientes abiertos
 
-- [ ] **Probar la UI de cuentas por cobrar en el navegador.** Etapa 1 la reescribió
-      y nunca se ejecutó.
+- [ ] **Ver vencidas y mora en la UI.** Los datos sembrados están en el team 11 y
+      el usuario de auto-login no pertenece a ese team. O se le agrega como
+      miembro, o se siembran unos pocos escenarios en el team 9.
 - [ ] Decidir si el script de siembra se versiona en `scripts/`.
 - [ ] Respuesta de Alex sobre el hotfix: ¿se despliega aparte a main o se queda aquí?
 - [ ] Confirmar contra la base de **producción** si `fecha_limite_pago` está
