@@ -8,6 +8,7 @@ import {
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import type { DetalleCuenta, EventoCartera } from '@/lib/cobranza/detalle';
+import { GestionCobro } from '@/components/cuentas-por-cobrar/GestionCobro';
 
 /** Icono y color por tipo de evento del timeline. */
 const EVENTO_UI: Record<EventoCartera['tipo'], {
@@ -171,6 +172,11 @@ export function DetallePanel({
               )
             )}
           </section>
+
+          {/* Gestión de cobro: qué se ha hecho y qué sigue. Separado del
+              historial de arriba porque ese es el movimiento del dinero y este
+              es la gestión — mezclarlos confundiría lo fiscal con lo interno. */}
+          <GestionCobro docId={actual.id} />
         </div>
 
         {/* Acciones */}

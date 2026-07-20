@@ -1814,6 +1814,51 @@ export type TeamDataWithMembers = Team & {
   })[];
 };
 
+// ─── Cobranza — seguimiento de cartera (migración 0082) ──────────────────────
+// FK unidireccional: cobranza conoce la factura, la factura no sabe de cobranza.
+// Nada de esto entra al XML de la DGII ni afecta el saldo — es gestión interna.
+
+/** Log de gestión de cobro: contactos, notas internas y promesas de pago. */
+export const cobranzaEventos = pgTable('cobranza_eventos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  ecfDocumentId: integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
+  /** 'contacto' | 'nota' | 'promesa' */
+  tipo:          varchar('tipo', { length: 20 }).notNull(),
+  /** Fecha del hecho, no del registro: permite cargar gestiones atrasadas. */
+  fecha:         date('fecha').notNull(),
+  /** Solo tipo='contacto': llamada | whatsapp | correo | presencial | otro */
+  canal:         varchar('canal', { length: 20 }),
+  comentario:    text('comentario'),
+  /** Solo tipo='promesa'. El CHECK exige fecha + estado si tipo='promesa'. */
+  promesaFecha:      date('promesa_fecha'),
+  promesaMontoCents: integer('promesa_monto_cents'),
+  /** pendiente | cumplida | incumplida */
+  promesaEstado:     varchar('promesa_estado', { length: 20 }),
+  createdBy:     integer('created_by').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('cobranza_eventos_doc_idx').on(t.teamId, t.ecfDocumentId, t.fecha),
+]);
+
+/** Estado actual del seguimiento: una fila por documento, se sobrescribe. */
+export const cobranzaSeguimiento = pgTable('cobranza_seguimiento', {
+  ecfDocumentId:      integer('ecf_document_id').primaryKey().references(() => ecfDocuments.id),
+  teamId:             integer('team_id').notNull().references(() => teams.id),
+  responsableUserId:  integer('responsable_user_id').references(() => users.id),
+  /** Texto libre: cada empresa cobra distinto, un enum obligaría a migrar. */
+  proximaAccion:      text('proxima_accion'),
+  proximaAccionFecha: date('proxima_accion_fecha'),
+  updatedBy:          integer('updated_by').references(() => users.id),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('cobranza_seguimiento_team_idx').on(t.teamId, t.proximaAccionFecha),
+]);
+
+export type CobranzaEvento      = typeof cobranzaEventos.$inferSelect;
+export type NewCobranzaEvento   = typeof cobranzaEventos.$inferInsert;
+export type CobranzaSeguimiento = typeof cobranzaSeguimiento.$inferSelect;
+
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
