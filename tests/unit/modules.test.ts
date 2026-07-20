@@ -7,11 +7,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   sanitizeModules, moduleUrl, moduleForHost, MODULE_HOME,
+  withDependencies, dependentsOf, MODULES, MODULE_LABELS,
 } from '@/lib/config/modules';
 
 describe('sanitizeModules', () => {
   it('filtra valores desconocidos y conserva los válidos', () => {
     expect(sanitizeModules(['facturacion', 'pos', 'hack', 42])).toEqual(['facturacion', 'pos']);
+  });
+  it('acepta escolar', () => {
+    expect(sanitizeModules(['escolar'])).toEqual(['escolar']);
+    expect(sanitizeModules(['escolar', 'facturacion'])).toEqual(['facturacion', 'escolar']);
   });
   it('no-array → []', () => {
     expect(sanitizeModules(null)).toEqual([]);
@@ -44,8 +49,41 @@ describe('moduleUrl', () => {
   it('con envs usa la URL pública del subdominio', () => {
     vi.stubEnv('NEXT_PUBLIC_POS_URL', 'https://pos.zero.com.do');
     vi.stubEnv('NEXT_PUBLIC_FACTURACION_URL', 'https://facturacion.zero.com.do');
+    vi.stubEnv('NEXT_PUBLIC_ESCOLAR_URL', 'https://escolar.zero.com.do');
     expect(moduleUrl('pos')).toBe('https://pos.zero.com.do');
     expect(moduleUrl('facturacion')).toBe('https://facturacion.zero.com.do');
+    expect(moduleUrl('escolar')).toBe('https://escolar.zero.com.do');
+  });
+
+  it('escolar sin env cae a /escolar', () => {
+    vi.stubEnv('NEXT_PUBLIC_ESCOLAR_URL', '');
+    expect(moduleUrl('escolar')).toBe(MODULE_HOME.escolar);
+  });
+});
+
+describe('dependencias entre módulos', () => {
+  it('escolar arrastra facturacion (cobra con facturas)', () => {
+    expect(withDependencies(['escolar'])).toEqual(['facturacion', 'escolar']);
+  });
+
+  it('módulos sin dependencias pasan tal cual, en orden canónico', () => {
+    expect(withDependencies(['pos'])).toEqual(['pos']);
+    expect(withDependencies(['pos', 'facturacion'])).toEqual(['facturacion', 'pos']);
+  });
+
+  it('no duplica si la dependencia ya venía en la lista', () => {
+    expect(withDependencies(['facturacion', 'escolar'])).toEqual(['facturacion', 'escolar']);
+  });
+
+  it('apagar facturacion rompe escolar, no pos', () => {
+    expect(dependentsOf('facturacion')).toEqual(['escolar']);
+    expect(dependentsOf('pos')).toEqual([]);
+    expect(dependentsOf('escolar')).toEqual([]);
+  });
+
+  it('todo módulo tiene etiqueta visible', () => {
+    for (const m of MODULES) expect(MODULE_LABELS[m]).toBeTruthy();
+    expect(MODULE_LABELS.escolar).toBe('Administración Escolar');
   });
 });
 
@@ -54,6 +92,7 @@ describe('moduleForHost (routing de subdominios)', () => {
     vi.unstubAllEnvs();
     vi.stubEnv('POS_HOST', '');
     vi.stubEnv('FACTURACION_HOST', '');
+    vi.stubEnv('ESCOLAR_HOST', '');
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -68,6 +107,11 @@ describe('moduleForHost (routing de subdominios)', () => {
   it('prefijo facturacion. → facturacion', () => {
     expect(moduleForHost('facturacion.zero.com.do')).toBe('facturacion');
     expect(moduleForHost('facturacion.localhost:3000')).toBe('facturacion');
+  });
+
+  it('prefijo escolar. → escolar', () => {
+    expect(moduleForHost('escolar.zero.com.do')).toBe('escolar');
+    expect(moduleForHost('escolar.localhost:3000')).toBe('escolar');
   });
 
   it('hosts sin módulo → null', () => {

@@ -29,6 +29,7 @@ export type { ModuleKey } from '@/lib/config/modules';
 const MODULE_PERMISSION: Record<ModuleKey, Permission> = {
   facturacion: 'modulo:facturacion',
   pos: 'modulo:pos',
+  escolar: 'modulo:escolar',
 };
 
 /**

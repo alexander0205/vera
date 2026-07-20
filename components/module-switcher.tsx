@@ -18,7 +18,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
-import { LayoutGrid, FileText, Store, Check, Building2 } from 'lucide-react';
+import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
   MODULE_LABELS, MODULE_DESCRIPTIONS, moduleUrl, type ModuleKey,
@@ -27,6 +27,7 @@ import {
 const ICONS: Record<ModuleKey, typeof FileText> = {
   facturacion: FileText,
   pos: Store,
+  escolar: GraduationCap,
 };
 
 export function ModuleSwitcher({ current }: { current: ModuleKey }) {

@@ -63,6 +63,7 @@ export type Permission =
   // ∩ este permiso en su rol. Ver lib/auth/modules.ts.
   | 'modulo:facturacion'
   | 'modulo:pos'
+  | 'modulo:escolar'
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
@@ -263,6 +264,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   { module: 'Acceso a módulos', icon: 'LayoutGrid', permissions: [
     { key: 'modulo:facturacion', label: 'Acceso al módulo Facturación' },
     { key: 'modulo:pos',         label: 'Acceso al módulo Punto de Venta' },
+    { key: 'modulo:escolar',     label: 'Acceso al módulo Administración Escolar' },
   ]},
   { module: 'Equipo', icon: 'UserCog', permissions: [
     { key: 'equipo:ver',       label: 'Ver equipo' },
