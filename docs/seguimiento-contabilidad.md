@@ -353,10 +353,14 @@ texto y traza de red.
       el usuario mire otra cubeta. Solo aparece si hay promesas: un team que nunca
       registró una no gana nada con una tarjeta en cero permanente.
 
-### E. Entregable pendiente — briefing para Alex
+### E. Entregable — briefing para Alex
 
-- [ ] **Preparar la explicación para que Darian le presente el módulo a Alex.**
-      Debe cubrir dos cosas distintas:
+- [x] **HECHO (2026-07-20): `docs/briefing-contabilidad-paso1.md`.** Cubre qué es
+      y qué NO es el módulo, la fórmula del saldo, por qué se bajó a SQL, el bug
+      de zona horaria, el guion de prueba en la UI, las tres decisiones que le
+      tocan a Alex y cómo se verificó.
+
+El esqueleto original que se usó de guía:
 
   **1. Guion de prueba en la UI** (`/dashboard/cuentas-por-cobrar`, team 9, con
   `npx tsx scripts/seed-cartera-escenarios.ts 9` corrido):
