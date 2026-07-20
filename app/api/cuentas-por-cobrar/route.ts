@@ -13,7 +13,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser, getCuentasPorCobrar, type OrdenCartera } from '@/lib/db/queries';
+import {
+  getUser, getTeamIdForUser, getCuentasPorCobrar,
+  CUBETAS_ANTIGUEDAD, type OrdenCartera, type CubetaAntiguedad,
+} from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -50,6 +53,7 @@ export async function GET(req: NextRequest) {
   const tipoDocRaw = sp.get('tipoDoc');
   const estadoRaw  = sp.get('estado');
   const ordenRaw   = sp.get('orden');
+  const cubetaRaw  = sp.get('cubeta');
   const ORDENES: OrdenCartera[] = ['reciente', 'antiguo', 'monto', 'vencimiento'];
 
   const data = await getCuentasPorCobrar(teamId, {
@@ -59,6 +63,7 @@ export async function GET(req: NextRequest) {
     tipoDoc: tipoDocRaw === 'factura' || tipoDocRaw === 'nota-debito' ? tipoDocRaw : undefined,
     estado:  estadoRaw === 'vencidas' || estadoRaw === 'al-dia' ? estadoRaw : undefined,
     orden:   ORDENES.includes(ordenRaw as OrdenCartera) ? (ordenRaw as OrdenCartera) : undefined,
+    cubeta:  CUBETAS_ANTIGUEDAD.includes(cubetaRaw as CubetaAntiguedad) ? (cubetaRaw as CubetaAntiguedad) : undefined,
     limit:   Number.isFinite(limitRaw)  ? limitRaw  : undefined,
     offset:  Number.isFinite(offsetRaw) ? offsetRaw : undefined,
   });

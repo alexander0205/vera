@@ -514,6 +514,27 @@ const ORDEN_CARTERA_SQL: Record<OrdenCartera, string> = {
   vencimiento: 'vencida DESC, fecha_limite_date ASC NULLS LAST',
 };
 
+/**
+ * Cubetas de antigüedad de la cartera.
+ *
+ * `porVencer` = todavía no vence (incluye las que no tienen fecha límite).
+ * El resto son días de atraso cumplidos. Los cortes son los del plan:
+ * 1-30, 31-60, 61-90 y más de 90.
+ */
+export type CubetaAntiguedad = 'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas';
+
+export const CUBETAS_ANTIGUEDAD: CubetaAntiguedad[] =
+  ['porVencer', 'd1a30', 'd31a60', 'd61a90', 'd90mas'];
+
+/** Predicado SQL de cada cubeta, sobre las columnas del CTE `cartera`. */
+const CUBETA_SQL: Record<CubetaAntiguedad, string> = {
+  porVencer: 'NOT vencida',
+  d1a30:     'vencida AND dias_vencido BETWEEN 1 AND 30',
+  d31a60:    'vencida AND dias_vencido BETWEEN 31 AND 60',
+  d61a90:    'vencida AND dias_vencido BETWEEN 61 AND 90',
+  d90mas:    'vencida AND dias_vencido > 90',
+};
+
 export interface CuentasPorCobrarOpts {
   clientId?:     number;
   soloVencidas?: boolean;
@@ -526,6 +547,8 @@ export interface CuentasPorCobrarOpts {
   tipoDoc?:      'factura' | 'nota-debito';
   /** 'vencidas' | 'al-dia' — filtra por estado de vencimiento. */
   estado?:       'vencidas' | 'al-dia';
+  /** Restringe a una cubeta de antigüedad. */
+  cubeta?:       CubetaAntiguedad;
   orden?:        OrdenCartera;
 }
 
@@ -655,6 +678,14 @@ export async function getCuentasPorCobrar(
         ${opts.estado === 'al-dia' ? sql`AND NOT c.vencida` : sql``}
         ${opts.tipoDoc === 'factura' ? sql`AND c.saldo_factura > 0` : sql``}
         ${opts.tipoDoc === 'nota-debito' ? sql`AND c.mora_saldo > 0` : sql``}
+    ),
+    -- La cubeta se aplica APARTE de \`cartera\`: el desglose de antigüedad se
+    -- calcula sobre \`cartera\` (sin cubeta) para que al elegir una las demás
+    -- sigan mostrando su monto y se pueda volver. La lista y los totales de
+    -- arriba sí usan \`filtrada\`.
+    filtrada AS (
+      SELECT * FROM cartera
+      ${opts.cubeta ? sql`WHERE ${sql.raw(CUBETA_SQL[opts.cubeta])}` : sql``}
     )`;
 
   interface CarteraRow {
@@ -670,19 +701,29 @@ export async function getCuentasPorCobrar(
   const [rowsRaw, totalesRaw] = await Promise.all([
     db.execute(sql`
       ${cte}
-      SELECT * FROM cartera
+      SELECT * FROM filtrada
       ORDER BY ${sql.raw(ordenSql)}
       LIMIT ${limit} OFFSET ${offset}
     `),
-    // Totales sobre TODA la cartera filtrada, no solo la página visible.
+    // Totales sobre TODA la cartera filtrada, no solo la página visible. El
+    // desglose por antigüedad va sobre `cartera` (sin la cubeta activa).
     db.execute(sql`
       ${cte}
       SELECT
-        coalesce(SUM(saldo), 0)                                   AS pendiente,
-        coalesce(SUM(CASE WHEN vencida THEN saldo ELSE 0 END), 0) AS vencido,
-        COUNT(*)                                                  AS count,
-        COUNT(*) FILTER (WHERE vencida)                           AS count_vencidas
-      FROM cartera
+        (SELECT coalesce(SUM(saldo), 0)                    FROM filtrada) AS pendiente,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE vencida), 0) FROM filtrada) AS vencido,
+        (SELECT COUNT(*)                                   FROM filtrada) AS count,
+        (SELECT COUNT(*) FILTER (WHERE vencida)            FROM filtrada) AS count_vencidas,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.porVencer)}), 0) FROM cartera) AS ant_por_vencer,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d1a30)}),     0) FROM cartera) AS ant_d1a30,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d31a60)}),    0) FROM cartera) AS ant_d31a60,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d61a90)}),    0) FROM cartera) AS ant_d61a90,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d90mas)}),    0) FROM cartera) AS ant_d90mas,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.porVencer)}) FROM cartera) AS cnt_por_vencer,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d1a30)})     FROM cartera) AS cnt_d1a30,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d31a60)})    FROM cartera) AS cnt_d31a60,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d61a90)})    FROM cartera) AS cnt_d61a90,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d90mas)})    FROM cartera) AS cnt_d90mas
     `),
   ]);
 
@@ -746,18 +787,26 @@ export async function getCuentasPorCobrar(
     moraNotas:            moraNotasPorFactura.get(r.id) ?? [],
   }));
 
-  const t = (totalesRaw as unknown as Array<{
-    pendiente: string; vencido: string; count: string; count_vencidas: string;
-  }>)[0];
+  const t = (totalesRaw as unknown as Array<Record<string, string>>)[0];
+  const n = (k: string) => Number(t?.[k] ?? 0);
 
   return {
     cuentas,
     totales: {
-      pendiente:     Number(t?.pendiente ?? 0),
-      vencido:       Number(t?.vencido ?? 0),
-      count:         Number(t?.count ?? 0),
-      countVencidas: Number(t?.count_vencidas ?? 0),
+      pendiente:     n('pendiente'),
+      vencido:       n('vencido'),
+      count:         n('count'),
+      countVencidas: n('count_vencidas'),
     },
+    /** Distribución por antigüedad de TODA la cartera filtrada, ignorando la
+     *  cubeta activa: así las tarjetas siguen mostrando su monto al elegir una. */
+    antiguedad: {
+      porVencer: { saldo: n('ant_por_vencer'), count: n('cnt_por_vencer') },
+      d1a30:     { saldo: n('ant_d1a30'),      count: n('cnt_d1a30')      },
+      d31a60:    { saldo: n('ant_d31a60'),     count: n('cnt_d31a60')     },
+      d61a90:    { saldo: n('ant_d61a90'),     count: n('cnt_d61a90')     },
+      d90mas:    { saldo: n('ant_d90mas'),     count: n('cnt_d90mas')     },
+    } satisfies Record<CubetaAntiguedad, { saldo: number; count: number }>,
   };
 }
 

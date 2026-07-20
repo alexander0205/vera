@@ -20,6 +20,29 @@ interface Totales {
   countVencidas: number;
 }
 
+type Cubeta = 'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas';
+type Antiguedad = Record<Cubeta, { saldo: number; count: number }>;
+
+/** Cubetas en orden de urgencia creciente, con su etiqueta y color. */
+const CUBETAS: { id: Cubeta; label: string; hint: string; tono: string; activo: string }[] = [
+  { id: 'porVencer', label: 'Por vencer', hint: 'aún no vencen',
+    tono: 'border-gray-200 hover:border-teal-300',   activo: 'border-teal-500 bg-teal-50' },
+  { id: 'd1a30',     label: '1-30 días',  hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-amber-300',  activo: 'border-amber-500 bg-amber-50' },
+  { id: 'd31a60',    label: '31-60 días', hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-orange-300', activo: 'border-orange-500 bg-orange-50' },
+  { id: 'd61a90',    label: '61-90 días', hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-orange-400', activo: 'border-orange-600 bg-orange-50' },
+  { id: 'd90mas',    label: '+90 días',   hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-red-300',    activo: 'border-red-500 bg-red-50' },
+];
+
+const ANTIGUEDAD_VACIA: Antiguedad = {
+  porVencer: { saldo: 0, count: 0 }, d1a30: { saldo: 0, count: 0 },
+  d31a60:    { saldo: 0, count: 0 }, d61a90: { saldo: 0, count: 0 },
+  d90mas:    { saldo: 0, count: 0 },
+};
+
 // ─── Componente principal ──────────────────────────────────────────────────────
 
 // Al agrupar por cliente se piden más filas de una vez: agrupar solo la página
@@ -28,7 +51,7 @@ const PAGE_SIZE          = 25;
 const PAGE_SIZE_AGRUPADO = 500;
 
 export default function CuentasPorCobrarPage() {
-  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
+  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales; antiguedad: Antiguedad } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
   // Filtros, orden y paginación son server-side: el saldo se calcula en SQL, así
@@ -37,6 +60,7 @@ export default function CuentasPorCobrarPage() {
     cliente: '', tipoDoc: '', estado: '', agrupar: '', orden: '',
   });
   const [page, setPage] = useState(1);
+  const [cubeta, setCubeta] = useState<Cubeta | null>(null);
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
 
@@ -59,6 +83,12 @@ export default function CuentasPorCobrarPage() {
     setPage(1);
   }, []);
 
+  // Clic en una tarjeta de antigüedad: alterna esa cubeta y vuelve a la página 1.
+  const alternarCubeta = useCallback((c: Cubeta) => {
+    setCubeta(prev => (prev === c ? null : c));
+    setPage(1);
+  }, []);
+
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -70,6 +100,7 @@ export default function CuentasPorCobrarPage() {
         ...(filterValues.tipoDoc   && { tipoDoc: filterValues.tipoDoc }),
         ...(filterValues.estado    && { estado:  filterValues.estado }),
         ...(filterValues.orden     && { orden:   filterValues.orden }),
+        ...(cubeta                 && { cubeta }),
       });
       const res = await fetch(`/api/cuentas-por-cobrar?${sp}`);
       const json = await res.json();
@@ -80,7 +111,7 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, busqueda, filterValues.tipoDoc, filterValues.estado, filterValues.orden]);
+  }, [page, pageSize, busqueda, cubeta, filterValues.tipoDoc, filterValues.estado, filterValues.orden]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -102,6 +133,7 @@ export default function CuentasPorCobrarPage() {
   const cuentas = data?.cuentas ?? [];
   // Totales del servidor: cubren toda la cartera filtrada, no solo esta página.
   const totales: Totales = data?.totales ?? { pendiente: 0, vencido: 0, count: 0, countVencidas: 0 };
+  const antiguedad = data?.antiguedad ?? ANTIGUEDAD_VACIA;
   const truncadoAlAgrupar = agrupar && totales.count > cuentas.length;
 
   const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
@@ -234,6 +266,49 @@ export default function CuentasPorCobrarPage() {
             value={totales.countVencidas.toString()}
             color={totales.countVencidas > 0 ? 'text-red-600' : 'text-gray-900'}
           />
+        </div>
+      )}
+
+      {/* Antigüedad de saldos — clic para filtrar por cubeta. Los montos NO
+          cambian al elegir una: siempre muestran la distribución completa, para
+          poder saltar entre cubetas sin perder la referencia. */}
+      {data && (
+        <div>
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Antigüedad de saldos
+            </h2>
+            {cubeta && (
+              <button
+                onClick={() => { setCubeta(null); setPage(1); }}
+                className="text-xs text-teal-600 hover:text-teal-700 hover:underline"
+              >
+                Ver toda la cartera
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            {CUBETAS.map(c => {
+              const d = antiguedad[c.id];
+              const activa = cubeta === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => alternarCubeta(c.id)}
+                  aria-pressed={activa}
+                  className={`text-left bg-white border rounded-xl px-3 py-2.5 transition-colors ${activa ? c.activo : c.tono}`}
+                >
+                  <p className="text-[11px] font-medium text-gray-500">{c.label}</p>
+                  <p className={`text-base font-bold ${d.saldo > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+                    {fmtDOP(d.saldo)}
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    {d.count} cuenta{d.count !== 1 ? 's' : ''} · {c.hint}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
