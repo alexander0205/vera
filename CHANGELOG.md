@@ -4,6 +4,12 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.5.1 — 2026-07-21
+
+### Arreglado
+
+- **emision**: reservar el e-NCF en un borrador cuando falla /api/ecf/emitir
+
 ## v1.5.0 — 2026-07-20
 
 ### Nuevo
