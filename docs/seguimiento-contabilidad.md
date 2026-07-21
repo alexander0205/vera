@@ -394,9 +394,41 @@ El esqueleto original que se usó de guía:
   - Que la migración 0082 ya está aplicada en la branch de contabilidad, y que
     crea dos tablas nuevas sin tocar ninguna existente.
 
-## Siguiente trabajo de desarrollo
+## Siguiente trabajo de desarrollo — Paso 2
 
-**Paso 2 del plan: catálogo de cuentas contables.** Nada empezado. No existe
-ninguna tabla de asientos ni de catálogo en el schema. Ver
-`docs/plan-contabilidad-vera.md` desde "Paso 2". La primera migración libre es
-la **0083** (la 0082 ya se usó).
+**Catálogo de cuentas contables.** Nada empezado. No existe ninguna tabla de
+asientos ni de catálogo en el schema. Ver `docs/plan-contabilidad-vera.md` desde
+"Paso 2". La primera migración libre es la **0083** (la 0082 ya se usó).
+
+### Antes de escribir la primera línea
+
+1. **Releer el Paso 2 del plan.** No asumir el diseño del catálogo de memoria.
+2. **Confirmar la DB con Darian** antes de correr nada contra Neon, incluso de
+   solo lectura. Base actual: `ep-bold-pine-anhzpklp` / `neondb`.
+3. **Revisar `docs/no-contaminar-entidades-genericas.md`** (regla de Alex): un
+   módulo vertical no mete su vocabulario en las entidades genéricas. El catálogo
+   contable no debe ensuciar `products` ni `ecf_documents`; las FK van en una
+   sola dirección.
+4. **Numeración de migraciones:** esta rama ya chocó dos veces con main. Al
+   renombrar, ir en orden **descendente** y mover también
+   `scripts/apply-migration-XXXX.ts`, actualizando la ruta del `.sql` y el
+   mensaje de log **dentro** del script.
+
+### La regla que se aprendió cerrando el Paso 1
+
+**No marcar una etapa como hecha sin un camino desde la UI.** Las etapas 4-5 se
+dieron por terminadas con el backend escrito y sin conectar; el barrido encontró
+tres piezas huérfanas. Comprobación barata antes de marcar: `grep` del nombre del
+endpoint o de la función exportada en `app/` y `components/`. Si no aparece fuera
+de su propio archivo, no está hecho.
+
+### Entorno (para no perder tiempo)
+
+- **Auto-login:** `GET /api/dev/auto-login?email=ferrerasalexander@gmail.com`.
+  **Hay que pasar el `?email=`** — el default `admin@emitedo.test` no existe en
+  esta base y devuelve 404. Ese usuario pertenece a los teams 2, 7, 9 y 10.
+- **Team 9** = COLEGIO ANDRES BELLO, donde viven los escenarios `SEEDCXC`.
+- **No levantar un segundo `next dev`** si Darian ya tiene uno arriba: dos
+  instancias sobre el mismo `.next` lo corrompen y sale
+  `Invariant: missing bootstrap script` con 500. Si pasa: parar, borrar `.next`,
+  arrancar de nuevo.
