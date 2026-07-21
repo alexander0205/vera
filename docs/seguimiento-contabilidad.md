@@ -571,33 +571,127 @@ de resolución, incluida la vuelta atrás al quitar un override.
 
 ---
 
-## Siguiente trabajo de desarrollo — Paso 4
+## Paso 4 — Asientos · ✅ HECHO (2026-07-21)
 
-**Generar asientos para facturas y pagos.** Ver `docs/plan-contabilidad-vera.md`
-desde "Paso 4". La primera migración libre es la **0085**.
+**Migración `0085_contabilidad_asientos.sql` aplicada.** `contabilidad_asientos`
+(encabezado) + `contabilidad_asiento_lineas` (apuntes). Con los nombres y
+columnas que `tieneMovimientos()` ya esperaba, así que la protección de borrado
+del catálogo **quedó activa sola** al crear la tabla.
 
-Lo que el Paso 3 dejó preparado:
+| # | Qué pedía el plan | Cómo quedó |
+|---|---|---|
+| 1 | Tablas de asientos | Encabezado + líneas, con CHECK de que un apunte es debe **o** haber |
+| 2 | Asiento de factura | Debe CxC / Haber ingresos (repartidos) / Haber ITBIS |
+| 3 | Asiento de pago | Debe cuenta del método / Haber CxC |
+| 4 | Asegurar cuadre | Validación debe==haber **antes** del insert, dentro de la transacción |
+| 5 | Relacionar con origen | `origen_tipo` + `origen_id`, con índice único |
+| 6 | Una sola fuente monetaria | El cargo escolar no genera asiento; lo genera la factura |
 
-- `resolverCuentaIngreso(teamId, productoId)` → a qué cuenta va cada línea.
-- `resolverCuentaCobro(teamId, clave)` → a qué cuenta entra un cobro.
-- `claveContableDePago(teamId, pagoId, metodo)` → **usarla siempre**, nunca el
-  `metodo` crudo, o los cobros por link acaban en el banco equivocado.
-- `getConfig(teamId).activa` → si está apagado, **no generar asientos**.
+### Las tres trampas que había que esquivar
 
-**La tabla de líneas debe llamarse `contabilidad_asiento_lineas`, con columnas
-`team_id` y `cuenta_id`.** `tieneMovimientos()` en `lib/contabilidad/cuentas.ts`
-ya la consulta con `to_regclass` y empieza a proteger el catálogo sola en cuanto
-exista. Si le pones otro nombre, ajusta esa consulta o la protección de borrado
-se queda muda para siempre.
+**1. `lineas_json` está en PESOS, el encabezado en CENTAVOS.** Está dicho en
+`lib/reportes/shared.ts` pero es fácil de pasar por alto: sumar líneas para el
+asiento habría dado un error de ×100. `parseLineas()` ya devuelve centavos.
+
+**2. Las líneas de factura no llevan id de producto.** Solo `referencia` (SKU) o
+el nombre — el propio rollup de reportes agrupa por `'ref:'||referencia`. O sea
+que **`resolverCuentaIngreso(teamId, productoId)` del Paso 3 no se puede
+alimentar directo desde una línea.** El reparto mapea por SKU contra
+`products.referencia`, y una línea sin SKU (o con SKU que no case) cae a la
+cuenta de ingresos general. `products.referencia` **no es único por team**, así
+que se usa `DISTINCT ON ... ORDER BY p.id` para que el reparto sea estable entre
+ejecuciones en vez de depender del plan de consulta.
+
+**3. Redondeo: las líneas no tienen por qué sumar el ingreso del encabezado.**
+Se resuelve **anclando en el encabezado** —que es la cifra facturada al cliente y
+la que tiene la DGII— y usando las líneas solo para decidir el reparto. La
+diferencia va al grupo mayor. Así el asiento cuadra al centavo pase lo que pase
+con el JSON. Probado: líneas que sumaban RD$99.99 contra un encabezado que exigía
+RD$100.01 → ajuste de RD$0.02 al grupo mayor, cuadre exacto.
+
+> ⚠️ **Y una cuarta, que casi se cuela: las columnas `bigint` llegan a JS como
+> STRING.** `0 + "701" + "0"` da `"07010"`, no 701 — una suma de importes se
+> convierte en concatenación y no se nota hasta ver un total absurdo. Lo detectó
+> el propio script de prueba, que marcaba DESCUADRADO mientras el cuadre en SQL
+> daba cero. Contenido en `aNumero()` dentro de `libro-diario.ts`, el único sitio
+> por donde los montos salen de la base. **Si añades una consulta que devuelva
+> `bigint`, pásala por ahí.**
+
+### Decisiones de diseño
+
+- **La generación NO se engancha al flujo de emisión de facturas.** Meterle una
+  escritura contable al motor de facturación significa que un fallo aquí podría
+  tumbar una emisión a la DGII: eso cambia un problema grave por uno peor. El
+  barrido es un botón explícito en el libro diario.
+  *Compromiso conocido, igual que las promesas del Paso 1: **lo que nadie barre
+  no se asienta.*** El punto de enganche está aislado en
+  `generarAsientosPendientes()`; mudarlo a un cron es un cambio chico.
+- **Generar es POST, no efecto del GET.** Escribe contabilidad, y una recarga o
+  un prefetch del navegador no deberían poder dispararlo.
+- **Idempotencia por índice único `(team_id, origen_tipo, origen_id)`** más
+  `ON CONFLICT DO NOTHING`. Reintentar no duplica, que es el error más caro que
+  puede cometer este módulo. Si dos procesos asientan a la vez, uno gana y el
+  otro se entera sin romper nada.
+- **Se factura contra Cuentas por cobrar incluso al contado.** El pago genera su
+  propio asiento (debe caja / haber CxC), así que la cuenta se abre y se cierra.
+  Registrar la venta directo contra caja perdería la trazabilidad de qué se cobró
+  y cuándo.
+- **Los documentos con retenciones se saltan**, con motivo visible. Cambian el
+  asiento (parte del cobro va a la DGII) y son explícitamente del Paso 5.
+  Generar uno "casi bien" para un libro real es peor que no generarlo: nadie
+  vería que está mal hasta la declaración.
+- **Tope de 200 orígenes por barrido**, con aviso de "quedan más". El primer uso
+  en una empresa con historial no debe tardar minutos.
+- **`verificarCuadre()` se muestra en la pantalla** aunque siempre deba dar cero.
+  Si algún día da algo, hay un bug y se ve antes de contaminar un reporte.
+
+### Verificación
+
+- Typecheck limpio.
+- **Reparto y cuadre, con documentos temporales creados y borrados** (restos: 0):
+  - ITBIS > 0 → 3 apuntes, ITBIS exacto contra el encabezado.
+  - Dos líneas bien/servicio → `4101` y `4104` separados, cuadre exacto.
+  - Redondeo → ajuste al grupo mayor, débito == `monto_total` al centavo.
+  - Línea sin SKU → cuenta de ingresos general.
+- **Idempotencia**: segundo barrido crea 0; reintentar una factura ya asentada
+  devuelve `ya-tiene-asiento`.
+- **Cotejo global en SQL**: 0 asientos descuadrados, 0 facturas cuyo asiento no
+  cuadre con su `monto_total`.
+- **Barrido con la contabilidad apagada** → no genera nada, motivo explicado.
+- **Botón desde la UI**: generó 1 y saltó 1, con el aviso *"Se saltaron: 1 porque
+  tienen retenciones (se tratan en el siguiente paso)"*.
+- Detalle desplegable con fila de totales; 0 warnings de key en React; un id de
+  asiento inexistente devuelve vacío en vez de filtrar datos de otro team.
+
+---
+
+## Siguiente trabajo de desarrollo — Paso 5
+
+**Notas de crédito, anulaciones, mora, retenciones y saldos a favor.** Ver
+`docs/plan-contabilidad-vera.md` desde "Paso 5". La primera migración libre es
+la **0086**.
+
+Lo que el Paso 4 dejó preparado y pendiente:
+
+- **`origen_tipo` ya admite `'nota'` y `'anulacion'`** en el CHECK, para no tener
+  que migrar la restricción.
+- **Los documentos con `total_retenciones > 0` no tienen asiento**, a propósito.
+  Al implementar retenciones hay que quitar ese salto en
+  `generarAsientoFactura()` y contar con que esas facturas se asentarán entonces.
+- **Los pagos con `metodo` en `saldo_favor` / `nota_credito` tampoco**: su
+  asiento va contra la cuenta de descuentos, no contra caja.
+- **`cfg.cuentaDescuentosId`** ya está configurado y sin usar: es el destino de
+  las notas de crédito.
+- La nota de crédito (tipo e-CF **34**) está fuera de `TIPOS_VENTA` en
+  `lib/contabilidad/asientos.ts`, así que hoy no genera nada.
 
 ### Antes de escribir la primera línea
 
-1. **Releer el Paso 4 del plan.** No asumir el diseño de memoria.
+1. **Releer el Paso 5 del plan.** No asumir el diseño de memoria.
 2. **Confirmar la DB con Darian** antes de correr nada contra Neon, incluso de
    solo lectura. Base actual: `ep-bold-pine-anhzpklp` / `neondb`.
-3. **Revisar `docs/no-contaminar-entidades-genericas.md`**: el asiento apunta a
-   la factura, la factura no sabe del asiento.
-4. **Numeración de migraciones:** main va por `0069` y la rama por `0084`. Al
+3. **Revisar `docs/no-contaminar-entidades-genericas.md`**.
+4. **Numeración de migraciones:** main va por `0069` y la rama por `0085`. Al
    renombrar, ir en orden **descendente** y mover también
    `scripts/apply-migration-XXXX.ts`, actualizando la ruta del `.sql` y el
    mensaje de log **dentro** del script.

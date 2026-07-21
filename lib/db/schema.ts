@@ -1958,6 +1958,47 @@ export const contabilidadConfigIngresos = pgTable('contabilidad_config_ingresos'
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ─── Contabilidad: asientos (Paso 4) ─────────────────────────────────────────
+// Donde el módulo empieza a escribir números. Partida doble: cada asiento tiene
+// líneas de débito y de crédito que suman lo mismo.
+
+/** Encabezado del asiento. Un origen produce exactamente uno (índice único). */
+export const contabilidadAsientos = pgTable('contabilidad_asientos', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  /** Fecha contable del hecho, no del registro. */
+  fecha:   date('fecha').notNull(),
+  concepto: varchar('concepto', { length: 255 }).notNull(),
+  /** 'factura' | 'pago' | 'nota' | 'anulacion' (los dos últimos, Paso 5). */
+  origenTipo: varchar('origen_tipo', { length: 20 }).notNull(),
+  origenId:   integer('origen_id').notNull(),
+  /** debe == haber == esto. Lo garantiza la aplicación antes de insertar. */
+  totalCents: bigint('total_cents', { mode: 'number' }).notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_asientos_origen_idx').on(t.teamId, t.origenTipo, t.origenId),
+  index('contabilidad_asientos_team_fecha_idx').on(t.teamId, t.fecha),
+]);
+
+/** Apunte. Es débito o crédito, nunca los dos ni ninguno (lo obliga un CHECK). */
+export const contabilidadAsientoLineas = pgTable('contabilidad_asiento_lineas', {
+  id:        serial('id').primaryKey(),
+  asientoId: integer('asiento_id').notNull().references(() => contabilidadAsientos.id),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  cuentaId:  integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  debeCents:  bigint('debe_cents', { mode: 'number' }).notNull().default(0),
+  haberCents: bigint('haber_cents', { mode: 'number' }).notNull().default(0),
+  descripcion: varchar('descripcion', { length: 255 }),
+  orden:      integer('orden').notNull().default(0),
+}, (t) => [
+  index('contabilidad_asiento_lineas_asiento_idx').on(t.asientoId, t.orden),
+  index('contabilidad_asiento_lineas_cuenta_idx').on(t.teamId, t.cuentaId),
+]);
+
+export type ContabilidadAsiento      = typeof contabilidadAsientos.$inferSelect;
+export type ContabilidadAsientoLinea = typeof contabilidadAsientoLineas.$inferSelect;
+
 export type ContabilidadConfig       = typeof contabilidadConfig.$inferSelect;
 export type ContabilidadConfigMetodo = typeof contabilidadConfigMetodosPago.$inferSelect;
 export type ContabilidadConfigIngreso = typeof contabilidadConfigIngresos.$inferSelect;

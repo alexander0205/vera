@@ -92,6 +92,7 @@ const GROUPS: NavGroup[] = [
     icon: BookOpen,
     children: [
       { href: '/dashboard/contabilidad/cuentas',      label: 'Catálogo de cuentas' },
+      { href: '/dashboard/contabilidad/libro-diario', label: 'Libro diario' },
       { href: '/dashboard/contabilidad/configuracion', label: 'Configuración contable' },
       { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
       { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
@@ -175,6 +176,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Contabilidad — el grupo llegó de main sin gate: cualquiera con dashboard
   // veía secuencias y consulta de e-NCF. Se gatea junto con el motor contable.
   '/dashboard/contabilidad/cuentas':      'contabilidad:ver',
+  '/dashboard/contabilidad/libro-diario':  'contabilidad:ver',
   '/dashboard/contabilidad/configuracion': 'contabilidad:ver',
   '/dashboard/contabilidad/secuencias':   'contabilidad:ver',
   '/dashboard/contabilidad/consulta-ncf': 'contabilidad:ver',
