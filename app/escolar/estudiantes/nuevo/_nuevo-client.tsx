@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useId } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -166,7 +166,7 @@ export default function NuevoEstudianteClient() {
             </Field>
             <Field label="Sexo">
               <Select value={form.sexo} onValueChange={(v) => setForm((f) => ({ ...f, sexo: v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                <SelectTrigger aria-label="Sexo"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                 <SelectContent>
                   {SEXOS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                 </SelectContent>
@@ -189,7 +189,7 @@ export default function NuevoEstudianteClient() {
                 ) : (
                   <div className="flex gap-2">
                     <Select value={form.periodoId} onValueChange={(v) => setForm((f) => ({ ...f, periodoId: v }))}>
-                      <SelectTrigger className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectTrigger aria-label="Período" className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
                       </SelectContent>
@@ -209,7 +209,7 @@ export default function NuevoEstudianteClient() {
                 ) : (
                   <div className="flex gap-2">
                     <Select value={form.cursoId} onValueChange={(v) => setForm((f) => ({ ...f, cursoId: v }))}>
-                      <SelectTrigger className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectTrigger aria-label="Curso" className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
                         {cursos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
                       </SelectContent>
@@ -241,11 +241,23 @@ export default function NuevoEstudianteClient() {
   );
 }
 
+/**
+ * Campo con su etiqueta REALMENTE asociada al control.
+ *
+ * Antes era un <Label> suelto al lado del input: sin htmlFor no hay relación,
+ * así que el campo no tenía nombre accesible (un lector de pantalla solo decía
+ * "campo de texto"), hacer clic en la etiqueta no enfocaba, y nada podía
+ * localizarlo por su nombre. Se genera un id y se le pasa al hijo.
+ */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
+  const control = React.isValidElement(children)
+    ? React.cloneElement(children as React.ReactElement<{ id?: string }>, { id })
+    : children;
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {children}
+      <Label htmlFor={id}>{label}</Label>
+      {control}
     </div>
   );
 }
