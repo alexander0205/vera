@@ -10,7 +10,7 @@ import {
   Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store, BookOpen,
+  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, GraduationCap, Store, BookOpen,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { planHasFeature } from '@/lib/plans';
@@ -72,6 +72,18 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/compras',      label: 'Facturas recibidas', plusHref: '/dashboard/compras/nueva' },
       { href: '/dashboard/gastos/nueva', label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
+    ],
+  },
+  {
+    id: 'administracion-escolar',
+    label: 'Administración Escolar',
+    icon: GraduationCap,
+    children: [
+      { href: '/dashboard/administracion-escolar/estudiantes',    label: 'Estudiantes' },
+      { href: '/dashboard/administracion-escolar/matriculas',     label: 'Matrículas' },
+      { href: '/dashboard/administracion-escolar/cargos',         label: 'Cargos y deudas' },
+      { href: '/dashboard/administracion-escolar/pagos',          label: 'Pagos escolares' },
+      { href: '/dashboard/administracion-escolar/configuracion',  label: 'Configuración' },
     ],
   },
   {
@@ -137,6 +149,13 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   // Compras — owner/admin (e-CF de proveedores) o productos:gestionar (compras manuales)
   '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
+
+  // Administración Escolar
+  '/dashboard/administracion-escolar/estudiantes':   'administracion-escolar:ver',
+  '/dashboard/administracion-escolar/matriculas':    'administracion-escolar:ver',
+  '/dashboard/administracion-escolar/cargos':        'administracion-escolar:ver',
+  '/dashboard/administracion-escolar/pagos':         'administracion-escolar:ver',
+  '/dashboard/administracion-escolar/configuracion': 'administracion-escolar:configurar',
 
   // Caja
   '/dashboard/caja':                  'caja:operar',

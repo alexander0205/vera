@@ -513,7 +513,7 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
  */
 export async function getCuentasPorCobrar(
   teamId: number,
-  opts: { clientId?: number; soloVencidas?: boolean; limit?: number; offset?: number } = {},
+  opts: { clientId?: number; soloVencidas?: boolean; docId?: number; limit?: number; offset?: number } = {},
 ) {
   const hoy = new Date().toISOString().slice(0, 10);
   // Techo al dataset (antes cargaba toda la cartera abierta sin límite).
@@ -595,6 +595,7 @@ export async function getCuentasPorCobrar(
       // contra su factura padre (restadas vía ncAplicado).
       sql`${ecfDocuments.tipoEcf} != '34'`,
       opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
+      opts.docId ? eq(ecfDocuments.id, opts.docId) : sql`true`,
     ))
     .orderBy(desc(ecfDocuments.fechaEmision))
     .limit(limit)

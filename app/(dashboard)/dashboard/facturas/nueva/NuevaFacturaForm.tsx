@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
   StickyNote, ScrollText, MessageSquare, CreditCard, Send,
+  GraduationCap, Loader2,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
@@ -103,6 +104,12 @@ export default function NuevaFacturaForm({
     ? searchParams.get('tipo')!
     : null;
   const qpPadreId = !initialData ? searchParams.get('padreId') : null;
+  // ?desdeCargo=N → prefill desde un cargo escolar (cliente=tutor, dependiente=
+  // estudiante, línea=producto del concepto). Solo lee/pre-llena; NO toca el
+  // motor de emisión. Ver /api/administracion-escolar/cargos/[id]/prefill-factura.
+  const qpDesdeCargo = !initialData ? searchParams.get('desdeCargo') : null;
+  // ?desdeCargos=1,2,3 → una sola factura que cubre varios meses (N cargos).
+  const qpDesdeCargos = !initialData ? searchParams.get('desdeCargos') : null;
 
   // Categoría fija por ruta (factura/NC/ND/compras/gastos). Si está presente,
   // oculta el selector de categoría y el tipo arranca en el de esa categoría.
@@ -166,6 +173,13 @@ export default function NuevaFacturaForm({
 
   // ── Clasificación por maestros (Plan A) ─────────────────────────────────────
   const [clasificacion, setClasificacion] = useState<ClasifAsig[]>([]);
+
+  // ── Origen: cargo(s) escolar(es) (prefill vía ?desdeCargo / ?desdeCargos) ────
+  // Si esta factura nace de cargos escolares, guardamos sus id + saldo para
+  // ofrecer, en la pantalla de éxito, "volver al estudiante y vincular". Una
+  // sola factura puede cubrir varios meses (N cargos → 1 factura).
+  const [origenCargos, setOrigenCargos] = useState<{ id: number; saldoCentavos: number }[]>([]);
+  const [saldandoCargo, setSaldandoCargo] = useState(false);
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
@@ -352,6 +366,108 @@ export default function NuevaFacturaForm({
       .catch(() => {});
   }
 
+  type PrefillCargo = {
+    cargo?: { id: number; saldoCentavos: number };
+    comprador?: { clienteId: number; razonSocial?: string | null; rnc?: string | null; email?: string | null; telefono?: string | null } | null;
+    linea?: {
+      productoId?: number | null; nombreItem?: string; cantidadItem?: number;
+      precioUnitarioItem?: number; tasaItbis?: string; indicadorBienoServicio?: string;
+      dependienteId?: number | null; dependienteNombre?: string;
+    };
+    advertencias?: string[];
+  };
+
+  // Convierte la línea del prefill en un ItemLinea del formulario.
+  function lineaCargoAItem(l: NonNullable<PrefillCargo['linea']>, id: number): ItemLinea {
+    return {
+      id,
+      productoId:             typeof l.productoId === 'number' ? l.productoId : undefined,
+      nombreItem:             String(l.nombreItem ?? ''),
+      referencia:             '',
+      descripcionItem:        '',
+      cantidadItem:           Number(l.cantidadItem) || 1,
+      precioUnitarioItem:     Number(l.precioUnitarioItem) || 0,
+      descuentoPct:           0,
+      tasaItbis:              (['0.18', '0.16', '0', 'exento'].includes(String(l.tasaItbis))
+                                ? String(l.tasaItbis) : 'exento') as ItemLinea['tasaItbis'],
+      indicadorBienoServicio: String(l.indicadorBienoServicio) === '1' ? '1' : '2',
+      dependienteId:          typeof l.dependienteId === 'number' ? l.dependienteId : null,
+      dependienteNombre:      String(l.dependienteNombre ?? ''),
+    };
+  }
+
+  // Prefill desde uno o varios cargos escolares. Con varios, cada cargo aporta
+  // UNA línea (su mes) y la factura los cubre todos: un solo documento que se
+  // vincula a los N cargos al terminar (N cargos → 1 factura). El cliente
+  // (tutor) y beneficiario (estudiante) son compartidos. Solo pre-llena.
+  function aplicarPrefillCargos(payloads: PrefillCargo[]) {
+    const validos = payloads.filter((p) => p?.cargo?.id);
+    if (validos.length === 0) return;
+    setOrigenCargos(validos.map((p) => ({ id: p.cargo!.id, saldoCentavos: p.cargo!.saldoCentavos })));
+
+    const comprador = validos.find((p) => p.comprador?.clienteId)?.comprador;
+    if (comprador?.clienteId) {
+      seleccionarCliente({
+        id:          comprador.clienteId,
+        razonSocial: comprador.razonSocial ?? '',
+        rnc:         comprador.rnc ?? null,
+        email:       comprador.email ?? null,
+        telefono:    comprador.telefono ?? null,
+      });
+    }
+
+    const items = validos
+      .filter((p) => p.linea)
+      .map((p, i) => lineaCargoAItem(p.linea!, i + 1));
+    if (items.length) dispatchItems({ type: 'SET', items });
+
+    // Advertencias deduplicadas (no repetir la misma por cada mes).
+    const vistas = new Set<string>();
+    validos.forEach((p) => (p.advertencias ?? []).forEach((msg) => {
+      if (!vistas.has(msg)) { vistas.add(msg); toast.warning(msg, { duration: 7000 }); }
+    }));
+  }
+
+  // Carga el prefill de N cargos (en paralelo) y los aplica.
+  function cargarPrefillCargos(cargoIds: number[]) {
+    Promise.all(cargoIds.map((cargoId) =>
+      fetch(`/api/administracion-escolar/cargos/${cargoId}/prefill-factura`)
+        .then((r) => r.ok ? r.json() : Promise.reject()),
+    ))
+      .then(aplicarPrefillCargos)
+      .catch(() => toast.error('No se pudieron cargar los cargos para prefacturar.'));
+  }
+
+  // Cierra el loop: vincula la factura recién creada a TODOS los cargos de
+  // origen (uno o varios meses) y vuelve al perfil del estudiante. Solo
+  // disponible si la factura nació de cargos escolares (?desdeCargo[s]).
+  async function saldarCargoConFactura(documentoId: number) {
+    if (origenCargos.length === 0) return;
+    setSaldandoCargo(true);
+    let estudianteId: number | undefined;
+    try {
+      for (const oc of origenCargos) {
+        const res = await fetch(`/api/administracion-escolar/cargos/${oc.id}/saldar-con-factura`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ecfDocumentId: documentoId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'No se pudo vincular el cargo');
+        estudianteId = data.cargo?.estudianteId ?? estudianteId;
+      }
+      toast.success(origenCargos.length > 1
+        ? `${origenCargos.length} cargos vinculados a la factura. Registra el cobro en la factura.`
+        : 'Cargo vinculado a la factura. Registra el cobro en la factura.');
+      router.push(estudianteId
+        ? `/dashboard/administracion-escolar/estudiantes/${estudianteId}`
+        : '/dashboard/administracion-escolar/estudiantes');
+    } catch (e) {
+      setSaldandoCargo(false);
+      toast.error(e instanceof Error ? e.message : 'No se pudo vincular el cargo');
+    }
+  }
+
   // Limpia el vínculo con la factura de origen (mantiene cliente/líneas editables).
   function limpiarPadre() {
     setPadreNota(null);
@@ -368,8 +484,13 @@ export default function NuevaFacturaForm({
 
   useEffect(() => {
     if (initialData) return; // editar borrador manda sobre los query params
-    if (!qpPadreId) return;
-    cargarPadre(Number(qpPadreId));
+    if (qpPadreId) { cargarPadre(Number(qpPadreId)); return; }
+    if (qpDesdeCargos) {
+      const ids = qpDesdeCargos.split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0);
+      if (ids.length) cargarPrefillCargos(ids);
+    } else if (qpDesdeCargo) {
+      cargarPrefillCargos([Number(qpDesdeCargo)]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -690,7 +811,9 @@ export default function NuevaFacturaForm({
   // ─── Cambio de tipo ───────────────────────────────────────────────────────
   function handleChangeTipo(t: string) {
     setTipoEcf(t);
-    limpiarCliente();
+    // No se limpia el cliente: el comprador no depende del tipo de e-CF, y
+    // borrarlo obligaba a re-elegir cliente + beneficiarios (perdiendo el
+    // prefill de un cargo escolar). El ITBIS sí se ajusta abajo según la regla.
     setNcfModificado('');
     setError(null);
     const r = TIPO_ECF_REGLAS[t];
@@ -1124,6 +1247,39 @@ export default function NuevaFacturaForm({
                 </Badge>
               </div>
             </div>
+            {/* Origen cargo escolar → cerrar el loop: vincular la factura al
+                cargo. El cobro se registra luego en la factura (no hay pago
+                escolar paralelo), y el cargo refleja el estado de la factura. */}
+            {origenCargos.length > 0 && (
+              <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-left mb-6">
+                <div className="flex items-start gap-2 mb-3">
+                  <GraduationCap className="h-5 w-5 text-teal-700 shrink-0 mt-0.5" />
+                  <p className="text-sm text-teal-900">
+                    {origenCargos.length > 1
+                      ? `Esta factura cubre ${origenCargos.length} cargos escolares. Al vincularla, los ${origenCargos.length} meses quedarán ligados a esta factura y sus saldos reflejarán lo que se cobre aquí. El cobro se registra una sola vez en la factura.`
+                      : 'Esta factura nació de un cargo escolar. Al vincularla, el cargo quedará ligado a esta factura y su saldo reflejará lo que se cobre aquí. El cobro se registra en la factura.'}
+                  </p>
+                </div>
+                <div className="flex gap-3 flex-wrap">
+                  <Button
+                    className="bg-teal-600 hover:bg-teal-700 text-white"
+                    disabled={saldandoCargo}
+                    onClick={() => saldarCargoConFactura(resultado.documentoId)}
+                  >
+                    {saldandoCargo
+                      ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Vinculando…</>
+                      : <><CheckCircle className="h-4 w-4 mr-1.5" />{origenCargos.length > 1 ? 'Vincular a los cargos y volver al estudiante' : 'Vincular al cargo y volver al estudiante'}</>}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={saldandoCargo}
+                    onClick={() => router.push(`${detalleBase}/${resultado.documentoId}`)}
+                  >
+                    Ver factura sin vincular
+                  </Button>
+                </div>
+              </div>
+            )}
             {/* Nota en borrador → elección explícita: emitir ahora o dejar borrador.
                 Nunca obligatorio — emitir requiere que la factura padre tenga e-CF. */}
             {esNotaBorrador && (

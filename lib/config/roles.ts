@@ -59,7 +59,12 @@ export type Permission =
   | 'pos:vender'     // abrir terminal, vender y cobrar en el POS (cajero)
   | 'pos:configurar' // crear/editar terminales y config del POS (admin/owner)
   // Suscripción / billing
-  | 'suscripcion:gestionar';
+  | 'suscripcion:gestionar'
+  // Administración escolar
+  | 'administracion-escolar:ver'
+  | 'administracion-escolar:gestionar'
+  | 'administracion-escolar:configurar'
+  | 'administracion-escolar:pagos';
 
 export type RoleKey = 'owner' | 'admin' | 'user' | 'lector';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
@@ -120,6 +125,7 @@ export const ROLES: RoleDef[] = [
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'pos:vender', 'pos:configurar',
       'suscripcion:gestionar',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
   },
@@ -140,6 +146,7 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'pos:vender', 'pos:configurar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
@@ -159,6 +166,7 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'equipo:ver',
       'caja:ver', 'caja:operar',
+      'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:pagos',
       'pos:vender',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
@@ -178,6 +186,7 @@ export const ROLES: RoleDef[] = [
       'configuracion:ver',
       'compras:ver',
       'caja:ver',
+      'administracion-escolar:ver',
     ],
     ui: { color: 'text-sky-600 bg-sky-50 border-sky-200', icon: 'Eye' },
   },
@@ -247,6 +256,12 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   ]},
   { module: 'Suscripción', icon: 'CreditCard', permissions: [
     { key: 'suscripcion:gestionar', label: 'Gestionar plan y pagos' },
+  ]},
+  { module: 'Administración escolar', icon: 'GraduationCap', permissions: [
+    { key: 'administracion-escolar:ver',         label: 'Ver estudiantes, matrículas, cargos y pagos' },
+    { key: 'administracion-escolar:gestionar',    label: 'Crear / editar estudiantes, tutores, cursos y matrículas' },
+    { key: 'administracion-escolar:configurar',   label: 'Configurar períodos, cursos, materias y conceptos' },
+    { key: 'administracion-escolar:pagos',        label: 'Registrar pagos escolares' },
   ]},
 ];
 
