@@ -66,6 +66,11 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // ITBIS pagado en las compras: se compensa contra el 2102 al liquidar.
   { codigo: '1104', nombre: 'ITBIS adelantado',            tipo: 'activo', imputable: true },
   { codigo: '1105', nombre: 'Inventario',                  tipo: 'activo', imputable: true },
+  // Cuenta puente de las pasarelas (CardNet/Azul). El dinero de un cobro en
+  // línea NO entra al banco en el momento: la pasarela liquida días después y
+  // retiene su comisión. Mandarlo directo a Bancos inflaría el banco con plata
+  // que todavía no llegó. Se queda aquí hasta que la liquidación lo mueve.
+  { codigo: '1106', nombre: 'Cobros por liquidar',         tipo: 'activo', imputable: true },
 
   // ─── 2 Pasivo ───────────────────────────────────────────────────────────
   { codigo: '2',    nombre: 'Pasivo',                      tipo: 'pasivo', imputable: false },
@@ -84,7 +89,11 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // ─── 4 Ingresos ─────────────────────────────────────────────────────────
   { codigo: '4',    nombre: 'Ingresos',                    tipo: 'ingreso', imputable: false },
   { codigo: '41',   nombre: 'Ingresos operacionales',      tipo: 'ingreso', imputable: false },
-  { codigo: '4101', nombre: 'Ingresos por ventas',         tipo: 'ingreso', imputable: true },
+  // Se separan bien y servicio porque el Paso 3 mapea la cuenta de ingreso
+  // según `products.tipo`, y porque el estado de resultados suele pedirlos
+  // aparte.
+  { codigo: '4101', nombre: 'Ingresos por venta de mercancía', tipo: 'ingreso', imputable: true },
+  { codigo: '4104', nombre: 'Ingresos por servicios',      tipo: 'ingreso', imputable: true },
   // Los recargos por mora que cobra el módulo de cartera.
   { codigo: '4102', nombre: 'Ingresos por mora',           tipo: 'ingreso', imputable: true },
   // Cuenta de contrapartida: es ingreso, pero RESTA. De ahí la naturaleza
@@ -106,6 +115,9 @@ export const CATALOGO_BASE: CuentaBase[] = [
   { codigo: '6',    nombre: 'Gastos',                      tipo: 'gasto', imputable: false },
   { codigo: '61',   nombre: 'Gastos operacionales',        tipo: 'gasto', imputable: false },
   { codigo: '6101', nombre: 'Gastos generales',            tipo: 'gasto', imputable: true },
+  // La comisión que retiene la pasarela al liquidar. Es gasto, no un menor
+  // ingreso: la venta fue por el total y el costo de cobrarla va aparte.
+  { codigo: '6102', nombre: 'Comisiones por cobro electrónico', tipo: 'gasto', imputable: true },
 ];
 
 /**
@@ -135,8 +147,38 @@ export async function sembrarCatalogoBase(
   `);
   if (total > 0) return 0;
 
-  // Se insertan por nivel para poder resolver el padre por código: cuando toca
-  // insertar 1101, la 11 ya existe y se puede buscar su id.
+  return insertarCuentasBase(teamId, userId);
+}
+
+/**
+ * Inserta las cuentas del catálogo base que le falten al team, **sin el chequeo
+ * de "ya tiene catálogo"**.
+ *
+ * Existe porque `sembrarCatalogoBase` se planta en cuanto hay una sola cuenta,
+ * así que un team sembrado con una versión anterior del catálogo nunca vería
+ * las cuentas nuevas. Pasó de verdad al llegar el Paso 3, que necesita
+ * `1106 Cobros por liquidar`, `4104 Ingresos por servicios` y
+ * `6102 Comisiones por cobro electrónico`.
+ *
+ * Es explícita y la dispara el usuario desde el catálogo, no automática: si
+ * alguien borró una cuenta base a propósito, no se la devolvemos a sus espaldas
+ * en cada render.
+ *
+ * @returns cuántas cuentas se insertaron.
+ */
+export async function sembrarCuentasBaseFaltantes(
+  teamId: number,
+  userId?: number,
+): Promise<number> {
+  return insertarCuentasBase(teamId, userId);
+}
+
+/**
+ * El INSERT en sí. Recorre el catálogo en orden para que cada cuenta encuentre
+ * a su padre ya insertado, y deja pasar los conflictos: lo que ya existe no se
+ * toca.
+ */
+async function insertarCuentasBase(teamId: number, userId?: number): Promise<number> {
   let insertadas = 0;
   for (const c of CATALOGO_BASE) {
     const naturaleza = c.naturaleza ?? naturalezaPorTipo(c.tipo);
@@ -164,3 +206,18 @@ export async function sembrarCatalogoBase(
 
   return insertadas;
 }
+
+/** Los códigos que el motor contable espera encontrar. Para sugerir valores. */
+export const CODIGO = {
+  cuentasPorCobrar:   '1103',
+  cobrosPorLiquidar:  '1106',
+  itbisPorPagar:      '2102',
+  retencionesPorPagar:'2103',
+  ingresosMercancia:  '4101',
+  ingresosServicios:  '4104',
+  ingresosMora:       '4102',
+  descuentos:         '4103',
+  caja:               '1101',
+  bancos:             '1102',
+  comisionCobro:      '6102',
+} as const;

@@ -61,6 +61,7 @@ export function CatalogoClient({
 
   const [form, setForm]           = useState<FormState | null>(null);
   const [error, setError]         = useState<string | null>(null);
+  const [aviso, setAviso]         = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [colapsadas, setColapsadas] = useState<Set<number>>(new Set());
   const [verInactivas, setVerInactivas] = useState(false);
@@ -169,6 +170,30 @@ export function CatalogoClient({
     startTransition(() => router.refresh());
   }
 
+  /**
+   * Reinserta las cuentas del catálogo base que falten. Hace falta porque la
+   * siembra automática se planta si el team ya tiene cuentas: un catálogo
+   * creado antes de que el Paso 3 agregara `1106`, `4104` y `6102` no las
+   * tendría nunca.
+   */
+  async function restaurarBase() {
+    setGuardando(true);
+    setError(null);
+    const res = await fetch('/api/contabilidad/cuentas/restaurar-base', { method: 'POST' });
+    setGuardando(false);
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? 'No se pudieron restaurar las cuentas base.');
+      return;
+    }
+    const { insertadas } = await res.json();
+    setAviso(insertadas > 0
+      ? `Se agregaron ${insertadas} cuenta(s) que faltaban del catálogo base.`
+      : 'El catálogo base ya está completo, no faltaba ninguna.');
+    startTransition(() => router.refresh());
+  }
+
   async function borrar(c: Cuenta) {
     if (!confirm(`¿Eliminar la cuenta ${c.codigo} ${c.nombre}?`)) return;
     setError(null);
@@ -189,6 +214,12 @@ export function CatalogoClient({
         </div>
       )}
 
+      {aviso && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          {aviso}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <label className="flex items-center gap-2 text-sm text-gray-600">
           <input
@@ -201,10 +232,15 @@ export function CatalogoClient({
         </label>
 
         {puedeConfigurar && (
-          <Button onClick={() => abrirNueva()} size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva cuenta
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={restaurarBase} disabled={guardando}>
+              Restaurar cuentas base
+            </Button>
+            <Button onClick={() => abrirNueva()} size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva cuenta
+            </Button>
+          </div>
         )}
       </div>
 

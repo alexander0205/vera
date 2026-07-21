@@ -465,26 +465,142 @@ consulta.
 
 ---
 
-## Siguiente trabajo de desarrollo — Paso 3
+## Paso 3 — Cuentas automáticas · ✅ HECHO (2026-07-21)
 
-**Cuentas automáticas por empresa.** Ver `docs/plan-contabilidad-vera.md` desde
-"Paso 3": qué cuenta usar por defecto para cuentas por cobrar, ingresos, ITBIS,
-etc., para que Vera no le pregunte al usuario en cada factura. La primera
-migración libre es la **0084**.
+**Migración `0084_contabilidad_config_cuentas.sql` aplicada.** Tres tablas, una
+por subpaso del plan: `contabilidad_config` (5 cuentas generales + interruptor),
+`contabilidad_config_metodos_pago` (clave → cuenta, con cuenta de comisión para
+pasarelas) y `contabilidad_config_ingresos` (override por categoría o producto).
+
+| # | Qué pedía el plan | Cómo quedó |
+|---|---|---|
+| 1 | Configuración general | 5 cuentas: por cobrar, ITBIS, ingresos, descuentos, mora |
+| 2 | Cuentas por método de pago | 8 claves configurables + las 2 pasarelas aparte |
+| 3 | Por producto/servicio/categoría | Sin configurar: `products.tipo` decide. Overrides para excepciones |
+| 4 | Validar configuración incompleta | Lista de huecos concretos + interruptor que se niega a encender |
+
+### El hallazgo que cambió el diseño
+
+**Un cobro por CardNet/Azul se guarda como `metodo = 'tarjeta'`**, idéntico a una
+tarjeta pasada en el mostrador — ver `lib/pagos/links.ts`, que llama a
+`registrarPago({ metodo: 'tarjeta' })`. El campo `pagos_recibidos.cuenta` guarda
+'Azul'/'CardNet' pero es **texto libre editable**, así que no sirve de
+discriminador. Lo único fiable es que exista una fila en `payment_links`
+apuntando a ese pago.
+
+Importa porque el dinero de una pasarela **no entra al banco ese día**: liquida
+después y retiene comisión. Mapear ambos al mismo sitio infla el banco con plata
+que no ha llegado.
+
+Solución: las claves contables `pasarela_cardnet` / `pasarela_azul` existen
+aparte de `tarjeta`, y **`claveContableDePago()`** hace la traducción mirando el
+vínculo del link. La trampa queda encerrada en una función documentada.
+
+### Decisiones de diseño
+
+- **Solo se exigen los métodos que el team usa de verdad.** `getEstadoConfiguracion`
+  mira el historial real de `pagos_recibidos`. Pedirle a una panadería que
+  configure "Link de pago Azul" cuando nunca cobró en línea es ruido, y el ruido
+  hace que la gente ignore la validación entera.
+- **`saldo_favor` y `nota_credito` no llevan cuenta de cobro.** No son entrada de
+  efectivo, son la aplicación de un crédito previo; su asiento va contra
+  descuentos en el Paso 5. La API rechaza configurarles cuenta.
+- **La cuenta de comisión solo aplica a pasarelas.** En efectivo no hay comisión.
+- **La configuración solo acepta cuentas imputables y activas.** Apuntar a una de
+  agrupación produciría asientos sobre una cuenta que no los recibe.
+- **`activa` arranca apagado y no se puede encender con huecos.** Asientos
+  descuadrados son peores que no tener asientos.
+- **Bien → `4101`, servicio → `4104` sin configurar nada**, usando `products.tipo`
+  que ya existía. Los overrides son solo para excepciones.
+
+### Cuentas nuevas en el catálogo base
+
+El Paso 3 necesitaba tres que el Paso 2 no tenía: **`1106 Cobros por liquidar`**
+(puente de pasarela), **`4104 Ingresos por servicios`** y **`6102 Comisiones por
+cobro electrónico`**. Además `4101` pasó a llamarse "Ingresos por venta de
+mercancía".
+
+> ⚠️ **La siembra automática NO las reparte a los teams ya sembrados**, porque se
+> planta en cuanto existe una sola cuenta. Para eso está
+> **`sembrarCuentasBaseFaltantes()`** y el botón **"Restaurar cuentas base"** del
+> catálogo. Es explícito a propósito: si alguien borró una cuenta base porque no
+> la usa, no se la devolvemos a sus espaldas en cada render. **Nota:** tampoco
+> renombra `4101` en los catálogos viejos — el nombre es del usuario desde que lo
+> toca.
+
+### Piezas sin caller — a propósito, no por olvido
+
+`resolverCuentaIngreso()`, `resolverCuentaCobro()` y `claveContableDePago()` no
+tienen llamador fuera de su archivo. **No es el error del Paso 1.** Allí el
+huérfano era funcionalidad de usuario inalcanzable; estas son la puerta de
+entrada del Paso 4, y no hay nada que resolver hasta que existan los asientos.
+
+Están **verificadas por script**, no dadas por buenas: los 4 niveles de la cadena
+de resolución, incluida la vuelta atrás al quitar un override.
+
+### Verificación
+
+- Typecheck limpio.
+- **Cadena de resolución, los 4 niveles**, con datos temporales creados y
+  borrados: producto → `4102`, categoría → `4104`, tipo bien → `4101`, sin
+  producto → la general. Al quitar el override de producto vuelve al de
+  categoría. Limpieza confirmada en 0.
+- **Guardas probadas contra la API real**: activar con huecos → 409 con los 9
+  huecos listados; cuenta de agrupación → 409; comisión en método no-pasarela →
+  409; cuenta para `saldo_favor` → 409.
+- **Flujo completo**: configurar las 5 generales + 4 métodos + pasarela con
+  puente y comisión → `completa: true` → encender → la UI muestra "encendida" y
+  el botón cambia a "Apagar".
+- `restaurar-base` insertó exactamente las 3 que faltaban, sin duplicar ni tocar
+  las existentes. Cero códigos duplicados en la base.
+- UI hidratada, 15 selects activos, las 3 secciones renderizadas.
+
+> ⚠️ **Trampa: un componente de cliente no puede importar de `config.ts`.** Ese
+> archivo importa `db`, que arrastra `postgres` → `fs`, y el build del cliente
+> falla con `Can't resolve 'fs'`. Por eso las claves y etiquetas de método viven
+> en **`lib/contabilidad/metodos.ts`**, sin dependencias de base. Si añades una
+> constante que la UI necesite, va ahí — no en `config.ts`.
+
+> ⚠️ **`u.clave <> ALL(${arrayJS})` no funciona.** Postgres responde
+> `op ANY/ALL (array) requires array on right side`: el array de JS llega como
+> parámetro escalar. Hay que expandirlo con `sql.join` a parámetros sueltos.
+
+> **Ojo con el team en las pruebas.** `getTeamIdForUser()` devolvió el **team 2**,
+> no el 9. Ambos tienen catálogo. Los escenarios `SEEDCXC` de cartera siguen
+> viviendo solo en el **team 9**.
+
+---
+
+## Siguiente trabajo de desarrollo — Paso 4
+
+**Generar asientos para facturas y pagos.** Ver `docs/plan-contabilidad-vera.md`
+desde "Paso 4". La primera migración libre es la **0085**.
+
+Lo que el Paso 3 dejó preparado:
+
+- `resolverCuentaIngreso(teamId, productoId)` → a qué cuenta va cada línea.
+- `resolverCuentaCobro(teamId, clave)` → a qué cuenta entra un cobro.
+- `claveContableDePago(teamId, pagoId, metodo)` → **usarla siempre**, nunca el
+  `metodo` crudo, o los cobros por link acaban en el banco equivocado.
+- `getConfig(teamId).activa` → si está apagado, **no generar asientos**.
+
+**La tabla de líneas debe llamarse `contabilidad_asiento_lineas`, con columnas
+`team_id` y `cuenta_id`.** `tieneMovimientos()` en `lib/contabilidad/cuentas.ts`
+ya la consulta con `to_regclass` y empieza a proteger el catálogo sola en cuanto
+exista. Si le pones otro nombre, ajusta esa consulta o la protección de borrado
+se queda muda para siempre.
 
 ### Antes de escribir la primera línea
 
-1. **Releer el Paso 3 del plan.** No asumir el diseño de memoria.
+1. **Releer el Paso 4 del plan.** No asumir el diseño de memoria.
 2. **Confirmar la DB con Darian** antes de correr nada contra Neon, incluso de
    solo lectura. Base actual: `ep-bold-pine-anhzpklp` / `neondb`.
-3. **Revisar `docs/no-contaminar-entidades-genericas.md`** (regla de Alex): la
-   configuración contable apunta a la cuenta, nunca al revés. No agregar
-   columnas de contabilidad a `products` ni a `ecf_documents`.
-4. **Numeración de migraciones:** esta rama ya chocó dos veces con main. Al
-   momento de escribir esto main va por `0069` y la rama por `0083`, así que hay
-   14 números de colchón — pero al renombrar, ir en orden **descendente** y mover
-   también `scripts/apply-migration-XXXX.ts`, actualizando la ruta del `.sql` y
-   el mensaje de log **dentro** del script.
+3. **Revisar `docs/no-contaminar-entidades-genericas.md`**: el asiento apunta a
+   la factura, la factura no sabe del asiento.
+4. **Numeración de migraciones:** main va por `0069` y la rama por `0084`. Al
+   renombrar, ir en orden **descendente** y mover también
+   `scripts/apply-migration-XXXX.ts`, actualizando la ruta del `.sql` y el
+   mensaje de log **dentro** del script.
 
 ### La regla que se aprendió cerrando el Paso 1
 

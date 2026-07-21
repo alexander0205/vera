@@ -1899,6 +1899,69 @@ export const contabilidadCuentas = pgTable('contabilidad_cuentas', {
 export type ContabilidadCuenta    = typeof contabilidadCuentas.$inferSelect;
 export type NewContabilidadCuenta = typeof contabilidadCuentas.$inferInsert;
 
+// ─── Contabilidad: configuración de cuentas automáticas (Paso 3) ─────────────
+// Traduce operaciones a cuentas sin preguntarle al usuario en cada factura.
+// No genera asientos — eso es el Paso 4; esto solo dice DÓNDE va cada cosa.
+
+/** Cuentas generales + el interruptor del módulo. Una fila por empresa. */
+export const contabilidadConfig = pgTable('contabilidad_config', {
+  teamId: integer('team_id').primaryKey().references(() => teams.id),
+  /**
+   * Modo "sin contabilidad" del plan. Arranca apagado: entrar a la pantalla no
+   * hace que la empresa empiece a generar asientos. La API se niega a
+   * encenderlo mientras falte configuración.
+   */
+  activa: boolean('activa').notNull().default(false),
+  cuentaPorCobrarId: integer('cuenta_por_cobrar_id').references(() => contabilidadCuentas.id),
+  cuentaItbisId:     integer('cuenta_itbis_id').references(() => contabilidadCuentas.id),
+  cuentaIngresosId:  integer('cuenta_ingresos_id').references(() => contabilidadCuentas.id),
+  cuentaDescuentosId: integer('cuenta_descuentos_id').references(() => contabilidadCuentas.id),
+  cuentaMoraId:      integer('cuenta_mora_id').references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Cuenta por método de cobro.
+ *
+ * `clave` NO es `pagosRecibidos.metodo` tal cual: un cobro por CardNet/Azul se
+ * guarda como `metodo='tarjeta'` y solo se distingue por el vínculo desde
+ * `paymentLinks`. Contablemente son distintos — el cobro en línea no entra al
+ * banco hasta que la pasarela liquida. Lo resuelve `claveContableDePago()`.
+ */
+export const contabilidadConfigMetodosPago = pgTable('contabilidad_config_metodos_pago', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  clave:   varchar('clave', { length: 30 }).notNull(),
+  cuentaId: integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  /** Solo pasarelas: la comisión retenida al liquidar. Es gasto, no menor ingreso. */
+  cuentaComisionId: integer('cuenta_comision_id').references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_config_metodos_team_clave_idx').on(t.teamId, t.clave),
+]);
+
+/**
+ * Override de la cuenta de ingreso por categoría o producto. Exactamente uno de
+ * los dos va seteado (lo obliga un CHECK).
+ *
+ * Resolución: producto → categoría → tipo del producto → ingresos general.
+ */
+export const contabilidadConfigIngresos = pgTable('contabilidad_config_ingresos', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  categoriaId: integer('categoria_id').references(() => categorias.id),
+  productoId:  integer('producto_id').references(() => products.id),
+  cuentaId: integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export type ContabilidadConfig       = typeof contabilidadConfig.$inferSelect;
+export type ContabilidadConfigMetodo = typeof contabilidadConfigMetodosPago.$inferSelect;
+export type ContabilidadConfigIngreso = typeof contabilidadConfigIngresos.$inferSelect;
+
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
