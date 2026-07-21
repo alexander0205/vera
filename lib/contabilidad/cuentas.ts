@@ -5,10 +5,11 @@
  * Las reglas duras viven aquí y no en la UI, porque la API también las necesita
  * y una guarda que solo existe en el formulario no es una guarda.
  *
- * Sobre "tiene movimientos": la tabla de asientos NO existe todavía (llega en
- * el Paso 4). `tieneMovimientos` está escrita para devolver `false` mientras no
- * exista y empezar a proteger sola en cuanto exista, sin que haya que acordarse
- * de volver aquí. Ver el comentario de esa función.
+ * Sobre "tiene movimientos": desde el Paso 4 la tabla de asientos existe, así
+ * que `tieneMovimientos` protege de verdad — una cuenta con apuntes ya no se
+ * puede borrar, ni cambiarle el código o el tipo. La comprobación con
+ * `to_regclass` se conserva por si el módulo corre contra una base donde la
+ * migración 0085 todavía no se aplicó.
  */
 
 import { db } from '@/lib/db/drizzle';

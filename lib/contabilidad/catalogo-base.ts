@@ -71,6 +71,10 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // retiene su comisión. Mandarlo directo a Bancos inflaría el banco con plata
   // que todavía no llegó. Se queda aquí hasta que la liquidación lo mueve.
   { codigo: '1106', nombre: 'Cobros por liquidar',         tipo: 'activo', imputable: true },
+  // Lo que el cliente retuvo y le paga a la DGII por cuenta de la empresa. No
+  // entra al banco, pero deja un crédito fiscal a favor: es un activo, no un
+  // menor ingreso — la venta fue por el total.
+  { codigo: '1107', nombre: 'Retenciones por cobrar',      tipo: 'activo', imputable: true },
 
   // ─── 2 Pasivo ───────────────────────────────────────────────────────────
   { codigo: '2',    nombre: 'Pasivo',                      tipo: 'pasivo', imputable: false },
@@ -79,6 +83,10 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // ITBIS cobrado en las ventas, que se le debe a la DGII.
   { codigo: '2102', nombre: 'ITBIS por pagar',             tipo: 'pasivo', imputable: true },
   { codigo: '2103', nombre: 'Retenciones por pagar',       tipo: 'pasivo', imputable: true },
+  // Cuando una nota de crédito supera lo que el cliente debía, el sobrante es
+  // dinero que la empresa le debe a él. Tratarlo como menor cuenta por cobrar
+  // dejaría la cartera en negativo.
+  { codigo: '2104', nombre: 'Saldos a favor de clientes',  tipo: 'pasivo', imputable: true },
 
   // ─── 3 Patrimonio ───────────────────────────────────────────────────────
   { codigo: '3',    nombre: 'Patrimonio',                  tipo: 'patrimonio', imputable: false },
@@ -211,8 +219,10 @@ async function insertarCuentasBase(teamId: number, userId?: number): Promise<num
 export const CODIGO = {
   cuentasPorCobrar:   '1103',
   cobrosPorLiquidar:  '1106',
+  retencionesPorCobrar:'1107',
   itbisPorPagar:      '2102',
   retencionesPorPagar:'2103',
+  saldosFavorClientes:'2104',
   ingresosMercancia:  '4101',
   ingresosServicios:  '4104',
   ingresosMora:       '4102',

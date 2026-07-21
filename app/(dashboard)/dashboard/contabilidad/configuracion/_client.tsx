@@ -28,6 +28,10 @@ const GENERALES: { campo: keyof ConfigContable; label: string; ayuda: string }[]
     ayuda: 'Donde restan las notas de crédito. Sin esto, las ventas netas salen infladas.' },
   { campo: 'cuentaMoraId', label: 'Ingresos por mora',
     ayuda: 'Los recargos por atraso son un ingreso distinto de las ventas.' },
+  { campo: 'cuentaSaldosFavorId', label: 'Saldos a favor de clientes',
+    ayuda: 'Si una nota de crédito supera la deuda, el sobrante es dinero que le debes al cliente.' },
+  { campo: 'cuentaRetencionesId', label: 'Retenciones por cobrar',
+    ayuda: 'Lo que el cliente retiene no entra a tu banco, pero te deja un crédito fiscal.' },
 ];
 
 /** Métodos que se ofrecen para configurar, sin los que no mueven dinero. */

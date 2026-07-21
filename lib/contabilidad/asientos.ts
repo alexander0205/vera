@@ -26,8 +26,10 @@ import { getConfig, resolverCuentaCobro, claveContableDePago } from './config';
 
 /** Estados de un documento que representan una venta emitida y viva. */
 const ESTADOS_VENTA = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'];
-/** Tipos e-CF que suman ingreso. La nota de crédito (34) es del Paso 5. */
+/** Tipos e-CF que suman ingreso. La nota de crédito (34) resta y va aparte. */
 const TIPOS_VENTA = ['31', '32', '33', '44', '45'];
+/** Nota de crédito: reduce la deuda del cliente en vez de aumentarla. */
+const TIPO_NOTA_CREDITO = '34';
 
 export interface LineaAsiento {
   cuentaId:    number;
@@ -42,12 +44,17 @@ export type MotivoSalto =
   | 'ya-tiene-asiento'
   | 'no-es-venta'
   | 'sin-monto'
-  | 'con-retenciones'
   | 'sin-cuenta-por-cobrar'
   | 'sin-cuenta-itbis'
   | 'sin-cuenta-ingresos'
   | 'sin-cuenta-cobro'
-  | 'metodo-sin-cobro';
+  | 'sin-cuenta-mora'
+  | 'sin-cuenta-descuentos'
+  | 'sin-cuenta-saldos-favor'
+  | 'sin-cuenta-retenciones'
+  | 'sin-asiento-que-reversar'
+  | 'no-esta-anulado'
+  | 'nc-solo-texto';
 
 export interface ResultadoGeneracion {
   creado:  boolean;
@@ -128,7 +135,26 @@ interface DocumentoParaAsiento {
   totalRetenciones: number;
   lineasJson: string | null;
   fecha: string;
+  /** Si viene, el documento es una nota de débito por mora de esa factura. */
+  moraOrigenId: number | null;
+  /** Solo notas de crédito: cuánto del monto quedó como saldo a favor. */
+  creditoGeneradoCents: number | null;
+  /** Código DGII de modificación. 2 = "corrige texto", sin efecto monetario. */
+  codigoModificacion: number | null;
 }
+
+/** Todo lo que necesita saberse de un documento para asentarlo. */
+const SELECT_DOCUMENTO = sql`
+  SELECT id, encf, tipo_ecf AS "tipoEcf", estado,
+         monto_total AS "montoTotal", total_itbis AS "totalItbis",
+         COALESCE(total_retenciones, 0) AS "totalRetenciones",
+         lineas_json AS "lineasJson",
+         mora_origen_id AS "moraOrigenId",
+         credito_generado_cents AS "creditoGeneradoCents",
+         codigo_modificacion AS "codigoModificacion",
+         to_char(fecha_emision AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha
+  FROM ecf_documents
+`;
 
 /**
  * Reparte el ingreso entre cuentas según las líneas de la factura.
@@ -246,12 +272,7 @@ export async function generarAsientoFactura(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT id, encf, tipo_ecf AS "tipoEcf", estado,
-           monto_total AS "montoTotal", total_itbis AS "totalItbis",
-           COALESCE(total_retenciones, 0) AS "totalRetenciones",
-           lineas_json AS "lineasJson",
-           to_char(fecha_emision AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha
-    FROM ecf_documents
+    ${SELECT_DOCUMENTO}
     WHERE team_id = ${teamId} AND id = ${documentoId}
   `);
   const doc = (filas as unknown as DocumentoParaAsiento[])[0];
@@ -262,34 +283,63 @@ export async function generarAsientoFactura(
   }
   if (doc.montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
 
-  // Las retenciones cambian el asiento (parte del cobro va a la DGII y no a
-  // caja) y son explícitamente del Paso 5. Generar uno "casi bien" para un
-  // libro contable real es peor que no generarlo: el usuario no vería que está
-  // mal hasta la declaración.
-  if (doc.totalRetenciones > 0) return { creado: false, motivo: 'con-retenciones' };
-
   if (!cfg.cuentaPorCobrarId) return { creado: false, motivo: 'sin-cuenta-por-cobrar' };
-  if (!cfg.cuentaIngresosId) return { creado: false, motivo: 'sin-cuenta-ingresos' };
   if (doc.totalItbis > 0 && !cfg.cuentaItbisId) {
     return { creado: false, motivo: 'sin-cuenta-itbis' };
   }
 
-  const reparto = await repartirIngreso(teamId, doc, cfg.cuentaIngresosId);
+  const esMora = doc.moraOrigenId !== null;
+  const concepto = esMora
+    ? `Mora ${doc.encf ?? doc.id}`
+    : `Factura ${doc.encf ?? doc.id}`;
+
+  // ── Reparto del ingreso ───────────────────────────────────────────────────
+  // Una nota de débito por mora NO es una venta: es un recargo por atraso.
+  // Acreditarla a "Ingresos por ventas" inflaría las ventas y distorsionaría el
+  // margen del negocio. Va entera a la cuenta de mora, sin repartir por líneas
+  // (su única línea es el producto de sistema `esMora`).
+  let reparto: Map<number, number>;
+  if (esMora) {
+    if (!cfg.cuentaMoraId) return { creado: false, motivo: 'sin-cuenta-mora' };
+    reparto = new Map([[cfg.cuentaMoraId, doc.montoTotal - doc.totalItbis]]);
+  } else {
+    if (!cfg.cuentaIngresosId) return { creado: false, motivo: 'sin-cuenta-ingresos' };
+    reparto = await repartirIngreso(teamId, doc, cfg.cuentaIngresosId);
+  }
+
+  // ── Retenciones ───────────────────────────────────────────────────────────
+  // Cuando el comprador retiene ITBIS o ISR, esa plata NO va a entrar al banco:
+  // la paga él a la DGII por cuenta de la empresa. La venta sigue siendo por el
+  // total, así que el ingreso no cambia; lo que cambia es que el débito se parte
+  // en dos: lo que el cliente todavía debe, y el crédito fiscal retenido.
+  const retenido = doc.totalRetenciones;
+  if (retenido > 0 && !cfg.cuentaRetencionesId) {
+    return { creado: false, motivo: 'sin-cuenta-retenciones' };
+  }
 
   const lineas: LineaAsiento[] = [
     {
       cuentaId: cfg.cuentaPorCobrarId,
-      debeCents: doc.montoTotal,
+      debeCents: doc.montoTotal - retenido,
       haberCents: 0,
-      descripcion: `Factura ${doc.encf ?? doc.id}`,
+      descripcion: concepto,
     },
     ...[...reparto.entries()].map(([cuentaId, monto]) => ({
       cuentaId,
       debeCents: 0,
       haberCents: monto,
-      descripcion: 'Ingreso por ventas',
+      descripcion: esMora ? 'Recargo por mora' : 'Ingreso por ventas',
     })),
   ];
+
+  if (retenido > 0) {
+    lineas.splice(1, 0, {
+      cuentaId: cfg.cuentaRetencionesId!,
+      debeCents: retenido,
+      haberCents: 0,
+      descripcion: 'Retención practicada por el cliente',
+    });
+  }
 
   if (doc.totalItbis > 0) {
     lineas.push({
@@ -302,11 +352,199 @@ export async function generarAsientoFactura(
 
   const asientoId = await insertarAsiento(
     teamId,
+    { fecha: doc.fecha, concepto, origenTipo: 'factura', origenId: doc.id },
+    lineas,
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+// ─── Asiento de nota de crédito ──────────────────────────────────────────────
+
+/**
+ * Asiento de una nota de crédito (tipo e-CF 34). Es el espejo de una factura:
+ *
+ *   Debe  Descuentos y devoluciones   base
+ *   Debe  ITBIS por pagar             ITBIS  ← se devuelve lo que se le debía a la DGII
+ *     Haber  Cuentas por cobrar         lo que reduce la deuda
+ *     Haber  Saldos a favor de clientes lo que sobra
+ *
+ * **Por qué el sobrante no va contra cuentas por cobrar:** si la nota supera lo
+ * que el cliente debía, ese exceso no es "menos deuda", es dinero que la empresa
+ * le debe a él. Restarlo de la cartera la dejaría en negativo y el balance mal.
+ * Por eso `credito_generado_cents` —que el sistema ya calcula— va a un pasivo.
+ *
+ * El débito a descuentos usa la cuenta de contrapartida `4103`, que es de
+ * naturaleza deudora precisamente para esto (ver Paso 2).
+ */
+export async function generarAsientoNotaCredito(
+  teamId: number,
+  documentoId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    ${SELECT_DOCUMENTO}
+    WHERE team_id = ${teamId} AND id = ${documentoId}
+  `);
+  const doc = (filas as unknown as DocumentoParaAsiento[])[0];
+  if (!doc) return { creado: false, motivo: 'no-es-venta' };
+
+  if (doc.tipoEcf !== TIPO_NOTA_CREDITO || !ESTADOS_VENTA.includes(doc.estado)) {
+    return { creado: false, motivo: 'no-es-venta' };
+  }
+  if (doc.montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  // Código 2 = "corrige texto": la nota no mueve dinero, solo enmienda datos del
+  // documento original. Sin efecto monetario no hay asiento que hacer.
+  if (doc.codigoModificacion === 2) return { creado: false, motivo: 'nc-solo-texto' };
+
+  if (!cfg.cuentaDescuentosId) return { creado: false, motivo: 'sin-cuenta-descuentos' };
+  if (!cfg.cuentaPorCobrarId) return { creado: false, motivo: 'sin-cuenta-por-cobrar' };
+  if (doc.totalItbis > 0 && !cfg.cuentaItbisId) {
+    return { creado: false, motivo: 'sin-cuenta-itbis' };
+  }
+
+  // El sobrante que quedó como crédito del cliente. Capado al total por si el
+  // dato viniera inconsistente: nunca debe generar más pasivo que el importe
+  // de la propia nota.
+  const aSaldoFavor = Math.min(
+    Math.max(0, doc.creditoGeneradoCents ?? 0),
+    doc.montoTotal,
+  );
+  const aCuentaPorCobrar = doc.montoTotal - aSaldoFavor;
+
+  if (aSaldoFavor > 0 && !cfg.cuentaSaldosFavorId) {
+    return { creado: false, motivo: 'sin-cuenta-saldos-favor' };
+  }
+
+  const concepto = `Nota de crédito ${doc.encf ?? doc.id}`;
+  const base = doc.montoTotal - doc.totalItbis;
+
+  const lineas: LineaAsiento[] = [];
+
+  if (base > 0) {
+    lineas.push({
+      cuentaId: cfg.cuentaDescuentosId,
+      debeCents: base,
+      haberCents: 0,
+      descripcion: 'Descuento o devolución sobre ventas',
+    });
+  }
+
+  if (doc.totalItbis > 0) {
+    lineas.push({
+      cuentaId: cfg.cuentaItbisId!,
+      debeCents: doc.totalItbis,
+      haberCents: 0,
+      descripcion: 'ITBIS revertido',
+    });
+  }
+
+  if (aCuentaPorCobrar > 0) {
+    lineas.push({
+      cuentaId: cfg.cuentaPorCobrarId,
+      debeCents: 0,
+      haberCents: aCuentaPorCobrar,
+      descripcion: 'Reducción de la deuda del cliente',
+    });
+  }
+
+  if (aSaldoFavor > 0) {
+    lineas.push({
+      cuentaId: cfg.cuentaSaldosFavorId!,
+      debeCents: 0,
+      haberCents: aSaldoFavor,
+      descripcion: 'Saldo a favor generado',
+    });
+  }
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: doc.fecha, concepto, origenTipo: 'nota', origenId: doc.id },
+    lineas,
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+// ─── Asiento reverso de una anulación ────────────────────────────────────────
+
+/**
+ * Reversa el asiento de un documento anulado.
+ *
+ * **No se borra ni se edita el asiento original.** Un libro contable no se
+ * reescribe: lo que pasó, pasó, y la anulación es un hecho posterior con su
+ * propia fecha. Se crea un segundo asiento con debe y haber intercambiados, así
+ * que los saldos vuelven a donde estaban y las dos operaciones quedan visibles.
+ *
+ * El índice único sobre `(team_id, 'anulacion', origen_id)` impide reversar dos
+ * veces el mismo documento.
+ */
+export async function generarAsientoAnulacion(
+  teamId: number,
+  documentoId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const docs = await db.execute(sql`
+    SELECT estado, encf,
+           to_char(COALESCE(updated_at, fecha_emision) AT TIME ZONE 'America/Santo_Domingo',
+                   'YYYY-MM-DD') AS fecha
+    FROM ecf_documents
+    WHERE team_id = ${teamId} AND id = ${documentoId}
+  `);
+  const doc = (docs as unknown as { estado: string; encf: string | null; fecha: string }[])[0];
+  if (!doc) return { creado: false, motivo: 'no-es-venta' };
+  if (doc.estado !== 'ANULADO') return { creado: false, motivo: 'no-esta-anulado' };
+
+  // Se busca el asiento original por cualquiera de los dos orígenes: una factura
+  // anulada tiene 'factura', una nota de crédito anulada tiene 'nota'.
+  const originales = await db.execute(sql`
+    SELECT l.cuenta_id AS "cuentaId", l.debe_cents AS "debeCents",
+           l.haber_cents AS "haberCents", l.descripcion
+    FROM contabilidad_asientos a
+    JOIN contabilidad_asiento_lineas l ON l.asiento_id = a.id
+    WHERE a.team_id = ${teamId}
+      AND a.origen_id = ${documentoId}
+      AND a.origen_tipo IN ('factura', 'nota')
+    ORDER BY l.orden
+  `);
+
+  const lineasOriginales = originales as unknown as
+    { cuentaId: number; debeCents: unknown; haberCents: unknown; descripcion: string | null }[];
+
+  // Sin asiento original no hay nada que reversar. Es el caso normal de un
+  // documento que se anuló antes de que nadie barriera el libro.
+  if (lineasOriginales.length === 0) {
+    return { creado: false, motivo: 'sin-asiento-que-reversar' };
+  }
+
+  // Los montos vienen como string desde `bigint`: convertir antes de usarlos.
+  const lineas: LineaAsiento[] = lineasOriginales.map((l) => ({
+    cuentaId: l.cuentaId,
+    debeCents: Number(l.haberCents ?? 0),
+    haberCents: Number(l.debeCents ?? 0),
+    descripcion: `Reverso: ${l.descripcion ?? ''}`.slice(0, 255),
+  }));
+
+  const asientoId = await insertarAsiento(
+    teamId,
     {
       fecha: doc.fecha,
-      concepto: `Factura ${doc.encf ?? doc.id}`,
-      origenTipo: 'factura',
-      origenId: doc.id,
+      concepto: `Anulación de ${doc.encf ?? documentoId}`,
+      origenTipo: 'anulacion',
+      origenId: documentoId,
     },
     lineas,
     userId,
@@ -353,10 +591,37 @@ export async function generarAsientoPago(
   if (!pago) return { creado: false, motivo: 'no-es-venta' };
   if (pago.montoCentavos <= 0) return { creado: false, motivo: 'sin-monto' };
 
-  // saldo_favor y nota_credito no mueven dinero: son la aplicación de un
-  // crédito previo y su asiento va contra descuentos, en el Paso 5.
-  if (pago.metodo === 'saldo_favor' || pago.metodo === 'nota_credito') {
-    return { creado: false, motivo: 'metodo-sin-cobro' };
+  // ── Aplicación de un saldo a favor ────────────────────────────────────────
+  // No entra dinero: se consume el crédito que la nota de crédito dejó abierto.
+  //
+  //   Debe  Saldos a favor de clientes   ← se cancela el pasivo con el cliente
+  //     Haber  Cuentas por cobrar          ← se cancela su deuda
+  //
+  // Es la otra mitad del asiento de la nota de crédito: allí se creó el pasivo,
+  // aquí se salda. Sin esto, el saldo a favor crecería para siempre y nunca se
+  // vería consumido en el balance.
+  const esAplicacionDeCredito =
+    pago.metodo === 'saldo_favor' || pago.metodo === 'nota_credito';
+
+  if (esAplicacionDeCredito) {
+    if (!cfg.cuentaSaldosFavorId) {
+      return { creado: false, motivo: 'sin-cuenta-saldos-favor' };
+    }
+    const conceptoCredito = `Aplicación de saldo a favor ${pago.encf ? `· factura ${pago.encf}` : `#${pago.id}`}`;
+    const idCredito = await insertarAsiento(
+      teamId,
+      { fecha: pago.fecha, concepto: conceptoCredito, origenTipo: 'pago', origenId: pago.id },
+      [
+        { cuentaId: cfg.cuentaSaldosFavorId, debeCents: pago.montoCentavos, haberCents: 0,
+          descripcion: 'Consumo del crédito del cliente' },
+        { cuentaId: cfg.cuentaPorCobrarId, debeCents: 0, haberCents: pago.montoCentavos,
+          descripcion: 'Cancelación de cuenta por cobrar' },
+      ],
+      userId,
+    );
+    return idCredito === null
+      ? { creado: false, motivo: 'ya-tiene-asiento' }
+      : { creado: true, asientoId: idCredito };
   }
 
   const clave = await claveContableDePago(teamId, pago.id, pago.metodo);

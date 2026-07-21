@@ -34,12 +34,17 @@ export interface ConfigContable {
   cuentaIngresosId:    number | null;
   cuentaDescuentosId:  number | null;
   cuentaMoraId:        number | null;
+  /** Pasivo con el cliente cuando una nota de crédito supera su deuda (Paso 5). */
+  cuentaSaldosFavorId: number | null;
+  /** Activo: crédito fiscal por lo que el cliente retuvo (Paso 5). */
+  cuentaRetencionesId: number | null;
 }
 
 const CONFIG_VACIA: ConfigContable = {
   activa: false,
   cuentaPorCobrarId: null, cuentaItbisId: null, cuentaIngresosId: null,
   cuentaDescuentosId: null, cuentaMoraId: null,
+  cuentaSaldosFavorId: null, cuentaRetencionesId: null,
 };
 
 // ─── Lectura ─────────────────────────────────────────────────────────────────
@@ -52,7 +57,9 @@ export async function getConfig(teamId: number): Promise<ConfigContable> {
            cuenta_itbis_id       AS "cuentaItbisId",
            cuenta_ingresos_id    AS "cuentaIngresosId",
            cuenta_descuentos_id  AS "cuentaDescuentosId",
-           cuenta_mora_id        AS "cuentaMoraId"
+           cuenta_mora_id        AS "cuentaMoraId",
+           cuenta_saldos_favor_id AS "cuentaSaldosFavorId",
+           cuenta_retenciones_id  AS "cuentaRetencionesId"
     FROM contabilidad_config
     WHERE team_id = ${teamId}
   `);
@@ -156,6 +163,8 @@ export interface GuardarConfigInput {
   cuentaIngresosId?:   number | null;
   cuentaDescuentosId?: number | null;
   cuentaMoraId?:       number | null;
+  cuentaSaldosFavorId?: number | null;
+  cuentaRetencionesId?: number | null;
 }
 
 export async function guardarConfig(
@@ -173,6 +182,8 @@ export async function guardarConfig(
     cuentaIngresosId:   'cuenta_ingresos_id',
     cuentaDescuentosId: 'cuenta_descuentos_id',
     cuentaMoraId:       'cuenta_mora_id',
+    cuentaSaldosFavorId: 'cuenta_saldos_favor_id',
+    cuentaRetencionesId: 'cuenta_retenciones_id',
   };
 
   const entradas = Object.entries(input)

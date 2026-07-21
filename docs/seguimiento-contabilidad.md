@@ -665,33 +665,127 @@ RD$100.01 → ajuste de RD$0.02 al grupo mayor, cuadre exacto.
 
 ---
 
-## Siguiente trabajo de desarrollo — Paso 5
+## Paso 5 — Casos especiales · ✅ HECHO (2026-07-21)
 
-**Notas de crédito, anulaciones, mora, retenciones y saldos a favor.** Ver
-`docs/plan-contabilidad-vera.md` desde "Paso 5". La primera migración libre es
-la **0086**.
+**Migración `0086_contabilidad_casos_especiales.sql` aplicada.** No crea tablas:
+añade dos columnas a `contabilidad_config` y dos cuentas al catálogo base. Los
+asientos de estos casos van a las mismas tablas del Paso 4 — solo cambia lo que
+se sabe registrar.
 
-Lo que el Paso 4 dejó preparado y pendiente:
+| # | Qué pedía el plan | Cómo quedó |
+|---|---|---|
+| 1 | Notas de crédito | Debe descuentos + Debe ITBIS / Haber CxC (+ Haber saldo a favor) |
+| 2 | Notas de débito y mora | La mora acredita `4102`, no la cuenta de ventas |
+| 3 | Anulaciones | Asiento reverso con debe/haber intercambiados; el original se conserva |
+| 4 | Retenciones | El débito se parte: CxC (total − retenido) + `1107 Retenciones por cobrar` |
+| 5 | Saldos a favor | `2104` se acredita al generarlos y se debita al aplicarlos |
 
-- **`origen_tipo` ya admite `'nota'` y `'anulacion'`** en el CHECK, para no tener
-  que migrar la restricción.
-- **Los documentos con `total_retenciones > 0` no tienen asiento**, a propósito.
-  Al implementar retenciones hay que quitar ese salto en
-  `generarAsientoFactura()` y contar con que esas facturas se asentarán entonces.
-- **Los pagos con `metodo` en `saldo_favor` / `nota_credito` tampoco**: su
-  asiento va contra la cuenta de descuentos, no contra caja.
-- **`cfg.cuentaDescuentosId`** ya está configurado y sin usar: es el destino de
-  las notas de crédito.
-- La nota de crédito (tipo e-CF **34**) está fuera de `TIPOS_VENTA` en
-  `lib/contabilidad/asientos.ts`, así que hoy no genera nada.
+### El defecto del Paso 4 que salió aquí
+
+**Una nota de débito por mora acreditaba "Ingresos por ventas".** El tipo e-CF de
+una ND es `33`, que está en `TIPOS_VENTA`, así que `generarAsientoFactura` la
+trataba como una venta más y el reparto por línea caía a la cuenta de ingresos
+general. El recargo por atraso se mezclaba con las ventas y distorsionaba el
+margen del negocio.
+
+Corregido: si `mora_origen_id` no es nulo, el ingreso va entero a
+`cfg.cuentaMoraId` sin repartir por líneas. **Los asientos de mora generados
+antes de este arreglo tienen la cuenta equivocada** — en dev no había ninguno,
+pero conviene tenerlo presente si alguna base ya barrió con la versión anterior.
+
+### Dos cuentas nuevas, y por qué son de la clase que son
+
+- **`2104 Saldos a favor de clientes` es PASIVO.** Cuando una nota de crédito
+  supera lo que el cliente debía, ese exceso no es "menos deuda": es dinero que
+  la empresa le debe a él. Restarlo de la cartera la dejaría en negativo.
+- **`1107 Retenciones por cobrar` es ACTIVO.** Lo que el comprador retiene no
+  entra al banco, pero deja un crédito fiscal. La venta fue por el total, así que
+  el ingreso no cambia; lo que se parte es el débito.
+
+### Decisiones de diseño
+
+- **Un documento anulado no borra su asiento.** Se crea uno reverso con debe y
+  haber intercambiados. Un libro contable no se reescribe: la anulación es un
+  hecho posterior con su propia fecha, y las dos operaciones quedan visibles.
+  El índice único impide reversar dos veces.
+- **Se busca el asiento original por `origen_tipo IN ('factura','nota')`**, porque
+  una nota de crédito anulada también hay que reversarla.
+- **Una NC con `codigo_modificacion = 2` ("corrige texto") no genera asiento.**
+  No mueve dinero, solo enmienda datos del documento original.
+- **El crédito generado se capa al total de la nota**, por si el dato viniera
+  inconsistente: nunca debe crear más pasivo que el importe de la propia nota.
+- **El barrido ya no excluye `saldo_favor` ni `nota_credito`**: desde este paso
+  tienen asiento propio contra `2104`. Sin eso, el saldo a favor crecería para
+  siempre y nunca se vería consumido en el balance.
+- **Las anulaciones solo se barren si el documento YA tenía asiento** (`JOIN`, no
+  `LEFT JOIN`). Uno anulado antes de que nadie barriera no tiene nada que
+  reversar, y sale con ese motivo si se pide de una en una.
+
+### Verificación
+
+Los datos reales del dev no tienen notas de crédito, mora, retenciones ni
+anulaciones asentables, así que **nada de esto estaría probado sin datos
+sintéticos**. Siete casos con documentos temporales creados y borrados (restos: 0):
+
+| Caso | Resultado |
+|---|---|
+| Mora | Acredita `4102`, no ventas ✓ |
+| NC sin saldo a favor | Reduce CxC por el total ✓ |
+| NC con saldo a favor (800 de 2000) | CxC 1200 + `2104` 800 ✓ |
+| Retenciones (1800 de 11800) | CxC 10000 + `1107` 1800 ✓ |
+| Anulación | CxC pasa a haber; original conservado; reversar dos veces → `ya-tiene-asiento` ✓ |
+| Aplicación de saldo a favor | Debita `2104`, cancela CxC ✓ |
+| NC código 2 | No genera asiento (`nc-solo-texto`) ✓ |
+
+Los siete cuadran. Typecheck limpio. En el navegador: los 7 campos de
+configuración, los 4 badges del libro (factura/cobro/nota/anulación) con colores
+distintos, el detalle del reverso mostrando debe y haber invertidos, y 0 errores
+de consola.
+
+> ⚠️ **`guardarConfig` ignora los `undefined` en silencio** (es su contrato:
+> `undefined` = "no tocar este campo"). El primer intento de la prueba pasó
+> `by['2104']` cuando esa cuenta todavía no existía en el catálogo del team →
+> `undefined` → no se guardó nada, y el script dijo "configuradas". **Si un
+> script configura cuentas por código, que falle ruidosamente si el código no
+> existe.**
+
+> ⚠️ **Al borrar documentos de prueba, hacerlo en orden inverso al de creación.**
+> Una ND de mora referencia su factura origen vía `mora_origen_id`, así que
+> borrar la factura primero viola `ecf_documents_mora_origen_id_fkey`.
+
+---
+
+## Siguiente trabajo de desarrollo — Paso 6
+
+**Reportes contables.** Ver `docs/plan-contabilidad-vera.md` desde "Paso 6". Es
+el último. La primera migración libre es la **0087** (puede que no haga falta
+ninguna: los tres reportes salen de los asientos que ya existen).
+
+Los tres:
+
+1. **Libro diario** — ya existe (`/dashboard/contabilidad/libro-diario`). Le
+   faltan los **filtros por fecha, origen y cuenta** que pide el plan; el
+   parámetro `origenTipo` ya está en la API pero no hay UI para él.
+2. **Mayor general** — movimientos por cuenta con saldo inicial, débitos,
+   créditos y saldo final. El índice
+   `contabilidad_asiento_lineas_cuenta_idx (team_id, cuenta_id)` está puesto para
+   esto.
+3. **Balance de comprobación** — todas las cuentas con sus saldos y validación de
+   cuadre. `verificarCuadre()` ya existe y puede reusarse.
+
+**Ojo con la naturaleza al calcular saldos:** una cuenta deudora tiene saldo
+`debe − haber` y una acreedora `haber − debe`. La columna `naturaleza` está
+guardada por cuenta justo para esto, y las de contrapartida (`4103`) la tienen
+invertida respecto a su clase — usar `naturaleza`, nunca deducirla de `tipo`.
 
 ### Antes de escribir la primera línea
 
-1. **Releer el Paso 5 del plan.** No asumir el diseño de memoria.
+1. **Releer el Paso 6 del plan.** No asumir el diseño de memoria.
 2. **Confirmar la DB con Darian** antes de correr nada contra Neon, incluso de
    solo lectura. Base actual: `ep-bold-pine-anhzpklp` / `neondb`.
-3. **Revisar `docs/no-contaminar-entidades-genericas.md`**.
-4. **Numeración de migraciones:** main va por `0069` y la rama por `0085`. Al
+3. **Los montos `bigint` llegan como string.** Pasarlos por `aNumero()` de
+   `libro-diario.ts` o el reporte sumará concatenando.
+4. **Numeración de migraciones:** main va por `0069` y la rama por `0086`. Al
    renombrar, ir en orden **descendente** y mover también
    `scripts/apply-migration-XXXX.ts`, actualizando la ruta del `.sql` y el
    mensaje de log **dentro** del script.

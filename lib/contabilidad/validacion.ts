@@ -61,6 +61,16 @@ const GENERALES: { campo: keyof Awaited<ReturnType<typeof getConfig>>; que: stri
     que: 'Cuenta de ingresos por mora',
     porque: 'Los recargos por mora son un ingreso distinto de las ventas; mezclarlos distorsiona el margen del negocio.',
   },
+  {
+    campo: 'cuentaSaldosFavorId',
+    que: 'Cuenta de saldos a favor de clientes',
+    porque: 'Cuando una nota de crédito supera lo que el cliente debía, el sobrante es dinero que le debes a él. Sin esta cuenta, la cartera quedaría en negativo.',
+  },
+  {
+    campo: 'cuentaRetencionesId',
+    que: 'Cuenta de retenciones por cobrar',
+    porque: 'Lo que el cliente retiene no entra a tu banco, pero te deja un crédito fiscal. Sin esta cuenta, esas facturas no se pueden asentar.',
+  },
 ];
 
 /**

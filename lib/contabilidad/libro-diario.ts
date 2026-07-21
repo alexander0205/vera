@@ -19,6 +19,7 @@ import { sql } from 'drizzle-orm';
 import { getConfig } from './config';
 import {
   generarAsientoFactura, generarAsientoPago,
+  generarAsientoNotaCredito, generarAsientoAnulacion,
   type MotivoSalto,
 } from './asientos';
 
@@ -80,7 +81,33 @@ export async function generarAsientosPendientes(
     else anotar(r.motivo);
   }
 
+  // ── Notas de crédito sin asiento ──────────────────────────────────────────
+  // Van después de las facturas porque una nota reduce la deuda que la factura
+  // creó: leer el libro al revés confundiría.
+  const notas = await db.execute(sql`
+    SELECT d.id
+    FROM ecf_documents d
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = d.team_id AND a.origen_tipo = 'nota' AND a.origen_id = d.id
+    WHERE d.team_id = ${teamId}
+      AND a.id IS NULL
+      AND d.tipo_ecf = '34'
+      AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
+      AND d.monto_total > 0
+      AND d.codigo_modificacion IS DISTINCT FROM 2
+    ORDER BY d.fecha_emision, d.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+
+  for (const n of notas as unknown as { id: number }[]) {
+    const r = await generarAsientoNotaCredito(teamId, n.id, userId);
+    if (r.creado) resumen.creados++;
+    else anotar(r.motivo);
+  }
+
   // ── Pagos sin asiento ─────────────────────────────────────────────────────
+  // Ya no se excluyen saldo_favor ni nota_credito: desde el Paso 5 tienen su
+  // propio asiento contra la cuenta de saldos a favor.
   const pagos = await db.execute(sql`
     SELECT p.id
     FROM pagos_recibidos p
@@ -89,7 +116,6 @@ export async function generarAsientosPendientes(
     WHERE p.team_id = ${teamId}
       AND a.id IS NULL
       AND p.monto_centavos > 0
-      AND p.metodo NOT IN ('saldo_favor', 'nota_credito')
     ORDER BY p.fecha_pago, p.id
     LIMIT ${TOPE_POR_BARRIDO}
   `);
@@ -100,9 +126,32 @@ export async function generarAsientosPendientes(
     else anotar(r.motivo);
   }
 
-  resumen.hayMas =
-    (docs as unknown as unknown[]).length === TOPE_POR_BARRIDO ||
-    (pagos as unknown as unknown[]).length === TOPE_POR_BARRIDO;
+  // ── Anulaciones sin reversar ──────────────────────────────────────────────
+  // Solo los documentos anulados que YA tenían asiento: si nunca se asentó, no
+  // hay nada que reversar y el LEFT JOIN de abajo los deja fuera.
+  const anulados = await db.execute(sql`
+    SELECT d.id
+    FROM ecf_documents d
+    JOIN contabilidad_asientos orig
+      ON orig.team_id = d.team_id AND orig.origen_id = d.id
+     AND orig.origen_tipo IN ('factura', 'nota')
+    LEFT JOIN contabilidad_asientos rev
+      ON rev.team_id = d.team_id AND rev.origen_tipo = 'anulacion' AND rev.origen_id = d.id
+    WHERE d.team_id = ${teamId}
+      AND d.estado = 'ANULADO'
+      AND rev.id IS NULL
+    ORDER BY d.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+
+  for (const a of anulados as unknown as { id: number }[]) {
+    const r = await generarAsientoAnulacion(teamId, a.id, userId);
+    if (r.creado) resumen.creados++;
+    else anotar(r.motivo);
+  }
+
+  resumen.hayMas = [docs, notas, pagos, anulados]
+    .some((s) => (s as unknown as unknown[]).length === TOPE_POR_BARRIDO);
 
   return resumen;
 }
@@ -202,21 +251,40 @@ export async function getLineasAsiento(
 export async function contarPendientes(teamId: number): Promise<number> {
   const [{ total }] = await db.execute<{ total: number }>(sql`
     SELECT (
+      -- Facturas y notas de débito (incluida la mora)
       (SELECT count(*) FROM ecf_documents d
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = d.team_id AND a.origen_tipo = 'factura' AND a.origen_id = d.id
         WHERE d.team_id = ${teamId} AND a.id IS NULL
           AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
           AND d.tipo_ecf IN ('31', '32', '33', '44', '45')
-          AND d.monto_total > 0
-          AND COALESCE(d.total_retenciones, 0) = 0)
+          AND d.monto_total > 0)
       +
+      -- Notas de crédito con efecto monetario
+      (SELECT count(*) FROM ecf_documents d
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = d.team_id AND a.origen_tipo = 'nota' AND a.origen_id = d.id
+        WHERE d.team_id = ${teamId} AND a.id IS NULL
+          AND d.tipo_ecf = '34'
+          AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
+          AND d.monto_total > 0
+          AND d.codigo_modificacion IS DISTINCT FROM 2)
+      +
+      -- Cobros, incluidos los que aplican un saldo a favor
       (SELECT count(*) FROM pagos_recibidos p
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = p.team_id AND a.origen_tipo = 'pago' AND a.origen_id = p.id
         WHERE p.team_id = ${teamId} AND a.id IS NULL
-          AND p.monto_centavos > 0
-          AND p.metodo NOT IN ('saldo_favor', 'nota_credito'))
+          AND p.monto_centavos > 0)
+      +
+      -- Anulaciones de documentos que ya estaban asentados
+      (SELECT count(*) FROM ecf_documents d
+        JOIN contabilidad_asientos orig
+          ON orig.team_id = d.team_id AND orig.origen_id = d.id
+         AND orig.origen_tipo IN ('factura', 'nota')
+        LEFT JOIN contabilidad_asientos rev
+          ON rev.team_id = d.team_id AND rev.origen_tipo = 'anulacion' AND rev.origen_id = d.id
+        WHERE d.team_id = ${teamId} AND d.estado = 'ANULADO' AND rev.id IS NULL)
     )::int AS total
   `);
   return total;

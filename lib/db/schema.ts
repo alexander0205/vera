@@ -1917,6 +1917,10 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaIngresosId:  integer('cuenta_ingresos_id').references(() => contabilidadCuentas.id),
   cuentaDescuentosId: integer('cuenta_descuentos_id').references(() => contabilidadCuentas.id),
   cuentaMoraId:      integer('cuenta_mora_id').references(() => contabilidadCuentas.id),
+  /** Pasivo: el sobrante de una nota de crédito es dinero que se le debe al cliente. */
+  cuentaSaldosFavorId: integer('cuenta_saldos_favor_id').references(() => contabilidadCuentas.id),
+  /** Activo: lo que el cliente retuvo deja un crédito fiscal, no un menor ingreso. */
+  cuentaRetencionesId: integer('cuenta_retenciones_id').references(() => contabilidadCuentas.id),
   updatedBy: integer('updated_by').references(() => users.id),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

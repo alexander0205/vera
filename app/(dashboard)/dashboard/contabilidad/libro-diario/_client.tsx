@@ -2,7 +2,10 @@
 
 import { Fragment, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, ChevronDown, RefreshCw, AlertTriangle, FileText, Banknote } from 'lucide-react';
+import {
+  ChevronRight, ChevronDown, RefreshCw, AlertTriangle,
+  FileText, Banknote, Undo2, Ban,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { AsientoResumen, LineaDetalle } from '@/lib/contabilidad/libro-diario';
 
@@ -21,18 +24,39 @@ function fecha(f: string) {
   return `${d} ${meses[Number(m) - 1]} ${a}`;
 }
 
+/**
+ * Los cuatro orígenes de un asiento. La nota de crédito y la anulación se
+ * colorean distinto a propósito: son los que RESTAN, y conviene distinguirlos de
+ * un vistazo al leer el libro.
+ */
+const ORIGEN: Record<string, { label: string; icono: React.ReactNode; cls: string }> = {
+  factura:   { label: 'Factura',   icono: <FileText className="h-3 w-3" />,
+               cls: 'border-gray-200 bg-gray-50 text-gray-600' },
+  pago:      { label: 'Cobro',     icono: <Banknote className="h-3 w-3" />,
+               cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  nota:      { label: 'Nota de crédito', icono: <Undo2 className="h-3 w-3" />,
+               cls: 'border-amber-200 bg-amber-50 text-amber-700' },
+  anulacion: { label: 'Anulación', icono: <Ban className="h-3 w-3" />,
+               cls: 'border-red-200 bg-red-50 text-red-700' },
+};
+
 /** Los motivos que devuelve el barrido, en lenguaje de usuario. */
 const MOTIVO_TEXTO: Record<string, string> = {
-  'contabilidad-apagada':  'la contabilidad automática está apagada',
-  'ya-tiene-asiento':      'ya tenían asiento',
-  'no-es-venta':           'no son ventas emitidas',
-  'sin-monto':             'no tienen monto',
-  'con-retenciones':       'tienen retenciones (se tratan en el siguiente paso)',
-  'sin-cuenta-por-cobrar': 'falta configurar la cuenta por cobrar',
-  'sin-cuenta-itbis':      'falta configurar la cuenta de ITBIS',
-  'sin-cuenta-ingresos':   'falta configurar la cuenta de ingresos',
-  'sin-cuenta-cobro':      'falta configurar la cuenta de esa forma de cobro',
-  'metodo-sin-cobro':      'son saldo a favor o nota de crédito (siguiente paso)',
+  'contabilidad-apagada':    'la contabilidad automática está apagada',
+  'ya-tiene-asiento':        'ya tenían asiento',
+  'no-es-venta':             'no son ventas emitidas',
+  'sin-monto':               'no tienen monto',
+  'sin-cuenta-por-cobrar':   'falta configurar la cuenta por cobrar',
+  'sin-cuenta-itbis':        'falta configurar la cuenta de ITBIS',
+  'sin-cuenta-ingresos':     'falta configurar la cuenta de ingresos',
+  'sin-cuenta-cobro':        'falta configurar la cuenta de esa forma de cobro',
+  'sin-cuenta-mora':         'falta configurar la cuenta de ingresos por mora',
+  'sin-cuenta-descuentos':   'falta configurar la cuenta de descuentos',
+  'sin-cuenta-saldos-favor': 'falta configurar la cuenta de saldos a favor',
+  'sin-cuenta-retenciones':  'falta configurar la cuenta de retenciones por cobrar',
+  'sin-asiento-que-reversar':'se anularon antes de tener asiento, así que no hay nada que reversar',
+  'no-esta-anulado':         'no están anulados',
+  'nc-solo-texto':           'solo corrigen texto, sin efecto monetario',
 };
 
 export function LibroDiarioClient({
@@ -181,11 +205,9 @@ export function LibroDiarioClient({
                   </td>
                   <td className="px-4 py-2.5 text-gray-900">{a.concepto}</td>
                   <td className="px-4 py-2.5">
-                    <span className="inline-flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-600">
-                      {a.origenTipo === 'factura'
-                        ? <FileText className="h-3 w-3" />
-                        : <Banknote className="h-3 w-3" />}
-                      {a.origenTipo === 'factura' ? 'Factura' : 'Cobro'}
+                    <span className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs ${ORIGEN[a.origenTipo]?.cls ?? 'border-gray-200 bg-gray-50 text-gray-600'}`}>
+                      {ORIGEN[a.origenTipo]?.icono}
+                      {ORIGEN[a.origenTipo]?.label ?? a.origenTipo}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium text-gray-900">
@@ -257,8 +279,9 @@ export function LibroDiarioClient({
 
       <p className="text-xs text-gray-500">
         Los asientos se generan cuando pulsas el botón, no automáticamente al
-        facturar. Toda factura emitida y todo cobro registrado producen su asiento;
-        las notas de crédito, la mora y las retenciones llegan en el siguiente paso.
+        facturar. Se asientan facturas, cobros, notas de crédito, recargos por mora
+        y retenciones. Un documento anulado no borra su asiento: genera uno reverso,
+        para que el historial contable quede completo.
       </p>
     </div>
   );
