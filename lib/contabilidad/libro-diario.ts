@@ -191,12 +191,58 @@ export interface LineaDetalle {
   descripcion: string | null;
 }
 
+/** Los cuatro orígenes que admite el CHECK de `contabilidad_asientos`. */
+export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion'] as const;
+export type OrigenTipo = (typeof ORIGENES)[number];
+
+export interface FiltrosLibro {
+  limit?:      number;
+  offset?:     number;
+  origenTipo?: OrigenTipo;
+  /** Ambas en 'YYYY-MM-DD'. Inclusivas: `hasta` cuenta el día entero. */
+  desde?:      string;
+  hasta?:      string;
+  cuentaId?:   number;
+}
+
+/**
+ * Las condiciones del libro, en un solo sitio para que el listado y el total
+ * las compartan.
+ *
+ * **Que los dos usen exactamente el mismo `WHERE` no es cosmética**: si el
+ * conteo filtrara distinto que la lista, la paginación mostraría un número de
+ * páginas que no existe, o escondería asientos sin decirlo. Es el mismo
+ * cuidado que se tuvo con el CTE de cartera en el Paso 1.
+ */
+function condicionesLibro(teamId: number, f: FiltrosLibro) {
+  const cond = [sql`a.team_id = ${teamId}`];
+
+  if (f.origenTipo) cond.push(sql`a.origen_tipo = ${f.origenTipo}`);
+  if (f.desde)      cond.push(sql`a.fecha >= ${f.desde}::date`);
+  if (f.hasta)      cond.push(sql`a.fecha <= ${f.hasta}::date`);
+
+  // Filtrar por cuenta mira las líneas, no el encabezado: un asiento "toca" una
+  // cuenta si alguno de sus apuntes la usa. Se hace con EXISTS y no con un JOIN
+  // para no duplicar el asiento cuando la cuenta aparece en dos apuntes suyos
+  // (pasa: una factura con débito y crédito sobre la misma cuenta configurada).
+  // El `l.team_id` va aunque el asiento ya esté acotado, para que entre por
+  // `contabilidad_asiento_lineas_cuenta_idx (team_id, cuenta_id)`.
+  if (f.cuentaId) {
+    cond.push(sql`EXISTS (
+      SELECT 1 FROM contabilidad_asiento_lineas l
+      WHERE l.asiento_id = a.id AND l.team_id = ${teamId} AND l.cuenta_id = ${f.cuentaId}
+    )`);
+  }
+
+  return sql.join(cond, sql` AND `);
+}
+
 export async function listarAsientos(
   teamId: number,
-  opts: { limit?: number; offset?: number; origenTipo?: string } = {},
-): Promise<{ asientos: AsientoResumen[]; total: number }> {
-  const { limit = 50, offset = 0, origenTipo } = opts;
-  const filtroTipo = origenTipo ? sql`AND a.origen_tipo = ${origenTipo}` : sql``;
+  opts: FiltrosLibro = {},
+): Promise<{ asientos: AsientoResumen[]; total: number; sumaCents: number }> {
+  const { limit = 50, offset = 0 } = opts;
+  const where = condicionesLibro(teamId, opts);
 
   const filas = await db.execute(sql`
     SELECT a.id, to_char(a.fecha, 'YYYY-MM-DD') AS fecha, a.concepto,
@@ -205,15 +251,18 @@ export async function listarAsientos(
            (SELECT count(*)::int FROM contabilidad_asiento_lineas l
              WHERE l.asiento_id = a.id) AS lineas
     FROM contabilidad_asientos a
-    WHERE a.team_id = ${teamId} ${filtroTipo}
+    WHERE ${where}
     ORDER BY a.fecha DESC, a.id DESC
     LIMIT ${limit} OFFSET ${offset}
   `);
 
-  const [{ total }] = await db.execute<{ total: number }>(sql`
-    SELECT count(*)::int AS total
+  // El total y la suma salen del mismo WHERE, así que cubren **todo lo
+  // filtrado** y no la página que se está viendo. Fue el arreglo central de la
+  // cartera en el Paso 1 y aquí aplica igual.
+  const [agg] = await db.execute<{ total: number; suma: unknown }>(sql`
+    SELECT count(*)::int AS total, COALESCE(sum(a.total_cents), 0)::bigint AS suma
     FROM contabilidad_asientos a
-    WHERE a.team_id = ${teamId} ${filtroTipo}
+    WHERE ${where}
   `);
 
   const asientos = (filas as unknown as AsientoResumen[]).map((a) => ({
@@ -222,7 +271,28 @@ export async function listarAsientos(
     lineas:     aNumero(a.lineas),
   }));
 
-  return { asientos, total: aNumero(total) };
+  return { asientos, total: aNumero(agg.total), sumaCents: aNumero(agg.suma) };
+}
+
+/**
+ * Las cuentas que de verdad aparecen en algún asiento, para el desplegable del
+ * filtro.
+ *
+ * Se listan solo esas y no el catálogo entero (30+ cuentas, la mayoría sin usar)
+ * porque un filtro que ofrece opciones que devuelven cero resultados hace dudar
+ * al usuario de si el reporte está roto.
+ */
+export async function cuentasConMovimientos(
+  teamId: number,
+): Promise<{ id: number; codigo: string; nombre: string }[]> {
+  const filas = await db.execute(sql`
+    SELECT DISTINCT c.id, c.codigo, c.nombre
+    FROM contabilidad_asiento_lineas l
+    JOIN contabilidad_cuentas c ON c.id = l.cuenta_id
+    WHERE l.team_id = ${teamId}
+    ORDER BY c.codigo
+  `);
+  return filas as unknown as { id: number; codigo: string; nombre: string }[];
 }
 
 export async function getLineasAsiento(

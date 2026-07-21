@@ -1,6 +1,7 @@
 /**
  * GET  /api/contabilidad/libro-diario  — asientos + cuántos faltan
- *   ?limit=50&offset=0&origenTipo=factura|pago
+ *   ?limit=50&offset=0&origenTipo=factura|pago|nota|anulacion
+ *   &desde=YYYY-MM-DD&hasta=YYYY-MM-DD&cuentaId=12
  *
  * POST /api/contabilidad/libro-diario  — generar los asientos pendientes
  *
@@ -20,7 +21,23 @@ import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import {
   listarAsientos, contarPendientes, generarAsientosPendientes, verificarCuadre,
+  ORIGENES, type OrigenTipo,
 } from '@/lib/contabilidad/libro-diario';
+
+/**
+ * Acepta una fecha solo si es exactamente 'YYYY-MM-DD' y existe en el
+ * calendario.
+ *
+ * El formato se comprueba **antes** de que llegue al `::date` de Postgres: una
+ * cadena rara ahí no devuelve filas vacías, lanza excepción y la pantalla se
+ * cae con un 500 en vez de decir "esa fecha no vale". El chequeo de existencia
+ * es lo que descarta un 31 de febrero, que pasa el formato pero no es un día.
+ */
+function fechaValida(v: string | null): string | undefined {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
+  const d = new Date(`${v}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? undefined : v;
+}
 
 async function autorizar(permiso: 'contabilidad:ver' | 'contabilidad:gestionar') {
   const user = await getUser();
@@ -50,17 +67,30 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const limit  = Math.min(200, Math.max(1, Number(searchParams.get('limit')) || 50));
   const offset = Math.max(0, Number(searchParams.get('offset')) || 0);
-  const tipoRaw = searchParams.get('origenTipo');
-  const origenTipo = tipoRaw === 'factura' || tipoRaw === 'pago' ? tipoRaw : undefined;
 
-  const [{ asientos, total }, pendientes, cuadre] = await Promise.all([
-    listarAsientos(teamId, { limit, offset, origenTipo }),
+  // La whitelist sale de ORIGENES en vez de repetir los valores a mano: cuando
+  // el Paso 5 añadió 'nota' y 'anulacion', esta lista se quedó en
+  // 'factura'|'pago' y filtrar por los nuevos se ignoraba en silencio —
+  // devolvía el libro entero como si no hubiera filtro.
+  const tipoRaw = searchParams.get('origenTipo');
+  const origenTipo = ORIGENES.includes(tipoRaw as OrigenTipo)
+    ? (tipoRaw as OrigenTipo)
+    : undefined;
+
+  const desde = fechaValida(searchParams.get('desde'));
+  const hasta = fechaValida(searchParams.get('hasta'));
+
+  const cuentaRaw = Number(searchParams.get('cuentaId'));
+  const cuentaId = Number.isInteger(cuentaRaw) && cuentaRaw > 0 ? cuentaRaw : undefined;
+
+  const [{ asientos, total, sumaCents }, pendientes, cuadre] = await Promise.all([
+    listarAsientos(teamId, { limit, offset, origenTipo, desde, hasta, cuentaId }),
     contarPendientes(teamId),
     verificarCuadre(teamId),
   ]);
 
   return NextResponse.json({
-    asientos, total, pendientes,
+    asientos, total, sumaCents, pendientes,
     descuadrados: cuadre.asientosDescuadrados,
   });
 }

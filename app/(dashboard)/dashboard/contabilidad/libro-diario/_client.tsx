@@ -4,10 +4,18 @@ import { Fragment, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronRight, ChevronDown, RefreshCw, AlertTriangle,
-  FileText, Banknote, Undo2, Ban,
+  FileText, Banknote, Undo2, Ban, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { AsientoResumen, LineaDetalle } from '@/lib/contabilidad/libro-diario';
+import type { AsientoResumen, LineaDetalle, OrigenTipo } from '@/lib/contabilidad/libro-diario';
+
+export interface FiltrosUI {
+  origenTipo?: OrigenTipo;
+  desde?:      string;
+  hasta?:      string;
+  cuentaId?:   number;
+  pagina:      number;
+}
 
 function dop(cents: number) {
   return (cents / 100).toLocaleString('es-DO', {
@@ -60,23 +68,62 @@ const MOTIVO_TEXTO: Record<string, string> = {
 };
 
 export function LibroDiarioClient({
-  asientosIniciales, total, pendientes, descuadrados, activa, puedeGenerar,
+  asientosIniciales, total, sumaCents, pendientes, descuadrados, activa, puedeGenerar,
+  cuentas, filtros, pageSize,
 }: {
   asientosIniciales: AsientoResumen[];
   total:        number;
+  sumaCents:    number;
   pendientes:   number;
   descuadrados: { id: number; concepto: string; debe: number; haber: number }[];
   activa:       boolean;
   puedeGenerar: boolean;
+  cuentas:      { id: number; codigo: string; nombre: string }[];
+  filtros:      FiltrosUI;
+  pageSize:     number;
 }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [pendiente, startTransition] = useTransition();
 
   const [abierto, setAbierto] = useState<number | null>(null);
   const [lineas, setLineas] = useState<Record<number, LineaDetalle[]>>({});
   const [generando, setGenerando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const hayFiltro = Boolean(
+    filtros.origenTipo || filtros.desde || filtros.hasta || filtros.cuentaId,
+  );
+  const paginas = Math.max(1, Math.ceil(total / pageSize));
+
+  /**
+   * Reescribe la URL con los filtros nuevos.
+   *
+   * **Cambiar un filtro vuelve a la página 1 en el mismo paso**, salvo cuando lo
+   * que se cambia es la página. Separarlo en un efecto aparte fue justo el bug
+   * del Paso 1: disparaba dos consultas, y con suerte dejaba al usuario en una
+   * página 3 que ya no existía tras filtrar.
+   */
+  function navegar(cambios: Partial<FiltrosUI>) {
+    const siguiente = { ...filtros, ...cambios };
+    if (cambios.pagina === undefined) siguiente.pagina = 1;
+
+    const qs = new URLSearchParams();
+    if (siguiente.origenTipo) qs.set('origenTipo', siguiente.origenTipo);
+    if (siguiente.desde)      qs.set('desde', siguiente.desde);
+    if (siguiente.hasta)      qs.set('hasta', siguiente.hasta);
+    if (siguiente.cuentaId)   qs.set('cuentaId', String(siguiente.cuentaId));
+    if (siguiente.pagina > 1) qs.set('pagina', String(siguiente.pagina));
+
+    // Se cierra el detalle abierto: tras filtrar, ese asiento puede no estar en
+    // la lista nueva y quedaría un desplegable colgando de una fila que ya no es.
+    setAbierto(null);
+
+    const url = qs.toString()
+      ? `/dashboard/contabilidad/libro-diario?${qs}`
+      : '/dashboard/contabilidad/libro-diario';
+    startTransition(() => router.push(url));
+  }
 
   async function alternar(id: number) {
     if (abierto === id) { setAbierto(null); return; }
@@ -158,9 +205,78 @@ export function LibroDiarioClient({
         </div>
       )}
 
+      {/* Filtros. Los tres que pide el plan: fecha, origen y cuenta. */}
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-500">Desde</span>
+          <input
+            type="date"
+            value={filtros.desde ?? ''}
+            onChange={(e) => navegar({ desde: e.target.value || undefined })}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-500">Hasta</span>
+          <input
+            type="date"
+            value={filtros.hasta ?? ''}
+            onChange={(e) => navegar({ hasta: e.target.value || undefined })}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-500">Origen</span>
+          <select
+            value={filtros.origenTipo ?? ''}
+            onChange={(e) =>
+              navegar({ origenTipo: (e.target.value || undefined) as OrigenTipo | undefined })
+            }
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">Todos</option>
+            {Object.entries(ORIGEN).map(([clave, o]) => (
+              <option key={clave} value={clave}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-500">Cuenta</span>
+          <select
+            value={filtros.cuentaId ?? ''}
+            onChange={(e) => navegar({ cuentaId: Number(e.target.value) || undefined })}
+            className="max-w-xs rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            disabled={cuentas.length === 0}
+          >
+            <option value="">Todas</option>
+            {cuentas.map((c) => (
+              <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
+            ))}
+          </select>
+        </label>
+
+        {hayFiltro && (
+          <Button
+            variant="outline" size="sm"
+            onClick={() => navegar({
+              desde: undefined, hasta: undefined,
+              origenTipo: undefined, cuentaId: undefined,
+            })}
+          >
+            <X className="mr-1.5 h-3.5 w-3.5" />
+            Quitar filtros
+          </Button>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-600">
-          {total} asiento(s)
+          {/* El total y la suma son de TODO lo filtrado, no de esta página. */}
+          {total} asiento(s){hayFiltro && ' con estos filtros'}
+          {total > 0 && <> · {dop(sumaCents)}</>}
           {pendientes > 0 && (
             <span className="ml-2 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
               {pendientes} sin asentar
@@ -268,14 +384,62 @@ export function LibroDiarioClient({
             {asientosIniciales.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-10 text-center text-sm text-gray-500">
-                  Todavía no hay asientos.
-                  {activa && pendientes > 0 && ' Pulsa "Generar asientos pendientes".'}
+                  {/* Distinguir "no hay nada" de "no hay nada que case" evita que
+                      el usuario crea que perdió sus asientos por filtrar. */}
+                  {hayFiltro ? (
+                    <>
+                      Ningún asiento coincide con estos filtros.
+                      <button
+                        onClick={() => navegar({
+                          desde: undefined, hasta: undefined,
+                          origenTipo: undefined, cuentaId: undefined,
+                        })}
+                        className="ml-1 font-medium text-gray-700 underline"
+                      >
+                        Quitar filtros
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      Todavía no hay asientos.
+                      {activa && pendientes > 0 && ' Pulsa "Generar asientos pendientes".'}
+                    </>
+                  )}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Paginación. Antes no existía: la pantalla pedía 50 asientos y los
+          pintaba, así que a partir del 51 el resto era inalcanzable desde la UI
+          aunque la consulta ya soportara offset. */}
+      {paginas > 1 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-500">
+            Página {filtros.pagina} de {paginas} · mostrando{' '}
+            {(filtros.pagina - 1) * pageSize + 1}–
+            {Math.min(filtros.pagina * pageSize, total)} de {total}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline" size="sm"
+              disabled={filtros.pagina <= 1 || pendiente}
+              onClick={() => navegar({ pagina: filtros.pagina - 1 })}
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              disabled={filtros.pagina >= paginas || pendiente}
+              onClick={() => navegar({ pagina: filtros.pagina + 1 })}
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      )}
 
       <p className="text-xs text-gray-500">
         Los asientos se generan cuando pulsas el botón, no automáticamente al

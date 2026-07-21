@@ -2,7 +2,7 @@
 
 > **Para quien retome esto (humano o IA).** Estado real de la ejecución del plan
 > `docs/plan-contabilidad-vera.md` en la rama `feature/contabilidad-asientos-reportes`.
-> Última actualización: **2026-07-20**.
+> Última actualización: **2026-07-21**.
 >
 > Mantener este archivo al día es parte del trabajo: al terminar una etapa, marcarla
 > aquí con el commit y lo que quedó sin verificar.
@@ -755,23 +755,114 @@ de consola.
 
 ---
 
-## Siguiente trabajo de desarrollo — Paso 6
+## Paso 6 — Reportes contables · EN CURSO
 
-**Reportes contables.** Ver `docs/plan-contabilidad-vera.md` desde "Paso 6". Es
-el último. La primera migración libre es la **0087** (puede que no haga falta
-ninguna: los tres reportes salen de los asientos que ya existen).
+**Alcance acordado con Darian (2026-07-21): los tres reportes contables**
+(subpasos 1-3 del plan). El estado de resultados, los reportes de cartera y las
+exportaciones (subpasos 4-6) **quedan fuera**: la cartera ya salió casi entera
+en el Paso 1 y el resto se decide después. Sin migración nueva — los tres salen
+de los asientos que ya existen, así que la **0087 sigue libre**.
 
-Los tres:
+| # | Reporte | Estado |
+|---|---|---|
+| 1 | Libro diario + filtros | ✅ Hecho (sin commitear) |
+| 2 | Mayor general | ⬜ Pendiente |
+| 3 | Balance de comprobación | ⬜ Pendiente |
 
-1. **Libro diario** — ya existe (`/dashboard/contabilidad/libro-diario`). Le
-   faltan los **filtros por fecha, origen y cuenta** que pide el plan; el
-   parámetro `origenTipo` ya está en la API pero no hay UI para él.
+### Subpaso 1 — Libro diario con filtros · ✅ HECHO (2026-07-21)
+
+Filtros por **fecha (desde/hasta), origen y cuenta**, que es lo que pedía el
+plan, más la paginación que faltaba.
+
+**Los filtros viven en la URL, no en estado del cliente.** Así filtra y pagina
+el servidor —el libro puede tener miles de asientos y traerlos todos al
+navegador para filtrarlos ahí es exactamente el bug que se arregló en la
+cartera— y de paso una vista filtrada se puede compartir o guardar.
+
+#### Dos defectos que había antes de empezar
+
+1. **El filtro `origenTipo` de la API solo aceptaba `factura|pago`.** El Paso 5
+   añadió los orígenes `nota` y `anulacion`, pero la whitelist se quedó atrás:
+   filtrar por esos dos **se ignoraba en silencio y devolvía el libro entero**,
+   como si no hubiera filtro. Ahora la whitelist sale de la constante `ORIGENES`
+   en vez de repetir los valores a mano, que es lo que dejó que se desincronizara.
+2. **La paginación era inalcanzable.** `listarAsientos` aceptaba `limit`/`offset`
+   desde el Paso 4, pero la pantalla pedía 50 fijos y pintaba lo que llegara:
+   **a partir del asiento 51 el resto no se podía ver desde la UI**, y sin aviso.
+   Es la misma clase de pieza huérfana que el barrido del Paso 1 encontró tres
+   veces — el backend estaba, el camino desde la UI no.
+
+#### Decisiones de diseño
+
+- **El filtro por cuenta usa `EXISTS` sobre las líneas, no un `JOIN`.** Con
+  `JOIN`, un asiento que toca la misma cuenta en dos apuntes saldría duplicado en
+  la lista y contado dos veces en el total. El `l.team_id` va en la subconsulta
+  aunque el asiento ya esté acotado, para entrar por
+  `contabilidad_asiento_lineas_cuenta_idx (team_id, cuenta_id)`.
+- **El listado y el conteo comparten `condicionesLibro()`.** Si el conteo
+  filtrara distinto que la lista, la paginación ofrecería páginas que no existen
+  o escondería asientos sin decirlo.
+- **El total y la suma son de todo lo filtrado, no de la página.** Mismo criterio
+  que la cartera del Paso 1.
+- **El desplegable de cuenta solo lista las que tienen movimientos**, no las 30+
+  del catálogo: un filtro que ofrece opciones que devuelven cero hace dudar de si
+  el reporte está roto.
+- **Cambiar un filtro vuelve a la página 1 en el mismo paso.** Separarlo en un
+  `useEffect` fue el bug del Paso 1 (dos consultas, y el usuario en una página que
+  ya no existía).
+- **Las fechas se validan antes de llegar al `::date`.** Una cadena rara ahí no
+  devuelve vacío: lanza excepción y la pantalla se cae con un 500. Se comprueba
+  formato **y** existencia en el calendario, que es lo que descarta un 31 de
+  febrero.
+- **Una página fuera de rango cae a la última real.** `?pagina=999` mostraba
+  "Todavía no hay asientos" sobre un libro con 12 — falso y asustaba. La consulta
+  extra solo ocurre en ese caso anómalo.
+- **El vaciado distingue "no hay nada" de "no hay nada que case"**, para que
+  nadie crea que perdió sus asientos por filtrar.
+
+#### Verificación
+
+Typecheck limpio. En el navegador, contra el **team 2** (12 asientos, 4 cuentas
+con movimientos):
+
+| Prueba | Resultado |
+|---|---|
+| Sin filtro | 12 asientos · RD$158.16 (suma exacta de los 12 importes) |
+| `origenTipo=factura` | 3 · RD$56.76 |
+| `origenTipo=pago` | 9 · RD$101.40 — **9+3=12 y 101.40+56.76=158.16**, partición exacta |
+| `origenTipo=anulacion` | 0, con vaciado propio. **Antes del arreglo devolvía los 12** |
+| `cuentaId` = 4101 Ingresos | 3 · RD$56.76 (solo facturas acreditan ingresos) |
+| `cuentaId` = 1103 CxC | 12 asientos y **12 filas** — el `EXISTS` no duplica |
+| `desde=2026-06-24&hasta=2026-06-28` | 7 · RD$116.16, ambos extremos inclusivos |
+| Select de origen desde la UI | URL a `?origenTipo=pago`, 9 filas |
+| Botón "Quitar filtros" | URL limpia, selects a cero, 12 de vuelta |
+| Paginación (con `PAGE_SIZE` bajado a 5 y devuelto a 50) | "Página 1 de 3 · mostrando 1–5 de 12"; Anterior deshabilitado; página 2 sin solape; el total siguió siendo el de toda la cartera |
+| Filtrar **estando en página 2** | URL a `?origenTipo=factura` sin `pagina`, una sola navegación |
+| Parámetros basura (`desde=2026-02-31`, `desde=basura`, `';DROP TABLE x;--`, `cuentaId=abc`, `cuentaId=-5`, `origenTipo=inventado`, `pagina=-3`, `hasta=99999-99-99`) | Los 9 responden **200**, se ignoran como "sin filtro". Ninguno rompe |
+
+0 errores de consola.
+
+> ⚠️ **Lo que NO quedó ejercitado.** El team 2 no tiene asientos de `nota` ni de
+> `anulacion`, así que de esos dos filtros solo se probó que **filtran** (0 filas
+> en vez de las 12 de antes), no que seleccionen bien cuando hay datos. Para
+> cerrarlo haría falta asentar los escenarios del Paso 5, que son sintéticos.
+> Tampoco se probó con más de 50 asientos reales: la paginación se ejercitó
+> bajando `PAGE_SIZE` a 5 temporalmente.
+>
+> Los **screenshots siguen agotando el tiempo de espera** en este entorno (ya
+> pasaba en el Paso 1). La verificación fue por DOM y traza de red.
+
+### Lo que queda
+
 2. **Mayor general** — movimientos por cuenta con saldo inicial, débitos,
    créditos y saldo final. El índice
    `contabilidad_asiento_lineas_cuenta_idx (team_id, cuenta_id)` está puesto para
    esto.
 3. **Balance de comprobación** — todas las cuentas con sus saldos y validación de
    cuadre. `verificarCuadre()` ya existe y puede reusarse.
+
+`cuentasConMovimientos()` (nueva, en `libro-diario.ts`) puede servir de base para
+el mayor: ya resuelve "qué cuentas tienen apuntes" con el índice correcto.
 
 **Ojo con la naturaleza al calcular saldos:** una cuenta deudora tiene saldo
 `debe − haber` y una acreedora `haber − debe`. La columna `naturaleza` está
