@@ -1859,6 +1859,46 @@ export type CobranzaEvento      = typeof cobranzaEventos.$inferSelect;
 export type NewCobranzaEvento   = typeof cobranzaEventos.$inferInsert;
 export type CobranzaSeguimiento = typeof cobranzaSeguimiento.$inferSelect;
 
+// ─── Contabilidad: catálogo de cuentas (Paso 2) ──────────────────────────────
+// El mapa contable de cada empresa. Aquí no hay movimientos: los asientos
+// llegan en el Paso 4. No toca products ni ecf_documents — la relación con las
+// entidades genéricas se resuelve en el Paso 3 y apunta hacia la cuenta.
+
+/** Cuenta del catálogo contable. Jerárquica por self-FK; solo las hojas imputan. */
+export const contabilidadCuentas = pgTable('contabilidad_cuentas', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  /** Estable: inmutable una vez que la cuenta tiene movimientos. */
+  codigo:  varchar('codigo', { length: 20 }).notNull(),
+  nombre:  varchar('nombre', { length: 120 }).notNull(),
+  /** activo | pasivo | patrimonio | ingreso | costo | gasto */
+  tipo:    varchar('tipo', { length: 20 }).notNull(),
+  /**
+   * deudora | acreedora. Se guarda, no se deriva de `tipo`: las cuentas de
+   * contrapartida invierten la naturaleza de su clase (ej. "Descuentos y
+   * devoluciones sobre ventas" es ingreso de naturaleza deudora).
+   */
+  naturaleza:    varchar('naturaleza', { length: 10 }).notNull(),
+  /** NULL = cuenta raíz. Mismo team y sin ciclos: se valida en la aplicación. */
+  cuentaPadreId: integer('cuenta_padre_id'),
+  /** Si acepta asientos directos. Las cuentas padre agrupan, no imputan. */
+  imputable: boolean('imputable').notNull().default(true),
+  /** Desactivar en vez de borrar: los reportes históricos deben seguir cuadrando. */
+  activa:    boolean('activa').notNull().default(true),
+  /** Creada por la siembra del catálogo base, no por el usuario. */
+  esBase:    boolean('es_base').notNull().default(false),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_cuentas_team_codigo_idx').on(t.teamId, t.codigo),
+  index('contabilidad_cuentas_padre_idx').on(t.teamId, t.cuentaPadreId),
+]);
+
+export type ContabilidadCuenta    = typeof contabilidadCuentas.$inferSelect;
+export type NewContabilidadCuenta = typeof contabilidadCuentas.$inferInsert;
+
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;

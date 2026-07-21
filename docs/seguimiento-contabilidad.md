@@ -394,25 +394,97 @@ El esqueleto original que se usó de guía:
   - Que la migración 0082 ya está aplicada en la branch de contabilidad, y que
     crea dos tablas nuevas sin tocar ninguna existente.
 
-## Siguiente trabajo de desarrollo — Paso 2
+## Paso 2 — Catálogo de cuentas · ✅ HECHO (2026-07-21)
 
-**Catálogo de cuentas contables.** Nada empezado. No existe ninguna tabla de
-asientos ni de catálogo en el schema. Ver `docs/plan-contabilidad-vera.md` desde
-"Paso 2". La primera migración libre es la **0083** (la 0082 ya se usó).
+**Migración `0083_contabilidad_catalogo_cuentas.sql` aplicada** a
+`ep-bold-pine-anhzpklp` / `neondb` con confirmación de Darian. Una tabla
+(`contabilidad_cuentas`), 14 columnas, 5 índices, 4 CHECK. No toca ninguna tabla
+existente; las 2 de cobranza quedaron intactas.
+
+Los 4 subpasos del plan quedaron cubiertos:
+
+| # | Qué pedía el plan | Cómo quedó |
+|---|---|---|
+| 1 | Estructura del catálogo | `codigo`, `nombre`, `tipo`, `naturaleza`, `cuenta_padre_id`, `activa`, más `imputable` y `es_base` |
+| 2 | Catálogo base | 27 cuentas, numeración estándar RD, 3 niveles. Cubre las 8 que exige el plan |
+| 3 | Personalización | Crear, renombrar, mover de padre, invertir naturaleza, desactivar |
+| 4 | Proteger cuentas usadas | Sin borrado con hijas ni movimientos; código y tipo inmutables con movimientos |
+
+### Decisiones de diseño (no reabrir sin motivo)
+
+- **`naturaleza` se guarda, no se deriva de `tipo`.** Las cuentas de
+  contrapartida invierten la naturaleza de su clase: `4103 Descuentos y
+  devoluciones sobre ventas` es de tipo ingreso y naturaleza **deudora** porque
+  resta. Derivarla haría imposible representarlas. La UI las marca "(invertida)".
+- **`imputable` es un flag explícito, no "no tiene hijos".** Si se derivara,
+  colgarle una hija a una cuenta con movimientos la volvería no-imputable de
+  golpe y dejaría asientos huérfanos. Con el flag, ese caso se bloquea con
+  mensaje en vez de corromperse en silencio.
+- **Siembra perezosa.** El catálogo base se crea en el primer render de
+  `/dashboard/contabilidad/cuentas`, no en la migración ni al crear el team. Un
+  team que nunca use contabilidad no gana 27 cuentas que no pidió. Es
+  idempotente y **no sobrescribe**: si el usuario renombró `1101`, se queda.
+- **Numeración estándar RD** (1 Activo · 2 Pasivo · 3 Patrimonio · 4 Ingresos ·
+  5 Costos · 6 Gastos), decidida por Darian. Es con la que van a comparar los
+  contadores locales.
+- **Las cuentas base no se borran desde la UI**, solo se desactivan. Borrar queda
+  para las que crea el usuario (`es_base = false`).
+
+### La pieza que mira al futuro
+
+`tieneMovimientos()` en `lib/contabilidad/cuentas.ts` consulta
+`contabilidad_asiento_lineas`, **que no existe hasta el Paso 4**. Usa
+`to_regclass` para preguntar si la tabla existe: devuelve `false` mientras no
+exista y **empieza a proteger sola en cuanto aparezca**, sin que haya que
+acordarse de volver a este archivo. Cuando se cree esa tabla en el Paso 4, la
+columna debe llamarse `cuenta_id` y tener `team_id`, o hay que ajustar la
+consulta.
+
+### Verificación
+
+- Typecheck limpio.
+- Estructura confirmada contra la DB: 14 columnas, 5 índices, 4 CHECK.
+- **6 guardas probadas contra la API real** (código duplicado → 409, hija de
+  cuenta imputable → 409, tipo inválido → 400, código vacío → 400, desactivar
+  padre con hijas activas → 409, volver imputable una cuenta con hijas → 409).
+- **3 casos de ciclo probados**: directo (A→B→A), largo (dos niveles) y
+  autopadre. Los tres rechazados con mensaje propio.
+- Camino feliz completo desde el **formulario de la UI**, no solo por API: alta
+  de `6102 Alquiler de local` bajo `61`, la tabla refrescó a 28 filas, y se
+  borró después (catálogo de vuelta en 27).
+- El desplegable de cuenta padre lista solo las 12 agrupadoras, ninguna imputable.
+- Sin errores de consola. Los del server (`/api/sistema/ambiente`, API key de
+  e-CF inválida) son preexistentes del entorno de dev.
+
+> ⚠️ **Trampa del entorno, no del código.** En el navegador headless los modales
+> de Radix quedan montados tras cerrarse: el reloj de animaciones está congelado
+> (`currentTime: 0`) y nunca llega el `animationend` que dispara el desmontaje.
+> Se comprobó que **una transición CSS trivial tampoco avanza**, así que no es
+> del componente. El estado de React sí es correcto (`data-state="closed"`).
+> No perseguir esto como bug: verificar el cierre en un navegador real.
+
+---
+
+## Siguiente trabajo de desarrollo — Paso 3
+
+**Cuentas automáticas por empresa.** Ver `docs/plan-contabilidad-vera.md` desde
+"Paso 3": qué cuenta usar por defecto para cuentas por cobrar, ingresos, ITBIS,
+etc., para que Vera no le pregunte al usuario en cada factura. La primera
+migración libre es la **0084**.
 
 ### Antes de escribir la primera línea
 
-1. **Releer el Paso 2 del plan.** No asumir el diseño del catálogo de memoria.
+1. **Releer el Paso 3 del plan.** No asumir el diseño de memoria.
 2. **Confirmar la DB con Darian** antes de correr nada contra Neon, incluso de
    solo lectura. Base actual: `ep-bold-pine-anhzpklp` / `neondb`.
-3. **Revisar `docs/no-contaminar-entidades-genericas.md`** (regla de Alex): un
-   módulo vertical no mete su vocabulario en las entidades genéricas. El catálogo
-   contable no debe ensuciar `products` ni `ecf_documents`; las FK van en una
-   sola dirección.
+3. **Revisar `docs/no-contaminar-entidades-genericas.md`** (regla de Alex): la
+   configuración contable apunta a la cuenta, nunca al revés. No agregar
+   columnas de contabilidad a `products` ni a `ecf_documents`.
 4. **Numeración de migraciones:** esta rama ya chocó dos veces con main. Al
-   renombrar, ir en orden **descendente** y mover también
-   `scripts/apply-migration-XXXX.ts`, actualizando la ruta del `.sql` y el
-   mensaje de log **dentro** del script.
+   momento de escribir esto main va por `0069` y la rama por `0083`, así que hay
+   14 números de colchón — pero al renombrar, ir en orden **descendente** y mover
+   también `scripts/apply-migration-XXXX.ts`, actualizando la ruta del `.sql` y
+   el mensaje de log **dentro** del script.
 
 ### La regla que se aprendió cerrando el Paso 1
 
