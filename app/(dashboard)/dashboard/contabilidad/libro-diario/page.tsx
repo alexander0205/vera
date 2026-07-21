@@ -11,18 +11,12 @@ import {
   listarAsientos, contarPendientes, verificarCuadre, cuentasConMovimientos,
   ORIGENES, type OrigenTipo,
 } from '@/lib/contabilidad/libro-diario';
+import { fechaValidaISO } from '@/lib/utils/format';
 import { LibroDiarioClient } from './_client';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
-
-/** Igual que en la API: formato y existencia en el calendario. */
-function fechaValida(v: string | undefined): string | undefined {
-  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
-  const d = new Date(`${v}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? undefined : v;
-}
 
 /**
  * Libro diario — Paso 4 del plan, con los filtros del Paso 6.
@@ -62,8 +56,8 @@ export default async function LibroDiarioPage({
   const origenTipo = ORIGENES.includes(sp.origenTipo as OrigenTipo)
     ? (sp.origenTipo as OrigenTipo)
     : undefined;
-  const desde = fechaValida(sp.desde);
-  const hasta = fechaValida(sp.hasta);
+  const desde = fechaValidaISO(sp.desde);
+  const hasta = fechaValidaISO(sp.hasta);
   const cuentaNum = Number(sp.cuentaId);
   const cuentaId = Number.isInteger(cuentaNum) && cuentaNum > 0 ? cuentaNum : undefined;
   const paginaNum = Number(sp.pagina);

@@ -23,21 +23,7 @@ import {
   listarAsientos, contarPendientes, generarAsientosPendientes, verificarCuadre,
   ORIGENES, type OrigenTipo,
 } from '@/lib/contabilidad/libro-diario';
-
-/**
- * Acepta una fecha solo si es exactamente 'YYYY-MM-DD' y existe en el
- * calendario.
- *
- * El formato se comprueba **antes** de que llegue al `::date` de Postgres: una
- * cadena rara ahí no devuelve filas vacías, lanza excepción y la pantalla se
- * cae con un 500 en vez de decir "esa fecha no vale". El chequeo de existencia
- * es lo que descarta un 31 de febrero, que pasa el formato pero no es un día.
- */
-function fechaValida(v: string | null): string | undefined {
-  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
-  const d = new Date(`${v}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? undefined : v;
-}
+import { fechaValidaISO } from '@/lib/utils/format';
 
 async function autorizar(permiso: 'contabilidad:ver' | 'contabilidad:gestionar') {
   const user = await getUser();
@@ -77,8 +63,8 @@ export async function GET(req: NextRequest) {
     ? (tipoRaw as OrigenTipo)
     : undefined;
 
-  const desde = fechaValida(searchParams.get('desde'));
-  const hasta = fechaValida(searchParams.get('hasta'));
+  const desde = fechaValidaISO(searchParams.get('desde'));
+  const hasta = fechaValidaISO(searchParams.get('hasta'));
 
   const cuentaRaw = Number(searchParams.get('cuentaId'));
   const cuentaId = Number.isInteger(cuentaRaw) && cuentaRaw > 0 ? cuentaRaw : undefined;

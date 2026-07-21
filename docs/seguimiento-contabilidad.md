@@ -765,9 +765,13 @@ de los asientos que ya existen, así que la **0087 sigue libre**.
 
 | # | Reporte | Estado |
 |---|---|---|
-| 1 | Libro diario + filtros | ✅ Hecho (sin commitear) |
-| 2 | Mayor general | ⬜ Pendiente |
-| 3 | Balance de comprobación | ⬜ Pendiente |
+| 1 | Libro diario + filtros | ✅ Hecho |
+| 2 | Mayor general | ✅ Hecho |
+| 3 | Balance de comprobación | ✅ Hecho |
+
+**Los tres están hechos. El Paso 6 acordado está cerrado**, y con él el plan
+completo hasta donde se decidió llegar. Falta pushear (Darian decidió pushear al
+cerrar el paso, no por subpaso) y actualizar la descripción del PR.
 
 ### Subpaso 1 — Libro diario con filtros · ✅ HECHO (2026-07-21)
 
@@ -852,17 +856,106 @@ con movimientos):
 > Los **screenshots siguen agotando el tiempo de espera** en este entorno (ya
 > pasaba en el Paso 1). La verificación fue por DOM y traza de red.
 
-### Lo que queda
+### Subpasos 2 y 3 — Mayor general y balance · ✅ HECHO (2026-07-21)
 
-2. **Mayor general** — movimientos por cuenta con saldo inicial, débitos,
-   créditos y saldo final. El índice
-   `contabilidad_asiento_lineas_cuenta_idx (team_id, cuenta_id)` está puesto para
-   esto.
-3. **Balance de comprobación** — todas las cuentas con sus saldos y validación de
-   cuadre. `verificarCuadre()` ya existe y puede reusarse.
+Los dos en `lib/contabilidad/reportes.ts`, con pantallas en
+`/dashboard/contabilidad/mayor` y `/dashboard/contabilidad/balance`. **Sin
+migración**: un reporte no guarda nada, así que la **0087 sigue libre**.
 
-`cuentasConMovimientos()` (nueva, en `libro-diario.ts`) puede servir de base para
-el mayor: ya resuelve "qué cuentas tienen apuntes" con el índice correcto.
+#### La regla del signo, y dónde NO se aplica
+
+El saldo depende de la **`naturaleza`** de la cuenta, leída de la columna:
+deudora = `debe − haber`, acreedora = `haber − debe`. Está aislada en
+`saldoSegunNaturaleza()` para que exista un solo sitio donde equivocarse.
+
+Pero **las columnas "saldo deudor" y "saldo acreedor" del balance NO miran la
+naturaleza**: son aritmética pura (`debe − haber` y su inverso, el positivo
+gana). Por eso el balance cuadra siempre que cuadren los asientos. La naturaleza
+se usa ahí para otra cosa: para saber en qué columna se **esperaba** que cayera
+la cuenta y marcar la que cae en la contraria.
+
+#### Decisiones de diseño
+
+- **Ninguno de los dos tiene ruta de API.** Todo el filtrado va por la URL y lo
+  resuelve el servidor, así que una API sin llamador sería justo la pieza
+  huérfana que este módulo ya produjo tres veces. Cuando llegue la exportación
+  (subpaso 6, fuera de alcance) tendrá su propia ruta con su propio consumidor.
+- **Las dos entradas se registraron en el sidebar** (`HREF_PERMISSION` y el grupo
+  Contabilidad de `layout.tsx`), con `contabilidad:ver`. Sin eso las pantallas
+  existirían pero no habría camino desde la UI — la lección del Paso 1.
+- **El saldo inicial del mayor es el arrastre de todo lo anterior a `desde`.**
+  Sin él, el saldo final de un mes suelto no significa nada. Sin `desde` es cero
+  y se dice en pantalla, para que nadie lo lea como "empezó en cero".
+- **El mayor ordena ASCENDENTE**, al revés que el libro diario: el saldo
+  corriente solo se puede acumular leyendo de lo más viejo a lo más nuevo.
+- **Tope de 500 movimientos por cuenta**, y cuando se alcanza se avisa de que
+  *los totales de arriba son solo de esos 500*. Un total recortado presentado
+  como total es peor que no darlo.
+- **El saldo final se recalcula de los totales, no se toma del último movimiento
+  visible**, precisamente por ese tope.
+- **El balance solo lista cuentas con movimientos.** Un balance con 30 filas en
+  cero esconde las 4 que importan.
+- **Las cuentas del balance enlazan a su mayor** conservando el periodo.
+- **`fmtDOP` pasó a poner el signo delante del símbolo** (`-RD$44.64` en vez de
+  `RD$-44.64`). Estos reportes son los primeros que muestran negativos; hasta
+  ahora nadie le pasaba uno.
+- **`fechaValidaISO()` se movió a `lib/utils/format.ts`.** Había tres copias (la
+  página del libro diario, su API y el filtro nuevo) de una validación que
+  protege de un 500, que es el peor sitio para tener tres copias.
+
+#### Verificación
+
+Typecheck limpio. `npm run test:unit`: **24/24** (13 previos + 11 nuevos).
+
+**11 tests unitarios nuevos** en `tests/unit/contabilidad-saldos.test.ts`, y no
+son de adorno: **la trampa del paso no se puede ver con los datos del dev.** La
+cuenta que de verdad la ejercita es `4103 Descuentos`, tipo ingreso con
+naturaleza deudora, y no tiene ni un movimiento en la base. El test demuestra que
+deducir la naturaleza del tipo da `-3000` donde lo correcto es `3000` — el signo
+exactamente invertido, y solo en esa clase de cuenta.
+
+En el navegador, contra el **team 2**:
+
+| Prueba | Resultado |
+|---|---|
+| Balance completo | Debe 74.40+27.00+56.76 = **RD$158.16** = haber 101.40+56.76. Cuadra |
+| Saldos del balance | Deudor 101.40 = acreedor 101.40. Cuadra |
+| Cotejo con el libro diario | Los RD$158.16 coinciden con el total del libro |
+| Mayor de 1103 CxC (deudora) | Saldo corriente correcto en los 12 pasos; final **−RD$44.64** |
+| Mayor de 4101 Ingresos (acreedora) | Los créditos **suman**: 17.60 → 34.76 → 56.76. Signo opuesto, como debe |
+| Cotejo entre reportes | El −44.64 del mayor es el mismo 44.64 acreedor del balance |
+| Mayor con `desde=2026-06-28` | Arrastre −44.64 correcto; débitos 22.00 = créditos 22.00 → saldo final vuelve al inicial |
+| Aislamiento entre teams | Las cuentas 35/36/37 (team 9) dan "esa cuenta no existe" sin filtrar datos |
+| Cuenta inexistente / sin elegir / agrupadora sin movimientos | Cada una con su mensaje propio |
+| Periodo vacío (`desde=2027-01-01`) | "Ninguna cuenta tuvo movimientos en el periodo elegido" |
+| Parámetros basura (`cuentaId=abc`, `-1`, `desde=basura`, `2026-02-31`, `';DROP TABLE x;--`) | Los 9 responden **200**, se ignoran como "sin filtro" |
+| Sidebar | Las dos entradas aparecen bajo Contabilidad |
+
+0 errores de consola.
+
+> **Hallazgo con los datos reales del dev, que no es un bug del reporte.** El
+> balance marca `1103 Cuentas por cobrar` con **saldo invertido**: es deudora
+> pero quedó acreedora en RD$44.64. La causa es que hay **9 cobros asentados
+> contra solo 3 facturas** — el compromiso conocido del Paso 4 (*"lo que nadie
+> barre no se asienta"*) hecho visible por primera vez. En una base donde se
+> barra a tiempo no debería aparecer. Vale la pena enseñárselo a Alex: es
+> justamente para lo que sirve el aviso.
+
+> ⚠️ **Lo que NO quedó ejercitado.** Ninguna cuenta del dev tiene la naturaleza
+> invertida respecto a su clase, así que la trampa del `4103` está cubierta
+> **solo por test unitario**, no en pantalla. Tampoco hay datos de nota, mora,
+> retención ni anulación en el team 2, así que los reportes no se vieron con esos
+> asientos (sí con factura y cobro). El tope de 500 movimientos no se alcanzó.
+> Los screenshots siguen agotando el tiempo de espera en este entorno; la
+> verificación fue por DOM y traza de red.
+
+### Si se retoma el resto del Paso 6
+
+Quedaron fuera por decisión de alcance, no por olvido: **estado de resultados**
+(subpaso 4), **reportes de cartera** (subpaso 5 — casi todo salió ya en el Paso
+1) y **exportaciones CSV/PDF** (subpaso 6). El estado de resultados es el más
+barato de los tres: sale de agrupar `balanceComprobacion()` por `tipo`
+(ingreso − costo − gasto), que ya devuelve todo lo que necesita.
 
 **Ojo con la naturaleza al calcular saldos:** una cuenta deudora tiene saldo
 `debe − haber` y una acreedora `haber − debe`. La columna `naturaleza` está

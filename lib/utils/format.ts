@@ -89,9 +89,33 @@ export function fmtFechaHora(iso: string | Date | null | undefined): string {
   return `${fecha} ${fmtHora(d)}`;
 }
 
-/** Formato monto centavos → RD$X,XXX.XX */
+/**
+ * Devuelve la fecha si es un 'YYYY-MM-DD' real, y `undefined` si no.
+ *
+ * Comprueba el formato **y** que el día exista en el calendario: lo segundo es
+ * lo que descarta un 31 de febrero, que pasa el patrón pero no es una fecha.
+ *
+ * Importa porque estas cadenas acaban en un `::date` de Postgres, y una cadena
+ * rara ahí no devuelve vacío: lanza excepción y tumba la página con un 500. Se
+ * valida antes, y un valor inválido se trata como "sin filtro".
+ */
+export function fechaValidaISO(v: string | null | undefined): string | undefined {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
+  const d = new Date(`${v}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? undefined : v;
+}
+
+/**
+ * Formato monto centavos → RD$X,XXX.XX
+ *
+ * El signo va delante del símbolo (`-RD$44.64`), no entre medias: hasta que los
+ * reportes contables del Paso 6 empezaron a mostrar saldos negativos nadie le
+ * pasaba un número negativo, y salía `RD$-44.64`, que se lee mal.
+ */
 export function fmtDOP(centavos: number): string {
-  return `RD$${(centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const signo = centavos < 0 ? '-' : '';
+  const abs = Math.abs(centavos) / 100;
+  return `${signo}RD$${abs.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /**
