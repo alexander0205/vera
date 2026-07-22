@@ -83,6 +83,12 @@ export async function PATCH(req: NextRequest) {
           cuentaIngresosId:   numeroONulo(b.cuentaIngresosId),
           cuentaDescuentosId: numeroONulo(b.cuentaDescuentosId),
           cuentaMoraId:       numeroONulo(b.cuentaMoraId),
+          // Los dos del Paso 5. Faltaban aquí: la UI los enviaba pero esta ruta
+          // los descartaba, y como `guardarConfig` trata `undefined` como "no
+          // tocar" (su contrato), respondía 200 sin guardar nada — el peor tipo
+          // de fallo, el silencioso. La librería y la UI ya los soportaban.
+          cuentaSaldosFavorId: numeroONulo(b.cuentaSaldosFavorId),
+          cuentaRetencionesId: numeroONulo(b.cuentaRetencionesId),
         }, user.id);
         return NextResponse.json({ config });
       }

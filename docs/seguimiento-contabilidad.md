@@ -749,6 +749,16 @@ de consola.
 > script configura cuentas por código, que falle ruidosamente si el código no
 > existe.**
 
+> 🐛 **Bug del Paso 5 encontrado el 2026-07-21, arreglado en esta rama:** el
+> PATCH de `/api/contabilidad/config` (sección `general`) solo reenviaba los 5
+> campos originales. La UI mandaba `cuentaSaldosFavorId` y `cuentaRetencionesId`
+> pero la ruta los descartaba → `guardarConfig` los veía `undefined` → 200 sin
+> guardar nada. **Falla silenciosa de manual.** Lo destapó Darian configurando
+> el team 9 desde la UI; la verificación original del Paso 5 configuró por
+> script directo a `guardarConfig`, así que el camino UI→API de esos dos campos
+> nunca se ejercitó. Lección: **verificar los caminos nuevos de la UI aunque la
+> librería esté probada** — la ruta es parte del camino.
+
 > ⚠️ **Al borrar documentos de prueba, hacerlo en orden inverso al de creación.**
 > Una ND de mora referencia su factura origen vía `mora_origen_id`, así que
 > borrar la factura primero viola `ecf_documents_mora_origen_id_fkey`.
