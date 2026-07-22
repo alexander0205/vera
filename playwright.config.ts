@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/unit/**'],   // tests/unit/** son vitest, no Playwright
+  // tests/unit/** no son Playwright: vitest + node:test (`npm run test:unit`)
+  testIgnore: ['**/unit/**'],
   timeout: 30000,
   retries: 0,
   workers: 1, // Secuencial para no interferir entre tests

@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "1.5.1",
+  "version": "1.5.4",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
@@ -30,7 +30,8 @@
     "db:studio": "drizzle-kit studio",
     "db:reset": "npx tsx lib/db/reset.ts",
     "db:local:setup": "bash scripts/setup-local-db.sh",
-    "branch:setup": "bash scripts/branch-setup.sh"
+    "branch:setup": "bash scripts/branch-setup.sh",
+    "test:unit": "vitest run tests/unit"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

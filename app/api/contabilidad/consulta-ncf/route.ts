@@ -3,7 +3,7 @@
  *
  * Cruza el registro local con ecf-api para explicar TODOS los números del
  * rango — incluidos los que no existen, que es lo que preguntan los contadores.
- * Gate: `reportes:ver` (el contador es solo lectura).
+ * Gate: `contabilidad:ver` (el contador es solo lectura).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/api-guard';
@@ -12,7 +12,7 @@ import { consultarRango, parseEncf } from '@/lib/contabilidad/secuencias';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  const auth = await requirePermission('reportes:ver');
+  const auth = await requirePermission('contabilidad:ver');
   if (!auth.ok) return auth.response;
 
   const sp = req.nextUrl.searchParams;

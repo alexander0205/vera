@@ -18,7 +18,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
-import { LayoutGrid, FileText, Store, Check, Building2 } from 'lucide-react';
+import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
   MODULE_LABELS, MODULE_DESCRIPTIONS, moduleUrl, type ModuleKey,
@@ -27,9 +27,14 @@ import {
 const ICONS: Record<ModuleKey, typeof FileText> = {
   facturacion: FileText,
   pos: Store,
+  escolar: GraduationCap,
 };
 
-export function ModuleSwitcher({ current }: { current: ModuleKey }) {
+/**
+ * `current` puede ser null en áreas que no son un módulo del catálogo (p. ej.
+ * Administración): ahí el botón solo dice "Ir a…" y no marca ninguno activo.
+ */
+export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
   const { modules } = usePermissions();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
@@ -53,7 +58,7 @@ export function ModuleSwitcher({ current }: { current: ModuleKey }) {
           '&:hover': { bgcolor: 'action.hover' },
         }}
       >
-        {MODULE_LABELS[current]}
+        {current ? MODULE_LABELS[current] : 'Ir a…'}
       </Button>
       <Menu
         anchorEl={anchor}

@@ -32,20 +32,41 @@ const ITEMS: Item[] = [
   { href: '/cuenta/empresas', label: 'Mis empresas',     icon: Layers },
 ];
 
-export function CuentaNavRail() {
+/**
+ * `variant`:
+ *  - 'rail'   → columna de iconos que se expande al pasar el mouse (escritorio).
+ *  - 'drawer' → siempre abierto, sin animación: contenido del cajón móvil.
+ */
+export function CuentaNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   const pathname = usePathname();
+  const abierto = variant === 'drawer';
 
   return (
-    <Box component="aside" sx={{ width: RAIL, flexShrink: 0, display: { xs: 'none', md: 'block' }, position: 'relative' }}>
+    <Box
+      component="aside"
+      sx={{
+        width: abierto ? OPEN : RAIL,
+        flexShrink: 0,
+        display: abierto ? 'block' : { xs: 'none', md: 'block' },
+        position: 'relative',
+        height: '100%',
+      }}
+    >
       <Box
         sx={{
-          position: 'absolute', top: 0, left: 0, height: '100%',
-          width: RAIL, overflow: 'hidden', zIndex: 40,
+          position: abierto ? 'static' : 'absolute', top: 0, left: 0, height: '100%',
+          width: abierto ? OPEN : RAIL, overflow: 'hidden', zIndex: 40,
           bgcolor: '#0f766e', display: 'flex', flexDirection: 'column',
           transition: 'width 0.2s ease, box-shadow 0.2s ease',
-          '& .nav-text': { opacity: 0, transition: 'opacity 0.12s ease', whiteSpace: 'nowrap' },
-          '&:hover': { width: OPEN, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
-          '&:hover .nav-text': { opacity: 1 },
+          '& .nav-text': {
+            opacity: abierto ? 1 : 0,
+            transition: 'opacity 0.12s ease',
+            whiteSpace: 'nowrap',
+          },
+          ...(abierto ? {} : {
+            '&:hover': { width: OPEN, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
+            '&:hover .nav-text': { opacity: 1 },
+          }),
         }}
       >
         {/* Identidad del área */}

@@ -1550,6 +1550,231 @@ export type NewCajaTurno     = typeof cajaTurnos.$inferInsert;
 export type CajaMovimiento   = typeof cajaMovimientos.$inferSelect;
 export type NewCajaMovimiento = typeof cajaMovimientos.$inferInsert;
 
+// ─── Administración Escolar ───────────────────────────────────────────────────
+// Módulo escolar con reglas propias (períodos, matrículas por período, cargos
+// por mes, conceptos escolares, tutores responsables). Separado de Contactos,
+// pero con campos de enlace (dependienteId / clientId) para integración futura.
+// Montos en centavos, siguiendo el patrón del resto del sistema.
+
+/** Año escolar (ej. 2025-2026). Solo uno activo por team en la práctica. */
+export const adminEscolarPeriodos = pgTable('admin_escolar_periodos', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  nombre:      varchar('nombre', { length: 60 }).notNull(),
+  fechaInicio: date('fecha_inicio'),
+  fechaFin:    date('fecha_fin'),
+  activo:      boolean('activo').notNull().default(true),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_periodos_team_idx').on(t.teamId),
+]);
+
+/** Curso/grado (ej. Primero A, Segundo B). `orden` para ordenar en la UI. */
+export const adminEscolarCursos = pgTable('admin_escolar_cursos', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  nombre:    varchar('nombre', { length: 80 }).notNull(),
+  nivel:     varchar('nivel', { length: 60 }),
+  orden:     integer('orden').notNull().default(0),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_cursos_team_idx').on(t.teamId),
+]);
+
+/** Materia/asignatura. Catálogo simple; aún no ligado a matrícula en el MVP. */
+export const adminEscolarMaterias = pgTable('admin_escolar_materias', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  nombre:    varchar('nombre', { length: 120 }).notNull(),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_materias_team_idx').on(t.teamId),
+]);
+
+/** Estudiante. El curso NO vive aquí — pertenece a la matrícula (por período). */
+export const adminEscolarEstudiantes = pgTable('admin_escolar_estudiantes', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  /** Código interno del estudiante (matrícula/expediente). Opcional. */
+  codigo:          varchar('codigo', { length: 30 }),
+  nombres:         varchar('nombres', { length: 120 }).notNull(),
+  apellidos:       varchar('apellidos', { length: 120 }).notNull(),
+  fechaNacimiento: date('fecha_nacimiento'),
+  /** masculino | femenino | otro. Opcional. La edad se deriva de fechaNacimiento. */
+  sexo:            varchar('sexo', { length: 20 }),
+  /** activo | inactivo | retirado | graduado */
+  estado:          varchar('estado', { length: 20 }).notNull().default('activo'),
+  /** Enlace futuro con Contactos (dependientes). Nullable — integración post-MVP. */
+  dependienteId:   integer('dependiente_id').references(() => dependientes.id),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_estudiantes_team_idx').on(t.teamId),
+]);
+
+/** Tutor/padre responsable. Enlace futuro con clients vía clientId. */
+export const adminEscolarTutores = pgTable('admin_escolar_tutores', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  /** Enlace futuro con Contactos (clients). Nullable — integración post-MVP. */
+  clientId:  integer('client_id').references(() => clients.id),
+  nombre:    varchar('nombre', { length: 160 }).notNull(),
+  documento: varchar('documento', { length: 30 }),
+  telefono:  varchar('telefono', { length: 30 }),
+  email:     varchar('email', { length: 160 }),
+  direccion: varchar('direccion', { length: 300 }),
+  /** Foto del tutor (data URL base64, mismo patrón que products.imagen/teams.logo).
+   *  Útil para identificar a un tutor que no es padre/contacto (ej. chofer, cuidador). */
+  imagen:    text('imagen'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_tutores_team_idx').on(t.teamId),
+]);
+
+/** Relación N:M estudiante↔tutor. Solo un tutor responsable de pago por estudiante
+ *  (regla de negocio aplicada en la capa de app, no por constraint). */
+export const adminEscolarEstudianteTutores = pgTable('admin_escolar_estudiante_tutores', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  estudianteId:    integer('estudiante_id').notNull().references(() => adminEscolarEstudiantes.id, { onDelete: 'cascade' }),
+  tutorId:         integer('tutor_id').notNull().references(() => adminEscolarTutores.id, { onDelete: 'cascade' }),
+  /** padre | madre | tutor | cuidador | otro */
+  relacion:        varchar('relacion', { length: 20 }).notNull().default('tutor'),
+  responsablePago: boolean('responsable_pago').notNull().default(false),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_est_tutor_uniq').on(t.estudianteId, t.tutorId),
+  index('admin_escolar_est_tutor_team_idx').on(t.teamId),
+]);
+
+/** Matrícula del estudiante en un período+curso. Historial por año escolar.
+ *  Solo una matrícula 'activa' por (estudiante, período) — índice parcial abajo. */
+export const adminEscolarMatriculas = pgTable('admin_escolar_matriculas', {
+  id:               serial('id').primaryKey(),
+  teamId:           integer('team_id').notNull().references(() => teams.id),
+  estudianteId:     integer('estudiante_id').notNull().references(() => adminEscolarEstudiantes.id),
+  periodoId:        integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id),
+  cursoId:          integer('curso_id').notNull().references(() => adminEscolarCursos.id),
+  codigoMatricula:  varchar('codigo_matricula', { length: 40 }),
+  fechaInscripcion: date('fecha_inscripcion'),
+  /** activa | finalizada | retirada | anulada */
+  estado:           varchar('estado', { length: 20 }).notNull().default('activa'),
+  /** Plan genérico que genera la mensualidad automática de esta matrícula. */
+  facturaRecurrenteId: integer('factura_recurrente_id').references(() => facturasRecurrentes.id),
+  /** Concepto escolar que recibirá cada cargo generado por el plan. */
+  conceptoMensualidadId: integer('concepto_mensualidad_id').references(() => adminEscolarConceptosPago.id),
+  notas:            text('notas'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_matriculas_team_idx').on(t.teamId),
+  index('admin_escolar_matriculas_estudiante_idx').on(t.estudianteId),
+  index('admin_escolar_matriculas_periodo_idx').on(t.periodoId),
+  uniqueIndex('admin_escolar_matriculas_factura_recurrente_uniq').on(t.facturaRecurrenteId),
+]);
+
+/** Concepto de cargo escolar. `recurrente` = mensualidad (genera por mes). */
+export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  nombre:     varchar('nombre', { length: 80 }).notNull(),
+  /** inscripcion | mensualidad | uniforme | actividad | otro */
+  tipo:       varchar('tipo', { length: 20 }).notNull().default('otro'),
+  recurrente: boolean('recurrente').notNull().default(false),
+  /** Enlace opcional al catálogo de productos/servicios. Si viene, la factura
+   *  generada desde el cargo hereda nombre/ITBIS del producto — evita duplicar
+   *  catálogo. El monto sigue viniendo del cargo, no del producto. */
+  productId:  integer('product_id').references(() => products.id),
+  activo:     boolean('activo').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_conceptos_team_idx').on(t.teamId),
+]);
+
+/** Cargo/deuda escolar. La deuda vive AQUÍ, no depende de facturas.
+ *  `saldoCentavos` = pendiente; el pago lo reduce. `mes` solo para mensualidad. */
+export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
+  id:               serial('id').primaryKey(),
+  teamId:           integer('team_id').notNull().references(() => teams.id),
+  estudianteId:     integer('estudiante_id').notNull().references(() => adminEscolarEstudiantes.id),
+  matriculaId:      integer('matricula_id').notNull().references(() => adminEscolarMatriculas.id),
+  periodoId:        integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id),
+  conceptoId:       integer('concepto_id').notNull().references(() => adminEscolarConceptosPago.id),
+  /** Mes 1-12 solo si es mensualidad; null para inscripción/uniforme/etc. */
+  mes:              smallint('mes'),
+  anio:             smallint('anio').notNull(),
+  montoCentavos:    integer('monto_centavos').notNull(),
+  saldoCentavos:    integer('saldo_centavos').notNull(),
+  fechaVencimiento: date('fecha_vencimiento'),
+  /** pendiente | parcial | pagado | vencido | anulado */
+  estado:           varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  /** Enlace OPCIONAL a la factura (e-CF) que cubre este cargo. El cargo sigue
+   *  siendo la fuente de verdad de la deuda (saldoCentavos); la factura es el
+   *  documento fiscal/cobrable. Muchos cargos → una factura. */
+  ecfDocumentId:    integer('ecf_document_id').references(() => ecfDocuments.id),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_cargos_team_idx').on(t.teamId),
+  index('admin_escolar_cargos_estudiante_idx').on(t.estudianteId),
+  index('admin_escolar_cargos_matricula_idx').on(t.matriculaId),
+  index('admin_escolar_cargos_periodo_idx').on(t.periodoId),
+]);
+
+/** Pago escolar aplicado a un cargo. Enlace OPCIONAL a factura/pago_recibido,
+ *  pero no depende de ellos para existir. */
+export const adminEscolarPagos = pgTable('admin_escolar_pagos', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  estudianteId:   integer('estudiante_id').notNull().references(() => adminEscolarEstudiantes.id),
+  matriculaId:    integer('matricula_id').references(() => adminEscolarMatriculas.id),
+  cargoId:        integer('cargo_id').references(() => adminEscolarCargos.id),
+  /** Enlace opcional a un e-CF emitido. */
+  ecfDocumentId:  integer('ecf_document_id').references(() => ecfDocuments.id),
+  /** Enlace opcional a un pago recibido del módulo de cobros. */
+  pagoRecibidoId: integer('pago_recibido_id').references(() => pagosRecibidos.id),
+  montoCentavos:  integer('monto_centavos').notNull(),
+  fechaPago:      date('fecha_pago').notNull(),
+  metodo:         varchar('metodo', { length: 30 }),
+  referencia:     varchar('referencia', { length: 100 }),
+  notas:          text('notas'),
+  createdBy:      integer('created_by').references(() => users.id),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_pagos_team_idx').on(t.teamId),
+  index('admin_escolar_pagos_estudiante_idx').on(t.estudianteId),
+  index('admin_escolar_pagos_cargo_idx').on(t.cargoId),
+]);
+
+export type AdminEscolarPeriodo    = typeof adminEscolarPeriodos.$inferSelect;
+export type NewAdminEscolarPeriodo = typeof adminEscolarPeriodos.$inferInsert;
+export type AdminEscolarCurso      = typeof adminEscolarCursos.$inferSelect;
+export type NewAdminEscolarCurso   = typeof adminEscolarCursos.$inferInsert;
+export type AdminEscolarMateria    = typeof adminEscolarMaterias.$inferSelect;
+export type NewAdminEscolarMateria = typeof adminEscolarMaterias.$inferInsert;
+export type AdminEscolarEstudiante    = typeof adminEscolarEstudiantes.$inferSelect;
+export type NewAdminEscolarEstudiante = typeof adminEscolarEstudiantes.$inferInsert;
+export type AdminEscolarTutor      = typeof adminEscolarTutores.$inferSelect;
+export type NewAdminEscolarTutor   = typeof adminEscolarTutores.$inferInsert;
+export type AdminEscolarEstudianteTutor    = typeof adminEscolarEstudianteTutores.$inferSelect;
+export type NewAdminEscolarEstudianteTutor = typeof adminEscolarEstudianteTutores.$inferInsert;
+export type AdminEscolarMatricula    = typeof adminEscolarMatriculas.$inferSelect;
+export type NewAdminEscolarMatricula = typeof adminEscolarMatriculas.$inferInsert;
+export type AdminEscolarConceptoPago    = typeof adminEscolarConceptosPago.$inferSelect;
+export type NewAdminEscolarConceptoPago = typeof adminEscolarConceptosPago.$inferInsert;
+export type AdminEscolarCargo      = typeof adminEscolarCargos.$inferSelect;
+export type NewAdminEscolarCargo   = typeof adminEscolarCargos.$inferInsert;
+export type AdminEscolarPago       = typeof adminEscolarPagos.$inferSelect;
+export type NewAdminEscolarPago    = typeof adminEscolarPagos.$inferInsert;
+
 // ─── TypeScript types ─────────────────────────────────────────────────────────
 
 export type Impresora    = typeof impresoras.$inferSelect;
@@ -1597,6 +1822,199 @@ export type TeamDataWithMembers = Team & {
     user: Pick<User, 'id' | 'name' | 'email'>;
   })[];
 };
+
+// ─── Cobranza — seguimiento de cartera (migración 0082) ──────────────────────
+// FK unidireccional: cobranza conoce la factura, la factura no sabe de cobranza.
+// Nada de esto entra al XML de la DGII ni afecta el saldo — es gestión interna.
+
+/** Log de gestión de cobro: contactos, notas internas y promesas de pago. */
+export const cobranzaEventos = pgTable('cobranza_eventos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  ecfDocumentId: integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
+  /** 'contacto' | 'nota' | 'promesa' */
+  tipo:          varchar('tipo', { length: 20 }).notNull(),
+  /** Fecha del hecho, no del registro: permite cargar gestiones atrasadas. */
+  fecha:         date('fecha').notNull(),
+  /** Solo tipo='contacto': llamada | whatsapp | correo | presencial | otro */
+  canal:         varchar('canal', { length: 20 }),
+  comentario:    text('comentario'),
+  /** Solo tipo='promesa'. El CHECK exige fecha + estado si tipo='promesa'. */
+  promesaFecha:      date('promesa_fecha'),
+  promesaMontoCents: integer('promesa_monto_cents'),
+  /** pendiente | cumplida | incumplida */
+  promesaEstado:     varchar('promesa_estado', { length: 20 }),
+  createdBy:     integer('created_by').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('cobranza_eventos_doc_idx').on(t.teamId, t.ecfDocumentId, t.fecha),
+]);
+
+/** Estado actual del seguimiento: una fila por documento, se sobrescribe. */
+export const cobranzaSeguimiento = pgTable('cobranza_seguimiento', {
+  ecfDocumentId:      integer('ecf_document_id').primaryKey().references(() => ecfDocuments.id),
+  teamId:             integer('team_id').notNull().references(() => teams.id),
+  responsableUserId:  integer('responsable_user_id').references(() => users.id),
+  /** Texto libre: cada empresa cobra distinto, un enum obligaría a migrar. */
+  proximaAccion:      text('proxima_accion'),
+  proximaAccionFecha: date('proxima_accion_fecha'),
+  updatedBy:          integer('updated_by').references(() => users.id),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('cobranza_seguimiento_team_idx').on(t.teamId, t.proximaAccionFecha),
+]);
+
+export type CobranzaEvento      = typeof cobranzaEventos.$inferSelect;
+export type NewCobranzaEvento   = typeof cobranzaEventos.$inferInsert;
+export type CobranzaSeguimiento = typeof cobranzaSeguimiento.$inferSelect;
+
+// ─── Contabilidad: catálogo de cuentas (Paso 2) ──────────────────────────────
+// El mapa contable de cada empresa. Aquí no hay movimientos: los asientos
+// llegan en el Paso 4. No toca products ni ecf_documents — la relación con las
+// entidades genéricas se resuelve en el Paso 3 y apunta hacia la cuenta.
+
+/** Cuenta del catálogo contable. Jerárquica por self-FK; solo las hojas imputan. */
+export const contabilidadCuentas = pgTable('contabilidad_cuentas', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  /** Estable: inmutable una vez que la cuenta tiene movimientos. */
+  codigo:  varchar('codigo', { length: 20 }).notNull(),
+  nombre:  varchar('nombre', { length: 120 }).notNull(),
+  /** activo | pasivo | patrimonio | ingreso | costo | gasto */
+  tipo:    varchar('tipo', { length: 20 }).notNull(),
+  /**
+   * deudora | acreedora. Se guarda, no se deriva de `tipo`: las cuentas de
+   * contrapartida invierten la naturaleza de su clase (ej. "Descuentos y
+   * devoluciones sobre ventas" es ingreso de naturaleza deudora).
+   */
+  naturaleza:    varchar('naturaleza', { length: 10 }).notNull(),
+  /** NULL = cuenta raíz. Mismo team y sin ciclos: se valida en la aplicación. */
+  cuentaPadreId: integer('cuenta_padre_id'),
+  /** Si acepta asientos directos. Las cuentas padre agrupan, no imputan. */
+  imputable: boolean('imputable').notNull().default(true),
+  /** Desactivar en vez de borrar: los reportes históricos deben seguir cuadrando. */
+  activa:    boolean('activa').notNull().default(true),
+  /** Creada por la siembra del catálogo base, no por el usuario. */
+  esBase:    boolean('es_base').notNull().default(false),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_cuentas_team_codigo_idx').on(t.teamId, t.codigo),
+  index('contabilidad_cuentas_padre_idx').on(t.teamId, t.cuentaPadreId),
+]);
+
+export type ContabilidadCuenta    = typeof contabilidadCuentas.$inferSelect;
+export type NewContabilidadCuenta = typeof contabilidadCuentas.$inferInsert;
+
+// ─── Contabilidad: configuración de cuentas automáticas (Paso 3) ─────────────
+// Traduce operaciones a cuentas sin preguntarle al usuario en cada factura.
+// No genera asientos — eso es el Paso 4; esto solo dice DÓNDE va cada cosa.
+
+/** Cuentas generales + el interruptor del módulo. Una fila por empresa. */
+export const contabilidadConfig = pgTable('contabilidad_config', {
+  teamId: integer('team_id').primaryKey().references(() => teams.id),
+  /**
+   * Modo "sin contabilidad" del plan. Arranca apagado: entrar a la pantalla no
+   * hace que la empresa empiece a generar asientos. La API se niega a
+   * encenderlo mientras falte configuración.
+   */
+  activa: boolean('activa').notNull().default(false),
+  cuentaPorCobrarId: integer('cuenta_por_cobrar_id').references(() => contabilidadCuentas.id),
+  cuentaItbisId:     integer('cuenta_itbis_id').references(() => contabilidadCuentas.id),
+  cuentaIngresosId:  integer('cuenta_ingresos_id').references(() => contabilidadCuentas.id),
+  cuentaDescuentosId: integer('cuenta_descuentos_id').references(() => contabilidadCuentas.id),
+  cuentaMoraId:      integer('cuenta_mora_id').references(() => contabilidadCuentas.id),
+  /** Pasivo: el sobrante de una nota de crédito es dinero que se le debe al cliente. */
+  cuentaSaldosFavorId: integer('cuenta_saldos_favor_id').references(() => contabilidadCuentas.id),
+  /** Activo: lo que el cliente retuvo deja un crédito fiscal, no un menor ingreso. */
+  cuentaRetencionesId: integer('cuenta_retenciones_id').references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Cuenta por método de cobro.
+ *
+ * `clave` NO es `pagosRecibidos.metodo` tal cual: un cobro por CardNet/Azul se
+ * guarda como `metodo='tarjeta'` y solo se distingue por el vínculo desde
+ * `paymentLinks`. Contablemente son distintos — el cobro en línea no entra al
+ * banco hasta que la pasarela liquida. Lo resuelve `claveContableDePago()`.
+ */
+export const contabilidadConfigMetodosPago = pgTable('contabilidad_config_metodos_pago', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  clave:   varchar('clave', { length: 30 }).notNull(),
+  cuentaId: integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  /** Solo pasarelas: la comisión retenida al liquidar. Es gasto, no menor ingreso. */
+  cuentaComisionId: integer('cuenta_comision_id').references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_config_metodos_team_clave_idx').on(t.teamId, t.clave),
+]);
+
+/**
+ * Override de la cuenta de ingreso por categoría o producto. Exactamente uno de
+ * los dos va seteado (lo obliga un CHECK).
+ *
+ * Resolución: producto → categoría → tipo del producto → ingresos general.
+ */
+export const contabilidadConfigIngresos = pgTable('contabilidad_config_ingresos', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  categoriaId: integer('categoria_id').references(() => categorias.id),
+  productoId:  integer('producto_id').references(() => products.id),
+  cuentaId: integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ─── Contabilidad: asientos (Paso 4) ─────────────────────────────────────────
+// Donde el módulo empieza a escribir números. Partida doble: cada asiento tiene
+// líneas de débito y de crédito que suman lo mismo.
+
+/** Encabezado del asiento. Un origen produce exactamente uno (índice único). */
+export const contabilidadAsientos = pgTable('contabilidad_asientos', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  /** Fecha contable del hecho, no del registro. */
+  fecha:   date('fecha').notNull(),
+  concepto: varchar('concepto', { length: 255 }).notNull(),
+  /** 'factura' | 'pago' | 'nota' | 'anulacion' (los dos últimos, Paso 5). */
+  origenTipo: varchar('origen_tipo', { length: 20 }).notNull(),
+  origenId:   integer('origen_id').notNull(),
+  /** debe == haber == esto. Lo garantiza la aplicación antes de insertar. */
+  totalCents: bigint('total_cents', { mode: 'number' }).notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_asientos_origen_idx').on(t.teamId, t.origenTipo, t.origenId),
+  index('contabilidad_asientos_team_fecha_idx').on(t.teamId, t.fecha),
+]);
+
+/** Apunte. Es débito o crédito, nunca los dos ni ninguno (lo obliga un CHECK). */
+export const contabilidadAsientoLineas = pgTable('contabilidad_asiento_lineas', {
+  id:        serial('id').primaryKey(),
+  asientoId: integer('asiento_id').notNull().references(() => contabilidadAsientos.id),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  cuentaId:  integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  debeCents:  bigint('debe_cents', { mode: 'number' }).notNull().default(0),
+  haberCents: bigint('haber_cents', { mode: 'number' }).notNull().default(0),
+  descripcion: varchar('descripcion', { length: 255 }),
+  orden:      integer('orden').notNull().default(0),
+}, (t) => [
+  index('contabilidad_asiento_lineas_asiento_idx').on(t.asientoId, t.orden),
+  index('contabilidad_asiento_lineas_cuenta_idx').on(t.teamId, t.cuentaId),
+]);
+
+export type ContabilidadAsiento      = typeof contabilidadAsientos.$inferSelect;
+export type ContabilidadAsientoLinea = typeof contabilidadAsientoLineas.$inferSelect;
+
+export type ContabilidadConfig       = typeof contabilidadConfig.$inferSelect;
+export type ContabilidadConfigMetodo = typeof contabilidadConfigMetodosPago.$inferSelect;
+export type ContabilidadConfigIngreso = typeof contabilidadConfigIngresos.$inferSelect;
 
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;

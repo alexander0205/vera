@@ -10,7 +10,7 @@ import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import Chip from '@mui/material/Chip';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { getAgingCxC } from '@/lib/reportes/queries';
 import { ReportShell, KpiCard, Panel } from '@/components/reportes/report-shell';
 import { AgingChart } from '@/components/reportes/charts';
@@ -38,7 +38,7 @@ export default async function CuentasPorCobrarPage() {
   if (!teamId) redirect('/sign-in');
 
   const aging = await getAgingCxC(teamId);
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyRD();
 
   return (
     <ReportShell

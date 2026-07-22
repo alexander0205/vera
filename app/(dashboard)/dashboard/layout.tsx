@@ -11,6 +11,7 @@ import {
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
   PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store, BookOpen,
+  GraduationCap,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleSwitcher } from '@/components/module-switcher';
@@ -18,6 +19,7 @@ import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { moduleUrl } from '@/lib/config/modules';
+import { ProfileDropdown, getInitials, type UserInfo } from '@/components/profile-dropdown';
 
 // MUI imports
 import Box from '@mui/material/Box';
@@ -99,6 +101,11 @@ const GROUPS: NavGroup[] = [
     label: 'Contabilidad',
     icon: BookOpen,
     children: [
+      { href: '/dashboard/contabilidad/cuentas',      label: 'Catálogo de cuentas' },
+      { href: '/dashboard/contabilidad/libro-diario', label: 'Libro diario' },
+      { href: '/dashboard/contabilidad/mayor',        label: 'Mayor general' },
+      { href: '/dashboard/contabilidad/balance',      label: 'Balance de comprobación' },
+      { href: '/dashboard/contabilidad/configuracion', label: 'Configuración contable' },
       { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
       { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
     ],
@@ -154,6 +161,9 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Compras — owner/admin (e-CF de proveedores) o productos:gestionar (compras manuales)
   '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
 
+  // Administración Escolar no vive aquí: es otro módulo, con su propio nav en
+  // /escolar. Desde este sidebar solo se ofrece el salto (ver puedeIrEscolar).
+
   // Caja
   '/dashboard/caja':                  'caja:operar',
   '/dashboard/caja/aprobaciones':     'caja:aprobar',
@@ -166,6 +176,16 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
+
+  // Contabilidad — el grupo llegó de main sin gate: cualquiera con dashboard
+  // veía secuencias y consulta de e-NCF. Se gatea junto con el motor contable.
+  '/dashboard/contabilidad/cuentas':      'contabilidad:ver',
+  '/dashboard/contabilidad/libro-diario':  'contabilidad:ver',
+  '/dashboard/contabilidad/mayor':         'contabilidad:ver',
+  '/dashboard/contabilidad/balance':       'contabilidad:ver',
+  '/dashboard/contabilidad/configuracion': 'contabilidad:ver',
+  '/dashboard/contabilidad/secuencias':   'contabilidad:ver',
+  '/dashboard/contabilidad/consulta-ncf': 'contabilidad:ver',
 
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
@@ -195,12 +215,6 @@ function canAccessHref(
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; }
-interface UserInfo { name: string | null; email: string; platformRole?: string | null; }
-
-function getInitials(name: string | null, email: string) {
-  if (name) return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  return email.slice(0, 2).toUpperCase();
-}
 
 function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => void) {
   useEffect(() => {
@@ -413,122 +427,6 @@ function CompanySwitcher({
 
 // ─── Profile Dropdown ─────────────────────────────────────────────────────────
 
-function ProfileDropdown({ user }: { user: UserInfo | null }) {
-  const router = useRouter();
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const open = Boolean(anchorEl);
-
-  async function handleSignOut() {
-    setAnchorEl(null);
-    await fetch('/api/user', { method: 'DELETE' });
-    router.push('/sign-in');
-    router.refresh();
-  }
-
-  const menuItems = [
-    ...(user?.platformRole === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Panel admin' }] : []),
-    { href: '/dashboard/perfil',      icon: UserCircle, label: 'Mi perfil' },
-    { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
-    { href: '/dashboard/activity',    icon: Activity,   label: 'Actividad' },
-    { href: '/dashboard/security',    icon: Shield,     label: 'Seguridad' },
-  ];
-
-  const initials = user ? getInitials(user.name, user.email) : '?';
-
-  return (
-    <>
-      <Tooltip title={user?.name ?? user?.email ?? ''} placement="bottom">
-        <IconButton
-          onClick={(e) => setAnchorEl(e.currentTarget)}
-          size="small"
-          sx={{ p: 0.5 }}
-        >
-          <Avatar
-            sx={{
-              width:    32,
-              height:   32,
-              bgcolor:  'primary.main',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-            }}
-          >
-            {initials}
-          </Avatar>
-        </IconButton>
-      </Tooltip>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={() => setAnchorEl(null)}
-        onClick={() => setAnchorEl(null)}
-        slotProps={{
-          paper: {
-            elevation: 0,
-            sx: {
-              borderRadius: '12px',
-              border:       '1px solid #e5e7eb',
-              boxShadow:    '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-              minWidth:     220,
-              mt:           0.5,
-            },
-          },
-        }}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-            {user?.name ?? user?.email}
-          </Typography>
-          {user?.name && (
-            <Typography variant="caption" noWrap sx={{ display: 'block', color: 'text.secondary' }}>
-              {user.email}
-            </Typography>
-          )}
-        </Box>
-
-        <Box sx={{ py: 0.5 }}>
-          {menuItems.map(item => (
-            <MenuItem
-              key={item.href}
-              component={Link}
-              href={item.href}
-              sx={{ borderRadius: '6px', mx: 0.5, gap: 1.5, py: '6px', fontSize: '0.875rem' }}
-            >
-              <ListItemIcon sx={{ minWidth: 'auto' }}>
-                <item.icon style={{ width: 16, height: 16, color: '#6b7280' }} />
-              </ListItemIcon>
-              {item.label}
-            </MenuItem>
-          ))}
-        </Box>
-
-        <Divider sx={{ my: 0 }} />
-
-        <Box sx={{ py: 0.5 }}>
-          <MenuItem
-            onClick={handleSignOut}
-            sx={{
-              borderRadius: '6px',
-              mx: 0.5,
-              gap: 1.5,
-              py: '6px',
-              fontSize: '0.875rem',
-              color: 'error.main',
-              '&:hover': { bgcolor: '#fef2f2' },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 'auto' }}>
-              <LogOut style={{ width: 16, height: 16, color: '#ef4444' }} />
-            </ListItemIcon>
-            Cerrar sesión
-          </MenuItem>
-        </Box>
-      </Menu>
-    </>
-  );
-}
 
 // ─── Ambiente Badge ───────────────────────────────────────────────────────────
 
@@ -607,6 +505,11 @@ function SidebarContent({
   const puedeIrPos = (activeTeam?.posHabilitado ?? false)
     && (permsLoading || modules.includes('pos'))
     && can('/pos');
+
+  // Mismo trato para Administración Escolar. A diferencia del POS no tiene
+  // flag propio en teams: manda `modules` (empresa ∩ rol), así que mientras
+  // cargan los permisos NO se muestra — es opt-in y la mayoría no lo tiene.
+  const puedeIrEscolar = !permsLoading && modules.includes('escolar');
 
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
@@ -930,6 +833,28 @@ function SidebarContent({
             >
               <Store style={{ width: 16, height: 16, flexShrink: 0 }} />
               <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Punto de Venta</Box>
+              <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
+            </Box>
+          </>
+        )}
+
+        {/* Administración Escolar: también otro módulo. */}
+        {puedeIrEscolar && (
+          <>
+            {!puedeIrPos && <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />}
+            <Box
+              component={Link}
+              href={moduleUrl('escolar')}
+              onClick={onClose}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.875,
+                borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
+                color: 'rgba(204,251,241,0.85)', transition: 'all 0.15s',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+              }}
+            >
+              <GraduationCap style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Administración Escolar</Box>
               <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
             </Box>
           </>

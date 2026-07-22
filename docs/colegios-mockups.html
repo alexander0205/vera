@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mockups - Modulo Colegios</title>
+  <style>
+    :root {
+      --bg: #f5f7f8;
+      --panel: #ffffff;
+      --ink: #111827;
+      --muted: #6b7280;
+      --line: #dfe5e8;
+      --line-strong: #cbd5da;
+      --teal: #0f766e;
+      --teal-soft: #e7f6f3;
+      --amber: #b45309;
+      --amber-soft: #fff7ed;
+      --red: #b91c1c;
+      --red-soft: #fef2f2;
+      --green: #047857;
+      --green-soft: #ecfdf5;
+      --blue: #1d4ed8;
+      --blue-soft: #eff6ff;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      width: 1440px;
+      min-height: 980px;
+      padding: 32px;
+      background: var(--bg);
+    }
+
+    .mockup {
+      width: 1376px;
+      min-height: 860px;
+      display: grid;
+      grid-template-columns: 248px 1fr;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .sidebar {
+      background: #fbfcfc;
+      border-right: 1px solid var(--line);
+      padding: 20px 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 8px 20px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--teal);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+    }
+
+    .brand strong { display: block; font-size: 15px; }
+    .brand span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .nav-label {
+      padding: 16px 10px 7px;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #8b949e;
+      font-weight: 700;
+    }
+
+    .nav-item {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      border-radius: 7px;
+      color: #374151;
+      font-size: 14px;
+      margin-bottom: 3px;
+    }
+
+    .nav-item svg { width: 17px; height: 17px; color: #64748b; }
+    .nav-item.active { background: var(--teal-soft); color: var(--teal); font-weight: 700; }
+    .nav-item.active svg { color: var(--teal); }
+    .nav-sub { margin-left: 28px; margin-top: 4px; margin-bottom: 8px; }
+    .nav-sub div {
+      color: #4b5563;
+      font-size: 13px;
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+    .nav-sub div.active { background: white; color: var(--teal); font-weight: 700; border: 1px solid var(--line); }
+
+    .content {
+      background: var(--bg);
+      padding: 24px;
+    }
+
+    .topbar {
+      height: 64px;
+      background: white;
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      margin-bottom: 18px;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .title p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .actions { display: flex; gap: 10px; align-items: center; }
+    .button {
+      height: 38px;
+      border: 1px solid var(--line-strong);
+      background: white;
+      border-radius: 7px;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #374151;
+    }
+
+    .button.primary {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: white;
+    }
+
+    .button svg { width: 16px; height: 16px; }
+
+    .grid-main {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 18px;
+    }
+
+    .panel {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .panel.pad { padding: 18px; }
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr 160px 160px;
+      gap: 10px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfc;
+    }
+
+    .field {
+      height: 38px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: white;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #4b5563;
+      font-size: 13px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px;
+    }
+
+    th {
+      color: #6b7280;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: .03em;
+      background: #fbfcfc;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 12px 14px;
+    }
+
+    td {
+      border-bottom: 1px solid #edf1f3;
+      padding: 13px 14px;
+      vertical-align: middle;
+    }
+
+    tr.selected { background: #f0fdfa; }
+    .student-cell { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 12px;
+      flex: 0 0 auto;
+    }
+
+    .name strong { display: block; font-size: 13px; }
+    .name span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .badge.green { background: var(--green-soft); color: var(--green); border-color: #bbf7d0; }
+    .badge.red { background: var(--red-soft); color: var(--red); border-color: #fecaca; }
+    .badge.amber { background: var(--amber-soft); color: var(--amber); border-color: #fed7aa; }
+    .badge.blue { background: var(--blue-soft); color: var(--blue); border-color: #bfdbfe; }
+    .badge.gray { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
+
+    .student-card {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .profile-head {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .profile-head .avatar {
+      width: 52px;
+      height: 52px;
+      font-size: 15px;
+    }
+
+    .profile-head h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .profile-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 12px;
+      background: #fbfcfc;
+    }
+
+    .metric label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .metric strong {
+      font-size: 15px;
+      display: block;
+    }
+
+    .info-list {
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 13px;
+    }
+
+    .info-row span:first-child { color: var(--muted); }
+    .info-row strong { text-align: right; }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 10px 1fr auto;
+      gap: 10px;
+      align-items: start;
+      font-size: 13px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--teal);
+      margin-top: 5px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 18px;
+      background: white;
+    }
+
+    .tab {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-weight: 700;
+      color: #4b5563;
+      font-size: 13px;
+      border-bottom: 2px solid transparent;
+    }
+
+    .tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 18px;
+    }
+
+    .section-title {
+      margin: 0 0 12px;
+      font-size: 14px;
+      color: #374151;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .form-grid .wide { grid-column: 1 / -1; }
+    .input-label {
+      display: block;
+      font-size: 12px;
+      color: #4b5563;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .input {
+      height: 40px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: white;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      color: #374151;
+      font-size: 13px;
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .strip-card {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .strip-card span {
+      font-size: 12px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .strip-card strong {
+      font-size: 22px;
+      display: block;
+    }
+
+    .course-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+    }
+
+    .course-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+      padding: 16px;
+    }
+
+    .course-card h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .mini-list {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: #4b5563;
+    }
+
+    .mini-list div {
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid #eef2f4;
+      padding-top: 8px;
+    }
+
+    .mockup-caption {
+      font-size: 22px;
+      font-weight: 800;
+      margin: 0 0 18px;
+      color: #111827;
+    }
+
+    @media print {
+      .page { page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+  <section id="mockup-students" class="page">
+    <h1 class="mockup-caption">Mockup 1 - Modulo Colegios: listado con ficha del estudiante</h1>
+    <div class="mockup">
+      <aside class="sidebar">
+        <div class="brand"><div class="brand-mark">V</div><div><strong>Vera</strong><span>Colegio Demo</span></div></div>
+        <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h18M12 3v18"/></svg>Inicio</div>
+        <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Contactos</div>
+        <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16"/><path d="M8 7h8M8 11h8M8 15h4"/></svg>Colegios</div>
+        <div class="nav-sub"><div class="active">Estudiantes</div><div>Matrículas</div><div>Cargos y deudas</div><div>Pagos escolares</div></div>
+        <div class="nav-label">Ingresos</div>
+        <div class="nav-item">Facturas de venta</div>
+        <div class="nav-item">Cuentas por cobrar</div>
+        <div class="nav-item">Pagos recibidos</div>
+        <div class="nav-label">Configuración</div>
+        <div class="nav-item">Mi empresa</div>
+        <div class="nav-item">Maestros</div>
+      </aside>
+      <main class="content">
+        <div class="topbar">
+          <div class="title"><h1>Estudiantes</h1><p>Gobernanza escolar, matrículas, tutores, pagos y deudas.</p></div>
+          <div class="actions"><button class="button">Importar</button><button class="button primary">+ Nuevo estudiante</button></div>
+        </div>
+        <div class="summary-strip">
+          <div class="strip-card"><span>Estudiantes activos</span><strong>428</strong></div>
+          <div class="strip-card"><span>Periodo activo</span><strong>2025-2026</strong></div>
+          <div class="strip-card"><span>Balance pendiente</span><strong>RD$ 1.24M</strong></div>
+          <div class="strip-card"><span>Morosos</span><strong>73</strong></div>
+        </div>
+        <div class="grid-main">
+          <section class="panel">
+            <div class="panel-header"><h2>Directorio de estudiantes</h2><span class="badge blue">428 registros</span></div>
+            <div class="search-row"><div class="field">Buscar por nombre, codigo o tutor...</div><div class="field">Curso: Todos</div><div class="field">Estado: Activos</div></div>
+            <table>
+              <thead><tr><th>Estudiante</th><th>Curso</th><th>Tutor</th><th>Balance</th><th>Estado</th></tr></thead>
+              <tbody>
+                <tr class="selected"><td><div class="student-cell"><div class="avatar">AP</div><div class="name"><strong>Ana Maria Perez</strong><span>EST-00031</span></div></div></td><td>Segundo A</td><td>Carlos Perez</td><td><span class="badge red">RD$ 17,000</span></td><td><span class="badge green">Activa</span></td></tr>
+                <tr><td><div class="student-cell"><div class="avatar">LG</div><div class="name"><strong>Luis Gomez</strong><span>EST-00032</span></div></div></td><td>Primero B</td><td>Marta Gomez</td><td><span class="badge green">Al dia</span></td><td><span class="badge green">Activa</span></td></tr>
+                <tr><td><div class="student-cell"><div class="avatar">RM</div><div class="name"><strong>Rafael Mateo</strong><span>EST-00033</span></div></div></td><td>Tercero A</td><td>Julio Mateo</td><td><span class="badge amber">RD$ 8,500</span></td><td><span class="badge green">Activa</span></td></tr>
+                <tr><td><div class="student-cell"><div class="avatar">SC</div><div class="name"><strong>Sofia Cruz</strong><span>EST-00034</span></div></div></td><td>Quinto C</td><td>Laura Cruz</td><td><span class="badge green">Al dia</span></td><td><span class="badge green">Activa</span></td></tr>
+                <tr><td><div class="student-cell"><div class="avatar">DR</div><div class="name"><strong>Diego Rosario</strong><span>EST-00035</span></div></div></td><td>Segundo B</td><td>Natalia Rosario</td><td><span class="badge red">RD$ 25,500</span></td><td><span class="badge green">Activa</span></td></tr>
+              </tbody>
+            </table>
+          </section>
+          <aside class="panel pad student-card">
+            <div class="profile-head"><div class="avatar">AP</div><div><h2>Ana Maria Perez</h2><p>EST-00031 · Activa</p></div></div>
+            <div class="metric-grid">
+              <div class="metric"><label>Matricula</label><strong>2025-2026</strong></div>
+              <div class="metric"><label>Curso</label><strong>Segundo A</strong></div>
+              <div class="metric"><label>Deuda total</label><strong style="color:var(--red)">RD$ 17,000</strong></div>
+              <div class="metric"><label>Ultimo pago</label><strong>03 jul 2026</strong></div>
+            </div>
+            <div class="info-list">
+              <div class="info-row"><span>Tutor responsable</span><strong>Carlos Perez</strong></div>
+              <div class="info-row"><span>Relacion</span><strong>Padre</strong></div>
+              <div class="info-row"><span>Telefono</span><strong>809-555-1200</strong></div>
+              <div class="info-row"><span>Email</span><strong>carlos@email.com</strong></div>
+            </div>
+            <h3 class="section-title">Pendientes</h3>
+            <div class="timeline">
+              <div class="timeline-item"><div class="dot"></div><div><strong>Mensualidad septiembre</strong><br><span style="color:var(--muted)">Vence 15/09/2025</span></div><strong>RD$ 8,500</strong></div>
+              <div class="timeline-item"><div class="dot"></div><div><strong>Mensualidad octubre</strong><br><span style="color:var(--muted)">Vence 15/10/2025</span></div><strong>RD$ 8,500</strong></div>
+            </div>
+            <button class="button primary" style="justify-content:center">Registrar pago</button>
+            <button class="button" style="justify-content:center">Abrir perfil completo</button>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <section id="mockup-profile" class="page">
+    <h1 class="mockup-caption">Mockup 2 - Perfil completo del estudiante</h1>
+    <div class="mockup">
+      <aside class="sidebar">
+        <div class="brand"><div class="brand-mark">V</div><div><strong>Vera</strong><span>Colegio Demo</span></div></div>
+        <div class="nav-item">Inicio</div><div class="nav-item">Contactos</div><div class="nav-item active">Colegios</div>
+        <div class="nav-sub"><div class="active">Estudiantes</div><div>Matrículas</div><div>Cargos y deudas</div><div>Pagos escolares</div></div>
+      </aside>
+      <main class="content">
+        <div class="topbar">
+          <div class="title"><h1>Ana Maria Perez</h1><p>EST-00031 · Segundo A · Periodo 2025-2026</p></div>
+          <div class="actions"><button class="button">Editar</button><button class="button primary">Registrar pago</button></div>
+        </div>
+        <div class="two-col">
+          <aside class="panel pad student-card">
+            <div class="profile-head"><div class="avatar">AP</div><div><h2>Ana Maria Perez</h2><p>Fecha nac.: 12/03/2018</p></div></div>
+            <div class="metric"><label>Balance pendiente</label><strong style="font-size:24px;color:var(--red)">RD$ 17,000</strong></div>
+            <div class="info-list">
+              <div class="info-row"><span>Matricula activa</span><strong>MAT-2025-0031</strong></div>
+              <div class="info-row"><span>Periodo</span><strong>2025-2026</strong></div>
+              <div class="info-row"><span>Curso</span><strong>Segundo A</strong></div>
+              <div class="info-row"><span>Estado</span><strong>Activa</strong></div>
+            </div>
+            <h3 class="section-title">Tutor de pago</h3>
+            <div class="metric">
+              <strong>Carlos Perez</strong>
+              <p style="margin:6px 0 0;color:var(--muted);font-size:13px">Padre · 809-555-1200<br>carlos@email.com</p>
+            </div>
+            <h3 class="section-title">Otros tutores</h3>
+            <div class="mini-list"><div><span>Laura Diaz</span><strong>Madre</strong></div><div><span>Teresa Perez</span><strong>Cuidadora</strong></div></div>
+          </aside>
+          <section class="panel">
+            <div class="tabs"><div class="tab active">Deudas</div><div class="tab">Pagos</div><div class="tab">Matriculas</div><div class="tab">Tutores</div><div class="tab">Historial</div></div>
+            <div class="panel-header"><h2>Cargos pendientes</h2><span class="badge red">2 vencidos</span></div>
+            <table>
+              <thead><tr><th>Concepto</th><th>Periodo</th><th>Mes</th><th>Vencimiento</th><th>Monto</th><th>Saldo</th></tr></thead>
+              <tbody>
+                <tr><td>Mensualidad</td><td>2025-2026</td><td>Septiembre</td><td>15/09/2025</td><td>RD$ 8,500</td><td><span class="badge red">RD$ 8,500</span></td></tr>
+                <tr><td>Mensualidad</td><td>2025-2026</td><td>Octubre</td><td>15/10/2025</td><td>RD$ 8,500</td><td><span class="badge amber">RD$ 8,500</span></td></tr>
+                <tr><td>Inscripcion</td><td>2025-2026</td><td>-</td><td>01/08/2025</td><td>RD$ 12,000</td><td><span class="badge green">Pagado</span></td></tr>
+              </tbody>
+            </table>
+            <div class="panel-header"><h2>Pagos recientes</h2><span></span></div>
+            <table>
+              <thead><tr><th>Fecha</th><th>Aplicado a</th><th>Metodo</th><th>Factura</th><th>Monto</th></tr></thead>
+              <tbody>
+                <tr><td>03/07/2026</td><td>Inscripcion</td><td>Transferencia</td><td>BOR-00412</td><td>RD$ 12,000</td></tr>
+                <tr><td>28/06/2026</td><td>Mensualidad agosto</td><td>Tarjeta</td><td>E310000142</td><td>RD$ 8,500</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <section id="mockup-charges" class="page">
+    <h1 class="mockup-caption">Mockup 3 - Generar cargos escolares por periodo, curso y mes</h1>
+    <div class="mockup">
+      <aside class="sidebar">
+        <div class="brand"><div class="brand-mark">V</div><div><strong>Vera</strong><span>Colegio Demo</span></div></div>
+        <div class="nav-item">Inicio</div><div class="nav-item">Contactos</div><div class="nav-item active">Colegios</div>
+        <div class="nav-sub"><div>Estudiantes</div><div>Matrículas</div><div class="active">Cargos y deudas</div><div>Pagos escolares</div></div>
+      </aside>
+      <main class="content">
+        <div class="topbar">
+          <div class="title"><h1>Cargos y deudas</h1><p>Genera mensualidades, inscripciones y otros cargos asociados a la matricula.</p></div>
+          <div class="actions"><button class="button">Ver deudas</button><button class="button primary">Generar cargos</button></div>
+        </div>
+        <div class="two-col">
+          <section class="panel pad">
+            <h2 style="margin:0 0 18px;font-size:18px">Generar cargos masivos</h2>
+            <div class="form-grid">
+              <label><span class="input-label">Periodo escolar</span><div class="input">2025-2026</div></label>
+              <label><span class="input-label">Curso</span><div class="input">Todos los cursos</div></label>
+              <label><span class="input-label">Concepto</span><div class="input">Mensualidad</div></label>
+              <label><span class="input-label">Mes</span><div class="input">Septiembre 2025</div></label>
+              <label><span class="input-label">Monto</span><div class="input">RD$ 8,500.00</div></label>
+              <label><span class="input-label">Vencimiento</span><div class="input">15/09/2025</div></label>
+              <label class="wide"><span class="input-label">Notas internas</span><div class="input">Cargo mensual generado para estudiantes matriculados activos.</div></label>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:24px"><button class="button">Cancelar</button><button class="button primary">Generar 416 cargos</button></div>
+          </section>
+          <aside class="panel pad">
+            <h2 style="margin:0 0 18px;font-size:18px">Vista previa</h2>
+            <div class="metric-grid">
+              <div class="metric"><label>Matriculas activas</label><strong>428</strong></div>
+              <div class="metric"><label>Ya existentes</label><strong>12</strong></div>
+              <div class="metric"><label>Nuevos cargos</label><strong>416</strong></div>
+              <div class="metric"><label>Total a cobrar</label><strong>RD$ 3.54M</strong></div>
+            </div>
+            <h3 class="section-title" style="margin-top:18px">Distribucion por curso</h3>
+            <div class="mini-list">
+              <div><span>Primero A</span><strong>31 cargos</strong></div>
+              <div><span>Primero B</span><strong>29 cargos</strong></div>
+              <div><span>Segundo A</span><strong>34 cargos</strong></div>
+              <div><span>Segundo B</span><strong>33 cargos</strong></div>
+              <div><span>Tercero A</span><strong>30 cargos</strong></div>
+            </div>
+            <div class="metric" style="margin-top:18px;background:var(--amber-soft);border-color:#fed7aa">
+              <strong style="color:var(--amber)">Validacion</strong>
+              <p style="margin:6px 0 0;color:#92400e;font-size:13px">No se duplicaran cargos que ya existan para el mismo estudiante, concepto, mes y periodo.</p>
+            </div>
+          </aside>
+        </div>
+        <section class="panel" style="margin-top:18px">
+          <div class="panel-header"><h2>Cargos recientes</h2><span class="badge blue">Septiembre 2025</span></div>
+          <table><thead><tr><th>Estudiante</th><th>Curso</th><th>Concepto</th><th>Mes</th><th>Estado</th><th>Saldo</th></tr></thead><tbody>
+            <tr><td>Ana Maria Perez</td><td>Segundo A</td><td>Mensualidad</td><td>Septiembre</td><td><span class="badge red">Vencido</span></td><td>RD$ 8,500</td></tr>
+            <tr><td>Luis Gomez</td><td>Primero B</td><td>Mensualidad</td><td>Septiembre</td><td><span class="badge green">Pagado</span></td><td>RD$ 0</td></tr>
+            <tr><td>Rafael Mateo</td><td>Tercero A</td><td>Mensualidad</td><td>Septiembre</td><td><span class="badge amber">Parcial</span></td><td>RD$ 4,000</td></tr>
+          </tbody></table>
+        </section>
+      </main>
+    </div>
+  </section>
+
+  <section id="mockup-config" class="page">
+    <h1 class="mockup-caption">Mockup 4 - Configuracion escolar: periodos, cursos y materias</h1>
+    <div class="mockup">
+      <aside class="sidebar">
+        <div class="brand"><div class="brand-mark">V</div><div><strong>Vera</strong><span>Colegio Demo</span></div></div>
+        <div class="nav-item">Inicio</div><div class="nav-item">Contactos</div><div class="nav-item active">Colegios</div>
+        <div class="nav-sub"><div>Estudiantes</div><div>Matrículas</div><div>Cargos y deudas</div><div>Pagos escolares</div><div class="active">Configuración</div></div>
+      </aside>
+      <main class="content">
+        <div class="topbar">
+          <div class="title"><h1>Configuracion de colegios</h1><p>Solo administradores. Define la estructura academica y financiera inicial.</p></div>
+          <div class="actions"><button class="button">Historial</button><button class="button primary">Guardar cambios</button></div>
+        </div>
+        <div class="summary-strip">
+          <div class="strip-card"><span>Periodo activo</span><strong>2025-2026</strong></div>
+          <div class="strip-card"><span>Cursos</span><strong>18</strong></div>
+          <div class="strip-card"><span>Materias</span><strong>42</strong></div>
+          <div class="strip-card"><span>Conceptos de pago</span><strong>7</strong></div>
+        </div>
+        <div class="course-grid">
+          <section class="course-card">
+            <h3>Periodos escolares</h3>
+            <div class="mini-list">
+              <div><span>2025-2026</span><strong class="badge green">Activo</strong></div>
+              <div><span>2026-2027</span><strong class="badge gray">Borrador</strong></div>
+              <div><span>2027-2028</span><strong class="badge gray">Borrador</strong></div>
+            </div>
+            <button class="button" style="width:100%;justify-content:center;margin-top:16px">+ Nuevo periodo</button>
+          </section>
+          <section class="course-card">
+            <h3>Cursos y grados</h3>
+            <div class="mini-list">
+              <div><span>Primero A</span><strong>31 estudiantes</strong></div>
+              <div><span>Primero B</span><strong>29 estudiantes</strong></div>
+              <div><span>Segundo A</span><strong>34 estudiantes</strong></div>
+              <div><span>Segundo B</span><strong>33 estudiantes</strong></div>
+            </div>
+            <button class="button" style="width:100%;justify-content:center;margin-top:16px">+ Nuevo curso</button>
+          </section>
+          <section class="course-card">
+            <h3>Conceptos de pago</h3>
+            <div class="mini-list">
+              <div><span>Inscripcion</span><strong>Unico</strong></div>
+              <div><span>Mensualidad</span><strong>Mensual</strong></div>
+              <div><span>Actividad</span><strong>Variable</strong></div>
+              <div><span>Uniforme</span><strong>Variable</strong></div>
+            </div>
+            <button class="button" style="width:100%;justify-content:center;margin-top:16px">+ Nuevo concepto</button>
+          </section>
+        </div>
+        <section class="panel" style="margin-top:18px">
+          <div class="panel-header"><h2>Materias</h2><button class="button">+ Nueva materia</button></div>
+          <table><thead><tr><th>Materia</th><th>Aplica a</th><th>Maestro asignado</th><th>Estado</th></tr></thead><tbody>
+            <tr><td>Matematicas</td><td>Primaria completa</td><td>Maria Fernandez</td><td><span class="badge green">Activa</span></td></tr>
+            <tr><td>Lengua Espanola</td><td>Primaria completa</td><td>Ramon Castillo</td><td><span class="badge green">Activa</span></td></tr>
+            <tr><td>Ciencias Sociales</td><td>Segundo - Sexto</td><td>Laura Nunez</td><td><span class="badge green">Activa</span></td></tr>
+          </tbody></table>
+        </section>
+      </main>
+    </div>
+  </section>
+</body>
+</html>

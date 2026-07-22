@@ -127,6 +127,7 @@ export default function FacturaRecurrenteDetallePage() {
   const [error, setError]         = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
   const [generandoPeriodo, setGenerandoPeriodo] = useState<string | null>(null);
+  const [generandoTodos, setGenerandoTodos] = useState(false);
   const [canOperate, setCanOperate] = useState(true);
   const didLoad = useRef(false);
 
@@ -176,6 +177,39 @@ export default function FacturaRecurrenteDetallePage() {
     }
   }
 
+  // Genera EN SECUENCIA todos los períodos pendientes (sin factura). Sirve para
+  // adelantar varios meses de golpe (p.ej. un padre que paga 6 meses juntos):
+  // se crean N facturas borrador que luego se cobran juntas con "Cobrar varias".
+  async function generarPendientes(fechas: string[]) {
+    if (!id || fechas.length === 0) return;
+    setGenerandoTodos(true);
+    let ok = 0;
+    let ultimoError: string | null = null;
+    try {
+      for (const periodo of fechas) {
+        try {
+          const res = await fetch(`/api/facturas-recurrentes/${id}/generar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ periodo }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (res.ok) ok += 1;
+          else if (res.status !== 409) ultimoError = json.error ?? 'Error generando';
+          // 409 = ya generada: se ignora y se sigue.
+        } catch {
+          ultimoError = 'Error de conexión';
+        }
+      }
+      if (ok > 0) toast.success(`${ok} factura(s) generada(s)`);
+      if (ultimoError) toast.error(ultimoError);
+      cargar();
+    } finally {
+      setGenerandoTodos(false);
+    }
+  }
+
+  // ── Estados de carga / error ──────────────────────────────────────────────
   if (loading) {
     return (
       <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -198,6 +232,8 @@ export default function FacturaRecurrenteDetallePage() {
 
   const fr  = data.facturaRecurrente;
   const rango = `${fmtFechaCorta(fr.fechaInicio)} – ${fr.fechaFin ? fmtFechaCorta(fr.fechaFin) : 'sin fin'}`;
+  // Períodos sin factura generada — los que "Generar pendientes" adelanta.
+  const pendientes = data.periodos.filter(p => !p.factura);
 
   return (
     <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -262,9 +298,27 @@ export default function FacturaRecurrenteDetallePage() {
             <CalendarClock size={16} color="#0d9488" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Calendario de pagos</Typography>
           </Box>
-          <IconButton size="small" onClick={cargar} sx={{ color: '#6b7280' }}>
-            <RefreshCw size={16} />
-          </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Adelantar varios meses de golpe (p.ej. un padre que paga el
+                semestre): genera las N borrador y luego se cobran juntas. */}
+            {canOperate && pendientes.length > 1 && (
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={generandoTodos}
+                startIcon={generandoTodos
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <Zap size={14} />}
+                onClick={() => generarPendientes(pendientes.map(p => p.fecha))}
+                sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+              >
+                {generandoTodos ? 'Generando…' : `Generar pendientes (${pendientes.length})`}
+              </Button>
+            )}
+            <IconButton size="small" onClick={cargar} sx={{ color: '#6b7280' }}>
+              <RefreshCw size={16} />
+            </IconButton>
+          </Box>
         </Box>
         <Box sx={{ px: 3, py: 2.5 }}>
           {fr.estado !== 'activa' && (

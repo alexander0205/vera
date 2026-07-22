@@ -17,12 +17,23 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams, type Team } from '@/lib/db/schema';
 import { stripe } from '@/lib/payments/stripe';
-import { MODULES, type ModuleKey } from '@/lib/config/modules';
+import { MODULES, sanitizeModules, type ModuleKey } from '@/lib/config/modules';
 
 export const MODULE_PRICE_IDS: Record<ModuleKey, string> = {
   facturacion: process.env.STRIPE_PRICE_MODULO_FACTURACION ?? '',
   pos:         process.env.STRIPE_PRICE_MODULO_POS ?? '',
+  // Administración Escolar no tiene price: se habilita a mano (modulosOverride
+  // desde el panel admin). Ver isBillableModule.
+  escolar:     '',
 };
+
+/**
+ * ¿Este módulo se cobra por Stripe? Un módulo sin price se administra a mano y
+ * NUNCA debe derivarse (ni borrarse) desde una suscripción.
+ */
+export function isBillableModule(mod: ModuleKey): boolean {
+  return Boolean(MODULE_PRICE_IDS[mod]);
+}
 
 /** ¿El billing por módulo está configurado en este deploy? */
 export function moduleBillingEnabled(): boolean {
@@ -65,13 +76,22 @@ export async function syncModulesFromSubscription(
   const subMods = modulesFromSubscription(subscription);
   if (subMods.length === 0) return; // suscripción de plan clásico — no opina sobre módulos
 
+  // Módulos sin price (ej. escolar) se habilitan a mano; la suscripción no
+  // opina sobre ellos, así que se conservan tal cual estaban.
+  const [row] = await db
+    .select({ habilitados: teams.modulosHabilitados })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  const manuales = sanitizeModules(row?.habilitados).filter(m => !isBillableModule(m));
+
   const status = subscription.status;
   let next: ModuleKey[];
   if (status === 'active' || status === 'trialing' || status === 'past_due') {
     // past_due: gracia — banner en UI, sin corte inmediato.
-    next = Array.from(new Set<ModuleKey>(['facturacion', ...subMods]));
+    next = Array.from(new Set<ModuleKey>(['facturacion', ...subMods, ...manuales]));
   } else {
-    next = ['facturacion'];
+    next = Array.from(new Set<ModuleKey>(['facturacion', ...manuales]));
   }
 
   await db.update(teams)
@@ -96,7 +116,11 @@ export async function activarModulo(
   actorUserId: number,
 ): Promise<{ ok: true } | { checkoutUrl: string }> {
   const priceId = MODULE_PRICE_IDS[mod];
-  if (!priceId) throw new Error('Billing por módulo no configurado');
+  if (!priceId) {
+    // Sin price no hay nada que cobrar: el módulo se habilita desde el panel
+    // admin (modulosOverride), no por checkout.
+    throw new Error('Este módulo no se vende por Stripe: habilítalo desde el panel de administración');
+  }
 
   if (team.stripeSubscriptionId) {
     const sub = await stripe.subscriptions.retrieve(team.stripeSubscriptionId, {
@@ -136,7 +160,9 @@ export async function activarModulo(
 export async function desactivarModulo(team: Team, mod: ModuleKey): Promise<void> {
   if (mod === 'facturacion') throw new Error('El módulo Facturación no se puede desactivar');
   const priceId = MODULE_PRICE_IDS[mod];
-  if (!priceId) throw new Error('Billing por módulo no configurado');
+  if (!priceId) {
+    throw new Error('Este módulo no se vende por Stripe: desactívalo desde el panel de administración');
+  }
   if (!team.stripeSubscriptionId) return;
 
   const sub = await stripe.subscriptions.retrieve(team.stripeSubscriptionId, {

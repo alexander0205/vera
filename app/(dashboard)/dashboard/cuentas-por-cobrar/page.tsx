@@ -4,46 +4,22 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  Wallet, Loader2, Archive, Wallet2,
+  X, Wallet, Loader2, Archive, Wallet2, PanelRightOpen, Download, Mail,
 } from 'lucide-react';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import MuiButton from '@mui/material/Button';
-import MuiTextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Alert from '@mui/material/Alert';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import Alert from '@mui/material/Alert';
-import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
-import CircularProgress from '@mui/material/CircularProgress';
-
-interface Cuenta {
-  id:                   number;
-  clientId:             number | null;
-  encf:                 string;
-  codigo:               string | null;
-  tipoEcf:              string;
-  fechaEmision:         string;
-  fechaLimitePago:      string | null;
-  rncComprador:         string | null;
-  razonSocialComprador: string | null;
-  emailComprador:       string | null;
-  estado:               string;
-  montoTotal:           number;
-  totalItbis:           number;
-  pagado:               number;
-  saldo:                number;
-  saldoFactura:         number;
-  moraSaldo:            number;
-  moraNotas?:           { id: number; codigo: string | null; saldo: number }[];
-  vencida:              boolean;
-  diasVencido:          number;
-}
+import { DataTable, type DataTableColumn, type RowAction, type BulkAction } from '@/components/data-table';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
+import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
+import { RecordatoriosModal, MAX_POR_LOTE } from '@/components/cuentas-por-cobrar/RecordatoriosModal';
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
@@ -54,36 +30,100 @@ interface Totales {
   countVencidas: number;
 }
 
-function StatCard({ icon, label, value, color }: {
-  icon: React.ReactNode; label: string; value: string; color?: string;
-}) {
-  return (
-    <Box sx={{ bgcolor: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.disabled', mb: 1 }}>
-        {icon}
-        <Typography variant="caption" sx={{ fontWeight: 600 }}>{label}</Typography>
-      </Box>
-      <Typography variant="h6" sx={{ fontWeight: 700, color: color ?? 'text.primary' }}>{value}</Typography>
-    </Box>
-  );
+type Cubeta = 'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas';
+type Antiguedad = Record<Cubeta, { saldo: number; count: number }>;
+
+/** Promesas de pago del team completo (no de la cartera filtrada). */
+interface Promesas {
+  pendientes:     number;
+  incumplidas:    number;
+  montoPendiente: number;
 }
 
+/** Cubetas en orden de urgencia creciente, con su etiqueta y color. */
+const CUBETAS: { id: Cubeta; label: string; hint: string; hover: string; activoBorder: string; activoBg: string }[] = [
+  { id: 'porVencer', label: 'Por vencer', hint: 'aún no vencen',
+    hover: '#5eead4', activoBorder: '#14b8a6', activoBg: '#f0fdfa' },
+  { id: 'd1a30',     label: '1-30 días',  hint: 'de atraso',
+    hover: '#fcd34d', activoBorder: '#f59e0b', activoBg: '#fffbeb' },
+  { id: 'd31a60',    label: '31-60 días', hint: 'de atraso',
+    hover: '#fdba74', activoBorder: '#f97316', activoBg: '#fff7ed' },
+  { id: 'd61a90',    label: '61-90 días', hint: 'de atraso',
+    hover: '#fb923c', activoBorder: '#ea580c', activoBg: '#fff7ed' },
+  { id: 'd90mas',    label: '+90 días',   hint: 'de atraso',
+    hover: '#fca5a5', activoBorder: '#ef4444', activoBg: '#fef2f2' },
+];
+
+const ANTIGUEDAD_VACIA: Antiguedad = {
+  porVencer: { saldo: 0, count: 0 }, d1a30: { saldo: 0, count: 0 },
+  d31a60:    { saldo: 0, count: 0 }, d61a90: { saldo: 0, count: 0 },
+  d90mas:    { saldo: 0, count: 0 },
+};
+
+// ─── Componente principal ──────────────────────────────────────────────────────
+
+// Al agrupar por cliente se piden más filas de una vez: agrupar solo la página
+// visible daría grupos partidos. Igual hay techo — el aviso lo dice si se corta.
+const PAGE_SIZE          = 25;
+const PAGE_SIZE_AGRUPADO = 500;
+
 export default function CuentasPorCobrarPage() {
-  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
+  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales; antiguedad: Antiguedad; promesas?: Promesas } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  // Filtros 100% client-side sobre el dataset cargado (AR es acotado).
+  // Filtros, orden y paginación son server-side: el saldo se calcula en SQL, así
+  // que filtrar en memoria mostraría totales de la página en vez de la cartera.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    cliente: '', tipoDoc: '', estado: '', agrupar: '',
+    cliente: '', tipoDoc: '', estado: '', agrupar: '', orden: '',
   });
+  const [page, setPage] = useState(1);
+  const [cubeta, setCubeta] = useState<Cubeta | null>(null);
+  const [detalle, setDetalle] = useState<Cuenta | null>(null);
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
+  // Cuentas a las que se les va a mandar recordatorio. null = modal cerrado.
+  const [recordatorioDocs, setRecordatorioDocs] = useState<number[] | null>(null);
+  const [avisoLote, setAvisoLote] = useState<string | null>(null);
+
+  const agrupar  = filterValues.agrupar === 'cliente';
+  const pageSize = agrupar ? PAGE_SIZE_AGRUPADO : PAGE_SIZE;
+
+  // La búsqueda dispara un fetch por tecla; se espera a que el usuario pare.
+  const [busqueda, setBusqueda] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBusqueda(filterValues.cliente ?? ''), 300);
+    return () => clearTimeout(t);
+  }, [filterValues.cliente]);
+
+  // Cualquier cambio de filtro invalida la página actual. Se resetea en el mismo
+  // handler que cambia el filtro (no en un efecto aparte): si no, estando en la
+  // página 2 el cambio disparaba DOS consultas — una con el offset viejo y otra
+  // tras el reset. React agrupa ambos setState en un solo render.
+  const cambiarFiltros = useCallback((v: Record<string, string>) => {
+    setFilterValues(v);
+    setPage(1);
+  }, []);
+
+  // Clic en una tarjeta de antigüedad: alterna esa cubeta y vuelve a la página 1.
+  const alternarCubeta = useCallback((c: Cubeta) => {
+    setCubeta(prev => (prev === c ? null : c));
+    setPage(1);
+  }, []);
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/cuentas-por-cobrar');
+      const sp = new URLSearchParams({
+        limit:  String(pageSize),
+        offset: String((page - 1) * pageSize),
+        ...(busqueda.trim()        && { search:  busqueda.trim() }),
+        ...(filterValues.tipoDoc   && { tipoDoc: filterValues.tipoDoc }),
+        ...(filterValues.estado    && { estado:  filterValues.estado }),
+        ...(filterValues.orden     && { orden:   filterValues.orden }),
+        ...(cubeta                 && { cubeta }),
+      });
+      const res = await fetch(`/api/cuentas-por-cobrar?${sp}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error cargando');
       setData(json);
@@ -92,38 +132,48 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, busqueda, cubeta, filterValues.tipoDoc, filterValues.estado, filterValues.orden]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  const agrupar = filterValues.agrupar === 'cliente';
+  // Exporta lo que se está viendo: mismos filtros, sin la paginación (el
+  // archivo trae toda la cartera filtrada, no la página).
+  const exportHref = (() => {
+    const sp = new URLSearchParams({
+      ...(busqueda.trim()      && { search:  busqueda.trim() }),
+      ...(filterValues.tipoDoc && { tipoDoc: filterValues.tipoDoc }),
+      ...(filterValues.estado  && { estado:  filterValues.estado }),
+      ...(filterValues.orden   && { orden:   filterValues.orden }),
+      ...(cubeta               && { cubeta }),
+    });
+    const q = sp.toString();
+    return `/api/cuentas-por-cobrar/export${q ? `?${q}` : ''}`;
+  })();
 
-  // ── Filtrado client-side: cliente (texto), tipo de documento, vencimiento ──
-  const cuentasFiltradas = useMemo(() => {
-    let rows = data?.cuentas ?? [];
-    const q = (filterValues.cliente ?? '').trim().toLowerCase();
-    if (q) {
-      rows = rows.filter(c =>
-        (c.razonSocialComprador ?? 'consumidor final').toLowerCase().includes(q) ||
-        (c.rncComprador ?? '').toLowerCase().includes(q),
-      );
-    }
-    if (filterValues.tipoDoc === 'factura')      rows = rows.filter(c => c.saldoFactura > 0);
-    else if (filterValues.tipoDoc === 'nota-debito') rows = rows.filter(c => c.moraSaldo > 0);
+  // Deep-link `?pagar=<docId>`: al llegar desde otro módulo (p. ej. un cargo
+  // escolar) abre directo el modal de cobro de esa factura. Se pide por id — con
+  // la lista paginada la factura puede no estar en la página cargada.
+  const [pagarConsumido, setPagarConsumido] = useState(false);
+  useEffect(() => {
+    if (pagarConsumido) return;
+    const pagarId = new URLSearchParams(window.location.search).get('pagar');
+    if (!pagarId) return;
+    setPagarConsumido(true);
+    fetch(`/api/cuentas-por-cobrar/${pagarId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.cuenta) setPagoModal(j.cuenta); })
+      .catch(() => {});
+  }, [pagarConsumido]);
 
-    if (filterValues.estado === 'vencidas')   rows = rows.filter(c => c.vencida);
-    else if (filterValues.estado === 'al-dia') rows = rows.filter(c => !c.vencida);
-
-    return rows;
-  }, [data, filterValues.cliente, filterValues.tipoDoc, filterValues.estado]);
-
-  // Totales reactivos al filtro (las tarjetas reflejan lo que se ve en la tabla).
-  const totales: Totales = useMemo(() => ({
-    pendiente:     cuentasFiltradas.reduce((s, c) => s + c.saldo, 0),
-    vencido:       cuentasFiltradas.filter(c => c.vencida).reduce((s, c) => s + c.saldo, 0),
-    count:         cuentasFiltradas.length,
-    countVencidas: cuentasFiltradas.filter(c => c.vencida).length,
-  }), [cuentasFiltradas]);
+  const cuentas = data?.cuentas ?? [];
+  // Totales del servidor: cubren toda la cartera filtrada, no solo esta página.
+  const totales: Totales = data?.totales ?? { pendiente: 0, vencido: 0, count: 0, countVencidas: 0 };
+  const antiguedad = data?.antiguedad ?? ANTIGUEDAD_VACIA;
+  const promesas = data?.promesas;
+  // Solo se muestra si hay algo que mostrar: un team que nunca registró una
+  // promesa no gana nada con una tarjeta en cero permanente.
+  const hayPromesas = !!promesas && (promesas.pendientes > 0 || promesas.incumplidas > 0);
+  const truncadoAlAgrupar = agrupar && totales.count > cuentas.length;
 
   const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
     {
@@ -131,14 +181,23 @@ export default function CuentasPorCobrarPage() {
       header: 'Código',
       render: c => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-          <Link href={`/dashboard/facturas/${c.id}`} style={{ textDecoration: 'none' }}>
-            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}>
-              {c.codigo ?? `Factura #${c.id}`}
-            </Typography>
-          </Link>
+          <Box
+            component={Link}
+            href={`/dashboard/facturas/${c.id}`}
+            sx={{
+              color: '#0d9488', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500,
+              textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
+            }}
+          >
+            {c.codigo ?? `Factura #${c.id}`}
+          </Box>
           {isHistorica(c) && (
-            <Chip label="histórica" size="small"
-              sx={{ height: 18, fontSize: '0.625rem', fontWeight: 600, bgcolor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', '& .MuiChip-label': { px: 0.75 } }} />
+            <Box component="span" sx={{
+              fontSize: '10px', px: 0.75, py: 0.25, borderRadius: '9999px',
+              bgcolor: '#fef3c7', color: '#b45309', border: '1px solid #fde68a',
+            }}>
+              histórica
+            </Box>
           )}
         </Box>
       ),
@@ -148,11 +207,11 @@ export default function CuentasPorCobrarPage() {
       header: 'Cliente',
       render: c => (
         <Box sx={{ maxWidth: 220 }}>
-          <Typography variant="body2" sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Typography noWrap sx={{ fontSize: '0.875rem', color: '#111827' }}>
             {c.razonSocialComprador ?? 'Consumidor Final'}
           </Typography>
           {c.rncComprador && (
-            <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace', display: 'block' }}>{c.rncComprador}</Typography>
+            <Typography sx={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>{c.rncComprador}</Typography>
           )}
         </Box>
       ),
@@ -161,7 +220,7 @@ export default function CuentasPorCobrarPage() {
       id: 'fechaEmision',
       header: 'Emisión',
       visibleAt: 'md',
-      render: c => <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fmtFechaCorta(c.fechaEmision)}</Typography>,
+      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{fmtFechaCorta(c.fechaEmision)}</Box>,
     },
     {
       id: 'vence',
@@ -169,30 +228,30 @@ export default function CuentasPorCobrarPage() {
       visibleAt: 'lg',
       render: c => c.fechaLimitePago ? (
         <Box>
-          <Typography variant="caption" sx={{ color: c.vencida ? 'error.main' : 'text.secondary', fontWeight: c.vencida ? 700 : 400, display: 'block' }}>
+          <Typography sx={{ fontSize: '0.75rem', ...(c.vencida ? { color: '#b91c1c', fontWeight: 500 } : { color: '#374151' }) }}>
             {fmtFechaCorta(c.fechaLimitePago)}
           </Typography>
           {c.vencida && (
-            <Typography variant="caption" sx={{ color: 'error.main', display: 'block' }}>
+            <Typography sx={{ fontSize: '11px', color: '#dc2626' }}>
               {c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida
             </Typography>
           )}
         </Box>
-      ) : <Typography variant="caption" sx={{ color: 'text.disabled' }}>—</Typography>,
+      ) : <Box component="span" sx={{ color: '#9ca3af', fontSize: '0.75rem' }}>—</Box>,
     },
     {
       id: 'total',
       header: 'Total',
       align: 'right',
       visibleAt: 'md',
-      render: c => <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>{fmtDOP(c.montoTotal)}</Typography>,
+      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', whiteSpace: 'nowrap' }}>{fmtDOP(c.montoTotal)}</Box>,
     },
     {
       id: 'pagado',
       header: 'Pagado',
       align: 'right',
       visibleAt: 'lg',
-      render: c => <Typography variant="caption" sx={{ color: '#059669', whiteSpace: 'nowrap' }}>{fmtDOP(c.pagado)}</Typography>,
+      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#047857', whiteSpace: 'nowrap' }}>{fmtDOP(c.pagado)}</Box>,
     },
     {
       id: 'saldo',
@@ -200,11 +259,11 @@ export default function CuentasPorCobrarPage() {
       align: 'right',
       render: c => (
         <Box sx={{ textAlign: 'right' }}>
-          <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+          <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>
             {fmtDOP(c.saldo)}
-          </Typography>
+          </Box>
           {c.moraSaldo > 0 && (
-            <Typography variant="caption" sx={{ color: '#ea580c', display: 'block', whiteSpace: 'nowrap' }}>
+            <Typography sx={{ fontSize: '11px', color: '#ea580c', whiteSpace: 'nowrap' }}>
               incl. mora {fmtDOP(c.moraSaldo)}
             </Typography>
           )}
@@ -214,45 +273,204 @@ export default function CuentasPorCobrarPage() {
   ], []);
 
   const rowActions = (c: Cuenta): RowAction[] => [
-    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c) },
+    { icon: PanelRightOpen, title: 'Ver detalle',    onClick: () => setDetalle(c),   primary: true },
+    { icon: Wallet2,        title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true },
+    // Sin `primary`: va en el menú de 3 puntos. Escribirle a un cliente no es
+    // una acción que convenga tener a un clic de distancia en cada fila.
+    { icon: Mail, title: 'Enviar recordatorio de pago', onClick: () => setRecordatorioDocs([c.id]) },
+  ];
+
+  // El endpoint tope 50 por lote, para que un clic no se convierta en cientos de
+  // correos. Se corta aquí también y se avisa, en vez de dejar que la API
+  // rechace el lote entero con un 400.
+  const bulkActions: BulkAction<Cuenta>[] = [
+    {
+      label: 'Enviar recordatorio',
+      icon:  Mail,
+      onClick: (ids) => {
+        const nums = ids.map(Number);
+        if (nums.length > MAX_POR_LOTE) {
+          setAvisoLote(
+            `Seleccionaste ${nums.length} cuentas y el máximo por envío es ${MAX_POR_LOTE}. ` +
+            `Se van a preparar las primeras ${MAX_POR_LOTE}.`,
+          );
+        }
+        setRecordatorioDocs(nums.slice(0, MAX_POR_LOTE));
+      },
+    },
   ];
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1100 }}>
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: 'space-between', gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: { sm: 'space-between' }, gap: 1.5 }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>Cuentas por cobrar</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+            Cuentas por cobrar
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
             Facturas a crédito pendientes de pago. Registra abonos y monitorea vencimientos.
           </Typography>
         </Box>
-        <MuiButton variant="outlined" size="small"
-          startIcon={<Archive style={{ width: 14, height: 14 }} />}
-          onClick={() => setHistoricaModal(true)}
-          title="Importar factura previa al uso de Zero (no va a DGII)"
-          sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary', flexShrink: 0 }}>
-          Agregar cuenta histórica
-        </MuiButton>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+          <Button
+            component="a" href={exportHref} nativeButton={false}
+            variant="outlined" color="inherit"
+            title="Descargar en Excel la cartera con los filtros activos"
+            startIcon={<Download style={{ width: 16, height: 16 }} />}
+            sx={{ color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff', whiteSpace: 'nowrap' }}
+          >
+            Exportar
+          </Button>
+          <Button
+            variant="outlined" color="inherit"
+            onClick={() => setHistoricaModal(true)}
+            title="Importar factura previa al uso de Zero (no va a DGII)"
+            startIcon={<Archive style={{ width: 16, height: 16 }} />}
+            sx={{ color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff', whiteSpace: 'nowrap' }}
+          >
+            Agregar cuenta histórica
+          </Button>
+        </Box>
       </Box>
 
-      {/* Stats — reflejan el filtro activo (totales reactivos a cuentasFiltradas) */}
+      {/* Stats — reflejan el filtro activo */}
       {data && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
-          <StatCard icon={<DollarSign style={{ width: 18, height: 18 }} />} label="Pendiente" value={fmtDOP(totales.pendiente)} />
-          <StatCard icon={<AlertTriangle style={{ width: 18, height: 18 }} />} label="Vencido" value={fmtDOP(totales.vencido)} color="#dc2626" />
-          <StatCard icon={<Wallet style={{ width: 18, height: 18 }} />} label="Cuentas" value={totales.count.toString()} />
-          <StatCard icon={<Clock style={{ width: 18, height: 18 }} />} label="Vencidas" value={totales.countVencidas.toString()}
-            color={totales.countVencidas > 0 ? '#dc2626' : undefined} />
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+          <StatCard
+            icon={<DollarSign style={{ width: 20, height: 20 }} />}
+            label="Pendiente"
+            value={fmtDOP(totales.pendiente)}
+            color="#111827"
+          />
+          <StatCard
+            icon={<AlertTriangle style={{ width: 20, height: 20 }} />}
+            label="Vencido"
+            value={fmtDOP(totales.vencido)}
+            color="#dc2626"
+          />
+          <StatCard
+            icon={<Wallet style={{ width: 20, height: 20 }} />}
+            label="Cuentas"
+            value={totales.count.toString()}
+            color="#111827"
+          />
+          <StatCard
+            icon={<Clock style={{ width: 20, height: 20 }} />}
+            label="Vencidas"
+            value={totales.countVencidas.toString()}
+            color={totales.countVencidas > 0 ? '#dc2626' : '#111827'}
+          />
         </Box>
+      )}
+
+      {/* Promesas de pago. A diferencia de los stats de arriba, estas NO siguen
+          el filtro activo: son del team completo. Una promesa incumplida no deja
+          de serlo porque el usuario esté mirando otra cubeta. */}
+      {hayPromesas && promesas && (
+        <Box sx={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2.5, rowGap: 1,
+          border: '1px solid #e5e7eb', bgcolor: '#fff', borderRadius: '12px', px: 2, py: 1.25,
+        }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Promesas de pago
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
+            <Box component="span" sx={{ fontWeight: 600, color: '#111827' }}>{promesas.pendientes}</Box> pendiente
+            {promesas.pendientes !== 1 ? 's' : ''}
+            {promesas.montoPendiente > 0 && (
+              <Box component="span" sx={{ color: '#6b7280' }}> · {fmtDOP(promesas.montoPendiente)} comprometido</Box>
+            )}
+          </Typography>
+          {promesas.incumplidas > 0 && (
+            <Typography sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#dc2626' }}>
+              <AlertTriangle style={{ width: 14, height: 14 }} />
+              <Box component="span" sx={{ fontWeight: 600 }}>{promesas.incumplidas}</Box> incumplida
+              {promesas.incumplidas !== 1 ? 's' : ''}
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      {/* Antigüedad de saldos — clic para filtrar por cubeta. Los montos NO
+          cambian al elegir una: siempre muestran la distribución completa, para
+          poder saltar entre cubetas sin perder la referencia. */}
+      {data && (
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1 }}>
+            <Typography component="h2" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Antigüedad de saldos
+            </Typography>
+            {cubeta && (
+              <Box
+                component="button"
+                onClick={() => { setCubeta(null); setPage(1); }}
+                sx={{
+                  fontSize: '0.75rem', color: '#0d9488', bgcolor: 'transparent', border: 0,
+                  cursor: 'pointer', p: 0, '&:hover': { color: '#0f766e', textDecoration: 'underline' },
+                }}
+              >
+                Ver toda la cartera
+              </Box>
+            )}
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' }, gap: 1 }}>
+            {CUBETAS.map(c => {
+              const d = antiguedad[c.id];
+              const activa = cubeta === c.id;
+              return (
+                <Box
+                  component="button"
+                  key={c.id}
+                  onClick={() => alternarCubeta(c.id)}
+                  aria-pressed={activa}
+                  sx={{
+                    textAlign: 'left', borderRadius: '12px', px: 1.5, py: 1.25,
+                    cursor: 'pointer', transition: 'border-color .15s, background-color .15s',
+                    ...(activa
+                      ? { border: `1px solid ${c.activoBorder}`, bgcolor: c.activoBg }
+                      : { border: '1px solid #e5e7eb', bgcolor: '#fff', '&:hover': { borderColor: c.hover } }),
+                  }}
+                >
+                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>{c.label}</Typography>
+                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: d.saldo > 0 ? '#111827' : '#d1d5db' }}>
+                    {fmtDOP(d.saldo)}
+                  </Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#9ca3af' }}>
+                    {d.count} cuenta{d.count !== 1 ? 's' : ''} · {c.hint}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      )}
+
+      {avisoLote && (
+        <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+          {avisoLote}
+        </Alert>
+      )}
+
+      {truncadoAlAgrupar && (
+        <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+          Agrupando las primeras {cuentas.length} de {totales.count} cuentas. Filtra para
+          reducir la cartera y ver los grupos completos.
+        </Alert>
       )}
 
       {/* Tabla reutilizable con filtros + agrupación */}
       <DataTable<Cuenta>
-        data={cuentasFiltradas}
+        data={cuentas}
         loading={loading}
         error={error}
         columns={columns}
+        pagination={agrupar ? undefined : {
+          page,
+          pageSize,
+          total: totales.count,
+          onPageChange: setPage,
+        }}
         filters={[
           { type: 'search', id: 'cliente', placeholder: 'Buscar cliente o RNC…' },
           {
@@ -277,6 +495,17 @@ export default function CuentasPorCobrarPage() {
           },
           {
             type: 'select',
+            id: 'orden',
+            label: 'Ordenar',
+            placeholder: 'Más recientes',
+            options: [
+              { value: 'vencimiento', label: 'Vencidas primero' },
+              { value: 'monto',       label: 'Mayor saldo' },
+              { value: 'antiguo',     label: 'Más antiguas' },
+            ],
+          },
+          {
+            type: 'select',
             id: 'agrupar',
             label: 'Agrupar',
             placeholder: 'Sin agrupar',
@@ -286,8 +515,9 @@ export default function CuentasPorCobrarPage() {
           },
         ]}
         filterValues={filterValues}
-        onFilterChange={setFilterValues}
+        onFilterChange={cambiarFiltros}
         rowActions={rowActions}
+        bulkActions={bulkActions}
         groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
@@ -301,7 +531,9 @@ export default function CuentasPorCobrarPage() {
                   <Box component="span" sx={{ color: '#dc2626', fontWeight: 400 }}> · {venc} vencida{venc !== 1 ? 's' : ''}</Box>
                 )}
               </Typography>
-              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{fmtDOP(tot)}</Typography>
+              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>
+                {fmtDOP(tot)}
+              </Typography>
             </Box>
           );
         }) : undefined}
@@ -314,7 +546,17 @@ export default function CuentasPorCobrarPage() {
         }}
       />
 
-      {/* Modal: Registrar pago */}
+      {/* Panel lateral de detalle — se cierra al abrir el cobro para no apilar
+          dos capas encima de la lista. */}
+      {detalle && (
+        <DetallePanel
+          cuenta={detalle}
+          onClose={() => setDetalle(null)}
+          onCobrar={(c) => { setDetalle(null); setPagoModal(c); }}
+        />
+      )}
+
+      {/* Modal registrar pago */}
       {pagoModal && (
         <PagoModal
           cuenta={pagoModal}
@@ -323,189 +565,71 @@ export default function CuentasPorCobrarPage() {
         />
       )}
 
-      {/* Modal: Agregar cuenta histórica */}
+      {/* Modal agregar cuenta histórica */}
       {historicaModal && (
         <HistoricaModal
           onClose={() => setHistoricaModal(false)}
           onSuccess={() => { setHistoricaModal(false); cargar(); }}
         />
       )}
+
+      {/* Modal de recordatorios (previsualiza y, con confirmación, envía) */}
+      {recordatorioDocs && (
+        <RecordatoriosModal
+          docIds={recordatorioDocs}
+          onClose={() => { setRecordatorioDocs(null); setAvisoLote(null); }}
+          // El envío deja un evento de contacto en cada cuenta: se recarga para
+          // que el panel de detalle muestre el historial al día.
+          onEnviado={cargar}
+        />
+      )}
     </Box>
   );
 }
 
-// ─── Modal: registrar pago ───────────────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
-function PagoModal({ cuenta, onClose, onSuccess }: {
-  cuenta: Cuenta; onClose: () => void; onSuccess: () => void;
+function StatCard({ icon, label, value, color }: {
+  icon: React.ReactNode; label: string; value: string; color: string;
 }) {
-  const today    = new Date().toISOString().slice(0, 10);
-  const saldoDOP = cuenta.saldo / 100;
-  const totalDOP = saldoDOP;
-  const pagadoDOP = 0;
-  const [fecha, setFecha]         = useState(today);
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  // Cuando el pago se bloquea por método que obliga DGII sobre factura no emitida,
-  // el backend devuelve el link al detalle para emitirla primero.
-  const [emitirUrl, setEmitirUrl] = useState<string | null>(null);
-
-  // Notas de crédito del cliente usables como pago (voucher por código, uso parcial).
-  const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
-
-  useEffect(() => {
-    if (!cuenta.clientId) { setNotasCredito([]); return; }
-    let vivo = true;
-    fetch(`/api/clientes/${cuenta.clientId}/notas-credito-disponibles`)
-      .then(r => r.json())
-      .then(j => { if (vivo) setNotasCredito(Array.isArray(j.notas) ? j.notas : []); })
-      .catch(() => { if (vivo) setNotasCredito([]); });
-    return () => { vivo = false; };
-  }, [cuenta.clientId]);
-
-  // Una o varias líneas (1 línea = pago normal). AR usa referencia.
-  const [lineas, setLineas] = useState<PagoLinea[]>([
-    { metodo: 'transferencia', valor: '', referencia: '' },
-  ]);
-
-  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!valido) return;
-    setGuardando(true);
-    setError(null);
-    setEmitirUrl(null);
-    try {
-      const pagos = lineas
-        .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
-        .map(l => ({
-          montoDOP:      parseFloat(l.valor),
-          metodo:        l.metodo,
-          referencia:    l.referencia?.trim() || undefined,
-          notaCreditoId: l.notaCreditoId ?? undefined,
-        }));
-      const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaPago: fecha, pagos }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setEmitirUrl(typeof json.emitirUrl === 'string' ? json.emitirUrl : null);
-        throw new Error(json.error ?? 'Error al registrar pago');
-      }
-      onSuccess();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error desconocido');
-    } finally {
-      setGuardando(false);
-    }
-  }
-
   return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth
-      slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
-      <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
-        Registrar pago
-        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
-          {cuenta.codigo ?? `Factura #${cuenta.id}`}
-        </Typography>
-      </DialogTitle>
-      <DialogContent sx={{ pt: '12px !important' }}>
-        <Box component="form" id="pago-form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* Resumen de saldo */}
-          <Box sx={{ bgcolor: 'grey.50', borderRadius: '8px', p: 1.5 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Saldo factura</Typography>
-              <Typography variant="caption" sx={{ color: 'text.primary' }}>{fmtDOP(cuenta.saldoFactura)}</Typography>
-            </Box>
-            {cuenta.moraSaldo > 0 && (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>Mora</Typography>
-                <Typography variant="caption" sx={{ color: '#ea580c' }}>{fmtDOP(cuenta.moraSaldo)}</Typography>
-              </Box>
-            )}
-            <Divider sx={{ my: 0.75 }} />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Total a cobrar</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>{fmtDOP(cuenta.saldo)}</Typography>
-            </Box>
-            {cuenta.moraSaldo > 0 && (
-              <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.5 }}>
-                El pago cubre primero la factura; el resto se aplica a la mora.
-              </Typography>
-            )}
-          </Box>
-
-          {/* Fecha */}
-          <MuiTextField
-            label="Fecha *" type="date" value={fecha} size="small" fullWidth required
-            onChange={e => setFecha(e.target.value)}
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-          />
-
-          <PagoMetodos
-            lineas={lineas}
-            onChange={setLineas}
-            total={totalDOP}
-            yaPagado={pagadoDOP}
-            disabled={guardando}
-            showReferencia
-            notasCredito={notasCredito}
-          />
-
-          {error && (
-            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
-              {error}
-              {emitirUrl && (
-                <Box
-                  component={Link}
-                  href={emitirUrl}
-                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 1, fontWeight: 600, color: '#991b1b', textDecoration: 'underline', textUnderlineOffset: 2, '&:hover': { color: '#7f1d1d' } }}
-                >
-                  Ir a emitir la factura →
-                </Box>
-              )}
-            </Alert>
-          )}
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-        <MuiButton variant="outlined" onClick={onClose} sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
-        <MuiButton type="submit" form="pago-form" variant="contained" disableElevation
-          disabled={guardando || !valido}
-          startIcon={guardando ? <CircularProgress size={14} color="inherit" /> : undefined}
-          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-          Registrar pago
-        </MuiButton>
-      </DialogActions>
-    </Dialog>
+    <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#9ca3af', mb: 1 }}>
+        {icon}
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500 }}>{label}</Typography>
+      </Box>
+      <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color }}>{value}</Typography>
+    </Box>
   );
 }
 
-// ─── Modal: agregar cuenta histórica ─────────────────────────────────────────
+// ─── Modal: agregar cuenta histórica (factura previa, no DGII) ──────────────
 
-function HistoricaModal({ onClose, onSuccess }: {
-  onClose: () => void; onSuccess: () => void;
+function HistoricaModal({
+  onClose, onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyRD();
+  // Vencimiento sugerido: 15 días desde hoy (RD). Se opera en UTC sobre la
+  // fecha calendario RD para que sumar días no arrastre desfase de zona.
   const vencDefault = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 15);
-    return d.toISOString().slice(0, 10);
+    const [y, m, d] = today.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + 15));
+    return dt.toISOString().slice(0, 10);
   })();
 
-  const [encf, setEncf]                 = useState('');
-  const [razonSocial, setRazonSocial]   = useState('');
-  const [rnc, setRnc]                   = useState('');
+  const [encf, setEncf]               = useState('');
+  const [razonSocial, setRazonSocial] = useState('');
+  const [rnc, setRnc]                 = useState('');
   const [fechaEmision, setFechaEmision] = useState(today);
-  const [fechaLimite, setFechaLimite]   = useState(vencDefault);
-  const [montoDOP, setMontoDOP]         = useState('');
-  const [yaPagadoDOP, setYaPagadoDOP]   = useState('0');
-  const [notas, setNotas]               = useState('');
-  const [guardando, setGuardando]       = useState(false);
-  const [error, setError]               = useState<string | null>(null);
+  const [fechaLimite, setFechaLimite] = useState(vencDefault);
+  const [montoDOP, setMontoDOP]       = useState('');
+  const [yaPagadoDOP, setYaPagadoDOP] = useState('0');
+  const [notas, setNotas]             = useState('');
+  const [guardando, setGuardando]     = useState(false);
+  const [error, setError]             = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -537,97 +661,124 @@ function HistoricaModal({ onClose, onSuccess }: {
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth
-      slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
-      <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
-        Agregar cuenta histórica
-        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
-          Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
-        </Typography>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, pb: 1.5 }}>
+        <Box>
+          <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+            Agregar cuenta histórica
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25 }}>
+            Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
+          </Typography>
+        </Box>
+        <IconButton size="small" onClick={onClose} sx={{ color: '#9ca3af' }}>
+          <X style={{ width: 16, height: 16 }} />
+        </IconButton>
       </DialogTitle>
-      <DialogContent sx={{ pt: '12px !important' }}>
-        <Box component="form" id="historica-form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+      <DialogContent>
+        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          {/* NCF + Razón social */}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-            <MuiTextField
-              label="NCF / Referencia" placeholder="B01000000001 (opcional)"
-              value={encf} size="small" fullWidth
-              slotProps={{ htmlInput: { maxLength: 40, style: { fontFamily: 'monospace', textTransform: 'uppercase' } } }}
-              onChange={e => setEncf(e.target.value.toUpperCase())}
-              helperText="Si lo dejas vacío se genera automáticamente."
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-            />
-            <MuiTextField
-              label="RNC / Cédula" placeholder="131988032"
-              value={rnc} size="small" fullWidth
-              slotProps={{ htmlInput: { maxLength: 20 } }}
+            <Box>
+              <TextField
+                label="NCF / Referencia" fullWidth
+                value={encf}
+                onChange={e => setEncf(e.target.value.toUpperCase())}
+                placeholder="B01000000001 (opcional)"
+                slotProps={{
+                  htmlInput: { maxLength: 40 },
+                  input: { sx: { fontFamily: 'monospace' } },
+                }}
+              />
+              <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
+                Si lo dejas vacío se genera automáticamente.
+              </Typography>
+            </Box>
+            <TextField
+              label="RNC / Cédula" fullWidth
+              value={rnc}
               onChange={e => setRnc(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              placeholder="131988032"
+              slotProps={{ htmlInput: { maxLength: 20 } }}
             />
           </Box>
 
-          <MuiTextField
-            label="Cliente *" placeholder="Razón social del cliente"
-            value={razonSocial} size="small" fullWidth required
-            slotProps={{ htmlInput: { maxLength: 255 } }}
+          <TextField
+            label="Cliente" required fullWidth
+            value={razonSocial}
             onChange={e => setRazonSocial(e.target.value)}
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            placeholder="Razón social del cliente"
+            slotProps={{ htmlInput: { maxLength: 255 } }}
           />
 
+          {/* Fechas */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <MuiTextField
-              label="Fecha emisión *" type="date" value={fechaEmision} size="small" fullWidth required
+            <TextField
+              label="Fecha emisión" type="date" required fullWidth
+              value={fechaEmision}
               onChange={e => setFechaEmision(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              slotProps={{ inputLabel: { shrink: true } }}
             />
-            <MuiTextField
-              label="Vencimiento *" type="date" value={fechaLimite} size="small" fullWidth required
+            <TextField
+              label="Vencimiento" type="date" required fullWidth
+              value={fechaLimite}
               onChange={e => setFechaLimite(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              slotProps={{ inputLabel: { shrink: true } }}
             />
           </Box>
 
+          {/* Montos */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <MuiTextField
-              label="Monto total RD$ *" type="number" placeholder="0.00"
-              value={montoDOP} size="small" fullWidth required
-              slotProps={{ htmlInput: { step: 0.01, min: 0.01 } }}
+            <TextField
+              label="Monto total RD$" type="number" required fullWidth
+              value={montoDOP}
               onChange={e => setMontoDOP(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              placeholder="0.00"
+              slotProps={{ htmlInput: { step: 0.01, min: 0.01 } }}
             />
-            <MuiTextField
-              label="Ya pagado RD$" type="number" placeholder="0.00"
-              value={yaPagadoDOP} size="small" fullWidth
-              slotProps={{ htmlInput: { step: 0.01, min: 0 } }}
-              onChange={e => setYaPagadoDOP(e.target.value)}
-              helperText="Abonos previos al sistema."
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-            />
+            <Box>
+              <TextField
+                label="Ya pagado RD$" type="number" fullWidth
+                value={yaPagadoDOP}
+                onChange={e => setYaPagadoDOP(e.target.value)}
+                placeholder="0.00"
+                slotProps={{ htmlInput: { step: 0.01, min: 0 } }}
+              />
+              <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
+                Abonos previos al sistema.
+              </Typography>
+            </Box>
           </Box>
 
-          <MuiTextField
-            label="Notas (opcional)" placeholder="Factura preimpresa serie B01 julio 2025, etc."
-            value={notas} size="small" fullWidth multiline rows={2}
-            slotProps={{ htmlInput: { maxLength: 1000 } }}
+          <TextField
+            label="Notas (opcional)" fullWidth multiline rows={2}
+            value={notas}
             onChange={e => setNotas(e.target.value)}
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            placeholder="Factura preimpresa serie B01 julio 2025, etc."
+            slotProps={{ htmlInput: { maxLength: 1000 } }}
           />
 
           {error && (
-            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
               {error}
             </Alert>
           )}
+
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', pt: 1 }}>
+            <Button color="inherit" onClick={onClose} sx={{ color: '#4b5563' }}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit" variant="contained"
+              disabled={guardando}
+              startIcon={guardando ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> : undefined}
+            >
+              Agregar cuenta
+            </Button>
+          </Box>
         </Box>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-        <MuiButton variant="outlined" onClick={onClose} sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
-        <MuiButton type="submit" form="historica-form" variant="contained" disableElevation
-          disabled={guardando}
-          startIcon={guardando ? <CircularProgress size={14} color="inherit" /> : undefined}
-          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-          Agregar cuenta
-        </MuiButton>
-      </DialogActions>
     </Dialog>
   );
 }
