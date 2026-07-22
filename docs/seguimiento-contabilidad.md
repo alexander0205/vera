@@ -1038,3 +1038,30 @@ de su propio archivo, no está hecho.
   instancias sobre el mismo `.next` lo corrompen y sale
   `Invariant: missing bootstrap script` con 500. Si pasa: parar, borrar `.next`,
   arrancar de nuevo.
+
+---
+
+## Integración en `feature/modulo-escolar` + adaptación MUI (2026-07-22)
+
+Alex pidió integrar todo el módulo en su rama `feature/modulo-escolar`
+(PR #24) — la rama MUI v9 / arquitectura de módulos. Hecho en 3 commits:
+
+- **`edd2ec9` merge**: 10 conflictos resueltos. Claves: la cartera ganó
+  nuestra versión (la de allá era pre-Paso 1 con MUI); vendedor sin permisos
+  escolares (filosofía de la rama) pero con `contabilidad:ver`; tests
+  convertidos de node:test a **vitest** (único runner: 76 pass).
+- **`98f5b20` + `8e91725` MUI**: las 14 pantallas/componentes del módulo
+  reexpresados con los patrones MUI del branch. Sin tocar lógica.
+- **Fix real encontrado**: `component={Link}` en páginas SERVER revienta
+  (función → client component). Afectaba también a `secuencias` de la propia
+  rama. En server se usa `component="a"`; `component={Link}` solo en
+  `'use client'`. **Avisar a Alex.**
+- **Migraciones 0082-0086 aplicadas** a `launch-preparation-platform`
+  (`ep-winter-morning-anjbmrp1`/`neondb`) con confirmación de Darian.
+- Verificado contra esa DB: 7 pantallas en 200, catálogo sembrado (32
+  cuentas), cartera con datos reales del COLEGIO, libro diario con 450
+  docs por asentar. **No se generaron asientos** — escribir 450 asientos
+  en la DB de Alex espera su OK.
+- Ojo: esa rama tiene DOS migraciones `0071` (`dependientes` y `modulos`)
+  — preexistente, avisar a Alex.
+- Local sin push (decisión pendiente: push directo vs PR).
