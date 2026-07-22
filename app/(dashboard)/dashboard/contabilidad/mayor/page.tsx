@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
@@ -131,7 +130,7 @@ export default async function MayorGeneralPage({
       {cuentas.length === 0 && (
         <Typography sx={{ ...CARD, px: 2, py: 5, textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
           Todavía no hay ninguna cuenta con movimientos.{' '}
-          <Box component={Link} href="/dashboard/contabilidad/libro-diario" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
+          <Box component="a" href="/dashboard/contabilidad/libro-diario" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
             Genera los asientos en el libro diario
           </Box>{' '}
           y vuelve.
@@ -284,7 +283,7 @@ export default async function MayorGeneralPage({
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Button
-                    component={Link} href={urlPagina(paginaReal - 1)} nativeButton={false}
+                    component="a" href={urlPagina(paginaReal - 1)} nativeButton={false}
                     variant="outlined" color="inherit" size="small"
                     aria-disabled={paginaReal <= 1}
                     sx={{ color: '#374151', borderColor: '#d1d5db', ...(paginaReal <= 1 && { pointerEvents: 'none', opacity: 0.4 }) }}
@@ -292,7 +291,7 @@ export default async function MayorGeneralPage({
                     Anterior
                   </Button>
                   <Button
-                    component={Link} href={urlPagina(paginaReal + 1)} nativeButton={false}
+                    component="a" href={urlPagina(paginaReal + 1)} nativeButton={false}
                     variant="outlined" color="inherit" size="small"
                     aria-disabled={paginaReal >= paginas}
                     sx={{ color: '#374151', borderColor: '#d1d5db', ...(paginaReal >= paginas && { pointerEvents: 'none', opacity: 0.4 }) }}

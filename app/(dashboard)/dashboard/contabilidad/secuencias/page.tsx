@@ -96,7 +96,7 @@ export default async function SecuenciasPage({
           </Typography>
         </Box>
         <Button
-          component={Link}
+          component="a"
           href="/dashboard/contabilidad/consulta-ncf"
           nativeButton={false}
           variant="contained"
@@ -263,7 +263,7 @@ export default async function SecuenciasPage({
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
-                component={Link} href={pageHref(page - 1)} nativeButton={false}
+                component="a" href={pageHref(page - 1)} nativeButton={false}
                 variant="outlined" color="inherit" size="small"
                 aria-disabled={page <= 1}
                 sx={{ color: '#374151', borderColor: '#d1d5db', ...(page <= 1 && { pointerEvents: 'none', opacity: 0.4 }) }}
@@ -271,7 +271,7 @@ export default async function SecuenciasPage({
                 Anterior
               </Button>
               <Button
-                component={Link} href={pageHref(page + 1)} nativeButton={false}
+                component="a" href={pageHref(page + 1)} nativeButton={false}
                 variant="outlined" color="inherit" size="small"
                 aria-disabled={page >= totalPages}
                 sx={{ color: '#374151', borderColor: '#d1d5db', ...(page >= totalPages && { pointerEvents: 'none', opacity: 0.4 }) }}

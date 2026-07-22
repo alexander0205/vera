@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Loader2, Phone, StickyNote, HandCoins, Check, XCircle, UserRound, CalendarClock,
 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import type {
   GestionCuenta, TipoEventoCobranza, CanalContacto,
@@ -15,17 +20,17 @@ const CANAL_LABEL: Record<CanalContacto, string> = {
 };
 
 const TIPO_UI: Record<TipoEventoCobranza, {
-  Icon: React.ComponentType<{ className?: string }>; label: string; punto: string;
+  Icon: React.ComponentType<{ style?: React.CSSProperties }>; label: string; punto: string;
 }> = {
-  contacto: { Icon: Phone,      label: 'Contacto',        punto: 'bg-indigo-500' },
-  nota:     { Icon: StickyNote, label: 'Nota interna',    punto: 'bg-gray-400'   },
-  promesa:  { Icon: HandCoins,  label: 'Promesa de pago', punto: 'bg-violet-500' },
+  contacto: { Icon: Phone,      label: 'Contacto',        punto: '#6366f1' },
+  nota:     { Icon: StickyNote, label: 'Nota interna',    punto: '#9ca3af' },
+  promesa:  { Icon: HandCoins,  label: 'Promesa de pago', punto: '#8b5cf6' },
 };
 
-const ESTADO_PROMESA_UI: Record<string, { label: string; cls: string }> = {
-  pendiente:  { label: 'Pendiente',  cls: 'bg-violet-100 text-violet-700 border-violet-200' },
-  cumplida:   { label: 'Cumplida',   cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  incumplida: { label: 'Incumplida', cls: 'bg-red-100 text-red-700 border-red-200' },
+const ESTADO_PROMESA_UI: Record<string, { label: string; bg: string; fg: string; border: string }> = {
+  pendiente:  { label: 'Pendiente',  bg: '#ede9fe', fg: '#6d28d9', border: '#ddd6fe' },
+  cumplida:   { label: 'Cumplida',   bg: '#d1fae5', fg: '#047857', border: '#a7f3d0' },
+  incumplida: { label: 'Incumplida', bg: '#fee2e2', fg: '#b91c1c', border: '#fecaca' },
 };
 
 export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: () => void }) {
@@ -105,37 +110,37 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
   const seg = data?.seguimiento;
 
   return (
-    <section className="px-4 py-3 border-t border-gray-100">
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+    <Box component="section" sx={{ px: 2, py: 1.5, borderTop: '1px solid #f3f4f6' }}>
+      <Typography component="h3" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1.5 }}>
         Gestión de cobro
-      </h3>
+      </Typography>
 
-      {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+      {error && <Typography sx={{ fontSize: '0.875rem', color: '#dc2626', mb: 1 }}>{error}</Typography>}
 
       {loading ? (
-        <p className="flex items-center gap-2 text-sm text-gray-400 py-2">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-        </p>
+        <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.875rem', color: '#9ca3af', py: 1 }}>
+          <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> Cargando…
+        </Typography>
       ) : (
         <>
           {/* Estado: responsable y próxima acción */}
-          <div className="rounded-lg border border-gray-200 p-3 mb-3 text-sm">
+          <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', p: 1.5, mb: 1.5 }}>
             {editSeg ? (
-              <div className="space-y-2">
-                <input
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <TextField
+                  size="small" fullWidth
                   value={proxAccion}
                   onChange={e => setProxAccion(e.target.value)}
                   placeholder="Próxima acción (ej. llamar al encargado)"
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                 />
-                <input
-                  type="date"
+                <TextField
+                  size="small" fullWidth type="date"
                   value={proxFecha}
                   onChange={e => setProxFecha(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                 />
-                <div className="flex gap-2">
-                  <button
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    variant="contained" size="small"
                     disabled={guardando}
                     onClick={async () => {
                       const ok = await enviar({
@@ -145,195 +150,207 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
                       });
                       if (ok) setEditSeg(false);
                     }}
-                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-xs font-medium rounded"
                   >
                     Guardar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="outlined" color="inherit" size="small"
                     onClick={() => setEditSeg(false)}
-                    className="px-3 py-1.5 border border-gray-300 text-gray-700 text-xs rounded"
+                    sx={{ color: '#374151', borderColor: '#d1d5db' }}
                   >
                     Cancelar
-                  </button>
-                </div>
-              </div>
+                  </Button>
+                </Box>
+              </Box>
             ) : (
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-1 min-w-0">
-                  <p className="flex items-center gap-1.5 text-gray-700">
-                    <CalendarClock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                  <Typography sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#374151' }}>
+                    <CalendarClock style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
                     {seg?.proximaAccion
                       ? <span>{seg.proximaAccion}{seg.proximaAccionFecha && ` · ${fmtFechaCorta(seg.proximaAccionFecha)}`}</span>
-                      : <span className="text-gray-400">Sin próxima acción definida</span>}
-                  </p>
-                  <p className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <UserRound className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                      : <Box component="span" sx={{ color: '#9ca3af' }}>Sin próxima acción definida</Box>}
+                  </Typography>
+                  <Typography sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', color: '#6b7280' }}>
+                    <UserRound style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
                     {seg?.responsableNombre ?? 'Sin responsable asignado'}
-                  </p>
-                  <p className="text-xs text-gray-400">
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
                     Último contacto: {data?.ultimoContacto ? fmtFechaCorta(data.ultimoContacto) : '—'}
-                  </p>
-                </div>
-                <button
+                  </Typography>
+                </Box>
+                <Box
+                  component="button"
                   onClick={() => setEditSeg(true)}
-                  className="text-xs text-teal-600 hover:underline shrink-0"
+                  sx={{
+                    fontSize: '0.75rem', color: '#0d9488', flexShrink: 0, bgcolor: 'transparent',
+                    border: 0, cursor: 'pointer', p: 0, '&:hover': { textDecoration: 'underline' },
+                  }}
                 >
                   Editar
-                </button>
-              </div>
+                </Box>
+              </Box>
             )}
-          </div>
+          </Box>
 
           {/* Promesa vigente, destacada */}
           {data?.promesaActiva && (
-            <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 mb-3">
-              <p className="text-sm text-violet-900">
+            <Box sx={{ border: '1px solid #ddd6fe', bgcolor: '#f5f3ff', borderRadius: '8px', p: 1.5, mb: 1.5 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: '#5b21b6' }}>
                 Prometió pagar el {fmtFechaCorta(data.promesaActiva.promesaFecha!)}
                 {data.promesaActiva.promesaMonto ? ` · ${fmtDOP(data.promesaActiva.promesaMonto)}` : ''}
-              </p>
-              <div className="flex gap-2 mt-2">
-                <button
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                <Button
+                  variant="contained" size="small" color="success"
                   disabled={guardando}
                   onClick={() => enviar({ accion: 'cerrar-promesa', eventoId: data.promesaActiva!.id, estado: 'cumplida' })}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs rounded"
+                  startIcon={<Check style={{ width: 12, height: 12 }} />}
+                  sx={{ fontSize: '0.75rem', py: 0.25 }}
                 >
-                  <Check className="h-3 w-3" /> Cumplida
-                </button>
-                <button
+                  Cumplida
+                </Button>
+                <Button
+                  variant="outlined" size="small" color="error"
                   disabled={guardando}
                   onClick={() => enviar({ accion: 'cerrar-promesa', eventoId: data.promesaActiva!.id, estado: 'incumplida' })}
-                  className="inline-flex items-center gap-1 px-2 py-1 border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 text-xs rounded"
+                  startIcon={<XCircle style={{ width: 12, height: 12 }} />}
+                  sx={{ fontSize: '0.75rem', py: 0.25 }}
                 >
-                  <XCircle className="h-3 w-3" /> Incumplida
-                </button>
-              </div>
-            </div>
+                  Incumplida
+                </Button>
+              </Box>
+            </Box>
           )}
 
           {/* Registrar gestión */}
-          <div className="rounded-lg border border-gray-200 p-3 mb-3 space-y-2">
-            <div className="flex gap-1">
+          <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', p: 1.5, mb: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
               {(['contacto', 'nota', 'promesa'] as TipoEventoCobranza[]).map(t => {
                 const ui = TIPO_UI[t];
+                const activo = tipo === t;
                 return (
-                  <button
+                  <Box
+                    component="button"
                     key={t}
                     onClick={() => setTipo(t)}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded border transition-colors ${
-                      tipo === t
-                        ? 'border-teal-500 bg-teal-50 text-teal-700 font-medium'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
+                    sx={{
+                      flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      gap: 0.5, px: 1, py: 0.75, fontSize: '0.75rem', borderRadius: '6px',
+                      cursor: 'pointer', transition: 'border-color .15s',
+                      ...(activo
+                        ? { border: '1px solid #14b8a6', bgcolor: '#f0fdfa', color: '#0f766e', fontWeight: 500 }
+                        : { border: '1px solid #e5e7eb', bgcolor: 'transparent', color: '#4b5563', '&:hover': { borderColor: '#d1d5db' } }),
+                    }}
                   >
-                    <ui.Icon className="h-3.5 w-3.5" /> {ui.label}
-                  </button>
+                    <ui.Icon style={{ width: 14, height: 14 }} /> {ui.label}
+                  </Box>
                 );
               })}
-            </div>
+            </Box>
 
             {tipo === 'contacto' && (
-              <select
+              <TextField
+                select size="small" fullWidth
                 value={canal}
                 onChange={e => setCanal(e.target.value as CanalContacto)}
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
               >
                 {(Object.keys(CANAL_LABEL) as CanalContacto[]).map(c => (
-                  <option key={c} value={c}>{CANAL_LABEL[c]}</option>
+                  <MenuItem key={c} value={c}>{CANAL_LABEL[c]}</MenuItem>
                 ))}
-              </select>
+              </TextField>
             )}
 
             {tipo === 'promesa' && (
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs text-gray-500">
-                  Fecha prometida
-                  <input
-                    type="date"
-                    value={promesaFecha}
-                    onChange={e => setPromesaFecha(e.target.value)}
-                    className="w-full mt-0.5 px-2 py-1.5 border border-gray-300 rounded text-sm"
-                  />
-                </label>
-                <label className="text-xs text-gray-500">
-                  Monto (opcional)
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={promesaMonto}
-                    onChange={e => setPromesaMonto(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full mt-0.5 px-2 py-1.5 border border-gray-300 rounded text-sm"
-                  />
-                </label>
-              </div>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                <TextField
+                  size="small" type="date" label="Fecha prometida"
+                  value={promesaFecha}
+                  onChange={e => setPromesaFecha(e.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+                <TextField
+                  size="small" type="number" label="Monto (opcional)"
+                  value={promesaMonto}
+                  onChange={e => setPromesaMonto(e.target.value)}
+                  placeholder="0.00"
+                  slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+                />
+              </Box>
             )}
 
-            <textarea
+            <TextField
+              size="small" fullWidth multiline rows={2}
               value={comentario}
               onChange={e => setComentario(e.target.value)}
-              rows={2}
               placeholder="Comentario interno (no lo ve el cliente)"
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm resize-none"
             />
 
-            <button
+            <Button
+              variant="contained" size="small" fullWidth
               onClick={registrar}
               disabled={guardando}
-              className="w-full px-3 py-1.5 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white text-xs font-medium rounded inline-flex items-center justify-center gap-2"
+              startIcon={guardando ? <Loader2 className="animate-spin" style={{ width: 12, height: 12 }} /> : undefined}
+              sx={{ bgcolor: '#111827', '&:hover': { bgcolor: '#1f2937' }, fontSize: '0.75rem' }}
             >
-              {guardando && <Loader2 className="h-3 w-3 animate-spin" />}
               Registrar {TIPO_UI[tipo].label.toLowerCase()}
-            </button>
-          </div>
+            </Button>
+          </Box>
 
           {/* Historial de gestión */}
           {data && data.eventos.length > 0 && (
-            <ol className="relative space-y-3 pl-5">
-              <span className="absolute left-[5px] top-1.5 bottom-1.5 w-px bg-gray-200" aria-hidden />
+            <Box component="ol" sx={{ position: 'relative', m: 0, p: 0, pl: 2.5, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box component="span" aria-hidden sx={{ position: 'absolute', left: '5px', top: 6, bottom: 6, width: '1px', bgcolor: '#e5e7eb' }} />
               {data.eventos.map(ev => {
                 const ui = TIPO_UI[ev.tipo];
                 const est = ev.promesaEstado ? ESTADO_PROMESA_UI[ev.promesaEstado] : null;
                 return (
-                  <li key={ev.id} className="relative">
-                    <span
-                      className={`absolute -left-5 top-1.5 h-[11px] w-[11px] rounded-full ring-2 ring-white ${ui.punto}`}
-                      aria-hidden
+                  <Box component="li" key={ev.id} sx={{ position: 'relative' }}>
+                    <Box
+                      component="span" aria-hidden
+                      sx={{
+                        position: 'absolute', left: -20, top: 6, height: 11, width: 11,
+                        borderRadius: '9999px', bgcolor: ui.punto, boxShadow: '0 0 0 2px #fff',
+                      }}
                     />
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-sm text-gray-900 flex items-center gap-1.5">
-                        <ui.Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
+                      <Typography sx={{ fontSize: '0.875rem', color: '#111827', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <ui.Icon style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
                         {ui.label}
-                        {ev.canal && <span className="text-gray-400">· {CANAL_LABEL[ev.canal]}</span>}
-                      </p>
+                        {ev.canal && <Box component="span" sx={{ color: '#9ca3af' }}>· {CANAL_LABEL[ev.canal]}</Box>}
+                      </Typography>
                       {est && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${est.cls}`}>
+                        <Box component="span" sx={{
+                          fontSize: '10px', px: 0.75, py: 0.25, borderRadius: '9999px',
+                          bgcolor: est.bg, color: est.fg, border: `1px solid ${est.border}`,
+                          whiteSpace: 'nowrap',
+                        }}>
                           {est.label}
-                        </span>
+                        </Box>
                       )}
-                    </div>
+                    </Box>
                     {ev.tipo === 'promesa' && ev.promesaFecha && (
-                      <p className="text-xs text-violet-700 mt-0.5">
+                      <Typography sx={{ fontSize: '0.75rem', color: '#6d28d9', mt: 0.25 }}>
                         Prometió el {fmtFechaCorta(ev.promesaFecha)}
                         {ev.promesaMonto ? ` · ${fmtDOP(ev.promesaMonto)}` : ''}
-                      </p>
+                      </Typography>
                     )}
                     {ev.comentario && (
-                      <p className="text-xs text-gray-600 mt-0.5 whitespace-pre-wrap">{ev.comentario}</p>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', mt: 0.25, whiteSpace: 'pre-wrap' }}>{ev.comentario}</Typography>
                     )}
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                    <Typography sx={{ fontSize: '11px', color: '#9ca3af', mt: 0.25 }}>
                       {fmtFechaCorta(ev.fecha)}{ev.usuario && ` · ${ev.usuario}`}
-                    </p>
-                  </li>
+                    </Typography>
+                  </Box>
                 );
               })}
-            </ol>
+            </Box>
           )}
           {data && data.eventos.length === 0 && (
-            <p className="text-sm text-gray-400">Sin gestión registrada.</p>
+            <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af' }}>Sin gestión registrada.</Typography>
           )}
         </>
       )}
-    </section>
+    </Box>
   );
 }

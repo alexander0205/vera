@@ -6,9 +6,17 @@ import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
   X, Wallet, Loader2, Archive, Wallet2, PanelRightOpen, Download, Mail,
 } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
 import { DataTable, type DataTableColumn, type RowAction, type BulkAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
-import { PagoMetodos, pagosValidos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
 import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
 import { RecordatoriosModal, MAX_POR_LOTE } from '@/components/cuentas-por-cobrar/RecordatoriosModal';
@@ -33,17 +41,17 @@ interface Promesas {
 }
 
 /** Cubetas en orden de urgencia creciente, con su etiqueta y color. */
-const CUBETAS: { id: Cubeta; label: string; hint: string; tono: string; activo: string }[] = [
+const CUBETAS: { id: Cubeta; label: string; hint: string; hover: string; activoBorder: string; activoBg: string }[] = [
   { id: 'porVencer', label: 'Por vencer', hint: 'aún no vencen',
-    tono: 'border-gray-200 hover:border-teal-300',   activo: 'border-teal-500 bg-teal-50' },
+    hover: '#5eead4', activoBorder: '#14b8a6', activoBg: '#f0fdfa' },
   { id: 'd1a30',     label: '1-30 días',  hint: 'de atraso',
-    tono: 'border-gray-200 hover:border-amber-300',  activo: 'border-amber-500 bg-amber-50' },
+    hover: '#fcd34d', activoBorder: '#f59e0b', activoBg: '#fffbeb' },
   { id: 'd31a60',    label: '31-60 días', hint: 'de atraso',
-    tono: 'border-gray-200 hover:border-orange-300', activo: 'border-orange-500 bg-orange-50' },
+    hover: '#fdba74', activoBorder: '#f97316', activoBg: '#fff7ed' },
   { id: 'd61a90',    label: '61-90 días', hint: 'de atraso',
-    tono: 'border-gray-200 hover:border-orange-400', activo: 'border-orange-600 bg-orange-50' },
+    hover: '#fb923c', activoBorder: '#ea580c', activoBg: '#fff7ed' },
   { id: 'd90mas',    label: '+90 días',   hint: 'de atraso',
-    tono: 'border-gray-200 hover:border-red-300',    activo: 'border-red-500 bg-red-50' },
+    hover: '#fca5a5', activoBorder: '#ef4444', activoBg: '#fef2f2' },
 ];
 
 const ANTIGUEDAD_VACIA: Antiguedad = {
@@ -172,74 +180,94 @@ export default function CuentasPorCobrarPage() {
       id: 'codigo',
       header: 'Código',
       render: c => (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+          <Box
+            component={Link}
+            href={`/dashboard/facturas/${c.id}`}
+            sx={{
+              color: '#0d9488', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500,
+              textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
+            }}
+          >
             {c.codigo ?? `Factura #${c.id}`}
-          </Link>
+          </Box>
           {isHistorica(c) && (
-            <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+            <Box component="span" sx={{
+              fontSize: '10px', px: 0.75, py: 0.25, borderRadius: '9999px',
+              bgcolor: '#fef3c7', color: '#b45309', border: '1px solid #fde68a',
+            }}>
               histórica
-            </span>
+            </Box>
           )}
-        </div>
+        </Box>
       ),
     },
     {
       id: 'cliente',
       header: 'Cliente',
       render: c => (
-        <div className="max-w-[220px]">
-          <p className="text-sm text-gray-900 truncate">{c.razonSocialComprador ?? 'Consumidor Final'}</p>
-          {c.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{c.rncComprador}</p>}
-        </div>
+        <Box sx={{ maxWidth: 220 }}>
+          <Typography noWrap sx={{ fontSize: '0.875rem', color: '#111827' }}>
+            {c.razonSocialComprador ?? 'Consumidor Final'}
+          </Typography>
+          {c.rncComprador && (
+            <Typography sx={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>{c.rncComprador}</Typography>
+          )}
+        </Box>
       ),
     },
     {
       id: 'fechaEmision',
       header: 'Emisión',
       visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
+      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{fmtFechaCorta(c.fechaEmision)}</Box>,
     },
     {
       id: 'vence',
       header: 'Vence',
       visibleAt: 'lg',
       render: c => c.fechaLimitePago ? (
-        <div>
-          <p className={`text-xs ${c.vencida ? 'text-red-700 font-medium' : 'text-gray-700'}`}>
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', ...(c.vencida ? { color: '#b91c1c', fontWeight: 500 } : { color: '#374151' }) }}>
             {fmtFechaCorta(c.fechaLimitePago)}
-          </p>
+          </Typography>
           {c.vencida && (
-            <p className="text-[11px] text-red-600">{c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida</p>
+            <Typography sx={{ fontSize: '11px', color: '#dc2626' }}>
+              {c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida
+            </Typography>
           )}
-        </div>
-      ) : <span className="text-gray-400 text-xs">—</span>,
+        </Box>
+      ) : <Box component="span" sx={{ color: '#9ca3af', fontSize: '0.75rem' }}>—</Box>,
     },
     {
       id: 'total',
       header: 'Total',
       align: 'right',
       visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600 whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
+      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', whiteSpace: 'nowrap' }}>{fmtDOP(c.montoTotal)}</Box>,
     },
     {
       id: 'pagado',
       header: 'Pagado',
       align: 'right',
       visibleAt: 'lg',
-      render: c => <span className="text-xs text-emerald-700 whitespace-nowrap">{fmtDOP(c.pagado)}</span>,
+      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#047857', whiteSpace: 'nowrap' }}>{fmtDOP(c.pagado)}</Box>,
     },
     {
       id: 'saldo',
       header: 'Saldo',
       align: 'right',
       render: c => (
-        <div className="text-right">
-          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>
+        <Box sx={{ textAlign: 'right' }}>
+          <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>
+            {fmtDOP(c.saldo)}
+          </Box>
           {c.moraSaldo > 0 && (
-            <p className="text-[11px] text-orange-600 whitespace-nowrap">incl. mora {fmtDOP(c.moraSaldo)}</p>
+            <Typography sx={{ fontSize: '11px', color: '#ea580c', whiteSpace: 'nowrap' }}>
+              incl. mora {fmtDOP(c.moraSaldo)}
+            </Typography>
           )}
-        </div>
+        </Box>
       ),
     },
   ], []);
@@ -273,148 +301,162 @@ export default function CuentasPorCobrarPage() {
   ];
 
   return (
-    <section className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Cuentas por cobrar</h1>
-          <p className="text-sm text-gray-500 mt-1">
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: { sm: 'space-between' }, gap: 1.5 }}>
+        <Box>
+          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+            Cuentas por cobrar
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
             Facturas a crédito pendientes de pago. Registra abonos y monitorea vencimientos.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={exportHref}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+          <Button
+            component="a" href={exportHref} nativeButton={false}
+            variant="outlined" color="inherit"
             title="Descargar en Excel la cartera con los filtros activos"
+            startIcon={<Download style={{ width: 16, height: 16 }} />}
+            sx={{ color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff', whiteSpace: 'nowrap' }}
           >
-            <Download className="h-4 w-4" />
             Exportar
-          </a>
-          <button
+          </Button>
+          <Button
+            variant="outlined" color="inherit"
             onClick={() => setHistoricaModal(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
             title="Importar factura previa al uso de Zero (no va a DGII)"
+            startIcon={<Archive style={{ width: 16, height: 16 }} />}
+            sx={{ color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff', whiteSpace: 'nowrap' }}
           >
-            <Archive className="h-4 w-4" />
             Agregar cuenta histórica
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Box>
+      </Box>
 
       {/* Stats — reflejan el filtro activo */}
       {data && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
           <StatCard
-            icon={<DollarSign className="h-5 w-5" />}
+            icon={<DollarSign style={{ width: 20, height: 20 }} />}
             label="Pendiente"
             value={fmtDOP(totales.pendiente)}
-            color="text-gray-900"
+            color="#111827"
           />
           <StatCard
-            icon={<AlertTriangle className="h-5 w-5" />}
+            icon={<AlertTriangle style={{ width: 20, height: 20 }} />}
             label="Vencido"
             value={fmtDOP(totales.vencido)}
-            color="text-red-600"
+            color="#dc2626"
           />
           <StatCard
-            icon={<Wallet className="h-5 w-5" />}
+            icon={<Wallet style={{ width: 20, height: 20 }} />}
             label="Cuentas"
             value={totales.count.toString()}
-            color="text-gray-900"
+            color="#111827"
           />
           <StatCard
-            icon={<Clock className="h-5 w-5" />}
+            icon={<Clock style={{ width: 20, height: 20 }} />}
             label="Vencidas"
             value={totales.countVencidas.toString()}
-            color={totales.countVencidas > 0 ? 'text-red-600' : 'text-gray-900'}
+            color={totales.countVencidas > 0 ? '#dc2626' : '#111827'}
           />
-        </div>
+        </Box>
       )}
 
       {/* Promesas de pago. A diferencia de los stats de arriba, estas NO siguen
           el filtro activo: son del team completo. Una promesa incumplida no deja
           de serlo porque el usuario esté mirando otra cubeta. */}
       {hayPromesas && promesas && (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <Box sx={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2.5, rowGap: 1,
+          border: '1px solid #e5e7eb', bgcolor: '#fff', borderRadius: '12px', px: 2, py: 1.25,
+        }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Promesas de pago
-          </span>
-          <span className="text-sm text-gray-700">
-            <span className="font-semibold text-gray-900">{promesas.pendientes}</span> pendiente
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
+            <Box component="span" sx={{ fontWeight: 600, color: '#111827' }}>{promesas.pendientes}</Box> pendiente
             {promesas.pendientes !== 1 ? 's' : ''}
             {promesas.montoPendiente > 0 && (
-              <span className="text-gray-500"> · {fmtDOP(promesas.montoPendiente)} comprometido</span>
+              <Box component="span" sx={{ color: '#6b7280' }}> · {fmtDOP(promesas.montoPendiente)} comprometido</Box>
             )}
-          </span>
+          </Typography>
           {promesas.incumplidas > 0 && (
-            <span className="inline-flex items-center gap-1.5 text-sm text-red-600">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              <span className="font-semibold">{promesas.incumplidas}</span> incumplida
+            <Typography sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#dc2626' }}>
+              <AlertTriangle style={{ width: 14, height: 14 }} />
+              <Box component="span" sx={{ fontWeight: 600 }}>{promesas.incumplidas}</Box> incumplida
               {promesas.incumplidas !== 1 ? 's' : ''}
-            </span>
+            </Typography>
           )}
-        </div>
+        </Box>
       )}
 
       {/* Antigüedad de saldos — clic para filtrar por cubeta. Los montos NO
           cambian al elegir una: siempre muestran la distribución completa, para
           poder saltar entre cubetas sin perder la referencia. */}
       {data && (
-        <div>
-          <div className="flex items-baseline justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1 }}>
+            <Typography component="h2" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Antigüedad de saldos
-            </h2>
+            </Typography>
             {cubeta && (
-              <button
+              <Box
+                component="button"
                 onClick={() => { setCubeta(null); setPage(1); }}
-                className="text-xs text-teal-600 hover:text-teal-700 hover:underline"
+                sx={{
+                  fontSize: '0.75rem', color: '#0d9488', bgcolor: 'transparent', border: 0,
+                  cursor: 'pointer', p: 0, '&:hover': { color: '#0f766e', textDecoration: 'underline' },
+                }}
               >
                 Ver toda la cartera
-              </button>
+              </Box>
             )}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' }, gap: 1 }}>
             {CUBETAS.map(c => {
               const d = antiguedad[c.id];
               const activa = cubeta === c.id;
               return (
-                <button
+                <Box
+                  component="button"
                   key={c.id}
                   onClick={() => alternarCubeta(c.id)}
                   aria-pressed={activa}
-                  className={`text-left bg-white border rounded-xl px-3 py-2.5 transition-colors ${activa ? c.activo : c.tono}`}
+                  sx={{
+                    textAlign: 'left', borderRadius: '12px', px: 1.5, py: 1.25,
+                    cursor: 'pointer', transition: 'border-color .15s, background-color .15s',
+                    ...(activa
+                      ? { border: `1px solid ${c.activoBorder}`, bgcolor: c.activoBg }
+                      : { border: '1px solid #e5e7eb', bgcolor: '#fff', '&:hover': { borderColor: c.hover } }),
+                  }}
                 >
-                  <p className="text-[11px] font-medium text-gray-500">{c.label}</p>
-                  <p className={`text-base font-bold ${d.saldo > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>{c.label}</Typography>
+                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: d.saldo > 0 ? '#111827' : '#d1d5db' }}>
                     {fmtDOP(d.saldo)}
-                  </p>
-                  <p className="text-[11px] text-gray-400">
+                  </Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#9ca3af' }}>
                     {d.count} cuenta{d.count !== 1 ? 's' : ''} · {c.hint}
-                  </p>
-                </button>
+                  </Typography>
+                </Box>
               );
             })}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {avisoLote && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
-          <span>{avisoLote}</span>
-        </div>
+        <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+          {avisoLote}
+        </Alert>
       )}
 
       {truncadoAlAgrupar && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
-          <span>
-            Agrupando las primeras {cuentas.length} de {totales.count} cuentas. Filtra para
-            reducir la cartera y ver los grupos completos.
-          </span>
-        </div>
+        <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+          Agrupando las primeras {cuentas.length} de {totales.count} cuentas. Filtra para
+          reducir la cartera y ver los grupos completos.
+        </Alert>
       )}
 
       {/* Tabla reutilizable con filtros + agrupación */}
@@ -481,16 +523,18 @@ export default function CuentasPorCobrarPage() {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
           const venc = rows.filter(c => c.vencida).length;
           return (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-gray-800">
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>
                 {key}
-                <span className="text-gray-400 font-normal"> · {rows.length} cuenta{rows.length !== 1 ? 's' : ''}</span>
+                <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}> · {rows.length} cuenta{rows.length !== 1 ? 's' : ''}</Box>
                 {venc > 0 && (
-                  <span className="text-red-600 font-normal"> · {venc} vencida{venc !== 1 ? 's' : ''}</span>
+                  <Box component="span" sx={{ color: '#dc2626', fontWeight: 400 }}> · {venc} vencida{venc !== 1 ? 's' : ''}</Box>
                 )}
-              </span>
-              <span className="text-xs font-bold text-gray-900 whitespace-nowrap">{fmtDOP(tot)}</span>
-            </div>
+              </Typography>
+              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>
+                {fmtDOP(tot)}
+              </Typography>
+            </Box>
           );
         }) : undefined}
         emptyState={{
@@ -539,7 +583,7 @@ export default function CuentasPorCobrarPage() {
           onEnviado={cargar}
         />
       )}
-    </section>
+    </Box>
   );
 }
 
@@ -549,13 +593,13 @@ function StatCard({ icon, label, value, color }: {
   icon: React.ReactNode; label: string; value: string; color: string;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <div className="flex items-center gap-2 text-gray-400 mb-2">
+    <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#9ca3af', mb: 1 }}>
         {icon}
-        <p className="text-xs font-medium">{label}</p>
-      </div>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
-    </div>
+        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500 }}>{label}</Typography>
+      </Box>
+      <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color }}>{value}</Typography>
+    </Box>
   );
 }
 
@@ -617,153 +661,124 @@ function HistoricaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">Agregar cuenta histórica</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
-            </p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, pb: 1.5 }}>
+        <Box>
+          <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+            Agregar cuenta histórica
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25 }}>
+            Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
+          </Typography>
+        </Box>
+        <IconButton size="small" onClick={onClose} sx={{ color: '#9ca3af' }}>
+          <X style={{ width: 16, height: 16 }} />
+        </IconButton>
+      </DialogTitle>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+      <DialogContent>
+        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {/* NCF + Razón social */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">NCF / Referencia</label>
-              <input
-                type="text"
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+            <Box>
+              <TextField
+                label="NCF / Referencia" fullWidth
                 value={encf}
                 onChange={e => setEncf(e.target.value.toUpperCase())}
                 placeholder="B01000000001 (opcional)"
-                maxLength={40}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                slotProps={{
+                  htmlInput: { maxLength: 40 },
+                  input: { sx: { fontFamily: 'monospace' } },
+                }}
               />
-              <p className="text-[10px] text-gray-400 mt-1">Si lo dejas vacío se genera automáticamente.</p>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">RNC / Cédula</label>
-              <input
-                type="text"
-                value={rnc}
-                onChange={e => setRnc(e.target.value)}
-                placeholder="131988032"
-                maxLength={20}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Cliente *</label>
-            <input
-              type="text"
-              value={razonSocial}
-              onChange={e => setRazonSocial(e.target.value)}
-              required
-              placeholder="Razón social del cliente"
-              maxLength={255}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
+                Si lo dejas vacío se genera automáticamente.
+              </Typography>
+            </Box>
+            <TextField
+              label="RNC / Cédula" fullWidth
+              value={rnc}
+              onChange={e => setRnc(e.target.value)}
+              placeholder="131988032"
+              slotProps={{ htmlInput: { maxLength: 20 } }}
             />
-          </div>
+          </Box>
+
+          <TextField
+            label="Cliente" required fullWidth
+            value={razonSocial}
+            onChange={e => setRazonSocial(e.target.value)}
+            placeholder="Razón social del cliente"
+            slotProps={{ htmlInput: { maxLength: 255 } }}
+          />
 
           {/* Fechas */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha emisión *</label>
-              <input
-                type="date"
-                value={fechaEmision}
-                onChange={e => setFechaEmision(e.target.value)}
-                required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Vencimiento *</label>
-              <input
-                type="date"
-                value={fechaLimite}
-                onChange={e => setFechaLimite(e.target.value)}
-                required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-          </div>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            <TextField
+              label="Fecha emisión" type="date" required fullWidth
+              value={fechaEmision}
+              onChange={e => setFechaEmision(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+            <TextField
+              label="Vencimiento" type="date" required fullWidth
+              value={fechaLimite}
+              onChange={e => setFechaLimite(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+          </Box>
 
           {/* Montos */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Monto total RD$ *</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={montoDOP}
-                onChange={e => setMontoDOP(e.target.value)}
-                required
-                placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Ya pagado RD$</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            <TextField
+              label="Monto total RD$" type="number" required fullWidth
+              value={montoDOP}
+              onChange={e => setMontoDOP(e.target.value)}
+              placeholder="0.00"
+              slotProps={{ htmlInput: { step: 0.01, min: 0.01 } }}
+            />
+            <Box>
+              <TextField
+                label="Ya pagado RD$" type="number" fullWidth
                 value={yaPagadoDOP}
                 onChange={e => setYaPagadoDOP(e.target.value)}
                 placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                slotProps={{ htmlInput: { step: 0.01, min: 0 } }}
               />
-              <p className="text-[10px] text-gray-400 mt-1">Abonos previos al sistema.</p>
-            </div>
-          </div>
+              <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
+                Abonos previos al sistema.
+              </Typography>
+            </Box>
+          </Box>
 
-          <div>
-            <label className="text-xs font-medium text-gray-700 mb-1 block">Notas (opcional)</label>
-            <textarea
-              value={notas}
-              onChange={e => setNotas(e.target.value)}
-              rows={2}
-              maxLength={1000}
-              placeholder="Factura preimpresa serie B01 julio 2025, etc."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
-          </div>
+          <TextField
+            label="Notas (opcional)" fullWidth multiline rows={2}
+            value={notas}
+            onChange={e => setNotas(e.target.value)}
+            placeholder="Factura preimpresa serie B01 julio 2025, etc."
+            slotProps={{ htmlInput: { maxLength: 1000 } }}
+          />
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-700">{error}</p>
-            </div>
+            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+              {error}
+            </Alert>
           )}
 
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
-            >
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', pt: 1 }}>
+            <Button color="inherit" onClick={onClose} sx={{ color: '#4b5563' }}>
               Cancelar
-            </button>
-            <button
-              type="submit"
+            </Button>
+            <Button
+              type="submit" variant="contained"
               disabled={guardando}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+              startIcon={guardando ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> : undefined}
             >
-              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
               Agregar cuenta
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+            </Button>
+          </Box>
+        </Box>
+      </DialogContent>
+    </Dialog>
   );
 }

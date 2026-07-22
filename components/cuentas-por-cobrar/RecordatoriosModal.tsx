@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { X, AlertTriangle, Loader2, CheckCircle, Send } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
 import { fmtDOP } from '@/lib/utils/format';
 
 /**
@@ -98,142 +107,139 @@ export function RecordatoriosModal({
   const sinSaldo  = preview?.omitidos.sinSaldo ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">
-              {resultado ? 'Recordatorios enviados' : 'Enviar recordatorio de pago'}
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {resultado
-                ? 'Queda registrado en el historial de gestión de cada cuenta.'
-                : `${docIds.length} cuenta${docIds.length !== 1 ? 's' : ''} seleccionada${docIds.length !== 1 ? 's' : ''}`}
-            </p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, pb: 1.5 }}>
+        <Box>
+          <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+            {resultado ? 'Recordatorios enviados' : 'Enviar recordatorio de pago'}
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25 }}>
+            {resultado
+              ? 'Queda registrado en el historial de gestión de cada cuenta.'
+              : `${docIds.length} cuenta${docIds.length !== 1 ? 's' : ''} seleccionada${docIds.length !== 1 ? 's' : ''}`}
+          </Typography>
+        </Box>
+        <IconButton size="small" onClick={onClose} sx={{ color: '#9ca3af' }}>
+          <X style={{ width: 16, height: 16 }} />
+        </IconButton>
+      </DialogTitle>
 
-        <div className="p-5 space-y-4">
-          {cargando && (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Preparando la previsualización…
-            </div>
-          )}
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {cargando && (
+          <Typography sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 4, fontSize: '0.875rem', color: '#6b7280' }}>
+            <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} />
+            Preparando la previsualización…
+          </Typography>
+        )}
 
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
+        {error && (
+          <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+            {error}
+          </Alert>
+        )}
 
-          {/* ── Resultado del envío ─────────────────────────────────────────── */}
-          {resultado && (
-            <>
-              <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-800">
-                <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>
-                  {resultado.enviados} correo{resultado.enviados !== 1 ? 's' : ''} enviado
-                  {resultado.enviados !== 1 ? 's' : ''}.
-                </span>
-              </div>
-              {resultado.fallidos.length > 0 && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
-                  <p className="font-medium mb-1">
-                    {resultado.fallidos.length} fallaron:
-                  </p>
-                  <ul className="space-y-0.5 text-xs">
-                    {resultado.fallidos.map(f => (
-                      <li key={f.id}>Cuenta #{f.id} — {f.error}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
-          )}
+        {/* ── Resultado del envío ─────────────────────────────────────────── */}
+        {resultado && (
+          <>
+            <Alert severity="success" icon={<CheckCircle style={{ width: 16, height: 16 }} />}>
+              {resultado.enviados} correo{resultado.enviados !== 1 ? 's' : ''} enviado
+              {resultado.enviados !== 1 ? 's' : ''}.
+            </Alert>
+            {resultado.fallidos.length > 0 && (
+              <Alert severity="error">
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, mb: 0.5 }}>
+                  {resultado.fallidos.length} fallaron:
+                </Typography>
+                <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                  {resultado.fallidos.map(f => (
+                    <Box component="li" key={f.id} sx={{ fontSize: '0.75rem' }}>
+                      Cuenta #{f.id} — {f.error}
+                    </Box>
+                  ))}
+                </Box>
+              </Alert>
+            )}
+          </>
+        )}
 
-          {/* ── Previsualización ────────────────────────────────────────────── */}
-          {preview && !resultado && (
-            <>
-              {enviables.length === 0 ? (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>
-                    Ninguna de las cuentas seleccionadas se puede notificar. Necesitan
-                    un correo registrado y saldo pendiente.
-                  </span>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                    Se enviará a {enviables.length} destinatario{enviables.length !== 1 ? 's' : ''}
-                  </p>
-                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
-                    {enviables.map(e => (
-                      <div key={e.id} className="px-3 py-2.5 flex items-start justify-between gap-3 text-sm">
-                        <div className="min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{e.cliente}</p>
-                          <p className="text-xs text-gray-500 truncate">{e.email}</p>
-                          <p className="text-xs text-gray-400 font-mono">{e.codigo}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="font-medium text-gray-900">{fmtDOP(e.saldoCents)}</p>
-                          {e.diasVencido > 0 && (
-                            <p className="text-xs text-red-600">{e.diasVencido} días de atraso</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        {/* ── Previsualización ────────────────────────────────────────────── */}
+        {preview && !resultado && (
+          <>
+            {enviables.length === 0 ? (
+              <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+                Ninguna de las cuentas seleccionadas se puede notificar. Necesitan
+                un correo registrado y saldo pendiente.
+              </Alert>
+            ) : (
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1 }}>
+                  Se enviará a {enviables.length} destinatario{enviables.length !== 1 ? 's' : ''}
+                </Typography>
+                <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', '& > div + div': { borderTop: '1px solid #f3f4f6' } }}>
+                  {enviables.map(e => (
+                    <Box key={e.id} sx={{ px: 1.5, py: 1.25, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{e.cliente}</Typography>
+                        <Typography noWrap sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{e.email}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', fontFamily: 'monospace' }}>{e.codigo}</Typography>
+                      </Box>
+                      <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{fmtDOP(e.saldoCents)}</Typography>
+                        {e.diasVencido > 0 && (
+                          <Typography sx={{ fontSize: '0.75rem', color: '#dc2626' }}>{e.diasVencido} días de atraso</Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
 
-              {(sinCorreo.length > 0 || sinSaldo.length > 0) && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs text-gray-600 space-y-1">
-                  {sinCorreo.length > 0 && (
-                    <p>
-                      <span className="font-medium">{sinCorreo.length}</span> sin correo
-                      registrado: {sinCorreo.map(o => o.codigo).join(', ')}
-                    </p>
-                  )}
-                  {sinSaldo.length > 0 && (
-                    <p>
-                      <span className="font-medium">{sinSaldo.length}</span> sin saldo
-                      pendiente: {sinSaldo.map(o => o.codigo).join(', ')}
-                    </p>
-                  )}
-                  <p className="text-gray-400">Estas quedan fuera del envío.</p>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+            {(sinCorreo.length > 0 || sinSaldo.length > 0) && (
+              <Box sx={{ border: '1px solid #e5e7eb', bgcolor: '#f9fafb', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {sinCorreo.length > 0 && (
+                  <Typography sx={{ fontSize: '0.75rem', color: '#4b5563' }}>
+                    <strong>{sinCorreo.length}</strong> sin correo
+                    registrado: {sinCorreo.map(o => o.codigo).join(', ')}
+                  </Typography>
+                )}
+                {sinSaldo.length > 0 && (
+                  <Typography sx={{ fontSize: '0.75rem', color: '#4b5563' }}>
+                    <strong>{sinSaldo.length}</strong> sin saldo
+                    pendiente: {sinSaldo.map(o => o.codigo).join(', ')}
+                  </Typography>
+                )}
+                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Estas quedan fuera del envío.</Typography>
+              </Box>
+            )}
+          </>
+        )}
+      </DialogContent>
 
-        <div className="px-5 py-3.5 border-t border-gray-200 flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button
+          color="inherit"
+          onClick={onClose}
+          sx={{ color: '#374151' }}
+        >
+          {resultado ? 'Cerrar' : 'Cancelar'}
+        </Button>
+        {!resultado && (
+          <Button
+            variant="contained"
+            onClick={enviar}
+            disabled={enviando || cargando || enviables.length === 0}
+            startIcon={enviando
+              ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} />
+              : <Send style={{ width: 16, height: 16 }} />}
           >
-            {resultado ? 'Cerrar' : 'Cancelar'}
-          </button>
-          {!resultado && (
-            <button
-              onClick={enviar}
-              disabled={enviando || cargando || enviables.length === 0}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {enviando
-                ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando…</>
-                : <><Send className="h-4 w-4" /> Enviar {enviables.length} correo{enviables.length !== 1 ? 's' : ''}</>}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+            {enviando
+              ? 'Enviando…'
+              : `Enviar ${enviables.length} correo${enviables.length !== 1 ? 's' : ''}`}
+          </Button>
+        )}
+      </DialogActions>
+    </Dialog>
   );
 }
 

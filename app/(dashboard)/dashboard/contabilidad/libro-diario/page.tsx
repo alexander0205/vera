@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser, getUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
@@ -118,7 +117,7 @@ export default async function LibroDiarioPage({
         <Alert severity="warning">
           <strong>La contabilidad automática está apagada</strong>, así que no se
           genera ningún asiento.{' '}
-          <Box component={Link} href="/dashboard/contabilidad/configuracion" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
+          <Box component="a" href="/dashboard/contabilidad/configuracion" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
             Ve a la configuración
           </Box>{' '}
           para completarla y encenderla.

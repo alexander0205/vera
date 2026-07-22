@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
@@ -125,7 +124,7 @@ export default async function BalancePage({
                 <TableRow key={f.cuentaId} hover>
                   <TableCell>
                     <Box
-                      component={Link}
+                      component="a"
                       href={`/dashboard/contabilidad/mayor?cuentaId=${f.cuentaId}${
                         desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`}
                       sx={{ color: '#111827', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
@@ -166,7 +165,7 @@ export default async function BalancePage({
                     ) : (
                       <>
                         Todavía no hay movimientos que balancear.{' '}
-                        <Box component={Link} href="/dashboard/contabilidad/libro-diario" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
+                        <Box component="a" href="/dashboard/contabilidad/libro-diario" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
                           Genera los asientos en el libro diario
                         </Box>{' '}
                         y vuelve.

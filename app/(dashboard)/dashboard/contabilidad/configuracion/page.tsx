@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser, getUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
@@ -78,7 +77,7 @@ export default async function ConfiguracionContablePage() {
       {cuentas.length === 0 ? (
         <Alert severity="warning">
           Todavía no hay cuentas en el catálogo.{' '}
-          <Box component={Link} href="/dashboard/contabilidad/cuentas" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
+          <Box component="a" href="/dashboard/contabilidad/cuentas" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
             Abre el catálogo de cuentas
           </Box>{' '}
           primero: se creará solo con la estructura estándar.
