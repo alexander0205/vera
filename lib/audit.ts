@@ -56,7 +56,9 @@ export type AuditAction =
   | 'POS_COMANDA_CANCELAR'
   | 'MONEDERO_RECARGA'
   | 'MONEDERO_CONSUMO'
-  | 'MONEDERO_LIMITE';
+  | 'MONEDERO_LIMITE'
+  // Cobranza — acciones hacia el cliente, deben quedar trazadas
+  | 'RECORDATORIOS_COBRO_ENVIADOS';
 
 export interface AuditParams {
   teamId:    number;

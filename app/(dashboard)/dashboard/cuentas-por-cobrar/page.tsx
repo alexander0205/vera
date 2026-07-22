@@ -4,12 +4,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2,
+  X, Wallet, Loader2, Archive, Wallet2, PanelRightOpen, Download, Mail,
 } from 'lucide-react';
-import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { DataTable, type DataTableColumn, type RowAction, type BulkAction } from '@/components/data-table';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
+import { RecordatoriosModal, MAX_POR_LOTE } from '@/components/cuentas-por-cobrar/RecordatoriosModal';
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
@@ -20,24 +22,100 @@ interface Totales {
   countVencidas: number;
 }
 
+type Cubeta = 'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas';
+type Antiguedad = Record<Cubeta, { saldo: number; count: number }>;
+
+/** Promesas de pago del team completo (no de la cartera filtrada). */
+interface Promesas {
+  pendientes:     number;
+  incumplidas:    number;
+  montoPendiente: number;
+}
+
+/** Cubetas en orden de urgencia creciente, con su etiqueta y color. */
+const CUBETAS: { id: Cubeta; label: string; hint: string; tono: string; activo: string }[] = [
+  { id: 'porVencer', label: 'Por vencer', hint: 'aún no vencen',
+    tono: 'border-gray-200 hover:border-teal-300',   activo: 'border-teal-500 bg-teal-50' },
+  { id: 'd1a30',     label: '1-30 días',  hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-amber-300',  activo: 'border-amber-500 bg-amber-50' },
+  { id: 'd31a60',    label: '31-60 días', hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-orange-300', activo: 'border-orange-500 bg-orange-50' },
+  { id: 'd61a90',    label: '61-90 días', hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-orange-400', activo: 'border-orange-600 bg-orange-50' },
+  { id: 'd90mas',    label: '+90 días',   hint: 'de atraso',
+    tono: 'border-gray-200 hover:border-red-300',    activo: 'border-red-500 bg-red-50' },
+];
+
+const ANTIGUEDAD_VACIA: Antiguedad = {
+  porVencer: { saldo: 0, count: 0 }, d1a30: { saldo: 0, count: 0 },
+  d31a60:    { saldo: 0, count: 0 }, d61a90: { saldo: 0, count: 0 },
+  d90mas:    { saldo: 0, count: 0 },
+};
+
 // ─── Componente principal ──────────────────────────────────────────────────────
 
+// Al agrupar por cliente se piden más filas de una vez: agrupar solo la página
+// visible daría grupos partidos. Igual hay techo — el aviso lo dice si se corta.
+const PAGE_SIZE          = 25;
+const PAGE_SIZE_AGRUPADO = 500;
+
 export default function CuentasPorCobrarPage() {
-  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
+  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales; antiguedad: Antiguedad; promesas?: Promesas } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  // Filtros 100% client-side sobre el dataset cargado (AR es acotado).
+  // Filtros, orden y paginación son server-side: el saldo se calcula en SQL, así
+  // que filtrar en memoria mostraría totales de la página en vez de la cartera.
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    cliente: '', tipoDoc: '', estado: '', agrupar: '',
+    cliente: '', tipoDoc: '', estado: '', agrupar: '', orden: '',
   });
+  const [page, setPage] = useState(1);
+  const [cubeta, setCubeta] = useState<Cubeta | null>(null);
+  const [detalle, setDetalle] = useState<Cuenta | null>(null);
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
+  // Cuentas a las que se les va a mandar recordatorio. null = modal cerrado.
+  const [recordatorioDocs, setRecordatorioDocs] = useState<number[] | null>(null);
+  const [avisoLote, setAvisoLote] = useState<string | null>(null);
+
+  const agrupar  = filterValues.agrupar === 'cliente';
+  const pageSize = agrupar ? PAGE_SIZE_AGRUPADO : PAGE_SIZE;
+
+  // La búsqueda dispara un fetch por tecla; se espera a que el usuario pare.
+  const [busqueda, setBusqueda] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBusqueda(filterValues.cliente ?? ''), 300);
+    return () => clearTimeout(t);
+  }, [filterValues.cliente]);
+
+  // Cualquier cambio de filtro invalida la página actual. Se resetea en el mismo
+  // handler que cambia el filtro (no en un efecto aparte): si no, estando en la
+  // página 2 el cambio disparaba DOS consultas — una con el offset viejo y otra
+  // tras el reset. React agrupa ambos setState en un solo render.
+  const cambiarFiltros = useCallback((v: Record<string, string>) => {
+    setFilterValues(v);
+    setPage(1);
+  }, []);
+
+  // Clic en una tarjeta de antigüedad: alterna esa cubeta y vuelve a la página 1.
+  const alternarCubeta = useCallback((c: Cubeta) => {
+    setCubeta(prev => (prev === c ? null : c));
+    setPage(1);
+  }, []);
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/cuentas-por-cobrar');
+      const sp = new URLSearchParams({
+        limit:  String(pageSize),
+        offset: String((page - 1) * pageSize),
+        ...(busqueda.trim()        && { search:  busqueda.trim() }),
+        ...(filterValues.tipoDoc   && { tipoDoc: filterValues.tipoDoc }),
+        ...(filterValues.estado    && { estado:  filterValues.estado }),
+        ...(filterValues.orden     && { orden:   filterValues.orden }),
+        ...(cubeta                 && { cubeta }),
+      });
+      const res = await fetch(`/api/cuentas-por-cobrar?${sp}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error cargando');
       setData(json);
@@ -46,49 +124,48 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, busqueda, cubeta, filterValues.tipoDoc, filterValues.estado, filterValues.orden]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Exporta lo que se está viendo: mismos filtros, sin la paginación (el
+  // archivo trae toda la cartera filtrada, no la página).
+  const exportHref = (() => {
+    const sp = new URLSearchParams({
+      ...(busqueda.trim()      && { search:  busqueda.trim() }),
+      ...(filterValues.tipoDoc && { tipoDoc: filterValues.tipoDoc }),
+      ...(filterValues.estado  && { estado:  filterValues.estado }),
+      ...(filterValues.orden   && { orden:   filterValues.orden }),
+      ...(cubeta               && { cubeta }),
+    });
+    const q = sp.toString();
+    return `/api/cuentas-por-cobrar/export${q ? `?${q}` : ''}`;
+  })();
+
   // Deep-link `?pagar=<docId>`: al llegar desde otro módulo (p. ej. un cargo
-  // escolar) abre directo el modal de cobro de esa factura. Se consume una vez.
+  // escolar) abre directo el modal de cobro de esa factura. Se pide por id — con
+  // la lista paginada la factura puede no estar en la página cargada.
   const [pagarConsumido, setPagarConsumido] = useState(false);
   useEffect(() => {
-    if (!data || pagarConsumido) return;
+    if (pagarConsumido) return;
     const pagarId = new URLSearchParams(window.location.search).get('pagar');
     if (!pagarId) return;
-    const cuenta = data.cuentas.find((c) => String(c.id) === pagarId);
-    if (cuenta) { setPagoModal(cuenta); setPagarConsumido(true); }
-  }, [data, pagarConsumido]);
+    setPagarConsumido(true);
+    fetch(`/api/cuentas-por-cobrar/${pagarId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.cuenta) setPagoModal(j.cuenta); })
+      .catch(() => {});
+  }, [pagarConsumido]);
 
-  const agrupar = filterValues.agrupar === 'cliente';
-
-  // ── Filtrado client-side: cliente (texto), tipo de documento, vencimiento ──
-  const cuentasFiltradas = useMemo(() => {
-    let rows = data?.cuentas ?? [];
-    const q = (filterValues.cliente ?? '').trim().toLowerCase();
-    if (q) {
-      rows = rows.filter(c =>
-        (c.razonSocialComprador ?? 'consumidor final').toLowerCase().includes(q) ||
-        (c.rncComprador ?? '').toLowerCase().includes(q),
-      );
-    }
-    if (filterValues.tipoDoc === 'factura')      rows = rows.filter(c => c.saldoFactura > 0);
-    else if (filterValues.tipoDoc === 'nota-debito') rows = rows.filter(c => c.moraSaldo > 0);
-
-    if (filterValues.estado === 'vencidas')   rows = rows.filter(c => c.vencida);
-    else if (filterValues.estado === 'al-dia') rows = rows.filter(c => !c.vencida);
-
-    return rows;
-  }, [data, filterValues.cliente, filterValues.tipoDoc, filterValues.estado]);
-
-  // Totales reactivos al filtro (las tarjetas reflejan lo que se ve en la tabla).
-  const totales: Totales = useMemo(() => ({
-    pendiente:     cuentasFiltradas.reduce((s, c) => s + c.saldo, 0),
-    vencido:       cuentasFiltradas.filter(c => c.vencida).reduce((s, c) => s + c.saldo, 0),
-    count:         cuentasFiltradas.length,
-    countVencidas: cuentasFiltradas.filter(c => c.vencida).length,
-  }), [cuentasFiltradas]);
+  const cuentas = data?.cuentas ?? [];
+  // Totales del servidor: cubren toda la cartera filtrada, no solo esta página.
+  const totales: Totales = data?.totales ?? { pendiente: 0, vencido: 0, count: 0, countVencidas: 0 };
+  const antiguedad = data?.antiguedad ?? ANTIGUEDAD_VACIA;
+  const promesas = data?.promesas;
+  // Solo se muestra si hay algo que mostrar: un team que nunca registró una
+  // promesa no gana nada con una tarjeta en cero permanente.
+  const hayPromesas = !!promesas && (promesas.pendientes > 0 || promesas.incumplidas > 0);
+  const truncadoAlAgrupar = agrupar && totales.count > cuentas.length;
 
   const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
     {
@@ -168,7 +245,31 @@ export default function CuentasPorCobrarPage() {
   ], []);
 
   const rowActions = (c: Cuenta): RowAction[] => [
-    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c) },
+    { icon: PanelRightOpen, title: 'Ver detalle',    onClick: () => setDetalle(c),   primary: true },
+    { icon: Wallet2,        title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true },
+    // Sin `primary`: va en el menú de 3 puntos. Escribirle a un cliente no es
+    // una acción que convenga tener a un clic de distancia en cada fila.
+    { icon: Mail, title: 'Enviar recordatorio de pago', onClick: () => setRecordatorioDocs([c.id]) },
+  ];
+
+  // El endpoint tope 50 por lote, para que un clic no se convierta en cientos de
+  // correos. Se corta aquí también y se avisa, en vez de dejar que la API
+  // rechace el lote entero con un 400.
+  const bulkActions: BulkAction<Cuenta>[] = [
+    {
+      label: 'Enviar recordatorio',
+      icon:  Mail,
+      onClick: (ids) => {
+        const nums = ids.map(Number);
+        if (nums.length > MAX_POR_LOTE) {
+          setAvisoLote(
+            `Seleccionaste ${nums.length} cuentas y el máximo por envío es ${MAX_POR_LOTE}. ` +
+            `Se van a preparar las primeras ${MAX_POR_LOTE}.`,
+          );
+        }
+        setRecordatorioDocs(nums.slice(0, MAX_POR_LOTE));
+      },
+    },
   ];
 
   return (
@@ -182,6 +283,14 @@ export default function CuentasPorCobrarPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={exportHref}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
+            title="Descargar en Excel la cartera con los filtros activos"
+          >
+            <Download className="h-4 w-4" />
+            Exportar
+          </a>
           <button
             onClick={() => setHistoricaModal(true)}
             className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
@@ -223,12 +332,103 @@ export default function CuentasPorCobrarPage() {
         </div>
       )}
 
+      {/* Promesas de pago. A diferencia de los stats de arriba, estas NO siguen
+          el filtro activo: son del team completo. Una promesa incumplida no deja
+          de serlo porque el usuario esté mirando otra cubeta. */}
+      {hayPromesas && promesas && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Promesas de pago
+          </span>
+          <span className="text-sm text-gray-700">
+            <span className="font-semibold text-gray-900">{promesas.pendientes}</span> pendiente
+            {promesas.pendientes !== 1 ? 's' : ''}
+            {promesas.montoPendiente > 0 && (
+              <span className="text-gray-500"> · {fmtDOP(promesas.montoPendiente)} comprometido</span>
+            )}
+          </span>
+          {promesas.incumplidas > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-red-600">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span className="font-semibold">{promesas.incumplidas}</span> incumplida
+              {promesas.incumplidas !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Antigüedad de saldos — clic para filtrar por cubeta. Los montos NO
+          cambian al elegir una: siempre muestran la distribución completa, para
+          poder saltar entre cubetas sin perder la referencia. */}
+      {data && (
+        <div>
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Antigüedad de saldos
+            </h2>
+            {cubeta && (
+              <button
+                onClick={() => { setCubeta(null); setPage(1); }}
+                className="text-xs text-teal-600 hover:text-teal-700 hover:underline"
+              >
+                Ver toda la cartera
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            {CUBETAS.map(c => {
+              const d = antiguedad[c.id];
+              const activa = cubeta === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => alternarCubeta(c.id)}
+                  aria-pressed={activa}
+                  className={`text-left bg-white border rounded-xl px-3 py-2.5 transition-colors ${activa ? c.activo : c.tono}`}
+                >
+                  <p className="text-[11px] font-medium text-gray-500">{c.label}</p>
+                  <p className={`text-base font-bold ${d.saldo > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
+                    {fmtDOP(d.saldo)}
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    {d.count} cuenta{d.count !== 1 ? 's' : ''} · {c.hint}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {avisoLote && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+          <span>{avisoLote}</span>
+        </div>
+      )}
+
+      {truncadoAlAgrupar && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+          <span>
+            Agrupando las primeras {cuentas.length} de {totales.count} cuentas. Filtra para
+            reducir la cartera y ver los grupos completos.
+          </span>
+        </div>
+      )}
+
       {/* Tabla reutilizable con filtros + agrupación */}
       <DataTable<Cuenta>
-        data={cuentasFiltradas}
+        data={cuentas}
         loading={loading}
         error={error}
         columns={columns}
+        pagination={agrupar ? undefined : {
+          page,
+          pageSize,
+          total: totales.count,
+          onPageChange: setPage,
+        }}
         filters={[
           { type: 'search', id: 'cliente', placeholder: 'Buscar cliente o RNC…' },
           {
@@ -253,6 +453,17 @@ export default function CuentasPorCobrarPage() {
           },
           {
             type: 'select',
+            id: 'orden',
+            label: 'Ordenar',
+            placeholder: 'Más recientes',
+            options: [
+              { value: 'vencimiento', label: 'Vencidas primero' },
+              { value: 'monto',       label: 'Mayor saldo' },
+              { value: 'antiguo',     label: 'Más antiguas' },
+            ],
+          },
+          {
+            type: 'select',
             id: 'agrupar',
             label: 'Agrupar',
             placeholder: 'Sin agrupar',
@@ -262,8 +473,9 @@ export default function CuentasPorCobrarPage() {
           },
         ]}
         filterValues={filterValues}
-        onFilterChange={setFilterValues}
+        onFilterChange={cambiarFiltros}
         rowActions={rowActions}
+        bulkActions={bulkActions}
         groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
@@ -290,6 +502,16 @@ export default function CuentasPorCobrarPage() {
         }}
       />
 
+      {/* Panel lateral de detalle — se cierra al abrir el cobro para no apilar
+          dos capas encima de la lista. */}
+      {detalle && (
+        <DetallePanel
+          cuenta={detalle}
+          onClose={() => setDetalle(null)}
+          onCobrar={(c) => { setDetalle(null); setPagoModal(c); }}
+        />
+      )}
+
       {/* Modal registrar pago */}
       {pagoModal && (
         <PagoModal
@@ -304,6 +526,17 @@ export default function CuentasPorCobrarPage() {
         <HistoricaModal
           onClose={() => setHistoricaModal(false)}
           onSuccess={() => { setHistoricaModal(false); cargar(); }}
+        />
+      )}
+
+      {/* Modal de recordatorios (previsualiza y, con confirmación, envía) */}
+      {recordatorioDocs && (
+        <RecordatoriosModal
+          docIds={recordatorioDocs}
+          onClose={() => { setRecordatorioDocs(null); setAvisoLote(null); }}
+          // El envío deja un evento de contacto en cada cuenta: se recarga para
+          // que el panel de detalle muestre el historial al día.
+          onEnviado={cargar}
         />
       )}
     </section>
@@ -334,11 +567,13 @@ function HistoricaModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyRD();
+  // Vencimiento sugerido: 15 días desde hoy (RD). Se opera en UTC sobre la
+  // fecha calendario RD para que sumar días no arrastre desfase de zona.
   const vencDefault = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 15);
-    return d.toISOString().slice(0, 10);
+    const [y, m, d] = today.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + 15));
+    return dt.toISOString().slice(0, 10);
   })();
 
   const [encf, setEncf]               = useState('');

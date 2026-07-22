@@ -6,7 +6,7 @@ import { ConsultaNcfClient } from './_client';
 export const dynamic = 'force-dynamic';
 
 export default async function ConsultaNcfPage() {
-  await requirePermission('reportes:ver');
+  await requirePermission('contabilidad:ver');
 
   return (
     <section className="p-4 sm:p-6 max-w-7xl mx-auto">
