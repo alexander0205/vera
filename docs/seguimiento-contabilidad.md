@@ -959,6 +959,42 @@ En el navegador, contra el **team 2**:
 > Los screenshots siguen agotando el tiempo de espera en este entorno; la
 > verificación fue por DOM y traza de red.
 
+### Ajuste perf post-revisión (2026-07-22) — pedido por Alex
+
+Alex pidió aplicar al módulo el patrón de `perf/db-optimization` (que **ya está
+en main y por tanto en esta rama** — verificado con `git merge-base
+--is-ancestor`: SWR global, `React.cache` de sesión e índices 0070 ya activos
+aquí). Lo que faltaba era de este módulo:
+
+- **Libro diario: `PAGE_SIZE` 50 → 25.** Menos filas por consulta, más páginas
+  — mismo tamaño que la cartera.
+- **Mayor general: paginado de verdad** (25/página) en vez del tope de 500 con
+  aviso. Tres piezas, todas en SQL y en paralelo:
+  1. Totales y conteo del **tramo completo** (antes se sumaban en JS sobre las
+     filas traídas: con más de 500 movimientos los totales salían recortados —
+     ese defecto desapareció con el cambio, ya no hace falta el banner ámbar).
+  2. El **arrastre de la página** (`saldoPrevioPaginaCents`): suma de las filas
+     saltadas por el offset, con EL MISMO `ORDER BY` de la lista para que el
+     saldo corriente empalme exacto entre páginas.
+  3. La página de filas con `LIMIT/OFFSET`.
+  La paginación de la UI es server-side con `<Link>` (la página no tiene
+  componente de cliente y no hace falta crear uno). Página fuera de rango cae a
+  la última real, como en el libro diario.
+- **Cartera, balance y estudiantes: sin trabajo** — cartera y estudiantes ya
+  seguían el patrón (Etapa 1 y MD1), el balance es agregado sin lista larga.
+- **Secuencias NO se tocó**: página que vino de main (decisión 1: no tocar lo
+  de main en esta rama).
+- **Sin cache nuevo**: reportes server-rendered, 1 consulta por navegación;
+  `unstable_cache` aportaría poco y arriesga staleness contable.
+
+Verificado contra el team 9 (471 asientos, mayor de `1103` con 470 movimientos,
+19 páginas): totales del periodo idénticos en todas las páginas; el arrastre de
+la página 2 (RD$11,695.00) empalma exacto con la última fila de la página 1; el
+acumulado de la última fila de la página 19 (−RD$1,528,505.00) coincide con el
+saldo final agregado en SQL; `desde` + `pagina` combinados coherentes;
+`pagina=999` cae a la 19; parámetros basura → 200. Typecheck limpio,
+`test:unit` 24/24, 0 errores de consola.
+
 ### Si se retoma el resto del Paso 6
 
 Quedaron fuera por decisión de alcance, no por olvido: **estado de resultados**

@@ -10,6 +10,8 @@ import { SelectorCuenta } from './_selector-cuenta';
 
 export const dynamic = 'force-dynamic';
 
+const PAGE_SIZE = 25;
+
 /** 'YYYY-MM-DD' → '24 jun 2026', sin pasar por Date (que restaría un día en RD). */
 function fechaCorta(f: string) {
   const [a, m, d] = f.split('-');
@@ -43,9 +45,39 @@ export default async function MayorGeneralPage({
   const hasta = fechaValidaISO(sp.hasta);
   const cuentaNum = Number(sp.cuentaId);
   const cuentaId = Number.isInteger(cuentaNum) && cuentaNum > 0 ? cuentaNum : undefined;
+  const paginaNum = Number(sp.pagina);
+  const pagina = Number.isInteger(paginaNum) && paginaNum > 0 ? paginaNum : 1;
 
-  const cuentas = await cuentasConMovimientos(teamId);
-  const mayor = cuentaId ? await mayorGeneral(teamId, cuentaId, { desde, hasta }) : null;
+  const [cuentas, primera] = await Promise.all([
+    cuentasConMovimientos(teamId),
+    cuentaId
+      ? mayorGeneral(teamId, cuentaId, {
+          desde, hasta, limit: PAGE_SIZE, offset: (pagina - 1) * PAGE_SIZE,
+        })
+      : Promise.resolve(null),
+  ]);
+
+  // Una página fuera de rango cae a la última real, igual que en el libro
+  // diario: "?pagina=999" no debe mostrar "sin movimientos" sobre una cuenta
+  // que sí los tiene. La consulta extra solo ocurre en ese caso anómalo.
+  const paginas = primera ? Math.max(1, Math.ceil(primera.total / PAGE_SIZE)) : 1;
+  const paginaReal = Math.min(pagina, paginas);
+  const mayor = primera && paginaReal !== pagina
+    ? await mayorGeneral(teamId, cuentaId!, {
+        desde, hasta, limit: PAGE_SIZE, offset: (paginaReal - 1) * PAGE_SIZE,
+      })
+    : primera;
+
+  /** URL del mayor conservando cuenta y periodo, cambiando solo la página. */
+  const urlPagina = (p: number) => {
+    const qs = new URLSearchParams();
+    if (cuentaId) qs.set('cuentaId', String(cuentaId));
+    if (desde) qs.set('desde', desde);
+    if (hasta) qs.set('hasta', hasta);
+    if (p > 1) qs.set('pagina', String(p));
+    const s = qs.toString();
+    return `/dashboard/contabilidad/mayor${s ? `?${s}` : ''}`;
+  };
 
   // Signo del saldo según la naturaleza: un saldo negativo significa que la
   // cuenta está del lado contrario al que le toca, y conviene que se vea rojo.
@@ -140,15 +172,6 @@ export default async function MayorGeneralPage({
             )}
           </div>
 
-          {mayor.hayMas && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              Esta cuenta tiene más de 500 movimientos en el periodo. Se muestran
-              los 500 primeros, pero <strong>los totales y el saldo final de
-              arriba son solo de esos 500</strong>. Acota el periodo para verla
-              completa.
-            </div>
-          )}
-
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="w-full text-sm">
               <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
@@ -161,15 +184,19 @@ export default async function MayorGeneralPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {/* El saldo inicial va como primera fila y no como dato suelto:
-                    así la columna de saldo se lee de arriba abajo sin saltos. */}
-                {desde && (
+                {/* El saldo con el que arranca la página va como primera fila y
+                    no como dato suelto: así la columna de saldo se lee de
+                    arriba abajo sin saltos. En la página 1 es el saldo inicial
+                    del periodo; en las siguientes, el acumulado de lo anterior. */}
+                {(desde || paginaReal > 1) && (
                   <tr className="bg-gray-50/60 text-gray-500">
                     <td className="px-4 py-2 text-xs" colSpan={4}>
-                      Saldo anterior al {fechaCorta(desde)}
+                      {paginaReal > 1
+                        ? 'Saldo acumulado de las páginas anteriores'
+                        : `Saldo anterior al ${fechaCorta(desde!)}`}
                     </td>
-                    <td className={`px-4 py-2 text-right tabular-nums ${saldoCls(mayor.saldoInicialCents)}`}>
-                      {fmtDOP(mayor.saldoInicialCents)}
+                    <td className={`px-4 py-2 text-right tabular-nums ${saldoCls(mayor.saldoPrevioPaginaCents)}`}>
+                      {fmtDOP(mayor.saldoPrevioPaginaCents)}
                     </td>
                   </tr>
                 )}
@@ -224,6 +251,43 @@ export default async function MayorGeneralPage({
               </tbody>
             </table>
           </div>
+
+          {paginas > 1 && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-gray-500">
+                Página {paginaReal} de {paginas} · mostrando{' '}
+                {(paginaReal - 1) * PAGE_SIZE + 1}–
+                {Math.min(paginaReal * PAGE_SIZE, mayor.total)} de {mayor.total}{' '}
+                movimientos
+              </p>
+              <div className="flex gap-2">
+                {paginaReal > 1 ? (
+                  <Link
+                    href={urlPagina(paginaReal - 1)}
+                    className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Anterior
+                  </Link>
+                ) : (
+                  <span className="rounded-md border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-300">
+                    Anterior
+                  </span>
+                )}
+                {paginaReal < paginas ? (
+                  <Link
+                    href={urlPagina(paginaReal + 1)}
+                    className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Siguiente
+                  </Link>
+                ) : (
+                  <span className="rounded-md border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-300">
+                    Siguiente
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           <p className="text-xs text-gray-500">
             El saldo sigue la naturaleza de la cuenta: en una cuenta{' '}

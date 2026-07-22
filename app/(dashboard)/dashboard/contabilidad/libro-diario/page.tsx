@@ -16,7 +16,9 @@ import { LibroDiarioClient } from './_client';
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 50;
+// 25 en vez de 50: páginas más ligeras y menos filas por consulta — el patrón
+// de la rama perf/db-optimization, mismo tamaño que la cartera.
+const PAGE_SIZE = 25;
 
 /**
  * Libro diario — Paso 4 del plan, con los filtros del Paso 6.

@@ -80,19 +80,38 @@ export interface MayorCuenta {
   };
   /** Arrastre de lo anterior a `desde`. Sin `desde` es 0: no hay nada antes. */
   saldoInicialCents: number;
+  /**
+   * Saldo con el que arranca la página pedida: el inicial más el efecto de los
+   * movimientos saltados por el `offset`. En la página 1 coincide con
+   * `saldoInicialCents`.
+   */
+  saldoPrevioPaginaCents: number;
+  /** Sumas de TODO el tramo filtrado, no de la página. */
   debeCents:         number;
   haberCents:        number;
   saldoFinalCents:   number;
+  /** Movimientos totales del tramo (para paginar). */
+  total:             number;
   movimientos:       MovimientoMayor[];
-  /** true si se recortó la lista por el tope. */
-  hayMas:            boolean;
 }
 
-/** Tope de movimientos que se traen de una cuenta. */
+export interface OpcionesMayor extends RangoFechas {
+  limit?:  number;
+  offset?: number;
+}
+
+/** Tope de movimientos que se traen de una vez si nadie pide otra cosa. */
 const TOPE_MOVIMIENTOS = 500;
 
 /**
- * Movimientos de UNA cuenta con su saldo corriente.
+ * Movimientos de UNA cuenta con su saldo corriente, paginados.
+ *
+ * Los totales (`debeCents`/`haberCents`/`saldoFinalCents`) se calculan en SQL
+ * sobre el tramo COMPLETO, no sobre la página: mismo criterio que la cartera y
+ * el libro diario — un total recortado presentado como total confunde más que
+ * no darlo. El saldo corriente de cada fila sí depende de dónde empieza la
+ * página, y para eso está `saldoPrevioPaginaCents`: la suma de lo saltado por
+ * el `offset`, calculada también en SQL con el mismo orden de la lista.
  *
  * Devuelve `null` si la cuenta no existe o es de otro team — así la ruta puede
  * responder 404 sin que este archivo sepa nada de HTTP, y sin filtrar la
@@ -101,8 +120,12 @@ const TOPE_MOVIMIENTOS = 500;
 export async function mayorGeneral(
   teamId: number,
   cuentaId: number,
-  rango: RangoFechas = {},
+  opciones: OpcionesMayor = {},
 ): Promise<MayorCuenta | null> {
+  const rango  = { desde: opciones.desde, hasta: opciones.hasta };
+  const limit  = Math.max(1, opciones.limit ?? TOPE_MOVIMIENTOS);
+  const offset = Math.max(0, opciones.offset ?? 0);
+
   const [cuenta] = await db.execute<{
     id: number; codigo: string; nombre: string;
     tipo: TipoCuenta; naturaleza: NaturalezaCuenta;
@@ -139,33 +162,65 @@ export async function mayorGeneral(
   if (rango.hasta) cond.push(sql`a.fecha <= ${rango.hasta}::date`);
   const where = sql.join(cond, sql` AND `);
 
-  // Orden ASCENDENTE, al revés que el libro diario: un mayor se lee de arriba
-  // abajo acumulando, así que el saldo corriente solo tiene sentido si el más
-  // antiguo va primero.
-  const filas = await db.execute(sql`
-    SELECT a.id AS "asientoId", to_char(a.fecha, 'YYYY-MM-DD') AS fecha,
-           a.concepto, a.origen_tipo AS "origenTipo",
-           l.descripcion, l.debe_cents AS "debeCents", l.haber_cents AS "haberCents"
-    FROM contabilidad_asiento_lineas l
-    JOIN contabilidad_asientos a ON a.id = l.asiento_id
-    WHERE ${where}
-    ORDER BY a.fecha ASC, a.id ASC, l.orden ASC
-    LIMIT ${TOPE_MOVIMIENTOS + 1}
-  `);
+  // Las tres consultas no dependen entre sí: van en paralelo.
+  const [[tot], previas, filas] = await Promise.all([
+    // Totales y conteo del tramo COMPLETO, para que las cifras de arriba y la
+    // paginación no dependan de qué página se está mirando.
+    db.execute<{ total: unknown; debe: unknown; haber: unknown }>(sql`
+      SELECT count(*)::bigint AS total,
+             COALESCE(sum(l.debe_cents), 0)::bigint  AS debe,
+             COALESCE(sum(l.haber_cents), 0)::bigint AS haber
+      FROM contabilidad_asiento_lineas l
+      JOIN contabilidad_asientos a ON a.id = l.asiento_id
+      WHERE ${where}
+    `),
+    // El efecto de las filas que el offset salta, con EL MISMO orden de la
+    // lista: si ordenaran distinto, el saldo corriente de la página no
+    // empalmaría con la anterior. Solo se consulta si hay algo saltado.
+    offset > 0
+      ? db.execute<{ debe: unknown; haber: unknown }>(sql`
+          SELECT COALESCE(sum(debe_cents), 0)::bigint  AS debe,
+                 COALESCE(sum(haber_cents), 0)::bigint AS haber
+          FROM (
+            SELECT l.debe_cents, l.haber_cents
+            FROM contabilidad_asiento_lineas l
+            JOIN contabilidad_asientos a ON a.id = l.asiento_id
+            WHERE ${where}
+            ORDER BY a.fecha ASC, a.id ASC, l.orden ASC
+            LIMIT ${offset}
+          ) saltadas
+        `)
+      : Promise.resolve(null),
+    // Orden ASCENDENTE, al revés que el libro diario: un mayor se lee de arriba
+    // abajo acumulando, así que el saldo corriente solo tiene sentido si el más
+    // antiguo va primero.
+    db.execute(sql`
+      SELECT a.id AS "asientoId", to_char(a.fecha, 'YYYY-MM-DD') AS fecha,
+             a.concepto, a.origen_tipo AS "origenTipo",
+             l.descripcion, l.debe_cents AS "debeCents", l.haber_cents AS "haberCents"
+      FROM contabilidad_asiento_lineas l
+      JOIN contabilidad_asientos a ON a.id = l.asiento_id
+      WHERE ${where}
+      ORDER BY a.fecha ASC, a.id ASC, l.orden ASC
+      LIMIT ${limit} OFFSET ${offset}
+    `),
+  ]);
 
-  const brutos = filas as unknown as Omit<MovimientoMayor, 'saldoCents'>[];
-  const hayMas = brutos.length > TOPE_MOVIMIENTOS;
-  const usados = hayMas ? brutos.slice(0, TOPE_MOVIMIENTOS) : brutos;
+  const debeCents  = aNumero(tot.debe);
+  const haberCents = aNumero(tot.haber);
 
-  let saldo = saldoInicialCents;
-  let debeCents = 0;
-  let haberCents = 0;
+  const saldoPrevioPaginaCents = previas
+    ? saldoInicialCents + saldoSegunNaturaleza(
+        cuenta.naturaleza, aNumero(previas[0].debe), aNumero(previas[0].haber),
+      )
+    : saldoInicialCents;
 
-  const movimientos: MovimientoMayor[] = usados.map((m) => {
+  let saldo = saldoPrevioPaginaCents;
+  const movimientos: MovimientoMayor[] = (
+    filas as unknown as Omit<MovimientoMayor, 'saldoCents'>[]
+  ).map((m) => {
     const debe  = aNumero(m.debeCents);
     const haber = aNumero(m.haberCents);
-    debeCents  += debe;
-    haberCents += haber;
     saldo += saldoSegunNaturaleza(cuenta.naturaleza, debe, haber);
     return { ...m, debeCents: debe, haberCents: haber, saldoCents: saldo };
   });
@@ -173,14 +228,15 @@ export async function mayorGeneral(
   return {
     cuenta,
     saldoInicialCents,
+    saldoPrevioPaginaCents,
     debeCents,
     haberCents,
-    // Se recalcula en vez de usar el `saldo` corriente: si el tope recortó la
-    // lista, el acumulado del último movimiento visible no es el saldo real.
+    // Del agregado del tramo, no del acumulado de la página: el último
+    // movimiento visible no es el último del tramo salvo en la página final.
     saldoFinalCents: saldoInicialCents
       + saldoSegunNaturaleza(cuenta.naturaleza, debeCents, haberCents),
+    total: aNumero(tot.total),
     movimientos,
-    hayMas,
   };
 }
 
