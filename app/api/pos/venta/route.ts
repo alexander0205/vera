@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
   }
 
   // 2) Emitir la venta reusando el motor existente (sesión reenviada).
-  let emitJson: { ok?: boolean; documentoId?: number; error?: string };
+  // `docId` viaja cuando la emisión falló pero el e-NCF quedó reservado en un
+  // borrador: hay que propagarlo para que el reintento reuse ese mismo número.
+  let emitJson: { ok?: boolean; documentoId?: number; error?: string; docId?: number; encf?: string };
   let emitOk = false;
   try {
     const emitRes = await fetch(`${req.nextUrl.origin}/api/ecf/emitir`, {
@@ -79,7 +81,12 @@ export async function POST(req: NextRequest) {
       console.error('[pos/venta] reversa falló tras emisión fallida', e);
     }
     return NextResponse.json(
-      { error: emitJson.error ?? 'No se pudo completar la venta; se revirtió el saldo.' },
+      {
+        error: emitJson.error ?? 'No se pudo completar la venta; se revirtió el saldo.',
+        // Si el e-NCF quedó reservado en un borrador, propagarlo: el reintento
+        // debe reusar ese número en vez de consumir el siguiente.
+        ...(typeof emitJson.docId === 'number' ? { docId: emitJson.docId, encf: emitJson.encf } : {}),
+      },
       { status: 400 },
     );
   }

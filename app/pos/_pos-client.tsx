@@ -657,10 +657,14 @@ function Venta({
       setCobrando(false);
       const r = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // El e-NCF quedó reservado en un borrador: guardarlo para que el
+        // próximo intento lo reuse en vez de consumir otro número.
+        if (typeof r.docId === 'number') setReservaDocId(r.docId);
         toast.error(r.error ?? 'No se pudo completar la venta');
         await refrescarEstudiante(estudiante.dependienteId);  // refleja la reversa
         return;
       }
+      setReservaDocId(null);
       toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(r.saldoCentavos)}`);
       await refrescarEstudiante(estudiante.dependienteId);
       if (r.documentoId) { docId = r.documentoId; }
