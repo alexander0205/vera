@@ -1,5 +1,6 @@
 /**
  * GET /api/cuentas-por-cobrar/[docId]
+ *   ?detalle=1  — incluye pagos, notas aplicadas y timeline (panel lateral)
  *
  * Una sola cuenta por cobrar (factura con saldo pendiente), con el mismo shape
  * que el listado. Sirve para reutilizar el modal de cobro fuera del listado
@@ -8,12 +9,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, getCuentasPorCobrar } from '@/lib/db/queries';
+import { getDetalleCuenta } from '@/lib/cobranza/detalle';
+import { getOrigenEscolarDeFactura } from '@/lib/administracion-escolar/origen-factura';
 import { db } from '@/lib/db/drizzle';
 import { teamMembers } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ docId: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ docId: string }> }) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
@@ -35,5 +38,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ doc
   if (isNaN(id)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const { cuentas } = await getCuentasPorCobrar(teamId, { docId: id });
-  return NextResponse.json({ cuenta: cuentas[0] ?? null });
+  const cuenta = cuentas[0] ?? null;
+
+  if (new URL(req.url).searchParams.get('detalle') !== '1') {
+    return NextResponse.json({ cuenta });
+  }
+  // El detalle se pide igual aunque la cuenta ya no esté en cartera (saldada
+  // mientras el panel estaba abierto): el historial sigue siendo válido.
+  // El origen escolar se pide aparte y por su propio módulo: cobranza no
+  // importa las tablas escolares (ver lib/administracion-escolar/origen-factura).
+  const [detalle, origenEscolar] = await Promise.all([
+    getDetalleCuenta(teamId, id),
+    getOrigenEscolarDeFactura(teamId, id),
+  ]);
+  return NextResponse.json({ cuenta, ...detalle, origenEscolar });
 }

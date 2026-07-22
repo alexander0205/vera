@@ -1823,6 +1823,199 @@ export type TeamDataWithMembers = Team & {
   })[];
 };
 
+// ─── Cobranza — seguimiento de cartera (migración 0082) ──────────────────────
+// FK unidireccional: cobranza conoce la factura, la factura no sabe de cobranza.
+// Nada de esto entra al XML de la DGII ni afecta el saldo — es gestión interna.
+
+/** Log de gestión de cobro: contactos, notas internas y promesas de pago. */
+export const cobranzaEventos = pgTable('cobranza_eventos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  ecfDocumentId: integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
+  /** 'contacto' | 'nota' | 'promesa' */
+  tipo:          varchar('tipo', { length: 20 }).notNull(),
+  /** Fecha del hecho, no del registro: permite cargar gestiones atrasadas. */
+  fecha:         date('fecha').notNull(),
+  /** Solo tipo='contacto': llamada | whatsapp | correo | presencial | otro */
+  canal:         varchar('canal', { length: 20 }),
+  comentario:    text('comentario'),
+  /** Solo tipo='promesa'. El CHECK exige fecha + estado si tipo='promesa'. */
+  promesaFecha:      date('promesa_fecha'),
+  promesaMontoCents: integer('promesa_monto_cents'),
+  /** pendiente | cumplida | incumplida */
+  promesaEstado:     varchar('promesa_estado', { length: 20 }),
+  createdBy:     integer('created_by').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('cobranza_eventos_doc_idx').on(t.teamId, t.ecfDocumentId, t.fecha),
+]);
+
+/** Estado actual del seguimiento: una fila por documento, se sobrescribe. */
+export const cobranzaSeguimiento = pgTable('cobranza_seguimiento', {
+  ecfDocumentId:      integer('ecf_document_id').primaryKey().references(() => ecfDocuments.id),
+  teamId:             integer('team_id').notNull().references(() => teams.id),
+  responsableUserId:  integer('responsable_user_id').references(() => users.id),
+  /** Texto libre: cada empresa cobra distinto, un enum obligaría a migrar. */
+  proximaAccion:      text('proxima_accion'),
+  proximaAccionFecha: date('proxima_accion_fecha'),
+  updatedBy:          integer('updated_by').references(() => users.id),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('cobranza_seguimiento_team_idx').on(t.teamId, t.proximaAccionFecha),
+]);
+
+export type CobranzaEvento      = typeof cobranzaEventos.$inferSelect;
+export type NewCobranzaEvento   = typeof cobranzaEventos.$inferInsert;
+export type CobranzaSeguimiento = typeof cobranzaSeguimiento.$inferSelect;
+
+// ─── Contabilidad: catálogo de cuentas (Paso 2) ──────────────────────────────
+// El mapa contable de cada empresa. Aquí no hay movimientos: los asientos
+// llegan en el Paso 4. No toca products ni ecf_documents — la relación con las
+// entidades genéricas se resuelve en el Paso 3 y apunta hacia la cuenta.
+
+/** Cuenta del catálogo contable. Jerárquica por self-FK; solo las hojas imputan. */
+export const contabilidadCuentas = pgTable('contabilidad_cuentas', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  /** Estable: inmutable una vez que la cuenta tiene movimientos. */
+  codigo:  varchar('codigo', { length: 20 }).notNull(),
+  nombre:  varchar('nombre', { length: 120 }).notNull(),
+  /** activo | pasivo | patrimonio | ingreso | costo | gasto */
+  tipo:    varchar('tipo', { length: 20 }).notNull(),
+  /**
+   * deudora | acreedora. Se guarda, no se deriva de `tipo`: las cuentas de
+   * contrapartida invierten la naturaleza de su clase (ej. "Descuentos y
+   * devoluciones sobre ventas" es ingreso de naturaleza deudora).
+   */
+  naturaleza:    varchar('naturaleza', { length: 10 }).notNull(),
+  /** NULL = cuenta raíz. Mismo team y sin ciclos: se valida en la aplicación. */
+  cuentaPadreId: integer('cuenta_padre_id'),
+  /** Si acepta asientos directos. Las cuentas padre agrupan, no imputan. */
+  imputable: boolean('imputable').notNull().default(true),
+  /** Desactivar en vez de borrar: los reportes históricos deben seguir cuadrando. */
+  activa:    boolean('activa').notNull().default(true),
+  /** Creada por la siembra del catálogo base, no por el usuario. */
+  esBase:    boolean('es_base').notNull().default(false),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_cuentas_team_codigo_idx').on(t.teamId, t.codigo),
+  index('contabilidad_cuentas_padre_idx').on(t.teamId, t.cuentaPadreId),
+]);
+
+export type ContabilidadCuenta    = typeof contabilidadCuentas.$inferSelect;
+export type NewContabilidadCuenta = typeof contabilidadCuentas.$inferInsert;
+
+// ─── Contabilidad: configuración de cuentas automáticas (Paso 3) ─────────────
+// Traduce operaciones a cuentas sin preguntarle al usuario en cada factura.
+// No genera asientos — eso es el Paso 4; esto solo dice DÓNDE va cada cosa.
+
+/** Cuentas generales + el interruptor del módulo. Una fila por empresa. */
+export const contabilidadConfig = pgTable('contabilidad_config', {
+  teamId: integer('team_id').primaryKey().references(() => teams.id),
+  /**
+   * Modo "sin contabilidad" del plan. Arranca apagado: entrar a la pantalla no
+   * hace que la empresa empiece a generar asientos. La API se niega a
+   * encenderlo mientras falte configuración.
+   */
+  activa: boolean('activa').notNull().default(false),
+  cuentaPorCobrarId: integer('cuenta_por_cobrar_id').references(() => contabilidadCuentas.id),
+  cuentaItbisId:     integer('cuenta_itbis_id').references(() => contabilidadCuentas.id),
+  cuentaIngresosId:  integer('cuenta_ingresos_id').references(() => contabilidadCuentas.id),
+  cuentaDescuentosId: integer('cuenta_descuentos_id').references(() => contabilidadCuentas.id),
+  cuentaMoraId:      integer('cuenta_mora_id').references(() => contabilidadCuentas.id),
+  /** Pasivo: el sobrante de una nota de crédito es dinero que se le debe al cliente. */
+  cuentaSaldosFavorId: integer('cuenta_saldos_favor_id').references(() => contabilidadCuentas.id),
+  /** Activo: lo que el cliente retuvo deja un crédito fiscal, no un menor ingreso. */
+  cuentaRetencionesId: integer('cuenta_retenciones_id').references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Cuenta por método de cobro.
+ *
+ * `clave` NO es `pagosRecibidos.metodo` tal cual: un cobro por CardNet/Azul se
+ * guarda como `metodo='tarjeta'` y solo se distingue por el vínculo desde
+ * `paymentLinks`. Contablemente son distintos — el cobro en línea no entra al
+ * banco hasta que la pasarela liquida. Lo resuelve `claveContableDePago()`.
+ */
+export const contabilidadConfigMetodosPago = pgTable('contabilidad_config_metodos_pago', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  clave:   varchar('clave', { length: 30 }).notNull(),
+  cuentaId: integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  /** Solo pasarelas: la comisión retenida al liquidar. Es gasto, no menor ingreso. */
+  cuentaComisionId: integer('cuenta_comision_id').references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_config_metodos_team_clave_idx').on(t.teamId, t.clave),
+]);
+
+/**
+ * Override de la cuenta de ingreso por categoría o producto. Exactamente uno de
+ * los dos va seteado (lo obliga un CHECK).
+ *
+ * Resolución: producto → categoría → tipo del producto → ingresos general.
+ */
+export const contabilidadConfigIngresos = pgTable('contabilidad_config_ingresos', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  categoriaId: integer('categoria_id').references(() => categorias.id),
+  productoId:  integer('producto_id').references(() => products.id),
+  cuentaId: integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  updatedBy: integer('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ─── Contabilidad: asientos (Paso 4) ─────────────────────────────────────────
+// Donde el módulo empieza a escribir números. Partida doble: cada asiento tiene
+// líneas de débito y de crédito que suman lo mismo.
+
+/** Encabezado del asiento. Un origen produce exactamente uno (índice único). */
+export const contabilidadAsientos = pgTable('contabilidad_asientos', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  /** Fecha contable del hecho, no del registro. */
+  fecha:   date('fecha').notNull(),
+  concepto: varchar('concepto', { length: 255 }).notNull(),
+  /** 'factura' | 'pago' | 'nota' | 'anulacion' (los dos últimos, Paso 5). */
+  origenTipo: varchar('origen_tipo', { length: 20 }).notNull(),
+  origenId:   integer('origen_id').notNull(),
+  /** debe == haber == esto. Lo garantiza la aplicación antes de insertar. */
+  totalCents: bigint('total_cents', { mode: 'number' }).notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_asientos_origen_idx').on(t.teamId, t.origenTipo, t.origenId),
+  index('contabilidad_asientos_team_fecha_idx').on(t.teamId, t.fecha),
+]);
+
+/** Apunte. Es débito o crédito, nunca los dos ni ninguno (lo obliga un CHECK). */
+export const contabilidadAsientoLineas = pgTable('contabilidad_asiento_lineas', {
+  id:        serial('id').primaryKey(),
+  asientoId: integer('asiento_id').notNull().references(() => contabilidadAsientos.id),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  cuentaId:  integer('cuenta_id').notNull().references(() => contabilidadCuentas.id),
+  debeCents:  bigint('debe_cents', { mode: 'number' }).notNull().default(0),
+  haberCents: bigint('haber_cents', { mode: 'number' }).notNull().default(0),
+  descripcion: varchar('descripcion', { length: 255 }),
+  orden:      integer('orden').notNull().default(0),
+}, (t) => [
+  index('contabilidad_asiento_lineas_asiento_idx').on(t.asientoId, t.orden),
+  index('contabilidad_asiento_lineas_cuenta_idx').on(t.teamId, t.cuentaId),
+]);
+
+export type ContabilidadAsiento      = typeof contabilidadAsientos.$inferSelect;
+export type ContabilidadAsientoLinea = typeof contabilidadAsientoLineas.$inferSelect;
+
+export type ContabilidadConfig       = typeof contabilidadConfig.$inferSelect;
+export type ContabilidadConfigMetodo = typeof contabilidadConfigMetodosPago.$inferSelect;
+export type ContabilidadConfigIngreso = typeof contabilidadConfigIngresos.$inferSelect;
+
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;

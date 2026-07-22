@@ -525,113 +525,234 @@ export function getPlanLimit(planName: string | null, status?: string | null): n
 
 // ─── EmiteDO — Cuentas por cobrar (AR) ────────────────────────────────────────
 
+/** Orden de la cartera. Whitelist — nunca interpolar entrada del usuario. */
+export type OrdenCartera = 'reciente' | 'antiguo' | 'monto' | 'vencimiento';
+
+const ORDEN_CARTERA_SQL: Record<OrdenCartera, string> = {
+  reciente:    'fecha_emision_ts DESC',
+  antiguo:     'fecha_emision_ts ASC',
+  monto:       'saldo DESC',
+  // Vencidas primero y las más atrasadas arriba; las que no vencen, al final.
+  vencimiento: 'vencida DESC, fecha_limite_date ASC NULLS LAST',
+};
+
 /**
- * Lista cuentas por cobrar: facturas crédito con saldo pendiente > 0.
+ * Cubetas de antigüedad de la cartera.
  *
- * Reglas:
- * - Solo tipo de pago = 2 (crédito) con estado emitido (no BORRADOR/RECHAZADO).
- * - saldo = montoTotal - SUM(pagosRecibidos.montoCentavos)
- * - Filtros opcionales: clientId, soloVencidas (fechaLimitePago < hoy y saldo > 0).
+ * `porVencer` = todavía no vence (incluye las que no tienen fecha límite).
+ * El resto son días de atraso cumplidos. Los cortes son los del plan:
+ * 1-30, 31-60, 61-90 y más de 90.
+ */
+export type CubetaAntiguedad = 'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas';
+
+export const CUBETAS_ANTIGUEDAD: CubetaAntiguedad[] =
+  ['porVencer', 'd1a30', 'd31a60', 'd61a90', 'd90mas'];
+
+/** Predicado SQL de cada cubeta, sobre las columnas del CTE `cartera`. */
+const CUBETA_SQL: Record<CubetaAntiguedad, string> = {
+  porVencer: 'NOT vencida',
+  d1a30:     'vencida AND dias_vencido BETWEEN 1 AND 30',
+  d31a60:    'vencida AND dias_vencido BETWEEN 31 AND 60',
+  d61a90:    'vencida AND dias_vencido BETWEEN 61 AND 90',
+  d90mas:    'vencida AND dias_vencido > 90',
+};
+
+export interface CuentasPorCobrarOpts {
+  clientId?:     number;
+  soloVencidas?: boolean;
+  docId?:        number;
+  limit?:        number;
+  offset?:       number;
+  /** Texto libre sobre razón social o RNC del comprador. */
+  search?:       string;
+  /** 'factura' → con saldo de factura; 'nota-debito' → con mora pendiente. */
+  tipoDoc?:      'factura' | 'nota-debito';
+  /** 'vencidas' | 'al-dia' — filtra por estado de vencimiento. */
+  estado?:       'vencidas' | 'al-dia';
+  /** Restringe a una cubeta de antigüedad. */
+  cubeta?:       CubetaAntiguedad;
+  orden?:        OrdenCartera;
+}
+
+/**
+ * Lista cuentas por cobrar: facturas con saldo pendiente > 0.
+ *
+ * El saldo se calcula EN SQL (antes se calculaba en JS después del fetch, así
+ * que el LIMIT recortaba antes de descartar las filas con saldo 0 y la cartera
+ * se truncaba en silencio). Eso permite filtrar, ordenar y paginar en servidor,
+ * y que los totales cubran TODA la cartera filtrada, no solo la página.
+ *
+ * Fórmula (ver docs/contabilidad-paso1-logica-saldo.md):
+ *   saldoFactura = max(0, montoTotal − pagado − ncAplicado)
+ *   saldo        = saldoFactura + moraSaldo
+ *
+ * `hoy` sale de Postgres en zona RD (`now() AT TIME ZONE 'America/Santo_Domingo'`):
+ * el corte del día es medianoche en RD y no en UTC.
  */
 export async function getCuentasPorCobrar(
   teamId: number,
-  opts: {
-    clientId?: number;
-    soloVencidas?: boolean;
-    limit?: number;
-    offset?: number;
-    /** Una sola factura (el módulo escolar la usa para resolver el saldo de un cargo). */
-    docId?: number;
-  } = {},
+  opts: CuentasPorCobrarOpts = {},
 ) {
-  const hoy = new Date().toISOString().slice(0, 10);
-  // Techo al dataset (antes cargaba toda la cartera abierta sin límite).
-  const limit  = Math.min(opts.limit ?? 2000, 2000);
+  const limit  = Math.min(Math.max(opts.limit ?? 2000, 1), 2000);
   const offset = Math.max(opts.offset ?? 0, 0);
+  const ordenSql = ORDEN_CARTERA_SQL[opts.orden ?? 'reciente'] ?? ORDEN_CARTERA_SQL.reciente;
 
-  const rows = await db
-    .select({
-      id:                   ecfDocuments.id,
-      encf:                 ecfDocuments.encf,
-      codigo:               ecfDocuments.codigo,
-      tipoEcf:              ecfDocuments.tipoEcf,
-      fechaEmision:         ecfDocuments.fechaEmision,
-      fechaLimitePago:      ecfDocuments.fechaLimitePago,
-      rncComprador:         ecfDocuments.rncComprador,
-      razonSocialComprador: ecfDocuments.razonSocialComprador,
-      emailComprador:       ecfDocuments.emailComprador,
-      clientId:             ecfDocuments.clientId,
-      estado:               ecfDocuments.estado,
-      montoTotal:           ecfDocuments.montoTotal,
-      totalItbis:           ecfDocuments.totalItbis,
-      // Subquery correlacionada: usar nombre literal de tabla en lugar de
-      // ${ecfDocuments.id} para evitar que Drizzle lo trate como parámetro
-      // (caso real: todos los rows devolvían el mismo SUM del primer id).
-      pagado: sql<number>`coalesce((
-        SELECT SUM(monto_centavos) FROM pagos_recibidos
-        WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
-      ), 0)`,
-      // Saldo combinado de las ND de mora atadas a esta factura
-      // (mora_origen_id = factura.id, no anuladas, saldo > 0). Subquery
-      // correlacionada con nombres literales de tabla para evitar el bug de
-      // parámetro de Drizzle (mismo patrón que `pagado` arriba).
-      moraSaldo: sql<number>`coalesce((
-        SELECT SUM(nd.monto_total - coalesce((
-          SELECT SUM(monto_centavos) FROM pagos_recibidos
-          WHERE pagos_recibidos.ecf_document_id = nd.id
-        ), 0))
-        FROM ecf_documents AS nd
-        WHERE nd.mora_origen_id = ecf_documents.id
-          AND nd.estado != 'ANULADO'
-          AND (nd.monto_total - coalesce((
-            SELECT SUM(monto_centavos) FROM pagos_recibidos
-            WHERE pagos_recibidos.ecf_document_id = nd.id
-          ), 0)) > 0
-      ), 0)`,
-      // Crédito aplicado por Notas de Crédito (tipo 34) vinculadas a esta
-      // factura (por origen_documento_id o por ncf_modificado = encf real).
-      // Reduce el saldo cobrable. Mismo patrón de subquery correlacionada.
-      ncAplicado: sql<number>`coalesce((
-        SELECT SUM(nc.monto_total) FROM ecf_documents nc
-        WHERE nc.team_id = ecf_documents.team_id
-          AND nc.tipo_ecf = '34'
-          -- Solo NCs del modelo viejo reducen la factura; las nuevas generan
-          -- saldo a favor del cliente (credito_generado_cents IS NOT NULL).
-          AND nc.credito_generado_cents IS NULL
-          AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
-          -- Código 2 (Corrige texto) no afecta el saldo (sin efecto monetario).
-          AND nc.codigo_modificacion IS DISTINCT FROM 2
-          AND (
-            nc.origen_documento_id = ecf_documents.id
-            OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf)
-          )
-      ), 0)`,
-    })
-    .from(ecfDocuments)
-    .where(and(
-      eq(ecfDocuments.teamId, teamId),
-      // AR = toda factura con saldo pendiente, sin importar el estado de emisión
-      // (e-CF emitido, sin-ncf o borrador con cobro en curso). estado_pago captura
-      // crédito sin pagar, contado sin cobrar y parciales. PAGADA/ANULADA/GRATUITA/
-      // USO quedan fuera vía estado_pago. Solo se excluyen ANULADO/RECHAZADO (no
-      // cobrables).
-      sql`${ecfDocuments.estadoPago} IN ('PENDIENTE', 'PARCIAL')`,
-      sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
-      // Las ND de mora ya NO son cuentas propias: se agrupan dentro de su
-      // factura padre. Solo listamos facturas raíz (mora_origen_id IS NULL).
-      sql`${ecfDocuments.moraOrigenId} IS NULL`,
-      // Las Notas de Crédito (tipo 34) no son cuentas por cobrar: acreditan
-      // contra su factura padre (restadas vía ncAplicado).
-      sql`${ecfDocuments.tipoEcf} != '34'`,
-      opts.clientId ? eq(ecfDocuments.clientId, opts.clientId) : sql`true`,
-      opts.docId ? eq(ecfDocuments.id, opts.docId) : sql`true`,
-    ))
-    .orderBy(desc(ecfDocuments.fechaEmision))
-    .limit(limit)
-    .offset(offset);
+  // Fecha calendario de HOY en RD, resuelta por Postgres.
+  const hoyRdSql = sql`(now() AT TIME ZONE 'America/Santo_Domingo')::date`;
 
-  // Lista de ND de mora (id, codigo, saldo>0) por factura padre, para distribuir
-  // el pago en el frontend/desglose. Un solo query agrupado en memoria.
+  // ── CTE compartido entre la página de resultados y los totales ──────────────
+  // Se arma una sola vez y se reusa en las dos consultas para que no puedan
+  // divergir (que los totales midan algo distinto de lo que lista la tabla).
+  const cte = sql`
+    WITH base AS (
+      SELECT
+        d.id, d.encf, d.codigo, d.tipo_ecf, d.fecha_limite_pago,
+        -- db.execute crudo NO parsea timestamp a Date: devuelve el string de pg
+        -- ('2026-06-28 00:00:00'), y fmtFechaCorta parte por 'T' → salía
+        -- "28 00:00:00/06/2026". Se entrega ya como YYYY-MM-DD.
+        -- fecha_emision es timestamp SIN zona que guarda la hora-pared RD, así
+        -- que NO lleva AT TIME ZONE: convertirla correría el día.
+        to_char(d.fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
+        -- El timestamp crudo se conserva solo para ordenar: sobre el texto
+        -- YYYY-MM-DD el orden sería cronológico igual, pero empataría todas las
+        -- facturas del mismo día al perder la hora.
+        d.fecha_emision AS fecha_emision_ts,
+        d.rnc_comprador, d.razon_social_comprador, d.email_comprador,
+        d.client_id, d.estado, d.monto_total, d.total_itbis,
+        -- fecha_limite_pago es varchar(10); ''::date lanza en Postgres, así que
+        -- se normaliza a NULL una sola vez y el resto compara contra esto.
+        NULLIF(d.fecha_limite_pago, '')::date AS fecha_limite_date,
+        coalesce((
+          SELECT SUM(p.monto_centavos) FROM pagos_recibidos p
+          WHERE p.ecf_document_id = d.id
+        ), 0) AS pagado,
+        -- Saldo combinado de las ND de mora atadas a esta factura.
+        coalesce((
+          SELECT SUM(nd.monto_total - coalesce((
+            SELECT SUM(p2.monto_centavos) FROM pagos_recibidos p2
+            WHERE p2.ecf_document_id = nd.id
+          ), 0))
+          FROM ecf_documents AS nd
+          WHERE nd.mora_origen_id = d.id
+            AND nd.estado != 'ANULADO'
+            AND (nd.monto_total - coalesce((
+              SELECT SUM(p3.monto_centavos) FROM pagos_recibidos p3
+              WHERE p3.ecf_document_id = nd.id
+            ), 0)) > 0
+        ), 0) AS mora_saldo,
+        -- Crédito aplicado por NC (tipo 34) del modelo viejo. Las NC nuevas
+        -- generan saldo a favor del cliente y no reducen la factura.
+        coalesce((
+          SELECT SUM(nc.monto_total) FROM ecf_documents nc
+          WHERE nc.team_id = d.team_id
+            AND nc.tipo_ecf = '34'
+            AND nc.credito_generado_cents IS NULL
+            AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+            -- Código 2 (corrige texto) no tiene efecto monetario.
+            AND nc.codigo_modificacion IS DISTINCT FROM 2
+            AND (
+              nc.origen_documento_id = d.id
+              OR (d.encf LIKE 'E%' AND nc.ncf_modificado = d.encf)
+            )
+        ), 0) AS nc_aplicado
+      FROM ecf_documents d
+      WHERE d.team_id = ${teamId}
+        -- AR = toda factura con saldo pendiente, sin importar el estado de
+        -- emisión (e-CF emitido, sin-ncf o borrador con cobro en curso).
+        -- PAGADA/ANULADA/GRATUITA/USO quedan fuera vía estado_pago.
+        AND d.estado_pago IN ('PENDIENTE', 'PARCIAL')
+        AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+        -- Las ND de mora no son cuentas propias: se agrupan en su factura padre.
+        AND d.mora_origen_id IS NULL
+        -- Las NC no son cuentas por cobrar: acreditan contra su factura padre.
+        AND d.tipo_ecf != '34'
+        ${opts.clientId ? sql`AND d.client_id = ${opts.clientId}` : sql``}
+        ${opts.docId ? sql`AND d.id = ${opts.docId}` : sql``}
+        ${opts.search?.trim()
+          ? sql`AND (
+              coalesce(d.razon_social_comprador, '') ILIKE ${'%' + opts.search.trim() + '%'}
+              OR coalesce(d.rnc_comprador, '') ILIKE ${'%' + opts.search.trim() + '%'}
+            )`
+          : sql``}
+    ),
+    calc AS (
+      SELECT b.*,
+        GREATEST(0, b.monto_total - b.pagado - b.nc_aplicado) AS saldo_factura,
+        GREATEST(0, b.monto_total - b.pagado - b.nc_aplicado) + b.mora_saldo AS saldo,
+        (
+          b.fecha_limite_date IS NOT NULL
+          AND b.fecha_limite_date < ${hoyRdSql}
+          AND GREATEST(0, b.monto_total - b.pagado - b.nc_aplicado) > 0
+        ) AS vencida
+      FROM base b
+    ),
+    cartera AS (
+      SELECT c.*,
+        CASE WHEN c.vencida
+          THEN (${hoyRdSql} - c.fecha_limite_date)
+          ELSE 0
+        END AS dias_vencido
+      FROM calc c
+      -- Filas con saldo combinado > 0 (factura o mora pendiente). Esto ANTES
+      -- del LIMIT es lo que arregla el truncado silencioso.
+      WHERE c.saldo > 0
+        ${opts.soloVencidas || opts.estado === 'vencidas' ? sql`AND c.vencida` : sql``}
+        ${opts.estado === 'al-dia' ? sql`AND NOT c.vencida` : sql``}
+        ${opts.tipoDoc === 'factura' ? sql`AND c.saldo_factura > 0` : sql``}
+        ${opts.tipoDoc === 'nota-debito' ? sql`AND c.mora_saldo > 0` : sql``}
+    ),
+    -- La cubeta se aplica APARTE de \`cartera\`: el desglose de antigüedad se
+    -- calcula sobre \`cartera\` (sin cubeta) para que al elegir una las demás
+    -- sigan mostrando su monto y se pueda volver. La lista y los totales de
+    -- arriba sí usan \`filtrada\`.
+    filtrada AS (
+      SELECT * FROM cartera
+      ${opts.cubeta ? sql`WHERE ${sql.raw(CUBETA_SQL[opts.cubeta])}` : sql``}
+    )`;
+
+  interface CarteraRow {
+    id: number; encf: string; codigo: string | null; tipo_ecf: string;
+    fecha_emision: string; fecha_limite_pago: string | null;
+    rnc_comprador: string | null; razon_social_comprador: string | null;
+    email_comprador: string | null; client_id: number | null;
+    estado: string; monto_total: number; total_itbis: number;
+    pagado: string; mora_saldo: string; nc_aplicado: string;
+    saldo_factura: string; saldo: string; vencida: boolean; dias_vencido: number;
+  }
+
+  const [rowsRaw, totalesRaw] = await Promise.all([
+    db.execute(sql`
+      ${cte}
+      SELECT * FROM filtrada
+      ORDER BY ${sql.raw(ordenSql)}
+      LIMIT ${limit} OFFSET ${offset}
+    `),
+    // Totales sobre TODA la cartera filtrada, no solo la página visible. El
+    // desglose por antigüedad va sobre `cartera` (sin la cubeta activa).
+    db.execute(sql`
+      ${cte}
+      SELECT
+        (SELECT coalesce(SUM(saldo), 0)                    FROM filtrada) AS pendiente,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE vencida), 0) FROM filtrada) AS vencido,
+        (SELECT COUNT(*)                                   FROM filtrada) AS count,
+        (SELECT COUNT(*) FILTER (WHERE vencida)            FROM filtrada) AS count_vencidas,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.porVencer)}), 0) FROM cartera) AS ant_por_vencer,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d1a30)}),     0) FROM cartera) AS ant_d1a30,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d31a60)}),    0) FROM cartera) AS ant_d31a60,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d61a90)}),    0) FROM cartera) AS ant_d61a90,
+        (SELECT coalesce(SUM(saldo) FILTER (WHERE ${sql.raw(CUBETA_SQL.d90mas)}),    0) FROM cartera) AS ant_d90mas,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.porVencer)}) FROM cartera) AS cnt_por_vencer,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d1a30)})     FROM cartera) AS cnt_d1a30,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d31a60)})    FROM cartera) AS cnt_d31a60,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d61a90)})    FROM cartera) AS cnt_d61a90,
+        (SELECT COUNT(*) FILTER (WHERE ${sql.raw(CUBETA_SQL.d90mas)})    FROM cartera) AS cnt_d90mas
+    `),
+  ]);
+
+  const rows = rowsRaw as unknown as CarteraRow[];
+
+  // Lista de ND de mora (id, código, saldo>0) por factura padre, para desglosar
+  // el cobro en el frontend. Solo para las filas de esta página.
   const facturaIds = rows.map(r => r.id);
   const moraNotasPorFactura = new Map<number, { id: number; codigo: string | null; saldo: number }[]>();
   if (facturaIds.length > 0) {
@@ -663,50 +784,51 @@ export async function getCuentasPorCobrar(
     }
   }
 
-  const enriquecidas = rows
-    .map(r => {
-      const pagado = Number(r.pagado);
-      const ncAplicado = Number(r.ncAplicado);
-      // saldoFactura = montoTotal − pagado − NC aplicadas (saldo SOLO de la
-      // factura, nunca negativo: NC sobre factura ya pagada = crédito a favor
-      // del cliente, no deuda negativa en AR).
-      const saldoFactura = Math.max(0, r.montoTotal - pagado - ncAplicado);
-      const moraSaldo = Number(r.moraSaldo);
-      // saldo = saldoFactura + moraSaldo → TOTAL combinado que se cobra.
-      const saldo = saldoFactura + moraSaldo;
-      const vencida = !!r.fechaLimitePago && r.fechaLimitePago < hoy && saldoFactura > 0;
-      const diasVencido = vencida && r.fechaLimitePago
-        ? Math.floor((new Date(hoy).getTime() - new Date(r.fechaLimitePago).getTime()) / 86400000)
-        : 0;
-      const moraNotas = moraNotasPorFactura.get(r.id) ?? [];
-      return {
-        ...r,
-        pagado,
-        ncAplicado,
-        saldoFactura,
-        moraSaldo,
-        saldo,
-        moraNotas,
-        vencida,
-        diasVencido,
-      };
-    })
-    // Mantener filas con saldo combinado > 0 (factura o mora pendiente).
-    .filter(r => r.saldo > 0)
-    .filter(r => !opts.soloVencidas || r.vencida);
+  // pg devuelve numeric/bigint como string — normalizar a number en el borde.
+  const cuentas = rows.map(r => ({
+    id:                   r.id,
+    encf:                 r.encf,
+    codigo:               r.codigo,
+    tipoEcf:              r.tipo_ecf,
+    fechaEmision:         r.fecha_emision,
+    fechaLimitePago:      r.fecha_limite_pago,
+    rncComprador:         r.rnc_comprador,
+    razonSocialComprador: r.razon_social_comprador,
+    emailComprador:       r.email_comprador,
+    clientId:             r.client_id,
+    estado:               r.estado,
+    montoTotal:           Number(r.monto_total),
+    totalItbis:           Number(r.total_itbis),
+    pagado:               Number(r.pagado),
+    ncAplicado:           Number(r.nc_aplicado),
+    saldoFactura:         Number(r.saldo_factura),
+    moraSaldo:            Number(r.mora_saldo),
+    saldo:                Number(r.saldo),
+    vencida:              r.vencida,
+    diasVencido:          Number(r.dias_vencido),
+    moraNotas:            moraNotasPorFactura.get(r.id) ?? [],
+  }));
 
-  // Totales agregados sobre el saldo combinado (factura + mora).
-  const totalPendiente = enriquecidas.reduce((s, r) => s + r.saldo, 0);
-  const totalVencido   = enriquecidas.filter(r => r.vencida).reduce((s, r) => s + r.saldo, 0);
+  const t = (totalesRaw as unknown as Array<Record<string, string>>)[0];
+  const n = (k: string) => Number(t?.[k] ?? 0);
 
   return {
-    cuentas: enriquecidas,
+    cuentas,
     totales: {
-      pendiente: totalPendiente,
-      vencido:   totalVencido,
-      count:     enriquecidas.length,
-      countVencidas: enriquecidas.filter(r => r.vencida).length,
+      pendiente:     n('pendiente'),
+      vencido:       n('vencido'),
+      count:         n('count'),
+      countVencidas: n('count_vencidas'),
     },
+    /** Distribución por antigüedad de TODA la cartera filtrada, ignorando la
+     *  cubeta activa: así las tarjetas siguen mostrando su monto al elegir una. */
+    antiguedad: {
+      porVencer: { saldo: n('ant_por_vencer'), count: n('cnt_por_vencer') },
+      d1a30:     { saldo: n('ant_d1a30'),      count: n('cnt_d1a30')      },
+      d31a60:    { saldo: n('ant_d31a60'),     count: n('cnt_d31a60')     },
+      d61a90:    { saldo: n('ant_d61a90'),     count: n('cnt_d61a90')     },
+      d90mas:    { saldo: n('ant_d90mas'),     count: n('cnt_d90mas')     },
+    } satisfies Record<CubetaAntiguedad, { saldo: number; count: number }>,
   };
 }
 

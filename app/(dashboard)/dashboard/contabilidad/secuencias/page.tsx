@@ -47,7 +47,7 @@ export default async function SecuenciasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await requirePermission('reportes:ver');
+  await requirePermission('contabilidad:ver');
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 

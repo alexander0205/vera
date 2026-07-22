@@ -70,7 +70,12 @@ export type Permission =
   | 'administracion-escolar:ver'
   | 'administracion-escolar:gestionar'
   | 'administracion-escolar:configurar'
-  | 'administracion-escolar:pagos';
+  | 'administracion-escolar:pagos'
+  // Contabilidad — agrupa lo fiscal (secuencias, consulta de e-NCF) y el motor
+  // contable (catálogo de cuentas, asientos, libro diario, reportes).
+  | 'contabilidad:ver'        // consultar secuencias, e-NCF, asientos y reportes
+  | 'contabilidad:gestionar'  // crear/editar/anular asientos manuales
+  | 'contabilidad:configurar';// catálogo de cuentas y cuentas automáticas
 
 export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero' | 'personal-escolar';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
@@ -133,6 +138,7 @@ export const ROLES: RoleDef[] = [
       'modulo:facturacion', 'modulo:pos', 'modulo:escolar',
       'suscripcion:gestionar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
+      'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
   },
@@ -154,6 +160,7 @@ export const ROLES: RoleDef[] = [
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
+      'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
       'pos:vender', 'pos:configurar',
       'modulo:facturacion', 'modulo:pos', 'modulo:escolar',
     ],
@@ -176,6 +183,8 @@ export const ROLES: RoleDef[] = [
       'caja:ver', 'caja:operar',
       // Sin permisos de Administración Escolar: un vendedor no matricula
       // estudiantes. El colegio se atiende con 'personal-escolar'.
+      // Solo lectura contable: el vendedor consulta secuencias y e-NCF, no toca asientos.
+      'contabilidad:ver',
       'pos:vender',
       'modulo:facturacion', 'modulo:pos',
     ],
@@ -200,6 +209,7 @@ export const ROLES: RoleDef[] = [
       // Sin 'modulo:escolar': ver el colegio en solo lectura solo aplica si el
       // dueño le abre el módulo a este rol.
       'administracion-escolar:ver',
+      'contabilidad:ver',
     ],
     ui: { color: 'text-sky-600 bg-sky-50 border-sky-200', icon: 'Eye' },
   },
@@ -309,6 +319,11 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'administracion-escolar:gestionar',    label: 'Crear / editar estudiantes, tutores, cursos y matrículas' },
     { key: 'administracion-escolar:configurar',   label: 'Configurar períodos, cursos, materias y conceptos' },
     { key: 'administracion-escolar:pagos',        label: 'Registrar pagos escolares' },
+  ]},
+  { module: 'Contabilidad', icon: 'BookOpen', permissions: [
+    { key: 'contabilidad:ver',        label: 'Ver secuencias, e-NCF, asientos y reportes contables' },
+    { key: 'contabilidad:gestionar',  label: 'Crear / editar / anular asientos manuales' },
+    { key: 'contabilidad:configurar', label: 'Configurar catálogo de cuentas y cuentas automáticas' },
   ]},
 ];
 

@@ -14,7 +14,7 @@ import DialogActions from '@mui/material/DialogActions';
 import Alert from '@mui/material/Alert';
 import Divider from '@mui/material/Divider';
 import CircularProgress from '@mui/material/CircularProgress';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 
 /**
@@ -37,9 +37,11 @@ export interface Cuenta {
   montoTotal:           number;
   totalItbis:           number;
   pagado:               number;
+  // Crédito de notas de crédito ya descontado del saldo de la factura.
+  ncAplicado:           number;
   // saldo = saldoFactura + moraSaldo (TOTAL combinado a cobrar).
   saldo:                number;
-  // Saldo SOLO de la factura (montoTotal − pagado).
+  // Saldo SOLO de la factura (montoTotal − pagado − ncAplicado).
   saldoFactura:         number;
   // Saldo combinado de las ND de mora atadas a esta factura.
   moraSaldo:            number;
@@ -69,7 +71,7 @@ export function PagoModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyRD();
   // saldo = saldoFactura + moraSaldo (combinado). Montos en DOP.
   const saldoDOP  = cuenta.saldo / 100;
   // El repeater valida contra (total − yaPagado). Con yaPagado=0, el cap es el

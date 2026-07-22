@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 export const dynamic = 'force-dynamic';
 
 export default async function ConsultaNcfPage() {
-  await requirePermission('reportes:ver');
+  await requirePermission('contabilidad:ver');
 
   return (
     <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto' }}>

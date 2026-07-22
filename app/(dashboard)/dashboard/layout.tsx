@@ -101,6 +101,11 @@ const GROUPS: NavGroup[] = [
     label: 'Contabilidad',
     icon: BookOpen,
     children: [
+      { href: '/dashboard/contabilidad/cuentas',      label: 'Catálogo de cuentas' },
+      { href: '/dashboard/contabilidad/libro-diario', label: 'Libro diario' },
+      { href: '/dashboard/contabilidad/mayor',        label: 'Mayor general' },
+      { href: '/dashboard/contabilidad/balance',      label: 'Balance de comprobación' },
+      { href: '/dashboard/contabilidad/configuracion', label: 'Configuración contable' },
       { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
       { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
     ],
@@ -171,6 +176,16 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Configuración — solo roles con configuracion:ver
   '/dashboard/configuracion':         'configuracion:ver',
   '/dashboard/maestros':              'maestros:gestionar', // solo admin/owner
+
+  // Contabilidad — el grupo llegó de main sin gate: cualquiera con dashboard
+  // veía secuencias y consulta de e-NCF. Se gatea junto con el motor contable.
+  '/dashboard/contabilidad/cuentas':      'contabilidad:ver',
+  '/dashboard/contabilidad/libro-diario':  'contabilidad:ver',
+  '/dashboard/contabilidad/mayor':         'contabilidad:ver',
+  '/dashboard/contabilidad/balance':       'contabilidad:ver',
+  '/dashboard/contabilidad/configuracion': 'contabilidad:ver',
+  '/dashboard/contabilidad/secuencias':   'contabilidad:ver',
+  '/dashboard/contabilidad/consulta-ncf': 'contabilidad:ver',
 
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
