@@ -448,6 +448,13 @@ export default function NuevaFacturaForm({
 
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  /**
+   * Si un envío falla, el backend guarda un borrador que CONSERVA el e-NCF ya
+   * consumido y devuelve su id. Guardarlo aquí hace que el siguiente intento
+   * vaya por /api/facturas/{id}/emitir-ecf, que REUSA ese mismo número en vez
+   * de tomar el siguiente y dejar un hueco en la secuencia.
+   */
+  const [reservaDocId, setReservaDocId] = useState<number | null>(null);
   // Mirror error → toast (más visible, no requiere scroll para verlo)
   useEffect(() => { if (error) toast.error(error, { duration: 6500 }); }, [error]);
   const [resultado, setResultado]       = useState<ResultadoEmision | null>(null);
@@ -955,9 +962,26 @@ export default function NuevaFacturaForm({
 
     setLoading(true); setError(null);
     try {
-      const res  = await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...buildPayload(modoEfectivo), _traza: traza }) });
+      // Si un intento anterior falló, el backend dejó el e-NCF reservado en un
+      // borrador. Reintentar por esa ruta REUSA el mismo número; volver a
+      // /api/ecf/emitir tomaría el siguiente y abriría un hueco en la secuencia.
+      const payload = buildPayload(modoEfectivo);
+      const res = reservaDocId
+        ? await fetch(`/api/facturas/${reservaDocId}/emitir-ecf`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tipoEcf: payload.tipoEcf,
+              ...(payload.rncComprador         ? { rncComprador:         payload.rncComprador }         : {}),
+              ...(payload.razonSocialComprador ? { razonSocialComprador: payload.razonSocialComprador } : {}),
+            }),
+          })
+        : await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, _traza: traza }) });
       const data = await res.json();
       if (!res.ok) {
+        // El backend reservó el e-NCF en un borrador: guardarlo para que el
+        // próximo intento lo reuse en vez de consumir otro número.
+        if (typeof data.docId === 'number') setReservaDocId(data.docId);
         setError(data.error ?? 'Error al guardar');
         // El método de pago obliga tipo fiscal (ej. tarjeta con «Sin NCF»): llevar
         // al usuario al selector de tipo y resaltarlo para que lo cambie.
@@ -971,6 +995,8 @@ export default function NuevaFacturaForm({
         }
         return;
       }
+      // Emitió bien: la reserva quedó consumida por este documento.
+      setReservaDocId(null);
       try { localStorage.removeItem(draftKey); } catch {}
       // Persistir clasificación por maestros (Plan A) — metadata no fiscal.
       if (data.documentoId) {
