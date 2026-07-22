@@ -8,6 +8,10 @@ import { userCanForTeam } from '@/lib/auth/permissions';
 import { sembrarCatalogoBase } from '@/lib/contabilidad/catalogo-base';
 import { listarCuentasArbol } from '@/lib/contabilidad/cuentas';
 import { CatalogoClient } from './_client';
+import { ChevronRight } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,25 +44,32 @@ export default async function CuentasPage() {
   const cuentas = await listarCuentasArbol(teamId, { incluirInactivas: true });
 
   return (
-    <section className="p-4 lg:p-8 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-lg lg:text-2xl font-medium text-gray-900">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Breadcrumb */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
+        <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Catálogo de cuentas</Typography>
+      </Box>
+
+      <Box>
+        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
           Catálogo de cuentas
-        </h1>
-        <p className="text-sm text-gray-500">
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
           El mapa contable de tu empresa: dónde se van a clasificar los movimientos.
           Todavía no hay asientos — eso llega en el siguiente paso.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
       {sembradas > 0 && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <Alert severity="info">
           Se creó un catálogo base de {sembradas} cuentas con la numeración estándar
           dominicana. Puedes renombrarlas, agregar las tuyas o desactivar las que no uses.
-        </div>
+        </Alert>
       )}
 
       <CatalogoClient cuentasIniciales={cuentas} puedeConfigurar={puedeConfigurar} />
-    </section>
+    </Box>
   );
 }

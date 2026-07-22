@@ -3,13 +3,27 @@
 import { useState, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Pencil, Power, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 import type { CuentaNodo, Cuenta } from '@/lib/contabilidad/cuentas';
+
+const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
 const TIPOS = [
   { valor: 'activo',     label: 'Activo' },
@@ -20,14 +34,15 @@ const TIPOS = [
   { valor: 'gasto',      label: 'Gastos' },
 ] as const;
 
-const TIPO_CLS: Record<string, string> = {
-  activo:     'bg-blue-50 text-blue-700 border-blue-200',
-  pasivo:     'bg-amber-50 text-amber-700 border-amber-200',
-  patrimonio: 'bg-purple-50 text-purple-700 border-purple-200',
-  ingreso:    'bg-emerald-50 text-emerald-700 border-emerald-200',
-  costo:      'bg-orange-50 text-orange-700 border-orange-200',
-  gasto:      'bg-rose-50 text-rose-700 border-rose-200',
+const TIPO_TONO: Record<string, { bg: string; fg: string; border: string }> = {
+  activo:     { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' },
+  pasivo:     { bg: '#fffbeb', fg: '#b45309', border: '#fde68a' },
+  patrimonio: { bg: '#faf5ff', fg: '#7e22ce', border: '#e9d5ff' },
+  ingreso:    { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
+  costo:      { bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' },
+  gasto:      { bg: '#fff1f2', fg: '#be123c', border: '#fecdd3' },
 };
+const TIPO_FALLBACK = { bg: '#f9fafb', fg: '#4b5563', border: '#e5e7eb' };
 
 /** Naturaleza que le toca a la clase. Espeja `naturalezaPorTipo` del servidor. */
 function naturalezaPorTipo(tipo: string) {
@@ -207,279 +222,294 @@ export function CatalogoClient({
   }
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {error && <Alert severity="error">{error}</Alert>}
+      {aviso && <Alert severity="info">{aviso}</Alert>}
 
-      {aviso && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          {aviso}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input
-            type="checkbox"
-            checked={verInactivas}
-            onChange={(e) => setVerInactivas(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          Mostrar cuentas desactivadas
-        </label>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              size="small"
+              checked={verInactivas}
+              onChange={(e) => setVerInactivas(e.target.checked)}
+            />
+          }
+          label="Mostrar cuentas desactivadas"
+          slotProps={{ typography: { sx: { fontSize: '0.875rem', color: '#4b5563' } } }}
+          sx={{ mr: 0 }}
+        />
 
         {puedeConfigurar && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={restaurarBase} disabled={guardando}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Button
+              variant="outlined" color="inherit" size="small"
+              onClick={restaurarBase} disabled={guardando}
+              sx={{ color: '#374151', borderColor: '#d1d5db' }}
+            >
               Restaurar cuentas base
             </Button>
-            <Button onClick={() => abrirNueva()} size="sm">
-              <Plus className="mr-2 h-4 w-4" />
+            <Button
+              variant="contained" size="small"
+              onClick={() => abrirNueva()}
+              startIcon={<Plus style={{ width: 16, height: 16 }} />}
+              sx={{ px: 2 }}
+            >
               Nueva cuenta
             </Button>
-          </div>
+          </Box>
         )}
-      </div>
+      </Box>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">Cuenta</th>
-              <th className="px-4 py-3 font-medium">Tipo</th>
-              <th className="px-4 py-3 font-medium">Naturaleza</th>
-              <th className="px-4 py-3 font-medium">Movimientos</th>
-              {puedeConfigurar && <th className="px-4 py-3 font-medium text-right">Acciones</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filas.map((c) => (
-              <tr key={c.id} className={c.activa ? '' : 'bg-gray-50/60 text-gray-400'}>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center" style={{ paddingLeft: `${c.nivel * 20}px` }}>
-                    {c.hijas.length > 0 ? (
-                      <button
-                        onClick={() => alternarColapso(c.id)}
-                        className="mr-1 rounded p-0.5 text-gray-400 hover:bg-gray-100"
-                        aria-label={colapsadas.has(c.id) ? 'Expandir' : 'Colapsar'}
-                      >
-                        {colapsadas.has(c.id)
-                          ? <ChevronRight className="h-4 w-4" />
-                          : <ChevronDown className="h-4 w-4" />}
-                      </button>
-                    ) : (
-                      <span className="mr-1 w-5" />
-                    )}
-                    <span className="font-mono text-xs text-gray-500">{c.codigo}</span>
-                    <span className={`ml-3 ${c.imputable ? '' : 'font-medium text-gray-900'}`}>
-                      {c.nombre}
-                    </span>
-                    {!c.activa && (
-                      <span className="ml-2 rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
-                        Desactivada
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className={`rounded border px-2 py-0.5 text-xs ${TIPO_CLS[c.tipo]}`}>
-                    {TIPOS.find((t) => t.valor === c.tipo)?.label ?? c.tipo}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-gray-600">
-                  {c.naturaleza === 'deudora' ? 'Deudora' : 'Acreedora'}
-                  {/* Señal de cuenta de contrapartida: naturaleza invertida
-                      respecto a su clase. Vale la pena que salte a la vista. */}
-                  {c.naturaleza !== naturalezaPorTipo(c.tipo) && (
-                    <span className="ml-1.5 text-xs text-amber-600">(invertida)</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-gray-600">
-                  {c.imputable ? 'Acepta' : <span className="text-gray-400">Agrupa</span>}
-                </td>
-                {puedeConfigurar && (
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center justify-end gap-1">
-                      {!c.imputable && (
-                        <button
-                          onClick={() => abrirNueva(c)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                          title="Agregar cuenta hija"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
+      <Box sx={{ ...CARD, overflow: 'hidden' }}>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 760 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Cuenta</TableCell>
+                <TableCell>Tipo</TableCell>
+                <TableCell>Naturaleza</TableCell>
+                <TableCell>Movimientos</TableCell>
+                {puedeConfigurar && <TableCell align="right">Acciones</TableCell>}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filas.map((c) => {
+                const tono = TIPO_TONO[c.tipo] ?? TIPO_FALLBACK;
+                return (
+                  <TableRow key={c.id} sx={c.activa ? undefined : { bgcolor: '#f9fafb', '& td': { color: '#9ca3af' } }}>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', pl: `${c.nivel * 20}px` }}>
+                        {c.hijas.length > 0 ? (
+                          <IconButton
+                            size="small"
+                            onClick={() => alternarColapso(c.id)}
+                            aria-label={colapsadas.has(c.id) ? 'Expandir' : 'Colapsar'}
+                            sx={{ mr: 0.5, p: 0.25, color: '#9ca3af' }}
+                          >
+                            {colapsadas.has(c.id)
+                              ? <ChevronRight style={{ width: 16, height: 16 }} />
+                              : <ChevronDown style={{ width: 16, height: 16 }} />}
+                          </IconButton>
+                        ) : (
+                          <Box component="span" sx={{ mr: 0.5, width: 24 }} />
+                        )}
+                        <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280' }}>
+                          {c.codigo}
+                        </Box>
+                        <Box component="span" sx={{ ml: 1.5, ...(c.imputable ? {} : { fontWeight: 600, color: '#111827' }) }}>
+                          {c.nombre}
+                        </Box>
+                        {!c.activa && (
+                          <Box component="span" sx={{
+                            ml: 1, fontSize: '10px', px: 0.75, py: 0.25, borderRadius: '4px',
+                            bgcolor: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb',
+                          }}>
+                            Desactivada
+                          </Box>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box component="span" sx={{
+                        display: 'inline-block', fontSize: '0.75rem', fontWeight: 500,
+                        px: 1, py: 0.25, borderRadius: '4px', whiteSpace: 'nowrap',
+                        bgcolor: tono.bg, color: tono.fg, border: `1px solid ${tono.border}`,
+                      }}>
+                        {TIPOS.find((t) => t.valor === c.tipo)?.label ?? c.tipo}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ color: '#4b5563' }}>
+                      {c.naturaleza === 'deudora' ? 'Deudora' : 'Acreedora'}
+                      {/* Señal de cuenta de contrapartida: naturaleza invertida
+                          respecto a su clase. Vale la pena que salte a la vista. */}
+                      {c.naturaleza !== naturalezaPorTipo(c.tipo) && (
+                        <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', color: '#d97706' }}>
+                          (invertida)
+                        </Box>
                       )}
-                      <button
-                        onClick={() => abrirEditar(c)}
-                        className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        title="Editar"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => alternarActiva(c)}
-                        className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        title={c.activa ? 'Desactivar' : 'Activar'}
-                      >
-                        <Power className="h-4 w-4" />
-                      </button>
-                      {/* Las cuentas del catálogo base son estructurales; se
-                          desactivan, no se borran. Borrar queda para las que
-                          creó el usuario. */}
-                      {!c.esBase && (
-                        <button
-                          onClick={() => borrar(c)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
+                    </TableCell>
+                    <TableCell sx={{ color: '#4b5563' }}>
+                      {c.imputable ? 'Acepta' : <Box component="span" sx={{ color: '#9ca3af' }}>Agrupa</Box>}
+                    </TableCell>
+                    {puedeConfigurar && (
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.25 }}>
+                          {!c.imputable && (
+                            <IconButton
+                              size="small" title="Agregar cuenta hija"
+                              onClick={() => abrirNueva(c)}
+                              sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                            >
+                              <Plus style={{ width: 16, height: 16 }} />
+                            </IconButton>
+                          )}
+                          <IconButton
+                            size="small" title="Editar"
+                            onClick={() => abrirEditar(c)}
+                            sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                          >
+                            <Pencil style={{ width: 16, height: 16 }} />
+                          </IconButton>
+                          <IconButton
+                            size="small" title={c.activa ? 'Desactivar' : 'Activar'}
+                            onClick={() => alternarActiva(c)}
+                            sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                          >
+                            <Power style={{ width: 16, height: 16 }} />
+                          </IconButton>
+                          {/* Las cuentas del catálogo base son estructurales; se
+                              desactivan, no se borran. Borrar queda para las que
+                              creó el usuario. */}
+                          {!c.esBase && (
+                            <IconButton
+                              size="small" title="Eliminar"
+                              onClick={() => borrar(c)}
+                              sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' } }}
+                            >
+                              <Trash2 style={{ width: 16, height: 16 }} />
+                            </IconButton>
+                          )}
+                        </Box>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
 
-            {filas.length === 0 && (
-              <tr>
-                <td colSpan={puedeConfigurar ? 5 : 4} className="px-4 py-10 text-center text-sm text-gray-500">
-                  No hay cuentas en el catálogo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              {filas.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={puedeConfigurar ? 5 : 4} sx={{ py: 6, textAlign: 'center', color: '#9ca3af' }}>
+                    No hay cuentas en el catálogo.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      </Box>
 
-      <p className="text-xs text-gray-500">
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
         Las cuentas que <strong>agrupan</strong> no reciben movimientos: su saldo es la suma
         de las que cuelgan de ellas. Los asientos van siempre en las cuentas que
         <strong> aceptan</strong> movimientos.
-      </p>
+      </Typography>
 
-      <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{form?.id ? 'Editar cuenta' : 'Nueva cuenta'}</DialogTitle>
-          </DialogHeader>
+      <Dialog open={form !== null} onClose={() => setForm(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>
+          {form?.id ? 'Editar cuenta' : 'Nueva cuenta'}
+        </DialogTitle>
 
+        <DialogContent>
           {form && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="codigo">Código</Label>
-                  <Input
-                    id="codigo"
-                    value={form.codigo}
-                    onChange={(e) => setForm({ ...form, codigo: e.target.value })}
-                    placeholder="1101"
-                    className="font-mono"
-                  />
-                </div>
-                <div className="col-span-2 space-y-1.5">
-                  <Label htmlFor="nombre">Nombre</Label>
-                  <Input
-                    id="nombre"
-                    value={form.nombre}
-                    onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                    placeholder="Caja chica"
-                  />
-                </div>
-              </div>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 1.5 }}>
+                <TextField
+                  label="Código"
+                  value={form.codigo}
+                  onChange={(e) => setForm({ ...form, codigo: e.target.value })}
+                  placeholder="1101"
+                  slotProps={{ input: { sx: { fontFamily: 'monospace' } } }}
+                />
+                <TextField
+                  label="Nombre"
+                  value={form.nombre}
+                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                  placeholder="Caja chica"
+                />
+              </Box>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="tipo">Tipo</Label>
-                  <select
-                    id="tipo"
-                    value={form.tipo}
-                    onChange={(e) => setForm({
-                      ...form,
-                      tipo: e.target.value,
-                      // Al cambiar la clase se repropone su naturaleza. Si el
-                      // usuario la invierte después, esa elección se respeta.
-                      naturaleza: naturalezaPorTipo(e.target.value),
-                    })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    {TIPOS.map((t) => (
-                      <option key={t.valor} value={t.valor}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="naturaleza">Naturaleza</Label>
-                  <select
-                    id="naturaleza"
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                <TextField
+                  label="Tipo" select
+                  value={form.tipo}
+                  onChange={(e) => setForm({
+                    ...form,
+                    tipo: e.target.value,
+                    // Al cambiar la clase se repropone su naturaleza. Si el
+                    // usuario la invierte después, esa elección se respeta.
+                    naturaleza: naturalezaPorTipo(e.target.value),
+                  })}
+                >
+                  {TIPOS.map((t) => (
+                    <MenuItem key={t.valor} value={t.valor}>{t.label}</MenuItem>
+                  ))}
+                </TextField>
+                <Box>
+                  <TextField
+                    label="Naturaleza" select fullWidth
                     value={form.naturaleza}
                     onChange={(e) => setForm({ ...form, naturaleza: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   >
-                    <option value="deudora">Deudora</option>
-                    <option value="acreedora">Acreedora</option>
-                  </select>
+                    <MenuItem value="deudora">Deudora</MenuItem>
+                    <MenuItem value="acreedora">Acreedora</MenuItem>
+                  </TextField>
                   {form.naturaleza !== naturalezaPorTipo(form.tipo) && (
-                    <p className="text-xs text-amber-600">
+                    <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#d97706' }}>
                       Invertida respecto a su tipo. Es lo correcto para cuentas que
                       restan, como descuentos o devoluciones.
-                    </p>
+                    </Typography>
                   )}
-                </div>
-              </div>
+                </Box>
+              </Box>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="padre">Cuenta padre</Label>
-                <select
-                  id="padre"
+              <Box>
+                <TextField
+                  label="Cuenta padre" select fullWidth
                   value={form.cuentaPadreId ?? ''}
                   onChange={(e) => setForm({
                     ...form,
                     cuentaPadreId: e.target.value ? Number(e.target.value) : null,
                   })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 >
-                  <option value="">Ninguna (cuenta raíz)</option>
+                  <MenuItem value="">Ninguna (cuenta raíz)</MenuItem>
                   {padresPosibles.map((p) => (
-                    <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>
+                    <MenuItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</MenuItem>
                   ))}
-                </select>
-                <p className="text-xs text-gray-500">
+                </TextField>
+                <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#6b7280' }}>
                   Solo aparecen las cuentas que agrupan. Una cuenta que acepta
                   movimientos no puede tener hijas.
-                </p>
-              </div>
+                </Typography>
+              </Box>
 
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.imputable}
-                  onChange={(e) => setForm({ ...form, imputable: e.target.checked })}
-                  className="mt-0.5 rounded border-gray-300"
-                />
-                <span>
-                  Acepta movimientos
-                  <span className="block text-xs text-gray-500">
-                    Desmárcalo si esta cuenta solo agrupa a otras.
-                  </span>
-                </span>
-              </label>
-            </div>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={form.imputable}
+                    onChange={(e) => setForm({ ...form, imputable: e.target.checked })}
+                    sx={{ alignSelf: 'flex-start', pt: 0 }}
+                  />
+                }
+                label={
+                  <Box>
+                    Acepta movimientos
+                    <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                      Desmárcalo si esta cuenta solo agrupa a otras.
+                    </Typography>
+                  </Box>
+                }
+                slotProps={{ typography: { sx: { fontSize: '0.875rem' } } }}
+                sx={{ alignItems: 'flex-start', mr: 0 }}
+              />
+            </Box>
           )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setForm(null)} disabled={guardando}>
-              Cancelar
-            </Button>
-            <Button onClick={guardar} disabled={guardando || pending}>
-              {guardando ? 'Guardando…' : 'Guardar'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined" color="inherit"
+            onClick={() => setForm(null)} disabled={guardando}
+            sx={{ color: '#374151', borderColor: '#d1d5db' }}
+          >
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={guardar} disabled={guardando || pending}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </DialogActions>
       </Dialog>
-    </div>
+    </Box>
   );
 }

@@ -8,6 +8,8 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
 
 export function SelectorCuenta({
   cuentas, cuentaId, desde, hasta,
@@ -33,19 +35,17 @@ export function SelectorCuenta({
   }
 
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-500">Cuenta</span>
-      <select
-        value={cuentaId ?? ''}
-        disabled={pendiente || cuentas.length === 0}
-        onChange={(e) => elegir(e.target.value)}
-        className="min-w-64 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-      >
-        <option value="">Elige una cuenta…</option>
-        {cuentas.map((c) => (
-          <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
-        ))}
-      </select>
-    </label>
+    <TextField
+      label="Cuenta" select
+      value={cuentaId ?? ''}
+      disabled={pendiente || cuentas.length === 0}
+      onChange={(e) => elegir(e.target.value)}
+      sx={{ minWidth: 260 }}
+    >
+      <MenuItem value="">Elige una cuenta…</MenuItem>
+      {cuentas.map((c) => (
+        <MenuItem key={c.id} value={c.id}>{c.codigo} · {c.nombre}</MenuItem>
+      ))}
+    </TextField>
   );
 }

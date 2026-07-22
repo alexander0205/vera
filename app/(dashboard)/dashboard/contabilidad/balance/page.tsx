@@ -1,13 +1,24 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { fmtDOP, fechaValidaISO } from '@/lib/utils/format';
 import { balanceComprobacion } from '@/lib/contabilidad/reportes';
 import { FiltrosPeriodo } from '../_filtros-periodo';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 
 export const dynamic = 'force-dynamic';
+
+const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
 /**
  * Balance de comprobación — subpaso 3 del Paso 6.
@@ -36,18 +47,29 @@ export default async function BalancePage({
   const balance = await balanceComprobacion(teamId, { desde, hasta });
   const anomalas = balance.filas.filter((f) => f.anomala);
 
+  const celdaMonto = {
+    whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: '#111827',
+  } as const;
+
   return (
-    <section className="p-4 lg:p-8 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-lg lg:text-2xl font-medium text-gray-900">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Breadcrumb */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
+        <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Balance de comprobación</Typography>
+      </Box>
+
+      <Box>
+        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
           Balance de comprobación
-        </h1>
-        <p className="text-sm text-gray-500">
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
           Todas las cuentas con movimientos, con lo que entró y lo que salió por
           cada una. Si la contabilidad está bien, las dos columnas de abajo dan
           exactamente lo mismo.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
       <FiltrosPeriodo ruta="/dashboard/contabilidad/balance" periodo={{ desde, hasta }} />
 
@@ -55,134 +77,124 @@ export default async function BalancePage({
           no como una nota al pie que nadie lee. */}
       {balance.filas.length > 0 && (
         balance.cuadra ? (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span>
-              <strong>El balance cuadra.</strong> Débitos y créditos suman lo
-              mismo: {fmtDOP(balance.totales.debeCents)}.
-            </span>
-          </div>
+          <Alert severity="success" icon={<CheckCircle2 style={{ width: 16, height: 16 }} />}>
+            <strong>El balance cuadra.</strong> Débitos y créditos suman lo
+            mismo: {fmtDOP(balance.totales.debeCents)}.
+          </Alert>
         ) : (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
-            <div className="flex items-center gap-2 font-medium">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              El balance NO cuadra
-            </div>
-            <p className="mt-1 text-xs">
+          <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+            <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>El balance NO cuadra</AlertTitle>
+            <Typography sx={{ fontSize: '0.75rem' }}>
               Débitos {fmtDOP(balance.totales.debeCents)} contra créditos{' '}
               {fmtDOP(balance.totales.haberCents)} · diferencia{' '}
               {fmtDOP(Math.abs(balance.totales.debeCents - balance.totales.haberCents))}.
               Esto no debería poder pasar: la aplicación impide guardar asientos
               descuadrados. Repórtalo antes de usar estos números para declarar.
-            </p>
-          </div>
+            </Typography>
+          </Alert>
         )
       )}
 
       {anomalas.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <div className="font-medium">
+        <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+          <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
             {anomalas.length} cuenta(s) con saldo del lado contrario al esperado
-          </div>
-          <p className="mt-1 text-xs">
+          </AlertTitle>
+          <Typography sx={{ fontSize: '0.75rem' }}>
             No es necesariamente un error —una cuenta de banco puede quedar en
             descubierto— pero conviene mirarlas:{' '}
             {anomalas.map((f) => `${f.codigo} ${f.nombre}`).join(', ')}.
-          </p>
-        </div>
+          </Typography>
+        </Alert>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">Cuenta</th>
-              <th className="px-4 py-3 font-medium text-right">Debe</th>
-              <th className="px-4 py-3 font-medium text-right">Haber</th>
-              <th className="px-4 py-3 font-medium text-right">Saldo deudor</th>
-              <th className="px-4 py-3 font-medium text-right">Saldo acreedor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {balance.filas.map((f) => (
-              <tr key={f.cuentaId} className="hover:bg-gray-50">
-                <td className="px-4 py-2.5">
-                  <Link
-                    href={`/dashboard/contabilidad/mayor?cuentaId=${f.cuentaId}${
-                      desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`}
-                    className="text-gray-900 hover:underline"
-                  >
-                    <span className="font-mono text-gray-500">{f.codigo}</span>{' '}
-                    {f.nombre}
-                  </Link>
-                  {f.anomala && (
-                    <span className="ml-2 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">
-                      saldo invertido
-                    </span>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-gray-900">
-                  {f.debeCents > 0 ? fmtDOP(f.debeCents) : ''}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-gray-900">
-                  {f.haberCents > 0 ? fmtDOP(f.haberCents) : ''}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-gray-900">
-                  {f.saldoDeudorCents > 0 ? fmtDOP(f.saldoDeudorCents) : ''}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-gray-900">
-                  {f.saldoAcreedorCents > 0 ? fmtDOP(f.saldoAcreedorCents) : ''}
-                </td>
-              </tr>
-            ))}
+      <Box sx={{ ...CARD, overflow: 'hidden' }}>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 860 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Cuenta</TableCell>
+                <TableCell align="right">Debe</TableCell>
+                <TableCell align="right">Haber</TableCell>
+                <TableCell align="right">Saldo deudor</TableCell>
+                <TableCell align="right">Saldo acreedor</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {balance.filas.map((f) => (
+                <TableRow key={f.cuentaId} hover>
+                  <TableCell>
+                    <Box
+                      component={Link}
+                      href={`/dashboard/contabilidad/mayor?cuentaId=${f.cuentaId}${
+                        desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`}
+                      sx={{ color: '#111827', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                    >
+                      <Box component="span" sx={{ fontFamily: 'monospace', color: '#6b7280' }}>{f.codigo}</Box>{' '}
+                      {f.nombre}
+                    </Box>
+                    {f.anomala && (
+                      <Box component="span" sx={{
+                        ml: 1, display: 'inline-block', fontSize: '0.75rem', fontWeight: 500,
+                        px: 1, py: 0.25, borderRadius: '4px', whiteSpace: 'nowrap',
+                        bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a',
+                      }}>
+                        saldo invertido
+                      </Box>
+                    )}
+                  </TableCell>
+                  <TableCell align="right" sx={celdaMonto}>
+                    {f.debeCents > 0 ? fmtDOP(f.debeCents) : ''}
+                  </TableCell>
+                  <TableCell align="right" sx={celdaMonto}>
+                    {f.haberCents > 0 ? fmtDOP(f.haberCents) : ''}
+                  </TableCell>
+                  <TableCell align="right" sx={celdaMonto}>
+                    {f.saldoDeudorCents > 0 ? fmtDOP(f.saldoDeudorCents) : ''}
+                  </TableCell>
+                  <TableCell align="right" sx={celdaMonto}>
+                    {f.saldoAcreedorCents > 0 ? fmtDOP(f.saldoAcreedorCents) : ''}
+                  </TableCell>
+                </TableRow>
+              ))}
 
-            {balance.filas.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">
-                  {desde || hasta ? (
-                    'Ninguna cuenta tuvo movimientos en el periodo elegido.'
-                  ) : (
-                    <>
-                      Todavía no hay movimientos que balancear.{' '}
-                      <Link
-                        href="/dashboard/contabilidad/libro-diario"
-                        className="font-medium underline"
-                      >
-                        Genera los asientos en el libro diario
-                      </Link>{' '}
-                      y vuelve.
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
+              {balance.filas.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ py: 6, textAlign: 'center', color: '#9ca3af' }}>
+                    {desde || hasta ? (
+                      'Ninguna cuenta tuvo movimientos en el periodo elegido.'
+                    ) : (
+                      <>
+                        Todavía no hay movimientos que balancear.{' '}
+                        <Box component={Link} href="/dashboard/contabilidad/libro-diario" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
+                          Genera los asientos en el libro diario
+                        </Box>{' '}
+                        y vuelve.
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
 
-            {balance.filas.length > 0 && (
-              <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
-                <td className="px-4 py-3 text-gray-700">Totales</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                  {fmtDOP(balance.totales.debeCents)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                  {fmtDOP(balance.totales.haberCents)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                  {fmtDOP(balance.totales.saldoDeudorCents)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                  {fmtDOP(balance.totales.saldoAcreedorCents)}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              {balance.filas.length > 0 && (
+                <TableRow sx={{ borderTop: '2px solid #d1d5db', bgcolor: '#f9fafb', '& td': { fontWeight: 600 } }}>
+                  <TableCell sx={{ color: '#374151' }}>Totales</TableCell>
+                  <TableCell align="right" sx={celdaMonto}>{fmtDOP(balance.totales.debeCents)}</TableCell>
+                  <TableCell align="right" sx={celdaMonto}>{fmtDOP(balance.totales.haberCents)}</TableCell>
+                  <TableCell align="right" sx={celdaMonto}>{fmtDOP(balance.totales.saldoDeudorCents)}</TableCell>
+                  <TableCell align="right" sx={celdaMonto}>{fmtDOP(balance.totales.saldoAcreedorCents)}</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Box>
+      </Box>
 
-      <p className="text-xs text-gray-500">
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
         Solo aparecen las cuentas que tuvieron movimientos. Las columnas de saldo
         son la resta de las dos anteriores: cada cuenta cae en una sola de ellas.
         Pulsa una cuenta para ver su mayor.
-      </p>
-    </section>
+      </Typography>
+    </Box>
   );
 }

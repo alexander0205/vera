@@ -13,6 +13,10 @@ import {
 } from '@/lib/contabilidad/libro-diario';
 import { fechaValidaISO } from '@/lib/utils/format';
 import { LibroDiarioClient } from './_client';
+import { ChevronRight } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,24 +96,33 @@ export default async function LibroDiarioPage({
       });
 
   return (
-    <section className="p-4 lg:p-8 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-lg lg:text-2xl font-medium text-gray-900">Libro diario</h1>
-        <p className="text-sm text-gray-500">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Breadcrumb */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
+        <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Libro diario</Typography>
+      </Box>
+
+      <Box>
+        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+          Libro diario
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
           El registro contable que se genera solo a partir de tus facturas y cobros.
           Cada asiento tiene que cuadrar: lo que entra por un lado sale por el otro.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
       {!cfg.activa && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Alert severity="warning">
           <strong>La contabilidad automática está apagada</strong>, así que no se
           genera ningún asiento.{' '}
-          <Link href="/dashboard/contabilidad/configuracion" className="font-medium underline">
+          <Box component={Link} href="/dashboard/contabilidad/configuracion" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
             Ve a la configuración
-          </Link>{' '}
+          </Box>{' '}
           para completarla y encenderla.
-        </div>
+        </Alert>
       )}
 
       <LibroDiarioClient
@@ -124,6 +137,6 @@ export default async function LibroDiarioPage({
         filtros={{ ...filtros, pagina: paginaReal }}
         pageSize={PAGE_SIZE}
       />
-    </section>
+    </Box>
   );
 }

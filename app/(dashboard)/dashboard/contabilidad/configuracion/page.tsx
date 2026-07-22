@@ -12,6 +12,10 @@ import {
 } from '@/lib/contabilidad/config';
 import { getEstadoConfiguracion } from '@/lib/contabilidad/validacion';
 import { ConfigClient } from './_client';
+import { ChevronRight } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,25 +57,32 @@ export default async function ConfiguracionContablePage() {
   ]);
 
   return (
-    <section className="p-4 lg:p-8 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-lg lg:text-2xl font-medium text-gray-900">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Breadcrumb */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
+        <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Configuración contable</Typography>
+      </Box>
+
+      <Box>
+        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
           Configuración contable
-        </h1>
-        <p className="text-sm text-gray-500">
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
           Qué cuenta usar para cada cosa, para que el sistema no te lo pregunte en
           cada factura. Todavía no se generan asientos — eso llega en el siguiente paso.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
       {cuentas.length === 0 ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Alert severity="warning">
           Todavía no hay cuentas en el catálogo.{' '}
-          <Link href="/dashboard/contabilidad/cuentas" className="font-medium underline">
+          <Box component={Link} href="/dashboard/contabilidad/cuentas" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
             Abre el catálogo de cuentas
-          </Link>{' '}
+          </Box>{' '}
           primero: se creará solo con la estructura estándar.
-        </div>
+        </Alert>
       ) : (
         <ConfigClient
           configInicial={config}
@@ -84,6 +95,6 @@ export default async function ConfiguracionContablePage() {
           puedeConfigurar={puedeConfigurar}
         />
       )}
-    </section>
+    </Box>
   );
 }

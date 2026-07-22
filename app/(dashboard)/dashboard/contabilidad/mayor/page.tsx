@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { fmtDOP, fechaValidaISO } from '@/lib/utils/format';
@@ -7,10 +8,20 @@ import { cuentasConMovimientos } from '@/lib/contabilidad/libro-diario';
 import { mayorGeneral } from '@/lib/contabilidad/reportes';
 import { FiltrosPeriodo } from '../_filtros-periodo';
 import { SelectorCuenta } from './_selector-cuenta';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 25;
+
+const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
 /** 'YYYY-MM-DD' → '24 jun 2026', sin pasar por Date (que restaría un día en RD). */
 function fechaCorta(f: string) {
@@ -81,17 +92,30 @@ export default async function MayorGeneralPage({
 
   // Signo del saldo según la naturaleza: un saldo negativo significa que la
   // cuenta está del lado contrario al que le toca, y conviene que se vea rojo.
-  const saldoCls = (v: number) => (v < 0 ? 'text-red-700' : 'text-gray-900');
+  const saldoColor = (v: number) => (v < 0 ? '#b91c1c' : '#111827');
+
+  const celdaMonto = {
+    whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+  } as const;
 
   return (
-    <section className="p-4 lg:p-8 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-lg lg:text-2xl font-medium text-gray-900">Mayor general</h1>
-        <p className="text-sm text-gray-500">
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1400, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Breadcrumb */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
+        <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Mayor general</Typography>
+      </Box>
+
+      <Box>
+        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+          Mayor general
+        </Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
           Todo lo que pasó por una cuenta, en orden, con el saldo que iba
           quedando. Elige la cuenta y, si quieres, el periodo.
-        </p>
-      </header>
+        </Typography>
+      </Box>
 
       <FiltrosPeriodo
         ruta="/dashboard/contabilidad/mayor"
@@ -105,200 +129,191 @@ export default async function MayorGeneralPage({
       />
 
       {cuentas.length === 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+        <Typography sx={{ ...CARD, px: 2, py: 5, textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
           Todavía no hay ninguna cuenta con movimientos.{' '}
-          <Link href="/dashboard/contabilidad/libro-diario" className="font-medium underline">
+          <Box component={Link} href="/dashboard/contabilidad/libro-diario" sx={{ fontWeight: 500, textDecoration: 'underline', color: 'inherit' }}>
             Genera los asientos en el libro diario
-          </Link>{' '}
+          </Box>{' '}
           y vuelve.
-        </div>
+        </Typography>
       )}
 
       {cuentas.length > 0 && !mayor && (
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+        <Typography sx={{ ...CARD, px: 2, py: 5, textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
           {/* Si pidieron una cuenta que no existe o es de otro team, se dice sin
               revelar cuál de las dos cosas fue. */}
           {cuentaId
             ? 'Esa cuenta no existe en este equipo.'
             : 'Elige una cuenta arriba para ver su mayor.'}
-        </div>
+        </Typography>
       )}
 
       {mayor && (
         <>
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="font-medium text-gray-900">
-                <span className="font-mono text-gray-500">{mayor.cuenta.codigo}</span>{' '}
+          <Box sx={{ ...CARD, p: 2 }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
+              <Typography component="h2" sx={{ fontWeight: 600, color: '#111827' }}>
+                <Box component="span" sx={{ fontFamily: 'monospace', color: '#6b7280' }}>{mayor.cuenta.codigo}</Box>{' '}
                 {mayor.cuenta.nombre}
-              </h2>
-              <span className="text-xs text-gray-500">
+              </Typography>
+              <Typography component="span" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
                 {mayor.cuenta.tipo} · naturaleza {mayor.cuenta.naturaleza}
-              </span>
-            </div>
+              </Typography>
+            </Box>
 
-            <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div>
-                <dt className="text-xs text-gray-500">Saldo inicial</dt>
-                <dd className={`text-sm font-medium tabular-nums ${saldoCls(mayor.saldoInicialCents)}`}>
+            <Box sx={{ mt: 1.5, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Saldo inicial</Typography>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: saldoColor(mayor.saldoInicialCents) }}>
                   {fmtDOP(mayor.saldoInicialCents)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Débitos</dt>
-                <dd className="text-sm font-medium tabular-nums text-gray-900">
+                </Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Débitos</Typography>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: '#111827' }}>
                   {fmtDOP(mayor.debeCents)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Créditos</dt>
-                <dd className="text-sm font-medium tabular-nums text-gray-900">
+                </Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Créditos</Typography>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: '#111827' }}>
                   {fmtDOP(mayor.haberCents)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Saldo final</dt>
-                <dd className={`text-sm font-semibold tabular-nums ${saldoCls(mayor.saldoFinalCents)}`}>
+                </Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Saldo final</Typography>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: saldoColor(mayor.saldoFinalCents) }}>
                   {fmtDOP(mayor.saldoFinalCents)}
-                </dd>
-              </div>
-            </dl>
+                </Typography>
+              </Box>
+            </Box>
 
             {!desde && (
-              <p className="mt-3 text-xs text-gray-500">
+              <Typography sx={{ mt: 1.5, fontSize: '0.75rem', color: '#6b7280' }}>
                 Sin fecha de inicio, el saldo inicial es cero: todo el histórico
                 está en la lista de abajo.
-              </p>
+              </Typography>
             )}
-          </div>
+          </Box>
 
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Fecha</th>
-                  <th className="px-4 py-3 font-medium">Concepto</th>
-                  <th className="px-4 py-3 font-medium text-right">Debe</th>
-                  <th className="px-4 py-3 font-medium text-right">Haber</th>
-                  <th className="px-4 py-3 font-medium text-right">Saldo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {/* El saldo con el que arranca la página va como primera fila y
-                    no como dato suelto: así la columna de saldo se lee de
-                    arriba abajo sin saltos. En la página 1 es el saldo inicial
-                    del periodo; en las siguientes, el acumulado de lo anterior. */}
-                {(desde || paginaReal > 1) && (
-                  <tr className="bg-gray-50/60 text-gray-500">
-                    <td className="px-4 py-2 text-xs" colSpan={4}>
-                      {paginaReal > 1
-                        ? 'Saldo acumulado de las páginas anteriores'
-                        : `Saldo anterior al ${fechaCorta(desde!)}`}
-                    </td>
-                    <td className={`px-4 py-2 text-right tabular-nums ${saldoCls(mayor.saldoPrevioPaginaCents)}`}>
-                      {fmtDOP(mayor.saldoPrevioPaginaCents)}
-                    </td>
-                  </tr>
-                )}
+          <Box sx={{ ...CARD, overflow: 'hidden' }}>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 760 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Fecha</TableCell>
+                    <TableCell>Concepto</TableCell>
+                    <TableCell align="right">Debe</TableCell>
+                    <TableCell align="right">Haber</TableCell>
+                    <TableCell align="right">Saldo</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {/* El saldo con el que arranca la página va como primera fila y
+                      no como dato suelto: así la columna de saldo se lee de
+                      arriba abajo sin saltos. En la página 1 es el saldo inicial
+                      del periodo; en las siguientes, el acumulado de lo anterior. */}
+                  {(desde || paginaReal > 1) && (
+                    <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                      <TableCell colSpan={4} sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                        {paginaReal > 1
+                          ? 'Saldo acumulado de las páginas anteriores'
+                          : `Saldo anterior al ${fechaCorta(desde!)}`}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...celdaMonto, color: saldoColor(mayor.saldoPrevioPaginaCents) }}>
+                        {fmtDOP(mayor.saldoPrevioPaginaCents)}
+                      </TableCell>
+                    </TableRow>
+                  )}
 
-                {mayor.movimientos.map((m, i) => (
-                  <tr key={`${m.asientoId}-${i}`} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">
-                      {fechaCorta(m.fecha)}
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-900">
-                      {m.concepto}
-                      {m.descripcion && (
-                        <span className="block text-xs text-gray-500">{m.descripcion}</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-gray-900">
-                      {m.debeCents > 0 ? fmtDOP(m.debeCents) : ''}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-gray-900">
-                      {m.haberCents > 0 ? fmtDOP(m.haberCents) : ''}
-                    </td>
-                    <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums font-medium ${saldoCls(m.saldoCents)}`}>
-                      {fmtDOP(m.saldoCents)}
-                    </td>
-                  </tr>
-                ))}
+                  {mayor.movimientos.map((m, i) => (
+                    <TableRow key={`${m.asientoId}-${i}`} hover>
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: '#6b7280' }}>
+                        {fechaCorta(m.fecha)}
+                      </TableCell>
+                      <TableCell sx={{ color: '#111827' }}>
+                        {m.concepto}
+                        {m.descripcion && (
+                          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{m.descripcion}</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...celdaMonto, color: '#111827' }}>
+                        {m.debeCents > 0 ? fmtDOP(m.debeCents) : ''}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...celdaMonto, color: '#111827' }}>
+                        {m.haberCents > 0 ? fmtDOP(m.haberCents) : ''}
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...celdaMonto, fontWeight: 500, color: saldoColor(m.saldoCents) }}>
+                        {fmtDOP(m.saldoCents)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
 
-                {mayor.movimientos.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">
-                      Esta cuenta no tuvo movimientos
-                      {desde || hasta ? ' en el periodo elegido' : ''}.
-                    </td>
-                  </tr>
-                )}
+                  {mayor.movimientos.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} sx={{ py: 6, textAlign: 'center', color: '#9ca3af' }}>
+                        Esta cuenta no tuvo movimientos
+                        {desde || hasta ? ' en el periodo elegido' : ''}.
+                      </TableCell>
+                    </TableRow>
+                  )}
 
-                {mayor.movimientos.length > 0 && (
-                  <tr className="border-t-2 border-gray-300 bg-gray-50 font-medium">
-                    <td className="px-4 py-2.5" />
-                    <td className="px-4 py-2.5 text-gray-600">Totales del periodo</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
-                      {fmtDOP(mayor.debeCents)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
-                      {fmtDOP(mayor.haberCents)}
-                    </td>
-                    <td className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums ${saldoCls(mayor.saldoFinalCents)}`}>
-                      {fmtDOP(mayor.saldoFinalCents)}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  {mayor.movimientos.length > 0 && (
+                    <TableRow sx={{ borderTop: '2px solid #d1d5db', bgcolor: '#f9fafb', '& td': { fontWeight: 500 } }}>
+                      <TableCell />
+                      <TableCell sx={{ color: '#4b5563' }}>Totales del periodo</TableCell>
+                      <TableCell align="right" sx={celdaMonto}>{fmtDOP(mayor.debeCents)}</TableCell>
+                      <TableCell align="right" sx={celdaMonto}>{fmtDOP(mayor.haberCents)}</TableCell>
+                      <TableCell align="right" sx={{ ...celdaMonto, color: saldoColor(mayor.saldoFinalCents) }}>
+                        {fmtDOP(mayor.saldoFinalCents)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Box>
 
-          {paginas > 1 && (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-gray-500">
-                Página {paginaReal} de {paginas} · mostrando{' '}
-                {(paginaReal - 1) * PAGE_SIZE + 1}–
-                {Math.min(paginaReal * PAGE_SIZE, mayor.total)} de {mayor.total}{' '}
-                movimientos
-              </p>
-              <div className="flex gap-2">
-                {paginaReal > 1 ? (
-                  <Link
-                    href={urlPagina(paginaReal - 1)}
-                    className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            {/* Paginación */}
+            {paginas > 1 && (
+              <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                  Página {paginaReal} de {paginas} · mostrando{' '}
+                  {(paginaReal - 1) * PAGE_SIZE + 1}–
+                  {Math.min(paginaReal * PAGE_SIZE, mayor.total)} de {mayor.total}{' '}
+                  movimientos
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    component={Link} href={urlPagina(paginaReal - 1)} nativeButton={false}
+                    variant="outlined" color="inherit" size="small"
+                    aria-disabled={paginaReal <= 1}
+                    sx={{ color: '#374151', borderColor: '#d1d5db', ...(paginaReal <= 1 && { pointerEvents: 'none', opacity: 0.4 }) }}
                   >
                     Anterior
-                  </Link>
-                ) : (
-                  <span className="rounded-md border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-300">
-                    Anterior
-                  </span>
-                )}
-                {paginaReal < paginas ? (
-                  <Link
-                    href={urlPagina(paginaReal + 1)}
-                    className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  </Button>
+                  <Button
+                    component={Link} href={urlPagina(paginaReal + 1)} nativeButton={false}
+                    variant="outlined" color="inherit" size="small"
+                    aria-disabled={paginaReal >= paginas}
+                    sx={{ color: '#374151', borderColor: '#d1d5db', ...(paginaReal >= paginas && { pointerEvents: 'none', opacity: 0.4 }) }}
                   >
                     Siguiente
-                  </Link>
-                ) : (
-                  <span className="rounded-md border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-300">
-                    Siguiente
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
+                  </Button>
+                </Box>
+              </Box>
+            )}
+          </Box>
 
-          <p className="text-xs text-gray-500">
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
             El saldo sigue la naturaleza de la cuenta: en una cuenta{' '}
             {mayor.cuenta.naturaleza === 'deudora' ? 'deudora' : 'acreedora'} como
             esta, {mayor.cuenta.naturaleza === 'deudora'
               ? 'los débitos suman y los créditos restan'
               : 'los créditos suman y los débitos restan'}. Un saldo en rojo
             significa que quedó del lado contrario al que le corresponde.
-          </p>
+          </Typography>
         </>
       )}
-    </section>
+    </Box>
   );
 }

@@ -3,7 +3,18 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, AlertTriangle, Plus, Trash2, Info } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 import type { Cuenta } from '@/lib/contabilidad/cuentas';
 // Valores desde `metodos` (sin dependencias de base) y tipos desde `config`.
 // Importar valores de `config` aquí rompe el bundle del cliente: arrastra
@@ -16,7 +27,9 @@ import type {
 } from '@/lib/contabilidad/config';
 import type { EstadoConfiguracion } from '@/lib/contabilidad/validacion';
 
-/** Las 5 generales, con la explicación que ve el usuario. */
+const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
+
+/** Las 7 generales, con la explicación que ve el usuario. */
 const GENERALES: { campo: keyof ConfigContable; label: string; ayuda: string }[] = [
   { campo: 'cuentaPorCobrarId', label: 'Cuenta por cobrar',
     ayuda: 'Lo que un cliente queda debiendo al emitirle una factura a crédito.' },
@@ -87,141 +100,153 @@ export function ConfigClient({
     onChange: (id: number | null) => void,
     placeholder = 'Sin configurar',
   ) => (
-    <select
+    <TextField
+      select fullWidth
       value={valor ?? ''}
       disabled={!puedeConfigurar || guardando}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-400"
     >
-      <option value="">{placeholder}</option>
+      <MenuItem value="">{placeholder}</MenuItem>
       {cuentas.map((c) => (
-        <option key={c.id} value={c.id}>{c.codigo} — {c.nombre}</option>
+        <MenuItem key={c.id} value={c.id}>{c.codigo} — {c.nombre}</MenuItem>
       ))}
-    </select>
+    </TextField>
   );
 
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {error && <Alert severity="error">{error}</Alert>}
 
       {/* ─── Estado: qué falta ─────────────────────────────────────────── */}
-      <div className={`rounded-lg border px-4 py-4 ${
-        estadoInicial.completa
-          ? 'border-emerald-200 bg-emerald-50'
-          : 'border-amber-200 bg-amber-50'
-      }`}>
-        <div className="flex items-start gap-3">
+      <Box sx={{
+        borderRadius: '12px', px: 2, py: 2, border: '1px solid',
+        ...(estadoInicial.completa
+          ? { borderColor: '#a7f3d0', bgcolor: '#ecfdf5' }
+          : { borderColor: '#fde68a', bgcolor: '#fffbeb' }),
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
           {estadoInicial.completa
-            ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-            : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />}
+            ? <CheckCircle2 style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#059669' }} />
+            : <AlertTriangle style={{ width: 20, height: 20, flexShrink: 0, marginTop: 2, color: '#d97706' }} />}
 
-          <div className="min-w-0 flex-1 space-y-2">
-            <p className={`text-sm font-medium ${
-              estadoInicial.completa ? 'text-emerald-900' : 'text-amber-900'
-            }`}>
+          <Box sx={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography sx={{
+              fontSize: '0.875rem', fontWeight: 600,
+              color: estadoInicial.completa ? '#065f46' : '#78350f',
+            }}>
               {estadoInicial.completa
                 ? 'La configuración está completa.'
                 : `Faltan ${estadoInicial.huecos.length} cosa(s) por configurar.`}
-            </p>
+            </Typography>
 
             {estadoInicial.huecos.length > 0 && (
-              <ul className="space-y-1.5 text-sm text-amber-900">
+              <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 {estadoInicial.huecos.map((h) => (
-                  <li key={h.clave}>
+                  <Box component="li" key={h.clave} sx={{ fontSize: '0.875rem', color: '#78350f' }}>
                     <strong>{h.que}</strong> — {h.porque}
-                  </li>
+                  </Box>
                 ))}
-              </ul>
+              </Box>
             )}
 
-            <div className="flex items-center gap-3 pt-1">
-              <span className="text-sm text-gray-700">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pt: 0.5 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
                 Contabilidad automática:{' '}
                 <strong>{estadoInicial.activa ? 'encendida' : 'apagada'}</strong>
-              </span>
+              </Typography>
               {puedeConfigurar && (
                 <Button
-                  size="sm"
-                  variant={estadoInicial.activa ? 'outline' : 'default'}
+                  size="small"
+                  variant={estadoInicial.activa ? 'outlined' : 'contained'}
+                  color={estadoInicial.activa ? 'inherit' : 'primary'}
                   disabled={guardando || (!estadoInicial.completa && !estadoInicial.activa)}
                   onClick={() => enviar({ seccion: 'activar', activa: !estadoInicial.activa })}
+                  sx={estadoInicial.activa ? { color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff' } : undefined}
                 >
                   {estadoInicial.activa ? 'Apagar' : 'Encender'}
                 </Button>
               )}
-            </div>
+            </Box>
 
             {!estadoInicial.completa && !estadoInicial.activa && (
-              <p className="text-xs text-amber-800">
+              <Typography sx={{ fontSize: '0.75rem', color: '#92400e' }}>
                 No se puede encender con la configuración incompleta: los asientos
                 saldrían descuadrados, y eso es peor que no generarlos.
-              </p>
+              </Typography>
             )}
-          </div>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       {/* ─── 1. Cuentas generales ──────────────────────────────────────── */}
-      <section className="rounded-lg border border-gray-200 bg-white p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-medium text-gray-900">Cuentas generales</h2>
-          <p className="text-xs text-gray-500">
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Cuentas generales
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
             Lo que se usa en toda factura, sin importar el producto ni la forma de cobro.
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
           {GENERALES.map((g) => (
-            <div key={g.campo} className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">{g.label}</label>
+            <Box key={g.campo} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                {g.label}
+              </Typography>
               {selectCuenta(
                 configInicial[g.campo] as number | null,
                 (id) => enviar({ seccion: 'general', [g.campo]: id }),
               )}
-              <p className="text-xs text-gray-500">{g.ayuda}</p>
-            </div>
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{g.ayuda}</Typography>
+            </Box>
           ))}
-        </div>
-      </section>
+        </Box>
+      </Box>
 
       {/* ─── 2. Métodos de cobro ───────────────────────────────────────── */}
-      <section className="rounded-lg border border-gray-200 bg-white p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-medium text-gray-900">Formas de cobro</h2>
-          <p className="text-xs text-gray-500">
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Formas de cobro
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
             A qué cuenta entra el dinero según cómo te paguen.
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
-        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 flex gap-2">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-          <p className="text-xs text-blue-900">
+        <Alert severity="info" icon={<Info style={{ width: 16, height: 16 }} />}>
+          <Typography sx={{ fontSize: '0.75rem' }}>
             <strong>Los links de pago van aparte de la tarjeta de mostrador.</strong>{' '}
             Cuando cobras por CardNet o Azul el dinero no entra a tu banco ese día:
             la pasarela liquida después y te retiene su comisión. Por eso conviene
             apuntarlos a <em>Cobros por liquidar</em> y no a Bancos — si no, el banco
             te muestra plata que todavía no tienes.
-          </p>
-        </div>
+          </Typography>
+        </Alert>
 
-        <div className="space-y-3">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {METODOS_CONFIGURABLES.map((clave) => {
             const m = metodoPorClave.get(clave);
             const falta = estadoInicial.metodosSinCuenta.includes(clave);
             return (
-              <div key={clave} className="grid gap-3 sm:grid-cols-[200px_1fr_1fr] sm:items-center">
-                <div className="text-sm text-gray-700">
+              <Box key={clave} sx={{
+                display: 'grid', gap: 1.5, alignItems: 'center',
+                gridTemplateColumns: { xs: '1fr', sm: '200px 1fr 1fr' },
+              }}>
+                <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
                   {CLAVE_METODO_LABEL[clave]}
                   {falta && (
-                    <span className="ml-2 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                    <Box component="span" sx={{
+                      ml: 1, fontSize: '10px', px: 0.75, py: 0.25, borderRadius: '4px',
+                      bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a',
+                      whiteSpace: 'nowrap',
+                    }}>
                       lo usas y falta
-                    </span>
+                    </Box>
                   )}
-                </div>
+                </Typography>
 
                 {selectCuenta(
                   m?.cuentaId ?? null,
@@ -232,7 +257,7 @@ export function ConfigClient({
                 )}
 
                 {esPasarela(clave) ? (
-                  <div>
+                  <Box>
                     {selectCuenta(
                       m?.cuentaComisionId ?? null,
                       (id) => m?.cuentaId
@@ -240,105 +265,108 @@ export function ConfigClient({
                         : setError('Primero elige la cuenta donde entra el cobro.'),
                       'Cuenta de comisión (opcional)',
                     )}
-                  </div>
-                ) : <div />}
-              </div>
+                  </Box>
+                ) : <Box />}
+              </Box>
             );
           })}
-        </div>
-      </section>
+        </Box>
+      </Box>
 
       {/* ─── 3. Ingresos por categoría o producto ──────────────────────── */}
-      <section className="rounded-lg border border-gray-200 bg-white p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-medium text-gray-900">Ingresos por categoría o producto</h2>
-          <p className="text-xs text-gray-500">
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Ingresos por categoría o producto
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
             Solo para las excepciones. Por defecto los bienes van a{' '}
             <strong>4101 Ingresos por venta de mercancía</strong> y los servicios a{' '}
             <strong>4104 Ingresos por servicios</strong>, sin configurar nada.
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
         {overridesIniciales.length > 0 && (
-          <div className="overflow-x-auto rounded-md border border-gray-200">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Aplica a</th>
-                  <th className="px-3 py-2 font-medium">Va a la cuenta</th>
-                  {puedeConfigurar && <th className="px-3 py-2" />}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          <Box sx={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Aplica a</TableCell>
+                  <TableCell>Va a la cuenta</TableCell>
+                  {puedeConfigurar && <TableCell />}
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {overridesIniciales.map((o) => (
-                  <tr key={o.id}>
-                    <td className="px-3 py-2">
-                      <span className="text-gray-400 text-xs mr-1.5">
+                  <TableRow key={o.id}>
+                    <TableCell>
+                      <Box component="span" sx={{ color: '#9ca3af', fontSize: '0.75rem', mr: 0.75 }}>
                         {o.categoriaId !== null ? 'Categoría' : 'Producto'}
-                      </span>
+                      </Box>
                       {o.destinoNombre}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">
-                      <span className="font-mono text-xs">{o.cuentaCodigo}</span> {o.cuentaNombre}
-                    </td>
+                    </TableCell>
+                    <TableCell sx={{ color: '#4b5563' }}>
+                      <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{o.cuentaCodigo}</Box>{' '}
+                      {o.cuentaNombre}
+                    </TableCell>
                     {puedeConfigurar && (
-                      <td className="px-3 py-2 text-right">
-                        <button
+                      <TableCell align="right">
+                        <IconButton
+                          size="small" title="Quitar"
                           onClick={() => enviar({ seccion: 'ingreso', id: o.id, cuentaId: null })}
-                          className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                          title="Quitar"
+                          sx={{ color: '#9ca3af', '&:hover': { color: '#dc2626', bgcolor: '#fef2f2' } }}
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
+                          <Trash2 style={{ width: 16, height: 16 }} />
+                        </IconButton>
+                      </TableCell>
                     )}
-                  </tr>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Box>
         )}
 
         {puedeConfigurar && (nuevoOverride ? (
-          <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-3">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <select
+          <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', bgcolor: '#f9fafb', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' } }}>
+              <TextField
+                select
                 value={nuevoOverride.tipo}
                 onChange={(e) => setNuevoOverride({
                   ...nuevoOverride, tipo: e.target.value as 'categoria' | 'producto', destinoId: '',
                 })}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
               >
-                <option value="categoria">Categoría</option>
-                <option value="producto">Producto</option>
-              </select>
+                <MenuItem value="categoria">Categoría</MenuItem>
+                <MenuItem value="producto">Producto</MenuItem>
+              </TextField>
 
-              <select
+              <TextField
+                select
                 value={nuevoOverride.destinoId}
                 onChange={(e) => setNuevoOverride({ ...nuevoOverride, destinoId: e.target.value })}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
               >
-                <option value="">Elegir…</option>
+                <MenuItem value="">Elegir…</MenuItem>
                 {(nuevoOverride.tipo === 'categoria' ? categorias : productos).map((d) => (
-                  <option key={d.id} value={d.id}>{d.nombre}</option>
+                  <MenuItem key={d.id} value={d.id}>{d.nombre}</MenuItem>
                 ))}
-              </select>
+              </TextField>
 
-              <select
+              <TextField
+                select
                 value={nuevoOverride.cuentaId}
                 onChange={(e) => setNuevoOverride({ ...nuevoOverride, cuentaId: e.target.value })}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
               >
-                <option value="">Cuenta…</option>
+                <MenuItem value="">Cuenta…</MenuItem>
                 {cuentas.map((c) => (
-                  <option key={c.id} value={c.id}>{c.codigo} — {c.nombre}</option>
+                  <MenuItem key={c.id} value={c.id}>{c.codigo} — {c.nombre}</MenuItem>
                 ))}
-              </select>
-            </div>
+              </TextField>
+            </Box>
 
-            <div className="flex gap-2">
+            <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
-                size="sm"
+                variant="contained" size="small"
                 disabled={guardando || !nuevoOverride.destinoId || !nuevoOverride.cuentaId}
                 onClick={async () => {
                   const ok = await enviar({
@@ -352,21 +380,26 @@ export function ConfigClient({
               >
                 Agregar
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setNuevoOverride(null)}>
+              <Button
+                variant="outlined" color="inherit" size="small"
+                onClick={() => setNuevoOverride(null)}
+                sx={{ color: '#374151', borderColor: '#d1d5db' }}
+              >
                 Cancelar
               </Button>
-            </div>
-          </div>
+            </Box>
+          </Box>
         ) : (
           <Button
-            size="sm" variant="outline"
+            variant="outlined" color="inherit" size="small"
             onClick={() => setNuevoOverride({ tipo: 'categoria', destinoId: '', cuentaId: '' })}
+            startIcon={<Plus style={{ width: 16, height: 16 }} />}
+            sx={{ alignSelf: 'flex-start', color: '#374151', borderColor: '#d1d5db' }}
           >
-            <Plus className="mr-2 h-4 w-4" />
             Agregar excepción
           </Button>
         ))}
-      </section>
-    </div>
+      </Box>
+    </Box>
   );
 }

@@ -6,7 +6,18 @@ import {
   ChevronRight, ChevronDown, RefreshCw, AlertTriangle,
   FileText, Banknote, Undo2, Ban, X,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 import type { AsientoResumen, LineaDetalle, OrigenTipo } from '@/lib/contabilidad/libro-diario';
 
 export interface FiltrosUI {
@@ -16,6 +27,8 @@ export interface FiltrosUI {
   cuentaId?:   number;
   pagina:      number;
 }
+
+const CARD = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' } as const;
 
 function dop(cents: number) {
   return (cents / 100).toLocaleString('es-DO', {
@@ -37,16 +50,17 @@ function fecha(f: string) {
  * colorean distinto a propósito: son los que RESTAN, y conviene distinguirlos de
  * un vistazo al leer el libro.
  */
-const ORIGEN: Record<string, { label: string; icono: React.ReactNode; cls: string }> = {
-  factura:   { label: 'Factura',   icono: <FileText className="h-3 w-3" />,
-               cls: 'border-gray-200 bg-gray-50 text-gray-600' },
-  pago:      { label: 'Cobro',     icono: <Banknote className="h-3 w-3" />,
-               cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-  nota:      { label: 'Nota de crédito', icono: <Undo2 className="h-3 w-3" />,
-               cls: 'border-amber-200 bg-amber-50 text-amber-700' },
-  anulacion: { label: 'Anulación', icono: <Ban className="h-3 w-3" />,
-               cls: 'border-red-200 bg-red-50 text-red-700' },
+const ORIGEN: Record<string, { label: string; icono: React.ReactNode; bg: string; fg: string; border: string }> = {
+  factura:   { label: 'Factura', icono: <FileText style={{ width: 12, height: 12 }} />,
+               bg: '#f9fafb', fg: '#4b5563', border: '#e5e7eb' },
+  pago:      { label: 'Cobro', icono: <Banknote style={{ width: 12, height: 12 }} />,
+               bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
+  nota:      { label: 'Nota de crédito', icono: <Undo2 style={{ width: 12, height: 12 }} />,
+               bg: '#fffbeb', fg: '#b45309', border: '#fde68a' },
+  anulacion: { label: 'Anulación', icono: <Ban style={{ width: 12, height: 12 }} />,
+               bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
 };
+const ORIGEN_FALLBACK = { bg: '#f9fafb', fg: '#4b5563', border: '#e5e7eb' };
 
 /** Los motivos que devuelve el barrido, en lenguaje de usuario. */
 const MOTIVO_TEXTO: Record<string, string> = {
@@ -169,284 +183,304 @@ export function LibroDiarioClient({
     startTransition(() => router.refresh());
   }
 
+  const celdaMonto = {
+    whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+  } as const;
+
   return (
-    <div className="space-y-4">
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
-      {aviso && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          {aviso}
-        </div>
-      )}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {error && <Alert severity="error">{error}</Alert>}
+      {aviso && <Alert severity="info">{aviso}</Alert>}
 
       {/* Si esto aparece alguna vez, hay un bug: la aplicación impide guardar
           asientos descuadrados. Se muestra para que se vea antes de que
           contamine un reporte, no para que el usuario lo arregle. */}
       {descuadrados.length > 0 && (
-        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
-          <div className="flex items-center gap-2 font-medium">
-            <AlertTriangle className="h-4 w-4" />
+        <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
+          <AlertTitle sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
             {descuadrados.length} asiento(s) descuadrado(s)
-          </div>
-          <p className="mt-1 text-xs">
+          </AlertTitle>
+          <Typography sx={{ fontSize: '0.75rem' }}>
             Esto no debería poder pasar. Repórtalo antes de usar estos números
             para declarar.
-          </p>
-          <ul className="mt-2 space-y-0.5 text-xs">
+          </Typography>
+          <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
             {descuadrados.slice(0, 5).map((d) => (
-              <li key={d.id}>
+              <Box component="li" key={d.id} sx={{ fontSize: '0.75rem' }}>
                 #{d.id} {d.concepto}: debe {dop(d.debe)} · haber {dop(d.haber)}
-              </li>
+              </Box>
             ))}
-          </ul>
-        </div>
+          </Box>
+        </Alert>
       )}
 
       {/* Filtros. Los tres que pide el plan: fecha, origen y cuenta. */}
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Desde</span>
-          <input
-            type="date"
-            value={filtros.desde ?? ''}
-            onChange={(e) => navegar({ desde: e.target.value || undefined })}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-          />
-        </label>
+      <Box sx={{ ...CARD, p: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5 }}>
+        <TextField
+          label="Desde" type="date"
+          value={filtros.desde ?? ''}
+          onChange={(e) => navegar({ desde: e.target.value || undefined })}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Hasta</span>
-          <input
-            type="date"
-            value={filtros.hasta ?? ''}
-            onChange={(e) => navegar({ hasta: e.target.value || undefined })}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-          />
-        </label>
+        <TextField
+          label="Hasta" type="date"
+          value={filtros.hasta ?? ''}
+          onChange={(e) => navegar({ hasta: e.target.value || undefined })}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Origen</span>
-          <select
-            value={filtros.origenTipo ?? ''}
-            onChange={(e) =>
-              navegar({ origenTipo: (e.target.value || undefined) as OrigenTipo | undefined })
-            }
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-          >
-            <option value="">Todos</option>
-            {Object.entries(ORIGEN).map(([clave, o]) => (
-              <option key={clave} value={clave}>{o.label}</option>
-            ))}
-          </select>
-        </label>
+        <TextField
+          label="Origen" select
+          value={filtros.origenTipo ?? ''}
+          onChange={(e) =>
+            navegar({ origenTipo: (e.target.value || undefined) as OrigenTipo | undefined })
+          }
+          sx={{ minWidth: 150 }}
+        >
+          <MenuItem value="">Todos</MenuItem>
+          {Object.entries(ORIGEN).map(([clave, o]) => (
+            <MenuItem key={clave} value={clave}>{o.label}</MenuItem>
+          ))}
+        </TextField>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-500">Cuenta</span>
-          <select
-            value={filtros.cuentaId ?? ''}
-            onChange={(e) => navegar({ cuentaId: Number(e.target.value) || undefined })}
-            className="max-w-xs rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            disabled={cuentas.length === 0}
-          >
-            <option value="">Todas</option>
-            {cuentas.map((c) => (
-              <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
-            ))}
-          </select>
-        </label>
+        <TextField
+          label="Cuenta" select
+          value={filtros.cuentaId ?? ''}
+          onChange={(e) => navegar({ cuentaId: Number(e.target.value) || undefined })}
+          disabled={cuentas.length === 0}
+          sx={{ minWidth: 220, maxWidth: 320 }}
+        >
+          <MenuItem value="">Todas</MenuItem>
+          {cuentas.map((c) => (
+            <MenuItem key={c.id} value={c.id}>{c.codigo} · {c.nombre}</MenuItem>
+          ))}
+        </TextField>
 
         {hayFiltro && (
           <Button
-            variant="outline" size="sm"
+            type="button" color="inherit"
             onClick={() => navegar({
               desde: undefined, hasta: undefined,
               origenTipo: undefined, cuentaId: undefined,
             })}
+            startIcon={<X style={{ width: 16, height: 16 }} />}
+            sx={{ color: '#6b7280', '&:hover': { color: '#374151' }, pb: 1 }}
           >
-            <X className="mr-1.5 h-3.5 w-3.5" />
             Quitar filtros
           </Button>
         )}
-      </div>
+      </Box>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-600">
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+        <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>
           {/* El total y la suma son de TODO lo filtrado, no de esta página. */}
           {total} asiento(s){hayFiltro && ' con estos filtros'}
           {total > 0 && <> · {dop(sumaCents)}</>}
           {pendientes > 0 && (
-            <span className="ml-2 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+            <Box component="span" sx={{
+              ml: 1, display: 'inline-block', fontSize: '0.75rem', fontWeight: 500,
+              px: 1, py: 0.25, borderRadius: '4px',
+              bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a',
+            }}>
               {pendientes} sin asentar
-            </span>
+            </Box>
           )}
-        </p>
+        </Typography>
 
         {puedeGenerar && (
-          <Button size="sm" onClick={generar} disabled={generando || !activa}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${generando ? 'animate-spin' : ''}`} />
+          <Button
+            variant="contained" size="small"
+            onClick={generar} disabled={generando || !activa}
+            startIcon={
+              <RefreshCw
+                style={{ width: 16, height: 16 }}
+                className={generando ? 'animate-spin' : undefined}
+              />
+            }
+            sx={{ px: 2 }}
+          >
             {generando ? 'Generando…' : 'Generar asientos pendientes'}
           </Button>
         )}
-      </div>
+      </Box>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">Fecha</th>
-              <th className="px-4 py-3 font-medium">Concepto</th>
-              <th className="px-4 py-3 font-medium">Origen</th>
-              <th className="px-4 py-3 font-medium text-right">Importe</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {asientosIniciales.map((a) => (
-              // Fragment con key: el elemento externo del map es el que React
-              // necesita identificar, no los <tr> de dentro.
-              <Fragment key={a.id}>
-                <tr
-                  onClick={() => alternar(a.id)}
-                  className="cursor-pointer hover:bg-gray-50"
-                >
-                  <td className="whitespace-nowrap px-4 py-2.5 text-gray-600">
-                    <div className="flex items-center gap-1.5">
-                      {abierto === a.id
-                        ? <ChevronDown className="h-4 w-4 text-gray-400" />
-                        : <ChevronRight className="h-4 w-4 text-gray-400" />}
-                      {fecha(a.fecha)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-900">{a.concepto}</td>
-                  <td className="px-4 py-2.5">
-                    <span className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs ${ORIGEN[a.origenTipo]?.cls ?? 'border-gray-200 bg-gray-50 text-gray-600'}`}>
-                      {ORIGEN[a.origenTipo]?.icono}
-                      {ORIGEN[a.origenTipo]?.label ?? a.origenTipo}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium text-gray-900">
-                    {dop(a.totalCents)}
-                  </td>
-                </tr>
+      <Box sx={{ ...CARD, overflow: 'hidden' }}>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ minWidth: 700 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Fecha</TableCell>
+                <TableCell>Concepto</TableCell>
+                <TableCell>Origen</TableCell>
+                <TableCell align="right">Importe</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {asientosIniciales.map((a) => {
+                const o = ORIGEN[a.origenTipo];
+                const tono = o ?? ORIGEN_FALLBACK;
+                return (
+                  // Fragment con key: el elemento externo del map es el que React
+                  // necesita identificar, no los <tr> de dentro.
+                  <Fragment key={a.id}>
+                    <TableRow
+                      hover
+                      onClick={() => alternar(a.id)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: '#4b5563' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          {abierto === a.id
+                            ? <ChevronDown style={{ width: 16, height: 16, color: '#9ca3af' }} />
+                            : <ChevronRight style={{ width: 16, height: 16, color: '#9ca3af' }} />}
+                          {fecha(a.fecha)}
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ color: '#111827' }}>{a.concepto}</TableCell>
+                      <TableCell>
+                        <Box component="span" sx={{
+                          display: 'inline-flex', alignItems: 'center', gap: 0.75,
+                          fontSize: '0.75rem', fontWeight: 500, px: 1, py: 0.25,
+                          borderRadius: '4px', whiteSpace: 'nowrap',
+                          bgcolor: tono.bg, color: tono.fg, border: `1px solid ${tono.border}`,
+                        }}>
+                          {o?.icono}
+                          {o?.label ?? a.origenTipo}
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right" sx={{ ...celdaMonto, fontWeight: 500, color: '#111827' }}>
+                        {dop(a.totalCents)}
+                      </TableCell>
+                    </TableRow>
 
-                {abierto === a.id && (
-                  <tr className="bg-gray-50/60">
-                    <td colSpan={4} className="px-4 py-3">
-                      {!lineas[a.id] ? (
-                        <p className="text-xs text-gray-500">Cargando apuntes…</p>
-                      ) : (
-                        <table className="w-full text-xs">
-                          <thead className="text-left text-gray-500">
-                            <tr>
-                              <th className="pb-1.5 font-medium">Cuenta</th>
-                              <th className="pb-1.5 font-medium">Descripción</th>
-                              <th className="pb-1.5 text-right font-medium">Debe</th>
-                              <th className="pb-1.5 text-right font-medium">Haber</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {lineas[a.id].map((l, i) => (
-                              <tr key={i} className="border-t border-gray-200/70">
-                                <td className="py-1.5 text-gray-700">
-                                  <span className="font-mono text-gray-500">{l.cuentaCodigo}</span>
-                                  {' '}{l.cuentaNombre}
-                                </td>
-                                <td className="py-1.5 text-gray-500">{l.descripcion}</td>
-                                <td className="py-1.5 text-right tabular-nums text-gray-900">
-                                  {l.debeCents > 0 ? dop(l.debeCents) : ''}
-                                </td>
-                                <td className="py-1.5 text-right tabular-nums text-gray-900">
-                                  {l.haberCents > 0 ? dop(l.haberCents) : ''}
-                                </td>
-                              </tr>
-                            ))}
-                            <tr className="border-t-2 border-gray-300 font-medium">
-                              <td className="py-1.5" />
-                              <td className="py-1.5 text-gray-500">Totales</td>
-                              <td className="py-1.5 text-right tabular-nums">
-                                {dop(lineas[a.id].reduce((s, l) => s + l.debeCents, 0))}
-                              </td>
-                              <td className="py-1.5 text-right tabular-nums">
-                                {dop(lineas[a.id].reduce((s, l) => s + l.haberCents, 0))}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
+                    {abierto === a.id && (
+                      <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                        <TableCell colSpan={4} sx={{ px: 2, py: 1.5 }}>
+                          {!lineas[a.id] ? (
+                            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                              Cargando apuntes…
+                            </Typography>
+                          ) : (
+                            <Table size="small" sx={{ '& td, & th': { fontSize: '0.75rem', border: 0, py: 0.5 } }}>
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ color: '#6b7280' }}>Cuenta</TableCell>
+                                  <TableCell sx={{ color: '#6b7280' }}>Descripción</TableCell>
+                                  <TableCell align="right" sx={{ color: '#6b7280' }}>Debe</TableCell>
+                                  <TableCell align="right" sx={{ color: '#6b7280' }}>Haber</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {lineas[a.id].map((l, i) => (
+                                  <TableRow key={i} sx={{ borderTop: '1px solid #e5e7eb' }}>
+                                    <TableCell sx={{ color: '#374151' }}>
+                                      <Box component="span" sx={{ fontFamily: 'monospace', color: '#6b7280' }}>{l.cuentaCodigo}</Box>
+                                      {' '}{l.cuentaNombre}
+                                    </TableCell>
+                                    <TableCell sx={{ color: '#6b7280' }}>{l.descripcion}</TableCell>
+                                    <TableCell align="right" sx={{ ...celdaMonto, color: '#111827' }}>
+                                      {l.debeCents > 0 ? dop(l.debeCents) : ''}
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ ...celdaMonto, color: '#111827' }}>
+                                      {l.haberCents > 0 ? dop(l.haberCents) : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow sx={{ borderTop: '2px solid #d1d5db', '& td': { fontWeight: 500 } }}>
+                                  <TableCell />
+                                  <TableCell sx={{ color: '#6b7280' }}>Totales</TableCell>
+                                  <TableCell align="right" sx={celdaMonto}>
+                                    {dop(lineas[a.id].reduce((s, l) => s + l.debeCents, 0))}
+                                  </TableCell>
+                                  <TableCell align="right" sx={celdaMonto}>
+                                    {dop(lineas[a.id].reduce((s, l) => s + l.haberCents, 0))}
+                                  </TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
 
-            {asientosIniciales.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-sm text-gray-500">
-                  {/* Distinguir "no hay nada" de "no hay nada que case" evita que
-                      el usuario crea que perdió sus asientos por filtrar. */}
-                  {hayFiltro ? (
-                    <>
-                      Ningún asiento coincide con estos filtros.
-                      <button
-                        onClick={() => navegar({
-                          desde: undefined, hasta: undefined,
-                          origenTipo: undefined, cuentaId: undefined,
-                        })}
-                        className="ml-1 font-medium text-gray-700 underline"
-                      >
-                        Quitar filtros
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      Todavía no hay asientos.
-                      {activa && pendientes > 0 && ' Pulsa "Generar asientos pendientes".'}
-                    </>
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              {asientosIniciales.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} sx={{ py: 6, textAlign: 'center', color: '#9ca3af' }}>
+                    {/* Distinguir "no hay nada" de "no hay nada que case" evita que
+                        el usuario crea que perdió sus asientos por filtrar. */}
+                    {hayFiltro ? (
+                      <>
+                        Ningún asiento coincide con estos filtros.
+                        <Box
+                          component="button"
+                          onClick={() => navegar({
+                            desde: undefined, hasta: undefined,
+                            origenTipo: undefined, cuentaId: undefined,
+                          })}
+                          sx={{
+                            ml: 0.5, fontWeight: 500, color: '#374151',
+                            textDecoration: 'underline', bgcolor: 'transparent',
+                            border: 0, cursor: 'pointer', font: 'inherit',
+                          }}
+                        >
+                          Quitar filtros
+                        </Box>
+                      </>
+                    ) : (
+                      <>
+                        Todavía no hay asientos.
+                        {activa && pendientes > 0 && ' Pulsa "Generar asientos pendientes".'}
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Box>
 
-      {/* Paginación. Antes no existía: la pantalla pedía 50 asientos y los
-          pintaba, así que a partir del 51 el resto era inalcanzable desde la UI
-          aunque la consulta ya soportara offset. */}
-      {paginas > 1 && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-gray-500">
-            Página {filtros.pagina} de {paginas} · mostrando{' '}
-            {(filtros.pagina - 1) * pageSize + 1}–
-            {Math.min(filtros.pagina * pageSize, total)} de {total}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline" size="sm"
-              disabled={filtros.pagina <= 1 || pendiente}
-              onClick={() => navegar({ pagina: filtros.pagina - 1 })}
-            >
-              Anterior
-            </Button>
-            <Button
-              variant="outline" size="sm"
-              disabled={filtros.pagina >= paginas || pendiente}
-              onClick={() => navegar({ pagina: filtros.pagina + 1 })}
-            >
-              Siguiente
-            </Button>
-          </div>
-        </div>
-      )}
+        {/* Paginación. Antes no existía: la pantalla pedía 50 asientos y los
+            pintaba, así que a partir del 51 el resto era inalcanzable desde la UI
+            aunque la consulta ya soportara offset. */}
+        {paginas > 1 && (
+          <Box sx={{ px: 2, py: 1.5, borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+              Página {filtros.pagina} de {paginas} · mostrando{' '}
+              {(filtros.pagina - 1) * pageSize + 1}–
+              {Math.min(filtros.pagina * pageSize, total)} de {total}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined" color="inherit" size="small"
+                disabled={filtros.pagina <= 1 || pendiente}
+                onClick={() => navegar({ pagina: filtros.pagina - 1 })}
+                sx={{ color: '#374151', borderColor: '#d1d5db' }}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outlined" color="inherit" size="small"
+                disabled={filtros.pagina >= paginas || pendiente}
+                onClick={() => navegar({ pagina: filtros.pagina + 1 })}
+                sx={{ color: '#374151', borderColor: '#d1d5db' }}
+              >
+                Siguiente
+              </Button>
+            </Box>
+          </Box>
+        )}
+      </Box>
 
-      <p className="text-xs text-gray-500">
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
         Los asientos se generan cuando pulsas el botón, no automáticamente al
         facturar. Se asientan facturas, cobros, notas de crédito, recargos por mora
         y retenciones. Un documento anulado no borra su asiento: genera uno reverso,
         para que el historial contable quede completo.
-      </p>
-    </div>
+      </Typography>
+    </Box>
   );
 }

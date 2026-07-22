@@ -13,7 +13,9 @@
 import { useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
 
 export interface Periodo {
   desde?: string;
@@ -50,40 +52,38 @@ export function FiltrosPeriodo({
   const hayPeriodo = Boolean(periodo.desde || periodo.hasta);
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3">
+    <Box sx={{
+      display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 1.5,
+      bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2,
+    }}>
       {extra}
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-gray-500">Desde</span>
-        <input
-          type="date"
-          value={periodo.desde ?? ''}
-          disabled={pendiente}
-          onChange={(e) => navegar({ desde: e.target.value || undefined })}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-        />
-      </label>
+      <TextField
+        label="Desde" type="date"
+        value={periodo.desde ?? ''}
+        disabled={pendiente}
+        onChange={(e) => navegar({ desde: e.target.value || undefined })}
+        slotProps={{ inputLabel: { shrink: true } }}
+      />
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-gray-500">Hasta</span>
-        <input
-          type="date"
-          value={periodo.hasta ?? ''}
-          disabled={pendiente}
-          onChange={(e) => navegar({ hasta: e.target.value || undefined })}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-        />
-      </label>
+      <TextField
+        label="Hasta" type="date"
+        value={periodo.hasta ?? ''}
+        disabled={pendiente}
+        onChange={(e) => navegar({ hasta: e.target.value || undefined })}
+        slotProps={{ inputLabel: { shrink: true } }}
+      />
 
       {hayPeriodo && (
         <Button
-          variant="outline" size="sm" disabled={pendiente}
+          type="button" color="inherit" disabled={pendiente}
           onClick={() => navegar({ desde: undefined, hasta: undefined })}
+          startIcon={<X style={{ width: 16, height: 16 }} />}
+          sx={{ color: '#6b7280', '&:hover': { color: '#374151' }, pb: 1 }}
         >
-          <X className="mr-1.5 h-3.5 w-3.5" />
           Todo el histórico
         </Button>
       )}
-    </div>
+    </Box>
   );
 }
