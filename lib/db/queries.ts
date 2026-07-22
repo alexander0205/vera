@@ -662,6 +662,12 @@ export async function getCuentasPorCobrar(
         -- PAGADA/ANULADA/GRATUITA/USO quedan fuera vía estado_pago.
         AND d.estado_pago IN ('PENDIENTE', 'PARCIAL')
         AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+        -- Un BORRADOR con e-NCF REAL no es una venta: es la reserva que deja un
+        -- intento de emisión fallido (ver /api/ecf/emitir). La venta se
+        -- re-facturó con otro número, así que contarlo aquí duplica la deuda.
+        -- Los borradores legítimos traen 'BOR-...' o encf vacío (tickets
+        -- sin-ncf) y esos sí siguen apareciendo. (Fix 3ffe6a9 portado al CTE.)
+        AND NOT (d.estado = 'BORRADOR' AND d.encf ~ '^E[0-9]{12}$')
         -- Las ND de mora no son cuentas propias: se agrupan en su factura padre.
         AND d.mora_origen_id IS NULL
         -- Las NC no son cuentas por cobrar: acreditan contra su factura padre.

@@ -1012,6 +1012,63 @@ export async function POST(request: NextRequest) {
     // Llamar a ecf-api — usar endpoint unificado (/emisiones/emitir)
     // ecf-api espera body wrapped: { tipoComprobante, formato?, payload: {...campos del comprobante} }
     // El mapper devuelve un DTO plano — extraemos tipoComprobante + formato y movemos el resto a `payload`.
+    /**
+     * Si el envío falla, guarda un BORRADOR que CONSERVA el e-NCF ya consumido.
+     *
+     * En esta ruta el documento se creaba solo tras emitir con éxito, así que un
+     * fallo dejaba el número quemado y sin rastro en ninguna parte: el siguiente
+     * intento tomaba otro y se abría un hueco permanente en la secuencia. Con el
+     * borrador, el número queda visible y el reintento entra por
+     * /api/facturas/[id]/emitir-ecf, que reusa el mismo e-NCF.
+     *
+     * Solo aplica cuando nosotros consumimos la secuencia (`sequenceConsumedId`);
+     * con `encfOverride` (habilitación/tests) no se crea nada.
+     */
+    async function reservarBorradorTrasFallo(): Promise<number | null> {
+      // Capturar en consts: TypeScript pierde el narrowing dentro del closure.
+      const tid = teamId;
+      const uid = user?.id;
+      const enc = encfAsignado;
+      if (!sequenceConsumedId || !enc || tid == null || uid == null) return null;
+      try {
+        const montoCts = Math.round(totales.montoTotal * 100);
+        const [row] = await db
+          .insert(ecfDocuments)
+          .values({
+            teamId:               tid,
+            encf:                 enc,
+            codigo:               await generarCodigoFactura(db, { teamId: tid, userId: uid, tipoEcf: data.tipoEcf }),
+            tipoEcf:              data.tipoEcf,
+            estado:               'BORRADOR',
+            estadoPago:           calcularEstadoPago({
+              estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
+            }),
+            rncComprador:         data.rncComprador,
+            razonSocialComprador: data.razonSocialComprador,
+            emailComprador:       data.emailComprador,
+            montoTotal:           montoCts,
+            totalItbis:           Math.round(totales.totalItbis * 100),
+            ncfModificado:        data.ncfModificado,
+            origenDocumentoId:    padreDoc?.id ?? null,
+            codigoModificacion:   data.codigoModificacion ?? null,
+            razonModificacion:    data.razonModificacion || null,
+            lineasJson:           data.lineasJson ?? JSON.stringify(data.items),
+            tipoPago:             data.tipoPago ?? 1,
+            fechaLimitePago:      data.fechaLimitePago ?? null,
+            createdBy:            uid,
+          })
+          .returning({ id: ecfDocuments.id });
+        console.warn(
+          `[ecf/emitir] envío falló — e-NCF ${encfAsignado} RESERVADO en borrador #${row?.id}. ` +
+          `El reintento debe usar /api/facturas/${row?.id}/emitir-ecf para reusar el mismo número.`,
+        );
+        return row?.id ?? null;
+      } catch (e) {
+        console.error('[ecf/emitir] no se pudo reservar el e-NCF en un borrador', e);
+        return null;
+      }
+    }
+
     let resultado;
     try {
       const { tipoComprobante: tipoCmp, formato: fmt, ...payloadFields } = ecfApiDto as Record<string, unknown> & {
@@ -1029,12 +1086,16 @@ export async function POST(request: NextRequest) {
 
       if (err instanceof EcfApiError) {
         const resolved = resolveEcfApiError(err);
+        const docId    = await reservarBorradorTrasFallo();
         return NextResponse.json(
           {
             error:       resolved.mensaje,
             code:        resolved.code,
-            action:      resolved.action,
+            action:      docId ? 'retry-same-ncf' : resolved.action,
             statusEcfApi: err.status,
+            // El e-NCF quedó reservado en este borrador: reintentar por
+            // /api/facturas/{docId}/emitir-ecf reusa el MISMO número.
+            ...(docId ? { docId, encf: encfAsignado } : {}),
             // DGII upstream útil para el usuario (códigos 75, 156, 181, etc.)
             ...(resolved.dgiiDetalle ? { dgii: resolved.dgiiDetalle } : {}),
             // En desarrollo incluir body crudo para debugging; en prod ocultar.
@@ -1047,12 +1108,17 @@ export async function POST(request: NextRequest) {
       // Otros errores (timeout, network, parseo, etc.) — no son EcfApiError.
       const raw = err instanceof Error ? err.message : 'Error desconocido';
       const esTimeout = /timeout|econnreset|etimedout|aborted/i.test(raw);
+      const docId = await reservarBorradorTrasFallo();
       return NextResponse.json(
         {
-          error: esTimeout
+          error: docId
+            ? `${esTimeout ? 'Tiempo de espera agotado al comunicarse con el servicio de firma.' : 'No se pudo enviar el comprobante.'} ` +
+              `El comprobante ${encfAsignado} quedó reservado — reintenta y se usará el mismo número.`
+            : esTimeout
             ? 'Tiempo de espera agotado al comunicarse con el servicio de firma. Reintenta.'
             : 'No se pudo enviar el comprobante. Intenta de nuevo.',
-          action: 'retry-later',
+          action: docId ? 'retry-same-ncf' : 'retry-later',
+          ...(docId ? { docId, encf: encfAsignado } : {}),
           ...(process.env.NODE_ENV !== 'production' ? { mensajeOriginal: raw } : {}),
         },
         { status: 502 },

@@ -324,6 +324,13 @@ function Venta({
   const [categoriaActiva, setCategoriaActiva] = useState<number | 'todas'>('todas');
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [cobrando, setCobrando] = useState(false);
+  /**
+   * Cuando el envío a DGII falla, el backend deja el e-NCF reservado en un
+   * borrador y devuelve su id. Guardarlo hace que el siguiente intento reuse
+   * ese mismo número en vez de consumir el siguiente de la secuencia.
+   * Solo aplica a tipos con secuencia fiscal; `sin-ncf` no reserva nada.
+   */
+  const [reservaDocId, setReservaDocId] = useState<number | null>(null);
   const [estudiante, setEstudiante] = useState<MonederoView | null>(null);
   const [listas, setListas] = useState<ListaPrecio[]>([]);
   const [listaPreciosId, setListaPreciosId] = useState<number | 'general'>('general');
@@ -720,24 +727,41 @@ function Venta({
       setCobrando(false);
       const r = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // El e-NCF quedó reservado en un borrador: guardarlo para que el
+        // próximo intento lo reuse en vez de consumir otro número.
+        if (typeof r.docId === 'number') setReservaDocId(r.docId);
         toast.error(r.error ?? 'No se pudo completar la venta');
         await refrescarEstudiante(estudiante.dependienteId);  // refleja la reversa
         return;
       }
+      setReservaDocId(null);
       toast.success(`Cobrado a ${estudiante.nombre}. Saldo: ${fmt(r.saldoCentavos)}`);
       await refrescarEstudiante(estudiante.dependienteId);
       if (r.documentoId) { docId = r.documentoId; }
     } else {
-      const res = await fetch('/api/ecf/emitir', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      // Reintento tras un fallo: usar el borrador que conserva el e-NCF ya
+      // reservado, para no quemar otro número de la secuencia.
+      const res = reservaDocId
+        ? await fetch(`/api/facturas/${reservaDocId}/emitir-ecf`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tipoEcf: payload.tipoEcf,
+              ...(payload.rncComprador         ? { rncComprador:         payload.rncComprador }         : {}),
+              ...(payload.razonSocialComprador ? { razonSocialComprador: payload.razonSocialComprador } : {}),
+            }),
+          })
+        : await fetch('/api/ecf/emitir', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
       setCobrando(false);
       const venta = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (typeof venta.docId === 'number') setReservaDocId(venta.docId);
         toast.error(venta.error ?? 'No se pudo completar la venta');
         return;
       }
+      setReservaDocId(null);
       const cambio = recibidoCentavos - totalConPropina;
       toast.success(cambio > 0 ? `Venta cobrada. Cambio: ${fmt(cambio)}` : 'Venta cobrada');
       if (venta.documentoId) { docId = venta.documentoId; }
