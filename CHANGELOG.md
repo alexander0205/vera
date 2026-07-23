@@ -4,6 +4,24 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.5.4 — 2026-07-22
+
+### Arreglado
+
+- **pos**: propagar el e-NCF reservado en la venta con monedero
+
+## v1.5.3 — 2026-07-22
+
+### Arreglado
+
+- **emision**: reintentar con el mismo e-NCF desde el formulario y el POS
+
+## v1.5.2 — 2026-07-22
+
+### Arreglado
+
+- **cxc**: excluir de cuentas por cobrar los borradores que solo reservan e-NCF
+
 ## v1.5.1 — 2026-07-21
 
 ### Arreglado
