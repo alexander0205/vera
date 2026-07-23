@@ -282,6 +282,51 @@ export async function listarAsientos(
  * porque un filtro que ofrece opciones que devuelven cero resultados hace dudar
  * al usuario de si el reporte está roto.
  */
+/** Una fila plana del libro diario para exportar: un apunte con su encabezado. */
+export interface FilaExportLibro {
+  fecha:        string;
+  concepto:     string;
+  origenTipo:   string;
+  cuentaCodigo: string;
+  cuentaNombre: string;
+  descripcion:  string | null;
+  debeCents:    number;
+  haberCents:   number;
+}
+
+/**
+ * El libro diario aplanado a una fila por apunte, con los MISMOS filtros que la
+ * pantalla (via `condicionesLibro`), para exportarlo a Excel.
+ *
+ * A diferencia de `listarAsientos`, que devuelve un resumen por asiento para la
+ * lista paginada, aquí baja cada línea con su cuenta: es el formato columnar con
+ * el que un contador lee un libro diario impreso (fecha · asiento · cuenta ·
+ * debe · haber). Sin paginar: exporta todo lo filtrado.
+ */
+export async function asientosParaExportar(
+  teamId: number,
+  opts: FiltrosLibro = {},
+): Promise<FilaExportLibro[]> {
+  const where = condicionesLibro(teamId, opts);
+  const filas = await db.execute(sql`
+    SELECT to_char(a.fecha, 'YYYY-MM-DD') AS fecha, a.concepto,
+           a.origen_tipo AS "origenTipo",
+           c.codigo AS "cuentaCodigo", c.nombre AS "cuentaNombre",
+           l.descripcion,
+           l.debe_cents AS "debeCents", l.haber_cents AS "haberCents"
+    FROM contabilidad_asientos a
+    JOIN contabilidad_asiento_lineas l ON l.asiento_id = a.id
+    JOIN contabilidad_cuentas c ON c.id = l.cuenta_id
+    WHERE ${where}
+    ORDER BY a.fecha DESC, a.id DESC, l.orden ASC
+  `);
+  return (filas as unknown as FilaExportLibro[]).map((f) => ({
+    ...f,
+    debeCents:  aNumero(f.debeCents),
+    haberCents: aNumero(f.haberCents),
+  }));
+}
+
 export async function cuentasConMovimientos(
   teamId: number,
 ): Promise<{ id: number; codigo: string; nombre: string }[]> {

@@ -1085,3 +1085,78 @@ Alex pidió integrar todo el módulo en su rama `feature/modulo-escolar`
 - Pendiente al retomar: avisar a Alex (fix portado, bug `component={Link}` de
   server arreglado —su secuencias lo tenía—, migraciones 0071 duplicadas) y
   decidir el destino del PR viejo de contabilidad (superseded).
+
+---
+
+## Niveles pendientes 1-4 · ✅ HECHO (2026-07-23)
+
+Plan en `docs/plan-niveles-pendientes-contabilidad.md`. **Implementados los
+niveles 1 y parte del 3 (los que no dependen de Alex): estado de resultados,
+balance general, exports a Excel, asientos manuales.** Quedan para después, con
+OK de Alex: cron del barrido (2.1/2.2), compras/gastos (3.2, toca sus tablas) y
+el saldo invertido de 1103 (2.3). **Sin commitear todavía** (working tree).
+
+### Estado de resultados y balance general (sin migración)
+
+`lib/contabilidad/estado-resultados.ts` y `lib/contabilidad/balance-general.ts`,
+los dos derivan de `balanceComprobacion()` (una sola consulta cada uno).
+Pantallas en `/dashboard/contabilidad/estado-resultados` y `/balance-general`,
+con sus entradas en el sidebar (`contabilidad:ver`).
+
+**Decisión clave — se agrega por `tipo` con debe/haber CRUDO, no por
+`naturaleza`.** El signo de cada sección lo fija la clase: ingreso = `haber −
+debe`, costo/gasto = `debe − haber`, activo = `debe − haber`, pasivo/patrimonio
+= `haber − debe`. Así las cuentas de contrapartida restan solas: 4103 Descuentos
+(tipo ingreso) sale NEGATIVO y resta de las ventas sin tratamiento especial.
+**No usar `saldoSegunNaturaleza` para esto** — para la 4103 deudora daría un
+positivo que se SUMARÍA al ingreso. Es la misma lección de "aritmética pura" del
+balance de comprobación.
+
+El balance general cuadra por identidad, no por casualidad: sobre todos los
+asientos Σdebe=Σhaber, y al separar por clase eso ES `activo = pasivo +
+patrimonio + resultado`. El resultado del ejercicio entra como línea sintética
+de patrimonio (`cuentaId: null`) mientras no exista el cierre de ejercicio.
+
+Verificado en UI contra team 9: estado de resultados muestra 4103 en −RD$2,250;
+balance general cuadra a RD$618,095 con 1103 negativo (saldo invertido conocido)
+sin romperse.
+
+### Exports a Excel
+
+Helper común `lib/contabilidad/export-xlsx.ts` (formato DOP + encabezado, igual
+que el export de cartera del Paso 1). Cinco rutas: libro diario, mayor, balance,
+estado de resultados, balance general — todas `contabilidad:ver`, respetan los
+filtros de la pantalla, exportan el conjunto completo. Libro diario aplanado a
+una fila por apunte (`asientosParaExportar` en `libro-diario.ts`). Los 5 devuelven
+xlsx 200 verificado por fetch.
+
+### Asientos manuales — migración 0087
+
+`0087_contabilidad_asientos_manuales.sql` **aplicada** a la DB launch
+(`ep-winter-morning-anjbmrp1`/`neondb`) con OK de Darian. Amplía el CHECK de
+`origen_tipo` a `'manual'` + crea `contabilidad_asiento_manual_seq`. **Primera
+libre ahora: 0088.**
+
+`generarAsientoManual()` en `asientos.ts` reusa el guardián privado
+`insertarAsiento` (mismo cuadre). **NO depende del interruptor `cfg.activa`**: el
+interruptor gobierna el barrido de documentos, no la voluntad humana de anotar un
+ajuste. El `origen_id` sale de la secuencia (cada manual es único, sin la
+idempotencia de los automáticos: dos manuales iguales son dos asientos). Valida
+cuentas imputables+activas del team, cuadre, fecha real, ≥2 líneas.
+
+API `POST /api/contabilidad/asientos-manuales` (`contabilidad:gestionar`).
+Página `/dashboard/contabilidad/nuevo-asiento` + `_client.tsx` con cuadre en
+vivo (el botón no se habilita hasta cuadrar). Sidebar gateado a
+`contabilidad:gestionar` (quien solo ve no ve el formulario).
+
+**Verificado el camino UI→API** (la lección del bug del Paso 5): formulario
+llenado a mano, cuadre en vivo, guardado, redirect al libro diario, asiento con
+badge `manual`. Las 4 validaciones rechazan (descuadrado, agrupación, 1 línea,
+fecha inválida). Asiento de prueba borrado después. Queda en team 9 un asiento
+manual de demo: **"Pago de alquiler de local (demo manual)"** #483, Debe 6101 /
+Haber 1101 Caja RD$15,000 — enriquece la demo (hace que el estado de resultados
+muestre un gasto). Team 9 ahora: **483 asientos** (480 originales + SEEDITBIS
+factura/cobro + alquiler manual).
+
+Typecheck limpio. Tests 75 pass (el único fallo, `payments-modulos`, es un
+timeout ajeno a contabilidad).

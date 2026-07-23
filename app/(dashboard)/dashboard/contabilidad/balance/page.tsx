@@ -46,6 +46,11 @@ export default async function BalancePage({
   const balance = await balanceComprobacion(teamId, { desde, hasta });
   const anomalas = balance.filas.filter((f) => f.anomala);
 
+  const qs = new URLSearchParams();
+  if (desde) qs.set('desde', desde);
+  if (hasta) qs.set('hasta', hasta);
+  const exportHref = `/api/contabilidad/balance/export${qs.toString() ? `?${qs}` : ''}`;
+
   const celdaMonto = {
     whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: '#111827',
   } as const;
@@ -59,15 +64,27 @@ export default async function BalancePage({
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Balance de comprobación</Typography>
       </Box>
 
-      <Box>
-        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-          Balance de comprobación
-        </Typography>
-        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
-          Todas las cuentas con movimientos, con lo que entró y lo que salió por
-          cada una. Si la contabilidad está bien, las dos columnas de abajo dan
-          exactamente lo mismo.
-        </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box>
+          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+            Balance de comprobación
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
+            Todas las cuentas con movimientos, con lo que entró y lo que salió por
+            cada una. Si la contabilidad está bien, las dos columnas de abajo dan
+            exactamente lo mismo.
+          </Typography>
+        </Box>
+        {balance.filas.length > 0 && (
+          <Box component="a" href={exportHref}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
+              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
+              color: '#0f766e', bgcolor: '#f0fdfa', border: '1px solid #99f6e4',
+              '&:hover': { bgcolor: '#ccfbf1' } }}
+          >
+            Exportar a Excel
+          </Box>
+        )}
       </Box>
 
       <FiltrosPeriodo ruta="/dashboard/contabilidad/balance" periodo={{ desde, hasta }} />

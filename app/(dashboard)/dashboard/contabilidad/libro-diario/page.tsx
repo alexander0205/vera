@@ -103,14 +103,32 @@ export default async function LibroDiarioPage({
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Libro diario</Typography>
       </Box>
 
-      <Box>
-        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-          Libro diario
-        </Typography>
-        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
-          El registro contable que se genera solo a partir de tus facturas y cobros.
-          Cada asiento tiene que cuadrar: lo que entra por un lado sale por el otro.
-        </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box>
+          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+            Libro diario
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
+            El registro contable que se genera solo a partir de tus facturas y cobros.
+            Cada asiento tiene que cuadrar: lo que entra por un lado sale por el otro.
+          </Typography>
+        </Box>
+        {total > 0 && (
+          <Box component="a"
+            href={`/api/contabilidad/libro-diario/export?${new URLSearchParams({
+              ...(origenTipo ? { origenTipo } : {}),
+              ...(desde ? { desde } : {}),
+              ...(hasta ? { hasta } : {}),
+              ...(cuentaId ? { cuentaId: String(cuentaId) } : {}),
+            })}`}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
+              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
+              color: '#0f766e', bgcolor: '#f0fdfa', border: '1px solid #99f6e4',
+              '&:hover': { bgcolor: '#ccfbf1' } }}
+          >
+            Exportar a Excel
+          </Box>
+        )}
       </Box>
 
       {!cfg.activa && (

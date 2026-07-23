@@ -645,3 +645,138 @@ export async function generarAsientoPago(
     ? { creado: false, motivo: 'ya-tiene-asiento' }
     : { creado: true, asientoId };
 }
+
+// ─── Asiento manual ──────────────────────────────────────────────────────────
+
+/** Error de validación de un asiento manual. La API lo traduce a 400. */
+export class AsientoManualError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AsientoManualError';
+  }
+}
+
+export interface LineaManualInput {
+  cuentaId:    number;
+  debeCents:   number;
+  haberCents:  number;
+  descripcion?: string | null;
+}
+
+export interface AsientoManualInput {
+  /** 'YYYY-MM-DD'. */
+  fecha:    string;
+  concepto: string;
+  lineas:   LineaManualInput[];
+}
+
+/**
+ * Registra un asiento a mano: lo que no nace de una factura ni de un pago.
+ *
+ * A diferencia de la generación automática, **no depende del interruptor de la
+ * contabilidad** (`cfg.activa`): ese interruptor gobierna el barrido de
+ * documentos, no la voluntad explícita de un humano de anotar un ajuste. El
+ * guardián de cuadre de `insertarAsiento` sigue siendo el mismo, así que un
+ * asiento manual descuadrado tampoco puede existir.
+ *
+ * El `origen_id` sale de una secuencia (migración 0087): cada asiento manual es
+ * único, sin la idempotencia de los automáticos —dos asientos manuales iguales
+ * son dos asientos, no uno—.
+ */
+export async function generarAsientoManual(
+  teamId: number,
+  entrada: AsientoManualInput,
+  userId: number | null = null,
+): Promise<{ asientoId: number }> {
+  const concepto = (entrada.concepto ?? '').trim();
+  if (!concepto) throw new AsientoManualError('El concepto es obligatorio.');
+  if (concepto.length > 255) throw new AsientoManualError('El concepto es demasiado largo.');
+
+  // Fecha en formato y calendario válidos: una cadena rara reventaría el ::date.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.fecha)) {
+    throw new AsientoManualError('La fecha no es válida.');
+  }
+  const d = new Date(`${entrada.fecha}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== entrada.fecha) {
+    throw new AsientoManualError('La fecha no existe en el calendario.');
+  }
+
+  const lineas = entrada.lineas ?? [];
+  if (lineas.length < 2) {
+    throw new AsientoManualError('Un asiento necesita al menos dos líneas.');
+  }
+
+  let totalDebe = 0;
+  let totalHaber = 0;
+  const limpias: LineaAsiento[] = [];
+  for (const l of lineas) {
+    if (!Number.isInteger(l.cuentaId) || l.cuentaId <= 0) {
+      throw new AsientoManualError('Cada línea debe apuntar a una cuenta.');
+    }
+    const debe = Math.trunc(Number(l.debeCents) || 0);
+    const haber = Math.trunc(Number(l.haberCents) || 0);
+    if (debe < 0 || haber < 0) {
+      throw new AsientoManualError('Los importes no pueden ser negativos.');
+    }
+    // Exactamente uno de los dos con valor, como exige el CHECK de la tabla.
+    if ((debe > 0) === (haber > 0)) {
+      throw new AsientoManualError('Cada línea es débito O crédito, no ambos ni ninguno.');
+    }
+    totalDebe += debe;
+    totalHaber += haber;
+    limpias.push({
+      cuentaId: l.cuentaId,
+      debeCents: debe,
+      haberCents: haber,
+      descripcion: (l.descripcion ?? '').trim().slice(0, 255) || concepto,
+    });
+  }
+
+  if (totalDebe !== totalHaber) {
+    throw new AsientoManualError(
+      `El asiento no cuadra: debe ${totalDebe / 100} ≠ haber ${totalHaber / 100}.`,
+    );
+  }
+  if (totalDebe === 0) {
+    throw new AsientoManualError('El asiento no puede ser por cero.');
+  }
+
+  // Las cuentas tienen que ser de este team, imputables y activas: un asiento no
+  // puede caer sobre una cuenta de agrupación ni sobre una desactivada.
+  const ids = [...new Set(limpias.map((l) => l.cuentaId))];
+  const cuentas = await db.execute(sql`
+    SELECT id, imputable, activa
+    FROM contabilidad_cuentas
+    WHERE team_id = ${teamId} AND id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
+  `) as unknown as { id: number; imputable: boolean; activa: boolean }[];
+
+  const porId = new Map(cuentas.map((c) => [c.id, c]));
+  for (const id of ids) {
+    const c = porId.get(id);
+    if (!c) throw new AsientoManualError('Alguna cuenta no existe en este equipo.');
+    if (!c.activa) throw new AsientoManualError('No se puede usar una cuenta desactivada.');
+    if (!c.imputable) {
+      throw new AsientoManualError('No se puede usar una cuenta de agrupación; elige una cuenta de detalle.');
+    }
+  }
+
+  // origen_id único de la secuencia: cada asiento manual es distinto.
+  const [{ origen_id: origenId }] = await db.execute<{ origen_id: number }>(sql`
+    SELECT nextval('contabilidad_asiento_manual_seq')::int AS origen_id
+  `);
+
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: entrada.fecha, concepto, origenTipo: 'manual', origenId },
+    limpias,
+    userId,
+  );
+
+  // Con un origen_id fresco de la secuencia no puede haber conflicto; si acaso
+  // pasara, es un error real y no una idempotencia esperada.
+  if (asientoId === null) {
+    throw new AsientoManualError('No se pudo guardar el asiento. Inténtalo de nuevo.');
+  }
+
+  return { asientoId };
+}

@@ -103,8 +103,11 @@ const GROUPS: NavGroup[] = [
     children: [
       { href: '/dashboard/contabilidad/cuentas',      label: 'Catálogo de cuentas' },
       { href: '/dashboard/contabilidad/libro-diario', label: 'Libro diario' },
+      { href: '/dashboard/contabilidad/nuevo-asiento', label: 'Nuevo asiento manual' },
       { href: '/dashboard/contabilidad/mayor',        label: 'Mayor general' },
       { href: '/dashboard/contabilidad/balance',      label: 'Balance de comprobación' },
+      { href: '/dashboard/contabilidad/estado-resultados', label: 'Estado de resultados' },
+      { href: '/dashboard/contabilidad/balance-general', label: 'Balance general' },
       { href: '/dashboard/contabilidad/configuracion', label: 'Configuración contable' },
       { href: '/dashboard/contabilidad/secuencias',   label: 'Secuencias' },
       { href: '/dashboard/contabilidad/consulta-ncf', label: 'Consulta de e-NCF' },
@@ -181,8 +184,11 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // veía secuencias y consulta de e-NCF. Se gatea junto con el motor contable.
   '/dashboard/contabilidad/cuentas':      'contabilidad:ver',
   '/dashboard/contabilidad/libro-diario':  'contabilidad:ver',
+  '/dashboard/contabilidad/nuevo-asiento': 'contabilidad:gestionar',
   '/dashboard/contabilidad/mayor':         'contabilidad:ver',
   '/dashboard/contabilidad/balance':       'contabilidad:ver',
+  '/dashboard/contabilidad/estado-resultados': 'contabilidad:ver',
+  '/dashboard/contabilidad/balance-general': 'contabilidad:ver',
   '/dashboard/contabilidad/configuracion': 'contabilidad:ver',
   '/dashboard/contabilidad/secuencias':   'contabilidad:ver',
   '/dashboard/contabilidad/consulta-ncf': 'contabilidad:ver',

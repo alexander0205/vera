@@ -106,14 +106,27 @@ export default async function MayorGeneralPage({
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Mayor general</Typography>
       </Box>
 
-      <Box>
-        <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-          Mayor general
-        </Typography>
-        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
-          Todo lo que pasó por una cuenta, en orden, con el saldo que iba
-          quedando. Elige la cuenta y, si quieres, el periodo.
-        </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box>
+          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
+            Mayor general
+          </Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
+            Todo lo que pasó por una cuenta, en orden, con el saldo que iba
+            quedando. Elige la cuenta y, si quieres, el periodo.
+          </Typography>
+        </Box>
+        {mayor && (
+          <Box component="a"
+            href={`/api/contabilidad/mayor/export?cuentaId=${cuentaId}${desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
+              px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
+              color: '#0f766e', bgcolor: '#f0fdfa', border: '1px solid #99f6e4',
+              '&:hover': { bgcolor: '#ccfbf1' } }}
+          >
+            Exportar a Excel
+          </Box>
+        )}
       </Box>
 
       <FiltrosPeriodo
