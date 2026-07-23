@@ -1065,3 +1065,23 @@ Alex pidió integrar todo el módulo en su rama `feature/modulo-escolar`
 - Ojo: esa rama tiene DOS migraciones `0071` (`dependientes` y `modulos`)
   — preexistente, avisar a Alex.
 - Local sin push (decisión pendiente: push directo vs PR).
+
+### Cierre de la sesión de integración (2026-07-22, tarde)
+
+- **Pusheado todo** hasta `3661d62`. Antes del push Alex metió v1.5.4 en la
+  rama; su fix `3ffe6a9` (excluir de CxC los borradores que solo reservan
+  e-NCF) se portó a nuestro CTE en el merge — **pedirle que lo ojee**.
+- **Seed `SEEDCXC` sembrado** en el team 9 de la DB launch (31 docs,
+  idempotente, `--limpiar` para borrar).
+- **Asientos generados con OK de Darian**: contabilidad del team 9 configurada
+  por script (7 generales + efectivo/tarjeta/transferencia), encendida y
+  barrida en 2 vueltas: **480 asientos, RD$2,804,295 por lado, cuadre exacto,
+  0 pendientes, 0 saltados, 0 descuadrados**. El balance muestra `4103` con
+  RD$2,250 al debe (la cuenta invertida, por fin visible con datos) y `1103`
+  marcada "saldo invertido" (compromiso conocido: pagos de facturas no
+  asentables).
+- **PR #24 sin mergear a main** — main (v1.5.4) no contiene nada de esto; la
+  rama tiene todo main + 156 commits. El merge lo decide Alex.
+- Pendiente al retomar: avisar a Alex (fix portado, bug `component={Link}` de
+  server arreglado —su secuencias lo tenía—, migraciones 0071 duplicadas) y
+  decidir el destino del PR viejo de contabilidad (superseded).
