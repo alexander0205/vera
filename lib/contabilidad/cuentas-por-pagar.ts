@@ -8,7 +8,8 @@ export interface CuentaPorPagar {
   estadoPago: string; vencida: boolean; diasVencido: number;
 }
 
-export async function listarCuentasPorPagar(teamId: number) {
+export type CubetaCxP = 'porVencer'|'d1a30'|'d31a60'|'d61a90'|'d90mas';
+export async function listarCuentasPorPagar(teamId: number, opts: { search?:string; estado?:'vencidas'|'al-dia'; cubeta?:CubetaCxP; limit?:number; offset?:number } = {}) {
   const rows = await db.execute(sql`
     WITH cartera AS (
       SELECT c.id, c.proveedor_nombre AS "proveedorNombre", c.proveedor_rnc AS "proveedorRnc",
@@ -21,13 +22,24 @@ export async function listarCuentasPorPagar(teamId: number) {
       greatest(0, (now() AT TIME ZONE 'America/Santo_Domingo')::date - "fechaVencimiento"::date) AS "diasVencido"
     FROM cartera WHERE "montoTotal"-pagado > 0 ORDER BY vencida DESC, "fechaVencimiento" ASC NULLS LAST, fecha ASC
   `);
-  const cuentas = (rows as unknown as Array<Record<string, unknown>>).map(r => ({
+  const todas = (rows as unknown as Array<Record<string, unknown>>).map(r => ({
     ...r, id:Number(r.id), montoTotal:Number(r.montoTotal), pagado:Number(r.pagado), saldo:Number(r.saldo), diasVencido:Number(r.diasVencido),
   })) as CuentaPorPagar[];
-  return { cuentas, totales: {
-    pendiente: cuentas.reduce((s,c)=>s+c.saldo,0), vencido: cuentas.filter(c=>c.vencida).reduce((s,c)=>s+c.saldo,0),
-    count: cuentas.length, countVencidas: cuentas.filter(c=>c.vencida).length,
-  }};
+  const cubetaDe = (c: CuentaPorPagar): CubetaCxP => !c.vencida ? 'porVencer' : c.diasVencido<=30?'d1a30':c.diasVencido<=60?'d31a60':c.diasVencido<=90?'d61a90':'d90mas';
+  let filtrada = todas.filter(c => !opts.search || `${c.proveedorNombre??''} ${c.proveedorRnc??''} ${c.referenciaEncf??''}`.toLowerCase().includes(opts.search!.toLowerCase()));
+  if (opts.estado === 'vencidas') filtrada = filtrada.filter(c=>c.vencida);
+  if (opts.estado === 'al-dia') filtrada = filtrada.filter(c=>!c.vencida);
+  const antiguedad = Object.fromEntries((['porVencer','d1a30','d31a60','d61a90','d90mas'] as CubetaCxP[]).map(k=>[k,{saldo:todas.filter(c=>cubetaDe(c)===k).reduce((s,c)=>s+c.saldo,0),count:todas.filter(c=>cubetaDe(c)===k).length}])) as Record<CubetaCxP,{saldo:number;count:number}>;
+  if (opts.cubeta) filtrada=filtrada.filter(c=>cubetaDe(c)===opts.cubeta);
+  const count=filtrada.length, limit=Math.min(Math.max(opts.limit??25,1),200), offset=Math.max(opts.offset??0,0);
+  return { cuentas:filtrada.slice(offset,offset+limit), totales: {
+    pendiente: filtrada.reduce((s,c)=>s+c.saldo,0), vencido: filtrada.filter(c=>c.vencida).reduce((s,c)=>s+c.saldo,0), count, countVencidas:filtrada.filter(c=>c.vencida).length,
+  }, antiguedad };
+}
+
+export async function getPagosProveedor(teamId:number, compraId:number) {
+  const rows=await db.execute(sql`SELECT id,monto_cents AS "montoCents",metodo,to_char(fecha_pago,'YYYY-MM-DD') AS "fechaPago",referencia,notas FROM pagos_proveedores WHERE team_id=${teamId} AND compra_id=${compraId} ORDER BY fecha_pago DESC,id DESC`);
+  return (rows as unknown as Array<Record<string,unknown>>).map(r=>({...r,id:Number(r.id),montoCents:Number(r.montoCents)}));
 }
 
 export class PagoProveedorError extends Error {}
