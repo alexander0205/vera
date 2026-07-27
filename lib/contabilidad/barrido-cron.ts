@@ -19,6 +19,7 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { generarAsientosPendientes, type ResumenBarrido } from './libro-diario';
 import type { MotivoSalto } from './asientos';
+import { generarDepreciacionesPendientes } from './depreciacion';
 import { evaluarPromesasVencidas } from '@/lib/cobranza/seguimiento';
 
 /**
@@ -94,12 +95,16 @@ export interface ResultadoBarridoCron {
     porTeam:         Array<{ teamId: number } & ResumenDrenaje>;
     truncadoPorTiempo: boolean;
   };
+  depreciacion: {
+    teamsProcesados: number;
+    creados:         number;
+  };
   promesas: {
     teamsProcesados: number;
     cumplidas:       number;
     incumplidas:     number;
   };
-  errores: Array<{ fase: 'asientos' | 'promesas'; teamId: number; error: string }>;
+  errores: Array<{ fase: 'asientos' | 'depreciacion' | 'promesas'; teamId: number; error: string }>;
 }
 
 /**
@@ -115,6 +120,7 @@ export async function ejecutarBarridoContabilidad(
 
   const res: ResultadoBarridoCron = {
     asientos: { teamsProcesados: 0, creados: 0, porTeam: [], truncadoPorTiempo: false },
+    depreciacion: { teamsProcesados: 0, creados: 0 },
     promesas: { teamsProcesados: 0, cumplidas: 0, incumplidas: 0 },
     errores: [],
   };
@@ -140,7 +146,21 @@ export async function ejecutarBarridoContabilidad(
     }
   }
 
-  // ── 2. Promesas vencidas: teams con promesa pendiente ──────────────────────
+  // ── 2. Depreciación: mismos teams con contabilidad encendida ────────────────
+  // Barato (pocas cuotas por team). Idempotente por el UNIQUE de periodo. Un
+  // team sin las cuentas de depreciación lanza y se anota en `errores`.
+  for (const { team_id } of teamsAsientos) {
+    if (!sigueTiempo()) { break; }
+    try {
+      const d = await generarDepreciacionesPendientes(team_id);
+      res.depreciacion.teamsProcesados++;
+      res.depreciacion.creados += d.creados;
+    } catch (e) {
+      res.errores.push({ fase: 'depreciacion', teamId: team_id, error: String(e) });
+    }
+  }
+
+  // ── 3. Promesas vencidas: teams con promesa pendiente ──────────────────────
   // Barato (dos UPDATEs por team). No se acota por tiempo: importa no saltarlo.
   const teamsPromesas = (await db.execute(sql`
     SELECT DISTINCT team_id FROM cobranza_eventos

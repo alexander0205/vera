@@ -4,7 +4,7 @@ import { Fragment, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronRight, ChevronDown, RefreshCw, AlertTriangle,
-  FileText, Banknote, Undo2, Ban, X, PenLine, ShoppingCart, Wallet,
+  FileText, Banknote, Undo2, Ban, X, PenLine, ShoppingCart, Wallet, TrendingDown,
 } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -65,6 +65,8 @@ const ORIGEN: Record<string, { label: string; icono: React.ReactNode; bg: string
                bg: '#f0f9ff', fg: '#0369a1', border: '#bae6fd' },
   gasto_caja:{ label: 'Gasto de caja', icono: <Wallet style={{ width: 12, height: 12 }} />,
                bg: '#fdf4ff', fg: '#a21caf', border: '#f5d0fe' },
+  depreciacion:{ label: 'Depreciación', icono: <TrendingDown style={{ width: 12, height: 12 }} />,
+               bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' },
 };
 const ORIGEN_FALLBACK = { bg: '#f9fafb', fg: '#4b5563', border: '#e5e7eb' };
 

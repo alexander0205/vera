@@ -1936,6 +1936,12 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaPorPagarId:   integer('cuenta_por_pagar_id').references(() => contabilidadCuentas.id),
   /** Nivel 3.2 — cuenta de gasto de la caja chica (Debe). Default 6101. */
   cuentaGastosId:     integer('cuenta_gastos_id').references(() => contabilidadCuentas.id),
+  /** Nivel 4.2 — activo fijo, donde se registra el bien (Debe al alta). Default 1201. */
+  cuentaActivoFijoId:  integer('cuenta_activo_fijo_id').references(() => contabilidadCuentas.id),
+  /** Nivel 4.2 — depreciación acumulada, contra-activo (Haber mensual). Default 1202. */
+  cuentaDeprecAcumId:  integer('cuenta_deprec_acum_id').references(() => contabilidadCuentas.id),
+  /** Nivel 4.2 — gasto por depreciación (Debe mensual). Default 6103. */
+  cuentaGastoDeprecId: integer('cuenta_gasto_deprec_id').references(() => contabilidadCuentas.id),
   updatedBy: integer('updated_by').references(() => users.id),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -2017,6 +2023,49 @@ export const contabilidadAsientoLineas = pgTable('contabilidad_asiento_lineas', 
 
 export type ContabilidadAsiento      = typeof contabilidadAsientos.$inferSelect;
 export type ContabilidadAsientoLinea = typeof contabilidadAsientoLineas.$inferSelect;
+
+// ─── Contabilidad: activos fijos y depreciación (Nivel 4.2) ──────────────────
+// El sistema deprecia solo, método lineal, una cuota por mes por activo. El
+// activo fijo ES del dominio contable: tabla propia, no se contamina inventario.
+
+/** Inventario de activos fijos: costo, valor residual y vida útil en meses. */
+export const contabilidadActivosFijos = pgTable('contabilidad_activos_fijos', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  nombre:  varchar('nombre', { length: 160 }).notNull(),
+  costoCents: bigint('costo_cents', { mode: 'number' }).notNull(),
+  /** Piso de la depreciación: nunca se deprecia por debajo de esto. */
+  valorResidualCents: bigint('valor_residual_cents', { mode: 'number' }).notNull().default(0),
+  vidaUtilMeses: integer('vida_util_meses').notNull(),
+  fechaAdquisicion: date('fecha_adquisicion').notNull(),
+  /** Baja lógica: deja de generar cuotas, pero conserva su historia. */
+  activa:    boolean('activa').notNull().default(true),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('contabilidad_activos_fijos_team_idx').on(t.teamId, t.activa),
+]);
+
+/**
+ * Cuota de depreciación ya generada. El único (team, activo, periodo) es la
+ * idempotencia mensual: un activo no se deprecia dos veces el mismo mes.
+ */
+export const contabilidadDepreciaciones = pgTable('contabilidad_depreciaciones', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  activoId:  integer('activo_id').notNull().references(() => contabilidadActivosFijos.id),
+  /** Primer día del mes depreciado. */
+  periodo:   date('periodo').notNull(),
+  montoCents: bigint('monto_cents', { mode: 'number' }).notNull(),
+  asientoId: integer('asiento_id').references(() => contabilidadAsientos.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_depreciaciones_periodo_uq').on(t.teamId, t.activoId, t.periodo),
+  index('contabilidad_depreciaciones_activo_idx').on(t.teamId, t.activoId),
+]);
+
+export type ContabilidadActivoFijo    = typeof contabilidadActivosFijos.$inferSelect;
+export type ContabilidadDepreciacion  = typeof contabilidadDepreciaciones.$inferSelect;
 
 export type ContabilidadConfig       = typeof contabilidadConfig.$inferSelect;
 export type ContabilidadConfigMetodo = typeof contabilidadConfigMetodosPago.$inferSelect;

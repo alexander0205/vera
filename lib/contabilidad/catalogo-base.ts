@@ -75,6 +75,18 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // entra al banco, pero deja un crédito fiscal a favor: es un activo, no un
   // menor ingreso — la venta fue por el total.
   { codigo: '1107', nombre: 'Retenciones por cobrar',      tipo: 'activo', imputable: true },
+  // Activo no corriente: los bienes de larga vida y su depreciación (Nivel 4.2).
+  { codigo: '12',   nombre: 'Activo no corriente',          tipo: 'activo', imputable: false },
+  { codigo: '1201', nombre: 'Activos fijos',                tipo: 'activo', imputable: true },
+  // Contra-activo: es activo pero RESTA (acumula lo depreciado). Naturaleza
+  // acreedora, invertida respecto a su clase, igual que 4103 en ingresos.
+  {
+    codigo: '1202',
+    nombre: 'Depreciación acumulada',
+    tipo: 'activo',
+    naturaleza: 'acreedora',
+    imputable: true,
+  },
 
   // ─── 2 Pasivo ───────────────────────────────────────────────────────────
   { codigo: '2',    nombre: 'Pasivo',                      tipo: 'pasivo', imputable: false },
@@ -126,6 +138,9 @@ export const CATALOGO_BASE: CuentaBase[] = [
   // La comisión que retiene la pasarela al liquidar. Es gasto, no un menor
   // ingreso: la venta fue por el total y el costo de cobrarla va aparte.
   { codigo: '6102', nombre: 'Comisiones por cobro electrónico', tipo: 'gasto', imputable: true },
+  // El desgaste mensual de los activos fijos (Nivel 4.2). Su contrapartida es
+  // 1202, no la caja: la depreciación no saca dinero, solo reconoce el gasto.
+  { codigo: '6103', nombre: 'Gasto por depreciación',      tipo: 'gasto', imputable: true },
 ];
 
 /**
@@ -230,4 +245,7 @@ export const CODIGO = {
   caja:               '1101',
   bancos:             '1102',
   comisionCobro:      '6102',
+  activoFijo:         '1201',
+  depreciacionAcum:   '1202',
+  gastoDepreciacion:  '6103',
 } as const;

@@ -44,6 +44,12 @@ export interface ConfigContable {
   cuentaPorPagarId:    number | null;
   /** Nivel 3.2 — Debe de un gasto de caja chica. */
   cuentaGastosId:      number | null;
+  /** Nivel 4.2 — activo fijo, donde se registra el bien. */
+  cuentaActivoFijoId:  number | null;
+  /** Nivel 4.2 — depreciación acumulada (contra-activo, Haber mensual). */
+  cuentaDeprecAcumId:  number | null;
+  /** Nivel 4.2 — gasto por depreciación (Debe mensual). */
+  cuentaGastoDeprecId: number | null;
 }
 
 const CONFIG_VACIA: ConfigContable = {
@@ -52,6 +58,7 @@ const CONFIG_VACIA: ConfigContable = {
   cuentaDescuentosId: null, cuentaMoraId: null,
   cuentaSaldosFavorId: null, cuentaRetencionesId: null,
   cuentaInventarioId: null, cuentaPorPagarId: null, cuentaGastosId: null,
+  cuentaActivoFijoId: null, cuentaDeprecAcumId: null, cuentaGastoDeprecId: null,
 };
 
 // ─── Lectura ─────────────────────────────────────────────────────────────────
@@ -69,7 +76,10 @@ export async function getConfig(teamId: number): Promise<ConfigContable> {
            cuenta_retenciones_id  AS "cuentaRetencionesId",
            cuenta_inventario_id   AS "cuentaInventarioId",
            cuenta_por_pagar_id    AS "cuentaPorPagarId",
-           cuenta_gastos_id       AS "cuentaGastosId"
+           cuenta_gastos_id       AS "cuentaGastosId",
+           cuenta_activo_fijo_id  AS "cuentaActivoFijoId",
+           cuenta_deprec_acum_id  AS "cuentaDeprecAcumId",
+           cuenta_gasto_deprec_id AS "cuentaGastoDeprecId"
     FROM contabilidad_config
     WHERE team_id = ${teamId}
   `);
@@ -178,6 +188,9 @@ export interface GuardarConfigInput {
   cuentaInventarioId?:  number | null;
   cuentaPorPagarId?:    number | null;
   cuentaGastosId?:      number | null;
+  cuentaActivoFijoId?:  number | null;
+  cuentaDeprecAcumId?:  number | null;
+  cuentaGastoDeprecId?: number | null;
 }
 
 export async function guardarConfig(
@@ -200,6 +213,9 @@ export async function guardarConfig(
     cuentaInventarioId:  'cuenta_inventario_id',
     cuentaPorPagarId:    'cuenta_por_pagar_id',
     cuentaGastosId:      'cuenta_gastos_id',
+    cuentaActivoFijoId:  'cuenta_activo_fijo_id',
+    cuentaDeprecAcumId:  'cuenta_deprec_acum_id',
+    cuentaGastoDeprecId: 'cuenta_gasto_deprec_id',
   };
 
   const entradas = Object.entries(input)
