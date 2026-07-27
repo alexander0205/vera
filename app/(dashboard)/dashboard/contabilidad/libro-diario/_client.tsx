@@ -88,6 +88,7 @@ const MOTIVO_TEXTO: Record<string, string> = {
   'no-esta-anulado':         'no están anulados',
   'nc-solo-texto':           'solo corrigen texto, sin efecto monetario',
   'sin-cuenta-inventario':   'falta configurar la cuenta de inventario',
+  'sin-cuenta-itbis-adelantado': 'falta la cuenta 1104 de ITBIS adelantado',
   'sin-cuenta-por-pagar':    'falta configurar la cuenta por pagar',
   'sin-cuenta-gastos':       'falta configurar la cuenta de gastos de caja',
   'sin-cuenta-caja':         'falta configurar la cuenta de caja/efectivo',

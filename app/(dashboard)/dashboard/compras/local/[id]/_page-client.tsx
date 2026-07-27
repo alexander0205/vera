@@ -25,6 +25,7 @@ interface CompraDetalle {
   proveedorRnc:   string | null;
   referenciaEncf: string | null;
   notas:          string | null;
+  itbisCents:     number;
   montoTotal:     number;   // centavos
   registradoPor:  string;
   items:          CompraItem[];
@@ -136,8 +137,18 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 3 }}>
-          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Total de la compra</Typography>
-          <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{compra ? fmtDOP(compra.montoTotal) : '—'}</Typography>
+          <Box>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Base de productos</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#374151', fontVariantNumeric: 'tabular-nums' }}>{compra ? fmtDOP(compra.montoTotal - compra.itbisCents) : '—'}</Typography>
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>ITBIS</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#374151', fontVariantNumeric: 'tabular-nums' }}>{compra ? fmtDOP(compra.itbisCents) : '—'}</Typography>
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Total compra</Typography>
+            <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{compra ? fmtDOP(compra.montoTotal) : '—'}</Typography>
+          </Box>
         </Box>
       </Box>
 

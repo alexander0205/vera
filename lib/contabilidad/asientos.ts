@@ -23,6 +23,7 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { parseLineas } from '@/lib/reportes/shared';
 import { getConfig, resolverCuentaCobro, claveContableDePago } from './config';
+import { distribuirCompra } from './compras';
 
 /** Estados de un documento que representan una venta emitida y viva. */
 const ESTADOS_VENTA = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'];
@@ -84,6 +85,7 @@ export type MotivoSalto =
   | 'no-esta-anulado'
   | 'nc-solo-texto'
   | 'sin-cuenta-inventario'
+  | 'sin-cuenta-itbis-adelantado'
   | 'sin-cuenta-por-pagar'
   | 'sin-cuenta-gastos'
   | 'sin-cuenta-caja'
@@ -702,14 +704,9 @@ async function cuentaPorCodigo(teamId: number, codigo: string): Promise<number |
  *   Debe  Inventario            monto de la compra
  *     Haber  Cuentas por pagar    la deuda con el proveedor
  *
- * `compras_locales` no guarda ITBIS ni forma de pago (son de su modelo, no del
- * nuestro; se leen sin tocar la tabla). Dos decisiones v1, documentadas para
- * revisar con Alex:
- *  - **Todo el costo va a Inventario**, ITBIS incluido. Separar el crédito
- *    fiscal (nivel 4.3) exige que `compras_locales` guarde el ITBIS.
- *  - **El haber va a Cuentas por pagar** (compra a crédito). Sin campo de forma
- *    de pago no se sabe si fue al contado; el pago se asentaría aparte al
- *    liquidar la CxP.
+ * Nivel 4.3: la compra guarda total + ITBIS. Empresas gravadas separan el
+ * crédito fiscal (1104); las exentas conservan el total en Inventario. El haber
+ * sigue en CxP hasta que Nivel 4.1 añada compras al contado y pagos proveedores.
  */
 export async function generarAsientoCompra(
   teamId: number,
@@ -720,14 +717,14 @@ export async function generarAsientoCompra(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT id, monto_total AS "montoTotal",
+    SELECT id, monto_total AS "montoTotal", itbis_cents AS "itbisCents",
            to_char(fecha, 'YYYY-MM-DD') AS fecha,
            proveedor_nombre AS "proveedorNombre"
     FROM compras_locales
     WHERE team_id = ${teamId} AND id = ${compraId}
   `);
   const compra = (filas as unknown as {
-    id: number; montoTotal: number; fecha: string; proveedorNombre: string | null;
+    id: number; montoTotal: number; itbisCents: number; fecha: string; proveedorNombre: string | null;
   }[])[0];
 
   if (!compra) return { creado: false, motivo: 'no-es-gasto' };
@@ -735,6 +732,13 @@ export async function generarAsientoCompra(
 
   const cuentaInv = cfg.cuentaInventarioId ?? await cuentaPorCodigo(teamId, '1105');
   if (!cuentaInv) return { creado: false, motivo: 'sin-cuenta-inventario' };
+  const distribucion = distribuirCompra(compra.montoTotal, compra.itbisCents, cfg.regimenItbis);
+  const cuentaItbisAdelantado = distribucion.itbisAdelantadoCents > 0
+    ? await cuentaPorCodigo(teamId, '1104')
+    : null;
+  if (distribucion.itbisAdelantadoCents > 0 && !cuentaItbisAdelantado) {
+    return { creado: false, motivo: 'sin-cuenta-itbis-adelantado' };
+  }
   const cuentaCxP = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
   if (!cuentaCxP) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
 
@@ -743,7 +747,11 @@ export async function generarAsientoCompra(
     teamId,
     { fecha: compra.fecha, concepto, origenTipo: 'compra', origenId: compra.id },
     [
-      { cuentaId: cuentaInv, debeCents: compra.montoTotal, haberCents: 0, descripcion: 'Entrada de inventario' },
+      { cuentaId: cuentaInv, debeCents: distribucion.inventarioCents, haberCents: 0, descripcion: 'Entrada de inventario' },
+      ...(distribucion.itbisAdelantadoCents > 0 ? [{
+        cuentaId: cuentaItbisAdelantado!, debeCents: distribucion.itbisAdelantadoCents, haberCents: 0,
+        descripcion: 'ITBIS adelantado (crédito fiscal)',
+      }] : []),
       { cuentaId: cuentaCxP, debeCents: 0, haberCents: compra.montoTotal, descripcion: 'Deuda con proveedor' },
     ],
     userId,

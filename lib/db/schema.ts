@@ -1089,6 +1089,8 @@ export const comprasLocales = pgTable('compras_locales', {
   fecha:            date('fecha').notNull().defaultNow(),
   referenciaEncf:   varchar('referencia_encf',  { length: 40 }),
   notas:            text('notas'),
+  /** ITBIS incluido en montoTotal; 4.3 lo separa solo para régimen gravado. */
+  itbisCents:       integer('itbis_cents').notNull().default(0),
   montoTotal:       integer('monto_total').notNull().default(0),
   createdBy:        integer('created_by').references(() => users.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
@@ -1942,6 +1944,8 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaDeprecAcumId:  integer('cuenta_deprec_acum_id').references(() => contabilidadCuentas.id),
   /** Nivel 4.2 — gasto por depreciación (Debe mensual). Default 6103. */
   cuentaGastoDeprecId: integer('cuenta_gasto_deprec_id').references(() => contabilidadCuentas.id),
+  /** Nivel 4.3 — exento capitaliza ITBIS; gravado registra crédito fiscal 1104. */
+  regimenItbis: varchar('regimen_itbis', { length: 10 }).notNull().default('exento'),
   updatedBy: integer('updated_by').references(() => users.id),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

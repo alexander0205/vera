@@ -40,6 +40,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       proveedorRnc:    comprasLocales.proveedorRnc,
       referenciaEncf:  comprasLocales.referenciaEncf,
       notas:           comprasLocales.notas,
+      itbisCents:      comprasLocales.itbisCents,
       montoTotal:      comprasLocales.montoTotal,
       createdAt:       comprasLocales.createdAt,
       registradoPor:   users.name,

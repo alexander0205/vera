@@ -178,6 +178,26 @@ export function ConfigClient({
         </Box>
       </Box>
 
+      {/* ─── Régimen ITBIS de compras ─────────────────────────────────── */}
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            ITBIS de compras
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            Define cómo se registra el ITBIS pagado al proveedor. El total de la compra sigue siendo la deuda con el proveedor.
+          </Typography>
+        </Box>
+        <TextField
+          select fullWidth label="Régimen de ITBIS" value={configInicial.regimenItbis}
+          disabled={!puedeConfigurar || guardando}
+          onChange={(e) => enviar({ seccion: 'itbis-compras', regimenItbis: e.target.value })}
+        >
+          <MenuItem value="exento">Exento — ITBIS forma parte del costo de inventario</MenuItem>
+          <MenuItem value="gravado">Gravado — ITBIS va a 1104 Crédito fiscal</MenuItem>
+        </TextField>
+      </Box>
+
       {/* ─── 1. Cuentas generales ──────────────────────────────────────── */}
       <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box>

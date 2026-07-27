@@ -53,6 +53,7 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
   const [proveedorNombre, setProveedorNombre] = useState('');
   const [fecha,           setFecha]           = useState(new Date().toISOString().slice(0, 10));
   const [notas,           setNotas]           = useState('');
+  const [itbis,           setItbis]           = useState('0');
   const [almacenId,       setAlmacenId]       = useState<number | null>(null);
   const [items,           setItems]           = useState<ItemForm[]>([{ ...ITEM_VACIO }]);
 
@@ -64,7 +65,7 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
     }
     if (!open) {
       setProveedorRnc(''); setProveedorNombre(''); setFecha(new Date().toISOString().slice(0, 10));
-      setNotas(''); setAlmacenId(null); setItems([{ ...ITEM_VACIO }]);
+      setNotas(''); setItbis('0'); setAlmacenId(null); setItems([{ ...ITEM_VACIO }]);
     }
   }, [open, prefill]);
 
@@ -101,6 +102,7 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
           referenciaEncf:  prefill?.referenciaEncf ?? null,
           notas:           notas || null,
           almacenId,
+          itbis:           parseFloat(itbis) || 0,
           items: validItems.map(i => ({
             productoId:    i.productoId!,
             cantidad:      parseInt(i.cantidad),
@@ -219,6 +221,18 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
           >
             Agregar producto
           </Button>
+        </Box>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+          <Box>
+            <Typography component="label" sx={labelSx}>ITBIS de la compra (DOP)</Typography>
+            <TextField
+              type="number" size="small" fullWidth value={itbis}
+              onChange={e => setItbis(e.target.value)}
+              slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+              helperText="Se suma al total. En régimen gravado se registra como crédito fiscal."
+            />
+          </Box>
         </Box>
 
         <Box>

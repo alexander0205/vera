@@ -17,6 +17,7 @@ import {
   CLAVES_METODO, CLAVES_SIN_COBRO, CLAVE_METODO_LABEL, esPasarela,
   type ClaveMetodo,
 } from './metodos';
+import type { RegimenItbis } from './compras';
 
 // Las claves y etiquetas viven en `./metodos` porque la pantalla de
 // configuración es un componente de cliente y no puede importar este archivo:
@@ -50,6 +51,8 @@ export interface ConfigContable {
   cuentaDeprecAcumId:  number | null;
   /** Nivel 4.2 — gasto por depreciación (Debe mensual). */
   cuentaGastoDeprecId: number | null;
+  /** Nivel 4.3 — tratamiento del ITBIS pagado en compras. */
+  regimenItbis:       RegimenItbis;
 }
 
 const CONFIG_VACIA: ConfigContable = {
@@ -59,6 +62,7 @@ const CONFIG_VACIA: ConfigContable = {
   cuentaSaldosFavorId: null, cuentaRetencionesId: null,
   cuentaInventarioId: null, cuentaPorPagarId: null, cuentaGastosId: null,
   cuentaActivoFijoId: null, cuentaDeprecAcumId: null, cuentaGastoDeprecId: null,
+  regimenItbis: 'exento',
 };
 
 // ─── Lectura ─────────────────────────────────────────────────────────────────
@@ -79,7 +83,8 @@ export async function getConfig(teamId: number): Promise<ConfigContable> {
            cuenta_gastos_id       AS "cuentaGastosId",
            cuenta_activo_fijo_id  AS "cuentaActivoFijoId",
            cuenta_deprec_acum_id  AS "cuentaDeprecAcumId",
-           cuenta_gasto_deprec_id AS "cuentaGastoDeprecId"
+           cuenta_gasto_deprec_id AS "cuentaGastoDeprecId",
+           regimen_itbis          AS "regimenItbis"
     FROM contabilidad_config
     WHERE team_id = ${teamId}
   `);
@@ -191,6 +196,7 @@ export interface GuardarConfigInput {
   cuentaActivoFijoId?:  number | null;
   cuentaDeprecAcumId?:  number | null;
   cuentaGastoDeprecId?: number | null;
+  regimenItbis?:       RegimenItbis;
 }
 
 export async function guardarConfig(
@@ -216,10 +222,14 @@ export async function guardarConfig(
     cuentaActivoFijoId:  'cuenta_activo_fijo_id',
     cuentaDeprecAcumId:  'cuenta_deprec_acum_id',
     cuentaGastoDeprecId: 'cuenta_gasto_deprec_id',
+    regimenItbis:       'regimen_itbis',
   };
 
   const entradas = Object.entries(input)
-    .filter(([k, v]) => k in campos && v !== undefined) as [keyof GuardarConfigInput, number | null][];
+    .filter(([k, v]) => k in campos && v !== undefined) as [
+      keyof GuardarConfigInput,
+      number | null | RegimenItbis,
+    ][];
 
   if (entradas.length === 0) return getConfig(teamId);
 
