@@ -24,6 +24,10 @@ interface Props {
   sinComprobante?: boolean;
   secuencia: SecuenciaInfo | null;
   fechaEmision: string;
+  /** Permite elegir la fecha de emisión (permiso facturas:fecha-personalizada). */
+  puedeEditarFecha?: boolean;
+  /** Actualiza la fecha de emisión (YYYY-MM-DD). Requerido si puedeEditarFecha. */
+  onChangeFecha?: (v: string) => void;
   onEditarNcf: () => void;
 }
 
@@ -35,7 +39,7 @@ interface Props {
 export function CompactHeader({
   empresa, categoriaId, setCategoriaId, tipoEcf, onChangeTipo,
   ocultarCategoria, mostrarCodigoTipo = true, sinComprobante = false,
-  secuencia, fechaEmision, onEditarNcf,
+  secuencia, fechaEmision, puedeEditarFecha = false, onChangeFecha, onEditarNcf,
 }: Props) {
   // "Sin comprobante" efectivo: la secuencia es sin-ncf, o es una nota sobre una
   // factura sin e-CF (nunca tendrá e-NCF real).
@@ -143,10 +147,21 @@ export function CompactHeader({
           )}
         </div>
 
-        {/* Fecha */}
+        {/* Fecha — editable solo para roles con permiso y en sin-ncf (la fecha
+            de un e-CF fiscal la fija la DGII, no el usuario). */}
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-gray-500">Fecha:</span>
-          <span className="font-medium text-gray-900">{fechaFmt}</span>
+          {puedeEditarFecha && sinNcfEfectivo ? (
+            <input
+              type="date"
+              value={fechaEmision}
+              onChange={(e) => onChangeFecha?.(e.target.value)}
+              aria-label="Fecha de emisión"
+              className="font-medium text-gray-900 border border-gray-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+            />
+          ) : (
+            <span className="font-medium text-gray-900">{fechaFmt}</span>
+          )}
         </div>
 
         {/* Estado */}

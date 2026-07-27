@@ -28,6 +28,9 @@ export type Permission =
   | 'facturas:anular'
   | 'facturas:exportar'
   | 'facturas:emitir-dgii'
+  // Elegir manualmente la fecha de emisión (facturas sin-ncf / borrador) —
+  // para registrar cobros de fechas pasadas. Solo admin/owner.
+  | 'facturas:fecha-personalizada'
   // Pagos recibidos (módulo de cobros)
   | 'pagos:ver'
   // Clientes
@@ -107,7 +110,7 @@ export const ROLES: RoleDef[] = [
     description: 'Control total de la cuenta y el equipo',
     invitable:   false,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii',
+      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada',
       'pagos:ver',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
@@ -129,7 +132,7 @@ export const ROLES: RoleDef[] = [
     description: 'Acceso total excepto gestionar la suscripción',
     invitable:   true,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii',
+      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada',
       'pagos:ver',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
@@ -205,6 +208,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'facturas:anular',      label: 'Anular' },
     { key: 'facturas:exportar',    label: 'Exportar (PDF/CSV/XML)' },
     { key: 'facturas:emitir-dgii', label: 'Emitir a DGII (e-CF)' },
+    { key: 'facturas:fecha-personalizada', label: 'Elegir fecha de emisión (sin NCF)' },
   ]},
   { module: 'Pagos', icon: 'Wallet', permissions: [
     { key: 'pagos:ver', label: 'Ver pagos recibidos' },
