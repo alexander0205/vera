@@ -47,6 +47,22 @@ const GENERALES: { campo: keyof ConfigContable; label: string; ayuda: string }[]
     ayuda: 'Lo que el cliente retiene no entra a tu banco, pero te deja un crédito fiscal.' },
 ];
 
+/** Cuentas usadas por compras, gastos operativos y activos fijos. */
+const COMPRAS_Y_ACTIVOS: { campo: keyof ConfigContable; label: string; ayuda: string }[] = [
+  { campo: 'cuentaInventarioId', label: 'Inventario',
+    ayuda: 'Recibe el valor de las compras de bienes, sin ITBIS acreditable.' },
+  { campo: 'cuentaPorPagarId', label: 'Cuentas por pagar',
+    ayuda: 'La deuda que queda con el proveedor al registrar una compra a crédito.' },
+  { campo: 'cuentaGastosId', label: 'Gastos de caja chica',
+    ayuda: 'Registra los gastos operativos pagados desde caja chica.' },
+  { campo: 'cuentaActivoFijoId', label: 'Activos fijos',
+    ayuda: 'Donde se registra el costo de un bien de uso duradero.' },
+  { campo: 'cuentaDeprecAcumId', label: 'Depreciación acumulada',
+    ayuda: 'Contra-activo que acumula el desgaste reconocido de cada activo.' },
+  { campo: 'cuentaGastoDeprecId', label: 'Gasto por depreciación',
+    ayuda: 'Gasto mensual que reconoce el uso de los activos fijos.' },
+];
+
 /** Métodos que se ofrecen para configurar, sin los que no mueven dinero. */
 const METODOS_CONFIGURABLES = (Object.keys(CLAVE_METODO_LABEL) as ClaveMetodo[])
   .filter((c) => !CLAVES_SIN_COBRO.includes(c));
@@ -225,7 +241,34 @@ export function ConfigClient({
         </Box>
       </Box>
 
-      {/* ─── 2. Métodos de cobro ───────────────────────────────────────── */}
+      {/* ─── 2. Compras, gastos y activos ─────────────────────────────── */}
+      <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+            Compras, gastos y activos
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            Cuentas que usa la contabilidad automática fuera de las ventas. Si las dejas sin configurar, se usa el catálogo base.
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+          {COMPRAS_Y_ACTIVOS.map((g) => (
+            <Box key={g.campo} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                {g.label}
+              </Typography>
+              {selectCuenta(
+                configInicial[g.campo] as number | null,
+                (id) => enviar({ seccion: 'compras-activos', [g.campo]: id }),
+              )}
+              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{g.ayuda}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* ─── 3. Métodos de cobro ───────────────────────────────────────── */}
       <Box component="section" sx={{ ...CARD, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box>
           <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
