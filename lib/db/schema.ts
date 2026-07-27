@@ -1092,6 +1092,10 @@ export const comprasLocales = pgTable('compras_locales', {
   /** ITBIS incluido en montoTotal; 4.3 lo separa solo para régimen gravado. */
   itbisCents:       integer('itbis_cents').notNull().default(0),
   montoTotal:       integer('monto_total').notNull().default(0),
+  formaPago:        varchar('forma_pago', { length: 10 }).notNull().default('credito'),
+  metodoPago:       varchar('metodo_pago', { length: 30 }).notNull().default('efectivo'),
+  fechaVencimiento: date('fecha_vencimiento'),
+  estadoPago:       varchar('estado_pago', { length: 12 }).notNull().default('PENDIENTE'),
   createdBy:        integer('created_by').references(() => users.id),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
@@ -1107,6 +1111,19 @@ export const comprasLocalesItems = pgTable('compras_locales_items', {
 
 export type CompraLocal     = typeof comprasLocales.$inferSelect;
 export type CompraLocalItem = typeof comprasLocalesItems.$inferSelect;
+
+export const pagosProveedores = pgTable('pagos_proveedores', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  compraId: integer('compra_id').notNull().references(() => comprasLocales.id),
+  montoCents: integer('monto_cents').notNull(),
+  metodo: varchar('metodo', { length: 30 }).notNull(),
+  fechaPago: date('fecha_pago').notNull(),
+  referencia: varchar('referencia', { length: 100 }),
+  notas: text('notas'),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [index('pagos_proveedores_team_compra_idx').on(t.teamId, t.compraId)]);
 
 // ─── EmiteDO — Listas de Precios ──────────────────────────────────────────────
 

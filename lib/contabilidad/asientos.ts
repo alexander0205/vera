@@ -23,6 +23,7 @@ import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import { parseLineas } from '@/lib/reportes/shared';
 import { getConfig, resolverCuentaCobro, claveContableDePago } from './config';
+import type { ClaveMetodo } from './metodos';
 import { distribuirCompra } from './compras';
 
 /** Estados de un documento que representan una venta emitida y viva. */
@@ -717,14 +718,14 @@ export async function generarAsientoCompra(
   if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
 
   const filas = await db.execute(sql`
-    SELECT id, monto_total AS "montoTotal", itbis_cents AS "itbisCents",
+    SELECT id, monto_total AS "montoTotal", itbis_cents AS "itbisCents", forma_pago AS "formaPago", metodo_pago AS "metodoPago",
            to_char(fecha, 'YYYY-MM-DD') AS fecha,
            proveedor_nombre AS "proveedorNombre"
     FROM compras_locales
     WHERE team_id = ${teamId} AND id = ${compraId}
   `);
   const compra = (filas as unknown as {
-    id: number; montoTotal: number; itbisCents: number; fecha: string; proveedorNombre: string | null;
+    id: number; montoTotal: number; itbisCents: number; formaPago: string; metodoPago: string; fecha: string; proveedorNombre: string | null;
   }[])[0];
 
   if (!compra) return { creado: false, motivo: 'no-es-gasto' };
@@ -739,8 +740,12 @@ export async function generarAsientoCompra(
   if (distribucion.itbisAdelantadoCents > 0 && !cuentaItbisAdelantado) {
     return { creado: false, motivo: 'sin-cuenta-itbis-adelantado' };
   }
-  const cuentaCxP = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
-  if (!cuentaCxP) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+  const esContado = compra.formaPago === 'contado';
+  const cuentaHaber = esContado
+    ? (await resolverCuentaCobro(teamId, compra.metodoPago as ClaveMetodo)) ??
+      (compra.metodoPago === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null)
+    : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaHaber) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
 
   const concepto = `Compra #${compra.id}${compra.proveedorNombre ? ` · ${compra.proveedorNombre}` : ''}`;
   const asientoId = await insertarAsiento(
@@ -752,7 +757,8 @@ export async function generarAsientoCompra(
         cuentaId: cuentaItbisAdelantado!, debeCents: distribucion.itbisAdelantadoCents, haberCents: 0,
         descripcion: 'ITBIS adelantado (crédito fiscal)',
       }] : []),
-      { cuentaId: cuentaCxP, debeCents: 0, haberCents: compra.montoTotal, descripcion: 'Deuda con proveedor' },
+      { cuentaId: cuentaHaber, debeCents: 0, haberCents: compra.montoTotal,
+        descripcion: esContado ? 'Pago al contado' : 'Deuda con proveedor' },
     ],
     userId,
   );
@@ -760,6 +766,31 @@ export async function generarAsientoCompra(
   return asientoId === null
     ? { creado: false, motivo: 'ya-tiene-asiento' }
     : { creado: true, asientoId };
+}
+
+/** Pago a proveedor: Debe 2101 CxP / Haber caja o banco según método. */
+export async function generarAsientoPagoProveedor(teamId: number, pagoId: number, userId: number | null = null): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+  const filas = await db.execute(sql`
+    SELECT p.id, p.monto_cents AS "montoCents", p.metodo, to_char(p.fecha_pago,'YYYY-MM-DD') AS fecha,
+           c.proveedor_nombre AS "proveedorNombre"
+    FROM pagos_proveedores p JOIN compras_locales c ON c.id = p.compra_id AND c.team_id = p.team_id
+    WHERE p.team_id = ${teamId} AND p.id = ${pagoId}
+  `);
+  const pago = (filas as unknown as { id: number; montoCents: number; metodo: string; fecha: string; proveedorNombre: string | null }[])[0];
+  if (!pago || pago.montoCents <= 0) return { creado: false, motivo: 'sin-monto' };
+  const cxp = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  const salida = (await resolverCuentaCobro(teamId, pago.metodo as ClaveMetodo)) ??
+    (pago.metodo === 'efectivo' ? await cuentaPorCodigo(teamId, '1101') : null);
+  if (!cxp) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+  if (!salida) return { creado: false, motivo: 'sin-cuenta-cobro' };
+  const concepto = `Pago proveedor #${pago.id}${pago.proveedorNombre ? ` · ${pago.proveedorNombre}` : ''}`;
+  const asientoId = await insertarAsiento(teamId, { fecha: pago.fecha, concepto, origenTipo: 'pago_proveedor', origenId: pago.id }, [
+    { cuentaId: cxp, debeCents: pago.montoCents, haberCents: 0, descripcion: 'Cancelación de cuenta por pagar' },
+    { cuentaId: salida, debeCents: 0, haberCents: pago.montoCents, descripcion: 'Salida para proveedor' },
+  ], userId);
+  return asientoId === null ? { creado: false, motivo: 'ya-tiene-asiento' } : { creado: true, asientoId };
 }
 
 /**

@@ -20,7 +20,7 @@ import { getConfig } from './config';
 import {
   generarAsientoFactura, generarAsientoPago,
   generarAsientoNotaCredito, generarAsientoAnulacion,
-  generarAsientoCompra, generarAsientoGastoCaja,
+  generarAsientoCompra, generarAsientoGastoCaja, generarAsientoPagoProveedor,
   VENTA_ASENTABLE_SQL,
   type MotivoSalto,
 } from './asientos';
@@ -170,6 +170,16 @@ export async function generarAsientosPendientes(
     else anotar(r.motivo);
   }
 
+  const pagosProveedores = await db.execute(sql`
+    SELECT p.id FROM pagos_proveedores p
+    LEFT JOIN contabilidad_asientos a ON a.team_id = p.team_id AND a.origen_tipo = 'pago_proveedor' AND a.origen_id = p.id
+    WHERE p.team_id = ${teamId} AND a.id IS NULL ORDER BY p.fecha_pago, p.id LIMIT ${TOPE_POR_BARRIDO}
+  `);
+  for (const p of pagosProveedores as unknown as { id: number }[]) {
+    const r = await generarAsientoPagoProveedor(teamId, p.id, userId);
+    if (r.creado) resumen.creados++; else anotar(r.motivo);
+  }
+
   // ── Gastos de caja sin asiento (nivel 3.2) ────────────────────────────────
   const gastos = await db.execute(sql`
     SELECT m.id
@@ -190,7 +200,7 @@ export async function generarAsientosPendientes(
     else anotar(r.motivo);
   }
 
-  resumen.hayMas = [docs, notas, pagos, anulados, compras, gastos]
+  resumen.hayMas = [docs, notas, pagos, anulados, compras, pagosProveedores, gastos]
     .some((s) => (s as unknown as unknown[]).length === TOPE_POR_BARRIDO);
 
   return resumen;

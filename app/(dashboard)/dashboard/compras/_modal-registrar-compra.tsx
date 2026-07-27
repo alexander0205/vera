@@ -54,6 +54,9 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
   const [fecha,           setFecha]           = useState(new Date().toISOString().slice(0, 10));
   const [notas,           setNotas]           = useState('');
   const [itbis,           setItbis]           = useState('0');
+  const [formaPago,       setFormaPago]       = useState<'contado'|'credito'>('credito');
+  const [metodoPago,      setMetodoPago]      = useState('efectivo');
+  const [fechaVencimiento,setFechaVencimiento]= useState('');
   const [almacenId,       setAlmacenId]       = useState<number | null>(null);
   const [items,           setItems]           = useState<ItemForm[]>([{ ...ITEM_VACIO }]);
 
@@ -65,7 +68,7 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
     }
     if (!open) {
       setProveedorRnc(''); setProveedorNombre(''); setFecha(new Date().toISOString().slice(0, 10));
-      setNotas(''); setItbis('0'); setAlmacenId(null); setItems([{ ...ITEM_VACIO }]);
+      setNotas(''); setItbis('0'); setFormaPago('credito'); setMetodoPago('efectivo'); setFechaVencimiento(''); setAlmacenId(null); setItems([{ ...ITEM_VACIO }]);
     }
   }, [open, prefill]);
 
@@ -103,6 +106,7 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
           notas:           notas || null,
           almacenId,
           itbis:           parseFloat(itbis) || 0,
+          formaPago, metodoPago, fechaVencimiento: formaPago === 'credito' ? fechaVencimiento || null : null,
           items: validItems.map(i => ({
             productoId:    i.productoId!,
             cantidad:      parseInt(i.cantidad),
@@ -144,6 +148,13 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
             <Typography component="label" sx={labelSx}>Nombre proveedor</Typography>
             <TextField size="small" fullWidth value={proveedorNombre} onChange={e => setProveedorNombre(e.target.value)} placeholder="Distribuidora XYZ" />
           </Box>
+        </Box>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+          <TextField select size="small" label="Forma de pago" value={formaPago} onChange={e => setFormaPago(e.target.value as 'contado'|'credito')}>
+            <MenuItem value="credito">Crédito (cuenta por pagar)</MenuItem><MenuItem value="contado">Contado</MenuItem>
+          </TextField>
+          {formaPago === 'credito' ? <TextField size="small" label="Fecha de vencimiento" type="date" value={fechaVencimiento} onChange={e=>setFechaVencimiento(e.target.value)} slotProps={{inputLabel:{shrink:true}}}/> : <TextField select size="small" label="Método de pago" value={metodoPago} onChange={e=>setMetodoPago(e.target.value)}><MenuItem value="efectivo">Efectivo</MenuItem><MenuItem value="transferencia">Transferencia</MenuItem><MenuItem value="tarjeta">Tarjeta</MenuItem><MenuItem value="cheque">Cheque</MenuItem><MenuItem value="deposito">Depósito</MenuItem><MenuItem value="otro">Otro</MenuItem></TextField>}
         </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
