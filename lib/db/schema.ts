@@ -1930,6 +1930,12 @@ export const contabilidadConfig = pgTable('contabilidad_config', {
   cuentaSaldosFavorId: integer('cuenta_saldos_favor_id').references(() => contabilidadCuentas.id),
   /** Activo: lo que el cliente retuvo deja un crédito fiscal, no un menor ingreso. */
   cuentaRetencionesId: integer('cuenta_retenciones_id').references(() => contabilidadCuentas.id),
+  /** Nivel 3.2 — destino de las compras de inventario (Debe). Default 1105. */
+  cuentaInventarioId: integer('cuenta_inventario_id').references(() => contabilidadCuentas.id),
+  /** Nivel 3.2 — el pasivo de una compra a crédito (Haber). Default 2101. */
+  cuentaPorPagarId:   integer('cuenta_por_pagar_id').references(() => contabilidadCuentas.id),
+  /** Nivel 3.2 — cuenta de gasto de la caja chica (Debe). Default 6101. */
+  cuentaGastosId:     integer('cuenta_gastos_id').references(() => contabilidadCuentas.id),
   updatedBy: integer('updated_by').references(() => users.id),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

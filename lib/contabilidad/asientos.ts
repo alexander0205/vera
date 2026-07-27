@@ -30,6 +30,34 @@ const ESTADOS_VENTA = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO'];
 const TIPOS_VENTA = ['31', '32', '33', '44', '45'];
 /** Nota de crédito: reduce la deuda del cliente en vez de aumentarla. */
 const TIPO_NOTA_CREDITO = '34';
+/**
+ * Venta interna sin comprobante fiscal. NO va a la DGII, así que **vive
+ * permanentemente en BORRADOR** — nunca pasa a ACEPTADO. Es como el flujo
+ * escolar registra un cargo cobrable. La cartera ya la cuenta como cobrable
+ * (`lib/db/queries.ts`, CTE de CxC); contabilidad debe reconocer la venta igual,
+ * o asentaría el cobro sin la venta y dejaría Cuentas por cobrar acreedor
+ * (nivel 2.3). Ver `esVentaAsentable`.
+ */
+const TIPO_SIN_NCF = 'sin-ncf';
+
+/**
+ * ¿Este documento genera asiento de venta? Dos familias:
+ *  - e-CF fiscal emitido y vivo (`TIPOS_VENTA` en un `ESTADOS_VENTA`), y
+ *  - venta interna `sin-ncf` no anulada (permanece en BORRADOR a propósito).
+ *
+ * ⚠️ `VENTA_ASENTABLE_SQL` es el espejo de esta función para el barrido.
+ * **Cambiar las dos juntas** o el barrido y el generador se desincronizan.
+ */
+export function esVentaAsentable(estado: string, tipoEcf: string): boolean {
+  if (tipoEcf === TIPO_SIN_NCF) return estado !== 'ANULADO' && estado !== 'RECHAZADO';
+  return ESTADOS_VENTA.includes(estado) && TIPOS_VENTA.includes(tipoEcf);
+}
+
+/** Espejo SQL de `esVentaAsentable`, sobre el alias `d`. Mantener en sync. */
+export const VENTA_ASENTABLE_SQL = sql`(
+  (d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO') AND d.tipo_ecf IN ('31', '32', '33', '44', '45'))
+  OR (d.tipo_ecf = 'sin-ncf' AND d.estado NOT IN ('ANULADO', 'RECHAZADO'))
+)`;
 
 export interface LineaAsiento {
   cuentaId:    number;
@@ -54,7 +82,12 @@ export type MotivoSalto =
   | 'sin-cuenta-retenciones'
   | 'sin-asiento-que-reversar'
   | 'no-esta-anulado'
-  | 'nc-solo-texto';
+  | 'nc-solo-texto'
+  | 'sin-cuenta-inventario'
+  | 'sin-cuenta-por-pagar'
+  | 'sin-cuenta-gastos'
+  | 'sin-cuenta-caja'
+  | 'no-es-gasto';
 
 export interface ResultadoGeneracion {
   creado:  boolean;
@@ -278,7 +311,7 @@ export async function generarAsientoFactura(
   const doc = (filas as unknown as DocumentoParaAsiento[])[0];
   if (!doc) return { creado: false, motivo: 'no-es-venta' };
 
-  if (!ESTADOS_VENTA.includes(doc.estado) || !TIPOS_VENTA.includes(doc.tipoEcf)) {
+  if (!esVentaAsentable(doc.estado, doc.tipoEcf)) {
     return { creado: false, motivo: 'no-es-venta' };
   }
   if (doc.montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
@@ -637,6 +670,136 @@ export async function generarAsientoPago(
       { cuentaId: cuentaCobro, debeCents: pago.montoCentavos, haberCents: 0, descripcion: concepto },
       { cuentaId: cfg.cuentaPorCobrarId, debeCents: 0, haberCents: pago.montoCentavos,
         descripcion: 'Cancelación de cuenta por cobrar' },
+    ],
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+// ─── Compras y gastos de caja (nivel 3.2) ────────────────────────────────────
+
+/**
+ * Resuelve una cuenta por su código base cuando la config no la fija. Solo
+ * imputables y activas. Deja que compras/gastos funcionen sin configurar,
+ * usando los códigos estándar (1105/2101/6101/1101), y personalizables si el
+ * team los cambia en la config.
+ */
+async function cuentaPorCodigo(teamId: number, codigo: string): Promise<number | null> {
+  const rows = await db.execute(sql`
+    SELECT id FROM contabilidad_cuentas
+    WHERE team_id = ${teamId} AND codigo = ${codigo} AND imputable AND activa
+    LIMIT 1
+  `);
+  return (rows as unknown as { id: number }[])[0]?.id ?? null;
+}
+
+/**
+ * Asiento de una compra local (entrada de inventario). Nivel 3.2.
+ *
+ *   Debe  Inventario            monto de la compra
+ *     Haber  Cuentas por pagar    la deuda con el proveedor
+ *
+ * `compras_locales` no guarda ITBIS ni forma de pago (son de su modelo, no del
+ * nuestro; se leen sin tocar la tabla). Dos decisiones v1, documentadas para
+ * revisar con Alex:
+ *  - **Todo el costo va a Inventario**, ITBIS incluido. Separar el crédito
+ *    fiscal (nivel 4.3) exige que `compras_locales` guarde el ITBIS.
+ *  - **El haber va a Cuentas por pagar** (compra a crédito). Sin campo de forma
+ *    de pago no se sabe si fue al contado; el pago se asentaría aparte al
+ *    liquidar la CxP.
+ */
+export async function generarAsientoCompra(
+  teamId: number,
+  compraId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT id, monto_total AS "montoTotal",
+           to_char(fecha, 'YYYY-MM-DD') AS fecha,
+           proveedor_nombre AS "proveedorNombre"
+    FROM compras_locales
+    WHERE team_id = ${teamId} AND id = ${compraId}
+  `);
+  const compra = (filas as unknown as {
+    id: number; montoTotal: number; fecha: string; proveedorNombre: string | null;
+  }[])[0];
+
+  if (!compra) return { creado: false, motivo: 'no-es-gasto' };
+  if (compra.montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaInv = cfg.cuentaInventarioId ?? await cuentaPorCodigo(teamId, '1105');
+  if (!cuentaInv) return { creado: false, motivo: 'sin-cuenta-inventario' };
+  const cuentaCxP = cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaCxP) return { creado: false, motivo: 'sin-cuenta-por-pagar' };
+
+  const concepto = `Compra #${compra.id}${compra.proveedorNombre ? ` · ${compra.proveedorNombre}` : ''}`;
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: compra.fecha, concepto, origenTipo: 'compra', origenId: compra.id },
+    [
+      { cuentaId: cuentaInv, debeCents: compra.montoTotal, haberCents: 0, descripcion: 'Entrada de inventario' },
+      { cuentaId: cuentaCxP, debeCents: 0, haberCents: compra.montoTotal, descripcion: 'Deuda con proveedor' },
+    ],
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
+/**
+ * Asiento de un movimiento de caja tipo GASTO. Nivel 3.2.
+ *
+ *   Debe  Gastos (de caja)     el gasto
+ *     Haber  Caja                el efectivo que salió
+ *
+ * El Haber es la cuenta del efectivo, la misma donde entran los cobros en
+ * efectivo: se reusa la config del método 'efectivo' y, si falta, se cae al
+ * código base 1101. `caja_movimientos.descripcion` es texto libre, así que todo
+ * gasto va a una sola cuenta de gastos configurable (hueco 3); refinar por
+ * categoría solo si hiciera falta, sin tocar la tabla de caja.
+ */
+export async function generarAsientoGastoCaja(
+  teamId: number,
+  movimientoId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT id, tipo, monto_centavos AS "montoCentavos",
+           to_char(created_at AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha,
+           descripcion
+    FROM caja_movimientos
+    WHERE team_id = ${teamId} AND id = ${movimientoId}
+  `);
+  const mov = (filas as unknown as {
+    id: number; tipo: string; montoCentavos: number; fecha: string; descripcion: string | null;
+  }[])[0];
+
+  if (!mov || mov.tipo !== 'GASTO') return { creado: false, motivo: 'no-es-gasto' };
+  if (mov.montoCentavos <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaGasto = cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
+  const cuentaCaja = (await resolverCuentaCobro(teamId, 'efectivo')) ?? await cuentaPorCodigo(teamId, '1101');
+  if (!cuentaCaja) return { creado: false, motivo: 'sin-cuenta-caja' };
+
+  const concepto = `Gasto de caja #${mov.id}${mov.descripcion ? ` · ${mov.descripcion.slice(0, 60)}` : ''}`;
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: mov.fecha, concepto, origenTipo: 'gasto_caja', origenId: mov.id },
+    [
+      { cuentaId: cuentaGasto, debeCents: mov.montoCentavos, haberCents: 0, descripcion: 'Gasto de caja chica' },
+      { cuentaId: cuentaCaja,  debeCents: 0, haberCents: mov.montoCentavos, descripcion: 'Salida de caja' },
     ],
     userId,
   );

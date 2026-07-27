@@ -38,6 +38,12 @@ export interface ConfigContable {
   cuentaSaldosFavorId: number | null;
   /** Activo: crédito fiscal por lo que el cliente retuvo (Paso 5). */
   cuentaRetencionesId: number | null;
+  /** Nivel 3.2 — Debe de una compra de inventario. */
+  cuentaInventarioId:  number | null;
+  /** Nivel 3.2 — Haber de una compra a crédito (pasivo). */
+  cuentaPorPagarId:    number | null;
+  /** Nivel 3.2 — Debe de un gasto de caja chica. */
+  cuentaGastosId:      number | null;
 }
 
 const CONFIG_VACIA: ConfigContable = {
@@ -45,6 +51,7 @@ const CONFIG_VACIA: ConfigContable = {
   cuentaPorCobrarId: null, cuentaItbisId: null, cuentaIngresosId: null,
   cuentaDescuentosId: null, cuentaMoraId: null,
   cuentaSaldosFavorId: null, cuentaRetencionesId: null,
+  cuentaInventarioId: null, cuentaPorPagarId: null, cuentaGastosId: null,
 };
 
 // ─── Lectura ─────────────────────────────────────────────────────────────────
@@ -59,7 +66,10 @@ export async function getConfig(teamId: number): Promise<ConfigContable> {
            cuenta_descuentos_id  AS "cuentaDescuentosId",
            cuenta_mora_id        AS "cuentaMoraId",
            cuenta_saldos_favor_id AS "cuentaSaldosFavorId",
-           cuenta_retenciones_id  AS "cuentaRetencionesId"
+           cuenta_retenciones_id  AS "cuentaRetencionesId",
+           cuenta_inventario_id   AS "cuentaInventarioId",
+           cuenta_por_pagar_id    AS "cuentaPorPagarId",
+           cuenta_gastos_id       AS "cuentaGastosId"
     FROM contabilidad_config
     WHERE team_id = ${teamId}
   `);
@@ -165,6 +175,9 @@ export interface GuardarConfigInput {
   cuentaMoraId?:       number | null;
   cuentaSaldosFavorId?: number | null;
   cuentaRetencionesId?: number | null;
+  cuentaInventarioId?:  number | null;
+  cuentaPorPagarId?:    number | null;
+  cuentaGastosId?:      number | null;
 }
 
 export async function guardarConfig(
@@ -184,6 +197,9 @@ export async function guardarConfig(
     cuentaMoraId:       'cuenta_mora_id',
     cuentaSaldosFavorId: 'cuenta_saldos_favor_id',
     cuentaRetencionesId: 'cuenta_retenciones_id',
+    cuentaInventarioId:  'cuenta_inventario_id',
+    cuentaPorPagarId:    'cuenta_por_pagar_id',
+    cuentaGastosId:      'cuenta_gastos_id',
   };
 
   const entradas = Object.entries(input)

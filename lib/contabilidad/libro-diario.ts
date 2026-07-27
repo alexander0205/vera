@@ -20,6 +20,8 @@ import { getConfig } from './config';
 import {
   generarAsientoFactura, generarAsientoPago,
   generarAsientoNotaCredito, generarAsientoAnulacion,
+  generarAsientoCompra, generarAsientoGastoCaja,
+  VENTA_ASENTABLE_SQL,
   type MotivoSalto,
 } from './asientos';
 
@@ -68,8 +70,7 @@ export async function generarAsientosPendientes(
       ON a.team_id = d.team_id AND a.origen_tipo = 'factura' AND a.origen_id = d.id
     WHERE d.team_id = ${teamId}
       AND a.id IS NULL
-      AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
-      AND d.tipo_ecf IN ('31', '32', '33', '44', '45')
+      AND ${VENTA_ASENTABLE_SQL}
       AND d.monto_total > 0
     ORDER BY d.fecha_emision, d.id
     LIMIT ${TOPE_POR_BARRIDO}
@@ -150,7 +151,46 @@ export async function generarAsientosPendientes(
     else anotar(r.motivo);
   }
 
-  resumen.hayMas = [docs, notas, pagos, anulados]
+  // ── Compras locales sin asiento (nivel 3.2) ───────────────────────────────
+  const compras = await db.execute(sql`
+    SELECT c.id
+    FROM compras_locales c
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = c.team_id AND a.origen_tipo = 'compra' AND a.origen_id = c.id
+    WHERE c.team_id = ${teamId}
+      AND a.id IS NULL
+      AND c.monto_total > 0
+    ORDER BY c.fecha, c.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+
+  for (const c of compras as unknown as { id: number }[]) {
+    const r = await generarAsientoCompra(teamId, c.id, userId);
+    if (r.creado) resumen.creados++;
+    else anotar(r.motivo);
+  }
+
+  // ── Gastos de caja sin asiento (nivel 3.2) ────────────────────────────────
+  const gastos = await db.execute(sql`
+    SELECT m.id
+    FROM caja_movimientos m
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = m.team_id AND a.origen_tipo = 'gasto_caja' AND a.origen_id = m.id
+    WHERE m.team_id = ${teamId}
+      AND a.id IS NULL
+      AND m.tipo = 'GASTO'
+      AND m.monto_centavos > 0
+    ORDER BY m.created_at, m.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+
+  for (const g of gastos as unknown as { id: number }[]) {
+    const r = await generarAsientoGastoCaja(teamId, g.id, userId);
+    if (r.creado) resumen.creados++;
+    else anotar(r.motivo);
+  }
+
+  resumen.hayMas = [docs, notas, pagos, anulados, compras, gastos]
     .some((s) => (s as unknown as unknown[]).length === TOPE_POR_BARRIDO);
 
   return resumen;
@@ -191,8 +231,9 @@ export interface LineaDetalle {
   descripcion: string | null;
 }
 
-/** Los cuatro orígenes que admite el CHECK de `contabilidad_asientos`. */
-export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion'] as const;
+/** Los orígenes que admite el CHECK de `contabilidad_asientos`, y que el libro
+ *  diario deja filtrar. */
+export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja'] as const;
 export type OrigenTipo = (typeof ORIGENES)[number];
 
 export interface FiltrosLibro {

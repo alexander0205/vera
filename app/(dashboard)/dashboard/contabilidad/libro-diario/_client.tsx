@@ -4,7 +4,7 @@ import { Fragment, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronRight, ChevronDown, RefreshCw, AlertTriangle,
-  FileText, Banknote, Undo2, Ban, X,
+  FileText, Banknote, Undo2, Ban, X, PenLine, ShoppingCart, Wallet,
 } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -59,6 +59,12 @@ const ORIGEN: Record<string, { label: string; icono: React.ReactNode; bg: string
                bg: '#fffbeb', fg: '#b45309', border: '#fde68a' },
   anulacion: { label: 'Anulación', icono: <Ban style={{ width: 12, height: 12 }} />,
                bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
+  manual:    { label: 'Manual', icono: <PenLine style={{ width: 12, height: 12 }} />,
+               bg: '#eef2ff', fg: '#4338ca', border: '#c7d2fe' },
+  compra:    { label: 'Compra', icono: <ShoppingCart style={{ width: 12, height: 12 }} />,
+               bg: '#f0f9ff', fg: '#0369a1', border: '#bae6fd' },
+  gasto_caja:{ label: 'Gasto de caja', icono: <Wallet style={{ width: 12, height: 12 }} />,
+               bg: '#fdf4ff', fg: '#a21caf', border: '#f5d0fe' },
 };
 const ORIGEN_FALLBACK = { bg: '#f9fafb', fg: '#4b5563', border: '#e5e7eb' };
 
@@ -79,6 +85,11 @@ const MOTIVO_TEXTO: Record<string, string> = {
   'sin-asiento-que-reversar':'se anularon antes de tener asiento, así que no hay nada que reversar',
   'no-esta-anulado':         'no están anulados',
   'nc-solo-texto':           'solo corrigen texto, sin efecto monetario',
+  'sin-cuenta-inventario':   'falta configurar la cuenta de inventario',
+  'sin-cuenta-por-pagar':    'falta configurar la cuenta por pagar',
+  'sin-cuenta-gastos':       'falta configurar la cuenta de gastos de caja',
+  'sin-cuenta-caja':         'falta configurar la cuenta de caja/efectivo',
+  'no-es-gasto':             'no son compras ni gastos de caja',
 };
 
 export function LibroDiarioClient({
