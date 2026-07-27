@@ -15,6 +15,7 @@ import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
 
 import { NavBar, TopBar } from './sections/TopBar';
 import { CompactHeader } from './sections/CompactHeader';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { FacturaOrigenSection, type FacturaResumen } from './sections/FacturaOrigenSection';
 import { SectionCard } from './sections/SectionCard';
 import { AccordionSection } from './sections/AccordionSection';
@@ -192,9 +193,18 @@ export default function NuevaFacturaForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fecha de emisión editable — solo roles con este permiso (admin/owner) y
+  // solo aplica a sin-ncf. Ver CompactHeader y app/api/ecf/emitir/route.ts.
+  const { can } = usePermissions();
+  const puedeEditarFecha = can('facturas:fecha-personalizada');
+
   // ── Condición de pago ──────────────────────────────────────────────────────
   // DGII: 1=contado, 2=crédito, 3=gratuito, 4=uso/consumo.
-  const [fechaEmision, setFechaEmision] = useState(() => new Date().toISOString().slice(0, 10));
+  // Editar borrador → arranca con la fecha guardada (soporta backdating al
+  // re-guardar). Factura nueva → hoy.
+  const [fechaEmision, setFechaEmision] = useState(
+    () => initialData?.fechaEmision ?? new Date().toISOString().slice(0, 10),
+  );
   // Factura NUEVA → arranca con el default del team (si hay plazo > 0 → crédito).
   // Editar borrador → respeta el tipoPago guardado.
   const [condicionPago, setCondicionPago] = useState(() => {
@@ -1256,6 +1266,8 @@ export default function NuevaFacturaForm({
                 sinComprobante={esPadreSinNcf}
                 secuencia={secuencia}
                 fechaEmision={fechaEmision}
+                puedeEditarFecha={puedeEditarFecha}
+                onChangeFecha={setFechaEmision}
                 onEditarNcf={() => {
                   setNcfSiguienteNum('');
                   setNcfFechaVenc(secuencia?.fechaVencimiento ? secuencia.fechaVencimiento.slice(0, 10) : '');
