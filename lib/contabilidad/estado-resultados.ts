@@ -61,7 +61,10 @@ export async function estadoResultados(
   teamId: number,
   rango: RangoFechas = {},
 ): Promise<EstadoResultados> {
-  const balance = await balanceComprobacion(teamId, rango);
+  // Se excluyen los asientos de cierre: son los que vacían las cuentas de
+  // resultado contra 3102 al fin de año. Contarlos aquí dejaría el resultado del
+  // ejercicio en cero justo después de cerrarlo.
+  const balance = await balanceComprobacion(teamId, rango, { excluirOrigen: ['cierre'] });
 
   const ingresos: SeccionResultado = { lineas: [], totalCents: 0 };
   const costos:   SeccionResultado = { lineas: [], totalCents: 0 };

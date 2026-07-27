@@ -2088,6 +2088,27 @@ export const contabilidadDepreciaciones = pgTable('contabilidad_depreciaciones',
 export type ContabilidadActivoFijo    = typeof contabilidadActivosFijos.$inferSelect;
 export type ContabilidadDepreciacion  = typeof contabilidadDepreciaciones.$inferSelect;
 
+// ─── Contabilidad: cierre de ejercicio (cierre anual) ────────────────────────
+// Un asiento de cierre lleva los saldos de resultado (4/5/6) a 3102 al terminar
+// el año. El único (team, ejercicio) impide cerrar dos veces el mismo año.
+
+export const contabilidadCierres = pgTable('contabilidad_cierres', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  /** El año que se cierra (p. ej. 2025). */
+  ejercicio: integer('ejercicio').notNull(),
+  fechaCierre: date('fecha_cierre').notNull(),
+  /** Resultado del ejercicio: utilidad (+) o pérdida (−). */
+  resultadoCents: bigint('resultado_cents', { mode: 'number' }).notNull(),
+  asientoId: integer('asiento_id').references(() => contabilidadAsientos.id),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('contabilidad_cierres_ejercicio_uq').on(t.teamId, t.ejercicio),
+]);
+
+export type ContabilidadCierre = typeof contabilidadCierres.$inferSelect;
+
 export type ContabilidadConfig       = typeof contabilidadConfig.$inferSelect;
 export type ContabilidadConfigMetodo = typeof contabilidadConfigMetodosPago.$inferSelect;
 export type ContabilidadConfigIngreso = typeof contabilidadConfigIngresos.$inferSelect;

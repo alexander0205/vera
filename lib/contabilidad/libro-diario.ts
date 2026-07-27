@@ -243,7 +243,7 @@ export interface LineaDetalle {
 
 /** Los orígenes que admite el CHECK de `contabilidad_asientos`, y que el libro
  *  diario deja filtrar. */
-export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'depreciacion'] as const;
+export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'depreciacion', 'pago_proveedor', 'cierre'] as const;
 export type OrigenTipo = (typeof ORIGENES)[number];
 
 export interface FiltrosLibro {

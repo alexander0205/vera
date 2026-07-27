@@ -288,10 +288,17 @@ export interface BalanceComprobacion {
 export async function balanceComprobacion(
   teamId: number,
   rango: RangoFechas = {},
+  opts: { excluirOrigen?: string[] } = {},
 ): Promise<BalanceComprobacion> {
   const cond = [sql`l.team_id = ${teamId}`];
   if (rango.desde) cond.push(sql`a.fecha >= ${rango.desde}::date`);
   if (rango.hasta) cond.push(sql`a.fecha <= ${rango.hasta}::date`);
+  // El estado de resultados excluye los asientos de cierre: si los contara, el
+  // propio cierre pondría el resultado del año en cero. El balance general, en
+  // cambio, SÍ los cuenta (el resultado ya vive en 3102 tras cerrar).
+  if (opts.excluirOrigen && opts.excluirOrigen.length > 0) {
+    cond.push(sql`a.origen_tipo NOT IN (${sql.join(opts.excluirOrigen.map((o) => sql`${o}`), sql`, `)})`);
+  }
   const where = sql.join(cond, sql` AND `);
 
   const filas = await db.execute(sql`
