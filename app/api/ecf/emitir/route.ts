@@ -71,6 +71,10 @@ const emitirSchema = z.object({
   emailComprador:       z.string().email().optional().or(z.literal('')).transform(v => v || undefined),
   tipoPago:             z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).default(1),
   fechaLimitePago:      z.string().optional(),
+  // Fecha de emisión elegida por el usuario (YYYY-MM-DD). Solo se honra en
+  // facturas sin-ncf y solo si el rol tiene 'facturas:fecha-personalizada'
+  // (ver fechaEmisionCustom abajo). Para e-CF fiscal la fecha la fija la DGII.
+  fechaEmision:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   items:                z.array(itemSchema).min(1),
   ncfModificado:        z.string().optional(),
   codigoModificacion:   z.coerce.number().int().min(1).max(5).optional(),
@@ -294,6 +298,19 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    // ── Fecha de emisión personalizada (sin-ncf) ─────────────────────────────
+    // Permite registrar cobros de fechas pasadas. Se honra solo cuando: (1) es
+    // sin-ncf, (2) el rol tiene 'facturas:fecha-personalizada' (admin/owner).
+    // Para e-CF fiscal la fecha la asigna la DGII, nunca el usuario. Si no
+    // aplica, queda null y los inserts usan new Date() como siempre. Usamos
+    // T12:00:00 para evitar el corrimiento de día UTC↔RD.
+    const fechaEmisionCustom =
+      data.tipoEcf === 'sin-ncf' &&
+      data.fechaEmision &&
+      await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:fecha-personalizada')
+        ? new Date(`${data.fechaEmision}T12:00:00`)
+        : null;
 
     // ── Resolver documento padre (notas tipos 33/34) ─────────────────────────
     // Por id (origenDocumentoId — flujo "crear nota desde factura") o por
@@ -623,6 +640,9 @@ export async function POST(request: NextRequest) {
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
             creditoGeneradoCents,
+            // Fecha custom (sin-ncf + permiso): solo sobreescribir cuando aplica,
+            // para no pisar la fecha original de un borrador que se re-guarda.
+            ...(fechaEmisionCustom ? { fechaEmision: fechaEmisionCustom } : {}),
             lineasJson:           data.lineasJson ?? null,
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,
@@ -782,7 +802,7 @@ export async function POST(request: NextRequest) {
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
             creditoGeneradoCents,
-            fechaEmision:         new Date(),
+            fechaEmision:         fechaEmisionCustom ?? new Date(),
             lineasJson:           data.lineasJson ?? null,
             tipoPago:             data.tipoPago ?? 1,
             fechaLimitePago:      data.fechaLimitePago ?? null,

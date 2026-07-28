@@ -4,6 +4,16 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.6.0 — 2026-07-27
+
+### Nuevo
+
+- **facturas**: fecha de emisión editable en sin-ncf para admin/owner
+  - roles: permiso nuevo en el type, en owner+admin y en PERMISSION_CATALOG.
+  - api/ecf/emitir: el schema acepta `fechaEmision`; el servidor solo la honra cuando el tipo es sin-ncf y el rol tiene el permiso (defensa en profundidad). Aplica al insert de borrador y al update. e-CF fiscal: la fecha la fija la DGII, nunca el usuario. Se usa T12:00:00 para evitar corrimiento UTC/RD.
+  - CompactHeader: el campo Fecha pasa a input de calendario cuando el rol tiene permiso y el documento es sin-ncf; en cualquier otro caso queda de solo lectura.
+  - Flujo de edición: BorradorInicial y la página de editar ahora incluyen fechaEmision, de modo que al reabrir un borrador se restaura la fecha guardada y no se pisa con la de hoy al re-guardar.
+
 ## v1.5.5 — 2026-07-23
 
 ### Arreglado
