@@ -4,6 +4,15 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.7.0 — 2026-07-28
+
+### Nuevo
+
+- **reportes**: imprimir/guardar PDF de la vista además de Excel
+  - print-button.tsx: botón client con window.print().
+  - report-shell.tsx: .print-area envuelve el contenido; breadcrumb, botones y filtro marcados .no-print; el título/descripción entran en el PDF.
+  - globals.css: print-color-adjust: exact para conservar los colores de chips de antigüedad, KPIs y barras en el PDF.
+
 ## v1.6.0 — 2026-07-27
 
 ### Nuevo
