@@ -2,6 +2,25 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Copy, Check, Key, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
 
 interface ApiKeyRow {
   id: number;
@@ -56,110 +75,151 @@ export default function ApiKeysPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">API Keys</h1>
-          <p className="text-sm text-gray-500 mt-1">Integra Zero con tus sistemas externos</p>
-        </div>
-        <button onClick={() => setShowNew(true)}
-          className="flex items-center gap-2 bg-teal-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">
-          <Plus className="h-4 w-4" /> Nueva Key
-        </button>
-      </div>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 900 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3, gap: 2, flexWrap: 'wrap' }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            API Keys
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            Integra Zero con tus sistemas externos
+          </Typography>
+        </Box>
+        <MuiButton
+          variant="contained"
+          color="primary"
+          disableElevation
+          startIcon={<Plus style={{ width: 16, height: 16 }} />}
+          onClick={() => setShowNew(true)}
+          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
+        >
+          Nueva Key
+        </MuiButton>
+      </Box>
 
+      {/* New key revealed */}
       {newKey && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-          <div className="flex items-center gap-2 text-amber-800 text-sm font-medium">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            Copia esta clave ahora — no se volverá a mostrar
-          </div>
-          <div className="flex items-center gap-2 bg-white rounded-lg border border-amber-200 px-3 py-2">
-            <code className="flex-1 text-xs font-mono text-gray-800 break-all">{newKey}</code>
-            <button onClick={copy} className="shrink-0 text-gray-500 hover:text-gray-700">
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </button>
-          </div>
-          <button onClick={() => setNewKey('')} className="text-xs text-amber-600 hover:underline">
-            Ya la copié, cerrar
-          </button>
-        </div>
+        <Alert
+          severity="warning"
+          icon={<AlertTriangle style={{ width: 18, height: 18 }} />}
+          sx={{ mb: 2, borderRadius: '12px' }}
+          onClose={() => setNewKey('')}
+        >
+          <AlertTitle sx={{ fontWeight: 700 }}>Copia esta clave ahora — no se volverá a mostrar</AlertTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'warning.light', px: 1.5, py: 1, mt: 1 }}>
+            <Box component="code" sx={{ flex: 1, fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.primary', wordBreak: 'break-all' }}>
+              {newKey}
+            </Box>
+            <IconButton size="small" onClick={copy} sx={{ color: copied ? 'success.main' : 'text.secondary', flexShrink: 0 }}>
+              {copied ? <Check style={{ width: 14, height: 14 }} /> : <Copy style={{ width: 14, height: 14 }} />}
+            </IconButton>
+          </Box>
+        </Alert>
       )}
 
+      {/* New key form */}
       {showNew && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-900">Nueva API Key</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre / descripción</label>
-            <input type="text" value={nombre} onChange={e => setNombre(e.target.value)}
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+          <CardContent sx={{ p: '20px !important', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>
+              Nueva API Key
+            </Typography>
+            <MuiTextField
+              label="Nombre / descripción"
+              value={nombre}
+              onChange={e => setNombre(e.target.value)}
               placeholder="Ej: Integración ERP interno"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Permisos</label>
-            <select value={permisos} onChange={e => setPermisos(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white">
-              <option value="read">Solo lectura</option>
-              <option value="write">Lectura + escritura</option>
-              <option value="admin">Acceso completo</option>
-            </select>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={create} disabled={loading || !nombre}
-              className="bg-teal-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium">
-              {loading ? 'Generando...' : 'Generar key'}
-            </button>
-            <button onClick={() => setShowNew(false)}
-              className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-              Cancelar
-            </button>
-          </div>
-        </div>
+              size="small"
+              fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+            <FormControl size="small" fullWidth>
+              <InputLabel>Permisos</InputLabel>
+              <Select
+                value={permisos}
+                label="Permisos"
+                onChange={e => setPermisos(e.target.value)}
+                sx={{ borderRadius: '8px' }}
+              >
+                <MenuItem value="read">Solo lectura</MenuItem>
+                <MenuItem value="write">Lectura + escritura</MenuItem>
+                <MenuItem value="admin">Acceso completo</MenuItem>
+              </Select>
+            </FormControl>
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
+              <MuiButton
+                variant="contained"
+                color="primary"
+                disableElevation
+                onClick={create}
+                disabled={loading || !nombre}
+                sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
+              >
+                {loading ? 'Generando...' : 'Generar key'}
+              </MuiButton>
+              <MuiButton
+                variant="outlined"
+                onClick={() => setShowNew(false)}
+                sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}
+              >
+                Cancelar
+              </MuiButton>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Keys table */}
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
         {keys.length === 0 ? (
-          <div className="py-16 text-center">
-            <Key className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No hay API keys creadas</p>
-          </div>
+          <Box sx={{ py: 10, textAlign: 'center' }}>
+            <Key style={{ width: 40, height: 40, color: '#e5e7eb', margin: '0 auto 12px' }} />
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              No hay API keys creadas
+            </Typography>
+          </Box>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Nombre</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Prefijo</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Permisos</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Último uso</th>
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>Nombre</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>Prefijo</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>Permisos</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em', display: { xs: 'none', md: 'table-cell' } }}>Último uso</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {keys.map(k => (
-                <tr key={k.id} className="hover:bg-gray-50">
-                  <td className="px-5 py-3 font-medium text-gray-900">{k.nombre}</td>
-                  <td className="px-5 py-3">
-                    <code className="font-mono text-xs bg-gray-100 rounded px-2 py-0.5">{k.keyPrefix}...</code>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">
-                      {k.permisos}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-xs text-gray-400 hidden md:table-cell">
+                <TableRow key={k.id} sx={{ '&:hover': { bgcolor: 'grey.50' } }}>
+                  <TableCell sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.875rem' }}>{k.nombre}</TableCell>
+                  <TableCell>
+                    <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', bgcolor: 'grey.100', borderRadius: 1, px: 0.75, py: 0.25 }}>
+                      {k.keyPrefix}...
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={k.permisos}
+                      size="small"
+                      sx={{ bgcolor: '#f0fdfa', color: '#0d9488', border: '1px solid #99f6e4', height: 22, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem', display: { xs: 'none', md: 'table-cell' } }}>
                     {k.ultimoUsoAt ? new Date(k.ultimoUsoAt).toLocaleDateString('es-DO') : 'Nunca'}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <button onClick={() => revoke(k.id)} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton size="small" onClick={() => revoke(k.id)} sx={{ color: 'error.light', '&:hover': { bgcolor: 'error.lighter', color: 'error.main' } }}>
+                      <Trash2 style={{ width: 16, height: 16 }} />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
-    </div>
+      </Card>
+    </Box>
   );
 }

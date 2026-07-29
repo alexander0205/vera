@@ -2,6 +2,9 @@ import Link from 'next/link';
 import { getUser } from '@/lib/db/queries';
 import { SiteHeaderClient } from './site-header-client';
 
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+
 const NAV_LINKS = [
   { href: '/#contacto', label: 'Contacto' },
 ];
@@ -11,103 +14,193 @@ export async function SiteHeader() {
   const isLoggedIn = !!user;
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-gray-200/60 bg-white/80 backdrop-blur-lg">
+    <Box
+      component="header"
+      sx={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+        width: '100%',
+        borderBottom: '1px solid rgba(229,231,235,0.6)',
+        bgcolor: 'rgba(255,255,255,0.8)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+      }}
+    >
       {/* Top bar — estado de sesión */}
-      <div className="bg-gray-900 text-gray-300 text-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-8">
-          <span className="hidden sm:block">
+      <Box sx={{ bgcolor: '#111827', color: '#d1d5db', fontSize: '0.75rem' }}>
+        <Box
+          sx={{
+            maxWidth: '80rem',
+            mx: 'auto',
+            px: { xs: 2, sm: 3, lg: 4 },
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            height: 32,
+          }}
+        >
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'block' } }}>
             Facturación electrónica certificada por la DGII
-          </span>
-          <div className="flex items-center gap-4 ml-auto">
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ml: 'auto' }}>
             {isLoggedIn ? (
               <>
-                <span className="text-gray-400">
+                <Box component="span" sx={{ color: '#9ca3af' }}>
                   {user.email}
-                </span>
-                <Link
+                </Box>
+                <Box
+                  component="a"
                   href="/dashboard"
-                  className="text-white font-medium hover:text-teal-300 transition-colors"
+                  sx={{
+                    color: '#ffffff',
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                    transition: 'color 0.15s',
+                    '&:hover': { color: '#5eead4' },
+                  }}
                 >
                   Ir al dashboard →
-                </Link>
+                </Box>
               </>
             ) : (
               <>
-                <Link
+                <Box
+                  component="a"
                   href="/sign-in"
-                  className="hover:text-white transition-colors"
+                  sx={{
+                    color: 'inherit',
+                    textDecoration: 'none',
+                    transition: 'color 0.15s',
+                    '&:hover': { color: '#ffffff' },
+                  }}
                 >
                   Iniciar sesión
-                </Link>
-                <Link
+                </Box>
+                <Box
+                  component="a"
                   href="/sign-up"
-                  className="bg-teal-600 text-white px-3 py-0.5 rounded-full font-medium hover:bg-teal-500 transition-colors"
+                  sx={{
+                    bgcolor: '#0d9488',
+                    color: '#ffffff',
+                    px: 1.5,
+                    py: 0.25,
+                    borderRadius: '9999px',
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                    transition: 'background-color 0.15s',
+                    '&:hover': { bgcolor: '#14b8a6' },
+                  }}
                 >
                   Crear cuenta
-                </Link>
+                </Box>
               </>
             )}
-          </div>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Nav principal */}
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <Box component="nav" sx={{ maxWidth: '80rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="h-8 w-8 rounded-lg bg-teal-600 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">Z</span>
-            </div>
-            <span className="text-xl font-bold text-gray-900">
-              Ze<span className="text-teal-600">ro</span>
-            </span>
-          </Link>
+          <Box
+            component="a"
+            href="/"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, textDecoration: 'none' }}
+          >
+            <Box sx={{ height: 32, width: 32, borderRadius: '8px', bgcolor: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography component="span" sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem' }}>E</Typography>
+            </Box>
+            <Typography component="span" sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
+              Ze<Box component="span" sx={{ color: '#0d9488' }}>ro</Box>
+            </Typography>
+          </Box>
 
           {/* Links — desktop */}
-          <div className="hidden md:flex items-center gap-8">
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 4 }}>
             {NAV_LINKS.map((link) => (
-              <Link
+              <Box
                 key={link.href}
+                component="a"
                 href={link.href}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                sx={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  color: '#4b5563',
+                  textDecoration: 'none',
+                  transition: 'color 0.15s',
+                  '&:hover': { color: '#111827' },
+                }}
               >
                 {link.label}
-              </Link>
+              </Box>
             ))}
-          </div>
+          </Box>
 
           {/* CTA — desktop */}
-          <div className="hidden md:flex items-center gap-3">
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1.5 }}>
             {isLoggedIn ? (
-              <Link
+              <Box
+                component="a"
                 href="/dashboard"
-                className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-colors"
+                sx={{
+                  bgcolor: '#0d9488',
+                  color: '#ffffff',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  px: 2.5,
+                  py: 1.25,
+                  borderRadius: '9999px',
+                  textDecoration: 'none',
+                  transition: 'background-color 0.15s',
+                  '&:hover': { bgcolor: '#0f766e' },
+                }}
               >
                 Ir al dashboard
-              </Link>
+              </Box>
             ) : (
               <>
-                <Link
+                <Box
+                  component="a"
                   href="/sign-in"
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+                  sx={{
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    color: '#4b5563',
+                    textDecoration: 'none',
+                    transition: 'color 0.15s',
+                    '&:hover': { color: '#111827' },
+                  }}
                 >
                   Iniciar sesión
-                </Link>
-                <Link
+                </Box>
+                <Box
+                  component="a"
                   href="/sign-up"
-                  className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-colors"
+                  sx={{
+                    bgcolor: '#0d9488',
+                    color: '#ffffff',
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    px: 2.5,
+                    py: 1.25,
+                    borderRadius: '9999px',
+                    textDecoration: 'none',
+                    transition: 'background-color 0.15s',
+                    '&:hover': { bgcolor: '#0f766e' },
+                  }}
                 >
                   Empezar gratis →
-                </Link>
+                </Box>
               </>
             )}
-          </div>
+          </Box>
 
           {/* Hamburger — mobile (Client Component) */}
           <SiteHeaderClient navLinks={NAV_LINKS} isLoggedIn={isLoggedIn} />
-        </div>
-      </nav>
-    </header>
+        </Box>
+      </Box>
+    </Box>
   );
 }

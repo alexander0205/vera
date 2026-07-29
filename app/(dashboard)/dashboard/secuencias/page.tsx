@@ -2,23 +2,35 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
 import {
   Plus, Pencil, Trash2, AlertTriangle, Loader2, RefreshCw, ExternalLink,
   Hash, Calendar, CheckCircle2, XCircle, AlertCircle, Star, Infinity,
 } from 'lucide-react';
 import { CATEGORIAS_ECF } from '@/lib/ecf/categorias';
-
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
+import Switch from '@mui/material/Switch';
+import CircularProgress from '@mui/material/CircularProgress';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 
 interface Secuencia {
   id:                   number;
@@ -27,7 +39,7 @@ interface Secuencia {
   secuenciaDesde:       string;
   secuenciaActual:      string;
   secuenciaHasta:       string;
-  disponibles:          number;   // -1 = ilimitado (sin-ncf)
+  disponibles:          number;
   fechaVencimiento:     string | null;
   preferida:            boolean;
   numeracionAutomatica: boolean;
@@ -36,8 +48,6 @@ interface Secuencia {
   sucursal:             string | null;
   estado:               'activa' | 'vencida' | 'agotada';
 }
-
-// ─── Catálogo de tipos (aplanado desde CATEGORIAS_ECF) ────────────────────────
 
 const TIPOS_PLANO: Record<string, { corto: string }> = {};
 for (const cat of CATEGORIAS_ECF) {
@@ -76,56 +86,48 @@ function toLocalDateInput(ts: string | null): string {
 function EstadoBadge({ estado }: { estado: Secuencia['estado'] }) {
   if (estado === 'activa') {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-        <CheckCircle2 className="h-3 w-3" />
-        Activa
-      </span>
+      <Chip size="small" label="Activa"
+        icon={<CheckCircle2 style={{ width: 10, height: 10 }} />}
+        sx={{ bgcolor: '#ecfdf5', color: '#065f46', border: '1px solid #6ee7b7', height: 20, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 }, '& .MuiChip-icon': { color: 'inherit', ml: '4px' } }}
+      />
     );
   }
   if (estado === 'vencida') {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-        <XCircle className="h-3 w-3" />
-        Vencida
-      </span>
+      <Chip size="small" label="Vencida"
+        icon={<XCircle style={{ width: 10, height: 10 }} />}
+        sx={{ bgcolor: '#fef2f2', color: '#991b1b', border: '1px solid #fca5a5', height: 20, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 }, '& .MuiChip-icon': { color: 'inherit', ml: '4px' } }}
+      />
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-      <AlertCircle className="h-3 w-3" />
-      Agotada
-    </span>
+    <Chip size="small" label="Agotada"
+      icon={<AlertCircle style={{ width: 10, height: 10 }} />}
+      sx={{ bgcolor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', height: 20, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 }, '& .MuiChip-icon': { color: 'inherit', ml: '4px' } }}
+    />
   );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
-
 export default function SecuenciasPage() {
-  const [secuencias, setSecuencias]     = useState<Secuencia[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState<string | null>(null);
-  const [filtroTipo, setFiltroTipo]     = useState('todos');
+  const [secuencias, setSecuencias] = useState<Secuencia[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [filtroTipo, setFiltroTipo] = useState('todos');
 
-  // Modales
   const [editTarget, setEditTarget]     = useState<Secuencia | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Secuencia | null>(null);
+  const [saving, setSaving]             = useState(false);
+  const [deleting, setDeleting]         = useState(false);
+  const [opError, setOpError]           = useState<string | null>(null);
 
-  // Estado de operaciones
-  const [saving, setSaving]     = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [opError, setOpError]   = useState<string | null>(null);
-
-  // Formulario edición
-  const [editNombre, setEditNombre]       = useState('');
-  const [editHasta, setEditHasta]         = useState('');
-  const [editSiguiente, setEditSiguiente] = useState('');
-  const [editVenc, setEditVenc]           = useState('');
-  const [editPreferida, setEditPreferida] = useState(false);
+  const [editNombre, setEditNombre]         = useState('');
+  const [editHasta, setEditHasta]           = useState('');
+  const [editSiguiente, setEditSiguiente]   = useState('');
+  const [editVenc, setEditVenc]             = useState('');
+  const [editPreferida, setEditPreferida]   = useState(false);
   const [editAutomatica, setEditAutomatica] = useState(false);
-  const [editSucursal, setEditSucursal]   = useState('');
-  const [editPie, setEditPie]             = useState('');
-
-  // ─── Cargar datos ──────────────────────────────────────────────────────────
+  const [editSucursal, setEditSucursal]     = useState('');
+  const [editPie, setEditPie]               = useState('');
 
   const cargar = useCallback(async () => {
     setLoading(true); setError(null);
@@ -143,8 +145,6 @@ export default function SecuenciasPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // ─── Handlers ──────────────────────────────────────────────────────────────
-
   function abrirEdicion(s: Secuencia) {
     setEditTarget(s);
     setEditNombre(s.nombre);
@@ -160,31 +160,22 @@ export default function SecuenciasPage() {
 
   async function handleEditar() {
     if (!editTarget) return;
-    if (!editNombre.trim()) {
-      setOpError('El nombre es obligatorio.');
-      return;
-    }
+    if (!editNombre.trim()) { setOpError('El nombre es obligatorio.'); return; }
     setSaving(true); setOpError(null);
     try {
       const esSinNcf = editTarget.tipoEcf === 'sin-ncf';
       const payload: Record<string, unknown> = {
-        nombre:   editNombre.trim(),
+        nombre: editNombre.trim(),
         preferida: editPreferida,
         numeracionAutomatica: editAutomatica,
-        sucursal:  editSucursal.trim() || null,
+        sucursal: editSucursal.trim() || null,
         pieDeFactura: editPie.trim() || null,
       };
-      if (!esSinNcf && editHasta) {
-        payload.hasta = parseInt(editHasta);
-      }
-      if (!esSinNcf && editSiguiente) {
-        payload.siguiente = parseInt(editSiguiente);
-      }
-      if (editVenc) {
-        payload.fechaVencimiento = editVenc;
-      }
+      if (!esSinNcf && editHasta) payload.hasta = parseInt(editHasta);
+      if (!esSinNcf && editSiguiente) payload.siguiente = parseInt(editSiguiente);
+      if (editVenc) payload.fechaVencimiento = editVenc;
 
-      const res = await fetch(`/api/secuencias/${editTarget.id}`, {
+      const res  = await fetch(`/api/secuencias/${editTarget.id}`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
@@ -208,453 +199,378 @@ export default function SecuenciasPage() {
     finally { setDeleting(false); }
   }
 
-  // ─── Filtrado ───────────────────────────────────────────────────────────────
-
   const filtradas = filtroTipo === 'todos'
     ? secuencias
     : secuencias.filter((s) => s.tipoEcf === filtroTipo);
 
-  // Tipos únicos presentes en la lista para el filtro
   const tiposPresentes = Array.from(new Set(secuencias.map(s => s.tipoEcf)));
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // Edit modal derived values
+  const editEsSinNcf = editTarget?.tipoEcf === 'sin-ncf';
+  const editShowFechaVenc = editTarget && !editEsSinNcf && editTarget.tipoEcf !== '32' && editTarget.tipoEcf !== '34';
+  const editShowPie = editTarget && CATEGORIAS_ECF
+    .filter(c => c.id === 'factura-venta' || c.id === 'nota-credito')
+    .some(c => c.tipos.some(t => t.codigo === editTarget.tipoEcf));
 
   return (
-    <div className="bg-[#eef0f7] min-h-full p-4 sm:p-6">
-      <div className="space-y-6">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: { xs: 2, sm: 3 } }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 
-        {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Numeraciones de comprobantes</h1>
-            <p className="text-sm text-gray-500 mt-1">
+        {/* Header */}
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: 'space-between', gap: 2 }}>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>Numeraciones de comprobantes</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
               Registra aquí los rangos de e-NCF autorizados por la DGII para tu empresa.{' '}
-              <a
-                href="https://ofv.dgii.gov.do"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-teal-600 hover:underline"
-              >
-                Solicitar rangos en OFV <ExternalLink className="h-3 w-3" />
-              </a>
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={cargar} disabled={loading} className="text-gray-600">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Link href="/dashboard/secuencias/nueva">
-              <Button className="bg-teal-600 hover:bg-teal-700 text-white">
-                <Plus className="h-4 w-4 mr-1" />
+              <Box component="a" href="https://ofv.dgii.gov.do" target="_blank" rel="noopener noreferrer"
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}>
+                Solicitar rangos en OFV <ExternalLink style={{ width: 12, height: 12 }} />
+              </Box>
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+            <IconButton size="small" onClick={cargar} disabled={loading}
+              sx={{ border: '1px solid #e5e7eb', borderRadius: '8px', color: 'text.secondary' }}>
+              <RefreshCw style={{ width: 16, height: 16, animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+            </IconButton>
+            <Link href="/dashboard/secuencias/nueva" style={{ textDecoration: 'none' }}>
+              <MuiButton variant="contained" disableElevation
+                startIcon={<Plus style={{ width: 14, height: 14 }} />}
+                sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
                 Nueva numeración
-              </Button>
+              </MuiButton>
             </Link>
-          </div>
-        </div>
+          </Box>
+        </Box>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4 flex gap-2">
-            <AlertTriangle className="h-5 w-5 shrink-0" />
-            <span>{error}</span>
-          </div>
+          <Alert severity="error" icon={<AlertTriangle style={{ width: 18, height: 18 }} />} sx={{ borderRadius: '12px' }}>
+            {error}
+          </Alert>
         )}
 
-        {/* CARD PRINCIPAL */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Card principal */}
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden' }}>
 
           {/* Filtro */}
-          <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center gap-4">
-            <div className="flex-1">
-              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger className="w-72">
-                  <SelectValue placeholder="Tipo de documento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los tipos</SelectItem>
-                  {tiposPresentes.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {code === 'sin-ncf' ? 'Sin NCF' : (TIPOS_PLANO[code]?.corto ?? `e${code}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+          <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 2 }}>
+            <FormControl size="small" sx={{ width: 280 }}>
+              <Select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} sx={{ borderRadius: '8px' }}>
+                <MenuItem value="todos">Todos los tipos</MenuItem>
+                {tiposPresentes.map((code) => (
+                  <MenuItem key={code} value={code}>
+                    {code === 'sin-ncf' ? 'Sin NCF' : (TIPOS_PLANO[code]?.corto ?? `e${code}`)}
+                  </MenuItem>
+                ))}
               </Select>
-            </div>
+            </FormControl>
             {!loading && (
-              <p className="text-sm text-gray-400">
+              <Typography variant="body2" sx={{ color: 'text.disabled', ml: 'auto' }}>
                 {filtradas.length} {filtradas.length === 1 ? 'numeración' : 'numeraciones'}
-              </p>
+              </Typography>
             )}
-          </div>
+          </Box>
 
           {/* Contenido */}
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 10 }}>
+              <CircularProgress size={36} color="primary" />
+            </Box>
           ) : filtradas.length === 0 ? (
-            <div className="text-center py-20 px-6">
-              <div className="h-12 w-12 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Hash className="h-6 w-6 text-teal-600" />
-              </div>
-              <p className="text-gray-700 font-semibold mb-1">Sin numeraciones registradas</p>
-              <p className="text-sm text-gray-400 mb-5 max-w-sm mx-auto">
+            <Box sx={{ textAlign: 'center', py: 10, px: 3 }}>
+              <Box sx={{ width: 48, height: 48, bgcolor: '#f0fdfa', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+                <Hash style={{ width: 22, height: 22, color: '#0d9488' }} />
+              </Box>
+              <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                Sin numeraciones registradas
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3, maxWidth: 360, mx: 'auto' }}>
                 Solicita tus rangos de e-NCF en la Oficina Virtual de la DGII y regístralos aquí.
-              </p>
-              <div className="flex items-center justify-center gap-3">
-                <a
-                  href="https://ofv.dgii.gov.do"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-teal-600 hover:underline"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                <Box component="a" href="https://ofv.dgii.gov.do" target="_blank" rel="noopener noreferrer"
+                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}>
+                  <ExternalLink style={{ width: 14, height: 14 }} />
                   Ir a OFV DGII
-                </a>
-                <Link href="/dashboard/secuencias/nueva">
-                  <Button className="bg-teal-600 hover:bg-teal-700 text-white" size="sm">
-                    <Plus className="h-4 w-4 mr-1" />
+                </Box>
+                <Link href="/dashboard/secuencias/nueva" style={{ textDecoration: 'none' }}>
+                  <MuiButton variant="contained" size="small" disableElevation
+                    startIcon={<Plus style={{ width: 14, height: 14 }} />}
+                    sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
                     Nueva numeración
-                  </Button>
+                  </MuiButton>
                 </Link>
-              </div>
-            </div>
+              </Box>
+            </Box>
           ) : (
-            <div className="overflow-x-auto">
-            <div className="min-w-[820px]">
-              {/* Header tabla */}
-              <div className="grid grid-cols-[2.5fr_1.5fr_1fr_1fr_1fr_auto] gap-4 px-6 py-3 border-b border-gray-100 text-xs font-medium text-gray-500 bg-gray-50/60 uppercase tracking-wide">
-                <div>Tipo / Nombre</div>
-                <div>Próximo e-NCF</div>
-                <div className="text-center">Rango</div>
-                <div className="text-center">Disponibles</div>
-                <div>Vencimiento</div>
-                <div className="text-right pr-2">Acciones</div>
-              </div>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 820 }}>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'rgba(249,250,251,0.6)' }}>
+                    {['Tipo / Nombre', 'Próximo e-NCF', 'Rango', 'Disponibles', 'Vencimiento', ''].map((h, i) => (
+                      <TableCell key={h + i}
+                        align={['Rango', 'Disponibles'].includes(h) ? 'center' : h === '' ? 'right' : 'left'}
+                        sx={{ fontWeight: 700, fontSize: '0.6875rem', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em', py: 1.5, borderBottom: '1px solid #f3f4f6' }}>
+                        {h}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filtradas.map((s) => {
+                    const esSinNcf = s.tipoEcf === 'sin-ncf';
+                    const encf     = (!esSinNcf && s.estado === 'activa')
+                      ? formatEncf(s.tipoEcf, s.secuenciaActual) : null;
+                    const pct = (!esSinNcf && Number(s.secuenciaHasta) > 0)
+                      ? Math.round((Number(s.secuenciaActual) / Number(s.secuenciaHasta)) * 100) : 0;
 
-              {/* Filas */}
-              {filtradas.map((s) => {
-                const esSinNcf = s.tipoEcf === 'sin-ncf';
-                const encf     = (!esSinNcf && s.estado === 'activa')
-                  ? formatEncf(s.tipoEcf, s.secuenciaActual)
-                  : null;
-                const pct = (!esSinNcf && Number(s.secuenciaHasta) > 0)
-                  ? Math.round((Number(s.secuenciaActual) / Number(s.secuenciaHasta)) * 100)
-                  : 0;
+                    return (
+                      <TableRow key={s.id} sx={{ '&:hover': { bgcolor: 'rgba(249,250,251,0.6)' }, '&:last-child td': { border: 0 } }}>
+                        {/* Tipo / Nombre */}
+                        <TableCell sx={{ py: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.75 }}>
+                            <Box component="span" sx={{
+                              fontFamily: 'monospace', fontSize: '0.625rem', fontWeight: 700, px: 0.75, py: 0.25, borderRadius: '4px', border: '1px solid', flexShrink: 0,
+                              ...(esSinNcf
+                                ? { color: '#4b5563', bgcolor: '#f9fafb', borderColor: '#e5e7eb' }
+                                : { color: '#0d9488', bgcolor: '#f0fdfa', borderColor: '#99f6e4' }),
+                            }}>
+                              {esSinNcf ? 'Sin NCF' : `e${s.tipoEcf}`}
+                            </Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                              {s.nombre}
+                            </Typography>
+                            {s.preferida && (
+                              <Chip size="small" label="Preferida"
+                                icon={<Star style={{ width: 8, height: 8, fill: '#d97706' }} />}
+                                sx={{ height: 18, fontSize: '0.625rem', fontWeight: 600, bgcolor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { color: 'inherit', ml: '2px' } }}
+                              />
+                            )}
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <EstadoBadge estado={s.estado} />
+                            {s.sucursal && (
+                              <Typography variant="caption" sx={{ color: 'text.disabled' }}>{s.sucursal}</Typography>
+                            )}
+                            {!esSinNcf && s.disponibles < 50 && s.estado === 'activa' && (
+                              <Typography variant="caption" sx={{ color: '#d97706', fontWeight: 600 }}>¡Pocos disponibles!</Typography>
+                            )}
+                          </Box>
+                        </TableCell>
 
-                return (
-                  <div
-                    key={s.id}
-                    className="grid grid-cols-[2.5fr_1.5fr_1fr_1fr_1fr_auto] gap-4 px-6 py-4 border-b border-gray-50 hover:bg-gray-50/60 items-center last:border-0"
-                  >
-                    {/* Tipo / Nombre */}
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`inline-block text-[10px] font-bold rounded px-1.5 py-0.5 font-mono shrink-0 border ${
-                          esSinNcf
-                            ? 'text-gray-600 bg-gray-50 border-gray-200'
-                            : 'text-teal-700 bg-teal-50 border-teal-200'
-                        }`}>
-                          {esSinNcf ? 'Sin NCF' : `e${s.tipoEcf}`}
-                        </span>
-                        <p className="text-sm font-medium text-gray-800 truncate">
-                          {s.nombre}
-                        </p>
-                        {s.preferida && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">
-                            <Star className="h-2.5 w-2.5 fill-amber-500" />
-                            Preferida
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                        <EstadoBadge estado={s.estado} />
-                        {s.sucursal && (
-                          <span className="text-[10px] text-gray-400">
-                            {s.sucursal}
-                          </span>
-                        )}
-                        {!esSinNcf && s.disponibles < 50 && s.estado === 'activa' && (
-                          <span className="text-[10px] text-amber-600">¡Pocos disponibles!</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Próximo e-NCF */}
-                    <div>
-                      {esSinNcf ? (
-                        <span className="text-xs text-gray-400 italic">Numeración automática</span>
-                      ) : encf ? (
-                        <span className="font-mono text-sm font-semibold text-gray-800 tracking-tight">{encf}</span>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">—</span>
-                      )}
-                    </div>
-
-                    {/* Rango */}
-                    <div className="text-center">
-                      {esSinNcf ? (
-                        <div className="flex flex-col items-center gap-1">
-                          <Infinity className="h-4 w-4 text-gray-300" />
-                          {s.prefijo && (
-                            <span className="text-[10px] text-gray-400 font-mono">{s.prefijo}…</span>
+                        {/* Próximo e-NCF */}
+                        <TableCell>
+                          {esSinNcf ? (
+                            <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>Numeración automática</Typography>
+                          ) : encf ? (
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>{encf}</Typography>
+                          ) : (
+                            <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>—</Typography>
                           )}
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-xs text-gray-500 font-mono">
-                            {Number(s.secuenciaActual).toLocaleString('es-DO')} –{' '}
-                            {Number(s.secuenciaHasta).toLocaleString('es-DO')}
-                          </p>
-                          <div className="mt-1 h-1 bg-gray-100 rounded-full overflow-hidden w-20 mx-auto">
-                            <div
-                              className={`h-1 rounded-full transition-all ${
-                                pct > 80 ? 'bg-red-400' : pct > 50 ? 'bg-amber-400' : 'bg-teal-400'
-                              }`}
-                              style={{ width: `${Math.min(pct, 100)}%` }}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
+                        </TableCell>
 
-                    {/* Disponibles — semáforo verde/amber/rojo */}
-                    <div className="text-center">
-                      {esSinNcf ? (
-                        <Infinity className="h-4 w-4 text-teal-500 mx-auto" />
-                      ) : (
-                        <span className={`text-sm font-semibold ${
-                          s.disponibles < 10
-                            ? 'text-red-600'
-                            : s.disponibles < 50
-                              ? 'text-amber-600'
-                              : 'text-emerald-600'
-                        }`}>
-                          {s.disponibles.toLocaleString('es-DO')}
-                        </span>
-                      )}
-                    </div>
+                        {/* Rango */}
+                        <TableCell align="center">
+                          {esSinNcf ? (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                              <Infinity style={{ width: 16, height: 16, color: '#d1d5db' }} />
+                              {s.prefijo && <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace' }}>{s.prefijo}…</Typography>}
+                            </Box>
+                          ) : (
+                            <Box sx={{ textAlign: 'center' }}>
+                              <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', display: 'block' }}>
+                                {Number(s.secuenciaActual).toLocaleString('es-DO')} – {Number(s.secuenciaHasta).toLocaleString('es-DO')}
+                              </Typography>
+                              <LinearProgress variant="determinate" value={Math.min(pct, 100)}
+                                sx={{ mt: 0.75, height: 4, borderRadius: 2, width: 80, mx: 'auto', bgcolor: '#f3f4f6',
+                                  '& .MuiLinearProgress-bar': { bgcolor: pct > 80 ? '#f87171' : pct > 50 ? '#fbbf24' : '#2dd4bf' } }} />
+                            </Box>
+                          )}
+                        </TableCell>
 
-                    {/* Vencimiento */}
-                    <div className="flex items-center gap-1.5">
-                      {esSinNcf ? (
-                        <span className="text-xs text-gray-400 italic">Sin vencimiento</span>
-                      ) : (
-                        <>
-                          <Calendar className={`h-3.5 w-3.5 shrink-0 ${s.estado === 'vencida' ? 'text-red-400' : 'text-gray-300'}`} />
-                          <span className={`text-sm ${s.estado === 'vencida' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
-                            {fmtFecha(s.fechaVencimiento)}
-                          </span>
-                        </>
-                      )}
-                    </div>
+                        {/* Disponibles */}
+                        <TableCell align="center">
+                          {esSinNcf ? (
+                            <Infinity style={{ width: 16, height: 16, color: '#0d9488', margin: '0 auto' }} />
+                          ) : (
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: s.disponibles < 10 ? '#dc2626' : s.disponibles < 50 ? '#d97706' : '#059669' }}>
+                              {s.disponibles.toLocaleString('es-DO')}
+                            </Typography>
+                          )}
+                        </TableCell>
 
-                    {/* Acciones */}
-                    <div className="flex items-center gap-0.5 justify-end">
-                      <button
-                        type="button"
-                        onClick={() => abrirEdicion(s)}
-                        title="Editar numeración"
-                        className="p-2 text-gray-400 hover:text-teal-600 rounded-md hover:bg-teal-50 transition-colors"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setDeleteTarget(s); setOpError(null); }}
-                        title="Eliminar numeración"
-                        className="p-2 text-gray-300 hover:text-red-500 rounded-md hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            </div>
+                        {/* Vencimiento */}
+                        <TableCell>
+                          {esSinNcf ? (
+                            <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>Sin vencimiento</Typography>
+                          ) : (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <Calendar style={{ width: 13, height: 13, color: s.estado === 'vencida' ? '#ef4444' : '#d1d5db', flexShrink: 0 }} />
+                              <Typography variant="body2" sx={{ color: s.estado === 'vencida' ? 'error.main' : 'text.secondary', fontWeight: s.estado === 'vencida' ? 700 : 400 }}>
+                                {fmtFecha(s.fechaVencimiento)}
+                              </Typography>
+                            </Box>
+                          )}
+                        </TableCell>
+
+                        {/* Acciones */}
+                        <TableCell align="right">
+                          <Box sx={{ display: 'flex', gap: 0.25, justifyContent: 'flex-end' }}>
+                            <IconButton size="small" onClick={() => abrirEdicion(s)} title="Editar numeración"
+                              sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#f0fdfa' }, borderRadius: '6px' }}>
+                              <Pencil style={{ width: 14, height: 14 }} />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => { setDeleteTarget(s); setOpError(null); }} title="Eliminar numeración"
+                              sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: '#fef2f2' }, borderRadius: '6px' }}>
+                              <Trash2 style={{ width: 14, height: 14 }} />
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Box>
           )}
-        </div>
-      </div>
+        </Card>
+      </Box>
 
-      {/* ── Modal: Editar numeración ─────────────────────────────────────────────── */}
-      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-lg">Editar numeración</DialogTitle>
-          </DialogHeader>
-          {editTarget && (() => {
-            const esSinNcf = editTarget.tipoEcf === 'sin-ncf';
-            const showFechaVenc = !esSinNcf && editTarget.tipoEcf !== '32' && editTarget.tipoEcf !== '34';
-            const showPie = CATEGORIAS_ECF
-              .filter(c => c.id === 'factura-venta' || c.id === 'nota-credito')
-              .some(c => c.tipos.some(t => t.codigo === editTarget.tipoEcf));
+      {/* Modal: Editar numeración */}
+      <Dialog open={!!editTarget} onClose={() => setEditTarget(null)} maxWidth="sm" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Editar numeración</DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          {editTarget && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {opError && <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>}
 
-            return (
-              <div className="space-y-4 py-2">
-                {opError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-                )}
+              {/* Info badge */}
+              <Box sx={{ bgcolor: 'grey.50', border: '1px solid #f3f4f6', borderRadius: '12px', p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box component="span" sx={{
+                  fontFamily: 'monospace', fontSize: '0.6875rem', fontWeight: 700, px: 1, py: 0.5, borderRadius: '4px', border: '1px solid',
+                  ...(editEsSinNcf ? { color: '#4b5563', bgcolor: '#f3f4f6', borderColor: '#e5e7eb' } : { color: '#0d9488', bgcolor: '#f0fdfa', borderColor: '#99f6e4' }),
+                }}>
+                  {editEsSinNcf ? 'Sin NCF' : `e${editTarget.tipoEcf}`}
+                </Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{getLabelTipo(editTarget)}</Typography>
+              </Box>
 
-                {/* Info */}
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 flex items-center gap-2.5">
-                  <span className={`font-mono text-[11px] font-bold rounded px-1.5 py-0.5 border ${
-                    esSinNcf ? 'text-gray-600 bg-gray-100 border-gray-200' : 'text-teal-700 bg-teal-50 border-teal-200'
-                  }`}>
-                    {esSinNcf ? 'Sin NCF' : `e${editTarget.tipoEcf}`}
-                  </span>
-                  <span className="text-sm font-semibold text-gray-800">{getLabelTipo(editTarget)}</span>
-                </div>
+              <MuiTextField
+                label="Nombre *" value={editNombre} size="small" fullWidth autoFocus
+                onChange={e => setEditNombre(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
 
-                {/* Nombre */}
-                <div className="space-y-1.5">
-                  <Label>Nombre <span className="text-red-500">*</span></Label>
-                  <Input value={editNombre} onChange={e => setEditNombre(e.target.value)} />
-                </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Numeración preferida</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.disabled' }}>Se usará por defecto al emitir este tipo</Typography>
+                </Box>
+                <Switch checked={editPreferida} onChange={(_, v) => setEditPreferida(v)} color="primary" />
+              </Box>
 
-                {/* Preferida */}
-                <div className="flex items-center justify-between">
-                  <Label>Numeración preferida</Label>
-                  <button
-                    type="button"
-                    onClick={() => setEditPreferida(p => !p)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      editPreferida ? 'bg-teal-600' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                      editPreferida ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </button>
-                </div>
+              <Divider />
 
-                {/* Numeración automática */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Numeración automática</Label>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Si está activa, el sistema asigna el siguiente número al emitir.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEditAutomatica(p => !p)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                      editAutomatica ? 'bg-teal-600' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                      editAutomatica ? 'translate-x-6' : 'translate-x-1'
-                    }`} />
-                  </button>
-                </div>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Numeración automática</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.disabled' }}>Si está activa, el sistema asigna el siguiente número al emitir.</Typography>
+                </Box>
+                <Switch checked={editAutomatica} onChange={(_, v) => setEditAutomatica(v)} color="primary" />
+              </Box>
 
-                {/* Número final (solo si no es sin-ncf) */}
-                {!esSinNcf && (
-                  <div className="space-y-1.5">
-                    <Label>Número final del rango <span className="text-red-500">*</span></Label>
-                    <p className="text-xs text-gray-400">
-                      Actual: <span className="font-mono">{editTarget.secuenciaHasta}</span>
-                    </p>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={editHasta}
-                      onChange={(e) => setEditHasta(e.target.value)}
-                    />
-                  </div>
-                )}
+              {!editEsSinNcf && (
+                <MuiTextField
+                  label={`Número final del rango *`} type="number" value={editHasta} size="small" fullWidth
+                  slotProps={{ htmlInput: { min: 1 } }}
+                  helperText={`Actual: ${editTarget.secuenciaHasta}`}
+                  onChange={(e) => setEditHasta(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
+              )}
 
-                {/* Siguiente número — permite corregir si se consumió uno por error */}
-                {!esSinNcf && (
-                  <div className="space-y-1.5">
-                    <Label>Siguiente número</Label>
-                    <p className="text-xs text-gray-400">
-                      Actual: <span className="font-mono">{editTarget.secuenciaActual}</span> — próximo e-NCF: <span className="font-mono">{formatEncf(editTarget.tipoEcf, editTarget.secuenciaActual)}</span>
-                    </p>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={Number(editTarget.secuenciaHasta)}
-                      value={editSiguiente}
-                      onChange={(e) => setEditSiguiente(e.target.value)}
-                    />
-                  </div>
-                )}
+              {!editEsSinNcf && (
+                <MuiTextField
+                  label="Siguiente número" type="number" value={editSiguiente} size="small" fullWidth
+                  slotProps={{ htmlInput: { min: 1, max: Number(editTarget.secuenciaHasta) } }}
+                  helperText={`Actual: ${editTarget.secuenciaActual} — próximo: ${formatEncf(editTarget.tipoEcf, editTarget.secuenciaActual)}`}
+                  onChange={(e) => setEditSiguiente(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
+              )}
 
-                {/* Fecha vencimiento (condicional) */}
-                {showFechaVenc && (
-                  <div className="space-y-1.5">
-                    <Label>Fecha de vencimiento</Label>
-                    <Input type="date" min={today()} value={editVenc} onChange={(e) => setEditVenc(e.target.value)} />
-                  </div>
-                )}
+              {editShowFechaVenc && (
+                <MuiTextField
+                  label="Fecha de vencimiento" type="date" value={editVenc} size="small" fullWidth
+                  slotProps={{ htmlInput: { min: today() } }}
+                  onChange={(e) => setEditVenc(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
+              )}
 
-                {/* Sucursal */}
-                <div className="space-y-1.5">
-                  <Label>Sucursal</Label>
-                  <Input
-                    placeholder="Opcional"
-                    value={editSucursal}
-                    onChange={e => setEditSucursal(e.target.value)}
-                  />
-                </div>
+              <MuiTextField
+                label="Sucursal" placeholder="Opcional" value={editSucursal} size="small" fullWidth
+                onChange={e => setEditSucursal(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
 
-                {/* Pie de factura (solo factura-venta y nota-credito) */}
-                {showPie && (
-                  <div className="space-y-1.5">
-                    <Label>Pie de factura</Label>
-                    <Textarea
-                      className="resize-none text-sm"
-                      rows={3}
-                      placeholder="Texto al pie del comprobante..."
-                      maxLength={2000}
-                      value={editPie}
-                      onChange={e => setEditPie(e.target.value)}
-                    />
-                    <p className="text-xs text-gray-400">{editPie.length}/2000 caracteres</p>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditTarget(null)} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleEditar} disabled={saving}>
-              {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Guardar'}
-            </Button>
-          </DialogFooter>
+              {editShowPie && (
+                <MuiTextField
+                  label="Pie de factura" placeholder="Texto al pie del comprobante..."
+                  value={editPie} size="small" fullWidth multiline rows={3}
+                  slotProps={{ htmlInput: { maxLength: 2000 } }}
+                  helperText={`${editPie.length}/2000 caracteres`}
+                  onChange={e => setEditPie(e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                />
+              )}
+            </Box>
+          )}
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton variant="outlined" onClick={() => setEditTarget(null)} disabled={saving}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+          <MuiButton variant="contained" disableElevation onClick={handleEditar} disabled={saving}
+            startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            {saving ? 'Guardando…' : 'Guardar'}
+          </MuiButton>
+        </DialogActions>
       </Dialog>
 
-      {/* ── Modal: Confirmar eliminación ─────────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>¿Eliminar numeración?</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <p className="text-sm text-gray-700">
+      {/* Modal: Confirmar eliminación */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>¿Eliminar numeración?</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {opError && <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>}
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               Vas a eliminar <strong>{deleteTarget?.nombre}</strong>{' '}
               {deleteTarget?.tipoEcf !== 'sin-ncf' && (
-                <span className="font-mono text-xs text-gray-500">(e{deleteTarget?.tipoEcf})</span>
+                <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.disabled' }}>
+                  (e{deleteTarget?.tipoEcf})
+                </Box>
               )}.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Los comprobantes ya emitidos no se verán afectados. Para volver a emitir este tipo deberás registrar un nuevo rango.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Eliminar'}
-            </Button>
-          </DialogFooter>
+            </Typography>
+            <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+              <Typography variant="caption">
+                Los comprobantes ya emitidos no se verán afectados. Para volver a emitir este tipo deberás registrar un nuevo rango.
+              </Typography>
+            </Alert>
+          </Box>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton variant="outlined" onClick={() => setDeleteTarget(null)} disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+          <MuiButton variant="contained" color="error" disableElevation onClick={handleEliminar} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            {deleting ? 'Eliminando…' : 'Eliminar'}
+          </MuiButton>
+        </DialogActions>
       </Dialog>
-    </div>
+    </Box>
   );
 }

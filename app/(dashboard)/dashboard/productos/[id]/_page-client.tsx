@@ -1,10 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags, Camera } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import MuiLink from '@mui/material/Link';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Chip from '@mui/material/Chip';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
 import AlmacenesPosSection from './_almacenes-pos';
@@ -82,13 +87,13 @@ const TASA_LABELS: Record<string, string> = {
   '0.18': 'ITBIS 18%', '0.16': 'ITBIS 16%', '0': 'ITBIS 0%', exento: 'Exento',
 };
 
-const ESTADO_BADGE: Record<string, string> = {
-  ACEPTADO:             'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  ACEPTADO_CONDICIONAL: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  RECHAZADO:            'bg-red-50 text-red-700 ring-1 ring-red-200',
-  EN_PROCESO:           'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
-  BORRADOR:             'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
-  ANULADO:              'bg-gray-100 text-gray-400 ring-1 ring-gray-200 line-through',
+const ESTADO_BADGE: Record<string, object> = {
+  ACEPTADO:             { bgcolor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' },
+  ACEPTADO_CONDICIONAL: { bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' },
+  RECHAZADO:            { bgcolor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' },
+  EN_PROCESO:           { bgcolor: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' },
+  BORRADOR:             { bgcolor: '#f3f4f6', color: '#4b5563', border: '1px solid #e5e7eb' },
+  ANULADO:              { bgcolor: '#f3f4f6', color: '#9ca3af', border: '1px solid #e5e7eb', textDecoration: 'line-through' },
 };
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
@@ -98,43 +103,48 @@ const columnsVentas: DataTableColumn<VentaProducto>[] = [
     id: 'encf',
     header: 'e-NCF',
     render: v => (
-      <Link href={`/dashboard/facturas/${v.ecfId}`} className="font-mono text-xs text-teal-700 hover:underline font-semibold">
+      <MuiLink component={Link} href={`/dashboard/facturas/${v.ecfId}`}
+        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#0f766e', fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
         {v.encf}
-      </Link>
+      </MuiLink>
     ),
   },
   {
     id: 'fecha',
     header: 'Fecha',
     visibleAt: 'md',
-    render: v => <span className="text-xs text-gray-600 tabular-nums whitespace-nowrap">{fmtFechaCorta(v.fecha)}</span>,
+    render: v => <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtFechaCorta(v.fecha)}</Typography>,
   },
   {
     id: 'cliente',
     header: 'Cliente',
-    render: v => <span className="text-sm text-gray-900 truncate">{v.cliente}</span>,
+    render: v => <Typography component="span" sx={{ fontSize: '0.875rem', color: '#111827', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.cliente}</Typography>,
   },
   {
     id: 'vendedor',
     header: 'Vendedor',
     visibleAt: 'lg',
-    render: v => <span className="text-xs text-gray-600">{v.vendedor}</span>,
+    render: v => <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{v.vendedor}</Typography>,
   },
   {
     id: 'estado',
     header: 'Estado',
     align: 'center',
     render: v => (
-      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${ESTADO_BADGE[v.estado] ?? 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'}`}>
+      <Box component="span" sx={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        px: 1, py: 0.25, borderRadius: '9999px', fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap',
+        ...(ESTADO_BADGE[v.estado] ?? { bgcolor: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }),
+      }}>
         {v.estado}
-      </span>
+      </Box>
     ),
   },
   {
     id: 'cantidad',
     header: 'Cant.',
     align: 'right',
-    render: v => <span className="text-sm tabular-nums text-gray-700">{v.cantidad}</span>,
+    render: v => <Typography component="span" sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{v.cantidad}</Typography>,
   },
   {
     id: 'precioUnitario',
@@ -142,9 +152,9 @@ const columnsVentas: DataTableColumn<VentaProducto>[] = [
     align: 'right',
     visibleAt: 'md',
     render: v => (
-      <span className="text-sm tabular-nums text-gray-700">
+      <Typography component="span" sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>
         {v.precioUnitario !== null ? `RD$${v.precioUnitario.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-      </span>
+      </Typography>
     ),
   },
   {
@@ -152,9 +162,9 @@ const columnsVentas: DataTableColumn<VentaProducto>[] = [
     header: 'Subtotal',
     align: 'right',
     render: v => (
-      <span className="text-sm font-bold text-gray-900 tabular-nums whitespace-nowrap">
+      <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
         {v.subtotal !== null ? `RD$${v.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-      </span>
+      </Typography>
     ),
   },
 ];
@@ -164,56 +174,57 @@ const columnsCompras: DataTableColumn<CompraProducto>[] = [
     id: 'compra',
     header: 'Compra',
     render: c => (
-      <Link href={`/dashboard/compras/local/${c.compraId}`} className="font-mono text-xs text-teal-700 hover:underline font-semibold whitespace-nowrap">
+      <MuiLink component={Link} href={`/dashboard/compras/local/${c.compraId}`}
+        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#0f766e', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', '&:hover': { textDecoration: 'underline' } }}>
         #{c.compraId}
-      </Link>
+      </MuiLink>
     ),
   },
   {
     id: 'fecha',
     header: 'Fecha',
-    render: c => <span className="text-xs text-gray-600 tabular-nums whitespace-nowrap">{fmtFechaCorta(c.fecha)}</span>,
+    render: c => <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtFechaCorta(c.fecha)}</Typography>,
   },
   {
     id: 'proveedor',
     header: 'Proveedor',
     render: c => (
-      <div className="min-w-0">
-        <div className="text-sm text-gray-900 truncate">{c.proveedor}</div>
-        {c.proveedorRnc && <div className="font-mono text-[11px] text-gray-400">{c.proveedorRnc}</div>}
-      </div>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.proveedor}</Typography>
+        {c.proveedorRnc && <Typography sx={{ fontFamily: 'monospace', fontSize: '11px', color: '#9ca3af' }}>{c.proveedorRnc}</Typography>}
+      </Box>
     ),
   },
   {
     id: 'referencia',
     header: 'e-NCF',
     visibleAt: 'md',
-    render: c => <span className="font-mono text-xs text-gray-600">{c.referenciaEncf ?? '—'}</span>,
+    render: c => <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#4b5563' }}>{c.referenciaEncf ?? '—'}</Typography>,
   },
   {
     id: 'registradoPor',
     header: 'Registrado por',
     visibleAt: 'lg',
-    render: c => <span className="text-xs text-gray-600">{c.registradoPor}</span>,
+    render: c => <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{c.registradoPor}</Typography>,
   },
   {
     id: 'cantidad',
     header: 'Cant.',
     align: 'right',
-    render: c => <span className="text-sm tabular-nums text-gray-700">{c.cantidad}</span>,
+    render: c => <Typography component="span" sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{c.cantidad}</Typography>,
   },
   {
     id: 'costoUnitario',
     header: 'Costo unit.',
     align: 'right',
     visibleAt: 'md',
-    render: c => <span className="text-sm tabular-nums text-gray-700">{fmtDOP(c.costoUnitario)}</span>,
+    render: c => <Typography component="span" sx={{ fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{fmtDOP(c.costoUnitario)}</Typography>,
   },
   {
     id: 'subtotal',
     header: 'Subtotal',
     align: 'right',
-    render: c => <span className="text-sm font-bold text-gray-900 tabular-nums whitespace-nowrap">{fmtDOP(c.subtotal)}</span>,
+    render: c => <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtDOP(c.subtotal)}</Typography>,
   },
 ];
 
@@ -222,6 +233,7 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
     `/api/productos/${productoId}`, fetcher,
   );
   const [subiendoImagen, setSubiendoImagen] = useState(false);
+  const [tab, setTab] = useState('detalle');
   const { data: ventasData, isLoading: loadingVentas } = useSWR<{ ventas?: VentaProducto[]; error?: string }>(
     `/api/productos/${productoId}/ventas`, fetcher,
   );
@@ -306,205 +318,193 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
 
   if (!loadingProd && !producto) {
     return (
-      <section className="p-4 sm:p-6">
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
-          <p className="text-sm text-gray-500">{prodData?.error ?? 'Producto no encontrado.'}</p>
-        </div>
-      </section>
+      <Box component="section" sx={{ p: { xs: 2, sm: 3 } }}>
+        <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 5, textAlign: 'center' }}>
+          <Typography variant="body2" sx={{ color: '#6b7280' }}>{prodData?.error ?? 'Producto no encontrado.'}</Typography>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <section className="p-4 sm:p-6 space-y-4">
-      <Link href="/dashboard/productos" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="h-4 w-4" /> Productos
-      </Link>
+    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <MuiLink component={Link} href="/dashboard/productos"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#6b7280', textDecoration: 'none', alignSelf: 'flex-start', '&:hover': { color: '#374151' } }}>
+        <ArrowLeft style={{ width: 16, height: 16 }} /> Productos
+      </MuiLink>
 
-      <div className="flex items-start gap-3">
-        <label
-          title={producto?.imagen ? 'Cambiar imagen' : 'Agregar imagen'}
-          className="group relative h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-teal-50"
-        >
-          <input type="file" accept="image/*" className="hidden" disabled={subiendoImagen}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box component="label" title={producto?.imagen ? 'Cambiar imagen' : 'Agregar imagen'}
+          sx={{
+            position: 'relative', height: 56, width: 56, flexShrink: 0, cursor: 'pointer',
+            overflow: 'hidden', borderRadius: '12px', bgcolor: '#f0fdfa',
+            '&:hover [data-overlay]': { bgcolor: 'rgba(0,0,0,0.4)', opacity: 1 },
+          }}>
+          <input type="file" accept="image/*" disabled={subiendoImagen} style={{ display: 'none' }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImagenFile(f); e.target.value = ''; }} />
           {producto?.imagen
-            ? <img src={producto.imagen} alt={producto.nombre} className="h-full w-full object-cover" />
-            : <div className="flex h-full w-full items-center justify-center"><Package className="h-6 w-6 text-teal-600" /></div>}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
-            {subiendoImagen ? <span className="text-[10px]">…</span> : <Camera className="h-4 w-4" />}
-          </div>
-        </label>
-        <div>
-          <h1 className="text-lg font-bold text-gray-900 leading-tight">{producto?.nombre ?? '—'}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{producto?.referencia ? `Ref. ${producto.referencia}` : 'Sin referencia'}</p>
-        </div>
-      </div>
+            ? <Box component="img" src={producto.imagen} alt={producto.nombre} sx={{ height: '100%', width: '100%', objectFit: 'cover' }} />
+            : <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center' }}><Package style={{ width: 24, height: 24, color: '#0d9488' }} /></Box>}
+          <Box data-overlay sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0)', color: '#fff', opacity: 0, transition: 'all 0.2s' }}>
+            {subiendoImagen ? <Box component="span" sx={{ fontSize: '10px' }}>…</Box> : <Camera style={{ width: 16, height: 16 }} />}
+          </Box>
+        </Box>
+        <Box>
+          <Typography component="h1" sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>{producto?.nombre ?? '—'}</Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>{producto?.referencia ? `Ref. ${producto.referencia}` : 'Sin referencia'}</Typography>
+        </Box>
+      </Box>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-            <TrendingUp className="h-4.5 w-4.5 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">Total vendido</p>
-            <p className="text-sm font-bold text-gray-900">
-              RD${resumen.totalVendido.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-sky-50 flex items-center justify-center shrink-0">
-            <ShoppingBag className="h-4.5 w-4.5 text-sky-600" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">Unidades vendidas</p>
-            <p className="text-sm font-bold text-gray-900">{resumen.unidades}</p>
-          </div>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-            <CalendarClock className="h-4.5 w-4.5 text-amber-600" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-500">Última venta</p>
-            <p className="text-sm font-bold text-gray-900">{resumen.ultimaVenta ? fmtFechaCorta(resumen.ultimaVenta) : '—'}</p>
-          </div>
-        </div>
-      </div>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 1.5 }}>
+        <ResumenCard icon={<TrendingUp style={{ width: 18, height: 18, color: '#059669' }} />} iconBg="#ecfdf5"
+          label="Total vendido"
+          valor={`RD$${resumen.totalVendido.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+        <ResumenCard icon={<ShoppingBag style={{ width: 18, height: 18, color: '#0284c7' }} />} iconBg="#f0f9ff"
+          label="Unidades vendidas" valor={String(resumen.unidades)} />
+        <ResumenCard icon={<CalendarClock style={{ width: 18, height: 18, color: '#d97706' }} />} iconBg="#fffbeb"
+          label="Última venta" valor={resumen.ultimaVenta ? fmtFechaCorta(resumen.ultimaVenta) : '—'} />
+      </Box>
 
       {posHabilitado && producto && (
         <AlmacenesPosSection productoId={productoId} visiblePos={producto.visiblePos} />
       )}
 
-      <Tabs defaultValue="detalle">
-        <TabsList>
-          <TabsTrigger value="detalle">Detalle</TabsTrigger>
-          <TabsTrigger value="ventas">
-            Historial de ventas
-            {ventas.length > 0 && <span className="ml-1.5 text-[11px] text-gray-400">({ventas.length})</span>}
-          </TabsTrigger>
-          <TabsTrigger value="compras">
-            Historial de compras
-            {compras.length > 0 && <span className="ml-1.5 text-[11px] text-gray-400">({compras.length})</span>}
-          </TabsTrigger>
-        </TabsList>
+      <Box>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)}
+          sx={{
+            borderBottom: '1px solid #e5e7eb', minHeight: 40,
+            '& .MuiTabs-indicator': { backgroundColor: '#0d9488' },
+            '& .MuiTab-root': { textTransform: 'none', minHeight: 40, py: 1, fontSize: '0.875rem', fontWeight: 500, color: '#6b7280', '&.Mui-selected': { color: '#0f766e' } },
+          }}>
+          <Tab value="detalle" label="Detalle" />
+          <Tab value="ventas" label={
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+              Historial de ventas
+              {ventas.length > 0 && <Box component="span" sx={{ ml: 0.75, fontSize: '11px', color: '#9ca3af' }}>({ventas.length})</Box>}
+            </Box>
+          } />
+          <Tab value="compras" label={
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+              Historial de compras
+              {compras.length > 0 && <Box component="span" sx={{ ml: 0.75, fontSize: '11px', color: '#9ca3af' }}>({compras.length})</Box>}
+            </Box>
+          } />
+        </Tabs>
 
-        <TabsContent value="detalle">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <Campo label="Tipo" valor={producto?.tipo === 'bien' ? 'Producto' : 'Servicio'} />
-            <Campo label="Precio" valor={producto ? `RD$${producto.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : '—'} />
-            <Campo label="Costo" valor={producto ? `RD$${producto.costoDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : '—'} />
-            <Campo label="ITBIS" valor={producto ? (TASA_LABELS[producto.tasaItbis] ?? producto.tasaItbis) : '—'} />
-            <Campo label="Unidad" valor={producto?.unidadMedida ?? '—'} />
-            <Campo label="Estado" valor={producto?.activo === 'true' ? 'Activo' : 'Inactivo'} />
-            {producto?.controlaInventario && (
-              <>
-                <Campo label="Stock actual" valor={String(producto.stockActual)} />
-                <Campo label="Stock mínimo" valor={String(producto.stockMinimo)} />
-                <Campo label="Venta sin stock" valor={producto.permiteVentaSinStock ? 'Permitida' : 'Bloqueada'} />
-              </>
+        {tab === 'detalle' && (
+          <Box sx={{ mt: 2 }}>
+            <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 2.5, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, gap: 2 }}>
+              <Campo label="Tipo" valor={producto?.tipo === 'bien' ? 'Producto' : 'Servicio'} />
+              <Campo label="Precio" valor={producto ? `RD$${producto.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : '—'} />
+              <Campo label="Costo" valor={producto ? `RD$${producto.costoDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : '—'} />
+              <Campo label="ITBIS" valor={producto ? (TASA_LABELS[producto.tasaItbis] ?? producto.tasaItbis) : '—'} />
+              <Campo label="Unidad" valor={producto?.unidadMedida ?? '—'} />
+              <Campo label="Estado" valor={producto?.activo === 'true' ? 'Activo' : 'Inactivo'} />
+              {producto?.controlaInventario && (
+                <>
+                  <Campo label="Stock actual" valor={String(producto.stockActual)} />
+                  <Campo label="Stock mínimo" valor={String(producto.stockMinimo)} />
+                  <Campo label="Venta sin stock" valor={producto.permiteVentaSinStock ? 'Permitida' : 'Bloqueada'} />
+                </>
+              )}
+              {producto?.descripcion && (
+                <Box sx={{ gridColumn: { xs: 'span 2', sm: 'span 3' } }}>
+                  <Campo label="Descripción" valor={producto.descripcion} />
+                </Box>
+              )}
+            </Box>
+
+            {/* Atributos asignados (maestros) — solo lectura */}
+            {atributos.length > 0 && (
+              <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 2.5, mt: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                  <Tags style={{ width: 16, height: 16, color: '#9ca3af' }} />
+                  <Typography component="h3" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>Atributos</Typography>
+                </Box>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, gap: 2 }}>
+                  {atributos.map(a => (
+                    <Box key={a.id}>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{a.nombre}</Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+                        {a.valores.map(v => (
+                          <Chip key={v} label={v} size="small"
+                            sx={{ height: 22, borderRadius: '9999px', bgcolor: '#f3f4f6', color: '#374151', fontSize: '0.75rem', '& .MuiChip-label': { px: 1 } }} />
+                        ))}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
             )}
-            {producto?.descripcion && (
-              <div className="col-span-2 sm:col-span-3">
-                <Campo label="Descripción" valor={producto.descripcion} />
-              </div>
-            )}
-          </div>
+          </Box>
+        )}
 
-          {/* Atributos asignados (maestros) — solo lectura */}
-          {atributos.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-5 mt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Tags className="h-4 w-4 text-gray-400" />
-                <h3 className="text-sm font-semibold text-gray-700">Atributos</h3>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {atributos.map(a => (
-                  <div key={a.id}>
-                    <p className="text-xs text-gray-500">{a.nombre}</p>
-                    <div className="flex flex-wrap gap-1 mt-0.5">
-                      {a.valores.map(v => (
-                        <span key={v} className="inline-flex items-center rounded-full bg-gray-100 text-gray-700 text-xs px-2 py-0.5">
-                          {v}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </TabsContent>
+        {tab === 'ventas' && (
+          <Box sx={{ mt: 2 }}>
+            <DataTable<VentaProducto>
+              data={ventas}
+              loading={loadingVentas}
+              columns={columnsVentas}
+              rowId={v => v.movimientoId}
+              title="Facturas con este producto"
+              emptyState={{
+                icon:  ShoppingBag,
+                title: 'Sin ventas registradas todavía',
+                hint:  'Aquí aparecerán las facturas guardadas o emitidas que incluyan este producto.',
+              }}
+            />
+          </Box>
+        )}
 
-        <TabsContent value="ventas">
-          <DataTable<VentaProducto>
-            data={ventas}
-            loading={loadingVentas}
-            columns={columnsVentas}
-            rowId={v => v.movimientoId}
-            title="Facturas con este producto"
-            emptyState={{
-              icon:  ShoppingBag,
-              title: 'Sin ventas registradas todavía',
-              hint:  'Aquí aparecerán las facturas guardadas o emitidas que incluyan este producto.',
-            }}
-          />
-        </TabsContent>
+        {tab === 'compras' && (
+          <Box sx={{ mt: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 1.5, mb: 2 }}>
+              <ResumenCard icon={<ShoppingCart style={{ width: 18, height: 18, color: '#4f46e5' }} />} iconBg="#eef2ff"
+                label="Total comprado" valor={fmtDOP(resumenCompras.totalComprado)} />
+              <ResumenCard icon={<Truck style={{ width: 18, height: 18, color: '#7c3aed' }} />} iconBg="#f5f3ff"
+                label="Unidades compradas" valor={String(resumenCompras.unidades)} />
+              <ResumenCard icon={<CalendarClock style={{ width: 18, height: 18, color: '#d97706' }} />} iconBg="#fffbeb"
+                label="Última compra" valor={resumenCompras.ultimaCompra ? fmtFechaCorta(resumenCompras.ultimaCompra) : '—'} />
+            </Box>
 
-        <TabsContent value="compras">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                <ShoppingCart className="h-4.5 w-4.5 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Total comprado</p>
-                <p className="text-sm font-bold text-gray-900">{fmtDOP(resumenCompras.totalComprado)}</p>
-              </div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
-                <Truck className="h-4.5 w-4.5 text-violet-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Unidades compradas</p>
-                <p className="text-sm font-bold text-gray-900">{resumenCompras.unidades}</p>
-              </div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                <CalendarClock className="h-4.5 w-4.5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Última compra</p>
-                <p className="text-sm font-bold text-gray-900">{resumenCompras.ultimaCompra ? fmtFechaCorta(resumenCompras.ultimaCompra) : '—'}</p>
-              </div>
-            </div>
-          </div>
-
-          <DataTable<CompraProducto>
-            data={compras}
-            loading={loadingCompras}
-            columns={columnsCompras}
-            rowId={c => c.itemId}
-            title="Compras con este producto"
-            emptyState={{
-              icon:  ShoppingCart,
-              title: 'Sin compras registradas todavía',
-              hint:  'Aquí aparecerán las compras manuales que registres incluyendo este producto.',
-            }}
-          />
-        </TabsContent>
-      </Tabs>
-    </section>
+            <DataTable<CompraProducto>
+              data={compras}
+              loading={loadingCompras}
+              columns={columnsCompras}
+              rowId={c => c.itemId}
+              title="Compras con este producto"
+              emptyState={{
+                icon:  ShoppingCart,
+                title: 'Sin compras registradas todavía',
+                hint:  'Aquí aparecerán las compras manuales que registres incluyendo este producto.',
+              }}
+            />
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 }
 
 function Campo({ label, valor }: { label: string; valor: string }) {
   return (
-    <div>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="text-sm font-medium text-gray-900">{valor}</p>
-    </div>
+    <Box>
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</Typography>
+      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{valor}</Typography>
+    </Box>
+  );
+}
+
+function ResumenCard({ icon, iconBg, label, valor }: { icon: ReactNode; iconBg: string; label: string; valor: string }) {
+  return (
+    <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ height: 36, width: 36, borderRadius: '8px', bgcolor: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {icon}
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</Typography>
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>{valor}</Typography>
+      </Box>
+    </Box>
   );
 }

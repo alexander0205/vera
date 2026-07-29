@@ -27,6 +27,9 @@ const productoSchema = z.object({
   permiteVentaSinStock: z.boolean().optional(),
   categoriaId:          z.number().int().positive().optional().nullable(),
   imagen:               z.string().max(1_500_000).optional().nullable(),
+  // POS: si aparece en la grilla del punto de venta y si es favorito.
+  visiblePos:           z.boolean().optional(),
+  posFavorito:          z.boolean().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -99,8 +102,12 @@ export async function POST(req: NextRequest) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
-    categoriaId, imagen,
+    categoriaId, imagen, visiblePos, posFavorito,
   } = parsed.data;
+
+  // Default inteligente: un servicio no se muestra en el mostrador salvo que
+  // se marque explícito; un bien sí. El usuario puede sobreescribir.
+  const visiblePosFinal = visiblePos ?? (tipo === 'bien');
 
   const [created] = await db.insert(products).values({
     teamId,
@@ -119,6 +126,8 @@ export async function POST(req: NextRequest) {
     stockMinimo:          stockMinimo ?? 0,
     categoriaId:          categoriaId ?? null,
     imagen:               imagen ?? null,
+    visiblePos:           visiblePosFinal,
+    posFavorito:          posFavorito ?? false,
     controlaInventario:   tipo === 'bien' ? (controlaInventario ?? false) : false,
     permiteVentaSinStock: permiteVentaSinStock ?? true,
   }).returning();

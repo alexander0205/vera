@@ -1,7 +1,8 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import { ArrowRight } from 'lucide-react';
 import { useFormStatus } from 'react-dom';
 
 export function SubmitButton({
@@ -16,24 +17,24 @@ export function SubmitButton({
   return (
     <Button
       type="submit"
+      fullWidth
+      variant="contained"
+      disableElevation
       disabled={pending}
-      className={`w-full rounded-full text-sm font-medium py-2.5 transition-colors ${
-        destacado
-          ? 'bg-white text-teal-700 hover:bg-teal-50 border-0'
-          : 'bg-teal-600 text-white hover:bg-teal-700 border-0'
-      }`}
+      endIcon={pending ? undefined : <ArrowRight size={16} />}
+      startIcon={pending ? <CircularProgress size={14} sx={{ color: destacado ? '#0f766e' : '#fff' }} /> : undefined}
+      sx={{
+        borderRadius: '99px',
+        textTransform: 'none',
+        fontSize: '0.875rem',
+        fontWeight: 500,
+        py: 1.25,
+        ...(destacado
+          ? { bgcolor: '#fff', color: '#0f766e', '&:hover': { bgcolor: '#f0fdfa' }, '&:disabled': { bgcolor: '#fff', opacity: 0.7 } }
+          : { bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' } }),
+      }}
     >
-      {pending ? (
-        <>
-          <Loader2 className="animate-spin mr-2 h-4 w-4" />
-          Cargando...
-        </>
-      ) : (
-        <>
-          {label}
-          <ArrowRight className="ml-2 h-4 w-4" />
-        </>
-      )}
+      {pending ? 'Cargando…' : label}
     </Button>
   );
 }

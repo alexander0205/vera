@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Loader2 } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export function ModalNuevoAlmacen({ open, onClose, onCreated }: {
   open: boolean;
@@ -39,33 +41,105 @@ export function ModalNuevoAlmacen({ open, onClose, onCreated }: {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) { onClose(); setError(null); } }}>
-      <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold">Nuevo almacén</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
-          <div className="space-y-1.5">
-            <Label className="text-sm">Nombre <span className="text-red-500">*</span></Label>
-            <Input placeholder="Ej. Almacén Principal" value={form.nombre} onChange={(e) => setForm(f => ({ ...f, nombre: e.target.value }))} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Dirección</Label>
-            <Input placeholder="Dirección del almacén" value={form.direccion} onChange={(e) => setForm(f => ({ ...f, direccion: e.target.value }))} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Observación</Label>
-            <Input placeholder="Notas adicionales" value={form.observacion} onChange={(e) => setForm(f => ({ ...f, observacion: e.target.value }))} />
-          </div>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => { onClose(); setError(null); }} disabled={saving}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSave} disabled={saving}>
-            {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Crear almacén'}
-          </Button>
-        </DialogFooter>
+    <Dialog
+      open={open}
+      onClose={() => { onClose(); setError(null); }}
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 480, width: '100%' } } as object }}
+    >
+      <DialogTitle sx={{ fontWeight: 600, fontSize: '1rem' }}>
+        Nuevo almacén
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {error && (
+            <Box sx={{
+              bgcolor: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#b91c1c',
+              fontSize: '0.875rem',
+              borderRadius: '8px',
+              px: 1.5,
+              py: 1,
+            }}>
+              {error}
+            </Box>
+          )}
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              Nombre <Box component="span" sx={{ color: '#ef4444' }}>*</Box>
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Ej. Almacén Principal"
+              value={form.nombre}
+              onChange={(e) => setForm(f => ({ ...f, nombre: e.target.value }))}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>Dirección</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Dirección del almacén"
+              value={form.direccion}
+              onChange={(e) => setForm(f => ({ ...f, direccion: e.target.value }))}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>Observación</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Notas adicionales"
+              value={form.observacion}
+              onChange={(e) => setForm(f => ({ ...f, observacion: e.target.value }))}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+          </Box>
+        </Box>
       </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button
+          variant="outlined"
+          disabled={saving}
+          onClick={() => { onClose(); setError(null); }}
+          sx={{
+            textTransform: 'none',
+            color: '#4b5563',
+            borderColor: '#e5e7eb',
+            '&:hover': { borderColor: '#d1d5db', bgcolor: 'transparent' },
+          }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          variant="contained"
+          disableElevation
+          disabled={saving}
+          onClick={handleSave}
+          sx={{
+            textTransform: 'none',
+            bgcolor: '#0d9488',
+            '&:hover': { bgcolor: '#0f766e' },
+            '&.Mui-disabled': { bgcolor: '#0d948880' },
+          }}
+        >
+          {saving ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <CircularProgress size={16} sx={{ color: 'inherit' }} />
+              Guardando…
+            </Box>
+          ) : 'Crear almacén'}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

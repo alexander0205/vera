@@ -3,11 +3,22 @@
 import { useState, useEffect } from 'react';
 import { User, Mail, Shield, CreditCard, Pencil, Check, X, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
 
-const PLAN_BADGE: Record<string, { label: string; color: string }> = {
-  starter:  { label: 'Starter',  color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  business: { label: 'Business', color: 'bg-teal-50 text-teal-700 border-teal-200' },
-  pro:      { label: 'Pro',      color: 'bg-purple-50 text-purple-700 border-purple-200' },
+const PLAN_BADGE: Record<string, { label: string; bgcolor: string; color: string }> = {
+  starter:  { label: 'Starter',  bgcolor: '#eff6ff', color: '#1d4ed8' },
+  business: { label: 'Business', bgcolor: '#f0fdfa', color: '#0d9488' },
+  pro:      { label: 'Pro',      bgcolor: '#faf5ff', color: '#7c3aed' },
 };
 
 function getInitials(name: string | null, email: string) {
@@ -64,130 +75,121 @@ export default function PerfilPage() {
   const isTrialing = team?.subscriptionStatus === 'trialing';
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Mi perfil</h1>
-        <p className="text-sm text-gray-500 mt-1">Gestiona tu información personal</p>
-      </div>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 600 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>Mi perfil</Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>Gestiona tu información personal</Typography>
+      </Box>
 
       {success && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">
-          <Check className="h-4 w-4 shrink-0" /> {success}
-        </div>
+        <Alert severity="success" sx={{ mb: 2, borderRadius: '10px' }} onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
       )}
 
       {/* Avatar + nombre */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-6">
-        <div className="flex items-start gap-5">
-          {/* Avatar */}
-          <div className="h-16 w-16 rounded-2xl bg-teal-600 flex items-center justify-center shrink-0">
-            <span className="text-white text-xl font-bold">
-              {user ? getInitials(user.name, user.email) : '…'}
-            </span>
-          </div>
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '16px', mb: 2 }}>
+        <CardContent sx={{ p: '24px !important' }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2.5 }}>
+            {/* Avatar */}
+            <Box sx={{ width: 64, height: 64, borderRadius: '16px', bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700 }}>
+                {user ? getInitials(user.name, user.email) : '…'}
+              </Typography>
+            </Box>
 
-          <div className="flex-1 min-w-0">
-            {/* Nombre */}
-            <div className="mb-1">
-              {editing ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={nameInput}
-                    onChange={e => setNameInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') cancelEdit(); }}
-                    autoFocus
-                    className="border border-teal-400 rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 w-56"
-                  />
-                  <button onClick={saveName} disabled={loading}
-                    className="p-1.5 rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50">
-                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  </button>
-                  <button onClick={cancelEdit}
-                    className="p-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-semibold text-gray-900">
-                    {user?.name ?? 'Sin nombre'}
-                  </span>
-                  <button onClick={() => setEditing(true)}
-                    className="p-1 rounded-md text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-              {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-            </div>
-
-            <p className="text-sm text-gray-500">{user?.email}</p>
-
-            {/* Plan badge */}
-            {planBadge && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${planBadge.color}`}>
-                  {planBadge.label}
-                </span>
-                {isTrialing && (
-                  <span className="text-xs text-blue-600 font-medium">· Prueba gratis</span>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              {/* Nombre */}
+              <Box sx={{ mb: 0.5 }}>
+                {editing ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <MuiTextField
+                      value={nameInput}
+                      onChange={e => setNameInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') cancelEdit(); }}
+                      autoFocus size="small"
+                      sx={{ width: 200, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontWeight: 600 } }}
+                    />
+                    <IconButton size="small" onClick={saveName} disabled={loading}
+                      sx={{ bgcolor: 'primary.main', color: '#fff', '&:hover': { bgcolor: 'primary.dark' }, '&:disabled': { opacity: 0.5 } }}>
+                      {loading ? <CircularProgress size={14} color="inherit" /> : <Check style={{ width: 14, height: 14 }} />}
+                    </IconButton>
+                    <IconButton size="small" onClick={cancelEdit} sx={{ border: '1px solid #e5e7eb', color: 'text.secondary' }}>
+                      <X style={{ width: 14, height: 14 }} />
+                    </IconButton>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                      {user?.name ?? 'Sin nombre'}
+                    </Typography>
+                    <IconButton size="small" onClick={() => setEditing(true)} sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#f0fdfa' } }}>
+                      <Pencil style={{ width: 14, height: 14 }} />
+                    </IconButton>
+                  </Box>
                 )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+                {error && <Typography variant="caption" sx={{ color: 'error.main', display: 'block', mt: 0.5 }}>{error}</Typography>}
+              </Box>
 
-      {/* Info de cuenta */}
-      <div className="bg-white rounded-2xl border border-gray-200 divide-y">
-        {/* Email */}
-        <div className="flex items-center gap-4 p-5">
-          <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-            <Mail className="h-4 w-4 text-gray-500" />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Email</p>
-            <p className="text-sm text-gray-900 mt-0.5">{user?.email ?? '—'}</p>
-          </div>
-          <span className="text-xs text-gray-400">Solo lectura</span>
-        </div>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>{user?.email}</Typography>
 
-        {/* Seguridad */}
-        <div className="flex items-center gap-4 p-5">
-          <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-            <Shield className="h-4 w-4 text-gray-500" />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Seguridad</p>
-            <p className="text-sm text-gray-900 mt-0.5">
-              2FA {user?.twoFactorEnabled ? '· Activo' : '· No configurado'}
-            </p>
-          </div>
-          <Link href="/dashboard/security"
-            className="text-xs text-teal-600 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50">
-            Gestionar
-          </Link>
-        </div>
+              {planBadge && (
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Chip label={planBadge.label} size="small"
+                    sx={{ bgcolor: planBadge.bgcolor, color: planBadge.color, height: 22, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }} />
+                  {isTrialing && (
+                    <Typography variant="caption" sx={{ color: '#2563eb', fontWeight: 600 }}>· Prueba gratis</Typography>
+                  )}
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
 
-        {/* Plan */}
-        <div className="flex items-center gap-4 p-5">
-          <div className="h-9 w-9 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-            <CreditCard className="h-4 w-4 text-gray-500" />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Plan actual</p>
-            <p className="text-sm text-gray-900 mt-0.5">
-              {team?.planName ?? 'Sin plan'}
-              {isTrialing ? ' · Prueba gratis' : ''}
-            </p>
-          </div>
-          <Link href="/dashboard/suscripcion"
-            className="text-xs text-teal-600 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50">
-            Ver plan
-          </Link>
-        </div>
-      </div>
-    </div>
+      {/* Info rows */}
+      <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden' }}>
+        {[
+          {
+            icon: Mail, label: 'Email', value: user?.email ?? '—', action: null, actionLabel: 'Solo lectura' as string | null,
+          },
+          {
+            icon: Shield, label: 'Seguridad',
+            value: `2FA ${user?.twoFactorEnabled ? '· Activo' : '· No configurado'}`,
+            action: '/dashboard/security', actionLabel: 'Gestionar',
+          },
+          {
+            icon: CreditCard, label: 'Plan actual',
+            value: `${team?.planName ?? 'Sin plan'}${isTrialing ? ' · Prueba gratis' : ''}`,
+            action: '/dashboard/suscripcion', actionLabel: 'Ver plan',
+          },
+        ].map((row, i) => (
+          <Box key={row.label}>
+            {i > 0 && <Divider />}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2.5, py: 2 }}>
+              <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: 'grey.50', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <row.icon style={{ width: 16, height: 16, color: '#6b7280' }} />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.disabled', display: 'block' }}>
+                  {row.label}
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.primary', mt: 0.25 }}>{row.value}</Typography>
+              </Box>
+              {row.action ? (
+                <Link href={row.action} style={{ textDecoration: 'none' }}>
+                  <MuiButton variant="outlined" size="small"
+                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: 'primary.main', color: 'primary.main' }}>
+                    {row.actionLabel}
+                  </MuiButton>
+                </Link>
+              ) : (
+                <Typography variant="caption" sx={{ color: 'text.disabled' }}>{row.actionLabel}</Typography>
+              )}
+            </Box>
+          </Box>
+        ))}
+      </Card>
+    </Box>
   );
 }

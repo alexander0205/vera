@@ -4,10 +4,14 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
-import {
-  ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2, PackagePlus,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
+import { ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2, PackagePlus } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
@@ -15,12 +19,12 @@ import ModalRegistrarCompra from '../_modal-registrar-compra';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const ESTADO_BADGE: Record<string, string> = {
-  ACEPTADO:             'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  ACEPTADO_CONDICIONAL: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  RECHAZADO:            'bg-red-50 text-red-700 ring-1 ring-red-200',
-  RECIBIDO:             'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
-  PENDIENTE:            'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
+const ESTADO_BADGE: Record<string, { bgcolor: string; color: string; border: string }> = {
+  ACEPTADO:             { bgcolor: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+  ACEPTADO_CONDICIONAL: { bgcolor: '#fffbeb', color: '#92400e', border: '#fde68a' },
+  RECHAZADO:            { bgcolor: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
+  RECIBIDO:             { bgcolor: '#f0f9ff', color: '#075985', border: '#bae6fd' },
+  PENDIENTE:            { bgcolor: '#f9fafb', color: '#4b5563', border: '#d1d5db' },
 };
 
 const TIPO_LABELS: Record<string, string> = {
@@ -29,7 +33,6 @@ const TIPO_LABELS: Record<string, string> = {
   '44': 'Régimen Único',  '45': 'Gubernamental', '46': 'Exportación', '47': 'Otros',
 };
 
-/** Tipo e-CF: `tipoECF` suele venir null; el real está en el e-NCF (E31… → "31"). */
 function tipoCode(item: RecepcionEcfDto): string {
   return (item.tipoECF || item.tipoComprobante || item.eNcf?.match(/^E(\d{2})/)?.[1] || '') as string;
 }
@@ -38,7 +41,6 @@ function tipoLabel(item: RecepcionEcfDto): string {
   return c ? `${TIPO_LABELS[c] ?? `Tipo e${c}`}${c ? ` (e${c})` : ''}` : '—';
 }
 
-/** El monto NO viene como campo del API — se extrae del XML firmado (<MontoTotal>, en pesos). */
 function fmtMonto(item: RecepcionEcfDto): string {
   const xml = item.xmlFirmado ?? item.xmlOriginal;
   const m = xml?.match(/<MontoTotal>\s*([\d.]+)\s*<\/MontoTotal>/i);
@@ -63,43 +65,42 @@ function XmlSection({ title, xml }: { title: string; xml?: string | null }) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <button
+    <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+      <Box
+        component="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+        sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.5, bgcolor: 'transparent', border: 'none', cursor: 'pointer', '&:hover': { bgcolor: '#f9fafb' }, transition: 'background 0.1s' }}
       >
-        <span className="text-sm font-semibold text-gray-800">{title}</span>
-        {open
-          ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
-          : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
-        }
-      </button>
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>{title}</Typography>
+        {open ? <ChevronDown size={16} color="#9ca3af" /> : <ChevronRight size={16} color="#9ca3af" />}
+      </Box>
 
-      {open && (
-        <div className="border-t border-gray-100">
+      <Collapse in={open}>
+        <Box sx={{ borderTop: '1px solid #f3f4f6' }}>
           {xml ? (
             <>
-              <div className="flex justify-end px-4 py-2 border-b border-gray-100 bg-gray-50">
-                <button
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: 2, py: 1, borderBottom: '1px solid #f3f4f6', bgcolor: '#f9fafb' }}>
+                <Box
+                  component="button"
                   onClick={handleCopy}
-                  className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 transition-colors"
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', color: '#4b5563', bgcolor: 'transparent', border: 'none', cursor: 'pointer', '&:hover': { color: '#111827' } }}
                 >
                   {copied
-                    ? <><Check className="h-3.5 w-3.5 text-emerald-600" /> Copiado</>
-                    : <><Copy className="h-3.5 w-3.5" /> Copiar</>
+                    ? <><Check size={14} color="#16a34a" /> Copiado</>
+                    : <><Copy size={14} /> Copiar</>
                   }
-                </button>
-              </div>
-              <pre className="p-4 text-[11px] font-mono text-gray-700 overflow-x-auto max-h-80 bg-gray-50 leading-relaxed whitespace-pre-wrap break-all">
+                </Box>
+              </Box>
+              <Box component="pre" sx={{ p: 2, fontSize: '0.6875rem', fontFamily: 'monospace', color: '#374151', overflowX: 'auto', maxHeight: 320, bgcolor: '#f9fafb', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', m: 0 }}>
                 {xml}
-              </pre>
+              </Box>
             </>
           ) : (
-            <p className="px-4 py-4 text-sm text-gray-400 italic">No disponible</p>
+            <Typography sx={{ px: 2, py: 2, fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>No disponible</Typography>
           )}
-        </div>
-      )}
-    </div>
+        </Box>
+      </Collapse>
+    </Box>
   );
 }
 
@@ -107,10 +108,10 @@ function XmlSection({ title, xml }: { title: string; xml?: string | null }) {
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-4 py-2.5 border-b border-gray-100 last:border-0">
-      <dt className="w-36 shrink-0 text-xs font-medium text-gray-500">{label}</dt>
-      <dd className="flex-1 text-sm text-gray-900">{value}</dd>
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, py: 1.5, borderBottom: '1px solid #f3f4f6', '&:last-child': { borderBottom: 'none' } }}>
+      <Typography component="dt" sx={{ width: 144, flexShrink: 0, fontSize: '0.75rem', fontWeight: 500, color: '#6b7280' }}>{label}</Typography>
+      <Box component="dd" sx={{ flex: 1, fontSize: '0.875rem', color: '#111827', m: 0 }}>{value}</Box>
+    </Box>
   );
 }
 
@@ -129,71 +130,73 @@ export default function CompraDetallePage() {
 
   if (permLoading || isLoading) {
     return (
-      <section className="p-4 sm:p-6 flex items-center justify-center min-h-[200px]">
-        <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
-      </section>
+      <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+      </Box>
     );
   }
 
   if (!permLoading && !can('compras:ver')) {
     return (
-      <section className="p-4 sm:p-6">
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
-          <p className="text-sm text-gray-500">No tienes permiso para ver esta sección.</p>
-        </div>
-      </section>
+      <Box sx={{ p: 3 }}>
+        <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 5, textAlign: 'center' }}>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>No tienes permiso para ver esta sección.</Typography>
+        </Box>
+      </Box>
     );
   }
 
   if (error || !data) {
     const msg = (error as { error?: string } | null)?.error ?? 'No se pudo cargar el detalle.';
     return (
-      <section className="p-4 sm:p-6 space-y-4">
-        <Link
-          href="/dashboard/compras"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" /> Volver a Compras
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Link href="/dashboard/compras" style={{ textDecoration: 'none' }}>
+          <Button variant="text" startIcon={<ArrowLeft size={16} />} sx={{ textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
+            Volver a Compras
+          </Button>
         </Link>
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{msg}</p>
-        </div>
-      </section>
+        <Alert severity="error" icon={<AlertTriangle size={16} />} sx={{ borderRadius: '8px' }}>{msg}</Alert>
+      </Box>
     );
   }
 
   const estado = data.estado ?? 'PENDIENTE';
+  const badge  = ESTADO_BADGE[estado] ?? { bgcolor: '#f9fafb', color: '#4b5563', border: '#d1d5db' };
 
   return (
-    <section className="p-4 sm:p-6 space-y-4 max-w-3xl">
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
       {/* Back */}
-      <Link
-        href="/dashboard/compras"
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" /> Volver a Compras
+      <Link href="/dashboard/compras" style={{ textDecoration: 'none' }}>
+        <Button variant="text" startIcon={<ArrowLeft size={16} />} sx={{ textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
+          Volver a Compras
+        </Button>
       </Link>
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg font-bold text-gray-900 font-mono">{data.eNcf}</h1>
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${ESTADO_BADGE[estado] ?? 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'}`}
-            >
-              {estado}
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 mt-0.5">{tipoLabel(data)}</p>
-        </div>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>{data.eNcf}</Typography>
+            <Chip
+              label={estado}
+              size="small"
+              sx={{ bgcolor: badge.bgcolor, color: badge.color, border: `1px solid ${badge.border}`, fontSize: '0.6875rem', height: 22, fontWeight: 500 }}
+            />
+          </Box>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>{tipoLabel(data)}</Typography>
+        </Box>
         {can('productos:gestionar') && (
-          <Button size="sm" variant="outline" onClick={() => setShowEntrada(true)}>
-            <PackagePlus className="h-4 w-4 mr-1.5" /> Registrar entrada
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setShowEntrada(true)}
+            startIcon={<PackagePlus style={{ width: 16, height: 16 }} />}
+            sx={{ textTransform: 'none', borderRadius: '8px' }}
+          >
+            Registrar entrada
           </Button>
         )}
-      </div>
+      </Box>
 
       <ModalRegistrarCompra
         open={showEntrada}
@@ -206,44 +209,34 @@ export default function CompraDetallePage() {
       />
 
       {/* Datos principales */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <h2 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Detalle</h2>
-        </div>
-        <dl className="px-4 divide-y divide-gray-100">
-          <DetailRow label="Emisor (RNC)" value={
-            <span className="font-mono">{data.rncEmisor ?? data.rnc}</span>
-          } />
-          <DetailRow label="e-NCF" value={
-            <span className="font-mono">{data.eNcf}</span>
-          } />
-          <DetailRow label="Tipo de comprobante" value={tipoLabel(data)} />
-          <DetailRow label="Fecha recepción" value={
-            fmtFechaCorta(data.fechaRecepcion ?? data.createdAt)
-          } />
-          <DetailRow label="Estado" value={
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${ESTADO_BADGE[estado] ?? 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'}`}>
-              {estado}
-            </span>
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #f3f4f6', bgcolor: '#f9fafb' }}>
+          <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Detalle</Typography>
+        </Box>
+        <Box component="dl" sx={{ px: 2, m: 0 }}>
+          <DetailRow label="Emisor (RNC)" value={<Box component="span" sx={{ fontFamily: 'monospace' }}>{data.rncEmisor ?? data.rnc}</Box>} />
+          <DetailRow label="e-NCF"        value={<Box component="span" sx={{ fontFamily: 'monospace' }}>{data.eNcf}</Box>} />
+          <DetailRow label="Tipo"         value={tipoLabel(data)} />
+          <DetailRow label="Fecha recepción" value={fmtFechaCorta(data.fechaRecepcion ?? data.createdAt)} />
+          <DetailRow label="Estado"       value={
+            <Chip label={estado} size="small" sx={{ bgcolor: badge.bgcolor, color: badge.color, border: `1px solid ${badge.border}`, fontSize: '0.6875rem', height: 22 }} />
           } />
           {typeof data.firmaValida === 'boolean' && (
             <DetailRow label="Firma" value={
               data.firmaValida
-                ? <span className="inline-flex items-center gap-1 text-emerald-700"><Check className="h-3.5 w-3.5" /> Válida</span>
-                : <span className="inline-flex items-center gap-1 text-red-700"><AlertTriangle className="h-3.5 w-3.5" /> Inválida</span>
+                ? <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#16a34a' }}><Check size={14} /> Válida</Box>
+                : <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#dc2626' }}><AlertTriangle size={14} /> Inválida</Box>
             } />
           )}
-          <DetailRow label="Monto" value={
-            <span className="font-semibold">{fmtMonto(data)}</span>
-          } />
-        </dl>
-      </div>
+          <DetailRow label="Monto" value={<Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>{fmtMonto(data)}</Typography>} />
+        </Box>
+      </Box>
 
       {/* XML emisor */}
       <XmlSection title="XML del emisor" xml={data.xmlFirmado ?? data.xmlOriginal} />
 
       {/* ARECF */}
       <XmlSection title="ARECF (nuestra respuesta)" xml={data.arecfXml} />
-    </section>
+    </Box>
   );
 }

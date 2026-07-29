@@ -7,132 +7,242 @@ import { Loader2, Receipt, Eye, EyeOff } from 'lucide-react';
 import { signIn, signUp } from './actions';
 import { ActionState } from '@/lib/auth/middleware';
 
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import MuiButton from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
+import Divider from '@mui/material/Divider';
+import CircularProgress from '@mui/material/CircularProgress';
+
 export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect');
-  const priceId = searchParams.get('priceId');
-  const inviteId = searchParams.get('inviteId');
+  const redirect  = searchParams.get('redirect');
+  const priceId   = searchParams.get('priceId');
+  const inviteId  = searchParams.get('inviteId');
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     mode === 'signin' ? signIn : signUp,
     { error: '' }
   );
-
   const [showPwd, setShowPwd] = useState(false);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-sm">
+    <Box
+      sx={{
+        minHeight:      '100dvh',
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
+        bgcolor:        '#f9fafb',
+        p:              2,
+      }}
+    >
+      <Box sx={{ width: '100%', maxWidth: 400 }}>
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-2">
-            <Receipt className="w-7 h-7 text-teal-600" />
-            <span className="text-xl font-bold text-gray-900">Zero</span>
-          </div>
-          <p className="text-sm text-gray-500">
-            {mode === 'signin' ? 'Inicia sesión en tu cuenta' : 'Crea tu cuenta'}
-          </p>
-        </div>
+        <Box sx={{ textAlign: 'center', mb: 4 }}>
+          <Box
+            sx={{
+              display:        'inline-flex',
+              alignItems:     'center',
+              gap:            1.5,
+              mb:             1.5,
+            }}
+          >
+            <Box
+              sx={{
+                width:          40,
+                height:         40,
+                bgcolor:        'primary.main',
+                borderRadius:   '10px',
+                display:        'flex',
+                alignItems:     'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Receipt style={{ width: 22, height: 22, color: '#fff' }} />
+            </Box>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary' }}>
+              Zero
+            </Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            {mode === 'signin'
+              ? 'Inicia sesión en tu cuenta'
+              : 'Crea tu cuenta gratis'}
+          </Typography>
+        </Box>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-7">
-          <form className="space-y-4" action={formAction}>
+        <Paper
+          elevation={0}
+          sx={{
+            border:       '1px solid #e5e7eb',
+            borderRadius: '16px',
+            p:            3.5,
+            bgcolor:      '#ffffff',
+          }}
+        >
+          <Box
+            component="form"
+            action={formAction}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}
+          >
             <input type="hidden" name="redirect" value={redirect || ''} />
-            <input type="hidden" name="priceId" value={priceId || ''} />
+            <input type="hidden" name="priceId"  value={priceId  || ''} />
             <input type="hidden" name="inviteId" value={inviteId || ''} />
 
             {/* Email */}
-            <div>
-              <label htmlFor="email" className="block text-xs font-medium text-gray-600 mb-1.5">
+            <Box>
+              <Typography
+                component="label"
+                htmlFor="email"
+                sx={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'text.primary', mb: 0.75 }}
+              >
                 Email
-              </label>
-              <input
+              </Typography>
+              <TextField
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="email"
                 defaultValue={state.email ?? ''}
                 required
-                maxLength={50}
+                slotProps={{ htmlInput: { maxLength: 50 } }}
                 placeholder="tu@empresa.com"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                  '& .MuiOutlinedInput-input': { py: '10px', fontSize: '0.875rem' },
+                }}
               />
-            </div>
+            </Box>
 
             {/* Password */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="block text-xs font-medium text-gray-600">
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+                <Typography
+                  component="label"
+                  htmlFor="password"
+                  sx={{ fontSize: '0.8125rem', fontWeight: 500, color: 'text.primary' }}
+                >
                   Contraseña
-                </label>
+                </Typography>
                 {mode === 'signin' && (
-                  <Link
+                  <Typography
+                    component={Link}
                     href="/forgot-password"
-                    className="text-xs text-teal-600 hover:text-teal-700 hover:underline"
+                    sx={{ fontSize: '0.8125rem', color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
                   >
                     ¿Olvidaste tu contraseña?
-                  </Link>
+                  </Typography>
                 )}
-              </div>
-              <div className="relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPwd ? 'text' : 'password'}
-                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                  defaultValue={state.password ?? ''}
-                  required
-                  minLength={8}
-                  maxLength={100}
-                  placeholder="••••••••"
-                  className="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  tabIndex={-1}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-                  aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+              </Box>
+              <TextField
+                id="password"
+                name="password"
+                type={showPwd ? 'text' : 'password'}
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                defaultValue={state.password ?? ''}
+                required
+                placeholder="••••••••"
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiOutlinedInput-root': { borderRadius: '8px' },
+                  '& .MuiOutlinedInput-input': { py: '10px', fontSize: '0.875rem' },
+                }}
+                slotProps={{
+                  htmlInput: { minLength: 8, maxLength: 100 },
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          tabIndex={-1}
+                          onClick={() => setShowPwd(v => !v)}
+                          edge="end"
+                          size="small"
+                          aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {showPwd
+                            ? <EyeOff style={{ width: 16, height: 16, color: '#9ca3af' }} />
+                            : <Eye    style={{ width: 16, height: 16, color: '#9ca3af' }} />
+                          }
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+            </Box>
 
             {/* Error */}
             {state?.error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2.5">
+              <Alert severity="error" sx={{ borderRadius: '10px', fontSize: '0.875rem' }}>
                 {state.error}
-              </div>
+              </Alert>
             )}
 
             {/* Submit */}
-            <button
+            <MuiButton
               type="submit"
+              variant="contained"
+              color="primary"
+              fullWidth
               disabled={pending}
-              className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+              disableElevation
+              size="large"
+              sx={{
+                borderRadius: '10px',
+                py:           '10px',
+                fontWeight:   700,
+                fontSize:     '0.9375rem',
+              }}
+              startIcon={pending ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
-              {pending ? (
-                <>
-                  <Loader2 className="animate-spin w-4 h-4" />
-                  Verificando...
-                </>
-              ) : mode === 'signin' ? (
-                'Iniciar sesión'
-              ) : (
-                'Crear cuenta'
-              )}
-            </button>
-          </form>
-        </div>
+              {pending
+                ? 'Verificando...'
+                : mode === 'signin'
+                  ? 'Iniciar sesión'
+                  : 'Crear cuenta'}
+            </MuiButton>
+          </Box>
 
-        {/* Soporte */}
-        <p className="text-center text-xs text-gray-400 mt-6">
+          <Divider sx={{ my: 3 }} />
+
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              {mode === 'signin' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}{' '}
+              <Typography
+                component={Link}
+                href={mode === 'signin' ? '/sign-up' : '/sign-in'}
+                sx={{ color: 'primary.main', fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+              >
+                {mode === 'signin' ? 'Regístrate gratis' : 'Inicia sesión'}
+              </Typography>
+            </Typography>
+          </Box>
+        </Paper>
+
+        {/* Support */}
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', textAlign: 'center', mt: 3 }}
+        >
           ¿Necesitas ayuda?{' '}
-          <a href="mailto:soporte@zero.com.do" className="text-teal-600 hover:underline">
+          <Box
+            component="a"
+            href="mailto:soporte@zero.com.do"
+            sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+          >
             soporte@zero.com.do
-          </a>
-        </p>
-      </div>
-    </div>
+          </Box>
+        </Typography>
+      </Box>
+    </Box>
   );
 }

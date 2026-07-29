@@ -1,23 +1,28 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import {
-  Package, Plus, Pencil, Trash2, Loader2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload,
-  PackagePlus, Camera, X,
-} from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Upload, PackagePlus, Camera, X } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
 import MaestrosProductoSection from './MaestrosProductoSection';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import MuiButton from '@mui/material/Button';
+import MuiTextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import Collapse from '@mui/material/Collapse';
+import Switch from '@mui/material/Switch';
+import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface Producto {
   id:                   number;
@@ -63,8 +68,6 @@ const TASA_LABELS: Record<string, string> = {
 };
 
 const TASA_ITBIS_OPCIONES = [
-  // 'exento' y '0%' son fiscalmente distintos: exento = fuera del régimen ITBIS;
-  // 0% = grava al 0% (mantiene derecho a crédito). Label refleja la diferencia.
   { value: 'exento', label: 'Exento (fuera de ITBIS)' },
   { value: '0',      label: 'ITBIS 0% (gravado al 0%)' },
   { value: '0.16',   label: 'ITBIS 16%' },
@@ -106,8 +109,8 @@ export default function ProductosPage() {
     fetch('/api/categorias').then((r) => r.json()).then((d) => setCategorias(d.categorias ?? []));
   }, []);
 
-  const search = filterValues.q     ?? '';
-  const tipoFilter = filterValues.tipo ?? '';
+  const search      = filterValues.q    ?? '';
+  const tipoFilter  = filterValues.tipo ?? '';
 
   const cargar = useCallback(async (q: string, tipo: string) => {
     setLoading(true);
@@ -123,7 +126,6 @@ export default function ProductosPage() {
     }
   }, []);
 
-  // Debounce on filter change
   useEffect(() => {
     const t = setTimeout(() => cargar(search, tipoFilter), 300);
     return () => clearTimeout(t);
@@ -235,28 +237,38 @@ export default function ProductosPage() {
       header: 'Nombre',
       sortable: true,
       render: p => (
-        <div>
-          <p className="font-medium text-gray-900">{p.nombre}</p>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>{p.nombre}</Typography>
           {p.descripcion && (
-            <p className="text-xs text-gray-400 truncate max-w-[260px]">{p.descripcion}</p>
+            <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>
+              {p.descripcion}
+            </Typography>
           )}
-        </div>
+        </Box>
       ),
     },
     {
       id: 'referencia',
       header: 'Referencia',
       visibleAt: 'lg',
-      render: p => <span className="font-mono text-sm text-gray-500">{p.referencia ?? '—'}</span>,
+      render: p => <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>{p.referencia ?? '—'}</Typography>,
     },
     {
       id: 'tipo',
       header: 'Tipo',
       visibleAt: 'md',
       render: p => (
-        <Badge variant={p.tipo === 'bien' ? 'secondary' : 'outline'}>
-          {p.tipo === 'bien' ? 'Bien' : 'Servicio'}
-        </Badge>
+        <Chip
+          label={p.tipo === 'bien' ? 'Bien' : 'Servicio'}
+          size="small"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 600,
+            ...(p.tipo === 'bien'
+              ? { bgcolor: '#f3f4f6', color: '#374151' }
+              : { bgcolor: '#f0fdfa', color: '#0d9488', border: '1px solid #99f6e4' }
+            ),
+            '& .MuiChip-label': { px: 1 }
+          }}
+        />
       ),
     },
     {
@@ -265,22 +277,22 @@ export default function ProductosPage() {
       visibleAt: 'md',
       render: p => {
         if (p.tipo !== 'bien' || !p.controlaInventario) {
-          return <span className="text-xs text-gray-400 italic">No aplica</span>;
+          return <Typography component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic' }}>No aplica</Typography>;
         }
         const agotado    = p.stockActual <= 0;
         const bajominimo = !agotado && p.stockActual <= p.stockMinimo;
         return (
-          <div className="flex items-center gap-2">
-            <span className={`font-medium text-sm ${agotado ? 'text-red-600' : bajominimo ? 'text-amber-600' : 'text-green-700'}`}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography component="span" sx={{ fontWeight: 500, fontSize: '0.875rem', color: agotado ? '#dc2626' : bajominimo ? '#d97706' : '#15803d' }}>
               {p.stockActual}
-            </span>
+            </Typography>
             {agotado && (
-              <Badge className="bg-red-50 text-red-700 border-red-200 text-xs">Agotado</Badge>
+              <Chip label="Agotado" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', '& .MuiChip-label': { px: 0.75 } }} />
             )}
             {bajominimo && (
-              <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-xs">Bajo mínimo</Badge>
+              <Chip label="Bajo mínimo" size="small" sx={{ height: 20, fontSize: '0.6875rem', bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', '& .MuiChip-label': { px: 0.75 } }} />
             )}
-          </div>
+          </Box>
         );
       },
     },
@@ -291,16 +303,16 @@ export default function ProductosPage() {
       sortable: true,
       sortAccessor: p => p.precioDOP,
       render: p => (
-        <span className="font-medium whitespace-nowrap">
+        <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           {p.precioDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-        </span>
+        </Typography>
       ),
     },
     {
       id: 'itbis',
       header: 'ITBIS',
       visibleAt: 'md',
-      render: p => <span className="text-sm text-gray-600">{TASA_LABELS[p.tasaItbis] ?? p.tasaItbis}</span>,
+      render: p => <Typography variant="body2" sx={{ color: 'text.secondary' }}>{TASA_LABELS[p.tasaItbis] ?? p.tasaItbis}</Typography>,
     },
   ], []);
 
@@ -313,7 +325,7 @@ export default function ProductosPage() {
   ];
 
   return (
-    <section className="p-6 space-y-6">
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <DataTable<Producto>
         data={productos}
         loading={loading}
@@ -342,22 +354,26 @@ export default function ProductosPage() {
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin productos o servicios registrados',
           hint: search ? undefined : 'Crea tu catálogo para agilizar la emisión de facturas',
           cta: search ? undefined : (
-            <Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
-              <Plus className="h-4 w-4 mr-1" />Nuevo ítem
-            </Button>
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+              startIcon={<Plus style={{ width: 14, height: 14 }} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+              Nuevo ítem
+            </MuiButton>
           ),
         }}
         headerActions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowImport(true)}>
-              <Upload className="h-4 w-4 mr-2" />
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <MuiButton variant="outlined" size="small" onClick={() => setShowImport(true)}
+              startIcon={<Upload style={{ width: 14, height: 14 }} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
               Importar de Alegra
-            </Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-              <Plus className="h-4 w-4 mr-2" />
+            </MuiButton>
+            <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
+              startIcon={<Plus style={{ width: 14, height: 14 }} />}
+              sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
               Nuevo ítem
-            </Button>
-          </div>
+            </MuiButton>
+          </Box>
         }
       />
 
@@ -368,255 +384,263 @@ export default function ProductosPage() {
         title="Importar productos de Alegra"
         helpText="Archivo CSV exportado de Alegra (Productos-servicios). Se omiten duplicados por referencia o nombre."
         columns={[
-          { key: 'nombre',      label: 'Nombre' },
-          { key: 'referencia',  label: 'Referencia' },
-          { key: 'precio',      label: 'Precio (¢)' },
-          { key: 'tasaItbis',   label: 'ITBIS' },
-          { key: 'tipo',        label: 'Tipo' },
+          { key: 'nombre',     label: 'Nombre' },
+          { key: 'referencia', label: 'Referencia' },
+          { key: 'precio',     label: 'Precio (¢)' },
+          { key: 'tasaItbis',  label: 'ITBIS' },
+          { key: 'tipo',       label: 'Tipo' },
         ]}
         onDone={() => cargar(search, tipoFilter)}
       />
 
-      {/* ── Modal: Crear / Editar ─────────────────────────────────────────────── */}
-      <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) { setShowForm(false); setShowAvanzado(false); } }}>
-        <DialogContent className="max-w-3xl lg:left-[calc(50%+7rem)]">
-          <DialogHeader>
-            <DialogTitle>{editTarget ? 'Editar ítem' : 'Nuevo producto o servicio'}</DialogTitle>
-          </DialogHeader>
-          {opError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-          )}
+      {/* Modal: Crear / Editar */}
+      <Dialog open={showForm} onClose={() => { setShowForm(false); setShowAvanzado(false); }} maxWidth="sm" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+          {editTarget ? 'Editar ítem' : 'Nuevo producto o servicio'}
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {opError && <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>}
 
-          <div className="grid grid-cols-1 gap-6 py-2 md:grid-cols-[1fr_260px]">
-            {/* ── Columna principal ──────────────────────────────────────── */}
-            <div className="space-y-4">
-              {/* Tipo toggle pills */}
-              {!editTarget && (
-                <div>
-                  <div className="flex gap-2">
-                    {TIPOS_ITEM.map((t) => {
-                      const isSelected = form.tipo === t.value;
-                      if (t.disabled) {
-                        return (
-                          <div key={t.value} title="Próximamente"
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium cursor-not-allowed opacity-40 bg-white border-gray-200 text-gray-400 select-none">
-                            {t.label}
-                          </div>
-                        );
-                      }
+            {/* Tipo toggle pills */}
+            {!editTarget && (
+              <Box>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {TIPOS_ITEM.map((t) => {
+                    const isSelected = form.tipo === t.value;
+                    if (t.disabled) {
                       return (
-                        <button key={t.value} type="button"
-                          onClick={() => setForm((f) => ({ ...f, tipo: t.value }))}
-                          className={`flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium transition-colors ${
-                            isSelected
-                              ? 'bg-teal-100 border-teal-300 text-teal-800'
-                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                          }`}>
-                          {isSelected && <Check className="h-3.5 w-3.5" />}
+                        <Box key={t.value} title="Próximamente"
+                          sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 2, py: 1, borderRadius: '20px', border: '1px solid #e5e7eb', fontSize: '0.875rem', fontWeight: 600, opacity: 0.4, cursor: 'not-allowed', userSelect: 'none', bgcolor: 'white', color: '#9ca3af' }}>
                           {t.label}
-                        </button>
+                        </Box>
                       );
-                    })}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-2">
-                    Ten en cuenta que, una vez creado, no podrás cambiar el tipo del artículo.
-                  </p>
-                </div>
-              )}
-
-              {/* Nombre + Categoría */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Nombre <span className="text-red-500">*</span></Label>
-                  <Input placeholder={form.tipo === 'bien' ? 'Ej. Camisa talla M' : 'Ej. Diseño de logo'}
-                    value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Categoría</Label>
-                  <Select value={form.categoriaId || 'ninguna'}
-                    onValueChange={(v) => setForm((f) => ({ ...f, categoriaId: v === 'ninguna' ? '' : v }))}>
-                    <SelectTrigger><SelectValue placeholder="Sin categoría" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ninguna">Sin categoría</SelectItem>
-                      {categorias.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Unidad de medida */}
-              <div className="space-y-1.5">
-                <Label>Unidad de medida</Label>
-                <Select value={form.unidad} onValueChange={(v) => setForm((f) => ({ ...f, unidad: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {UNIDADES.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Precio + ITBIS */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Precio (DOP) <span className="text-red-500">*</span></Label>
-                  <Input type="number" min={0} step={0.01} placeholder="0.00"
-                    value={form.precio} onChange={(e) => setForm((f) => ({ ...f, precio: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Impuesto (ITBIS)</Label>
-                  <Select value={form.tasaItbis} onValueChange={(v) => setForm((f) => ({ ...f, tasaItbis: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TASA_ITBIS_OPCIONES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Costo — solo para bienes */}
-              {form.tipo === 'bien' && (
-                <div className="space-y-1.5">
-                  <Label>Costo de compra (DOP)</Label>
-                  <Input type="number" min={0} step={0.01} placeholder="0.00"
-                    value={form.costo} onChange={(e) => setForm((f) => ({ ...f, costo: e.target.value }))} />
-                  <p className="text-xs text-gray-400">Usado para calcular margen y costo de ventas. No aparece en la factura.</p>
-                </div>
-              )}
-
-              {/* Control de inventario — solo para bienes */}
-              {form.tipo === 'bien' && (
-                <div className="space-y-3 border border-dashed border-teal-200 rounded-lg p-4 bg-teal-50/30">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">Controlar inventario</p>
-                      <p className="text-xs text-gray-400 mt-0.5">El stock se descuenta automáticamente al guardar o emitir facturas</p>
-                    </div>
-                    <button type="button"
-                      onClick={() => setForm(f => ({ ...f, controlaInventario: !f.controlaInventario }))}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-teal-600' : 'bg-gray-200'}`}>
-                      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.controlaInventario ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-
-                  {form.controlaInventario && (
-                    <>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <Label>Stock actual</Label>
-                          <Input type="number" min={0} step={1} placeholder="0"
-                            value={form.stockActual} onChange={(e) => setForm((f) => ({ ...f, stockActual: e.target.value }))} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>Stock mínimo</Label>
-                          <Input type="number" min={0} step={1} placeholder="0"
-                            value={form.stockMinimo} onChange={(e) => setForm((f) => ({ ...f, stockMinimo: e.target.value }))} />
-                          <p className="text-xs text-gray-400">Alerta si el stock baja de este número</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-gray-700">Permitir venta sin stock</p>
-                          <p className="text-xs text-gray-400 mt-0.5">Si está desactivado, se bloqueará la factura cuando el stock sea 0</p>
-                        </div>
-                        <button type="button"
-                          onClick={() => setForm(f => ({ ...f, permiteVentaSinStock: !f.permiteVentaSinStock }))}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-teal-600' : 'bg-gray-200'}`}>
-                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.permiteVentaSinStock ? 'translate-x-4' : 'translate-x-0'}`} />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Formulario avanzado */}
-              <div>
-                <button type="button"
-                  onClick={() => setShowAvanzado((v) => !v)}
-                  className="flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900 font-medium">
-                  {showAvanzado ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  Mostrar formulario avanzado
-                </button>
-                {showAvanzado && (
-                  <div className="mt-3 space-y-3 border border-dashed border-gray-200 rounded-lg p-4">
-                    <div className="space-y-1.5">
-                      <Label>Código de barras (POS)</Label>
-                      <Input placeholder="Escanea o escribe el EAN/UPC" value={form.codigoBarras}
-                        onChange={(e) => setForm((f) => ({ ...f, codigoBarras: e.target.value }))} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Descripción</Label>
-                      <Input placeholder="Descripción opcional que aparecerá en la factura"
-                        value={form.descripcion} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Atributos (maestros) — solo al editar un producto existente */}
-              {editTarget && <MaestrosProductoSection productId={editTarget.id} />}
-            </div>
-
-            {/* ── Columna lateral: imagen + preview ──────────────────────── */}
-            <div className="space-y-4">
-              <ImagenProductoBox
-                imagen={form.imagen}
-                onChange={(v) => setForm((f) => ({ ...f, imagen: v }))}
-              />
-
-              <div className="rounded-lg border border-gray-200 p-3 text-center">
-                <p className="text-sm font-medium text-gray-800 truncate">{form.nombre || 'Nombre del producto'}</p>
-                <p className="text-sm text-gray-500">
-                  {form.precio ? `RD$${Number(form.precio).toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : 'RD$0.00'}
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1">Referencia</Label>
-                <Input placeholder="SERV-001" value={form.referencia}
-                  onChange={(e) => setForm((f) => ({ ...f, referencia: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowForm(false); setShowAvanzado(false); }} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving}>
-              {saving
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
-                : (editTarget ? 'Guardar cambios' : 'Crear ítem')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar ítem?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
+                    }
+                    return (
+                      <Box key={t.value} component="button" type="button"
+                        onClick={() => setForm((f) => ({ ...f, tipo: t.value }))}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: 0.75,
+                          px: 2, py: 1, borderRadius: '20px', border: '1px solid',
+                          fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                          ...(isSelected
+                            ? { bgcolor: '#f0fdfa', borderColor: '#0d9488', color: '#0d9488' }
+                            : { bgcolor: 'white', borderColor: '#e5e7eb', color: '#6b7280', '&:hover': { borderColor: '#d1d5db', bgcolor: 'grey.50' } }),
+                        }}>
+                        {isSelected && <Check style={{ width: 14, height: 14 }} />}
+                        {t.label}
+                      </Box>
+                    );
+                  })}
+                </Box>
+                <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
+                  Una vez creado, no podrás cambiar el tipo del artículo.
+                </Typography>
+              </Box>
             )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Las facturas existentes no se verán afectadas.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Este ítem dejará de aparecer en el selector de nueva factura.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+
+            {/* Nombre */}
+            <MuiTextField
+              label="Nombre *"
+              placeholder={form.tipo === 'bien' ? 'Ej. Camisa talla M' : 'Ej. Diseño de logo'}
+              value={form.nombre} size="small" fullWidth autoFocus
+              onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            />
+
+            {/* Precio + ITBIS */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+              <MuiTextField
+                label="Precio (DOP) *" type="number" placeholder="0.00"
+                value={form.precio} size="small" fullWidth
+                slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+                onChange={(e) => setForm((f) => ({ ...f, precio: e.target.value }))}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
+              <FormControl size="small" fullWidth>
+                <InputLabel>Impuesto (ITBIS)</InputLabel>
+                <Select
+                  label="Impuesto (ITBIS)"
+                  value={form.tasaItbis}
+                  onChange={(e) => setForm((f) => ({ ...f, tasaItbis: e.target.value }))}
+                  sx={{ borderRadius: '8px' }}
+                >
+                  {TASA_ITBIS_OPCIONES.map((t) => (
+                    <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            {/* Costo de compra — solo para bienes */}
+            {form.tipo === 'bien' && (
+              <MuiTextField
+                label="Costo de compra (DOP)" type="number" placeholder="0.00"
+                value={form.costo} size="small" fullWidth
+                helperText="Usado para calcular margen y costo de ventas. No aparece en la factura."
+                slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+                onChange={(e) => setForm((f) => ({ ...f, costo: e.target.value }))}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+              />
+            )}
+
+            {/* Categoría */}
+            <FormControl size="small" fullWidth>
+              <InputLabel>Categoría</InputLabel>
+              <Select
+                label="Categoría"
+                value={form.categoriaId}
+                onChange={(e) => setForm((f) => ({ ...f, categoriaId: e.target.value }))}
+                sx={{ borderRadius: '8px' }}
+              >
+                <MenuItem value=""><em>Sin categoría</em></MenuItem>
+                {categorias.map((c) => (
+                  <MenuItem key={c.id} value={String(c.id)}>{c.nombre}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* Unidad de medida */}
+            <FormControl size="small" fullWidth>
+              <InputLabel>Unidad de medida</InputLabel>
+              <Select
+                label="Unidad de medida"
+                value={form.unidad}
+                onChange={(e) => setForm((f) => ({ ...f, unidad: e.target.value }))}
+                sx={{ borderRadius: '8px' }}
+              >
+                {UNIDADES.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
+              </Select>
+            </FormControl>
+
+            {/* Control de inventario — solo para bienes */}
+            {form.tipo === 'bien' && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, border: '1px dashed #99f6e4', borderRadius: '8px', p: 2, bgcolor: 'rgba(240,253,250,0.4)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Controlar inventario</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>El stock se descuenta automáticamente al guardar o emitir facturas</Typography>
+                  </Box>
+                  <Switch
+                    checked={form.controlaInventario}
+                    onChange={(e) => setForm((f) => ({ ...f, controlaInventario: e.target.checked }))}
+                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#0d9488' } }}
+                  />
+                </Box>
+
+                {form.controlaInventario && (
+                  <>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                      <MuiTextField
+                        label="Stock actual" type="number" placeholder="0"
+                        value={form.stockActual} size="small" fullWidth
+                        slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                        onChange={(e) => setForm((f) => ({ ...f, stockActual: e.target.value }))}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                      />
+                      <MuiTextField
+                        label="Stock mínimo" type="number" placeholder="0"
+                        value={form.stockMinimo} size="small" fullWidth
+                        helperText="Alerta si el stock baja de este número"
+                        slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                        onChange={(e) => setForm((f) => ({ ...f, stockMinimo: e.target.value }))}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                      />
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                      <Box>
+                        <Typography variant="body2" sx={{ color: '#374151' }}>Permitir venta sin stock</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>Si está desactivado, se bloqueará la factura cuando el stock sea 0</Typography>
+                      </Box>
+                      <Switch
+                        checked={form.permiteVentaSinStock}
+                        onChange={(e) => setForm((f) => ({ ...f, permiteVentaSinStock: e.target.checked }))}
+                        sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#0d9488' } }}
+                      />
+                    </Box>
+                  </>
+                )}
+              </Box>
+            )}
+
+            {/* Imagen del producto */}
+            <ImagenProductoBox imagen={form.imagen} onChange={(v) => setForm((f) => ({ ...f, imagen: v }))} />
+
+            {/* Formulario avanzado */}
+            <Box>
+              <MuiButton
+                variant="text" size="small"
+                onClick={() => setShowAvanzado((v) => !v)}
+                startIcon={showAvanzado ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
+                sx={{ textTransform: 'none', fontWeight: 600, color: 'primary.main', p: 0 }}>
+                Mostrar formulario avanzado
+              </MuiButton>
+              <Collapse in={showAvanzado}>
+                <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5, border: '1px dashed #e5e7eb', borderRadius: '8px', p: 2 }}>
+                  <MuiTextField
+                    label="Código de barras (POS)" placeholder="Escanea o escribe el EAN/UPC"
+                    value={form.codigoBarras} size="small" fullWidth
+                    onChange={(e) => setForm((f) => ({ ...f, codigoBarras: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                  />
+                  <MuiTextField
+                    label="Referencia / SKU" placeholder="SERV-001"
+                    value={form.referencia} size="small" fullWidth
+                    onChange={(e) => setForm((f) => ({ ...f, referencia: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                  />
+                  <MuiTextField
+                    label="Descripción" placeholder="Descripción opcional que aparecerá en la factura"
+                    value={form.descripcion} size="small" fullWidth
+                    onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                  />
+                </Box>
+              </Collapse>
+            </Box>
+
+            {/* Atributos (maestros) — solo al editar un producto existente */}
+            {editTarget && <MaestrosProductoSection productId={editTarget.id} />}
+          </Box>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton variant="outlined" onClick={() => { setShowForm(false); setShowAvanzado(false); }} disabled={saving}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+          <MuiButton variant="contained" disableElevation onClick={handleGuardar} disabled={saving}
+            startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            {saving ? 'Guardando…' : (editTarget ? 'Guardar cambios' : 'Crear ítem')}
+          </MuiButton>
+        </DialogActions>
       </Dialog>
-    </section>
+
+      {/* Modal: Confirmar eliminación */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>¿Eliminar ítem?</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {opError && <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>}
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Vas a eliminar <strong>{deleteTarget?.nombre}</strong>. Las facturas existentes no se verán afectadas.
+            </Typography>
+            <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />} sx={{ borderRadius: '8px' }}>
+              <Typography variant="caption">Este ítem dejará de aparecer en el selector de nueva factura.</Typography>
+            </Alert>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <MuiButton variant="outlined" onClick={() => setDeleteTarget(null)} disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>Cancelar</MuiButton>
+          <MuiButton variant="contained" color="error" disableElevation onClick={handleEliminar} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+          </MuiButton>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }
 
@@ -633,27 +657,32 @@ function ImagenProductoBox({ imagen, onChange }: { imagen: string; onChange: (v:
   }
 
   return (
-    <div className="space-y-1.5">
-      <Label>Imagen (opcional)</Label>
-      <label className="relative flex aspect-square w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300">
-        <input type="file" accept="image/*" className="hidden"
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151', mb: 0.5 }}>Imagen (opcional)</Typography>
+      <Box component="label" sx={{
+        position: 'relative', display: 'flex', aspectRatio: '1 / 1', width: '100%', maxWidth: 200, cursor: 'pointer',
+        flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.75,
+        borderRadius: '8px', border: '2px dashed #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af',
+        '&:hover': { borderColor: '#d1d5db' },
+      }}>
+        <input type="file" accept="image/*" style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         {imagen ? (
           <>
-            <img src={imagen} alt="Producto" className="h-full w-full rounded-lg object-cover" />
-            <button type="button" onClick={(e) => { e.preventDefault(); onChange(''); }}
-              className="absolute right-1.5 top-1.5 rounded-full bg-white/90 p-1 text-gray-600 shadow hover:bg-white">
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <Box component="img" src={imagen} alt="Producto" sx={{ height: '100%', width: '100%', borderRadius: '8px', objectFit: 'cover' }} />
+            <IconButton size="small" onClick={(e) => { e.preventDefault(); onChange(''); }}
+              sx={{ position: 'absolute', right: 6, top: 6, bgcolor: 'rgba(255,255,255,0.9)', color: '#4b5563', p: 0.5, boxShadow: 1, '&:hover': { bgcolor: '#fff' } }}>
+              <X style={{ width: 14, height: 14 }} />
+            </IconButton>
           </>
         ) : (
           <>
-            <Camera className="h-8 w-8" />
-            <span className="text-xs text-center">Selecciona una imagen<br />Tamaño máximo: 800 KB</span>
+            <Camera style={{ width: 32, height: 32 }} />
+            <Box component="span" sx={{ fontSize: '0.75rem', textAlign: 'center' }}>Selecciona una imagen<br />Tamaño máximo: 800 KB</Box>
           </>
         )}
-      </label>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-    </div>
+      </Box>
+      {error && <Typography sx={{ fontSize: '0.75rem', color: '#dc2626' }}>{error}</Typography>}
+    </Box>
   );
 }

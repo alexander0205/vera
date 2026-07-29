@@ -1,13 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Loader2 } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import CircularProgress from '@mui/material/CircularProgress';
+import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Producto { id: number; nombre: string; stockActual: number; }
@@ -34,6 +41,8 @@ interface Props {
 }
 
 const ITEM_VACIO: ItemForm = { productoId: null, cantidad: '1', costoUnitario: '0', almacenId: null };
+
+const labelSx = { display: 'block', mb: 0.5, fontSize: '0.875rem', fontWeight: 500, color: '#374151' };
 
 export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill }: Props) {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -115,112 +124,122 @@ export default function ModalRegistrarCompra({ open, onClose, onSuccess, prefill
   }
 
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Registrar entrada de inventario</DialogTitle>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onClose={() => onClose()}
+      slotProps={{ paper: { sx: { width: '100%', maxWidth: 672, maxHeight: '90vh' } } as object }}
+    >
+      <DialogTitle>Registrar entrada de inventario</DialogTitle>
 
-        <div className="space-y-4 py-2">
-          {/* Proveedor */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>RNC / Cédula proveedor</Label>
-              <Input value={proveedorRnc} onChange={e => setProveedorRnc(e.target.value)} placeholder="101234567" />
-            </div>
-            <div className="space-y-1">
-              <Label>Nombre proveedor</Label>
-              <Input value={proveedorNombre} onChange={e => setProveedorNombre(e.target.value)} placeholder="Distribuidora XYZ" />
-            </div>
-          </div>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        {/* Proveedor */}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+          <Box>
+            <Typography component="label" sx={labelSx}>RNC / Cédula proveedor</Typography>
+            <TextField size="small" fullWidth value={proveedorRnc} onChange={e => setProveedorRnc(e.target.value)} placeholder="101234567" />
+          </Box>
+          <Box>
+            <Typography component="label" sx={labelSx}>Nombre proveedor</Typography>
+            <TextField size="small" fullWidth value={proveedorNombre} onChange={e => setProveedorNombre(e.target.value)} placeholder="Distribuidora XYZ" />
+          </Box>
+        </Box>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Almacén destino</Label>
-              <Select value={almacenId?.toString() ?? '__none'}
-                onValueChange={v => setAlmacenId(v === '__none' ? null : parseInt(v))}>
-                <SelectTrigger><SelectValue placeholder="Sin almacén" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">Sin almacén</SelectItem>
-                  {almacenes.map(a => (
-                    <SelectItem key={a.id} value={a.id.toString()}>{a.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+          <Box>
+            <Typography component="label" sx={labelSx}>Fecha</Typography>
+            <TextField type="date" size="small" fullWidth value={fecha} onChange={e => setFecha(e.target.value)} />
+          </Box>
+          <Box>
+            <Typography component="label" sx={labelSx}>Almacén destino</Typography>
+            <FormControl size="small" fullWidth>
+              <Select
+                value={almacenId?.toString() ?? '__none'}
+                onChange={e => setAlmacenId(e.target.value === '__none' ? null : parseInt(e.target.value))}
+              >
+                <MenuItem value="__none">Sin almacén</MenuItem>
+                {almacenes.map(a => (
+                  <MenuItem key={a.id} value={a.id.toString()}>{a.nombre}</MenuItem>
+                ))}
               </Select>
-            </div>
-          </div>
+            </FormControl>
+          </Box>
+        </Box>
 
-          {prefill?.referenciaEncf && (
-            <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2 text-xs text-sky-700">
-              Vinculado a e-NCF: <span className="font-mono font-semibold">{prefill.referenciaEncf}</span>
-            </div>
-          )}
+        {prefill?.referenciaEncf && (
+          <Box sx={{ borderRadius: '8px', bgcolor: '#f0f9ff', border: '1px solid #bae6fd', px: 1.5, py: 1, fontSize: '0.75rem', color: '#0369a1' }}>
+            Vinculado a e-NCF: <Box component="span" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{prefill.referenciaEncf}</Box>
+          </Box>
+        )}
 
-          {/* Ítems */}
-          <div className="space-y-2">
-            <Label>Productos recibidos</Label>
-            {items.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-[1fr_80px_90px_36px] gap-2 items-center">
-                <Select value={item.productoId?.toString() ?? '__none'}
-                  onValueChange={v => setItem(idx, { productoId: v === '__none' ? null : parseInt(v) })}>
-                  <SelectTrigger className="text-sm"><SelectValue placeholder="Selecciona producto" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">— Producto —</SelectItem>
-                    {productos.map(p => (
-                      <SelectItem key={p.id} value={p.id.toString()}>{p.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number" min="1" placeholder="Cant."
-                  value={item.cantidad}
-                  onChange={e => setItem(idx, { cantidad: e.target.value })}
-                  className="text-sm"
-                />
-                <Input
-                  type="number" min="0" step="0.01" placeholder="Costo"
-                  value={item.costoUnitario}
-                  onChange={e => setItem(idx, { costoUnitario: e.target.value })}
-                  className="text-sm"
-                />
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
-                  disabled={items.length === 1}
-                  className="text-gray-400 hover:text-red-500"
+        {/* Ítems */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography component="label" sx={labelSx}>Productos recibidos</Typography>
+          {items.map((item, idx) => (
+            <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 36px', gap: 1, alignItems: 'center' }}>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={item.productoId?.toString() ?? '__none'}
+                  onChange={e => setItem(idx, { productoId: e.target.value === '__none' ? null : parseInt(e.target.value) })}
                 >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-            <div className="text-xs text-gray-400 grid grid-cols-[1fr_80px_90px_36px] gap-2 px-1">
-              <span>Producto</span><span>Cantidad</span><span>Costo unit. DOP</span>
-            </div>
-            <Button variant="outline" size="sm" className="w-full mt-1"
-              onClick={() => setItems(prev => [...prev, { ...ITEM_VACIO }])}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" /> Agregar producto
-            </Button>
-          </div>
-
-          <div className="space-y-1">
-            <Label>Notas internas</Label>
-            <Textarea value={notas} onChange={e => setNotas(e.target.value)}
-              placeholder="Número de orden, observaciones…" rows={2} />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={saving}>
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Registrar compra
+                  <MenuItem value="__none">— Producto —</MenuItem>
+                  {productos.map(p => (
+                    <MenuItem key={p.id} value={p.id.toString()}>{p.nombre}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                type="number" size="small" placeholder="Cant."
+                value={item.cantidad}
+                onChange={e => setItem(idx, { cantidad: e.target.value })}
+                slotProps={{ htmlInput: { min: 1 } }}
+              />
+              <TextField
+                type="number" size="small" placeholder="Costo"
+                value={item.costoUnitario}
+                onChange={e => setItem(idx, { costoUnitario: e.target.value })}
+                slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+              />
+              <IconButton
+                onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
+                disabled={items.length === 1}
+                sx={{ color: '#9ca3af', '&:hover': { color: '#ef4444' } }}
+              >
+                <Trash2 style={{ width: 16, height: 16 }} />
+              </IconButton>
+            </Box>
+          ))}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 36px', gap: 1, px: 0.5, fontSize: '0.75rem', color: '#9ca3af' }}>
+            <Box component="span">Producto</Box><Box component="span">Cantidad</Box><Box component="span">Costo unit. DOP</Box>
+          </Box>
+          <Button
+            variant="outlined" size="small" fullWidth
+            onClick={() => setItems(prev => [...prev, { ...ITEM_VACIO }])}
+            startIcon={<Plus style={{ width: 14, height: 14 }} />}
+            sx={{ mt: 0.5, borderColor: '#d1d5db', color: '#374151' }}
+          >
+            Agregar producto
           </Button>
-        </DialogFooter>
+        </Box>
+
+        <Box>
+          <Typography component="label" sx={labelSx}>Notas internas</Typography>
+          <TextField
+            multiline rows={2} size="small" fullWidth
+            value={notas} onChange={e => setNotas(e.target.value)}
+            placeholder="Número de orden, observaciones…"
+          />
+        </Box>
       </DialogContent>
+
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose} disabled={saving} sx={{ borderColor: '#d1d5db', color: '#374151' }}>Cancelar</Button>
+        <Button
+          variant="contained" onClick={handleSubmit} disabled={saving}
+          startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+        >
+          Registrar compra
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

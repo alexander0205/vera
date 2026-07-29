@@ -5,6 +5,10 @@ import { eq, desc } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { Activity } from 'lucide-react';
 import { PlanGate } from '@/components/plan-gate';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Card from '@mui/material/Card';
+import Divider from '@mui/material/Divider';
 
 const ACTION_LABELS: Record<string, string> = {
   SIGN_UP: 'Registro de usuario',
@@ -44,42 +48,55 @@ export default async function ActivityPage() {
 
   return (
     <>
-    <PlanGate feature="actividad" />
-    <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Registro de Actividad</h1>
-        <p className="text-sm text-gray-500 mt-1">Historial de acciones realizadas en esta empresa</p>
-      </div>
+      <PlanGate feature="actividad" />
+      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1200 }}>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            Registro de Actividad
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            Historial de acciones realizadas en esta empresa
+          </Typography>
+        </Box>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {logs.length === 0 ? (
-          <div className="py-16 text-center">
-            <Activity className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No hay actividad registrada</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {logs.map(log => (
-              <div key={log.id} className="flex items-center gap-4 px-5 py-3">
-                <div className="h-8 w-8 rounded-full bg-teal-50 flex items-center justify-center shrink-0">
-                  <Activity className="h-4 w-4 text-teal-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900">{ACTION_LABELS[log.action] ?? log.action}</p>
-                  <p className="text-xs text-gray-400">
-                    {log.userName ?? log.userEmail ?? 'Sistema'}
-                    {log.ipAddress && ` · ${log.ipAddress}`}
-                  </p>
-                </div>
-                <p className="text-xs text-gray-400 shrink-0">
-                  {new Date(log.timestamp).toLocaleString('es-DO')}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+          {logs.length === 0 ? (
+            <Box sx={{ py: 10, textAlign: 'center' }}>
+              <Activity style={{ width: 40, height: 40, color: '#e5e7eb', margin: '0 auto 12px' }} />
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                No hay actividad registrada
+              </Typography>
+            </Box>
+          ) : (
+            logs.map((log, i) => (
+              <Box key={log.id}>
+                {i > 0 && <Divider sx={{ mx: 2 }} />}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2.5, py: 1.5 }}>
+                  <Box sx={{
+                    width: 34, height: 34, borderRadius: '50%',
+                    bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <Activity style={{ width: 16, height: 16, color: '#0d9488' }} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                      {ACTION_LABELS[log.action] ?? log.action}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      {log.userName ?? log.userEmail ?? 'Sistema'}
+                      {log.ipAddress && ` · ${log.ipAddress}`}
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>
+                    {new Date(log.timestamp).toLocaleString('es-DO')}
+                  </Typography>
+                </Box>
+              </Box>
+            ))
+          )}
+        </Card>
+      </Box>
     </>
   );
 }

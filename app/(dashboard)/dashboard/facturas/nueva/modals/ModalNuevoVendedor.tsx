@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Loader2 } from 'lucide-react';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export function ModalNuevoVendedor({ open, onClose, onCreated }: {
   open: boolean;
@@ -42,34 +44,80 @@ export function ModalNuevoVendedor({ open, onClose, onCreated }: {
     }
   }
 
+  function handleClose() {
+    onClose();
+    setError(null);
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) { onClose(); setError(null); } }}>
-      <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="text-base font-semibold">Nuevo vendedor</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>}
-          <div className="space-y-1.5">
-            <Label className="text-sm">Nombre <span className="text-red-500">*</span></Label>
-            <Input placeholder="Nombre del vendedor" value={form.nombre} onChange={(e) => setForm(f => ({ ...f, nombre: e.target.value }))} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Identificación</Label>
-            <Input placeholder="Cédula u otro identificador" value={form.identificacion} onChange={(e) => setForm(f => ({ ...f, identificacion: e.target.value }))} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-sm">Observación</Label>
-            <Input placeholder="Notas adicionales" value={form.observacion} onChange={(e) => setForm(f => ({ ...f, observacion: e.target.value }))} />
-          </div>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => { onClose(); setError(null); }} disabled={saving}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSave} disabled={saving}>
-            {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Crear vendedor'}
-          </Button>
-        </DialogFooter>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 480, width: '100%' } } as object }}
+    >
+      <DialogTitle sx={{ fontWeight: 600, fontSize: '1rem' }}>
+        Nuevo vendedor
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 1 }}>
+        {error && (
+          <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', p: 1.5, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: '#b91c1c' }}>{error}</Typography>
+          </Box>
+        )}
+
+        <TextField
+          label="Nombre"
+          required
+          size="small"
+          fullWidth
+          placeholder="Nombre del vendedor"
+          value={form.nombre}
+          onChange={(e) => setForm(f => ({ ...f, nombre: e.target.value }))}
+          sx={{ mb: 2, mt: 1, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        />
+
+        <TextField
+          label="Identificación"
+          size="small"
+          fullWidth
+          placeholder="Cédula u otro identificador"
+          value={form.identificacion}
+          onChange={(e) => setForm(f => ({ ...f, identificacion: e.target.value }))}
+          sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        />
+
+        <TextField
+          label="Observación"
+          size="small"
+          fullWidth
+          placeholder="Notas adicionales"
+          value={form.observacion}
+          onChange={(e) => setForm(f => ({ ...f, observacion: e.target.value }))}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+        />
       </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button
+          variant="outlined"
+          onClick={handleClose}
+          disabled={saving}
+          sx={{ textTransform: 'none', color: '#4b5563', borderColor: '#e5e7eb' }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={saving}
+          disableElevation
+          startIcon={saving ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
+          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+        >
+          {saving ? 'Guardando…' : 'Crear vendedor'}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

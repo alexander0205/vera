@@ -14,6 +14,7 @@ import NuevaFacturaFormClient from './_nueva-factura-client';
 import { hasPermission } from '@/lib/auth/page-guard';
 import { ShieldX } from 'lucide-react';
 import Link from 'next/link';
+import { Box, Typography, Button } from '@mui/material';
 
 // Re-export para consumidores existentes (editar, wrapper cliente).
 export type { EmpresaPerfil } from '@/lib/facturas/empresa-perfil';
@@ -22,31 +23,66 @@ export default async function NuevaFacturaPage() {
   const canCreate = await hasPermission('facturas:crear');
   if (!canCreate) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-5 p-6 text-center">
-        <div className="h-14 w-14 rounded-full bg-red-50 flex items-center justify-center">
-          <ShieldX className="h-7 w-7 text-red-500" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Sin permisos para crear facturas</h2>
-          <p className="text-sm text-gray-500 mt-1 max-w-sm">
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 400,
+          gap: 2.5,
+          p: 3,
+          textAlign: 'center',
+        }}
+      >
+        <Box
+          sx={{
+            height: 56,
+            width: 56,
+            borderRadius: '50%',
+            bgcolor: '#fef2f2',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ShieldX style={{ width: 28, height: 28, color: '#ef4444' }} />
+        </Box>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: '#111827' }}>
+            Sin permisos para crear facturas
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5, maxWidth: 384 }}>
             Tu rol no tiene acceso para crear facturas. Contacta al administrador si necesitas realizar cambios.
-          </p>
-        </div>
-        <Link
+          </Typography>
+        </Box>
+        <Button
+          component="a"
           href="/dashboard/facturas"
-          className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          nativeButton={false}
+          variant="contained"
+          disableElevation
+          sx={{
+            textTransform: 'none',
+            fontSize: '0.875rem',
+            px: 2,
+            py: 1,
+            borderRadius: '8px',
+            bgcolor: '#0d9488',
+            '&:hover': { bgcolor: '#0f766e' },
+          }}
         >
           Volver a facturas
-        </Link>
-      </div>
+        </Button>
+      </Box>
     );
   }
   const perfil = await getEmpresaPerfil();
 
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <Loader2 style={{ width: 32, height: 32, color: '#0d9488', animation: 'spin 1s linear infinite' }} />
       </div>
     }>
       <NuevaFacturaFormClient initialPerfil={perfil} categoriaFija="factura-venta" />

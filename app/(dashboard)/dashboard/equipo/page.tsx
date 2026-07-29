@@ -1,32 +1,40 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Chip from '@mui/material/Chip';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import CircularProgress from '@mui/material/CircularProgress';
+import Link from 'next/link';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import {
-  Users, UserPlus, Mail, Trash2, Shield, Loader2,
+  Users, UserPlus, Mail, Trash2, Shield,
   Crown, BookOpen, ShoppingBag, User, Clock, Copy, CheckCheck,
   AlertTriangle, Eye, UserCog,
 } from 'lucide-react';
 import { ROLES as ROLE_DEFS } from '@/lib/config/roles';
+
+/** Módulos que otorga un rol de sistema (según sus permisos modulo:*). Para
+ *  roles custom sin catálogo estático devuelve null (no se muestra el hint). */
+function modulosDeRol(roleKey: string): { facturacion: boolean; pos: boolean } | null {
+  const def = ROLE_DEFS.find(r => r.key === roleKey);
+  if (!def) return null;
+  return {
+    facturacion: def.permissions.includes('modulo:facturacion'),
+    pos:         def.permissions.includes('modulo:pos'),
+  };
+}
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -99,13 +107,80 @@ function resolveRoleCfg(roleKey: string, dynamic?: RoleOpt[]): RoleCfg {
   return ROLES[roleKey] ?? ROLES.user;
 }
 
+// ─── Paleta: mapea las clases tailwind (`text-*`, `bg-*`, `border-*`) a hex ─────
+// Conserva la intención visual original de cada rol al pintar el Chip en MUI.
+const TW_COLOR_HEX: Record<string, string> = {
+  'gray-50': '#f9fafb', 'gray-100': '#f3f4f6', 'gray-200': '#e5e7eb',
+  'gray-300': '#d1d5db', 'gray-400': '#9ca3af', 'gray-500': '#6b7280',
+  'gray-600': '#4b5563', 'gray-700': '#374151', 'gray-800': '#1f2937',
+  'gray-900': '#111827',
+  'red-50': '#fef2f2', 'red-100': '#fee2e2', 'red-200': '#fecaca',
+  'red-500': '#ef4444', 'red-600': '#dc2626', 'red-700': '#b91c1c',
+  'amber-50': '#fffbeb', 'amber-100': '#fef3c7', 'amber-200': '#fde68a',
+  'amber-500': '#f59e0b', 'amber-600': '#d97706', 'amber-700': '#b45309',
+  'amber-800': '#92400e',
+  'yellow-50': '#fefce8', 'yellow-100': '#fef9c3', 'yellow-200': '#fef08a',
+  'yellow-600': '#ca8a04', 'yellow-700': '#a16207', 'yellow-800': '#854d0e',
+  'green-50': '#f0fdf4', 'green-100': '#dcfce7', 'green-200': '#bbf7d0',
+  'green-600': '#16a34a', 'green-700': '#15803d', 'green-800': '#166534',
+  'emerald-50': '#ecfdf5', 'emerald-100': '#d1fae5', 'emerald-200': '#a7f3d0',
+  'emerald-600': '#059669', 'emerald-700': '#047857', 'emerald-800': '#065f46',
+  'teal-50': '#f0fdfa', 'teal-100': '#ccfbf1', 'teal-200': '#99f6e4',
+  'teal-600': '#0d9488', 'teal-700': '#0f766e', 'teal-800': '#115e59',
+  'blue-50': '#eff6ff', 'blue-100': '#dbeafe', 'blue-200': '#bfdbfe',
+  'blue-600': '#2563eb', 'blue-700': '#1d4ed8', 'blue-800': '#1e40af',
+  'indigo-50': '#eef2ff', 'indigo-100': '#e0e7ff', 'indigo-200': '#c7d2fe',
+  'indigo-600': '#4f46e5', 'indigo-700': '#4338ca', 'indigo-800': '#3730a3',
+  'purple-50': '#faf5ff', 'purple-100': '#f3e8ff', 'purple-200': '#e9d5ff',
+  'purple-600': '#9333ea', 'purple-700': '#7e22ce', 'purple-800': '#6b21a8',
+  'violet-50': '#f5f3ff', 'violet-100': '#ede9fe', 'violet-200': '#ddd6fe',
+  'violet-600': '#7c3aed', 'violet-700': '#6d28d9', 'violet-800': '#5b21b6',
+  'pink-50': '#fdf2f8', 'pink-100': '#fce7f3', 'pink-200': '#fbcfe8',
+  'pink-600': '#db2777', 'pink-700': '#be185d', 'pink-800': '#9d174d',
+  'orange-50': '#fff7ed', 'orange-100': '#ffedd5', 'orange-200': '#fed7aa',
+  'orange-600': '#ea580c', 'orange-700': '#c2410c', 'orange-800': '#9a3412',
+  'cyan-50': '#ecfeff', 'cyan-100': '#cffafe', 'cyan-200': '#a5f5fe',
+  'cyan-600': '#0891b2', 'cyan-700': '#0e7490', 'cyan-800': '#155e75',
+  'slate-50': '#f8fafc', 'slate-100': '#f1f5f9', 'slate-200': '#e2e8f0',
+  'slate-600': '#475569', 'slate-700': '#334155', 'slate-800': '#1e293b',
+};
+
+function twToBadgeStyle(color: string): { color: string; bg: string; border: string } {
+  const out = { color: '#4b5563', bg: '#f9fafb', border: '#e5e7eb' };
+  for (const token of color.split(/\s+/)) {
+    const m = token.match(/^(text|bg|border)-(.+)$/);
+    if (!m) continue;
+    const hex = TW_COLOR_HEX[m[2]];
+    if (!hex) continue;
+    if (m[1] === 'text') out.color = hex;
+    else if (m[1] === 'bg') out.bg = hex;
+    else if (m[1] === 'border') out.border = hex;
+  }
+  return out;
+}
+
 function RoleBadge({ cfg }: { cfg: RoleCfg }) {
   const Icon = cfg.icon;
+  const c = twToBadgeStyle(cfg.color);
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.color}`}>
-      <Icon className="h-3 w-3" />
-      {cfg.label}
-    </span>
+    <Chip
+      size="small"
+      icon={<Icon style={{ width: 12, height: 12, color: c.color }} />}
+      label={cfg.label}
+      sx={{
+        height: 'auto',
+        py: 0.25,
+        px: 0.25,
+        fontSize: '0.75rem',
+        fontWeight: 500,
+        color: c.color,
+        bgcolor: c.bg,
+        border: `1px solid ${c.border}`,
+        borderRadius: '9999px',
+        '& .MuiChip-label': { px: 0.75 },
+        '& .MuiChip-icon': { ml: 0.75, mr: -0.25, color: c.color },
+      }}
+    />
   );
 }
 
@@ -266,20 +341,41 @@ export default function EquipoPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+      </Box>
     );
   }
 
   if (error || !data) {
     return (
-      <section className="p-6">
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
-          <p className="font-medium">{error ?? 'Error cargando equipo'}</p>
-          <Button variant="outline" className="mt-3" onClick={cargar}>Reintentar</Button>
-        </div>
-      </section>
+      <Box component="section" sx={{ p: 3 }}>
+        <Box
+          sx={{
+            bgcolor: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#b91c1c',
+            borderRadius: '12px',
+            p: 3,
+            textAlign: 'center',
+          }}
+        >
+          <Typography sx={{ fontWeight: 500 }}>{error ?? 'Error cargando equipo'}</Typography>
+          <Button
+            variant="outlined"
+            onClick={cargar}
+            sx={{
+              mt: 1.5,
+              textTransform: 'none',
+              color: '#374151',
+              borderColor: '#d1d5db',
+              '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+            }}
+          >
+            Reintentar
+          </Button>
+        </Box>
+      </Box>
     );
   }
 
@@ -290,356 +386,700 @@ export default function EquipoPage() {
   const isIlimitado = userLimit < 0;
 
   return (
-    <section className="p-6 space-y-6">
+    <Box component="section" sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Users className="h-6 w-6 text-teal-600" />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography
+            variant="h1"
+            sx={{
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              color: '#111827',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <Users style={{ width: 24, height: 24, color: '#0d9488' }} />
             Equipo
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          </Typography>
+          <Typography
+            component="p"
+            sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5, display: 'flex', alignItems: 'center' }}
+          >
             Administra los usuarios con acceso a tu empresa
             {!isIlimitado && (
-              <span className={`ml-2 text-xs font-medium px-2 py-0.5 rounded-full border ${
-                atLimit
-                  ? 'bg-red-50 text-red-700 border-red-200'
-                  : 'bg-gray-50 text-gray-500 border-gray-200'
-              }`}>
+              <Box
+                component="span"
+                sx={{
+                  ml: 1,
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: '9999px',
+                  border: '1px solid',
+                  ...(atLimit
+                    ? { bgcolor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }
+                    : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb' }),
+                }}
+              >
                 {memberCount}/{userLimit} usuarios
-              </span>
+              </Box>
             )}
-          </p>
-        </div>
+          </Typography>
+        </Box>
         {canManage && (
-          <div className="flex flex-col items-end gap-1">
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
             <Button
-              className="bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="contained"
               onClick={() => !atLimit && setShowInvitar(true)}
               disabled={atLimit}
               title={atLimit ? `Tu plan solo permite ${userLimit} usuario(s)` : undefined}
+              startIcon={<UserPlus style={{ width: 16, height: 16 }} />}
+              sx={{
+                textTransform: 'none',
+                bgcolor: '#0d9488',
+                color: '#fff',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+                '&.Mui-disabled': { bgcolor: '#0d9488', color: '#fff', opacity: 0.5 },
+              }}
             >
-              <UserPlus className="h-4 w-4 mr-2" />
               Invitar usuario
             </Button>
             {atLimit && (
-              <p className="text-xs text-red-600">
+              <Typography component="p" sx={{ fontSize: '0.75rem', color: '#dc2626' }}>
                 Límite alcanzado —{' '}
-                <a href="/dashboard/suscripcion" className="underline hover:text-red-700">
+                <Box
+                  component={Link}
+                  href="/dashboard/suscripcion"
+                  sx={{ textDecoration: 'underline', color: 'inherit', '&:hover': { color: '#b91c1c' } }}
+                >
                   actualiza tu plan
-                </a>
-              </p>
+                </Box>
+              </Typography>
             )}
-          </div>
+          </Box>
         )}
-      </div>
+      </Box>
 
       {/* Miembros activos */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold text-gray-600 flex items-center gap-2">
-            <Users className="h-4 w-4" />
+      <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+        <Box sx={{ px: 3, pt: 2.5, pb: 1.5 }}>
+          {/* component="div": Typography por defecto renderiza <p>, y el Chip
+              de MUI es un <div> — anidarlo dentro de <p> es HTML inválido y
+              React lo reporta como error en consola. */}
+          <Typography
+            component="div"
+            sx={{
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: '#4b5563',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <Users style={{ width: 16, height: 16 }} />
             Miembros activos
-            <Badge variant="secondary" className="ml-1">{data.members.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y divide-gray-100">
-            {data.members.map((m) => {
-              const isSelf  = m.userId === data.myUserId;
-              const isOwner = m.role === 'owner';
-              const canEditThis = canManage && !isSelf;
+            <Chip
+              label={data.members.length}
+              size="small"
+              sx={{ ml: 0.5, bgcolor: '#f1f5f9', color: '#475569', fontWeight: 500, height: 20 }}
+            />
+          </Typography>
+        </Box>
+        <Box>
+          {data.members.map((m) => {
+            const isSelf  = m.userId === data.myUserId;
+            const isOwner = m.role === 'owner';
+            const canEditThis = canManage && !isSelf;
 
-              return (
-                <div key={m.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
-                  {/* Avatar */}
-                  <div className="h-10 w-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-semibold text-sm shrink-0">
-                    {getInitials(m.name, m.email)}
-                  </div>
+            return (
+              <Box
+                key={m.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  px: 3,
+                  py: 2,
+                  borderTop: '1px solid #f3f4f6',
+                  transition: 'background-color 0.15s',
+                  '&:hover': { bgcolor: '#f9fafb' },
+                }}
+              >
+                {/* Avatar */}
+                <Box
+                  sx={{
+                    height: 40,
+                    width: 40,
+                    borderRadius: '9999px',
+                    bgcolor: '#ccfbf1',
+                    color: '#0f766e',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    flexShrink: 0,
+                  }}
+                >
+                  {getInitials(m.name, m.email)}
+                </Box>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {m.name ?? m.email}
-                        {isSelf && <span className="text-gray-400 font-normal ml-1">(tú)</span>}
-                      </p>
-                      <RoleBadge cfg={resolveRoleCfg(m.role, data?.roles)} />
-                    </div>
-                    <p className="text-xs text-gray-500 truncate">{m.email}</p>
-                    <p className="text-xs text-gray-400">Miembro desde {formatFecha(m.joinedAt)}</p>
-                  </div>
+                {/* Info */}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography
+                      component="p"
+                      sx={{
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        color: '#111827',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {m.name ?? m.email}
+                      {isSelf && (
+                        <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400, ml: 0.5 }}>(tú)</Box>
+                      )}
+                    </Typography>
+                    <RoleBadge cfg={resolveRoleCfg(m.role, data?.roles)} />
+                  </Box>
+                  <Typography
+                    component="p"
+                    sx={{
+                      fontSize: '0.75rem',
+                      color: '#6b7280',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {m.email}
+                  </Typography>
+                  <Typography component="p" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                    Miembro desde {formatFecha(m.joinedAt)}
+                  </Typography>
 
-                  {/* Acciones */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {canEditThis && (
-                      changingRole === m.id
-                        ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                        : (
-                          <Select
-                            value={m.role}
-                            onValueChange={(val) => handleRoleChange(m.id, val)}
-                            disabled={changingRole !== null}
+                  {/* Módulos a los que entra este usuario (según su rol). El
+                      owner siempre entra a todo. Deja ver de un vistazo quién
+                      usa Facturación, quién el POS o ambos. */}
+                  {(() => {
+                    const mods = isOwner
+                      ? { facturacion: true, pos: true }
+                      : modulosDeRol(m.role);
+                    if (!mods) return null;
+                    const activos = [
+                      mods.facturacion && 'Facturación',
+                      mods.pos && 'Punto de Venta',
+                    ].filter(Boolean) as string[];
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
+                        <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#9ca3af' }}>
+                          Acceso a:
+                        </Typography>
+                        {activos.length === 0 ? (
+                          <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#b45309' }}>
+                            ningún módulo
+                          </Typography>
+                        ) : activos.map(nombre => (
+                          <Box
+                            key={nombre}
+                            component="span"
+                            sx={{
+                              fontSize: '0.6875rem', fontWeight: 600, px: 0.875, py: '2px',
+                              borderRadius: '6px', bgcolor: '#f0fdfa', color: '#0f766e',
+                              border: '1px solid #99f6e4',
+                            }}
                           >
-                            <SelectTrigger className="h-8 text-xs w-36">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(data?.roles ?? []).filter(r => r.key !== 'owner').map(r => (
-                                <SelectItem key={r.key} value={r.key} className="text-xs">
-                                  {r.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )
-                    )}
+                            {nombre}
+                          </Box>
+                        ))}
+                      </Box>
+                    );
+                  })()}
+                </Box>
 
-                    {(canEditThis || (isSelf && !isOwner)) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
-                        onClick={() => { setRemoveError(null); setMemberToRemove(m); }}
-                        title={isSelf ? 'Salir del equipo' : 'Eliminar miembro'}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                {/* Acciones */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                  {canEditThis && (
+                    changingRole === m.id
+                      ? <CircularProgress size={16} sx={{ color: '#9ca3af' }} />
+                      : (
+                        <Select
+                          value={m.role}
+                          onChange={(e) => handleRoleChange(m.id, e.target.value)}
+                          disabled={changingRole !== null}
+                          size="small"
+                          sx={{
+                            height: 32,
+                            width: 144,
+                            fontSize: '0.75rem',
+                            '& .MuiSelect-select': { py: 0.5 },
+                          }}
+                        >
+                          {(data?.roles ?? []).filter(r => r.key !== 'owner').map(r => (
+                            <MenuItem key={r.key} value={r.key} sx={{ fontSize: '0.75rem' }}>
+                              {r.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      )
+                  )}
+
+                  {(canEditThis || (isSelf && !isOwner)) && (
+                    <IconButton
+                      size="small"
+                      onClick={() => { setRemoveError(null); setMemberToRemove(m); }}
+                      title={isSelf ? 'Salir del equipo' : 'Eliminar miembro'}
+                      sx={{
+                        height: 32,
+                        width: 32,
+                        color: '#ef4444',
+                        '&:hover': { color: '#b91c1c', bgcolor: '#fef2f2' },
+                      }}
+                    >
+                      <Trash2 style={{ width: 14, height: 14 }} />
+                    </IconButton>
+                  )}
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      </Paper>
 
       {/* Invitaciones pendientes */}
       {data.invitations.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-gray-600 flex items-center gap-2">
-              <Mail className="h-4 w-4" />
+        <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+          <Box sx={{ px: 3, pt: 2.5, pb: 1.5 }}>
+            <Typography
+              sx={{
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#4b5563',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+              }}
+            >
+              <Mail style={{ width: 16, height: 16 }} />
               Invitaciones pendientes
-              <Badge variant="secondary" className="ml-1">{data.invitations.length}</Badge>
-            </CardTitle>
-            <CardDescription className="text-xs">
+              <Chip
+                label={data.invitations.length}
+                size="small"
+                sx={{ ml: 0.5, bgcolor: '#f1f5f9', color: '#475569', fontWeight: 500, height: 20 }}
+              />
+            </Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.5 }}>
               Usuarios invitados que aún no se han registrado
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-gray-100">
-              {data.invitations.map((inv) => (
-                <div key={inv.id} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
-                  <div className="h-10 w-10 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{inv.email}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <RoleBadge cfg={resolveRoleCfg(inv.role, data?.roles)} />
-                      <span className="text-xs text-gray-400">Invitado el {formatFecha(inv.invitedAt)}</span>
-                    </div>
-                  </div>
-                  {canManage && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
-                      onClick={() => setInvToCancel(inv)}
-                      title="Cancelar invitación"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+            </Typography>
+          </Box>
+          <Box>
+            {data.invitations.map((inv) => (
+              <Box
+                key={inv.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  px: 3,
+                  py: 2,
+                  borderTop: '1px solid #f3f4f6',
+                  transition: 'background-color 0.15s',
+                  '&:hover': { bgcolor: '#f9fafb' },
+                }}
+              >
+                <Box
+                  sx={{
+                    height: 40,
+                    width: 40,
+                    borderRadius: '9999px',
+                    bgcolor: '#f3f4f6',
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Clock style={{ width: 16, height: 16 }} />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    component="p"
+                    sx={{
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: '#111827',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {inv.email}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.25 }}>
+                    <RoleBadge cfg={resolveRoleCfg(inv.role, data?.roles)} />
+                    <Box component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                      Invitado el {formatFecha(inv.invitedAt)}
+                    </Box>
+                  </Box>
+                </Box>
+                {canManage && (
+                  <IconButton
+                    size="small"
+                    onClick={() => setInvToCancel(inv)}
+                    title="Cancelar invitación"
+                    sx={{
+                      height: 32,
+                      width: 32,
+                      color: '#ef4444',
+                      '&:hover': { color: '#b91c1c', bgcolor: '#fef2f2' },
+                    }}
+                  >
+                    <Trash2 style={{ width: 14, height: 14 }} />
+                  </IconButton>
+                )}
+              </Box>
+            ))}
+          </Box>
+        </Paper>
       )}
 
       {/* ── Modal: Invitar usuario ──────────────────────────────────────────────── */}
       <Dialog
         open={showInvitar}
-        onOpenChange={(open) => { if (!open) resetInviteModal(); else setShowInvitar(true); }}
+        onClose={() => resetInviteModal()}
+        fullWidth
+        maxWidth="xs"
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5 text-teal-600" />
-              Invitar usuario
-            </DialogTitle>
-          </DialogHeader>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <UserPlus style={{ width: 20, height: 20, color: '#0d9488' }} />
+          Invitar usuario
+        </DialogTitle>
 
-          {inviteUrl ? (
-            <div className="py-4 space-y-4">
-              <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-center">
-                <CheckCheck className="h-8 w-8 text-teal-600 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-teal-800">¡Invitación creada!</p>
-                <p className="text-xs text-teal-600 mt-1">
-                  Comparte este enlace con <strong>{invEmail}</strong>:
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Input readOnly value={inviteUrl} className="text-xs font-mono bg-gray-50" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={copyInviteUrl}
-                  className={copied ? 'text-teal-600 border-teal-300' : ''}
-                >
-                  {copied ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-              <p className="text-xs text-gray-400 text-center">
-                El enlace es válido hasta que el usuario se registre con ese correo
-              </p>
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={resetInviteModal}>Cerrar</Button>
-              </div>
-            </div>
-          ) : (
-            <div className="py-4 space-y-4">
+        {inviteUrl ? (
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box
+              sx={{
+                bgcolor: '#f0fdfa',
+                border: '1px solid #99f6e4',
+                borderRadius: '12px',
+                p: 2,
+                textAlign: 'center',
+              }}
+            >
+              <CheckCheck style={{ width: 32, height: 32, color: '#0d9488', margin: '0 auto 8px' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#115e59' }}>
+                ¡Invitación creada!
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#0d9488', mt: 0.5 }}>
+                Comparte este enlace con <strong>{invEmail}</strong>:
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                size="small"
+                fullWidth
+                value={inviteUrl}
+                slotProps={{
+                  input: {
+                    readOnly: true,
+                    sx: { fontSize: '0.75rem', fontFamily: 'monospace', bgcolor: '#f9fafb' },
+                  },
+                }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={copyInviteUrl}
+                sx={{
+                  minWidth: 40,
+                  textTransform: 'none',
+                  color: copied ? '#0d9488' : '#374151',
+                  borderColor: copied ? '#5eead4' : '#d1d5db',
+                  '&:hover': { borderColor: copied ? '#5eead4' : '#9ca3af' },
+                }}
+              >
+                {copied
+                  ? <CheckCheck style={{ width: 16, height: 16 }} />
+                  : <Copy style={{ width: 16, height: 16 }} />}
+              </Button>
+            </Box>
+            <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>
+              El enlace es válido hasta que el usuario se registre con ese correo
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                variant="outlined"
+                onClick={resetInviteModal}
+                sx={{
+                  textTransform: 'none',
+                  color: '#374151',
+                  borderColor: '#d1d5db',
+                  '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+                }}
+              >
+                Cerrar
+              </Button>
+            </Box>
+          </DialogContent>
+        ) : (
+          <>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {invError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+                <Box
+                  sx={{
+                    bgcolor: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    color: '#b91c1c',
+                    fontSize: '0.875rem',
+                    borderRadius: '8px',
+                    p: 1.5,
+                  }}
+                >
                   {invError}
-                </div>
+                </Box>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="inv-email">Correo electrónico</Label>
-                <Input
-                  id="inv-email"
-                  type="email"
-                  placeholder="usuario@empresa.com"
-                  value={invEmail}
-                  onChange={(e) => setInvEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleInvitar()}
-                  disabled={invitando}
-                  autoFocus
-                />
-              </div>
+              <TextField
+                id="inv-email"
+                label="Correo electrónico"
+                type="email"
+                size="small"
+                fullWidth
+                placeholder="usuario@empresa.com"
+                value={invEmail}
+                onChange={(e) => setInvEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleInvitar()}
+                disabled={invitando}
+                autoFocus
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="inv-role">Rol</Label>
-                <Select value={invRole} onValueChange={setInvRole} disabled={invitando}>
-                  <SelectTrigger id="inv-role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(data?.roles ?? []).filter(r => r.key !== 'owner').map(r => {
-                      const cfg = resolveRoleCfg(r.key, data?.roles);
-                      const Icon = cfg.icon;
-                      return (
-                        <SelectItem key={r.key} value={r.key}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="h-3.5 w-3.5" />
-                            <span>{cfg.label}</span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
+              <FormControl size="small" fullWidth disabled={invitando}>
+                <InputLabel id="inv-role-label" shrink>Rol</InputLabel>
+                <Select
+                  labelId="inv-role-label"
+                  id="inv-role"
+                  label="Rol"
+                  value={invRole}
+                  onChange={(e) => setInvRole(e.target.value)}
+                  displayEmpty
+                >
+                  {(data?.roles ?? []).filter(r => r.key !== 'owner').map(r => {
+                    const cfg = resolveRoleCfg(r.key, data?.roles);
+                    const Icon = cfg.icon;
+                    return (
+                      <MenuItem key={r.key} value={r.key}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Icon style={{ width: 14, height: 14 }} />
+                          <Box component="span">{cfg.label}</Box>
+                        </Box>
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
                 {invRole && (
-                  <p className="text-xs text-gray-500">{resolveRoleCfg(invRole, data?.roles).descripcion}</p>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.75 }}>
+                    {resolveRoleCfg(invRole, data?.roles).descripcion}
+                  </Typography>
                 )}
-              </div>
+                {/* Acceso a módulos que otorga el rol elegido — así el owner ve
+                    de una si el empleado entra a POS, Facturación o ambos. */}
+                {(() => {
+                  const m = modulosDeRol(invRole);
+                  if (!m) return null;
+                  const chips = [
+                    ...(m.facturacion ? [{ label: 'Facturación', bg: '#eff6ff', fg: '#1d4ed8' }] : []),
+                    ...(m.pos ? [{ label: 'Punto de Venta', bg: '#f0fdfa', fg: '#0f766e' }] : []),
+                  ];
+                  return (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
+                      <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Acceso:</Typography>
+                      {chips.length === 0
+                        ? <Typography sx={{ fontSize: '0.75rem', color: '#b91c1c' }}>Ningún módulo</Typography>
+                        : chips.map(c => (
+                            <Box key={c.label} component="span" sx={{ fontSize: '0.6875rem', fontWeight: 600, px: 0.875, py: '2px', borderRadius: '6px', bgcolor: c.bg, color: c.fg }}>{c.label}</Box>
+                          ))}
+                    </Box>
+                  );
+                })()}
+              </FormControl>
+            </DialogContent>
 
-              <DialogFooter>
-                <Button variant="outline" onClick={resetInviteModal} disabled={invitando}>
-                  Cancelar
-                </Button>
-                <Button
-                  className="bg-teal-600 hover:bg-teal-700 text-white"
-                  onClick={handleInvitar}
-                  disabled={invitando || !invEmail.trim()}
-                >
-                  {invitando
-                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Invitando…</>
-                    : <><UserPlus className="h-4 w-4 mr-2" />Enviar invitación</>
-                  }
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button
+                variant="outlined"
+                onClick={resetInviteModal}
+                disabled={invitando}
+                sx={{
+                  textTransform: 'none',
+                  color: '#374151',
+                  borderColor: '#d1d5db',
+                  '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleInvitar}
+                disabled={invitando || !invEmail.trim()}
+                startIcon={
+                  invitando
+                    ? <CircularProgress size={16} color="inherit" />
+                    : <UserPlus style={{ width: 16, height: 16 }} />
+                }
+                sx={{
+                  textTransform: 'none',
+                  bgcolor: '#0d9488',
+                  color: '#fff',
+                  boxShadow: 'none',
+                  '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+                }}
+              >
+                {invitando ? 'Invitando…' : 'Enviar invitación'}
+              </Button>
+            </DialogActions>
+          </>
+        )}
       </Dialog>
 
       {/* ── Modal: Confirmar eliminación de miembro ────────────────────────────── */}
-      <Dialog open={!!memberToRemove} onOpenChange={(open) => { if (!open) setMemberToRemove(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="h-5 w-5" />
-              {memberToRemove?.userId === data.myUserId ? '¿Salir del equipo?' : '¿Eliminar miembro?'}
-            </DialogTitle>
-            <DialogDescription>
-              {memberToRemove?.userId === data.myUserId
-                ? 'Perderás acceso a todos los datos de esta empresa.'
-                : <>
-                    <strong>{memberToRemove?.name ?? memberToRemove?.email}</strong> perderá
-                    acceso a todos los datos de la empresa. Esta acción no se puede deshacer.
-                  </>
-              }
-            </DialogDescription>
-          </DialogHeader>
+      <Dialog
+        open={!!memberToRemove}
+        onClose={() => setMemberToRemove(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#dc2626' }}>
+          <AlertTriangle style={{ width: 20, height: 20 }} />
+          {memberToRemove?.userId === data.myUserId ? '¿Salir del equipo?' : '¿Eliminar miembro?'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
+            {memberToRemove?.userId === data.myUserId
+              ? 'Perderás acceso a todos los datos de esta empresa.'
+              : <>
+                  <strong>{memberToRemove?.name ?? memberToRemove?.email}</strong> perderá
+                  acceso a todos los datos de la empresa. Esta acción no se puede deshacer.
+                </>
+            }
+          </Typography>
           {removeError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mx-6">
-              {removeError}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMemberToRemove(null)} disabled={removing}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleRemove}
-              disabled={removing}
+            <Box
+              sx={{
+                bgcolor: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#b91c1c',
+                fontSize: '0.875rem',
+                borderRadius: '8px',
+                p: 1.5,
+                mt: 1.5,
+              }}
             >
-              {removing
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</>
-                : 'Sí, eliminar'
-              }
-            </Button>
-          </DialogFooter>
+              {removeError}
+            </Box>
+          )}
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setMemberToRemove(null)}
+            disabled={removing}
+            sx={{
+              textTransform: 'none',
+              color: '#374151',
+              borderColor: '#d1d5db',
+              '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleRemove}
+            disabled={removing}
+            startIcon={
+              removing
+                ? <CircularProgress size={16} color="inherit" />
+                : undefined
+            }
+            sx={{
+              textTransform: 'none',
+              bgcolor: '#dc2626',
+              color: '#fff',
+              boxShadow: 'none',
+              '&:hover': { bgcolor: '#b91c1c', boxShadow: 'none' },
+            }}
+          >
+            {removing ? 'Eliminando…' : 'Sí, eliminar'}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* ── Modal: Confirmar cancelación de invitación ─────────────────────────── */}
-      <Dialog open={!!invToCancel} onOpenChange={(open) => { if (!open) setInvToCancel(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              ¿Cancelar invitación?
-            </DialogTitle>
-            <DialogDescription>
-              La invitación para <strong>{invToCancel?.email}</strong> será cancelada y
-              el enlace de registro dejará de funcionar.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setInvToCancel(null)} disabled={cancelling}>
-              No, mantener
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleCancelInvite}
-              disabled={cancelling}
-            >
-              {cancelling
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Cancelando…</>
-                : 'Sí, cancelar'
-              }
-            </Button>
-          </DialogFooter>
+      <Dialog
+        open={!!invToCancel}
+        onClose={() => setInvToCancel(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AlertTriangle style={{ width: 20, height: 20, color: '#f59e0b' }} />
+          ¿Cancelar invitación?
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
+            La invitación para <strong>{invToCancel?.email}</strong> será cancelada y
+            el enlace de registro dejará de funcionar.
+          </Typography>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setInvToCancel(null)}
+            disabled={cancelling}
+            sx={{
+              textTransform: 'none',
+              color: '#374151',
+              borderColor: '#d1d5db',
+              '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' },
+            }}
+          >
+            No, mantener
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCancelInvite}
+            disabled={cancelling}
+            startIcon={
+              cancelling
+                ? <CircularProgress size={16} color="inherit" />
+                : undefined
+            }
+            sx={{
+              textTransform: 'none',
+              bgcolor: '#dc2626',
+              color: '#fff',
+              boxShadow: 'none',
+              '&:hover': { bgcolor: '#b91c1c', boxShadow: 'none' },
+            }}
+          >
+            {cancelling ? 'Cancelando…' : 'Sí, cancelar'}
+          </Button>
+        </DialogActions>
       </Dialog>
 
-    </section>
+    </Box>
   );
 }

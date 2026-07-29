@@ -27,10 +27,12 @@
 
 import useSWR from 'swr';
 import type { Permission } from '@/lib/config/roles';
+import type { ModuleKey } from '@/lib/config/modules';
 
 interface UserPermissionsResponse {
   teamRole?: string | null;
   permissions?: Permission[];
+  modules?: ModuleKey[];
 }
 
 // Fetch siempre /api/user, pero bajo una SWR key PROPIA (array) que NO coincide
@@ -45,6 +47,8 @@ export interface UsePermissionsResult {
   can: (permission: Permission) => boolean;
   /** Lista de permisos efectivos (vacía mientras carga o sin sesión). */
   permissions: Permission[];
+  /** Módulos del producto accesibles para el usuario (empresa ∩ rol). */
+  modules: ModuleKey[];
   /** Rol del usuario en el team activo (null si no aplica). */
   teamRole: string | null;
   /** true mientras la primera carga está en curso. */
@@ -63,11 +67,13 @@ export function usePermissions(): UsePermissionsResult {
   );
 
   const permissions = data?.permissions ?? [];
+  const modules = data?.modules ?? [];
   const teamRole = data?.teamRole ?? null;
 
   return {
     can: (permission: Permission) => permissions.includes(permission),
     permissions,
+    modules,
     teamRole,
     isLoading,
   };

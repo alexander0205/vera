@@ -11,9 +11,41 @@ import {
   FileSignature, Upload, Zap, Lock, RefreshCw,
   Image as ImageIcon, Mail, Clock, PartyPopper,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import CircularProgress from '@mui/material/CircularProgress';
+import LinearProgress from '@mui/material/LinearProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import InputAdornment from '@mui/material/InputAdornment';
+import Divider from '@mui/material/Divider';
+import Stepper from '@mui/material/Stepper';
+import Step from '@mui/material/Step';
+import StepLabel from '@mui/material/StepLabel';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import Tooltip from '@mui/material/Tooltip';
+import Badge from '@mui/material/Badge';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { TEST_CONTRIBUYENTE } from '@/lib/config/test-data';
 
@@ -120,18 +152,19 @@ const fmtSize = (b: number) => b < 1024 ? `${b} B` : `${(b / 1024).toFixed(0)} K
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-gray-400">{label}</p>
-        <p className="text-sm font-medium text-gray-900 truncate">{value}</p>
-      </div>
-      <button
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.25, borderBottom: '1px solid #f3f4f6', '&:last-child': { borderBottom: 0 } }}>
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{label}</Typography>
+        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</Typography>
+      </Box>
+      <IconButton
+        size="small"
         onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-        className="ml-3 shrink-0 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-teal-600 transition-colors"
+        sx={{ ml: 1.5, borderRadius: '8px', color: '#9ca3af', '&:hover': { bgcolor: '#f3f4f6', color: '#0d9488' } }}
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-teal-500" /> : <Copy className="h-3.5 w-3.5" />}
-      </button>
-    </div>
+        {copied ? <Check style={{ width: 14, height: 14, color: '#14b8a6' }} /> : <Copy style={{ width: 14, height: 14 }}/>}
+      </IconButton>
+    </Box>
   );
 }
 
@@ -141,28 +174,29 @@ function DgiiField({ label, value, span, required = true, isUrl = false }: {
   label: string; value: string; span?: 'full' | '2'; required?: boolean; isUrl?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const spanCls = span === 'full' ? 'col-span-full' : span === '2' ? 'col-span-2' : '';
+  const gridColumn = span === 'full' ? '1 / -1' : span === '2' ? 'span 2' : undefined;
   return (
-    <div className={spanCls}>
-      <label className="block text-sm text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      <div className="flex items-center border border-gray-300 rounded-md bg-white overflow-hidden focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-400">
+    <Box sx={{ gridColumn }}>
+      <Typography component="label" sx={{ display: 'block', fontSize: '0.875rem', color: '#374151', mb: 0.5 }}>
+        {label}{required && <Typography component="span" sx={{ color: 'error.main', ml: 0.25 }}>*</Typography>}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: '6px', bgcolor: '#fff', overflow: 'hidden', '&:focus-within': { borderColor: '#2dd4bf', boxShadow: '0 0 0 2px rgba(13,148,136,0.15)' } }}>
         {isUrl && (
-          <span className="shrink-0 px-3 py-2 text-sm text-gray-400 bg-gray-50 border-r border-gray-200 select-none">
+          <Typography component="span" sx={{ flexShrink: 0, px: 1.5, py: 1, fontSize: '0.875rem', color: '#9ca3af', bgcolor: '#f9fafb', borderRight: '1px solid #e5e7eb', userSelect: 'none' }}>
             https://
-          </span>
+          </Typography>
         )}
-        <span className="flex-1 px-3 py-2 text-sm text-gray-900 truncate min-w-0">{value}</span>
-        <button
+        <Typography component="span" sx={{ flex: 1, px: 1.5, py: 1, fontSize: '0.875rem', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{value}</Typography>
+        <IconButton
           onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-          className="shrink-0 px-3 py-2 border-l border-gray-200 bg-gray-50 hover:bg-teal-50 text-gray-400 hover:text-teal-600 transition-colors"
+          size="small"
           title="Copiar"
+          sx={{ flexShrink: 0, px: 1.5, py: 1, borderRadius: 0, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#f0fdfa', color: '#0d9488' } }}
         >
-          {copied ? <Check className="h-4 w-4 text-teal-500" /> : <Copy className="h-4 w-4" />}
-        </button>
-      </div>
-    </div>
+          {copied ? <Check style={{ width: 16, height: 16, color: '#14b8a6' }} /> : <Copy style={{ width: 16, height: 16 }}/>}
+        </IconButton>
+      </Box>
+    </Box>
   );
 }
 
@@ -172,17 +206,17 @@ function CopyField({ label, value, span }: { label: string; value: string; span?
 }
 
 function InfoBox({ color, title, children }: { color: 'blue'|'amber'|'teal'|'red'; title: string; children: React.ReactNode }) {
-  const cls = {
-    blue:  'border-blue-200 bg-blue-50 text-blue-800',
-    amber: 'border-amber-200 bg-amber-50 text-amber-800',
-    teal:  'border-teal-200 bg-teal-50 text-teal-800',
-    red:   'border-red-200 bg-red-50 text-red-800',
+  const colorMap = {
+    blue:  { border: '#bfdbfe', bgcolor: '#eff6ff', color: '#1e40af' },
+    amber: { border: '#fde68a', bgcolor: '#fffbeb', color: '#92400e' },
+    teal:  { border: '#99f6e4', bgcolor: '#f0fdfa', color: '#134e4a' },
+    red:   { border: '#fecaca', bgcolor: '#fef2f2', color: '#991b1b' },
   }[color];
   return (
-    <div className={`rounded-xl border p-4 ${cls}`}>
-      {title && <p className="text-sm font-semibold mb-1">{title}</p>}
-      <div className="text-xs opacity-90">{children}</div>
-    </div>
+    <Box sx={{ borderRadius: '12px', border: `1px solid ${colorMap.border}`, bgcolor: colorMap.bgcolor, color: colorMap.color, p: 2 }}>
+      {title && <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, mb: 0.5 }}>{title}</Typography>}
+      <Box sx={{ fontSize: '0.75rem', opacity: 0.9 }}>{children}</Box>
+    </Box>
   );
 }
 
@@ -193,18 +227,23 @@ function NavFooter({
   nextLabel?: string; nextDisabled?: boolean; nextLoading?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 2, mt: 1, borderTop: '1px solid #f3f4f6' }}>
       {onBack
-        ? <Button variant="outline" onClick={onBack}>← Atrás</Button>
-        : <div />}
+        ? <Button variant="outlined" onClick={onBack} sx={{ textTransform: 'none', borderRadius: '8px' }}>← Atrás</Button>
+        : <Box />}
       {onNext && (
-        <Button onClick={onNext} disabled={nextDisabled || nextLoading}
-          className="bg-teal-600 hover:bg-teal-700 disabled:opacity-40 px-8 gap-1.5">
-          {nextLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {nextLabel} {!nextLoading && <ChevronRight className="h-4 w-4" />}
+        <Button
+          onClick={onNext}
+          disabled={nextDisabled || nextLoading}
+          variant="contained"
+          disableElevation
+          sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.4 }, px: 4, gap: 0.75 }}
+        >
+          {nextLoading && <CircularProgress size={16} sx={{ color: 'inherit', mr: 0.5 }} />}
+          {nextLabel} {!nextLoading && <ChevronRight style={{ width: 16, height: 16 }}/>}
         </Button>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -230,29 +269,28 @@ function HelpPopover({ content, link, linkText }: {
   }, [open]);
 
   return (
-    <div ref={ref} className="relative inline-flex items-center shrink-0">
-      <button
+    <Box ref={ref} sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+      <Box
+        component="button"
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-label="Más información"
-        className="h-5 w-5 rounded-full border border-gray-300 bg-white text-gray-400 hover:border-teal-400 hover:text-teal-600 flex items-center justify-center text-[11px] font-bold leading-none transition-colors"
+        sx={{ height: 20, width: 20, borderRadius: '50%', border: '1px solid #d1d5db', bgcolor: '#fff', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', '&:hover': { borderColor: '#2dd4bf', color: '#0d9488' }, transition: 'color 0.15s, border-color 0.15s' }}
       >
         ?
-      </button>
+      </Box>
       {open && (
-        <div className="absolute z-[70] w-64 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4 space-y-2.5
-          left-7 top-1/2 -translate-y-1/2
-          max-[480px]:left-auto max-[480px]:right-0 max-[480px]:top-7 max-[480px]:translate-y-0">
-          <p className="text-xs text-gray-600 leading-relaxed">{content}</p>
+        <Box sx={{ position: 'absolute', zIndex: 70, width: 256, bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', boxShadow: '0 25px 50px rgba(0,0,0,0.15)', p: 2, left: 28, top: '50%', transform: 'translateY(-50%)' }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.6 }}>{content}</Typography>
           {link && (
-            <a href={link} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-semibold">
-              <ExternalLink className="h-3 w-3" />{linkText ?? 'Ver en DGII'}
-            </a>
+            <Box component="a" href={link} target="_blank" rel="noopener noreferrer"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: '#0d9488', fontWeight: 600, '&:hover': { color: '#0f766e' }, mt: 1.25 }}>
+              <ExternalLink style={{ width: 12, height: 12 }}/>{linkText ?? 'Ver en DGII'}
+            </Box>
           )}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -278,63 +316,65 @@ function DgiiScreenshot({
 
   if (mode === 'inline') {
     return (
-      <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
-        <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-          <ImageIcon className="h-3.5 w-3.5 text-gray-400" />
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Así se ve en el portal DGII</p>
-        </div>
+      <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', bgcolor: '#fff' }}>
+        <Box sx={{ px: 1.5, py: 1, bgcolor: '#f9fafb', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ImageIcon style={{ width: 14, height: 14, color: '#9ca3af' }} />
+          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Así se ve en el portal DGII</Typography>
+        </Box>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={alt} className="w-full h-auto" />
-        {caption && <p className="text-xs text-gray-600 px-4 py-3 border-t border-gray-100 bg-gray-50/60">{caption}</p>}
-      </div>
+        <img src={src} alt={alt} style={{ width: '100%', height: 'auto' }} />
+        {caption && <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', px: 2, py: 1.5, borderTop: '1px solid #f3f4f6', bgcolor: 'rgba(249,250,251,0.6)' }}>{caption}</Typography>}
+      </Box>
     );
   }
 
   return (
     <>
-      <button
+      <Box
+        component="button"
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-600 hover:text-teal-700 hover:underline underline-offset-2"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', fontWeight: 600, color: '#0d9488', cursor: 'pointer', background: 'none', border: 'none', '&:hover': { color: '#0f766e', textDecoration: 'underline' }, textUnderlineOffset: '2px' }}
       >
-        <ImageIcon className="h-3.5 w-3.5" />
+        <ImageIcon style={{ width: 14, height: 14 }}/>
         {label}
-      </button>
+      </Box>
 
       {open && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        <Box
+          sx={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, bgcolor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
           onClick={() => setOpen(false)}
         >
-          <div
-            className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+          <Box
+            sx={{ bgcolor: '#fff', borderRadius: '16px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', maxWidth: '48rem', width: '100%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-lg bg-teal-50 flex items-center justify-center">
-                  <ImageIcon className="h-4 w-4 text-teal-600" />
-                </div>
-                <p className="text-sm font-semibold text-gray-800">Portal DGII</p>
-              </div>
-              <button
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, borderBottom: '1px solid #e5e7eb' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ height: 28, width: 28, borderRadius: '8px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ImageIcon style={{ width: 16, height: 16, color: '#0d9488' }} />
+                </Box>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Portal DGII</Typography>
+              </Box>
+              <IconButton
                 onClick={() => setOpen(false)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                size="small"
+                sx={{ borderRadius: '50%', color: '#9ca3af', '&:hover': { bgcolor: '#f3f4f6', color: '#4b5563' } }}
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="overflow-y-auto">
+                <X style={{ width: 16, height: 16 }}/>
+              </IconButton>
+            </Box>
+            <Box sx={{ overflowY: 'auto' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt={alt} className="w-full h-auto" />
+              <img src={src} alt={alt} style={{ width: '100%', height: 'auto' }} />
               {caption && (
-                <p className="text-sm text-gray-600 px-5 py-4 border-t border-gray-100 leading-relaxed">
+                <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', px: 2.5, py: 2, borderTop: '1px solid #f3f4f6', lineHeight: 1.6 }}>
                   {caption}
-                </p>
+                </Typography>
               )}
-            </div>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Box>
       )}
     </>
   );
@@ -384,74 +424,70 @@ function WaitForDgii({
 
   if (done) {
     return (
-      <div className="rounded-2xl border border-teal-200 bg-teal-50/60 p-6 space-y-5">
-        <div className="flex items-start gap-3">
-          <div className="h-11 w-11 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
-            <CheckCircle className="h-5 w-5 text-teal-600" />
-          </div>
-          <div>
-            <p className="text-base font-bold text-gray-900">{successTitle}</p>
-            <p className="text-sm text-gray-600 mt-1 leading-relaxed">{successDescription}</p>
-          </div>
-        </div>
-        <Button onClick={onComplete} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
-          Continuar <ChevronRight className="h-4 w-4" />
+      <Box sx={{ borderRadius: '16px', border: '1px solid #99f6e4', bgcolor: 'rgba(240,253,250,0.6)', p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+          <Box sx={{ height: 44, width: 44, borderRadius: '50%', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <CheckCircle style={{ width: 20, height: 20, color: '#0d9488' }} />
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>{successTitle}</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 0.5, lineHeight: 1.6 }}>{successDescription}</Typography>
+          </Box>
+        </Box>
+        <Button onClick={onComplete} variant="contained" disableElevation sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
+          Continuar <ChevronRight style={{ width: 16, height: 16 }}/>
         </Button>
-      </div>
+      </Box>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-6 space-y-5">
-      <div className="flex items-start gap-3">
-        <div className="h-11 w-11 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-          <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-        </div>
-        <div>
-          <p className="text-base font-bold text-gray-900">{title}</p>
-          <p className="text-sm text-gray-600 mt-1 leading-relaxed">{description}</p>
-        </div>
-      </div>
+    <Box sx={{ borderRadius: '16px', border: '1px solid #bfdbfe', bgcolor: 'rgba(239,246,255,0.5)', p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box sx={{ height: 44, width: 44, borderRadius: '50%', bgcolor: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Loader2 style={{ width: 20, height: 20, animation: 'spin 1s linear infinite', color: '#2563eb' }} />
+        </Box>
+        <Box>
+          <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>{title}</Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 0.5, lineHeight: 1.6 }}>{description}</Typography>
+        </Box>
+      </Box>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-gray-500 flex items-center gap-1.5">
-            <RefreshCw className="h-3 w-3 animate-spin" />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+          <Typography component="span" sx={{ color: '#6b7280', display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem' }}>
+            <RefreshCw style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }}/>
             Consultando estado en portal DGII…
-          </span>
-          <span className="text-gray-500 font-mono">{Math.floor(progress)}%</span>
-        </div>
-        <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden">
-          <div
-            className="h-full bg-blue-500 transition-all duration-150"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+          </Typography>
+          <Typography component="span" sx={{ color: '#6b7280', fontFamily: 'monospace', fontSize: '0.75rem' }}>{Math.floor(progress)}%</Typography>
+        </Box>
+        <LinearProgress variant="determinate" value={progress} sx={{ height: 6, borderRadius: '9999px', bgcolor: '#dbeafe', '& .MuiLinearProgress-bar': { bgcolor: '#3b82f6' } }} />
+      </Box>
 
-      <div className="rounded-xl bg-white border border-blue-100 p-4 flex items-start gap-3">
-        <Mail className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-xs font-semibold text-gray-800 flex items-center gap-1.5">
-            <Clock className="h-3 w-3" />
+      <Box sx={{ borderRadius: '12px', bgcolor: '#fff', border: '1px solid #dbeafe', p: 2, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Mail style={{ width: 16, height: 16, flexShrink: 0, marginTop: '2px', color: '#3b82f6' }} />
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Clock style={{ width: 12, height: 12 }}/>
             Plazo típico: {estimated}
-          </p>
-          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+          </Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.5, lineHeight: 1.6 }}>
             Puedes cerrar Zero — te avisaremos por correo y WhatsApp cuando DGII responda.
             El wizard te llevará automáticamente a la siguiente fase.
-          </p>
-        </div>
-      </div>
+          </Typography>
+        </Box>
+      </Box>
 
       {allowSkip && (
-        <button
+        <Box
+          component="button"
           onClick={() => { setProgress(100); setDone(true); }}
-          className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+          sx={{ fontSize: '0.75rem', color: '#9ca3af', textDecoration: 'underline', textUnderlineOffset: '2px', cursor: 'pointer', background: 'none', border: 'none', '&:hover': { color: '#4b5563' } }}
         >
           [Demo] Saltar espera
-        </button>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -460,33 +496,34 @@ function WaitForDgii({
 function EtapasHero() {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-      <button
+    <Box sx={{ borderRadius: '16px', border: '1px solid #e5e7eb', bgcolor: '#fff', overflow: 'hidden' }}>
+      <Box
+        component="button"
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors"
+        sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, cursor: 'pointer', background: 'none', border: 'none', '&:hover': { bgcolor: '#f9fafb' }, transition: 'background-color 0.15s' }}
       >
-        <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-lg bg-teal-50 flex items-center justify-center">
-            <ImageIcon className="h-4 w-4 text-teal-600" />
-          </div>
-          <div className="text-left">
-            <p className="text-sm font-semibold text-gray-800">Las 3 etapas oficiales de la DGII</p>
-            <p className="text-[11px] text-gray-400">Solicitud → Set de Pruebas → Certificación</p>
-          </div>
-        </div>
-        <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
-      </button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box sx={{ height: 28, width: 28, borderRadius: '8px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ImageIcon style={{ width: 16, height: 16, color: '#0d9488' }} />
+          </Box>
+          <Box sx={{ textAlign: 'left' }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Las 3 etapas oficiales de la DGII</Typography>
+            <Typography sx={{ fontSize: '11px', color: '#9ca3af' }}>Solicitud → Set de Pruebas → Certificación</Typography>
+          </Box>
+        </Box>
+        <ChevronRight style={{ width: 16, height: 16, color: '#9ca3af', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+      </Box>
       {open && (
-        <div className="border-t border-gray-100 p-5 flex items-center justify-center bg-gray-50">
+        <Box sx={{ borderTop: '1px solid #f3f4f6', p: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f9fafb' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/dgii-guia/3-etapas-overview.png"
             alt="Diagrama de las 3 etapas: Solicitud, Set de Pruebas, Certificación"
-            className="max-w-full h-auto"
+            style={{ maxWidth: '100%', height: 'auto' }}
           />
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -494,21 +531,21 @@ function EtapasHero() {
 
 function StatusPill({ status }: { status: EcfSendStatus }) {
   if (status === 'idle') return null;
-  const map: Partial<Record<EcfSendStatus, { cls: string; label: string }>> = {
-    sending:     { cls: 'bg-blue-100 text-blue-700',   label: 'Enviando…' },
-    aceptado:    { cls: 'bg-teal-100 text-teal-700',   label: 'Aceptado' },
-    rechazado:   { cls: 'bg-red-100 text-red-700',     label: 'Rechazado' },
-    condicional: { cls: 'bg-amber-100 text-amber-700', label: 'Acep. condicional' },
-    proceso:     { cls: 'bg-gray-100 text-gray-600',   label: 'En proceso' },
+  const map: Partial<Record<EcfSendStatus, { bgcolor: string; color: string; label: string }>> = {
+    sending:     { bgcolor: '#dbeafe', color: '#1d4ed8', label: 'Enviando…' },
+    aceptado:    { bgcolor: '#ccfbf1', color: '#0f766e', label: 'Aceptado' },
+    rechazado:   { bgcolor: '#fee2e2', color: '#b91c1c', label: 'Rechazado' },
+    condicional: { bgcolor: '#fef3c7', color: '#92400e', label: 'Acep. condicional' },
+    proceso:     { bgcolor: '#f3f4f6', color: '#4b5563', label: 'En proceso' },
   };
   const c = map[status];
   if (!c) return null;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.cls}`}>
-      {status === 'sending'  && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
-      {status === 'aceptado' && <Check   className="h-2.5 w-2.5" />}
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.25, borderRadius: '9999px', fontSize: '10px', fontWeight: 600, bgcolor: c.bgcolor, color: c.color }}>
+      {status === 'sending'  && <Loader2 style={{ width: 10, height: 10, animation: 'spin 1s linear infinite' }}/>}
+      {status === 'aceptado' && <Check   style={{ width: 10, height: 10 }}/>}
       {c.label}
-    </span>
+    </Box>
   );
 }
 
@@ -517,47 +554,42 @@ function StatusPill({ status }: { status: EcfSendStatus }) {
 function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<number>; onJump: (p: number) => void }) {
   const maxReached = Math.max(phase, ...Array.from(completed), 0);
   return (
-    <nav className="hidden md:flex flex-col w-56 shrink-0 pt-2 select-none">
+    <Box component="nav" sx={{ display: { xs: 'none', md: 'flex' }, flexDirection: 'column', width: 224, flexShrink: 0, pt: 1, userSelect: 'none' }}>
       {PHASES.map((p, i) => {
         const isDone    = completed.has(p.id);
         const isCurrent = p.id === phase;
         const isLocked  = p.id > maxReached;
         return (
-          <div key={p.id} className="relative">
+          <Box key={p.id} sx={{ position: 'relative' }}>
             {i < PHASES.length - 1 && (
-              <div className={`absolute left-[15px] top-8 w-0.5 h-[calc(100%-4px)]
-                ${isDone ? 'bg-teal-400' : 'bg-gray-200'}`} />
+              <Box sx={{ position: 'absolute', left: 15, top: 32, width: 2, height: 'calc(100% - 4px)', bgcolor: isDone ? '#2dd4bf' : '#e5e7eb' }} />
             )}
-            <button
+            <Box
+              component="button"
               onClick={() => !isLocked && onJump(p.id)}
               disabled={isLocked}
-              className={`w-full flex items-start gap-3 px-2 py-2 rounded-xl text-left transition-colors mb-1
-                ${isCurrent ? 'bg-teal-50' : isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+              sx={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 1.5, px: 1, py: 1, borderRadius: '12px', textAlign: 'left', cursor: isLocked ? 'not-allowed' : 'pointer', background: 'none', border: 'none', mb: 0.5, opacity: isLocked ? 0.4 : 1, bgcolor: isCurrent ? '#f0fdfa' : 'transparent', '&:hover': !isLocked ? { bgcolor: isCurrent ? '#f0fdfa' : '#f9fafb' } : {}, transition: 'background-color 0.15s' }}
             >
-              <div className={`h-[30px] w-[30px] rounded-full flex items-center justify-center shrink-0 border-2 mt-0.5 transition-all
-                ${isDone    ? 'bg-teal-600 border-teal-600 text-white'
-                : isCurrent ? 'bg-white border-teal-600 text-teal-600'
-                : 'bg-white border-gray-200 text-gray-400'}`}>
-                {isDone ? <Check className="h-3.5 w-3.5" /> : <span className="text-xs font-bold">{p.id + 1}</span>}
-              </div>
-              <div className="pt-0.5 min-w-0">
-                <p className={`text-sm font-semibold leading-tight truncate
-                  ${isCurrent ? 'text-gray-900' : isDone ? 'text-teal-700' : 'text-gray-400'}`}>
+              <Box sx={{ height: 30, width: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '2px solid', mt: 0.25, transition: 'all 0.15s', borderColor: isDone ? '#0d9488' : isCurrent ? '#0d9488' : '#e5e7eb', bgcolor: isDone ? '#0d9488' : '#fff', color: isDone ? '#fff' : isCurrent ? '#0d9488' : '#9ca3af' }}>
+                {isDone ? <Check style={{ width: 14, height: 14 }}/> : <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>{p.id + 1}</Typography>}
+              </Box>
+              <Box sx={{ pt: 0.25, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isCurrent ? 'text.primary' : isDone ? '#0f766e' : '#9ca3af' }}>
                   {p.label}
-                </p>
+                </Typography>
                 {isCurrent && (
-                  <div className="mt-1.5 space-y-0.5">
+                  <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
                     {p.sub.map(s => (
-                      <p key={s} className="text-xs text-teal-600 leading-snug">· {s}</p>
+                      <Typography key={s} sx={{ fontSize: '0.75rem', color: '#0d9488', lineHeight: 1.4 }}>· {s}</Typography>
                     ))}
-                  </div>
+                  </Box>
                 )}
-              </div>
-            </button>
-          </div>
+              </Box>
+            </Box>
+          </Box>
         );
       })}
-    </nav>
+    </Box>
   );
 }
 
@@ -650,51 +682,57 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
   const canContinue    = perfilCompleto && certListo;
 
   if (loading) return (
-    <div className="flex items-center justify-center h-72">
-      <Loader2 className="h-7 w-7 animate-spin text-teal-500" />
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 288 }}>
+      <CircularProgress sx={{ color: '#14b8a6' }} />
+    </Box>
   );
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 3 }}>
 
         {/* Datos empresa */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Datos fiscales</h3>
-          <div className="rounded-2xl border border-gray-200 p-5 space-y-4">
-            <div>
-              <Label className="text-xs mb-1.5 block text-gray-400">RNC</Label>
-              <Input value={perfil.rnc ?? ''} disabled className="bg-gray-50 text-gray-500 text-sm" />
-              <p className="text-xs text-gray-400 mt-1">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos fiscales</Typography>
+          <Box sx={{ borderRadius: '16px', border: '1px solid #e5e7eb', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box>
+              <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block', color: '#9ca3af' }}>RNC</Typography>
+              <TextField value={perfil.rnc ?? ''} disabled size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb' }, '& .MuiInputBase-input': { color: '#6b7280', fontSize: '0.875rem' } }} />
+              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.5 }}>
                 Para cambiar el RNC ve a{' '}
-                <Link href="/dashboard/configuracion" className="text-teal-600 hover:underline">Configuración</Link>
-              </p>
-            </div>
-            <div>
-              <Label className="text-xs mb-1.5 block">Razón social <span className="text-red-500">*</span></Label>
-              <Input value={razonSocial}
+                <Link href="/dashboard/configuracion" style={{ color: '#0d9488' }}>Configuración</Link>
+              </Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>Razón social <Typography component="span" sx={{ color: 'error.main' }}>*</Typography></Typography>
+              <TextField value={razonSocial}
                 onChange={e => { setRazonSocial(e.target.value); setErrors(v => ({...v, razonSocial:''})); }}
                 placeholder="Mi Empresa SRL"
-                className={errors.razonSocial ? 'border-red-400' : ''} />
-              {errors.razonSocial && <p className="text-xs text-red-500 mt-1">{errors.razonSocial}</p>}
-            </div>
-            <div>
-              <Label className="text-xs mb-1.5 block">Correo de facturación <span className="text-red-500">*</span></Label>
-              <Input type="email" value={emailFact}
+                size="small" fullWidth
+                error={!!errors.razonSocial}
+                helperText={errors.razonSocial}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>Correo de facturación <Typography component="span" sx={{ color: 'error.main' }}>*</Typography></Typography>
+              <TextField type="email" value={emailFact}
                 onChange={e => { setEmailFact(e.target.value); setErrors(v => ({...v, email:''})); }}
                 placeholder="facturacion@empresa.com"
-                className={errors.email ? 'border-red-400' : ''} />
-              {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
-            </div>
-            <div>
-              <Label className="text-xs mb-1.5 block">Calle y número <span className="text-red-500">*</span></Label>
-              <Input value={direccion}
+                size="small" fullWidth
+                error={!!errors.email}
+                helperText={errors.email}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>Calle y número <Typography component="span" sx={{ color: 'error.main' }}>*</Typography></Typography>
+              <TextField value={direccion}
                 onChange={e => { setDireccion(e.target.value); setErrors(v => ({...v, direccion:''})); }}
                 placeholder="Ej: Calle El Conde #45, Apto 2B"
-                className={errors.direccion ? 'border-red-400' : ''} />
-              {errors.direccion && <p className="text-xs text-red-500 mt-1">{errors.direccion}</p>}
-            </div>
+                size="small" fullWidth
+                error={!!errors.direccion}
+                helperText={errors.direccion}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            </Box>
             <ProvinciaMunicipioSelect
               provincia={provincia}
               municipio={municipio}
@@ -703,100 +741,105 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
               required
               errors={errors}
             />
-          </div>
-        </div>
+          </Box>
+        </Box>
 
         {/* Certificado */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Certificado digital P12</h3>
-          <div className="rounded-2xl border border-gray-200 p-5 space-y-4">
-            <p className="text-xs text-gray-500">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Certificado digital P12</Typography>
+          <Box sx={{ borderRadius: '16px', border: '1px solid #e5e7eb', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
               Emitido por INDOTEL a través de Viafirma, Cámara de Comercio RD o DigiCert.
-            </p>
+            </Typography>
 
             {certListo ? (
-              <div className="rounded-xl border border-teal-200 bg-teal-50 p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-teal-500 shrink-0" />
-                  <p className="text-sm font-semibold text-teal-800">Certificado activo</p>
-                </div>
-                {certInfo?.titular && <p className="text-xs text-teal-700">{certInfo.titular}</p>}
+              <Box sx={{ borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CheckCircle style={{ width: 16, height: 16, flexShrink: 0, color: '#14b8a6' }} />
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Certificado activo</Typography>
+                </Box>
+                {certInfo?.titular && <Typography sx={{ fontSize: '0.75rem', color: '#0f766e' }}>{certInfo.titular}</Typography>}
                 {certInfo?.vencimiento && (
-                  <p className="text-xs text-teal-600">Vence: {certInfo.vencimiento}</p>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#0d9488' }}>Vence: {certInfo.vencimiento}</Typography>
                 )}
-                <button className="text-xs text-teal-600 underline underline-offset-2"
+                <Box component="button" sx={{ fontSize: '0.75rem', color: '#0d9488', textDecoration: 'underline', textUnderlineOffset: '2px', cursor: 'pointer', background: 'none', border: 'none', p: 0, textAlign: 'left' }}
                   onClick={() => setCertInfo({ tieneCertificado: false })}>
                   Reemplazar certificado
-                </button>
-              </div>
+                </Box>
+              </Box>
             ) : (
               <>
                 {!file ? (
-                  <div
+                  <Box
                     onDragOver={e => { e.preventDefault(); setDragging(true); }}
                     onDragLeave={() => setDragging(false)}
                     onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`rounded-xl border-2 border-dashed cursor-pointer flex flex-col items-center gap-2 py-8 px-4 text-center transition-colors
-                      ${dragging ? 'border-teal-400 bg-teal-50' : 'border-gray-200 hover:border-teal-300 hover:bg-gray-50'}`}
+                    sx={{ borderRadius: '12px', border: `2px dashed ${dragging ? '#2dd4bf' : '#e5e7eb'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 4, px: 2, textAlign: 'center', bgcolor: dragging ? '#f0fdfa' : 'transparent', '&:hover': { borderColor: '#5eead4', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}
                   >
-                    <CloudUpload className={`h-8 w-8 ${dragging ? 'text-teal-500' : 'text-gray-400'}`} />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Arrastra tu certificado aquí</p>
-                      <button type="button" onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                        className="text-xs text-teal-600 hover:underline mt-0.5">
+                    <CloudUpload style={{ width: 32, height: 32, color: dragging ? '#14b8a6' : '#9ca3af' }} />
+                    <Box>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>Arrastra tu certificado aquí</Typography>
+                      <Box component="button" type="button" onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                        sx={{ fontSize: '0.75rem', color: '#0d9488', cursor: 'pointer', background: 'none', border: 'none', mt: 0.25, '&:hover': { textDecoration: 'underline' } }}>
                         o selecciona el archivo .p12 / .pfx
-                      </button>
-                    </div>
-                  </div>
+                      </Box>
+                    </Box>
+                  </Box>
                 ) : (
-                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-                    <FileKey className="h-4 w-4 text-teal-600 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                      <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
-                    </div>
-                    <button onClick={() => { setFile(null); setCertError(null); }}
-                      className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <FileKey style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{fmtSize(file.size)}</Typography>
+                    </Box>
+                    <IconButton onClick={() => { setFile(null); setCertError(null); }} size="small" sx={{ borderRadius: '50%', color: '#9ca3af', '&:hover': { bgcolor: '#e5e7eb', color: '#4b5563' } }}>
+                      <X style={{ width: 14, height: 14 }}/>
+                    </IconButton>
+                  </Box>
                 )}
 
-                <input ref={fileInputRef} type="file" accept=".p12,.pfx" className="hidden"
+                <input ref={fileInputRef} type="file" accept=".p12,.pfx" style={{ display: 'none' }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
 
-                <div>
-                  <Label className="text-xs mb-1.5 block">Clave del certificado <span className="text-red-500">*</span></Label>
-                  <div className="relative">
-                    <Input type={showPass ? 'text' : 'password'} placeholder="Contraseña"
-                      value={password} onChange={e => { setPassword(e.target.value); setCertError(null); }}
-                      className="pr-10" />
-                    <button type="button" onClick={() => setShowPass(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
+                <Box>
+                  <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>Clave del certificado <Typography component="span" sx={{ color: 'error.main' }}>*</Typography></Typography>
+                  <TextField
+                    type={showPass ? 'text' : 'password'}
+                    placeholder="Contraseña"
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setCertError(null); }}
+                    size="small" fullWidth
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                    slotProps={{ input: { endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton type="button" onClick={() => setShowPass(v => !v)} edge="end" size="small" sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}>
+                            {showPass ? <EyeOff style={{ width: 16, height: 16 }}/> : <Eye style={{ width: 16, height: 16 }}/>}
+                          </IconButton>
+                        </InputAdornment>
+                      ) } as object }}
+                  />
+                </Box>
 
                 {certError && (
-                  <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-                    <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                    <p className="text-xs text-red-700">{certError}</p>
-                  </div>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', p: 1.5 }}>
+                    <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px', color: '#ef4444' }} />
+                    <Typography sx={{ fontSize: '0.75rem', color: '#b91c1c' }}>{certError}</Typography>
+                  </Box>
                 )}
 
                 <Button onClick={handleUploadCert} disabled={!file || !password || uploadingCert}
-                  className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-40" size="sm">
+                  variant="contained" disableElevation size="small"
+                  sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.4 }, width: '100%' }}>
                   {uploadingCert
-                    ? <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />Guardando…</>
-                    : <><KeyRound className="h-3.5 w-3.5 mr-2" />Guardar certificado</>}
+                    ? <><CircularProgress size={14} sx={{ color: 'inherit', mr: 1 }} />Guardando…</>
+                    : <><KeyRound style={{ width: 14, height: 14, marginRight: 8 }} />Guardar certificado</>}
                 </Button>
               </>
             )}
-          </div>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       <NavFooter
         onNext={async () => { if (!perfilSaved) await handleSavePerfil(); onComplete(); }}
@@ -805,12 +848,12 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
         nextLabel="Guardar y continuar"
       />
       {!canContinue && (
-        <p className="text-xs text-gray-400 text-right -mt-2">
+        <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'right', mt: -1 }}>
           {!perfilCompleto && '• Completa los datos de tu empresa '}
           {!certListo && '• Sube tu certificado P12'}
-        </p>
+        </Typography>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -894,200 +937,185 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
   const STEPS = ['Datos del portal', 'Firma digital', 'Envío al portal', 'Validación DGII'];
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
       {/* Stepper */}
-      <div className="flex items-center">
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
         {STEPS.map((label, i) => (
-          <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
-                :             'bg-white border-gray-200 text-gray-400'}`}>
-                {i < sub ? <Check className="h-3 w-3" /> : i + 1}
-              </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+                {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
+              </Box>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
                 {label.replace(/^\d+\.\s/, '')}
-              </span>
-            </div>
+              </Typography>
+            </Box>
             {i < STEPS.length - 1 && (
-              <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
-          </div>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ── Sub 0: Datos del portal ── */}
       {sub === 0 && (
-        <div className="space-y-5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
           {/* 1 — CTA principal: abrir portal */}
-          <div className="rounded-xl border border-teal-200 bg-teal-50 px-5 py-4 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-teal-900">Abre el portal DGII y crea tu postulación</p>
-              <p className="text-xs text-teal-700 mt-0.5">
+          <Box sx={{ borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', px: 2.5, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Abre el portal DGII y crea tu postulación</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#0f766e', mt: 0.25 }}>
                 Sección <strong>Emisor Electrónico → CREAR POSTULACIÓN</strong>.
                 Copia los datos de abajo y haz clic en <strong>"Generar archivo"</strong>.
-              </p>
-            </div>
-            <a
-              href="https://ecf.dgii.gov.do/testecf/contribuyentes"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold transition-colors"
-            >
-              Abrir portal <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
+              </Typography>
+            </Box>
+            <Box component="a" href="https://ecf.dgii.gov.do/testecf/contribuyentes" target="_blank" rel="noopener noreferrer"
+              sx={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 2, py: 1, borderRadius: '8px', bgcolor: '#0d9488', color: '#fff', fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' }, transition: 'background-color 0.15s' }}>
+              Abrir portal <ExternalLink style={{ width: 14, height: 14 }}/>
+            </Box>
+          </Box>
 
           {/* 2 — Formulario estilo portal DGII */}
-          <div className="space-y-6">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 
             {/* Software */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">⚙️ Datos del software de facturación.</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Los campos se ven iguales en el sitio de la DGII:</p>
-                </div>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>⚙️ Datos del software de facturación.</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25 }}>Los campos se ven iguales en el sitio de la DGII:</Typography>
+                </Box>
                 <DgiiScreenshot
                   src="/dgii-guia/paso1-datos-software.png"
                   alt="Formulario de datos del software en el portal DGII"
                   caption="Pega los tres URLs (recepción, aprobación comercial, autenticación) exactamente como aparecen abajo."
                   label="Ver dónde pegar"
                 />
-              </div>
-              <div className="grid grid-cols-3 gap-4">
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
                 <DgiiField label="Tipo de software"            value={EMITEDO.tipoSoftware}  required={false} />
                 <DgiiField label="Nombre del software"         value={EMITEDO.nombreSoftware} />
                 <DgiiField label="Versión del software"        value={EMITEDO.version} />
                 <DgiiField label="URL de recepción"            value={urls.recepcion}     span="full" isUrl />
                 <DgiiField label="URL de aprobación comercial" value={urls.aprobacion}    span="full" isUrl />
                 <DgiiField label="URL de autenticación"        value={urls.autenticacion} span="full" isUrl />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
             {/* Proveedor */}
-            <div>
-              <div className="mb-4">
-                <p className="text-sm font-semibold text-gray-800">👤 Datos del proveedor electrónico.</p>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
+            <Box>
+              <Box sx={{ mb: 2 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>👤 Datos del proveedor electrónico.</Typography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
                 <DgiiField label="RNC / Cédula"   value={EMITEDO.rncProveedor} />
                 <DgiiField label="Razón social"    value={EMITEDO.nombreProveedor} span="2" />
                 <DgiiField label="Nombre comercial" value={EMITEDO.nombreSoftware} span="full" required={false} />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-          </div>
+          </Box>
 
 
           <NavFooter onBack={onBack} onNext={() => setSub(1)} nextLabel="Ya generé el XML" />
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 1: Firma XML ── */}
       {sub === 1 && (
-        <div className="space-y-4">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <InfoBox color="blue" title="Carga el Formulario de Postulación">
             En el portal DGII hiciste clic en <strong>"Generar archivo"</strong> y descargaste
             el Formulario de Postulación. Cárgalo aquí — Zero le aplica la Firma Digital automáticamente.
           </InfoBox>
 
           {/* Paso 1: Cargar Formulario de Postulación */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all
-            ${xmlFile ? 'border-teal-200' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${xmlFile ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {xmlFile ? <Check className="h-3.5 w-3.5" /> : '1'}
-              </div>
-              <p className="text-sm font-semibold text-gray-800">Cargar el Formulario de Postulación</p>
-            </div>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${xmlFile ? '#99f6e4' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, transition: 'all 0.15s' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: xmlFile ? '#0d9488' : '#e5e7eb', color: xmlFile ? '#fff' : '#4b5563' }}>
+                {xmlFile ? <Check style={{ width: 14, height: 14 }}/> : '1'}
+              </Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Cargar el Formulario de Postulación</Typography>
+            </Box>
 
             {!xmlFile ? (
-              <div
+              <Box
                 onClick={() => xmlInputRef.current?.click()}
-                className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
+                sx={{ borderRadius: '12px', border: '2px dashed #e5e7eb', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 3.5, px: 2, textAlign: 'center', '&:hover': { borderColor: '#5eead4', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}
               >
-                <Upload className="h-7 w-7 text-gray-400" />
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Formulario de Postulación (.xml)</p>
-                  <p className="text-xs text-gray-400 mt-0.5">El archivo que descargaste del portal DGII · Máx. 2 MB</p>
-                </div>
-              </div>
+                <Upload style={{ width: 28, height: 28, color: '#9ca3af' }} />
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>Formulario de Postulación (.xml)</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>El archivo que descargaste del portal DGII · Máx. 2 MB</Typography>
+                </Box>
+              </Box>
             ) : (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-                <FileText className="h-4 w-4 text-teal-600 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{xmlFile.name}</p>
-                  <p className="text-xs text-gray-400">{fmtSize(xmlFile.size)}</p>
-                </div>
+              <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <FileText style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{xmlFile.name}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{fmtSize(xmlFile.size)}</Typography>
+                </Box>
                 {!signed && (
-                  <button onClick={() => setXmlFile(null)}
-                    className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <IconButton onClick={() => setXmlFile(null)} size="small" sx={{ borderRadius: '50%', color: '#9ca3af', '&:hover': { bgcolor: '#e5e7eb', color: '#4b5563' } }}>
+                    <X style={{ width: 14, height: 14 }}/>
+                  </IconButton>
                 )}
-              </div>
+              </Box>
             )}
-            <input ref={xmlInputRef} type="file" accept=".xml" className="hidden"
+            <input ref={xmlInputRef} type="file" accept=".xml" style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) setXmlFile(f); e.target.value = ''; }} />
-          </div>
+          </Box>
 
           {/* Paso 2: Aplicar Firma Digital */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all
-            ${signed ? 'border-teal-200' : !xmlFile ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${signed ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {signed ? <Check className="h-3.5 w-3.5" /> : '2'}
-              </div>
-              <p className="text-sm font-semibold text-gray-800">Aplicar Firma Digital</p>
-            </div>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${signed ? '#99f6e4' : !xmlFile ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !signed && !xmlFile ? 0.4 : 1, transition: 'all 0.15s' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: signed ? '#0d9488' : '#e5e7eb', color: signed ? '#fff' : '#4b5563' }}>
+                {signed ? <Check style={{ width: 14, height: 14 }}/> : '2'}
+              </Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Aplicar Firma Digital</Typography>
+            </Box>
             {!signed ? (
               <Button onClick={handleFirmar} disabled={!xmlFile || signing}
-                className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+                variant="contained" disableElevation
+                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
                 {signing
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Aplicando Firma Digital…</>
-                  : <><FileSignature className="h-4 w-4" />Aplicar Firma Digital</>}
+                  ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Aplicando Firma Digital…</>
+                  : <><FileSignature style={{ width: 16, height: 16 }}/>Aplicar Firma Digital</>}
               </Button>
             ) : (
-              <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg p-3 text-teal-800">
-                <CheckCircle className="h-4 w-4 shrink-0" />
-                <p className="text-sm font-medium">Firma Digital aplicada correctamente</p>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px', p: 1.5, color: '#134e4a' }}>
+                <CheckCircle style={{ width: 16, height: 16, flexShrink: 0 }}/>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Firma Digital aplicada correctamente</Typography>
+              </Box>
             )}
             {signError && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-red-800">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <p className="text-xs">{signError}</p>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', p: 1.5, color: '#991b1b' }}>
+                <AlertCircle style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px' }}/>
+                <Typography sx={{ fontSize: '0.75rem' }}>{signError}</Typography>
+              </Box>
             )}
-          </div>
+          </Box>
 
           {/* Paso 3: Descargar Formulario firmado */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all
-            ${downloaded ? 'border-teal-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${downloaded ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {downloaded ? <Check className="h-3.5 w-3.5" /> : '3'}
-              </div>
-              <p className="text-sm font-semibold text-gray-800">Descargar Formulario firmado</p>
-            </div>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${downloaded ? '#99f6e4' : !signed ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !downloaded && !signed ? 0.4 : 1, transition: 'all 0.15s' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: downloaded ? '#0d9488' : '#e5e7eb', color: downloaded ? '#fff' : '#4b5563' }}>
+                {downloaded ? <Check style={{ width: 14, height: 14 }}/> : '3'}
+              </Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Descargar Formulario firmado</Typography>
+            </Box>
             <Button
-              variant="outline"
+              variant="outlined"
               disabled={!signed || !xmlFirmado}
               onClick={handleDescargar}
-              className="w-full gap-2"
+              sx={{ textTransform: 'none', borderRadius: '8px', width: '100%', gap: 1 }}
             >
-              <Download className="h-4 w-4" /> Descargar Formulario firmado
+              <Download style={{ width: 16, height: 16 }}/> Descargar Formulario firmado
             </Button>
-          </div>
+          </Box>
 
           <NavFooter
             onBack={() => setSub(0)}
@@ -1095,12 +1123,12 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             nextDisabled={!downloaded}
             nextLabel="Ya lo descargué"
           />
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 2: Subir al portal DGII ── */}
       {sub === 2 && (
-        <div className="space-y-5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <InfoBox color="amber" title="Envío de archivo de declaración jurada firmado — portal DGII">
             En tu postulación, busca la sección <strong>Envío de archivo de declaración jurada firmado</strong>.
             Haz clic en <strong>Elegir archivo</strong>, selecciona el Formulario firmado
@@ -1114,25 +1142,19 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             caption='Sección "Envío de archivo de declaración jurada firmado" del portal DGII. Selecciona el Formulario firmado y presiona ENVIAR ARCHIVO.'
           />
 
-          <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            <p className="font-medium mb-0.5">Tras enviar el archivo:</p>
-            <p className="text-blue-700">
+          <Box sx={{ borderRadius: '12px', border: '1px solid #dbeafe', bgcolor: '#eff6ff', px: 2, py: 1.5, fontSize: '0.875rem', color: '#1e40af' }}>
+            <Typography sx={{ fontWeight: 500, mb: 0.25, fontSize: '0.875rem' }}>Tras enviar el archivo:</Typography>
+            <Typography sx={{ color: '#1d4ed8', fontSize: '0.875rem' }}>
               DGII te responderá por <strong>Buzón de Oficina Virtual</strong> en <strong>1 a 3 días hábiles</strong>.
               Si la postulación es aprobada se habilita el Set de Pruebas; si es rechazada, DGII te indica qué corregir.
-            </p>
-          </div>
+            </Typography>
+          </Box>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={uploadConfirmed}
-              onChange={e => handleConfirmarSubida(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-            />
-            <span className="text-sm text-gray-700">
-              Realicé el Envío de archivo de declaración jurada firmado en el portal DGII
-            </span>
-          </label>
+          <FormControlLabel
+            control={<Checkbox checked={uploadConfirmed} onChange={e => handleConfirmarSubida(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Realicé el Envío de archivo de declaración jurada firmado en el portal DGII</Typography>}
+            sx={{ alignItems: 'flex-start', mx: 0 }}
+          />
 
           <NavFooter
             onBack={() => setSub(1)}
@@ -1140,7 +1162,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             nextDisabled={!uploadConfirmed}
             nextLabel="Esperar validación"
           />
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 3: Esperar confirmación de DGII ──
@@ -1148,98 +1170,93 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
            La respuesta llega por Buzón de Oficina Virtual (correo DGII).
            El usuario debe confirmar manualmente cuando reciba el correo. */}
       {sub === 3 && (
-        <div className="space-y-5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
           {/* Cabecera con icono de correo */}
-          <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-6 space-y-3">
-            <div className="flex items-start gap-4">
-              <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                <Mail className="h-6 w-6 text-amber-700" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-bold text-gray-900">
+          <Box sx={{ borderRadius: '16px', border: '1px solid #fde68a', background: 'linear-gradient(135deg, #fffbeb, #fff7ed)', p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+              <Box sx={{ height: 48, width: 48, borderRadius: '50%', bgcolor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Mail style={{ width: 24, height: 24, color: '#92400e' }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: 'text.primary' }}>
                   Espera la respuesta de DGII
-                </h3>
-                <p className="text-sm text-gray-700 mt-1">
+                </Typography>
+                <Typography sx={{ fontSize: '0.875rem', color: '#374151', mt: 0.5 }}>
                   Enviaste tu Formulario de Postulación firmado al portal DGII.
                   Ahora DGII lo está validando en sus servidores.
-                </p>
-              </div>
-            </div>
-          </div>
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
 
           {/* Cómo te responde DGII */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-gray-400" />
-              <p className="text-sm font-semibold text-gray-800">Tiempo estimado: 1 a 3 días hábiles</p>
-            </div>
+          <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Clock style={{ width: 16, height: 16, color: '#9ca3af' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Tiempo estimado: 1 a 3 días hábiles</Typography>
+            </Box>
 
-            <div className="space-y-2.5">
-              <p className="text-sm text-gray-700">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
                 DGII te notificará el resultado por <strong>Buzón de Oficina Virtual</strong>.
                 No cierres sesión en Zero — tu progreso ya está guardado.
-              </p>
-              <ul className="space-y-1.5 text-sm text-gray-600 pl-4 list-disc">
-                <li>Si tu postulación es <strong className="text-teal-700">aprobada</strong>, DGII habilita el Set de Pruebas en el Portal de Certificación.</li>
-                <li>Si es <strong className="text-red-600">rechazada</strong>, DGII te indica qué datos corregir.</li>
-              </ul>
-            </div>
+              </Typography>
+              <Box component="ul" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.875rem', color: '#4b5563', pl: 2, listStyleType: 'disc' }}>
+                <li>Si tu postulación es <strong style={{ color: '#0f766e' }}>aprobada</strong>, DGII habilita el Set de Pruebas en el Portal de Certificación.</li>
+                <li>Si es <strong style={{ color: '#dc2626' }}>rechazada</strong>, DGII te indica qué datos corregir.</li>
+              </Box>
+            </Box>
 
-            <a
-              href="https://dgii.gov.do/ofv/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800 underline-offset-2 hover:underline"
-            >
+            <Box component="a" href="https://dgii.gov.do/ofv/" target="_blank" rel="noopener noreferrer"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', fontWeight: 600, color: '#0f766e', '&:hover': { color: '#134e4a', textDecoration: 'underline' }, textUnderlineOffset: '2px' }}>
               Abrir Oficina Virtual DGII
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
+              <ExternalLink style={{ width: 12, height: 12 }}/>
+            </Box>
+          </Box>
 
           {/* Confirmación manual */}
-          <div className="rounded-xl border-2 border-teal-200 bg-teal-50/50 p-5 space-y-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-teal-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-gray-900">
+          <Box sx={{ borderRadius: '12px', border: '2px solid #99f6e4', bgcolor: 'rgba(240,253,250,0.5)', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <CheckCircle style={{ width: 20, height: 20, marginTop: '2px', flexShrink: 0, color: '#0d9488' }} />
+              <Box>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                   ¿Ya recibiste el correo de aprobación de DGII?
-                </p>
-                <p className="text-xs text-gray-600 mt-0.5">
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', mt: 0.25 }}>
                   Solo cuando DGII confirme que tu postulación fue aprobada, puedes continuar con el Set de Pruebas.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
               <Button
                 onClick={onComplete}
-                className="flex-1 bg-teal-600 hover:bg-teal-700 gap-2"
+                variant="contained" disableElevation
+                sx={{ flex: 1, textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, gap: 1 }}
               >
-                <Check className="h-4 w-4" />
+                <Check style={{ width: 16, height: 16 }}/>
                 DGII ya aprobó mi postulación
               </Button>
               <Button
-                variant="outline"
+                variant="outlined"
                 onClick={() => setSub(2)}
-                className="sm:flex-none border-gray-300 text-gray-700 hover:bg-gray-50 gap-2"
+                sx={{ textTransform: 'none', borderRadius: '8px', borderColor: '#d1d5db', color: '#374151', '&:hover': { bgcolor: '#f9fafb' }, gap: 1 }}
               >
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle style={{ width: 16, height: 16 }}/>
                 DGII me rechazó
               </Button>
-            </div>
-          </div>
+            </Box>
+          </Box>
 
-          <div className="flex justify-start">
-            <button
-              onClick={() => setSub(2)}
-              className="text-sm text-gray-500 hover:text-gray-700 inline-flex items-center gap-1"
-            >
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <Box component="button" onClick={() => setSub(2)}
+              sx={{ fontSize: '0.875rem', color: '#6b7280', cursor: 'pointer', background: 'none', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.5, '&:hover': { color: '#374151' } }}>
               ← Volver
-            </button>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -1701,35 +1718,30 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
   void maxSub;
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
       {/* ── Stepper ── */}
-      <div className="flex items-center">
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
         {STEPS.map((label, i) => (
-          <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
-                :             'bg-white border-gray-200 text-gray-400'}`}>
-                {i < sub ? <Check className="h-3 w-3" /> : i + 1}
-              </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+                {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
+              </Box>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
                 {label}
-              </span>
-            </div>
+              </Typography>
+            </Box>
             {i < STEPS.length - 1 && (
-              <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
-          </div>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ── Step 0: Configuración y tabla de comprobantes ── */}
       {sub === 0 && (
-        <div className="space-y-4">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <InfoBox color="blue" title="¿Cómo funciona el Set de Pruebas?">
             Zero genera y envía automáticamente todos los e-CF de prueba (10 tipos + RFCE)
             con los datos que completes a continuación. Solo la factura de consumo &lt; RD$250K
@@ -1743,90 +1755,90 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
           </InfoBox>
 
           {/* ── Config compacta ── */}
-          <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
+          <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: 'rgba(249,250,251,0.6)', p: 2 }}>
+            <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1.5 }}>
               Configuración del ítem de prueba
-            </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <Label className="text-xs mb-1.5 block">
-                  Descripción <span className="text-red-500">*</span>
-                </Label>
-                <Input
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>
+                  Descripción <Typography component="span" sx={{ color: 'error.main' }}>*</Typography>
+                </Typography>
+                <TextField
                   value={nombre}
                   onChange={e => { setNombre(e.target.value); setFormErrors(v => ({...v, nombre: ''})); }}
                   placeholder={itemTipo === 'servicio' ? 'Ej: Consultoría de sistemas' : 'Ej: Computadora HP'}
-                  className={`text-sm ${formErrors.nombre ? 'border-red-400' : ''}`}
+                  size="small" fullWidth
+                  error={!!formErrors.nombre}
+                  helperText={formErrors.nombre}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
                 />
-                {formErrors.nombre && <p className="text-xs text-red-500 mt-1">{formErrors.nombre}</p>}
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">Tipo de ítem</Label>
-                <select
-                  value={itemTipo}
-                  onChange={e => setItemTipo(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                  <option value="servicio">Servicio</option>
-                  <option value="bien">Producto / Bien</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">Tarifa ITBIS</Label>
-                <select
-                  value={tarifa}
-                  onChange={e => setTarifa(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                  <option value="18">18%</option>
-                  <option value="16">16%</option>
-                  <option value="0">0% — Exento</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">
-                  Precio base (RD$) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="number" min="0" step="0.01"
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>Tipo de ítem</Typography>
+                <FormControl size="small" fullWidth>
+                  <Select value={itemTipo} onChange={e => setItemTipo(e.target.value)} sx={{ borderRadius: '8px', fontSize: '0.875rem' }}>
+                    <MenuItem value="servicio">Servicio</MenuItem>
+                    <MenuItem value="bien">Producto / Bien</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>Tarifa ITBIS</Typography>
+                <FormControl size="small" fullWidth>
+                  <Select value={tarifa} onChange={e => setTarifa(e.target.value)} sx={{ borderRadius: '8px', fontSize: '0.875rem' }}>
+                    <MenuItem value="18">18%</MenuItem>
+                    <MenuItem value="16">16%</MenuItem>
+                    <MenuItem value="0">0% — Exento</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.75rem', mb: 0.75, display: 'block' }}>
+                  Precio base (RD$) <Typography component="span" sx={{ color: 'error.main' }}>*</Typography>
+                </Typography>
+                <TextField
+                  type="number" slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
                   value={precio}
                   onChange={e => { setPrecio(e.target.value); setFormErrors(v => ({...v, precio: ''})); }}
                   placeholder="0.00"
-                  className={`font-mono text-sm ${formErrors.precio ? 'border-red-400' : ''}`}
+                  size="small" fullWidth
+                  error={!!formErrors.precio}
+                  helperText={formErrors.precio}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.875rem' } }}
                 />
-                {formErrors.precio && <p className="text-xs text-red-500 mt-1">{formErrors.precio}</p>}
-              </div>
-            </div>
-          </div>
+              </Box>
+            </Box>
+          </Box>
 
           <NavFooter onBack={onBack} onNext={startEmission} nextLabel="Iniciar pruebas" />
-        </div>
+        </Box>
       )}
 
       {/* ── Step 1: Envío y progreso ── */}
       {sub === 1 && (
-        <div className="space-y-4">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 
           {/* Banner mientras EMITIMOS a DGII */}
           {currentType && !polling && (
-            <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50">
-              <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
-              <p className="text-sm text-blue-800">
-                Enviando comprobantes tipo <span className="font-bold">{currentType.replace(/[grb]/g, '')}</span>…
-              </p>
-            </div>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #bfdbfe', bgcolor: '#eff6ff' }}>
+              <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite', flexShrink: 0, color: '#3b82f6' }} />
+              <Typography sx={{ fontSize: '0.875rem', color: '#1e40af' }}>
+                Enviando comprobantes tipo <strong>{currentType.replace(/[grb]/g, '')}</strong>…
+              </Typography>
+            </Box>
           )}
 
           {/* Banner mientras DGII VALIDA los trackIds — polling activo */}
           {polling && (
-            <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-4 space-y-1.5">
-              <div className="flex items-center gap-2.5">
-                <Loader2 className="h-4 w-4 text-amber-600 animate-spin shrink-0" />
-                <p className="text-sm font-semibold text-amber-900">
+            <Box sx={{ borderRadius: '12px', border: '1px solid #fde68a', background: 'linear-gradient(135deg, #fffbeb, #fefce8)', p: 2, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite', flexShrink: 0, color: '#d97706' }} />
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#78350f' }}>
                   DGII está validando tus comprobantes…
-                </p>
-              </div>
-              <p className="text-xs text-amber-800 pl-6">
+                </Typography>
+              </Box>
+              <Typography sx={{ fontSize: '0.75rem', color: '#92400e', pl: 3 }}>
                 {(() => {
                   const totalValidados = Object.values(validatedByTipo).reduce((a, b) => a + b, 0);
                   const totalRequeridos = PRUEBA_ECF_TYPES
@@ -1834,77 +1846,77 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
                     .reduce((a, b) => a + (b.required ?? 0), 0);
                   return `Validados ${totalValidados} de ${totalRequeridos} · esto puede tomar 1–3 minutos. No cierres esta ventana.`;
                 })()}
-              </p>
-            </div>
+              </Typography>
+            </Box>
           )}
 
           {/* Banner cuando todo está aceptado (un instante antes de auto-avanzar) */}
           {gridDone && !polling && !fc250Done && (
-            <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-teal-200 bg-teal-50">
-              <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" />
-              <p className="text-sm font-semibold text-teal-900">Pruebas validadas exitosamente</p>
-            </div>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa' }}>
+              <CheckCircle style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Pruebas validadas exitosamente</Typography>
+            </Box>
           )}
 
           {/* Banner de error / rechazo DGII */}
           {emitError && (
-            <div className="rounded-xl border border-red-300 bg-red-50 p-4 space-y-3">
+            <Box sx={{ borderRadius: '12px', border: '1px solid #fca5a5', bgcolor: '#fef2f2', p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {/* Encabezado */}
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 shrink-0 rounded-full bg-red-100 p-1.5">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-red-900">
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                <Box sx={{ mt: 0.25, flexShrink: 0, borderRadius: '50%', bgcolor: '#fee2e2', p: 0.75 }}>
+                  <AlertCircle style={{ width: 16, height: 16, color: '#dc2626' }} />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#7f1d1d' }}>
                     {emitError.startsWith('DGII rechazó')
                       ? 'La DGII rechazó los comprobantes de prueba'
                       : 'Ocurrió un error al enviar los comprobantes'}
-                  </p>
-                  <p className="text-xs text-red-700 mt-0.5 leading-relaxed">
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#b91c1c', mt: 0.25, lineHeight: 1.6 }}>
                     {emitError.startsWith('DGII rechazó')
                       ? 'Uno o más comprobantes fueron rechazados por validación de esquema. Haz clic en el botón para volver al inicio y reintentar.'
                       : 'No se pudo completar el envío. Verifica tu conexión o inténtalo de nuevo.'}
-                  </p>
-                </div>
-              </div>
+                  </Typography>
+                </Box>
+              </Box>
 
               {/* Detalle técnico colapsable (opcional) */}
-              <details className="group">
-                <summary className="text-[11px] text-red-500 cursor-pointer select-none list-none flex items-center gap-1 hover:text-red-700">
-                  <ChevronRight className="h-3 w-3 group-open:rotate-90 transition-transform" />
+              <details>
+                <summary style={{ fontSize: '11px', color: '#ef4444', cursor: 'pointer', userSelect: 'none', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <ChevronRight style={{ width: 12, height: 12 }}/>
                   Ver detalle del error
                 </summary>
-                <pre className="mt-2 text-[10px] text-red-700 bg-red-100/60 rounded-lg p-2 overflow-auto max-h-28 whitespace-pre-wrap break-words">
+                <Box component="pre" sx={{ mt: 1, fontSize: '10px', color: '#b91c1c', bgcolor: 'rgba(254,226,226,0.6)', borderRadius: '8px', p: 1, overflow: 'auto', maxHeight: 112, whiteSpace: 'pre-wrap', wordBreak: 'break-words' }}>
                   {emitError}
-                </pre>
+                </Box>
               </details>
 
               {/* CTA principal */}
-              <button
+              <Box
+                component="button"
                 onClick={() => {
-                  // Limpiar trackIds persistidos para que al recargar no reanude el polling fallido
                   import('@/lib/habilitacion/client').then(({ guardarEstado }) => {
                     guardarEstado({ pruebas: { trackIds: [] } }).catch(() => {});
                   });
                   reset();
                 }}
-                className="w-full flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-semibold px-4 py-2 transition-colors"
+                sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, borderRadius: '8px', bgcolor: '#dc2626', color: '#fff', fontSize: '0.875rem', fontWeight: 600, px: 2, py: 1, cursor: 'pointer', border: 'none', '&:hover': { bgcolor: '#b91c1c' }, transition: 'background-color 0.15s' }}
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw style={{ width: 14, height: 14 }}/>
                 Volver al inicio y reintentar
-              </button>
-            </div>
+              </Box>
+            </Box>
           )}
 
           {/* Grid + screenshot lado a lado */}
-          <div className="grid lg:grid-cols-2 gap-4 items-start">
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'flex-start' }}>
 
             {/* Izquierda: contadores compactos */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Estado del Set de Pruebas
-              </p>
-              <div className="grid grid-cols-2 gap-1.5">
+              </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75 }}>
                 {PRUEBA_ECF_TYPES.filter(t => t.batch <= 3).map(t => {
                   const count  = counts[t.tipo] ?? 0;
                   const req    = t.required!;
@@ -1915,81 +1927,70 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
                                : t.tipo === '32r' ? '32 RFCE'
                                : t.tipo;
                   return (
-                    <div key={t.tipo} className={`rounded-lg border px-3 py-2 transition-all
-                      ${done   ? 'border-teal-200 bg-teal-50'
-                      : active ? 'border-blue-200 bg-blue-50/60'
-                      :          'border-gray-100 bg-white'}`}>
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className={`text-base font-bold font-mono leading-none
-                          ${done ? 'text-teal-600' : active ? 'text-blue-600' : 'text-gray-300'}`}>
+                    <Box key={t.tipo} sx={{ borderRadius: '8px', border: `1px solid ${done ? '#99f6e4' : active ? '#bfdbfe' : '#f3f4f6'}`, px: 1.5, py: 1, bgcolor: done ? '#f0fdfa' : active ? 'rgba(239,246,255,0.6)' : '#fff', transition: 'all 0.15s' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5, mb: 0.25 }}>
+                        <Typography component="span" sx={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1, color: done ? '#0d9488' : active ? '#2563eb' : '#d1d5db' }}>
                           {count}/{req}
-                        </span>
-                        {done   && <Check   className="h-3.5 w-3.5 text-teal-500 shrink-0" />}
-                        {active && <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin shrink-0" />}
-                      </div>
-                      <p className={`text-[10px] font-medium leading-tight
-                        ${done ? 'text-teal-700' : active ? 'text-blue-700' : 'text-gray-400'}`}>
+                        </Typography>
+                        {done   && <Check   style={{ width: 14, height: 14, flexShrink: 0, color: '#14b8a6' }} />}
+                        {active && <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite', flexShrink: 0, color: '#3b82f6' }} />}
+                      </Box>
+                      <Typography sx={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.25, color: done ? '#0f766e' : active ? '#1d4ed8' : '#9ca3af' }}>
                         Tipo {label}
-                      </p>
-                    </div>
+                      </Typography>
+                    </Box>
                   );
                 })}
-              </div>
-            </div>
+              </Box>
+            </Box>
 
             {/* Derecha: screenshot inline pequeño */}
-            <div className="rounded-xl border border-gray-200 overflow-hidden bg-white shrink-0">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-1.5">
-                <ImageIcon className="h-3 w-3 text-gray-400" />
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+            <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', bgcolor: '#fff', flexShrink: 0 }}>
+              <Box sx={{ px: 1.5, py: 1, bgcolor: '#f9fafb', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <ImageIcon style={{ width: 12, height: 12, color: '#9ca3af' }} />
+                <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Así se ve en el portal DGII
-                </p>
-              </div>
+                </Typography>
+              </Box>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/dgii-guia/paso4-pruebas-simulacion.png"
-                alt="Estado de pruebas en el portal DGII"
-                className="w-full h-auto"
-              />
-              <p className="text-[10px] text-gray-500 px-3 py-2 border-t border-gray-100 leading-snug">
+              <img src="/dgii-guia/paso4-pruebas-simulacion.png" alt="Estado de pruebas en el portal DGII" style={{ width: '100%', height: 'auto' }} />
+              <Typography sx={{ fontSize: '10px', color: '#6b7280', px: 1.5, py: 1, borderTop: '1px solid #f3f4f6', lineHeight: 1.4 }}>
                 El portal DGII muestra el mismo progreso por tipo. Puedes verificar allí en tiempo real.
-              </p>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+          </Box>
 
           {/* ── Panel de descarga de XMLs generados ── */}
           {pendingTrackIds.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 rounded-t-xl">
-                <div className="flex items-center gap-2">
-                  <Download className="h-3.5 w-3.5 text-gray-500" />
-                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+            <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.25, borderBottom: '1px solid #f3f4f6', bgcolor: '#f9fafb', borderRadius: '12px 12px 0 0' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Download style={{ width: 14, height: 14, color: '#6b7280' }} />
+                  <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     XMLs generados — descargar para inspección
-                  </p>
-                </div>
-                <span className="text-[10px] text-gray-400">{pendingTrackIds.length} archivos</span>
-              </div>
-              <div className="divide-y divide-gray-50">
+                  </Typography>
+                </Box>
+                <Typography component="span" sx={{ fontSize: '10px', color: '#9ca3af' }}>{pendingTrackIds.length} archivos</Typography>
+              </Box>
+              <Box sx={{ '& > *': { borderBottom: '1px solid rgba(249,250,251,1)' }, '& > *:last-child': { borderBottom: 0 } }}>
                 {pendingTrackIds.map(doc => (
-                  <button
+                  <Box
                     key={doc.encf}
+                    component="button"
                     onClick={() => doc.documentoId && downloadXml(doc.documentoId, doc.encf)}
                     disabled={!doc.documentoId}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25, textAlign: 'left', cursor: doc.documentoId ? 'pointer' : 'not-allowed', background: 'none', border: 'none', opacity: doc.documentoId ? 1 : 0.4, '&:hover': doc.documentoId ? { bgcolor: '#f9fafb' } : {}, transition: 'background-color 0.15s' }}
                   >
-                    <Download className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                    <span className="flex-1 text-xs font-mono text-gray-800">{doc.encf}.xml</span>
-                    <span className="text-[10px] text-gray-400 shrink-0">Tipo {doc.tipo.replace(/[grb]/g, '')}</span>
-                    <span className="text-[10px] text-teal-600 font-medium shrink-0">↓ Descargar</span>
-                  </button>
+                    <Download style={{ width: 14, height: 14, flexShrink: 0, color: '#0d9488' }} />
+                    <Typography component="span" sx={{ flex: 1, fontSize: '0.75rem', fontFamily: 'monospace', color: '#1f2937' }}>{doc.encf}.xml</Typography>
+                    <Typography component="span" sx={{ fontSize: '10px', color: '#9ca3af', flexShrink: 0 }}>Tipo {doc.tipo.replace(/[grb]/g, '')}</Typography>
+                    <Typography component="span" sx={{ fontSize: '10px', color: '#0d9488', fontWeight: 500, flexShrink: 0 }}>↓ Descargar</Typography>
+                  </Box>
                 ))}
-              </div>
-            </div>
+              </Box>
+            </Box>
           )}
 
-          {/* Navegación: se bloquea durante emisión y polling — solo aparece
-              cuando todo está aceptado (auto-avance ya se dispara, pero dejamos
-              el botón por si el usuario quiere hacerlo manual). */}
           {!currentType && !polling && (
             <NavFooter
               onBack={() => setSub(0)}
@@ -1998,14 +1999,14 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               nextLabel="Siguiente →"
             />
           )}
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 2: Factura de consumo <250K ── */}
       {sub === 2 && (
-        <div className="space-y-5">
-          <div className="grid lg:grid-cols-2 gap-4 items-start">
-            <div className="space-y-4">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'flex-start' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <InfoBox color="amber" title="Un paso más en el portal DGII">
                 Descarga tu factura de consumo (&lt; RD$250 mil) y{' '}
                 <strong>súbela al portal DGII</strong> en la sección{' '}
@@ -2013,71 +2014,56 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
               </InfoBox>
 
               <Button
-                variant="outline"
-                className="gap-2 text-sm w-full"
+                variant="outlined"
                 disabled={downloading32b}
                 onClick={handleDownload32b}
+                sx={{ textTransform: 'none', borderRadius: '8px', fontSize: '0.875rem', width: '100%', gap: 1 }}
               >
                 {downloading32b
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Generando PDF…</>
-                  : <><Download className="h-4 w-4" />Descargar factura de consumo (&lt;RD$250K)</>}
+                  ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Generando PDF…</>
+                  : <><Download style={{ width: 16, height: 16 }}/>Descargar factura de consumo (&lt;RD$250K)</>}
               </Button>
 
               {download32bError && (
-                <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5">
-                  <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-red-700">{download32bError}</p>
-                  </div>
-                  <button onClick={() => setDownload32bError(null)} className="text-red-400 hover:text-red-600">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: '8px', bgcolor: '#fef2f2', border: '1px solid #fecaca', px: 1.5, py: 1.25 }}>
+                  <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px', color: '#ef4444' }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#b91c1c' }}>{download32bError}</Typography>
+                  </Box>
+                  <IconButton onClick={() => setDownload32bError(null)} size="small" sx={{ color: '#f87171', '&:hover': { color: '#dc2626' } }}>
+                    <X style={{ width: 14, height: 14 }}/>
+                  </IconButton>
+                </Box>
               )}
 
               <InfoBox color="blue" title="Si la DGII la rechaza">
                 Será necesario reiniciar todas las pruebas de simulación.{' '}
-                <button className="underline font-semibold" onClick={() => { reset(); setSub(1); }}>
+                <Box component="button" sx={{ textDecoration: 'underline', fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', p: 0 }} onClick={() => { reset(); setSub(1); }}>
                   Reiniciar envío
-                </button>
+                </Box>
               </InfoBox>
-            </div>
+            </Box>
 
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 border-b flex items-center gap-1.5">
-                <ImageIcon className="h-3 w-3 text-gray-400" />
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+            <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <Box sx={{ px: 1.5, py: 1, bgcolor: '#f9fafb', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <ImageIcon style={{ width: 12, height: 12, color: '#9ca3af' }} />
+                <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Dónde subirla en el portal
-                </p>
-              </div>
+                </Typography>
+              </Box>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/dgii-guia/paso4-fc-menor-250k.png"
-                alt="Sección Facturas de consumo menor a 250K en el portal DGII"
-                className="w-full h-auto"
-              />
-              <p className="text-[10px] text-gray-500 px-3 py-2 border-t border-gray-100 leading-snug">
+              <img src="/dgii-guia/paso4-fc-menor-250k.png" alt="Sección Facturas de consumo menor a 250K en el portal DGII" style={{ width: '100%', height: 'auto' }} />
+              <Typography sx={{ fontSize: '10px', color: '#6b7280', px: 1.5, py: 1, borderTop: '1px solid #f3f4f6', lineHeight: 1.4 }}>
                 Baja hasta &ldquo;Facturas de consumo &lt;250Mil&rdquo;, selecciona el PDF y haz clic en ENVIAR.
-              </p>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+          </Box>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={fc250Done}
-              onChange={async e => {
-                const v = e.target.checked;
-                setFc250Done(v);
-                const { guardarEstado } = await import('@/lib/habilitacion/client');
-                guardarEstado({ pruebas: { fc250Done: v } }).catch(() => {});
-              }}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600"
-            />
-            <span className="text-sm text-gray-700">
-              Subí con éxito la factura de consumo al portal DGII
-            </span>
-          </label>
+          <FormControlLabel
+            control={<Checkbox checked={fc250Done} onChange={async e => { const v = e.target.checked; setFc250Done(v); const { guardarEstado } = await import('@/lib/habilitacion/client'); guardarEstado({ pruebas: { fc250Done: v } }).catch(() => {}); }} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Subí con éxito la factura de consumo al portal DGII</Typography>}
+            sx={{ alignItems: 'flex-start', mx: 0 }}
+          />
 
           <NavFooter
             onBack={() => setSub(1)}
@@ -2085,51 +2071,41 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
             nextDisabled={!fc250Done}
             nextLabel="Ver confirmación"
           />
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 3: Confirmación ── */}
       {sub === 3 && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-teal-200 bg-teal-50 p-5">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
-                <CheckCircle className="h-5 w-5 text-teal-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-teal-900">Pruebas de simulación completadas</p>
-                <p className="text-xs text-teal-700 mt-0.5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', p: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{ height: 40, width: 40, borderRadius: '50%', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <CheckCircle style={{ width: 20, height: 20, color: '#0d9488' }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#134e4a' }}>Pruebas de simulación completadas</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#0f766e', mt: 0.25 }}>
                   Todos los e-CF de prueba fueron aceptados por la DGII
-                </p>
-              </div>
-            </div>
-          </div>
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
 
           <InfoBox color="blue" title="Próximo: Representación Impresa">
             Ahora DGII necesita validar los <strong>PDFs impresos</strong> de cada tipo de comprobante.
             Son 11 archivos (uno por tipo) que te entregamos en el siguiente paso.
           </InfoBox>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={async e => {
-                const v = e.target.checked;
-                setConfirmed(v);
-                const { guardarEstado } = await import('@/lib/habilitacion/client');
-                guardarEstado({ pruebas: { confirmed: v } }).catch(() => {});
-              }}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600" />
-            <span className="text-sm text-gray-700">
-              Confirmo que el Set de Pruebas fue aprobado en el portal DGII
-            </span>
-          </label>
+          <FormControlLabel
+            control={<Checkbox checked={confirmed} onChange={async e => { const v = e.target.checked; setConfirmed(v); const { guardarEstado } = await import('@/lib/habilitacion/client'); guardarEstado({ pruebas: { confirmed: v } }).catch(() => {}); }} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Confirmo que el Set de Pruebas fue aprobado en el portal DGII</Typography>}
+            sx={{ alignItems: 'flex-start', mx: 0 }}
+          />
 
           <NavFooter onBack={() => setSub(2)} onNext={onComplete} nextDisabled={!confirmed} />
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -2194,94 +2170,83 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
   const STEPS = ['Descargar PDFs', 'Subida al portal', 'Validación DGII'];
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
       {/* Stepper */}
-      <div className="flex items-center">
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
         {STEPS.map((label, i) => (
-          <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
-                :             'bg-white border-gray-200 text-gray-400'}`}>
-                {i < sub ? <Check className="h-3 w-3" /> : i + 1}
-              </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+                {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
+              </Box>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
                 {label}
-              </span>
-            </div>
+              </Typography>
+            </Box>
             {i < STEPS.length - 1 && (
-              <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
-          </div>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ── Sub 0: Descargar los 11 PDFs ── */}
       {sub === 0 && (
-        <div className="space-y-5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <InfoBox color="amber" title="11 representaciones impresas requeridas">
             DGII necesita aprobar el PDF impreso de cada tipo de comprobante. Zero los genera
             automáticamente con los QR correctos — solo descárgalos y súbelos al portal.
           </InfoBox>
 
-          <div className="flex items-center justify-between">
-            <Button onClick={handleDownloadAll} disabled={downloadingAll || !!downloading || allDone} variant="outline" className="gap-2">
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Button onClick={handleDownloadAll} disabled={downloadingAll || !!downloading || allDone} variant="outlined"
+              sx={{ textTransform: 'none', borderRadius: '8px', gap: 1 }}>
               {downloadingAll
-                ? <><Loader2 className="h-4 w-4 animate-spin" />Descargando {downloaded.size + 1} de {PDFS.length}…</>
+                ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Descargando {downloaded.size + 1} de {PDFS.length}…</>
                 : allDone
-                ? <><CheckCircle className="h-4 w-4 text-teal-500" />Todos descargados</>
-                : <><Download className="h-4 w-4" />Descargar todos (uno a uno)</>}
+                ? <><CheckCircle style={{ width: 16, height: 16, color: '#14b8a6' }} />Todos descargados</>
+                : <><Download style={{ width: 16, height: 16 }}/>Descargar todos (uno a uno)</>}
             </Button>
-            <span className="text-xs font-mono text-gray-500">
+            <Typography component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#6b7280' }}>
               {downloaded.size}/{PDFS.length}
-            </span>
-          </div>
+            </Typography>
+          </Box>
 
           {downloadError && (
-            <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-red-700">Error al descargar PDF</p>
-                <p className="text-xs text-red-600 mt-0.5">{downloadError}</p>
-              </div>
-              <button onClick={() => setDownloadError(null)} className="text-red-400 hover:text-red-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: '8px', bgcolor: '#fef2f2', border: '1px solid #fecaca', px: 2, py: 1.5 }}>
+              <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px', color: '#ef4444' }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#b91c1c' }}>Error al descargar PDF</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#dc2626', mt: 0.25 }}>{downloadError}</Typography>
+              </Box>
+              <IconButton onClick={() => setDownloadError(null)} size="small" sx={{ color: '#f87171', '&:hover': { color: '#dc2626' } }}>
+                <X style={{ width: 16, height: 16 }}/>
+              </IconButton>
+            </Box>
           )}
 
-          <div className="space-y-1.5">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
             {PDFS.map(pdf => {
               const done = downloaded.has(pdf.tipo);
               const busy = downloading === pdf.tipo;
               return (
-                <div key={pdf.tipo} className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all
-                  ${done ? 'border-teal-200 bg-teal-50/60' : 'border-gray-200 bg-white'}`}>
-                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold
-                    ${done ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-500'}`}>
+                <Box key={pdf.tipo} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: `1px solid ${done ? '#99f6e4' : '#e5e7eb'}`, bgcolor: done ? 'rgba(240,253,250,0.6)' : '#fff', transition: 'all 0.15s' }}>
+                  <Box sx={{ height: 28, width: 28, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.75rem', fontWeight: 700, bgcolor: done ? '#ccfbf1' : '#f3f4f6', color: done ? '#0f766e' : '#6b7280' }}>
                     {pdf.tipo.replace(/[ab]/g, '')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{pdf.nombre}</p>
-                    <p className="text-xs text-gray-400">{pdf.tam}</p>
-                  </div>
-                  <button onClick={() => !done && !busy && handleDownloadOne(pdf.tipo)} disabled={done || busy}
-                    className={`shrink-0 p-1.5 rounded-lg transition-colors
-                      ${done ? 'text-teal-500 cursor-default' : busy ? 'text-gray-300' : 'text-gray-400 hover:text-teal-600 hover:bg-teal-50'}`}>
-                    {busy
-                      ? <Loader2 className="h-4 w-4 animate-spin" />
-                      : done
-                      ? <CheckCircle className="h-4 w-4" />
-                      : <Download className="h-4 w-4" />}
-                  </button>
-                </div>
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{pdf.nombre}</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{pdf.tam}</Typography>
+                  </Box>
+                  <IconButton onClick={() => !done && !busy && handleDownloadOne(pdf.tipo)} disabled={done || busy}
+                    size="small" sx={{ flexShrink: 0, borderRadius: '8px', color: done ? '#14b8a6' : busy ? '#d1d5db' : '#9ca3af', cursor: done ? 'default' : 'pointer', '&:hover': !done && !busy ? { color: '#0d9488', bgcolor: '#f0fdfa' } : {} }}>
+                    {busy ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }}/> : done ? <CheckCircle style={{ width: 16, height: 16 }}/> : <Download style={{ width: 16, height: 16 }}/>}
+                  </IconButton>
+                </Box>
               );
             })}
-          </div>
+          </Box>
 
           <NavFooter
             onBack={onBack}
@@ -2289,12 +2254,12 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
             nextDisabled={!allDone}
             nextLabel="Ya los descargué"
           />
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 1: Confirmar subida al portal ── */}
       {sub === 1 && (
-        <div className="space-y-5">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <InfoBox color="blue" title="Sube los 11 PDFs al portal DGII">
             En el portal DGII, ve a <strong>Paso 5: Representación Impresa</strong>. Verás 11 casillas,
             una por cada tipo. Sube cada PDF en su casilla correspondiente (el nombre del archivo
@@ -2308,17 +2273,11 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
             mode="inline"
           />
 
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl border border-gray-200 hover:border-teal-300 transition-colors">
-            <input
-              type="checkbox"
-              checked={uploadConfirmed}
-              onChange={e => setUploadConfirmed(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600"
-            />
-            <span className="text-sm text-gray-700">
-              Subí los 11 PDFs al portal DGII y di clic en <strong>ENVIAR ARCHIVOS</strong>
-            </span>
-          </label>
+          <FormControlLabel
+            control={<Checkbox checked={uploadConfirmed} onChange={e => setUploadConfirmed(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Subí los 11 PDFs al portal DGII y di clic en <strong>ENVIAR ARCHIVOS</strong></Typography>}
+            sx={{ alignItems: 'flex-start', mx: 0, p: 2, borderRadius: '12px', border: '1px solid #e5e7eb', '&:hover': { borderColor: '#5eead4' }, transition: 'border-color 0.15s' }}
+          />
 
           <NavFooter
             onBack={() => setSub(0)}
@@ -2326,7 +2285,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
             nextDisabled={!uploadConfirmed}
             nextLabel="Esperar validación"
           />
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 2: Espera validación DGII ── */}
@@ -2341,16 +2300,16 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
             successDescription="DGII validó los 11 PDFs. Ya casi terminamos — solo faltan las URLs de producción y la declaración jurada."
             onComplete={onComplete}
           />
-          <p className="text-xs text-amber-600 mt-3 flex items-start gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>
+          <Box sx={{ fontSize: '0.75rem', color: '#d97706', mt: 1.5, display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+            <AlertTriangle style={{ width: 14, height: 14, flexShrink: 0, marginTop: '1px' }}/>
+            <Typography component="span" sx={{ fontSize: '0.75rem', color: '#d97706' }}>
               Si DGII rechaza alguna representación, recibirás un correo con los detalles. Vuelve a este paso,
               descarga nuevamente el PDF corregido y re-súbelo al portal.
-            </span>
-          </p>
+            </Typography>
+          </Box>
         </>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -2371,7 +2330,7 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
   };
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <InfoBox color="blue" title="Cambio de ambiente: pruebas → producción">
         Hasta ahora trabajaste en el ambiente de <strong>pruebas</strong> de DGII. Para emitir e-CF reales,
         DGII te pide actualizar las 3 URLs del software al ambiente de <strong>producción</strong>.
@@ -2385,35 +2344,33 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
         mode="inline"
       />
 
-      <div className="rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b flex items-center gap-2">
-          <Globe className="h-4 w-4 text-gray-400" />
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Endpoints de producción</p>
-        </div>
-        <div className="px-4 divide-y divide-gray-50">
+      <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, bgcolor: '#f9fafb', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Globe style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Endpoints de producción</Typography>
+        </Box>
+        <Box sx={{ px: 2 }}>
           <CopyRow label="URL de recepción"     value={urls.recepcion} />
           <CopyRow label="URL de aprobación"    value={urls.aprobacion} />
           <CopyRow label="URL de autenticación" value={urls.autenticacion} />
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 p-4">
-        <Lock className="h-4 w-4 text-teal-500 shrink-0" />
-        <p className="text-sm text-gray-700">
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, borderRadius: '12px', border: '1px solid #e5e7eb', p: 2 }}>
+        <Lock style={{ width: 16, height: 16, flexShrink: 0, color: '#14b8a6' }} />
+        <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
           Todos los endpoints usan <strong>HTTPS / TLS 1.2+</strong> con certificado SSL válido.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <label className="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600" />
-        <span className="text-sm text-gray-700">
-          Registré las 3 URLs en el portal DGII y di clic en CONFIRMAR URLs
-        </span>
-      </label>
+      <FormControlLabel
+        control={<Checkbox checked={confirmed} onChange={e => setConfirmed(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+        label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Registré las 3 URLs en el portal DGII y di clic en CONFIRMAR URLs</Typography>}
+        sx={{ alignItems: 'flex-start', mx: 0 }}
+      />
 
       <NavFooter onBack={onBack} onNext={onComplete} nextDisabled={!confirmed} />
-    </div>
+    </Box>
   );
 }
 
@@ -2434,35 +2391,30 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
   const STEPS = ['Firmar y enviar', 'Verificación RNC'];
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
       {/* Stepper */}
-      <div className="flex items-center">
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
         {STEPS.map((label, i) => (
-          <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
-                :             'bg-white border-gray-200 text-gray-400'}`}>
-                {i < sub ? <Check className="h-3 w-3" /> : i + 1}
-              </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+                {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
+              </Box>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
                 {label}
-              </span>
-            </div>
+              </Typography>
+            </Box>
             {i < STEPS.length - 1 && (
-              <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
-          </div>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ── Sub 0: Firmar + enviar ── */}
       {sub === 0 && (
-        <div className="space-y-4">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <InfoBox color="blue" title="¿Qué es la Declaración Jurada?">
             Es el <strong>contrato legal</strong> por el que te comprometes a usar los e-CF correctamente.
             Bajo fe de juramento declaras que: (1) el proceso de certificación se hizo correctamente,
@@ -2476,99 +2428,97 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           </InfoBox>
 
           {/* Step 1 */}
-          <div className={`rounded-xl border p-5 space-y-4 ${xmlFile ? 'border-teal-200' : 'border-gray-200'}`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                  ${xmlFile ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                  {xmlFile ? <Check className="h-3.5 w-3.5" /> : '1'}
-                </div>
-                <p className="text-sm font-semibold text-gray-800">Subir XML generado por la DGII</p>
-              </div>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${xmlFile ? '#99f6e4' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: xmlFile ? '#0d9488' : '#e5e7eb', color: xmlFile ? '#fff' : '#4b5563' }}>
+                  {xmlFile ? <Check style={{ width: 14, height: 14 }}/> : '1'}
+                </Box>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Subir XML generado por la DGII</Typography>
+              </Box>
               <DgiiScreenshot
                 src="/dgii-guia/paso13-envio-xml-declaracion.png"
                 alt="Envío del XML de declaración jurada firmado"
                 caption="En el portal DGII, después del texto legal, haz clic en GENERAR ARCHIVO para descargar el XML."
                 label="Ver pantalla"
               />
-            </div>
+            </Box>
 
             {!xmlFile ? (
-              <div onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-6 px-4 text-center transition-colors">
-                <Upload className="h-7 w-7 text-gray-400" />
-                <div>
-                  <p className="text-sm font-medium text-gray-700">XML de declaración jurada</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Descargado del portal DGII · Formato .xml</p>
-                </div>
-              </div>
+              <Box onClick={() => fileInputRef.current?.click()}
+                sx={{ borderRadius: '12px', border: '2px dashed #e5e7eb', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 3, px: 2, textAlign: 'center', '&:hover': { borderColor: '#5eead4', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}>
+                <Upload style={{ width: 28, height: 28, color: '#9ca3af' }} />
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>XML de declaración jurada</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>Descargado del portal DGII · Formato .xml</Typography>
+                </Box>
+              </Box>
             ) : (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
-                <FileText className="h-4 w-4 text-teal-600 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{xmlFile.name}</p>
-                  <p className="text-xs text-gray-400">{fmtSize(xmlFile.size)}</p>
-                </div>
-                <button onClick={() => { setXmlFile(null); setSigned(false); setSent(false); }}
-                  className="p-1 rounded-full hover:bg-gray-200 text-gray-400">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <FileText style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{xmlFile.name}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{fmtSize(xmlFile.size)}</Typography>
+                </Box>
+                <IconButton onClick={() => { setXmlFile(null); setSigned(false); setSent(false); }} size="small" sx={{ borderRadius: '50%', color: '#9ca3af', '&:hover': { bgcolor: '#e5e7eb' } }}>
+                  <X style={{ width: 14, height: 14 }}/>
+                </IconButton>
+              </Box>
             )}
-            <input ref={fileInputRef} type="file" accept=".xml" className="hidden"
+            <input ref={fileInputRef} type="file" accept=".xml" style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) setXmlFile(f); e.target.value = ''; }} />
-          </div>
+          </Box>
 
           {/* Step 2 */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all ${signed ? 'border-teal-200' : !xmlFile ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${signed ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {signed ? <Check className="h-3.5 w-3.5" /> : '2'}
-              </div>
-              <p className="text-sm font-semibold text-gray-800">Firmar con certificado P12</p>
-            </div>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${signed ? '#99f6e4' : !xmlFile ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !signed && !xmlFile ? 0.4 : 1, transition: 'all 0.15s' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: signed ? '#0d9488' : '#e5e7eb', color: signed ? '#fff' : '#4b5563' }}>
+                {signed ? <Check style={{ width: 14, height: 14 }}/> : '2'}
+              </Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Firmar con certificado P12</Typography>
+            </Box>
             {!signed ? (
-              <Button onClick={handleSign} disabled={!xmlFile || signing} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+              <Button onClick={handleSign} disabled={!xmlFile || signing} variant="contained" disableElevation
+                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
                 {signing
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Firmando declaración jurada…</>
-                  : <><FileSignature className="h-4 w-4" />Firmar declaración jurada</>}
+                  ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Firmando declaración jurada…</>
+                  : <><FileSignature style={{ width: 16, height: 16 }}/>Firmar declaración jurada</>}
               </Button>
             ) : (
-              <div className="flex gap-2">
-                <div className="flex-1 flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg p-3 text-teal-800">
-                  <CheckCircle className="h-4 w-4" />
-                  <p className="text-sm font-medium">Firmado · RSA-SHA256</p>
-                </div>
-                <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
-                  <Download className="h-3.5 w-3.5" /> Descargar
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px', p: 1.5, color: '#134e4a' }}>
+                  <CheckCircle style={{ width: 16, height: 16 }}/>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Firmado · RSA-SHA256</Typography>
+                </Box>
+                <Button variant="outlined" size="small" sx={{ flexShrink: 0, textTransform: 'none', borderRadius: '8px', gap: 0.75 }}>
+                  <Download style={{ width: 14, height: 14 }}/> Descargar
                 </Button>
-              </div>
+              </Box>
             )}
-          </div>
+          </Box>
 
           {/* Step 3 */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all ${sent ? 'border-teal-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-2">
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${sent ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {sent ? <Check className="h-3.5 w-3.5" /> : '3'}
-              </div>
-              <p className="text-sm font-semibold text-gray-800">Enviar al portal DGII</p>
-            </div>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${sent ? '#99f6e4' : !signed ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !sent && !signed ? 0.4 : 1, transition: 'all 0.15s' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: sent ? '#0d9488' : '#e5e7eb', color: sent ? '#fff' : '#4b5563' }}>
+                {sent ? <Check style={{ width: 14, height: 14 }}/> : '3'}
+              </Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Enviar al portal DGII</Typography>
+            </Box>
             {!sent ? (
-              <Button onClick={handleSend} disabled={!signed || sending} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+              <Button onClick={handleSend} disabled={!signed || sending} variant="contained" disableElevation
+                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
                 {sending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Enviando a DGII…</>
-                  : <><ExternalLink className="h-4 w-4" />Enviar declaración jurada</>}
+                  ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Enviando a DGII…</>
+                  : <><ExternalLink style={{ width: 16, height: 16 }}/>Enviar declaración jurada</>}
               </Button>
             ) : (
-              <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg p-3 text-teal-800">
-                <CheckCircle className="h-4 w-4 shrink-0" />
-                <p className="text-sm font-medium">Enviada y recibida por la DGII</p>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px', p: 1.5, color: '#134e4a' }}>
+                <CheckCircle style={{ width: 16, height: 16, flexShrink: 0 }}/>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Enviada y recibida por la DGII</Typography>
+              </Box>
             )}
-          </div>
+          </Box>
 
           <NavFooter
             onBack={onBack}
@@ -2576,23 +2526,23 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
             nextDisabled={!sent}
             nextLabel="Verificar RNC"
           />
-        </div>
+        </Box>
       )}
 
       {/* ── Sub 1: Verificación RNC ── */}
       {sub === 1 && (
         <>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Último paso antes de producción
-            </p>
+            </Typography>
             <DgiiScreenshot
               src="/dgii-guia/paso14-verificacion-estatus.png"
               alt="Verificación del estatus del RNC en el portal DGII"
               caption="DGII valida automáticamente que tu RNC esté activo y al día con tus obligaciones fiscales."
               label="Ver pantalla"
             />
-          </div>
+          </Box>
           <WaitForDgii
             title="DGII está verificando el estatus de tu RNC"
             description="Se valida que tu RNC esté activo, al día con las obligaciones, y que la relación representante ↔ empresa sea correcta."
@@ -2604,7 +2554,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           />
         </>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -2614,23 +2564,23 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
   const [acknowledged, setAcknowledged] = useState(false);
 
   return (
-    <div className="space-y-5">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
-      <div className="rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50 to-white p-6">
-        <div className="flex items-start gap-4">
-          <div className="h-14 w-14 rounded-2xl bg-teal-600 flex items-center justify-center shrink-0 shadow-sm">
-            <PartyPopper className="h-7 w-7 text-white" />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-teal-600 uppercase tracking-widest mb-1">Paso 15 · Finalizado</p>
-            <h3 className="text-xl font-bold text-gray-900">¡Tu habilitación está completa!</h3>
-            <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+      <Box sx={{ borderRadius: '16px', border: '1px solid #99f6e4', background: 'linear-gradient(135deg, #f0fdfa, #fff)', p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+          <Box sx={{ height: 56, width: 56, borderRadius: '16px', bgcolor: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <PartyPopper style={{ width: 28, height: 28, color: '#fff' }} />
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.1em', mb: 0.5 }}>Paso 15 · Finalizado</Typography>
+            <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>¡Tu habilitación está completa!</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 1, lineHeight: 1.6 }}>
               Has completado exitosamente el proceso de certificación como Facturador Electrónico.
               Ya puedes emitir e-CF en producción desde Zero.
-            </p>
-          </div>
-        </div>
-      </div>
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
 
       <DgiiScreenshot
         src="/dgii-guia/paso15-finalizado.png"
@@ -2645,46 +2595,35 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
         las envía automáticamente en producción. Úsala solo para consultar o ver reportes.
       </InfoBox>
 
-      <div className="grid sm:grid-cols-2 gap-3">
-        <a
-          href="https://www.dgii.gov.do/ofv/login.aspx"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors group"
-        >
-          <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-            <ExternalLink className="h-4 w-4 text-teal-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900">Ir a la OFV</p>
-            <p className="text-xs text-gray-500 truncate">Oficina Virtual de la DGII</p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0" />
-        </a>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+        <Box component="a" href="https://www.dgii.gov.do/ofv/login.aspx" target="_blank" rel="noopener noreferrer"
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #e5e7eb', textDecoration: 'none', '&:hover': { borderColor: '#5eead4', bgcolor: 'rgba(240,253,250,0.5)' }, transition: 'all 0.15s' }}>
+          <Box sx={{ height: 40, width: 40, borderRadius: '12px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ExternalLink style={{ width: 16, height: 16, color: '#0d9488' }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Ir a la OFV</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Oficina Virtual de la DGII</Typography>
+          </Box>
+          <ArrowRight style={{ width: 16, height: 16, flexShrink: 0, color: '#9ca3af' }} />
+        </Box>
 
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-teal-200 bg-teal-50">
-          <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center shrink-0">
-            <Zap className="h-4 w-4 text-teal-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-teal-900">Zero ya está en producción</p>
-            <p className="text-xs text-teal-700">Cada factura que emitas será real ante DGII</p>
-          </div>
-        </div>
-      </div>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa' }}>
+          <Box sx={{ height: 40, width: 40, borderRadius: '12px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Zap style={{ width: 16, height: 16, color: '#0d9488' }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Zero ya está en producción</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#0f766e' }}>Cada factura que emitas será real ante DGII</Typography>
+          </Box>
+        </Box>
+      </Box>
 
-      <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl border border-gray-200">
-        <input
-          type="checkbox"
-          checked={acknowledged}
-          onChange={e => setAcknowledged(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600"
-        />
-        <span className="text-sm text-gray-700">
-          Entiendo que desde ahora cada e-CF que emita en Zero es <strong>real</strong> y se envía
-          directamente a producción DGII
-        </span>
-      </label>
+      <FormControlLabel
+        control={<Checkbox checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+        label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Entiendo que desde ahora cada e-CF que emita en Zero es <strong>real</strong> y se envía directamente a producción DGII</Typography>}
+        sx={{ alignItems: 'flex-start', mx: 0, p: 2, borderRadius: '12px', border: '1px solid #e5e7eb' }}
+      />
 
       <NavFooter
         onBack={onBack}
@@ -2692,7 +2631,7 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
         nextDisabled={!acknowledged}
         nextLabel="Finalizar habilitación"
       />
-    </div>
+    </Box>
   );
 }
 
@@ -2700,48 +2639,48 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
 
 function PhaseListo() {
   return (
-    <div className="space-y-8 py-4">
-      <div className="flex flex-col items-center text-center space-y-4">
-        <div className="h-20 w-20 rounded-full bg-teal-100 flex items-center justify-center">
-          <Rocket className="h-10 w-10 text-teal-600" />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold text-gray-900">¡Habilitación completada!</h3>
-          <p className="text-gray-500 mt-2 max-w-md text-sm">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, py: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 2 }}>
+        <Box sx={{ height: 80, width: 80, borderRadius: '50%', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Rocket style={{ width: 40, height: 40, color: '#0d9488' }} />
+        </Box>
+        <Box>
+          <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: 'text.primary' }}>¡Habilitación completada!</Typography>
+          <Typography sx={{ color: '#6b7280', mt: 1, maxWidth: 448, fontSize: '0.875rem' }}>
             Tu empresa está habilitada ante la DGII para emitir comprobantes fiscales electrónicos.
             Ya puedes emitir e-CF en producción.
-          </p>
-        </div>
-      </div>
+          </Typography>
+        </Box>
+      </Box>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 1.5 }}>
         {[
-          { icon: Building2,   label: 'Empresa',       desc: 'Datos fiscales' },
-          { icon: KeyRound,    label: 'Certificado',   desc: 'P12 activo' },
-          { icon: FlaskConical,label: 'Set de Pruebas',desc: 'Aprobado' },
-          { icon: CheckCircle, label: 'Producción',    desc: 'En línea' },
+          { icon: Building2,    label: 'Empresa',        desc: 'Datos fiscales' },
+          { icon: KeyRound,     label: 'Certificado',    desc: 'P12 activo' },
+          { icon: FlaskConical, label: 'Set de Pruebas', desc: 'Aprobado' },
+          { icon: CheckCircle,  label: 'Producción',     desc: 'En línea' },
         ].map(item => (
-          <div key={item.label} className="rounded-xl border border-gray-200 p-4 text-center space-y-2">
-            <div className="h-9 w-9 rounded-full bg-teal-50 flex items-center justify-center mx-auto">
-              <item.icon className="h-4 w-4 text-teal-600" />
-            </div>
-            <p className="text-xs font-semibold text-gray-900">{item.label}</p>
-            <p className="text-xs text-gray-400">{item.desc}</p>
-          </div>
+          <Box key={item.label} sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', p: 2, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ height: 36, width: 36, borderRadius: '50%', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto' }}>
+              <item.icon style={{ width: 16, height: 16, color: '#0d9488' }} />
+            </Box>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.primary' }}>{item.label}</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{item.desc}</Typography>
+          </Box>
         ))}
-      </div>
+      </Box>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Link href="/dashboard/facturas/nueva" className="flex-1">
-          <Button className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
-            <ArrowRight className="h-4 w-4" /> Emitir primera factura
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5 }}>
+        <Link href="/dashboard/facturas/nueva" style={{ flex: 1 }}>
+          <Button variant="contained" disableElevation fullWidth sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, gap: 1 }}>
+            <ArrowRight style={{ width: 16, height: 16 }}/> Emitir primera factura
           </Button>
         </Link>
-        <Link href="/dashboard" className="flex-1">
-          <Button variant="outline" className="w-full">Ir al dashboard</Button>
+        <Link href="/dashboard" style={{ flex: 1 }}>
+          <Button variant="outlined" fullWidth sx={{ textTransform: 'none', borderRadius: '8px' }}>Ir al dashboard</Button>
         </Link>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -2758,27 +2697,27 @@ function IntroModal({ onStart }: { onStart: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden">
+    <Box sx={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, bgcolor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+      <Box sx={{ bgcolor: '#fff', borderRadius: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', width: '100%', maxWidth: '48rem', overflow: 'hidden' }}>
 
-        <div className="bg-gradient-to-r from-teal-600 to-teal-500 px-10 py-8">
-          <p className="text-xs font-semibold text-teal-100 uppercase tracking-widest mb-2">
+        <Box sx={{ background: 'linear-gradient(to right, #0d9488, #14b8a6)', px: 5, py: 4 }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#ccfbf1', textTransform: 'uppercase', letterSpacing: '0.1em', mb: 1 }}>
             Comprobantes Fiscales Electrónicos · DGII
-          </p>
-          <h2 className="text-3xl font-bold text-white leading-snug">
+          </Typography>
+          <Typography sx={{ fontSize: '1.875rem', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
             Activa tu facturación electrónica
-          </h2>
-          <p className="text-base text-teal-100 mt-2">
+          </Typography>
+          <Typography sx={{ fontSize: '1rem', color: '#ccfbf1', mt: 1 }}>
             Zero te guía paso a paso por el proceso de habilitación ante la DGII.
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
-        <div className="flex flex-col sm:flex-row">
-          <div className="flex-1 px-10 py-8 space-y-6">
-            <div className="space-y-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' } }}>
+          <Box sx={{ flex: 1, px: 5, py: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                 Antes de comenzar, ten a mano
-              </p>
+              </Typography>
               {[
                 {
                   n: '1', text: 'Acceso al portal de la DGII',
@@ -2796,41 +2735,41 @@ function IntroModal({ onStart }: { onStart: () => void }) {
                   link: 'https://dgii.gov.do/herramientas/consultas/Paginas/RNC.aspx', linkText: 'Consultar RNC',
                 },
               ].map(item => (
-                <div key={item.n} className="flex items-center gap-3">
-                  <div className="h-7 w-7 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-teal-600">{item.n}</span>
-                  </div>
-                  <p className="text-base text-gray-700 flex-1">{item.text}</p>
+                <Box key={item.n} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{ height: 28, width: 28, borderRadius: '50%', bgcolor: '#f0fdfa', border: '1px solid #99f6e4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#0d9488' }}>{item.n}</Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: '1rem', color: '#374151', flex: 1 }}>{item.text}</Typography>
                   <HelpPopover content={item.help} link={item.link} linkText={item.linkText} />
-                </div>
+                </Box>
               ))}
-            </div>
+            </Box>
 
-            <Button onClick={handleStart} size="lg"
-              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold text-base py-3">
+            <Button onClick={handleStart} variant="contained" disableElevation size="large"
+              sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, color: '#fff', fontWeight: 600, fontSize: '1rem', py: 1.5, width: '100%' }}>
               Comenzar →
             </Button>
-          </div>
+          </Box>
 
-          <div className="sm:w-60 bg-gray-50 border-l border-gray-100 px-8 py-8 space-y-5 flex flex-col justify-center">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">¿Qué obtienes?</p>
+          <Box sx={{ width: { sm: 240 }, bgcolor: '#f9fafb', borderLeft: '1px solid #f3f4f6', px: 4, py: 4, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2.5 }}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>¿Qué obtienes?</Typography>
             {[
               { icon: '💰', title: 'Créditos fiscales',       desc: 'Aplica créditos en ITBIS y otros impuestos.' },
               { icon: '⚡', title: 'Facturación en segundos', desc: 'Firma y envía e-CF a la DGII al instante.' },
               { icon: '🔒', title: 'Sin papel, sin riesgo',   desc: 'Todo firmado digitalmente y en la nube.' },
             ].map(b => (
-              <div key={b.title} className="flex items-start gap-3">
-                <span className="text-xl shrink-0">{b.icon}</span>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{b.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{b.desc}</p>
-                </div>
-              </div>
+              <Box key={b.title} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                <Typography component="span" sx={{ fontSize: '1.25rem', flexShrink: 0 }}>{b.icon}</Typography>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{b.title}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25, lineHeight: 1.6 }}>{b.desc}</Typography>
+                </Box>
+              </Box>
             ))}
-          </div>
-        </div>
-      </div>
-    </div>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -2840,71 +2779,67 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
   const [selected, setSelected] = useState<IntroMode | null>(null);
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-8 text-center">
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-teal-600 mb-4">
-          <CheckCircle className="h-7 w-7 text-white" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900">¡Datos listos!</h2>
-        <p className="text-sm text-gray-400 mt-2">
+    <Box sx={{ maxWidth: '42rem', mx: 'auto' }}>
+      <Box sx={{ mb: 4, textAlign: 'center' }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 56, width: 56, borderRadius: '16px', bgcolor: '#0d9488', mb: 2 }}>
+          <CheckCircle style={{ width: 28, height: 28, color: '#fff' }} />
+        </Box>
+        <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: 'text.primary' }}>¡Datos listos!</Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', mt: 1 }}>
           Ahora elige cómo quieres completar la habilitación ante la DGII.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <div className="space-y-3 mb-6">
-        <button
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 3 }}>
+        <Box
+          component="button"
           onClick={() => setSelected('asistido')}
-          className={`w-full text-left rounded-2xl border-2 p-5 transition-all group
-            ${selected === 'asistido' ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-teal-300 hover:bg-gray-50'}`}
+          sx={{ width: '100%', textAlign: 'left', borderRadius: '16px', border: `2px solid ${selected === 'asistido' ? '#14b8a6' : '#e5e7eb'}`, p: 2.5, cursor: 'pointer', background: 'none', bgcolor: selected === 'asistido' ? '#f0fdfa' : 'transparent', '&:hover': selected !== 'asistido' ? { borderColor: '#5eead4', bgcolor: '#f9fafb' } : {}, transition: 'all 0.15s' }}
         >
-          <div className="flex items-start gap-4">
-            <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 transition-colors
-              ${selected === 'asistido' ? 'bg-teal-500' : 'bg-teal-100 group-hover:bg-teal-200'}`}>
-              <Zap className={`h-5 w-5 ${selected === 'asistido' ? 'text-white' : 'text-teal-600'}`} />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-base font-bold text-gray-900">Zero gestiona todo por mí</p>
-                <span className="text-[11px] font-bold bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+            <Box sx={{ height: 44, width: 44, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, bgcolor: selected === 'asistido' ? '#14b8a6' : '#ccfbf1', transition: 'background-color 0.15s' }}>
+              <Zap style={{ width: 20, height: 20, color: selected === 'asistido' ? '#fff' : '#0d9488' }} />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>Zero gestiona todo por mí</Typography>
+                <Typography component="span" sx={{ fontSize: '11px', fontWeight: 700, bgcolor: '#ccfbf1', color: '#0f766e', px: 1, py: 0.25, borderRadius: '9999px' }}>
                   Recomendado
-                </span>
-              </div>
-              <p className="text-sm text-gray-500">
+                </Typography>
+              </Box>
+              <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
                 Comparte tus credenciales del portal DGII y nos encargamos del proceso completo.
                 Tú solo esperas la confirmación.
-              </p>
-            </div>
-            <div className={`h-5 w-5 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center transition-colors
-              ${selected === 'asistido' ? 'border-teal-500 bg-teal-500' : 'border-gray-300'}`}>
-              {selected === 'asistido' && <Check className="h-3 w-3 text-white" />}
-            </div>
-          </div>
-        </button>
+              </Typography>
+            </Box>
+            <Box sx={{ height: 20, width: 20, borderRadius: '50%', border: `2px solid ${selected === 'asistido' ? '#14b8a6' : '#d1d5db'}`, bgcolor: selected === 'asistido' ? '#14b8a6' : 'transparent', flexShrink: 0, mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+              {selected === 'asistido' && <Check style={{ width: 12, height: 12, color: '#fff' }} />}
+            </Box>
+          </Box>
+        </Box>
 
-        <button
+        <Box
+          component="button"
           onClick={() => setSelected('manual')}
-          className={`w-full text-left rounded-2xl border-2 p-5 transition-all group
-            ${selected === 'manual' ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-teal-300 hover:bg-gray-50'}`}
+          sx={{ width: '100%', textAlign: 'left', borderRadius: '16px', border: `2px solid ${selected === 'manual' ? '#14b8a6' : '#e5e7eb'}`, p: 2.5, cursor: 'pointer', background: 'none', bgcolor: selected === 'manual' ? '#f0fdfa' : 'transparent', '&:hover': selected !== 'manual' ? { borderColor: '#5eead4', bgcolor: '#f9fafb' } : {}, transition: 'all 0.15s' }}
         >
-          <div className="flex items-start gap-4">
-            <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 transition-colors
-              ${selected === 'manual' ? 'bg-teal-500' : 'bg-gray-100 group-hover:bg-gray-200'}`}>
-              <FileText className={`h-5 w-5 ${selected === 'manual' ? 'text-white' : 'text-gray-500'}`} />
-            </div>
-            <div className="flex-1">
-              <p className="text-base font-bold text-gray-900 mb-1">Lo gestiono yo paso a paso</p>
-              <p className="text-sm text-gray-500">
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+            <Box sx={{ height: 44, width: 44, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, bgcolor: selected === 'manual' ? '#14b8a6' : '#f3f4f6', transition: 'background-color 0.15s' }}>
+              <FileText style={{ width: 20, height: 20, color: selected === 'manual' ? '#fff' : '#6b7280' }} />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary', mb: 0.5 }}>Lo gestiono yo paso a paso</Typography>
+              <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
                 Te guiamos por cada fase con instrucciones claras. Tú ejecutas los pasos
                 en el portal DGII a tu ritmo.
-              </p>
-            </div>
-            <div className={`h-5 w-5 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center transition-colors
-              ${selected === 'manual' ? 'border-teal-500 bg-teal-500' : 'border-gray-300'}`}>
-              {selected === 'manual' && <Check className="h-3 w-3 text-white" />}
-            </div>
-          </div>
-        </button>
-      </div>
+              </Typography>
+            </Box>
+            <Box sx={{ height: 20, width: 20, borderRadius: '50%', border: `2px solid ${selected === 'manual' ? '#14b8a6' : '#d1d5db'}`, bgcolor: selected === 'manual' ? '#14b8a6' : 'transparent', flexShrink: 0, mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+              {selected === 'manual' && <Check style={{ width: 12, height: 12, color: '#fff' }} />}
+            </Box>
+          </Box>
+        </Box>
+      </Box>
 
       <NavFooter
         onBack={onBack}
@@ -2912,7 +2847,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
         nextDisabled={!selected}
         nextLabel="Continuar"
       />
-    </div>
+    </Box>
   );
 }
 
@@ -2943,101 +2878,103 @@ function StageCredencial({
   }
 
   return (
-    <div className="max-w-md mx-auto space-y-6">
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-teal-600 mb-2">
-          <Zap className="h-7 w-7 text-white" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900">Acceso al portal DGII</h2>
-        <p className="text-sm text-gray-500 leading-relaxed">
+    <Box sx={{ maxWidth: '28rem', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 56, width: 56, borderRadius: '16px', bgcolor: '#0d9488', mb: 1, mx: 'auto' }}>
+          <Zap style={{ width: 28, height: 28, color: '#fff' }} />
+        </Box>
+        <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: 'text.primary' }}>Acceso al portal DGII</Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.6 }}>
           Necesitamos acceder <strong>una sola vez</strong> al portal DGII para completar
           la habilitación por ti. No guardamos tus credenciales.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <div className="space-y-4">
-        <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.75, display: 'block' }}>
             RNC / Cédula
-          </Label>
-          <Input value={rnc} readOnly className="bg-gray-50 text-gray-500 font-mono" />
-        </div>
-        <div>
-          <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+          </Typography>
+          <TextField value={rnc} slotProps={{ htmlInput: { readOnly: true } }} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb', fontFamily: 'monospace' }, '& .MuiInputBase-input': { color: '#6b7280' } }} />
+        </Box>
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.75, display: 'block' }}>
             Contraseña del portal DGII
-          </Label>
-          <div className="relative">
-            <Input
-              type={showPass ? 'text' : 'password'}
-              placeholder="Tu contraseña del portal"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleConfirm()}
-              className="pr-10"
-              autoFocus
-            />
-            <button type="button" onClick={() => setShowPass(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
+          </Typography>
+          <TextField
+            type={showPass ? 'text' : 'password'}
+            placeholder="Tu contraseña del portal"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+            size="small" fullWidth autoFocus
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            slotProps={{ input: { endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton type="button" onClick={() => setShowPass(v => !v)} edge="end" size="small" sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}>
+                    {showPass ? <EyeOff style={{ width: 16, height: 16 }}/> : <Eye style={{ width: 16, height: 16 }}/>}
+                  </IconButton>
+                </InputAdornment>
+              ) } as object }}
+          />
+        </Box>
 
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-amber-800">La DGII puede pedir un código de verificación</p>
-              <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+        <Box sx={{ borderRadius: '16px', border: '1px solid #fde68a', bgcolor: '#fffbeb', p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+            <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px', color: '#f59e0b' }} />
+            <Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#92400e' }}>La DGII puede pedir un código de verificación</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#b45309', mt: 0.25, lineHeight: 1.6 }}>
                 Algunos portales envían un token por SMS o llamada durante el proceso.
                 Deja un número donde podamos contactarte de inmediato si ocurre.
-              </p>
-            </div>
-          </div>
-          <div>
-            <Label className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1.5 block">
-              WhatsApp / Teléfono de contacto <span className="text-red-500">*</span>
-            </Label>
-            <Input
+              </Typography>
+            </Box>
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.75, display: 'block' }}>
+              WhatsApp / Teléfono de contacto <Typography component="span" sx={{ color: 'error.main' }}>*</Typography>
+            </Typography>
+            <TextField
               type="tel"
               placeholder="Ej: +1 809 555 0000"
               value={telefono}
               onChange={e => setTelefono(e.target.value)}
-              className="bg-white border-amber-200 focus:border-amber-400 focus:ring-amber-300"
+              size="small" fullWidth
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#fff', '& fieldset': { borderColor: '#fde68a' } }, '& .MuiOutlinedInput-root:hover fieldset': { borderColor: '#fbbf24' } }}
             />
-            <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
-              <span className="text-base leading-none">💬</span>
+            <Typography sx={{ fontSize: '0.75rem', color: '#d97706', mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography component="span" sx={{ fontSize: '1rem', lineHeight: 1 }}>💬</Typography>
               Te contactaremos por WhatsApp si necesitamos el código
-            </p>
-          </div>
-        </div>
-      </div>
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
 
       <Button
         onClick={handleConfirm}
         disabled={!password || !telefono || loading}
-        size="lg"
-        className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-40 font-semibold"
+        variant="contained" disableElevation size="large"
+        sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.4 }, fontWeight: 600, width: '100%' }}
       >
         {loading
-          ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Verificando acceso…</>
+          ? <><CircularProgress size={16} sx={{ color: 'inherit', mr: 1 }} />Verificando acceso…</>
           : 'Continuar'}
       </Button>
 
-      <div className="flex items-start gap-2.5 bg-gray-50 rounded-xl p-4 border border-gray-100">
-        <Shield className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
-        <p className="text-xs text-gray-500 leading-relaxed">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, bgcolor: '#f9fafb', borderRadius: '12px', p: 2, border: '1px solid #f3f4f6' }}>
+        <Shield style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px', color: '#14b8a6' }} />
+        <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: 1.6 }}>
           Tus credenciales se usan <strong>una sola vez</strong> y se eliminan de nuestros
           sistemas de inmediato tras completar el proceso. Conexión cifrada TLS 1.3.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <button onClick={onSkip} className="w-full text-sm text-gray-400 hover:text-gray-600 text-center underline underline-offset-2">
+      <Box component="button" onClick={onSkip} sx={{ width: '100%', fontSize: '0.875rem', color: '#9ca3af', textAlign: 'center', textDecoration: 'underline', textUnderlineOffset: '2px', cursor: 'pointer', background: 'none', border: 'none', '&:hover': { color: '#4b5563' } }}>
         Prefiero hacer el proceso manualmente →
-      </button>
+      </Box>
 
       <NavFooter onBack={onBack} />
-    </div>
+    </Box>
   );
 }
 
@@ -3139,91 +3076,95 @@ export default function HabilitacionPage() {
         <IntroModal onStart={() => setShowIntro(false)} />
       )}
 
-      <div className="min-h-full bg-gray-50">
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">Habilitación e-CF</h1>
-              <p className="text-xs text-gray-400 mt-0.5">{subtitles[stage]}</p>
-            </div>
+      <Box sx={{ minHeight: '100%', bgcolor: '#f9fafb' }}>
+        {/* Header */}
+        <Box sx={{ bgcolor: '#fff', borderBottom: '1px solid #e5e7eb', px: 3, py: 2 }}>
+          <Box sx={{ maxWidth: '72rem', mx: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Typography sx={{ fontSize: '1.125rem', fontWeight: 700, color: 'text.primary' }}>Habilitación e-CF</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>{subtitles[stage]}</Typography>
+            </Box>
 
-            <div className="flex items-center gap-4">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               {/* Botón cancelar — solo visible en el wizard con progreso y sin completar */}
               {stage === 'wizard' && !isDone && (
-                <div className="relative">
-                  <button
+                <Box sx={{ position: 'relative' }}>
+                  <Box component="button"
                     onClick={() => setShowCancelConfirm(v => !v)}
-                    className="text-sm font-medium text-red-500 hover:text-red-700 transition-colors"
+                    sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 0.2s', '&:hover': { color: '#b91c1c' } }}
                   >
                     Cancelar proceso
-                  </button>
+                  </Box>
 
                   {showCancelConfirm && (
                     <>
-                      {/* Backdrop para cerrar al hacer click afuera */}
-                      <div
-                        className="fixed inset-0 z-40"
+                      {/* Backdrop */}
+                      <Box
+                        sx={{ position: 'fixed', inset: 0, zIndex: 40 }}
                         onClick={() => setShowCancelConfirm(false)}
                       />
-                      <div className="absolute right-0 top-8 z-50 w-76 bg-white border border-red-200 rounded-xl shadow-xl p-4 space-y-3">
-                        <div className="flex items-start gap-2.5">
-                          <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">
+                      <Box sx={{ position: 'absolute', right: 0, top: 32, zIndex: 50, width: 304, bgcolor: '#fff', border: '1px solid #fecaca', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+                          <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#ef4444', marginTop: 2 }} />
+                          <Box>
+                            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                               ¿Eliminar todo el progreso?
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.5 }}>
                               Se borrará todo el avance guardado del proceso de habilitación. Los
                               e-CF ya enviados a la DGII no se pueden deshacer.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Box component="button"
                             onClick={() => setShowCancelConfirm(false)}
-                            className="flex-1 text-sm py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700 transition-colors"
+                            sx={{ flex: 1, fontSize: '0.875rem', py: 0.75, borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: 'transparent', color: '#374151', cursor: 'pointer', '&:hover': { bgcolor: '#f9fafb' } }}
                           >
                             No, mantener
-                          </button>
-                          <button
+                          </Box>
+                          <Box component="button"
                             onClick={handleCancelarProceso}
                             disabled={canceling}
-                            className="flex-1 text-sm py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors font-medium"
+                            sx={{ flex: 1, fontSize: '0.875rem', py: 0.75, borderRadius: '8px', bgcolor: '#dc2626', color: '#fff', border: 'none', cursor: canceling ? 'default' : 'pointer', opacity: canceling ? 0.5 : 1, fontWeight: 500, '&:hover': { bgcolor: '#b91c1c' } }}
                           >
                             {canceling ? 'Eliminando…' : 'Sí, eliminar todo'}
-                          </button>
-                        </div>
-                      </div>
+                          </Box>
+                        </Box>
+                      </Box>
                     </>
                   )}
-                </div>
+                </Box>
               )}
 
-              <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+              <Link href="/dashboard" style={{ fontSize: '0.875rem', color: '#9ca3af', textDecoration: 'none' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#4b5563')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}
+              >
                 Cerrar ×
               </Link>
-            </div>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Box>
 
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        <Box sx={{ maxWidth: '72rem', mx: 'auto', px: { xs: 2, sm: 3 }, py: 5 }}>
 
           {/* ── Empresa + Certificado ── */}
           {stage === 'requisito' && (
-            <div className="max-w-3xl mx-auto">
-              <div className="mb-6">
-                <p className="text-xs font-semibold text-teal-600 uppercase tracking-wider mb-1">
+            <Box sx={{ maxWidth: '48rem', mx: 'auto' }}>
+              <Box sx={{ mb: 3 }}>
+                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
                   Paso previo
-                </p>
-                <h2 className="text-xl font-bold text-gray-900">Tu empresa y certificado digital</h2>
-                <p className="text-sm text-gray-400 mt-1">
+                </Typography>
+                <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>Tu empresa y certificado digital</Typography>
+                <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', mt: 0.5 }}>
                   Completa tus datos fiscales y carga tu certificado P12 antes de iniciar el proceso.
-                </p>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                </Typography>
+              </Box>
+              <Box sx={{ bgcolor: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', p: 3 }}>
                 <PhaseEmpresa onComplete={() => setStage('eleccion')} />
-              </div>
-            </div>
+              </Box>
+            </Box>
           )}
 
           {/* ── Elección de modalidad ── */}
@@ -3249,32 +3190,31 @@ export default function HabilitacionPage() {
 
           {/* ── Wizard 6 fases ── */}
           {stage === 'wizard' && (
-            <div className="space-y-4">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {!isDone && <EtapasHero />}
 
-              <div className="flex gap-8">
+              <Box sx={{ display: 'flex', gap: 4 }}>
                 <Sidebar phase={isDone ? PHASES.length : phase} completed={completed} onJump={handleJump} />
-                <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-6 min-h-[540px]">
+                <Box sx={{ flex: 1, bgcolor: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', p: 3, minHeight: 540 }}>
                   {!isDone ? (
                     <>
-                      <div className="mb-6">
-                        <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
-                          <span className="shrink-0">Fase {phase + 1} de {PHASES.length}</span>
-                          <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                            <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500"
-                              style={{ width: `${(completed.size / PHASES.length) * 100}%` }} />
-                          </div>
-                          <span className="shrink-0">{Math.round((completed.size / PHASES.length) * 100)}%</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-xl font-bold text-gray-900">{PHASE_TITLES[phase]}</h2>
+                      <Box sx={{ mb: 3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                          <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', flexShrink: 0 }}>Fase {phase + 1} de {PHASES.length}</Typography>
+                          <Box sx={{ flex: 1, bgcolor: '#f3f4f6', borderRadius: '999px', height: 6 }}>
+                            <Box sx={{ bgcolor: '#14b8a6', height: 6, borderRadius: '999px', transition: 'width 0.5s', width: `${(completed.size / PHASES.length) * 100}%` }} />
+                          </Box>
+                          <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', flexShrink: 0 }}>{Math.round((completed.size / PHASES.length) * 100)}%</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>{PHASE_TITLES[phase]}</Typography>
                           {mode === 'asistido' && (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">
-                              <Zap className="h-3 w-3" /> Asistido
-                            </span>
+                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 600, bgcolor: '#ccfbf1', color: '#0f766e', px: 1, py: 0.25, borderRadius: '999px' }}>
+                              <Zap style={{ width: 12, height: 12 }}/> Asistido
+                            </Box>
                           )}
-                        </div>
-                      </div>
+                        </Box>
+                      </Box>
 
                       {phase === 0 && <PhasePostulacion onComplete={() => completePhase(0)} onBack={() => setStage('eleccion')} />}
                       {phase === 1 && <PhasePruebas      onComplete={() => completePhase(1)} onBack={() => setPhase(0)} />}
@@ -3286,13 +3226,13 @@ export default function HabilitacionPage() {
                   ) : (
                     <PhaseListo />
                   )}
-                </div>
-              </div>
-            </div>
+                </Box>
+              </Box>
+            </Box>
           )}
 
-        </div>
-      </div>
+        </Box>
+      </Box>
     </>
   );
 }

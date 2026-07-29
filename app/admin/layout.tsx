@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/db/queries';
 import { me } from '@/lib/ecf-api/client';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { Wifi, WifiOff } from 'lucide-react';
 
 async function fetchEcfApiMe() {
-  try {
-    return await me();
-  } catch (e) {
+  try { return await me(); } catch (e) {
     console.error('[admin layout] ecf-api /me error:', e);
     return null;
   }
@@ -14,58 +14,60 @@ async function fetchEcfApiMe() {
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
-  if (!user || user.platformRole !== 'admin') {
-    redirect('/dashboard');
-  }
+  if (!user || user.platformRole !== 'admin') redirect('/dashboard');
 
   const ecfMe = await fetchEcfApiMe();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-gray-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-          <div className="h-7 w-7 bg-teal-500 rounded-lg flex items-center justify-center">
-            <span className="font-black text-xs text-white">z</span>
-          </div>
-          <span className="font-bold text-sm sm:text-base">Zero Admin</span>
-        </div>
-        <nav className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm overflow-x-auto -mx-1 px-1 sm:ml-2 order-3 sm:order-2 w-full sm:w-auto">
-          <a href="/admin" className="text-gray-300 hover:text-white whitespace-nowrap">Dashboard</a>
-          <a href="/admin/usuarios" className="text-gray-300 hover:text-white whitespace-nowrap">Usuarios</a>
-          <a href="/admin/empresas" className="text-gray-300 hover:text-white whitespace-nowrap">Empresas</a>
-          <a href="/admin/logs" className="text-gray-300 hover:text-white whitespace-nowrap">Logs</a>
-        </nav>
-        <a href="/dashboard" className="ml-auto text-xs sm:text-sm text-gray-400 hover:text-white whitespace-nowrap order-2 sm:order-3">← App</a>
-      </header>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f9fafb' }}>
+      {/* Header */}
+      <Box component="header" sx={{ bgcolor: '#111827', color: '#fff', px: { xs: 2, sm: 3 }, py: { xs: 1.5, sm: 2 }, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, flexShrink: 0 }}>
+          <Box sx={{ height: 28, width: 28, bgcolor: '#0d9488', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography sx={{ fontWeight: 900, fontSize: '0.75rem', color: '#fff', lineHeight: 1 }}>z</Typography>
+          </Box>
+          <Typography sx={{ fontWeight: 700, fontSize: { xs: '0.875rem', sm: '1rem' }, color: '#fff' }}>Zero Admin</Typography>
+        </Box>
+        <Box component="nav" sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, overflowX: 'auto', order: { xs: 3, sm: 2 }, width: { xs: '100%', sm: 'auto' }, ml: { sm: 1 } }}>
+          {[['Dashboard','/admin'],['Usuarios','/admin/usuarios'],['Empresas','/admin/empresas'],['Logs','/admin/logs']].map(([label, href]) => (
+            <Box key={href} component="a" href={href} sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, color: '#d1d5db', '&:hover': { color: '#fff' }, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              {label}
+            </Box>
+          ))}
+        </Box>
+        <Box component="a" href="/dashboard" sx={{ ml: 'auto', fontSize: { xs: '0.75rem', sm: '0.875rem' }, color: '#9ca3af', '&:hover': { color: '#fff' }, textDecoration: 'none', whiteSpace: 'nowrap', order: { xs: 2, sm: 3 } }}>
+          ← App
+        </Box>
+      </Box>
 
-      {/* Banner conexión ecf-api */}
+      {/* Banner ecf-api */}
       {ecfMe ? (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-2 text-xs text-emerald-800 flex items-center gap-3 flex-wrap">
-          <Wifi className="w-3.5 h-3.5" />
-          <span>
+        <Box sx={{ bgcolor: '#ecfdf5', borderBottom: '1px solid #a7f3d0', px: { xs: 2, sm: 3 }, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Wifi size={14} color="#059669" />
+          <Typography sx={{ fontSize: '0.75rem', color: '#065f46' }}>
             <strong>ecf-api</strong> · {ecfMe.empresa.nombre}
-            <span className="text-emerald-600"> · key:</span> {ecfMe.apiKey.nombre}
-            <span className="text-emerald-600"> · ambiente:</span> {ecfMe.software.ambienteDefault}
+            <Box component="span" sx={{ color: '#059669' }}> · key:</Box> {ecfMe.apiKey.nombre}
+            <Box component="span" sx={{ color: '#059669' }}> · ambiente:</Box> {ecfMe.software.ambienteDefault}
             {ecfMe.apiKey.esAdmin && (
-              <span className="ml-2 px-1.5 py-0.5 bg-emerald-200 text-emerald-900 rounded text-[10px] font-bold">ADMIN</span>
+              <Box component="span" sx={{ ml: 1, px: 0.75, py: 0.25, bgcolor: '#a7f3d0', color: '#064e3b', borderRadius: '4px', fontSize: '0.625rem', fontWeight: 700 }}>ADMIN</Box>
             )}
-          </span>
-          <span className="ml-auto text-emerald-600">
+          </Typography>
+          <Typography sx={{ ml: 'auto', fontSize: '0.75rem', color: '#059669' }}>
             {ecfMe.software.nombre} v{ecfMe.software.version}
-          </span>
-        </div>
+          </Typography>
+        </Box>
       ) : (
-        <div className="bg-red-50 border-b border-red-200 px-6 py-2 text-xs text-red-800 flex items-center gap-3">
-          <WifiOff className="w-3.5 h-3.5" />
-          <strong>ecf-api inalcanzable</strong>
-          <span className="text-red-600">
-            Verifica <code className="bg-red-100 px-1 rounded">ECF_API_URL</code> y{' '}
-            <code className="bg-red-100 px-1 rounded">ECF_API_KEY</code> en .env
-          </span>
-        </div>
+        <Box sx={{ bgcolor: '#fef2f2', borderBottom: '1px solid #fca5a5', px: 3, py: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <WifiOff size={14} color="#dc2626" />
+          <Typography sx={{ fontSize: '0.75rem', color: '#991b1b' }}>
+            <strong>ecf-api inalcanzable</strong>{' '}
+            Verifica <Box component="code" sx={{ bgcolor: '#fee2e2', px: 0.75, borderRadius: '4px' }}>ECF_API_URL</Box>{' '}
+            y <Box component="code" sx={{ bgcolor: '#fee2e2', px: 0.75, borderRadius: '4px' }}>ECF_API_KEY</Box> en .env
+          </Typography>
+        </Box>
       )}
 
-      <main className="p-4 sm:p-6">{children}</main>
-    </div>
+      <Box component="main" sx={{ p: { xs: 2, sm: 3 } }}>{children}</Box>
+    </Box>
   );
 }

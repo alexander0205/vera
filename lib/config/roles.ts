@@ -61,10 +61,15 @@ export type Permission =
   // Punto de venta (POS)
   | 'pos:vender'     // abrir terminal, vender y cobrar en el POS (cajero)
   | 'pos:configurar' // crear/editar terminales y config del POS (admin/owner)
+  // Acceso por módulo del producto (facturación / POS). El acceso efectivo de
+  // un usuario a un módulo = módulo activo en la empresa (teams.modulosHabilitados)
+  // ∩ este permiso en su rol. Ver lib/auth/modules.ts.
+  | 'modulo:facturacion'
+  | 'modulo:pos'
   // Suscripción / billing
   | 'suscripcion:gestionar';
 
-export type RoleKey = 'owner' | 'admin' | 'user' | 'lector';
+export type RoleKey = 'owner' | 'admin' | 'user' | 'lector' | 'cajero';
 // Roles de sistema. user→"Vendedor", lector→"Auditor" en la UI (ver labels abajo).
 // Roles legacy (contador/vendedor/member) fueron remapeados a 'user' en la
 // migración 0051; LEGACY_ROLE_MAP los normaliza por si quedan datos viejos.
@@ -122,6 +127,7 @@ export const ROLES: RoleDef[] = [
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'pos:vender', 'pos:configurar',
+      'modulo:facturacion', 'modulo:pos',
       'suscripcion:gestionar',
     ],
     ui: { color: 'text-amber-600 bg-amber-50 border-amber-200',   icon: 'Crown'       },
@@ -144,6 +150,7 @@ export const ROLES: RoleDef[] = [
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'pos:vender', 'pos:configurar',
+      'modulo:facturacion', 'modulo:pos',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -163,6 +170,7 @@ export const ROLES: RoleDef[] = [
       'equipo:ver',
       'caja:ver', 'caja:operar',
       'pos:vender',
+      'modulo:facturacion', 'modulo:pos',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
   },
@@ -181,8 +189,23 @@ export const ROLES: RoleDef[] = [
       'configuracion:ver',
       'compras:ver',
       'caja:ver',
+      'modulo:facturacion',
     ],
     ui: { color: 'text-sky-600 bg-sky-50 border-sky-200', icon: 'Eye' },
+  },
+  {
+    key:         'cajero',
+    label:       'Cajero (solo POS)',
+    description: 'Solo Punto de Venta: vende, cobra, opera caja y usa productos/contactos. No entra a Facturación.',
+    invitable:   true,
+    permissions: [
+      'clientes:ver', 'clientes:gestionar',
+      'productos:ver',
+      'caja:ver', 'caja:operar',
+      'pos:vender',
+      'modulo:pos',
+    ],
+    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200', icon: 'Store' },
   },
 ];
 
@@ -240,6 +263,10 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   { module: 'Punto de venta', icon: 'Store', permissions: [
     { key: 'pos:vender',     label: 'Vender y cobrar (cajero)' },
     { key: 'pos:configurar', label: 'Configurar terminales del POS' },
+  ]},
+  { module: 'Acceso a módulos', icon: 'LayoutGrid', permissions: [
+    { key: 'modulo:facturacion', label: 'Acceso al módulo Facturación' },
+    { key: 'modulo:pos',         label: 'Acceso al módulo Punto de Venta' },
   ]},
   { module: 'Equipo', icon: 'UserCog', permissions: [
     { key: 'equipo:ver',       label: 'Ver equipo' },

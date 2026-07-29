@@ -36,8 +36,8 @@ export default async function NuevaFacturaRecurrentePage() {
   const perfil = await getEmpresaPerfil();
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <Loader2 style={{ width: 32, height: 32, color: '#0d9488', animation: 'spin 1s linear infinite' }} />
       </div>
     }>
       <NuevaFacturaRecurrenteForm initialPerfil={perfil} />

@@ -116,6 +116,18 @@ export async function POST(req: NextRequest) {
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
+  // Sync legacy → módulos: el toggle self-service de POS también actualiza
+  // modulosHabilitados (fuente que lee lib/auth/modules.ts) durante la
+  // transición. Cuando el billing por módulo mande, este toggle desaparece.
+  if (data.posHabilitado !== undefined) {
+    const [t] = await db.select({ mods: teams.modulosHabilitados }).from(teams).where(eq(teams.id, teamId)).limit(1);
+    const current = Array.isArray(t?.mods) ? (t!.mods as string[]) : [];
+    const next = data.posHabilitado
+      ? Array.from(new Set([...current, 'pos']))
+      : current.filter(m => m !== 'pos');
+    await db.update(teams).set({ modulosHabilitados: next }).where(eq(teams.id, teamId));
+  }
+
   return NextResponse.json({ ok: true });
 }
 

@@ -3,6 +3,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CheckCircle, Circle, X, ChevronDown, ChevronUp } from 'lucide-react';
 
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+
 interface ChecklistItem {
   id: string;
   label: string;
@@ -80,52 +84,65 @@ export function OnboardingChecklist() {
   const pct = Math.round((doneCount / items.length) * 100);
 
   return (
-    <div className="bg-white border border-teal-200 rounded-xl shadow-sm overflow-hidden mb-6">
+    <Box sx={{ bgcolor: '#ffffff', border: '1px solid #99f6e4', borderRadius: '12px', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', overflow: 'hidden', mb: 3 }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 bg-teal-50">
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-teal-900">Configuración inicial — {doneCount}/{items.length} completados</p>
-            <div className="mt-1 h-1.5 bg-teal-200 rounded-full w-48">
-              <div className="h-1.5 bg-teal-600 rounded-full transition-all" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setCollapsed(c => !c)} className="text-teal-600 hover:text-teal-800">
-            {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </button>
-          <button onClick={dismiss} className="text-teal-400 hover:text-teal-700">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, bgcolor: '#f0fdfa' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ flex: 1 }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Configuración inicial — {doneCount}/{items.length} completados</Typography>
+            <Box sx={{ mt: 0.5, height: 6, bgcolor: '#99f6e4', borderRadius: '9999px', width: 192 }}>
+              <Box sx={{ height: 6, bgcolor: '#0d9488', borderRadius: '9999px', transition: 'all 0.15s', width: `${pct}%` }} />
+            </Box>
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton onClick={() => setCollapsed(c => !c)} size="small" sx={{ color: '#0d9488', '&:hover': { color: '#115e59', bgcolor: 'transparent' } }}>
+            {collapsed ? <ChevronDown style={{ width: 16, height: 16 }} /> : <ChevronUp style={{ width: 16, height: 16 }} />}
+          </IconButton>
+          <IconButton onClick={dismiss} size="small" sx={{ color: '#2dd4bf', '&:hover': { color: '#0f766e', bgcolor: 'transparent' } }}>
+            <X style={{ width: 16, height: 16 }} />
+          </IconButton>
+        </Box>
+      </Box>
 
       {/* Items */}
       {!collapsed && (
-        <div className="divide-y divide-gray-100">
+        <Box sx={{ '& > * + *': { borderTop: '1px solid #f3f4f6' } }}>
           {items.map(item => (
-            <div key={item.id} className={`flex items-center gap-4 px-5 py-3 ${item.done ? 'opacity-60' : ''}`}>
+            <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2.5, py: 1.5, ...(item.done ? { opacity: 0.6 } : {}) }}>
               {item.done
-                ? <CheckCircle className="h-5 w-5 text-teal-500 shrink-0" />
-                : <Circle className="h-5 w-5 text-gray-300 shrink-0" />
+                ? <CheckCircle style={{ width: 20, height: 20, color: '#14b8a6', flexShrink: 0 }} />
+                : <Circle style={{ width: 20, height: 20, color: '#d1d5db', flexShrink: 0 }} />
               }
-              <div className="flex-1">
-                <p className={`text-sm font-medium ${item.done ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, ...(item.done ? { textDecoration: 'line-through', color: '#9ca3af' } : { color: '#111827' }) }}>
                   {item.label}
-                </p>
-                <p className="text-xs text-gray-400">{item.description}</p>
-              </div>
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{item.description}</Typography>
+              </Box>
               {!item.done && (
-                <Link href={item.href}
-                  className="text-xs font-medium text-teal-600 hover:text-teal-800 border border-teal-200 px-3 py-1 rounded-lg hover:bg-teal-50">
+                <Box
+                  component={Link}
+                  href={item.href}
+                  sx={{
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    color: '#0d9488',
+                    border: '1px solid #99f6e4',
+                    px: 1.5,
+                    py: 0.5,
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    '&:hover': { color: '#115e59', bgcolor: '#f0fdfa' },
+                  }}
+                >
                   Ir →
-                </Link>
+                </Box>
               )}
-            </div>
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

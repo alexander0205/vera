@@ -2,16 +2,23 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Plus, Trash2, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import {
+  Alert,
+  Box,
+  Button,
+  Divider,
+  IconButton,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { Plus, Trash2, Loader2, ArrowLeft } from 'lucide-react';
 
 interface LineItem {
   descripcion: string;
@@ -21,23 +28,32 @@ interface LineItem {
 
 const EMPTY_ITEM: LineItem = { descripcion: '', precio: 0, cantidad: 1 };
 
+// ─── Card sx shorthand ────────────────────────────────────────────────────────
+
+const cardSx = {
+  bgcolor: '#fff',
+  border: '1px solid #e5e7eb',
+  borderRadius: '12px',
+  overflow: 'hidden',
+} as const;
+
 export default function NuevaCotizacionPage() {
   const router = useRouter();
 
   // Datos del comprador
-  const [razonSocial, setRazonSocial]       = useState('');
-  const [rnc, setRnc]                       = useState('');
-  const [email, setEmail]                   = useState('');
-  const [fechaVencimiento, setFechaVenc]    = useState('');
-  const [notas, setNotas]                   = useState('');
-  const [terminos, setTerminos]             = useState('');
+  const [razonSocial, setRazonSocial]    = useState('');
+  const [rnc, setRnc]                    = useState('');
+  const [email, setEmail]                = useState('');
+  const [fechaVencimiento, setFechaVenc] = useState('');
+  const [notas, setNotas]                = useState('');
+  const [terminos, setTerminos]          = useState('');
 
   // Líneas
   const [items, setItems] = useState<LineItem[]>([{ ...EMPTY_ITEM }]);
 
   // UI
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -55,8 +71,8 @@ export default function NuevaCotizacionPage() {
     setItems(prev => prev.filter((_, i) => i !== idx));
   }
 
-  const subtotal  = items.reduce((s, it) => s + it.precio * it.cantidad, 0);
-  const total     = subtotal; // sin ITBIS en cotización simple
+  const subtotal = items.reduce((s, it) => s + it.precio * it.cantidad, 0);
+  const total    = subtotal; // sin ITBIS en cotización simple
 
   function formatPesos(n: number) {
     return new Intl.NumberFormat('es-DO', {
@@ -106,205 +122,282 @@ export default function NuevaCotizacionPage() {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-[#eef0f7] min-h-full flex flex-col p-6">
-      <div className="flex flex-col flex-1 gap-6">
+    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', display: 'flex', flexDirection: 'column', p: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 3 }}>
 
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard/cotizaciones">
-          <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700">
-            <ArrowLeft className="h-4 w-4 mr-1" />
+        {/* Header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Button
+            component={Link}
+            href="/dashboard/cotizaciones"
+            variant="text"
+            size="small"
+            startIcon={<ArrowLeft size={16} />}
+            sx={{ textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}
+          >
             Volver
           </Button>
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Nueva cotización</h1>
-          <p className="text-sm text-gray-500">Se guardará como borrador (COT-XXXX)</p>
-        </div>
-      </div>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>
+              Nueva cotización
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#6b7280' }}>
+              Se guardará como borrador (COT-XXXX)
+            </Typography>
+          </Box>
+        </Box>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-          {error}
-        </div>
-      )}
+        {error && (
+          <Alert
+            severity="error"
+            sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+          >
+            {error}
+          </Alert>
+        )}
 
-      {/* ── Documento ────────────────────────────────────────────────────────── */}
-      <Card className="bg-white">
-        <CardHeader>
-          <CardTitle className="text-base">Datos del cliente</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Nombre / Razón Social</Label>
-              <Input
+        {/* ── Datos del cliente ─────────────────────────────────────────────── */}
+        <Paper sx={cardSx}>
+          <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid #f3f4f6' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#111827' }}>
+              Datos del cliente
+            </Typography>
+          </Box>
+          <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                label="Nombre / Razón Social"
                 placeholder="Empresa XYZ SRL"
+                size="small"
+                fullWidth
                 value={razonSocial}
                 onChange={(e) => setRazonSocial(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>RNC / Cédula / Pasaporte</Label>
-              <Input
+              <TextField
+                label="RNC / Cédula / Pasaporte"
                 placeholder="130123456 o PA123456"
+                size="small"
+                fullWidth
                 value={rnc}
                 onChange={(e) => setRnc(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
               />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                label="Email"
                 type="email"
                 placeholder="facturacion@empresa.com"
+                size="small"
+                fullWidth
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Fecha de vencimiento</Label>
-              <Input
+              <TextField
+                label="Fecha de vencimiento"
                 type="date"
+                size="small"
+                fullWidth
                 value={fechaVencimiento}
                 onChange={(e) => setFechaVenc(e.target.value)}
+                slotProps={{ htmlInput: { min: new Date().toISOString().split('T')[0] }, inputLabel: { shrink: true } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
               />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </Box>
+          </Box>
+        </Paper>
 
-      {/* ── Líneas ───────────────────────────────────────────────────────────── */}
-      <Card className="bg-white">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Ítems / Servicios</CardTitle>
-          <Button variant="outline" size="sm" onClick={addItem}>
-            <Plus className="h-4 w-4 mr-1" />
-            Agregar línea
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[45%]">Descripción</TableHead>
-                <TableHead className="w-[20%]">Precio (RD$)</TableHead>
-                <TableHead className="w-[15%]">Cantidad</TableHead>
-                <TableHead className="w-[15%]">Total</TableHead>
-                <TableHead className="w-[5%]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item, idx) => (
-                <TableRow key={idx}>
-                  <TableCell>
-                    <Input
-                      placeholder="Descripción del servicio o producto"
-                      value={item.descripcion}
-                      onChange={(e) => updateItem(idx, 'descripcion', e.target.value)}
-                    />
+        {/* ── Ítems / Servicios ─────────────────────────────────────────────── */}
+        <Paper sx={cardSx}>
+          <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#111827' }}>
+              Ítems / Servicios
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={addItem}
+              startIcon={<Plus size={16} />}
+              sx={{ borderRadius: '8px', textTransform: 'none' }}
+            >
+              Agregar línea
+            </Button>
+          </Box>
+
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                  <TableCell sx={{ width: '45%', fontWeight: 600, fontSize: '0.8125rem', color: '#374151' }}>
+                    Descripción
                   </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={item.precio === 0 ? '' : item.precio}
-                      onChange={(e) => updateItem(idx, 'precio', parseFloat(e.target.value) || 0)}
-                    />
+                  <TableCell sx={{ width: '20%', fontWeight: 600, fontSize: '0.8125rem', color: '#374151' }}>
+                    Precio (RD$)
                   </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder="1"
-                      value={item.cantidad}
-                      onChange={(e) => updateItem(idx, 'cantidad', parseInt(e.target.value) || 1)}
-                    />
+                  <TableCell sx={{ width: '15%', fontWeight: 600, fontSize: '0.8125rem', color: '#374151' }}>
+                    Cantidad
                   </TableCell>
-                  <TableCell className="font-medium text-sm">
-                    {formatPesos(item.precio * item.cantidad)}
+                  <TableCell sx={{ width: '15%', fontWeight: 600, fontSize: '0.8125rem', color: '#374151' }}>
+                    Total
                   </TableCell>
-                  <TableCell>
-                    {items.length > 1 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeItem(idx)}
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </TableCell>
+                  <TableCell sx={{ width: '5%' }} />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {items.map((item, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell sx={{ py: 1 }}>
+                      <TextField
+                        placeholder="Descripción del servicio o producto"
+                        size="small"
+                        fullWidth
+                        value={item.descripcion}
+                        onChange={(e) => updateItem(idx, 'descripcion', e.target.value)}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      <TextField
+                        type="number"
+                        size="small"
+                        fullWidth
+                        placeholder="0.00"
+                        value={item.precio === 0 ? '' : item.precio}
+                        onChange={(e) => updateItem(idx, 'precio', parseFloat(e.target.value) || 0)}
+                        slotProps={{ htmlInput: { min: 0, step: '0.01' } }}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      <TextField
+                        type="number"
+                        size="small"
+                        fullWidth
+                        placeholder="1"
+                        value={item.cantidad}
+                        onChange={(e) => updateItem(idx, 'cantidad', parseInt(e.target.value) || 1)}
+                        slotProps={{ htmlInput: { min: 1, step: 1 } }}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ py: 1, fontWeight: 500, fontSize: '0.875rem', color: '#111827' }}>
+                      {formatPesos(item.precio * item.cantidad)}
+                    </TableCell>
+                    <TableCell sx={{ py: 1 }}>
+                      {items.length > 1 && (
+                        <IconButton
+                          size="small"
+                          onClick={() => removeItem(idx)}
+                          sx={{ color: '#f87171', '&:hover': { color: '#dc2626' } }}
+                        >
+                          <Trash2 size={16} />
+                        </IconButton>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
 
           {/* Totales */}
-          <div className="flex justify-end p-4 border-t">
-            <div className="space-y-1 text-sm min-w-[200px]">
-              <div className="flex justify-between text-gray-600">
-                <span>Subtotal</span>
-                <span>{formatPesos(subtotal)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-gray-900 text-base border-t pt-1 mt-1">
-                <span>Total</span>
-                <span>{formatPesos(total)}</span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          <Divider />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 200 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>Subtotal</Typography>
+                <Typography sx={{ fontSize: '0.875rem' }}>{formatPesos(subtotal)}</Typography>
+              </Box>
+              <Divider />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5 }}>
+                <Typography sx={{ fontWeight: 700, color: '#111827' }}>Total</Typography>
+                <Typography sx={{ fontWeight: 700, color: '#111827', fontSize: '1rem' }}>{formatPesos(total)}</Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Paper>
 
-      {/* ── Notas y Términos ─────────────────────────────────────────────────── */}
-      <Card className="bg-white">
-        <CardHeader>
-          <CardTitle className="text-base">Notas y condiciones</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Notas internas / mensaje al cliente</Label>
-            <Textarea
+        {/* ── Notas y condiciones ───────────────────────────────────────────── */}
+        <Paper sx={cardSx}>
+          <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid #f3f4f6' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#111827' }}>
+              Notas y condiciones
+            </Typography>
+          </Box>
+          <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="Notas internas / mensaje al cliente"
               placeholder="Agradecemos su preferencia. Esta cotización es válida por 30 días."
+              multiline
               rows={3}
+              size="small"
+              fullWidth
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Términos y condiciones</Label>
-            <Textarea
+            <TextField
+              label="Términos y condiciones"
               placeholder="Pago a 30 días. Precios sujetos a cambio sin previo aviso."
+              multiline
               rows={3}
+              size="small"
+              fullWidth
               value={terminos}
               onChange={(e) => setTerminos(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
             />
-          </div>
-        </CardContent>
-      </Card>
+          </Box>
+        </Paper>
 
-      </div>
+      </Box>
 
-      {/* ── Acciones ─────────────────────────────────────────────────────────── */}
-      <div className="sticky bottom-0 z-30 -mx-6 px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end gap-3 py-3">
-        <Link href="/dashboard/cotizaciones">
-          <Button variant="outline" disabled={saving}>Cancelar</Button>
-        </Link>
+      {/* ── Acciones (sticky bottom bar) ─────────────────────────────────────── */}
+      <Box
+        sx={{
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 30,
+          mx: -3,
+          px: 3,
+          mt: 'auto',
+          bgcolor: 'rgba(255,255,255,0.95)',
+          backdropFilter: 'blur(8px)',
+          borderTop: '1px solid #e5e7eb',
+          boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 1.5,
+          py: 1.5,
+        }}
+      >
         <Button
-          className="bg-teal-600 hover:bg-teal-700"
+          component={Link}
+          href="/dashboard/cotizaciones"
+          variant="outlined"
+          disabled={saving}
+          sx={{ borderRadius: '8px', textTransform: 'none' }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          variant="contained"
+          disableElevation
           onClick={handleGuardar}
           disabled={saving}
+          startIcon={saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : undefined}
+          sx={{
+            borderRadius: '8px',
+            textTransform: 'none',
+            bgcolor: '#0d9488',
+            '&:hover': { bgcolor: '#0f766e' },
+          }}
         >
-          {saving
-            ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
-            : 'Guardar como borrador'}
+          {saving ? 'Guardando…' : 'Guardar como borrador'}
         </Button>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

@@ -5,6 +5,8 @@ import { getUser, getTeamForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
 import { Toaster } from 'sonner';
 import { WebVitals } from './(dashboard)/dashboard/_web-vitals';
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
+import { MuiProviders } from '@/components/mui-providers';
 
 export const metadata: Metadata = {
   title: 'Zero — Facturación Electrónica República Dominicana',
@@ -42,21 +44,25 @@ export default function RootLayout({
     >
       <body className="min-h-[100dvh] bg-gray-50">
         <WebVitals />
-        <SWRConfig
-          value={{
-            // Evita re-fetch de todos los hooks en cada alt-tab (default SWR: true).
-            revalidateOnFocus: false,
-            dedupingInterval: 30_000,
-            fallback: {
-              // We do NOT await here
-              // Only components that read this data will suspend
-              '/api/user': getUser(),
-              '/api/team': getTeamForUser()
-            }
-          }}
-        >
-          {children}
-        </SWRConfig>
+        <AppRouterCacheProvider>
+          <MuiProviders>
+            <SWRConfig
+              value={{
+                // Perf (de main): evita re-fetch de todos los hooks en cada
+                // alt-tab (default SWR: true) y dedup 30s.
+                revalidateOnFocus: false,
+                dedupingInterval: 30_000,
+                fallback: {
+                  // No await aquí — solo suspende quien lee estos datos.
+                  '/api/user': getUser(),
+                  '/api/team': getTeamForUser()
+                }
+              }}
+            >
+              {children}
+            </SWRConfig>
+          </MuiProviders>
+        </AppRouterCacheProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>

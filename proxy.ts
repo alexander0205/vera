@@ -1,16 +1,39 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
+import { moduleForHost } from '@/lib/config/modules';
 
-const protectedRoutes = '/dashboard';
+const protectedRoutes = ['/dashboard', '/pos', '/cuenta'];
+
+// Routing por subdominio (módulos del producto):
+// pos.zero.com.do → /pos · facturacion.zero.com.do → /dashboard.
+// moduleForHost vive en lib/config/modules.ts (testeable).
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get('session');
-  const isProtectedRoute = pathname.startsWith(protectedRoutes);
+  const isProtectedRoute = protectedRoutes.some(p => pathname.startsWith(p));
 
   if (isProtectedRoute && !sessionCookie) {
     return NextResponse.redirect(new URL('/sign-in', request.url));
+  }
+
+  // Home del módulo según el host. Solo se toca la raíz (y /dashboard exacto
+  // en el host POS) — las rutas profundas quedan protegidas por los guards de
+  // página/módulo, no por el proxy.
+  const mod = moduleForHost(request.headers.get('host'));
+  if (mod === 'pos') {
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/pos', request.url));
+    }
+    if (pathname === '/dashboard') {
+      // Post-login genérico apunta a /dashboard; en el host POS el destino es /pos.
+      return NextResponse.redirect(new URL('/pos', request.url));
+    }
+  } else if (mod === 'facturacion') {
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
   }
 
   // Pasar el pathname como header para que los Server Components puedan leerlo
@@ -35,7 +58,12 @@ export async function proxy(request: NextRequest) {
         // hace que el navegador no reenvíe la cookie y la sesión se "cae".
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        expires: expiresInOneDay
+        expires: expiresInOneDay,
+        // SSO entre subdominios (pos.* / facturacion.*): cookie a nivel de
+        // dominio raíz en prod (ej. ".zero.com.do"). Sin env → host-only (dev).
+        ...(process.env.SESSION_COOKIE_DOMAIN
+          ? { domain: process.env.SESSION_COOKIE_DOMAIN }
+          : {}),
       });
     } catch (error) {
       console.error('Error updating session:', error);

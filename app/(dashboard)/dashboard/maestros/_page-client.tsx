@@ -1,23 +1,29 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-  ListTree, Plus, Pencil, Trash2, Loader2, AlertTriangle, X,
+  ListTree, Plus, Pencil, Trash2, AlertTriangle, X,
 } from 'lucide-react';
 
 type AplicaA = 'bien' | 'servicio' | 'ambos' | 'manual';
@@ -57,6 +63,12 @@ const EMPTY_FORM = {
   nombre: '', descripcion: '', aplicaA: 'manual' as AplicaA, multiple: false,
   targets: ['producto'] as Entidad[],
 };
+
+const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
+const labelSx = { fontWeight: 500, color: '#374151' } as const;
+const fieldSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const;
+const chipOutlineSx = { height: 22, fontSize: '0.6875rem', borderColor: '#e5e7eb', color: '#6b7280', '& .MuiChip-label': { px: 1 } } as const;
+const chipSecondarySx = { height: 22, fontSize: '0.6875rem', fontWeight: 600, bgcolor: '#f1f5f9', color: '#475569', '& .MuiChip-label': { px: 1 } } as const;
 
 export default function MaestrosPage() {
   const [maestros, setMaestros]         = useState<Maestro[]>([]);
@@ -201,253 +213,268 @@ export default function MaestrosPage() {
   }
 
   return (
-    <section className="p-6 space-y-6">
+    <Box component="section" sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Maestros</h1>
-          <p className="text-sm text-gray-500 mt-1">
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Maestros</Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
             Listas de atributos (marca, color…) que se aplican a tus productos y servicios
-          </p>
-        </div>
-        <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
-          <Plus className="h-4 w-4 mr-2" />
+          </Typography>
+        </Box>
+        <Button variant="contained" disableElevation startIcon={<Plus size={16} />} onClick={abrirNuevo}
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
           Nuevo maestro
         </Button>
-      </div>
+      </Box>
 
       {/* Tabla */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <ListTree className="h-4 w-4" />
+      <Box sx={cardSx}>
+        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ListTree size={16} color="#6b7280" />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>
             {loading ? 'Cargando…' : `${maestros.length} maestro${maestros.length !== 1 ? 's' : ''}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
-            </div>
-          ) : maestros.length === 0 ? (
-            <div className="text-center py-16">
-              <ListTree className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">Sin maestros registrados</p>
-              <p className="text-sm text-gray-400 mt-1">
-                Crea un maestro (ej. Marca, Color) y agrégale valores
-              </p>
-              <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
-                <Plus className="h-4 w-4 mr-1" />Nuevo maestro
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Aplica a</TableHead>
-                  <TableHead>Selección</TableHead>
-                  <TableHead>Valores</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+          </Typography>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+          </Box>
+        ) : maestros.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 8 }}>
+            <ListTree size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
+            <Typography sx={{ color: '#6b7280', fontWeight: 500 }}>Sin maestros registrados</Typography>
+            <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.5 }}>
+              Crea un maestro (ej. Marca, Color) y agrégale valores
+            </Typography>
+            <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />} onClick={abrirNuevo}
+              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+              Nuevo maestro
+            </Button>
+          </Box>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ '& th': { fontWeight: 600, color: '#6b7280', fontSize: '0.75rem', bgcolor: '#f9fafb', borderBottom: '1px solid #f3f4f6' } }}>
+                <TableCell>Nombre</TableCell>
+                <TableCell>Aplica a</TableCell>
+                <TableCell>Selección</TableCell>
+                <TableCell>Valores</TableCell>
+                <TableCell align="right">Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {maestros.map((m) => (
+                <TableRow key={m.id} hover onClick={() => abrirEdicion(m)}
+                  sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#f9fafb' }, '& td': { borderBottom: '1px solid #f3f4f6' } }}>
+                  <TableCell><Typography variant="body2" sx={{ fontWeight: 600, color: '#111827' }}>{m.nombre}</Typography></TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5 }}>
+                      {(m.targets ?? []).map((t) => (
+                        <Chip key={t} label={TARGET_LABEL[t]} variant="outlined" size="small" sx={chipOutlineSx} />
+                      ))}
+                      {m.targets?.includes('producto') && (
+                        <Typography component="span" sx={{ fontSize: '11px', color: '#9ca3af' }}>· {APLICA_LABEL[m.aplicaA]}</Typography>
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={m.multiple ? 'Múltiple' : 'Único'} size="small"
+                      variant={m.multiple ? 'filled' : 'outlined'} sx={m.multiple ? chipSecondarySx : chipOutlineSx} />
+                  </TableCell>
+                  <TableCell><Typography variant="body2" sx={{ color: '#6b7280' }}>{m.valores.length}</Typography></TableCell>
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                      <IconButton size="small" onClick={() => abrirEdicion(m)} sx={{ color: '#6b7280', '&:hover': { color: '#374151', bgcolor: '#f3f4f6' } }}>
+                        <Pencil size={16} />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => { setDeleteTarget(m); setOpError(null); }} sx={{ color: '#ef4444', '&:hover': { bgcolor: '#fef2f2' } }}>
+                        <Trash2 size={16} />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {maestros.map((m) => (
-                  <TableRow key={m.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => abrirEdicion(m)}>
-                    <TableCell className="font-medium text-gray-900">{m.nombre}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {(m.targets ?? []).map((t) => (
-                          <Badge key={t} variant="outline">{TARGET_LABEL[t]}</Badge>
-                        ))}
-                        {m.targets?.includes('producto') && (
-                          <span className="text-[11px] text-gray-400">· {APLICA_LABEL[m.aplicaA]}</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={m.multiple ? 'secondary' : 'outline'}>
-                        {m.multiple ? 'Múltiple' : 'Único'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-500">{m.valores.length}</TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => abrirEdicion(m)}>
-                          <Pencil className="h-4 w-4 text-gray-500" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setDeleteTarget(m); setOpError(null); }}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Box>
 
       {/* Modal: Crear / Editar */}
-      <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editTarget ? 'Editar maestro' : 'Nuevo maestro'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <div className="space-y-1.5">
-              <Label>Nombre *</Label>
-              <Input
-                placeholder="Ej: Marca"
-                value={form.nombre}
-                onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Descripción</Label>
-              <Textarea
-                placeholder="Descripción opcional…"
-                rows={2}
-                value={form.descripcion}
-                onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
-              />
-            </div>
-            {/* Dónde aplica el maestro */}
-            <div className="space-y-1.5">
-              <Label>Aplica a</Label>
-              <div className="flex gap-2">
-                {(['producto', 'factura'] as Entidad[]).map((t) => (
-                  <label key={t} className="flex items-center gap-2 h-10 px-3 border rounded-md cursor-pointer flex-1">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-teal-600"
-                      checked={form.targets.includes(t)}
-                      onChange={() => toggleTarget(t)}
-                    />
-                    <span className="text-sm text-gray-700">{TARGET_LABEL[t]}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+      <Dialog open={showForm} onClose={() => setShowForm(false)} fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 512 } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>{editTarget ? 'Editar maestro' : 'Nuevo maestro'}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 1 }}>
+          {opError && (
+            <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>
+          )}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 1 }}>
+            <Typography variant="body2" sx={labelSx}>Nombre *</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Ej: Marca"
+              value={form.nombre}
+              onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+              sx={fieldSx}
+            />
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography variant="body2" sx={labelSx}>Descripción</Typography>
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              placeholder="Descripción opcional…"
+              rows={2}
+              value={form.descripcion}
+              onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+              sx={fieldSx}
+            />
+          </Box>
+          {/* Dónde aplica el maestro */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography variant="body2" sx={labelSx}>Aplica a</Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {(['producto', 'factura'] as Entidad[]).map((t) => (
+                <Box key={t} component="label"
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 40, px: 1.5, border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', flex: 1 }}>
+                  <Checkbox
+                    size="small"
+                    checked={form.targets.includes(t)}
+                    onChange={() => toggleTarget(t)}
+                    sx={{ p: 0, color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' } }}
+                  />
+                  <Typography variant="body2" sx={{ color: '#374151' }}>{TARGET_LABEL[t]}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
 
-            <div className="grid grid-cols-2 gap-3">
-              {/* aplicaA solo aplica del lado producto */}
-              <div className="space-y-1.5">
-                <Label className={form.targets.includes('producto') ? '' : 'text-gray-300'}>
-                  En productos, mostrar en
-                </Label>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            {/* aplicaA solo aplica del lado producto */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography variant="body2" sx={{ fontWeight: 500, color: form.targets.includes('producto') ? '#374151' : '#d1d5db' }}>
+                En productos, mostrar en
+              </Typography>
+              <FormControl size="small" fullWidth disabled={!form.targets.includes('producto')}>
                 <Select
                   value={form.aplicaA}
-                  onValueChange={(v) => setForm((f) => ({ ...f, aplicaA: v as AplicaA }))}
-                  disabled={!form.targets.includes('producto')}
+                  onChange={(e) => setForm((f) => ({ ...f, aplicaA: e.target.value as AplicaA }))}
+                  sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
                 >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manual">Manual (por producto)</SelectItem>
-                    <SelectItem value="bien">Todos los bienes</SelectItem>
-                    <SelectItem value="servicio">Todos los servicios</SelectItem>
-                    <SelectItem value="ambos">Bienes y servicios</SelectItem>
-                  </SelectContent>
+                  <MenuItem value="manual">Manual (por producto)</MenuItem>
+                  <MenuItem value="bien">Todos los bienes</MenuItem>
+                  <MenuItem value="servicio">Todos los servicios</MenuItem>
+                  <MenuItem value="ambos">Bienes y servicios</MenuItem>
                 </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Selección</Label>
-                <label className="flex items-center gap-2 h-10 px-3 border rounded-md cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-teal-600"
-                    checked={form.multiple}
-                    onChange={(e) => setForm((f) => ({ ...f, multiple: e.target.checked }))}
-                  />
-                  <span className="text-sm text-gray-700">Permite varios valores</span>
-                </label>
-              </div>
-            </div>
+              </FormControl>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography variant="body2" sx={labelSx}>Selección</Typography>
+              <Box component="label"
+                sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 40, px: 1.5, border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer' }}>
+                <Checkbox
+                  size="small"
+                  checked={form.multiple}
+                  onChange={(e) => setForm((f) => ({ ...f, multiple: e.target.checked }))}
+                  sx={{ p: 0, color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' } }}
+                />
+                <Typography variant="body2" sx={{ color: '#374151' }}>Permite varios valores</Typography>
+              </Box>
+            </Box>
+          </Box>
 
-            {/* Gestión de valores — solo en edición (el maestro ya existe) */}
-            {editTarget ? (
-              <div className="space-y-2 pt-2 border-t">
-                <Label>Valores del dropdown</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Ej: Toyota"
-                    value={nuevoValor}
-                    onChange={(e) => setNuevoValor(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); agregarValor(); } }}
-                  />
-                  <Button type="button" variant="outline" onClick={agregarValor} disabled={valorBusy || !nuevoValor.trim()}>
-                    {valorBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  </Button>
-                </div>
-                {editTarget.valores.length === 0 ? (
-                  <p className="text-xs text-gray-400">Aún no hay valores. Agrega al menos uno.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {editTarget.valores.map((v) => (
-                      <span key={v.id} className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-sm rounded-full pl-3 pr-1.5 py-1">
-                        {v.valor}
-                        <button
-                          type="button"
-                          className="hover:bg-gray-300 rounded-full p-0.5"
-                          onClick={() => eliminarValor(v)}
-                          disabled={valorBusy}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 pt-1">
-                Podrás agregar los valores del dropdown después de crear el maestro.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>
-              {editTarget ? 'Cerrar' : 'Cancelar'}
-            </Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving}>
-              {saving
-                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
-                : (editTarget ? 'Guardar cambios' : 'Crear maestro')}
-            </Button>
-          </DialogFooter>
+          {/* Gestión de valores — solo en edición (el maestro ya existe) */}
+          {editTarget ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 2, borderTop: '1px solid #e5e7eb' }}>
+              <Typography variant="body2" sx={labelSx}>Valores del dropdown</Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Ej: Toyota"
+                  value={nuevoValor}
+                  onChange={(e) => setNuevoValor(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); agregarValor(); } }}
+                  sx={fieldSx}
+                />
+                <Button type="button" variant="outlined" onClick={agregarValor} disabled={valorBusy || !nuevoValor.trim()}
+                  sx={{ borderRadius: '8px', textTransform: 'none', minWidth: 44, px: 1.5, borderColor: '#d1d5db', color: '#374151' }}>
+                  {valorBusy ? <CircularProgress size={16} /> : <Plus size={16} />}
+                </Button>
+              </Box>
+              {editTarget.valores.length === 0 ? (
+                <Typography variant="caption" sx={{ color: '#9ca3af' }}>Aún no hay valores. Agrega al menos uno.</Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {editTarget.valores.map((v) => (
+                    <Box key={v.id}
+                      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, bgcolor: '#f3f4f6', color: '#374151', fontSize: '0.875rem', borderRadius: '9999px', pl: 1.5, pr: 0.5, py: 0.5 }}>
+                      {v.valor}
+                      <IconButton
+                        type="button"
+                        size="small"
+                        onClick={() => eliminarValor(v)}
+                        disabled={valorBusy}
+                        sx={{ p: 0.25, color: 'inherit', '&:hover': { bgcolor: '#d1d5db' } }}
+                      >
+                        <X size={12} />
+                      </IconButton>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Typography variant="caption" sx={{ color: '#9ca3af', pt: 0.5 }}>
+              Podrás agregar los valores del dropdown después de crear el maestro.
+            </Typography>
+          )}
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button variant="outlined" onClick={() => setShowForm(false)} disabled={saving}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}>
+            {editTarget ? 'Cerrar' : 'Cancelar'}
+          </Button>
+          <Button variant="contained" disableElevation onClick={handleGuardar} disabled={saving}
+            startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+            {saving
+              ? 'Guardando…'
+              : (editTarget ? 'Guardar cambios' : 'Crear maestro')}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Modal: Confirmar eliminación */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Eliminar maestro?</DialogTitle></DialogHeader>
-          <div className="py-2 space-y-3">
-            {opError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
-            )}
-            <p className="text-sm text-gray-700">
-              Vas a eliminar el maestro <strong>{deleteTarget?.nombre}</strong>, sus valores y las
-              asignaciones a productos. Esta acción no se puede deshacer.
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Los productos no se eliminan, solo pierden este atributo.</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
-              {deleting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</> : 'Sí, eliminar'}
-            </Button>
-          </DialogFooter>
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 384 } } as object }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>¿Eliminar maestro?</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, py: 1 }}>
+          {opError && (
+            <Alert severity="error" sx={{ borderRadius: '8px' }}>{opError}</Alert>
+          )}
+          <Typography variant="body2" sx={{ color: '#374151' }}>
+            Vas a eliminar el maestro <strong>{deleteTarget?.nombre}</strong>, sus valores y las
+            asignaciones a productos. Esta acción no se puede deshacer.
+          </Typography>
+          <Alert severity="warning" icon={<AlertTriangle size={16} />} sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
+            Los productos no se eliminan, solo pierden este atributo.
+          </Alert>
         </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button variant="outlined" onClick={() => setDeleteTarget(null)} disabled={deleting}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}>Cancelar</Button>
+          <Button variant="contained" disableElevation color="error" onClick={handleEliminar} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ borderRadius: '8px', textTransform: 'none' }}>
+            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
+          </Button>
+        </DialogActions>
       </Dialog>
-    </section>
+    </Box>
   );
 }

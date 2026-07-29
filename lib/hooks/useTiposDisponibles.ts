@@ -5,13 +5,14 @@
  *
  * Determina qué tipos de e-CF mostrar en los dropdowns de comprobante.
  * Regla de negocio:
- *   - e31 y e32 SIEMPRE visibles (aunque no exista secuencia activa).
- *   - sin-ncf siempre visible (no consume secuencia).
- *   - El resto (33,34,41,43,44,45,46,47) solo si hay una secuencia ACTIVA
- *     (estado='activa' y con disponibles) para ese tipo.
+ *   - GATE DGII: si la empresa NO está lista para emitir a DGII
+ *     (/api/ecf/readiness → ready=false), SOLO se muestra `sin-ncf`.
+ *     Nada de E31/E32 en ninguna pantalla de creación.
+ *   - Con DGII lista: e31/e32/sin-ncf siempre visibles; el resto
+ *     (33,34,41,43,44,45,46,47) solo si hay secuencia ACTIVA con disponibles.
  *
  * Uso:
- *   const { tipoVisible, isLoading } = useTiposDisponibles();
+ *   const { tipoVisible, dgiiReady, isLoading } = useTiposDisponibles();
  *   options.filter(o => tipoVisible(o.value))
  */
 
@@ -25,12 +26,19 @@ interface SeqRow {
   disponibles: number;
 }
 
+interface Readiness { ready?: boolean }
+
 const fetcher = (url: string) =>
-  fetch(url).then(r => (r.ok ? r.json() : { sequences: [] }));
+  fetch(url).then(r => (r.ok ? r.json() : null));
 
 export function useTiposDisponibles() {
-  const { data, isLoading } = useSWR<{ sequences?: SeqRow[] }>(
+  const { data, isLoading } = useSWR<{ sequences?: SeqRow[] } | null>(
     '/api/secuencias',
+    fetcher,
+    { revalidateOnFocus: false },
+  );
+  const { data: readiness, isLoading: loadingReadiness } = useSWR<Readiness | null>(
+    '/api/ecf/readiness',
     fetcher,
     { revalidateOnFocus: false },
   );
@@ -41,8 +49,16 @@ export function useTiposDisponibles() {
       .map(s => s.tipoEcf),
   );
 
-  /** ¿Mostrar este tipo en el dropdown? e31/e32/sin-ncf siempre; resto solo con secuencia activa. */
-  const tipoVisible = (tipo: string) => SIEMPRE_VISIBLES.has(tipo) || activos.has(tipo);
+  // Mientras carga readiness asumimos NO listo (default fiscal-deny): mejor
+  // aparecer tarde que mostrar E31/E32 a una empresa sin DGII.
+  const dgiiReady = readiness?.ready === true;
 
-  return { tipoVisible, activos, isLoading };
+  /** ¿Mostrar este tipo en el dropdown? */
+  const tipoVisible = (tipo: string) => {
+    if (tipo === 'sin-ncf') return true;
+    if (!dgiiReady) return false;
+    return SIEMPRE_VISIBLES.has(tipo) || activos.has(tipo);
+  };
+
+  return { tipoVisible, activos, dgiiReady, isLoading: isLoading || loadingReadiness };
 }

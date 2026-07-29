@@ -1,14 +1,21 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import Box from '@mui/material/Box';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import TextField from '@mui/material/TextField';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Tooltip from '@mui/material/Tooltip';
 import { Info, X } from 'lucide-react';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
-import { Tooltip } from '@/components/ui/tooltip';
 import { Autocomplete } from '../components/Autocomplete';
 import { LineaMaestros } from './LineaMaestros';
 import { calcularMontoItem } from '../utils/calculos';
@@ -24,26 +31,38 @@ interface DependienteOpt {
 /** Ancho del dropdown de productos — más ancho que la celda para layout tipo tabla. */
 const PRODUCTO_DROPDOWN_W = 460;
 
+/**
+ * sx de los inputs numéricos de la línea. Las flechas del spinner se ocultan:
+ * en una tabla de factura invitan a errores de un clic y roban ancho a la celda.
+ */
+const inputNumeroSx = {
+  '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' },
+  '& input[type=number]': { MozAppearance: 'textfield' },
+  '& input[type=number]::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 },
+  '& input[type=number]::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+};
+
 /** Fila del dropdown de productos: código (referencia) · nombre + descripción · precio/ITBIS. */
 function renderProductoOption(p: Producto) {
   return (
-    <div className="grid grid-cols-[5rem_1fr] items-start gap-x-3 gap-y-0.5">
-      <span
-        className="font-mono text-xs text-gray-500 truncate pt-0.5"
+    <Box sx={{ display: 'grid', gridTemplateColumns: '5rem 1fr', alignItems: 'start', columnGap: 1.5, rowGap: 0.25 }}>
+      <Typography
+        component="span"
         title={p.referencia ?? undefined}
+        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pt: '2px' }}
       >
         {p.referencia || '—'}
-      </span>
-      <p className="min-w-0 font-medium truncate">{p.nombre}</p>
+      </Typography>
+      <Typography sx={{ minWidth: 0, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</Typography>
       {p.descripcion && (
-        <p
-          className="col-span-2 min-w-0 truncate text-xs text-gray-500"
+        <Typography
           title={p.descripcion}
+          sx={{ gridColumn: 'span 2', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem', color: '#6b7280' }}
         >
           {p.descripcion}
-        </p>
+        </Typography>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -74,60 +93,123 @@ export function ItemsTable({
 }: Props) {
   const { openProximamente, dialog } = useProximamenteDialog();
   const hasDeps = dependientes.length > 0;
+
+  // Compute min-width for the desktop table
+  const minWidth =
+    hasDeps && showReferencia && showDescripcion ? 960 :
+    hasDeps && (showReferencia || showDescripcion) ? 860 :
+    hasDeps ? 740 :
+    showReferencia && showDescripcion ? 820 :
+    (showReferencia || showDescripcion) ? 720 :
+    600;
+
+  const headerSx = {
+    fontWeight: 600,
+    color: '#6b7280',
+    fontSize: '0.75rem',
+    bgcolor: '#f9fafb',
+    py: 1.5,
+    px: 1,
+    lineHeight: 1.4,
+  };
+
   return (
-    <div>
+    <Box>
       {/* ───────── MOBILE: card list (< md) ───────── */}
-      <div className="md:hidden divide-y divide-gray-100 -mx-4 md:-mx-5">
+      <Box sx={{ display: { xs: 'block', md: 'none' }, mx: -2 }}>
         {items.map((item, idx) => (
-          <div key={item.id} className="p-4 space-y-3 bg-white">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          <Box
+            key={item.id}
+            sx={{
+              p: 2,
+              bgcolor: '#fff',
+              borderBottom: '1px solid #f3f4f6',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1.5,
+            }}
+          >
+            {/* Row header */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography
+                sx={{
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
                 Línea {idx + 1}
-              </span>
+              </Typography>
               {items.length > 1 && (
-                <button
-                  type="button"
+                <IconButton
+                  size="small"
                   onClick={() => onRemoveItem(item.id)}
                   aria-label={`Eliminar línea ${idx + 1}`}
-                  className="text-gray-400 hover:text-red-500 p-2 -m-2 transition-colors"
+                  sx={{ color: '#d1d5db', '&:hover': { color: '#ef4444' } }}
                 >
-                  <X className="h-5 w-5" />
-                </button>
+                  <X size={20} />
+                </IconButton>
               )}
-            </div>
+            </Box>
 
             {/* Beneficiario — mobile */}
             {hasDeps && (
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                  Beneficiario <span className="text-red-500 ml-0.5">*</span>
-                </Label>
-                <select
-                  className="h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
+                  Beneficiario <Box component="span" sx={{ color: '#ef4444', ml: '2px' }}>*</Box>
+                </Typography>
+                <Select
+                  size="small"
+                  fullWidth
+                  displayEmpty
                   value={item.dependienteId ?? ''}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (!val) {
                       onSelectBeneficiario(item.id, null, '');
                     } else {
-                      const id = parseInt(val, 10);
+                      const id = parseInt(String(val), 10);
                       const dep = dependientes.find(d => d.id === id);
                       onSelectBeneficiario(item.id, id, dep ? `${dep.nombre} ${dep.apellido}` : '');
                     }
                   }}
+                  sx={{ borderRadius: '8px' }}
                 >
-                  <option value="">— Beneficiario —</option>
+                  <MenuItem value=""><em>— Beneficiario —</em></MenuItem>
                   {dependientes.map(d => (
-                    <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                    <MenuItem key={d.id} value={d.id}>{d.nombre} {d.apellido}</MenuItem>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Box>
             )}
 
-            <div>
-              <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+            {/* Producto */}
+            <Box>
+              <Typography
+                component="label"
+                sx={{
+                  display: 'block',
+                  fontSize: '0.7rem',
+                  color: '#4b5563',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  mb: 0.5,
+                }}
+              >
                 Producto / servicio
-              </Label>
+              </Typography>
               <Autocomplete<Producto>
                 placeholder="Buscar producto o servicio..."
                 value={item.nombreItem}
@@ -140,237 +222,367 @@ export function ItemsTable({
                 renderOption={renderProductoOption}
               />
               <LineaMaestros productoId={item.productoId} />
-            </div>
+            </Box>
 
             {showReferencia && (
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Referencia
-                </Label>
-                <Input
-                  className="h-11 text-sm"
+                </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
                   placeholder="Ref."
                   value={item.referencia}
                   onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+                  slotProps={{ htmlInput: { style: { height: '2.75rem', boxSizing: 'border-box' } } }}
                 />
-              </div>
+              </Box>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+            {/* Precio + Cantidad */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Precio
-                </Label>
-                <Input
-                  type="number" inputMode="decimal" min={0} step={0.01}
-                  value={item.precioUnitarioItem || ''}
+                </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
+                  type="number"
                   placeholder="0.00"
+                  value={item.precioUnitarioItem || ''}
                   onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                  className="h-11 text-sm text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  sx={inputNumeroSx}
+                  slotProps={{ htmlInput: { min: 0, step: 0.01, inputMode: 'decimal', style: { textAlign: 'right' } } }}
                 />
-              </div>
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+              </Box>
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Cantidad
-                </Label>
-                <Input
-                  type="number" inputMode="decimal" min={0.01} step="any"
+                </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
+                  type="number"
                   value={item.cantidadItem}
                   onChange={(e) => {
                     const n = parseFloat(e.target.value);
                     onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
                   }}
-                  className="h-11 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  sx={inputNumeroSx}
+                  slotProps={{ htmlInput: { min: 0.01, step: 'any', inputMode: 'decimal', style: { textAlign: 'center' } } }}
                 />
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                  Descuento %
-                </Label>
-                <div className="relative">
-                  <Input
-                    type="number" inputMode="decimal" min={0} max={100} step={0.1}
-                    value={item.descuentoPct || ''}
-                    placeholder="0"
-                    onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                    className="h-11 text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
-                  Impuesto
-                </Label>
-                <Select
-                  value={item.tasaItbis}
-                  onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
-                  disabled={regla !== undefined && !regla.permiteItbis}
+            {/* Descuento + Impuesto */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
                 >
-                  <SelectTrigger className="h-11 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(regla === undefined || regla.permiteItbis)
-                      ? TASA_ITBIS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
-                      : <SelectItem value="exento">Exento</SelectItem>
-                    }
-                  </SelectContent>
+                  Descuento %
+                </Typography>
+                <Box sx={{ position: 'relative' }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    type="number"
+                    placeholder="0"
+                    value={item.descuentoPct || ''}
+                    onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
+                    sx={inputNumeroSx}
+                    slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, inputMode: 'decimal', style: { textAlign: 'center', paddingRight: '1.5rem' } } }}
+                  />
+                  <Typography
+                    sx={{
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      fontSize: '0.75rem',
+                      color: '#6b7280',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    %
+                  </Typography>
+                </Box>
+              </Box>
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
+                  Impuesto
+                </Typography>
+                <Select
+                  size="small"
+                  fullWidth
+                  value={item.tasaItbis}
+                  onChange={(e) => onUpdateItem(item.id, 'tasaItbis', e.target.value)}
+                  disabled={regla !== undefined && !regla.permiteItbis}
+                  sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+                >
+                  {(regla === undefined || regla.permiteItbis)
+                    ? TASA_ITBIS.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)
+                    : <MenuItem value="exento">Exento</MenuItem>
+                  }
                 </Select>
-              </div>
-            </div>
+              </Box>
+            </Box>
 
             {showDescripcion && (
-              <div>
-                <Label className="text-xs text-gray-600 uppercase tracking-wide mb-1 block">
+              <Box>
+                <Typography
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.7rem',
+                    color: '#4b5563',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    mb: 0.5,
+                  }}
+                >
                   Descripción
-                </Label>
-                <textarea
-                  className="w-full min-h-[60px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                </Typography>
+                <TextField
+                  multiline
+                  fullWidth
+                  minRows={2}
                   placeholder="Descripción..."
                   value={item.descripcionItem}
                   onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      '& fieldset': { borderColor: '#e5e7eb' },
+                      '&:hover fieldset': { borderColor: '#9ca3af' },
+                      '&.Mui-focused fieldset': { borderColor: '#0d9488' },
+                    },
+                  }}
                 />
-              </div>
+              </Box>
             )}
 
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Total</span>
-              <span className="text-base font-semibold text-gray-900">
+            {/* Total row */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                pt: 1,
+                borderTop: '1px solid #f3f4f6',
+              }}
+            >
+              <Typography sx={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Total
+              </Typography>
+              <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
                 RD$ {calcularMontoItem(item).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {/* ───────── DESKTOP: table (≥ md) ───────── */}
-      <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200">
-        {/* min-w dinámico — solo expandir cuando hay opcionales visibles */}
-        <table className={`w-full border-collapse table-fixed ${
-          hasDeps && showReferencia && showDescripcion ? 'min-w-[960px]' :
-          hasDeps && (showReferencia || showDescripcion) ? 'min-w-[860px]' :
-          hasDeps ? 'min-w-[740px]' :
-          showReferencia && showDescripcion ? 'min-w-[820px]' :
-          (showReferencia || showDescripcion) ? 'min-w-[720px]' :
-          'min-w-[600px]'
-        }`}>
-          <colgroup>
-            {/* Beneficiario */}
-            {hasDeps && <col className="w-[16%]" />}
-            {/* Producto */}
-            <col className={
-              hasDeps && showReferencia && showDescripcion ? 'w-[16%]' :
-              hasDeps && (showReferencia || showDescripcion) ? 'w-[18%]' :
-              hasDeps ? 'w-[22%]' :
-              showReferencia && showDescripcion ? 'w-[22%]' :
-              showReferencia ? 'w-[28%]' :
-              showDescripcion ? 'w-[22%]' :
-              'w-[32%]'
-            } />
-            {/* Referencia */}
-            {showReferencia && <col className="w-[10%]" />}
-            {/* Precio */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[10%]' :
-              (showReferencia || showDescripcion) ? 'w-[12%]' :
-              'w-[14%]'
-            } />
-            {/* Desc % */}
-            <col className="w-[8%]" />
-            {/* Impuesto */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[10%]' :
-              (showReferencia || showDescripcion) ? 'w-[12%]' :
-              'w-[14%]'
-            } />
-            {/* Descripción */}
-            {showDescripcion && <col className="w-[16%]" />}
-            {/* Cantidad */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[10%]' :
-              (showReferencia || showDescripcion) ? 'w-[12%]' :
-              'w-[14%]'
-            } />
-            {/* Total */}
-            <col className={
-              (showReferencia && showDescripcion) ? 'w-[12%]' :
-              (showReferencia || showDescripcion) ? 'w-[14%]' :
-              'w-[16%]'
-            } />
-            {/* Action */}
-            <col className="w-10" />
-          </colgroup>
-          <thead>
-            <tr className="border-b-2 border-gray-200 bg-gray-50">
+      <Box
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          overflowX: 'auto',
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb',
+        }}
+      >
+        <Table
+          size="small"
+          sx={{
+            width: '100%',
+            minWidth,
+            borderCollapse: 'collapse',
+            tableLayout: 'fixed',
+            '& th': { fontWeight: 600, color: '#6b7280', fontSize: '0.75rem', bgcolor: '#f9fafb' },
+          }}
+        >
+          <TableHead>
+            <TableRow sx={{ borderBottom: '2px solid #e5e7eb' }}>
               {hasDeps && (
-                <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">
-                  Beneficiario <span className="text-red-500 ml-0.5">*</span>
-                </th>
+                <TableCell sx={{ ...headerSx, textAlign: 'left', width: '16%' }}>
+                  Beneficiario <Box component="span" sx={{ color: '#ef4444', ml: '2px' }}>*</Box>
+                </TableCell>
               )}
-              <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">
-                <span className="inline-flex items-center gap-1">
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'left',
+                  px: 2,
+                  width: hasDeps && showReferencia && showDescripcion ? '16%' :
+                    hasDeps && (showReferencia || showDescripcion) ? '18%' :
+                    hasDeps ? '22%' :
+                    showReferencia && showDescripcion ? '22%' :
+                    showReferencia ? '28%' :
+                    showDescripcion ? '22%' : '32%',
+                }}
+              >
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                   Producto
-                  <Tooltip text="DGII #84 · nombreItem · máx 80 caracteres">
-                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  <Tooltip title="DGII #84 · nombreItem · máx 80 caracteres" arrow>
+                    <Box component="span" sx={{ display: 'inline-flex', color: '#4b5563', cursor: 'help' }}>
+                      <Info size={12} aria-hidden="true" />
+                    </Box>
                   </Tooltip>
-                </span>
-              </th>
-              {showReferencia && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Referencia</th>}
-              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3">
-                <span className="inline-flex items-center gap-1">
+                </Box>
+              </TableCell>
+              {showReferencia && (
+                <TableCell sx={{ ...headerSx, textAlign: 'left', width: '10%' }}>Referencia</TableCell>
+              )}
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'right',
+                  width: (showReferencia && showDescripcion) ? '10%' : (showReferencia || showDescripcion) ? '12%' : '14%',
+                }}
+              >
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
                   Precio
-                  <Tooltip text="DGII #94 · precioUnitarioItem">
-                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  <Tooltip title="DGII #94 · precioUnitarioItem" arrow>
+                    <Box component="span" sx={{ display: 'inline-flex', color: '#4b5563', cursor: 'help' }}>
+                      <Info size={12} aria-hidden="true" />
+                    </Box>
                   </Tooltip>
-                </span>
-              </th>
-              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3">Desc %</th>
-              <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Impuesto</th>
-              {showDescripcion && <th className="text-left text-xs font-medium text-gray-500 px-2 py-3">Descripción</th>}
-              <th className="text-center text-xs font-medium text-gray-500 px-2 py-3">
-                <span className="inline-flex items-center gap-1">
+                </Box>
+              </TableCell>
+              <TableCell sx={{ ...headerSx, textAlign: 'center', width: '8%' }}>Desc %</TableCell>
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'left',
+                  width: (showReferencia && showDescripcion) ? '10%' : (showReferencia || showDescripcion) ? '12%' : '14%',
+                }}
+              >
+                Impuesto
+              </TableCell>
+              {showDescripcion && (
+                <TableCell sx={{ ...headerSx, textAlign: 'left', width: '16%' }}>Descripción</TableCell>
+              )}
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'center',
+                  width: (showReferencia && showDescripcion) ? '10%' : (showReferencia || showDescripcion) ? '12%' : '14%',
+                }}
+              >
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, justifyContent: 'center' }}>
                   Cantidad
-                  <Tooltip text="DGII #91 · cantidadItem">
-                    <Info className="h-3 w-3 text-gray-600" aria-hidden="true" />
+                  <Tooltip title="DGII #91 · cantidadItem" arrow>
+                    <Box component="span" sx={{ display: 'inline-flex', color: '#4b5563', cursor: 'help' }}>
+                      <Info size={12} aria-hidden="true" />
+                    </Box>
                   </Tooltip>
-                </span>
-              </th>
-              <th className="text-right text-xs font-medium text-gray-500 px-2 py-3">Total</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+                </Box>
+              </TableCell>
+              <TableCell
+                sx={{
+                  ...headerSx,
+                  textAlign: 'right',
+                  width: (showReferencia && showDescripcion) ? '12%' : (showReferencia || showDescripcion) ? '14%' : '16%',
+                }}
+              >
+                Total
+              </TableCell>
+              <TableCell sx={{ ...headerSx, width: 40 }} />
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {items.map((item, idx) => (
-              <tr key={item.id} className="border-b border-gray-50 align-top group">
+              <TableRow
+                key={item.id}
+                sx={{
+                  borderBottom: '1px solid #f9fafb',
+                  verticalAlign: 'top',
+                  '&:hover .remove-btn': { opacity: 1 },
+                }}
+              >
                 {/* Beneficiario cell — desktop */}
                 {hasDeps && (
-                  <td className="px-2 py-2">
-                    <select
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  <TableCell sx={{ px: 1, py: 1 }}>
+                    <Select
+                      size="small"
+                      fullWidth
+                      displayEmpty
                       value={item.dependienteId ?? ''}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (!val) {
                           onSelectBeneficiario(item.id, null, '');
                         } else {
-                          const id = parseInt(val, 10);
+                          const id = parseInt(String(val), 10);
                           const dep = dependientes.find(d => d.id === id);
                           onSelectBeneficiario(item.id, id, dep ? `${dep.nombre} ${dep.apellido}` : '');
                         }
                       }}
+                      sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
                     >
-                      <option value="">— Beneficiario —</option>
+                      <MenuItem value=""><em>— Beneficiario —</em></MenuItem>
                       {dependientes.map(d => (
-                        <option key={d.id} value={d.id}>{d.nombre} {d.apellido}</option>
+                        <MenuItem key={d.id} value={d.id}>{d.nombre} {d.apellido}</MenuItem>
                       ))}
-                    </select>
-                  </td>
+                    </Select>
+                  </TableCell>
                 )}
-                <td className="px-4 py-2">
+
+                {/* Producto */}
+                <TableCell sx={{ px: 2, py: 1 }}>
                   <Autocomplete<Producto>
                     placeholder="Buscar producto o servicio..."
                     value={item.nombreItem}
@@ -383,114 +595,208 @@ export function ItemsTable({
                     renderOption={renderProductoOption}
                   />
                   <LineaMaestros productoId={item.productoId} />
-                </td>
+                </TableCell>
+
+                {/* Referencia */}
                 {showReferencia && (
-                  <td className="px-2 py-2">
-                    <Input
-                      className="h-9 text-sm"
+                  <TableCell sx={{ px: 1, py: 1 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
                       placeholder="Ref."
                       value={item.referencia}
                       onChange={(e) => onUpdateItem(item.id, 'referencia', e.target.value)}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
                     />
-                  </td>
+                  </TableCell>
                 )}
-                <td className="px-2 py-2">
-                  <Input
-                    type="number" min={0} step={0.01}
-                    value={item.precioUnitarioItem || ''}
+
+                {/* Precio */}
+                <TableCell sx={{ px: 1, py: 1 }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    type="number"
                     placeholder="0.00"
+                    value={item.precioUnitarioItem || ''}
                     onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                    className="h-9 text-sm text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    sx={inputNumeroSx}
+                    slotProps={{ htmlInput: { min: 0, step: 0.01, style: { textAlign: 'right' } } }}
                   />
-                </td>
-                <td className="px-2 py-2">
-                  <div className="relative">
-                    <Input
-                      type="number" min={0} max={100} step={0.1}
-                      value={item.descuentoPct || ''}
+                </TableCell>
+
+                {/* Descuento % */}
+                <TableCell sx={{ px: 1, py: 1 }}>
+                  <Box sx={{ position: 'relative' }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      type="number"
                       placeholder="0"
+                      value={item.descuentoPct || ''}
                       onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                      className="h-9 text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      sx={inputNumeroSx}
+                      slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, style: { textAlign: 'center', paddingRight: '1.25rem' } } }}
                     />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
-                  </div>
-                </td>
-                <td className="px-2 py-2">
+                    <Typography
+                      sx={{
+                        position: 'absolute',
+                        right: 8,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: '0.75rem',
+                        color: '#6b7280',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      %
+                    </Typography>
+                  </Box>
+                </TableCell>
+
+                {/* Impuesto */}
+                <TableCell sx={{ px: 1, py: 1 }}>
                   <Select
+                    size="small"
+                    fullWidth
                     value={item.tasaItbis}
-                    onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
+                    onChange={(e) => onUpdateItem(item.id, 'tasaItbis', e.target.value)}
                     disabled={regla !== undefined && !regla.permiteItbis}
+                    sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
                   >
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(regla === undefined || regla.permiteItbis)
-                        ? TASA_ITBIS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)
-                        : <SelectItem value="exento">Exento</SelectItem>
-                      }
-                    </SelectContent>
+                    {(regla === undefined || regla.permiteItbis)
+                      ? TASA_ITBIS.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)
+                      : <MenuItem value="exento">Exento</MenuItem>
+                    }
                   </Select>
-                </td>
+                </TableCell>
+
+                {/* Descripción */}
                 {showDescripcion && (
-                  <td className="px-2 py-2">
-                    <textarea
-                      className="w-full h-[68px] text-sm border border-gray-200 rounded-md p-2 resize-none focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300"
+                  <TableCell sx={{ px: 1, py: 1 }}>
+                    <TextField
+                      multiline
+                      fullWidth
                       placeholder="Descripción..."
                       value={item.descripcionItem}
                       onChange={(e) => onUpdateItem(item.id, 'descripcionItem', e.target.value)}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: '8px',
+                          fontSize: '0.875rem',
+                          minHeight: 68,
+                          alignItems: 'flex-start',
+                          '& fieldset': { borderColor: '#e5e7eb' },
+                          '&:hover fieldset': { borderColor: '#9ca3af' },
+                          '&.Mui-focused fieldset': { borderColor: '#0d9488' },
+                        },
+                        '& .MuiInputBase-inputMultiline': { resize: 'none' },
+                      }}
                     />
-                  </td>
+                  </TableCell>
                 )}
-                <td className="px-2 py-2">
-                  <Input
-                    type="number" min={0.01} step="any"
+
+                {/* Cantidad */}
+                <TableCell sx={{ px: 1, py: 1 }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    type="number"
                     value={item.cantidadItem}
                     onChange={(e) => {
                       const n = parseFloat(e.target.value);
                       // permitir 0 explícito, NaN/blank → 0; submit valida > 0
                       onUpdateItem(item.id, 'cantidadItem', Number.isFinite(n) && n >= 0 ? n : 0);
                     }}
-                    className="h-9 text-sm text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    sx={inputNumeroSx}
+                    slotProps={{ htmlInput: { min: 0.01, step: 'any', style: { textAlign: 'center' } } }}
                   />
-                </td>
-                <td className="px-2 py-2 text-right">
-                  <div className="h-9 flex items-center justify-end text-sm font-medium text-gray-700">
-                    RD$ {calcularMontoItem(item).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </div>
-                </td>
-                <td className="px-2 py-2">
+                </TableCell>
+
+                {/* Total */}
+                <TableCell sx={{ px: 1, py: 1, textAlign: 'right' }}>
+                  <Box sx={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                      RD$ {calcularMontoItem(item).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Box>
+                </TableCell>
+
+                {/* Action */}
+                <TableCell sx={{ px: 1, py: 1 }}>
                   {items.length > 1 && (
-                    <button
-                      type="button"
+                    <IconButton
+                      size="small"
+                      className="remove-btn"
                       onClick={() => onRemoveItem(item.id)}
                       aria-label={`Eliminar línea ${idx + 1}`}
-                      className="text-gray-300 hover:text-red-400 p-1 mt-1 transition-colors opacity-0 group-hover:opacity-100">
-                      <X className="h-4 w-4" />
-                    </button>
+                      sx={{
+                        color: '#d1d5db',
+                        opacity: 0,
+                        mt: 0.5,
+                        transition: 'color 0.15s, opacity 0.15s',
+                        '&:hover': { color: '#f87171' },
+                      }}
+                    >
+                      <X size={16} />
+                    </IconButton>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Box>
 
-      <div className="pt-3 mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50">
-        <button
+      {/* Footer actions */}
+      <Box
+        sx={{
+          pt: 1.5,
+          mt: 0.5,
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1.5,
+          borderTop: '1px solid #f9fafb',
+        }}
+      >
+        <Button
           type="button"
+          variant="text"
+          disableElevation
           onClick={onAddItem}
-          className="text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
+          sx={{
+            textTransform: 'none',
+            color: '#0d9488',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            py: 1,
+            my: -1,
+            '&:hover': { color: '#0f766e', bgcolor: 'transparent' },
+          }}
+        >
           + Agregar línea
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="text"
+          disableElevation
           onClick={() => openProximamente('Agregar Conduce')}
-          className="text-gray-500 hover:text-teal-700 text-sm font-medium flex items-center gap-1 transition-colors py-2 -my-2">
+          sx={{
+            textTransform: 'none',
+            color: '#6b7280',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            py: 1,
+            my: -1,
+            '&:hover': { color: '#0f766e', bgcolor: 'transparent' },
+          }}
+        >
           + Agregar Conduce
-        </button>
-      </div>
+        </Button>
+      </Box>
       {dialog}
-    </div>
+    </Box>
   );
 }

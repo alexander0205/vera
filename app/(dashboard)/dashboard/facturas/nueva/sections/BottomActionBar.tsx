@@ -1,9 +1,11 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { ChevronDown, CreditCard, FileText, Loader2, Mail, Printer } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ItemLinea } from '../utils/types';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface Props {
   items: ItemLinea[];
@@ -39,103 +41,109 @@ export function BottomActionBar({
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
+  const menuItemSx = {
+    width: '100%', display: 'flex', alignItems: 'center', gap: 1.25,
+    px: 2, py: { xs: 1.5, sm: 1.25 }, fontSize: '0.875rem', color: '#374151',
+    background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' as const,
+    '&:hover': { bgcolor: '#f9fafb' }, transition: 'background 0.1s',
+  };
+
   return (
-    <div className="sticky bottom-0 z-30 -mx-3 sm:-mx-4 md:-mx-5 px-3 sm:px-4 md:px-5 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 py-3">
+    <Box sx={{ position: 'sticky', bottom: 0, zIndex: 30, mx: { xs: -1.5, sm: -2, md: -2.5 }, px: { xs: 1.5, sm: 2, md: 2.5 }, mt: 'auto', bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e5e7eb', boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)', display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, py: 1.5 }}>
       <Button
         type="button"
-        variant="outline"
-        className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
+        variant="outlined"
+        disableElevation
         onClick={onCancelar}
+        sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
       >
         Cancelar
       </Button>
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, gap: 1.5, width: { xs: '100%', sm: 'auto' } }}>
         {onEmitir ? (
           <>
             <Button
               type="button"
-              variant="outline"
+              variant="outlined"
+              disableElevation
               disabled={loading || loadingPreview}
-              className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-              onClick={onVistaPrevia}>
-              {loadingPreview ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Guardando…</> : 'Vista previa'}
+              onClick={onVistaPrevia}
+              startIcon={loadingPreview ? <CircularProgress size={14} /> : undefined}
+              sx={{ textTransform: 'none', borderRadius: '8px', color: '#4b5563', borderColor: '#e5e7eb', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
+            >
+              {loadingPreview ? 'Guardando…' : 'Vista previa'}
             </Button>
 
             <Button
               type="button"
-              variant="outline"
+              variant="outlined"
+              disableElevation
               disabled={loading}
-              className="text-gray-700 border-gray-300 hover:bg-gray-50 h-11 sm:h-9 w-full sm:w-auto"
-              onClick={() => onEmitir('emitir', { andThen: 'nueva' })}>
+              onClick={() => onEmitir('emitir', { andThen: 'nueva' })}
+              sx={{ textTransform: 'none', borderRadius: '8px', color: '#374151', borderColor: '#d1d5db', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' } }}
+            >
               Guardar y crear nueva
             </Button>
 
-            <div ref={guardarMenuRef} className="relative flex w-full sm:w-auto">
+            <Box ref={guardarMenuRef} sx={{ position: 'relative', display: 'flex', width: { xs: '100%', sm: 'auto' } }}>
               <Button
                 type="submit"
+                disableElevation
                 disabled={loading}
-                className={`${primaryBtnClass} text-white rounded-r-none flex-1 sm:flex-none sm:min-w-[140px] border-r h-11 sm:h-9`}
+                startIcon={loading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
+                sx={{ textTransform: 'none', bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, borderRadius: '8px 0 0 8px', flex: { xs: 1, sm: 'none' }, minWidth: { sm: 140 }, height: { xs: 44, sm: 36 }, borderRight: '1px solid #0f766e', fontWeight: 500 }}
               >
-                {loading
-                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{loadingPrimaryLabel}</>
-                  : primaryLabel}
+                {loading ? loadingPrimaryLabel : primaryLabel}
               </Button>
-              <button
+              <Box
+                component="button"
                 type="button"
                 disabled={loading}
                 onClick={() => setShowGuardarMenu(v => !v)}
                 aria-label="Más opciones para guardar"
-                className={`${primaryBtnClass} disabled:opacity-50 text-white rounded-md rounded-l-none px-3 sm:px-2.5 flex items-center justify-center border-l transition-colors h-11 sm:h-9`}
+                sx={{ bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.5 }, borderRadius: '0 8px 8px 0', px: { xs: 1.5, sm: 1.25 }, display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #0f766e', cursor: 'pointer', border: 'none', height: { xs: 44, sm: 36 } }}
               >
-                <ChevronDown className="h-4 w-4" />
-              </button>
+                <ChevronDown size={16} />
+              </Box>
 
               {showGuardarMenu && (
-                <div className="absolute bottom-full right-0 left-auto mb-1 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-full sm:w-52 z-50 min-w-[12rem]">
-                  <button
+                <Box sx={{ position: 'absolute', bottom: '100%', right: 0, mb: 0.5, bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', py: 0.5, width: { xs: '100%', sm: 208 }, minWidth: 192, zIndex: 50 }}>
+                  {[
+                    { icon: <FileText size={16} color="#4b5563" />, label: 'Guardar como borrador', onClick: () => { setShowGuardarMenu(false); onEmitir('borrador'); } },
+                    { icon: <Printer size={16} color="#4b5563" />, label: 'Guardar e imprimir',    onClick: () => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'imprimir' }); } },
+                    { icon: <Mail size={16} color="#4b5563" />,    label: 'Guardar y enviar por correo', onClick: () => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'correo' }); } },
+                  ].map(item => (
+                    <Box key={item.label} component="button" type="button" onClick={item.onClick} sx={menuItemSx}>
+                      {item.icon}
+                      {item.label}
+                    </Box>
+                  ))}
+                  <Box
+                    component="button"
                     type="button"
-                    className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    onClick={() => { setShowGuardarMenu(false); onEmitir('borrador'); }}>
-                    <FileText className="h-4 w-4 text-gray-600" />
-                    Guardar
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'imprimir' }); }}>
-                    <Printer className="h-4 w-4 text-gray-600" />
-                    Guardar e imprimir
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'correo' }); }}>
-                    <Mail className="h-4 w-4 text-gray-600" />
-                    Guardar y enviar por correo
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2.5 px-4 py-3 sm:py-2.5 text-sm text-teal-700 hover:bg-teal-50 transition-colors border-t border-gray-100"
-                    onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'cobrar' }); }}>
-                    <CreditCard className="h-4 w-4 text-teal-600" />
+                    onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'cobrar' }); }}
+                    sx={{ ...menuItemSx, color: '#0f766e', borderTop: '1px solid #f3f4f6', '&:hover': { bgcolor: '#f0fdfa' } }}
+                  >
+                    <CreditCard size={16} color="#0d9488" />
                     Guardar y generar link de pago
-                  </button>
-                </div>
+                  </Box>
+                </Box>
               )}
-            </div>
+            </Box>
           </>
         ) : (
           <Button
             type="submit"
+            disableElevation
             disabled={loading}
-            className={`${primaryBtnClass} text-white h-11 sm:h-9 w-full sm:w-auto sm:min-w-[140px]`}
+            startIcon={loading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
+            sx={{ textTransform: 'none', bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, borderRadius: '8px', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 140 }, fontWeight: 500 }}
           >
-            {loading
-              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{loadingPrimaryLabel}</>
-              : primaryLabel}
+            {loading ? loadingPrimaryLabel : primaryLabel}
           </Button>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

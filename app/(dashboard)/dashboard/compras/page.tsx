@@ -4,8 +4,13 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { ShoppingCart, FileText, Plus, PackagePlus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -13,14 +18,12 @@ import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
 import type { CompraLocal } from '@/lib/db/schema';
 import ModalRegistrarCompra from './_modal-registrar-compra';
 
-// ─── Estado badge ─────────────────────────────────────────────────────────────
-
-const ESTADO_BADGE: Record<string, string> = {
-  ACEPTADO:             'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  ACEPTADO_CONDICIONAL: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  RECHAZADO:            'bg-red-50 text-red-700 ring-1 ring-red-200',
-  RECIBIDO:             'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
-  PENDIENTE:            'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
+const ESTADO_CHIP: Record<string, { label: string; bgcolor: string; color: string; border: string }> = {
+  ACEPTADO:             { label: 'Aceptado',    bgcolor: '#ecfdf5', color: '#065f46', border: '#6ee7b7' },
+  ACEPTADO_CONDICIONAL: { label: 'Condicional', bgcolor: '#fffbeb', color: '#92400e', border: '#fde68a' },
+  RECHAZADO:            { label: 'Rechazado',   bgcolor: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
+  RECIBIDO:             { label: 'Recibido',    bgcolor: '#e0f2fe', color: '#0c4a6e', border: '#7dd3fc' },
+  PENDIENTE:            { label: 'Pendiente',   bgcolor: '#f3f4f6', color: '#4b5563', border: '#d1d5db' },
 };
 
 const TIPO_LABELS: Record<string, string> = {
@@ -29,15 +32,11 @@ const TIPO_LABELS: Record<string, string> = {
   '44': 'Reg. Único',   '45': 'Gub.',    '46': 'Export.', '47': 'Otros',
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Tipo e-CF: viene null en `tipoECF`; el real está en el e-NCF (E31… → "31"). */
 export function tipoFromEncf(item: RecepcionEcfDto): string {
   const code = item.tipoECF || item.tipoComprobante || item.eNcf?.match(/^E(\d{2})/)?.[1] || '';
   return code ? (TIPO_LABELS[code] ?? `e${code}`) : '—';
 }
 
-/** El monto NO viene como campo del API — se extrae del XML firmado (<MontoTotal>, en pesos). */
 export function montoFromXml(xml?: string): number | null {
   if (!xml) return null;
   const m = xml.match(/<MontoTotal>\s*([\d.]+)\s*<\/MontoTotal>/i);
@@ -72,11 +71,10 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     id: 'emisor',
     header: 'Emisor (RNC)',
     render: item => (
-      <Link
-        href={`/dashboard/compras/${item.id}`}
-        className="font-mono text-xs text-teal-700 hover:underline font-semibold"
-      >
-        {item.rncEmisor ?? item.rnc}
+      <Link href={`/dashboard/compras/${item.id}`} style={{ textDecoration: 'none' }}>
+        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#0f766e', '&:hover': { textDecoration: 'underline' } }}>
+          {item.rncEmisor ?? item.rnc}
+        </Typography>
       </Link>
     ),
   },
@@ -84,11 +82,10 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     id: 'encf',
     header: 'e-NCF',
     render: item => (
-      <Link
-        href={`/dashboard/compras/${item.id}`}
-        className="font-mono text-xs text-gray-700 hover:underline"
-      >
-        {item.eNcf}
+      <Link href={`/dashboard/compras/${item.id}`} style={{ textDecoration: 'none' }}>
+        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#374151', '&:hover': { textDecoration: 'underline' } }}>
+          {item.eNcf}
+        </Typography>
       </Link>
     ),
   },
@@ -96,18 +93,16 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     id: 'tipo',
     header: 'Tipo',
     visibleAt: 'md',
-    render: item => (
-      <span className="text-xs text-gray-600">{tipoFromEncf(item)}</span>
-    ),
+    render: item => <Typography sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{tipoFromEncf(item)}</Typography>,
   },
   {
     id: 'fecha',
     header: 'Fecha',
     visibleAt: 'md',
     render: item => (
-      <span className="text-xs text-gray-600 tabular-nums whitespace-nowrap">
+      <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
         {fmtFechaCorta(item.fechaRecepcion ?? item.createdAt)}
-      </span>
+      </Typography>
     ),
   },
   {
@@ -116,12 +111,9 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     align: 'center',
     render: item => {
       const estado = item.estado ?? 'PENDIENTE';
+      const chip = ESTADO_CHIP[estado] ?? { label: estado, bgcolor: '#f3f4f6', color: '#6b7280', border: '#d1d5db' };
       return (
-        <span
-          className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${ESTADO_BADGE[estado] ?? 'bg-gray-100 text-gray-500 ring-1 ring-gray-200'}`}
-        >
-          {estado}
-        </span>
+        <Chip label={chip.label} size="small" sx={{ bgcolor: chip.bgcolor, color: chip.color, border: `1px solid ${chip.border}`, fontSize: '0.6875rem', fontWeight: 500 }} />
       );
     },
   },
@@ -130,9 +122,9 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     header: 'Monto',
     align: 'right',
     render: item => (
-      <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
+      <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
         {fmtMonto(item)}
-      </span>
+      </Typography>
     ),
   },
 ];
@@ -144,21 +136,21 @@ const columnsLocales: DataTableColumn<CompraLocal>[] = [
     id: 'fecha',
     header: 'Fecha',
     render: c => (
-      <span className="text-xs text-gray-700 tabular-nums whitespace-nowrap">
+      <Typography component="span" sx={{ fontSize: '0.75rem', color: '#374151', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
         {fmtFechaCorta(c.fecha)}
-      </span>
+      </Typography>
     ),
   },
   {
     id: 'proveedor',
     header: 'Proveedor',
     render: c => (
-      <div className="min-w-0">
-        <div className="text-sm text-gray-900 truncate">{c.proveedorNombre ?? '—'}</div>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.proveedorNombre ?? '—'}</Typography>
         {c.proveedorRnc && (
-          <div className="font-mono text-[11px] text-gray-400">{c.proveedorRnc}</div>
+          <Typography sx={{ fontFamily: 'monospace', fontSize: '11px', color: '#9ca3af' }}>{c.proveedorRnc}</Typography>
         )}
-      </div>
+      </Box>
     ),
   },
   {
@@ -166,7 +158,7 @@ const columnsLocales: DataTableColumn<CompraLocal>[] = [
     header: 'e-NCF',
     visibleAt: 'md',
     render: c => (
-      <span className="font-mono text-xs text-gray-600">{c.referenciaEncf ?? '—'}</span>
+      <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#4b5563' }}>{c.referenciaEncf ?? '—'}</Typography>
     ),
   },
   {
@@ -174,9 +166,9 @@ const columnsLocales: DataTableColumn<CompraLocal>[] = [
     header: 'Monto',
     align: 'right',
     render: c => (
-      <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
+      <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
         {fmtDOP(c.montoTotal)}
-      </span>
+      </Typography>
     ),
   },
 ];
@@ -190,6 +182,8 @@ export default function ComprasPage() {
   const canVerRecibidas = can('compras:ver');
   const canRegistrar    = can('productos:gestionar');
   const canVerLocales   = canRegistrar || can('productos:ver');
+
+  const [tab, setTab] = useState<'recibidas' | 'registradas'>(canVerRecibidas ? 'recibidas' : 'registradas');
 
   const { data, isLoading: swrLoading } = useSWR<ComprasResponse>(
     !permLoading && canVerRecibidas ? '/api/compras' : null,
@@ -211,40 +205,45 @@ export default function ComprasPage() {
   // ── Estados especiales ──
   if (!permLoading && !canVerRecibidas && !canVerLocales) {
     return (
-      <section className="p-4 sm:p-6">
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
-          <p className="text-sm text-gray-500">No tienes permiso para ver esta sección.</p>
-        </div>
-      </section>
+      <Box sx={{ p: 3 }}>
+        <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', bgcolor: '#fff', p: 5, textAlign: 'center' }}>
+          <Typography variant="body2" sx={{ color: '#6b7280' }}>No tienes permiso para ver esta sección.</Typography>
+        </Box>
+      </Box>
     );
   }
 
-  // Hint text según estado
   const emptyHint = data?.sinContribuyente
     ? 'Configura el certificado digital y regístrate en la DGII para comenzar a recibir facturas electrónicas.'
     : 'Aquí aparecerán las e-CF que tus proveedores te emitan.';
 
   return (
-    <section className="p-4 sm:p-6 space-y-4">
+    <Box sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Header tipo Alegra */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-            <ShoppingCart className="h-5 w-5 text-teal-600" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900 leading-tight">Compras</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ShoppingCart color="#0d9488" style={{ width: 20, height: 20 }} />
+          </Box>
+          <Box>
+            <Typography component="h1" sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>Compras</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>
               e-CF recibidas de tus proveedores y compras que registras manualmente.
-            </p>
-          </div>
-        </div>
+            </Typography>
+          </Box>
+        </Box>
         {canRegistrar && (
-          <Button size="sm" onClick={() => setShowModal(true)}>
-            <Plus className="h-4 w-4 mr-1.5" /> Nueva compra
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setShowModal(true)}
+            startIcon={<Plus style={{ width: 16, height: 16 }} />}
+            sx={{ flexShrink: 0 }}
+          >
+            Nueva compra
           </Button>
         )}
-      </div>
+      </Box>
 
       <ModalRegistrarCompra
         open={showModal}
@@ -253,28 +252,31 @@ export default function ComprasPage() {
       />
 
       {data?.error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-sm text-red-700">{data.error}</p>
-        </div>
+        <Alert severity="error" sx={{ borderRadius: '10px' }}>{data.error}</Alert>
       )}
 
-      <Tabs defaultValue={canVerRecibidas ? 'recibidas' : 'registradas'}>
-        <TabsList>
+      <Box>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           {canVerRecibidas && (
-            <TabsTrigger value="recibidas">Facturas recibidas</TabsTrigger>
+            <Tab value="recibidas" label="Facturas recibidas" />
           )}
           {canVerLocales && (
-            <TabsTrigger value="registradas">
-              Compras registradas
-              {comprasLocales.length > 0 && (
-                <span className="ml-1.5 text-[11px] text-gray-400">({comprasLocales.length})</span>
-              )}
-            </TabsTrigger>
+            <Tab
+              value="registradas"
+              label={
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                  Compras registradas
+                  {comprasLocales.length > 0 && (
+                    <Box component="span" sx={{ ml: 0.75, fontSize: '11px', color: '#9ca3af' }}>({comprasLocales.length})</Box>
+                  )}
+                </Box>
+              }
+            />
           )}
-        </TabsList>
+        </Tabs>
 
-        {canVerRecibidas && (
-          <TabsContent value="recibidas">
+        {canVerRecibidas && tab === 'recibidas' && (
+          <Box sx={{ mt: 2 }}>
             <DataTable<RecepcionEcfDto>
               data={items}
               loading={loading}
@@ -288,26 +290,26 @@ export default function ComprasPage() {
                 hint: emptyHint,
               }}
             />
-          </TabsContent>
+          </Box>
         )}
 
-        {canVerLocales && (
-        <TabsContent value="registradas">
-          <DataTable<CompraLocal>
-            data={comprasLocales}
-            loading={permLoading || localesLoading}
-            columns={columnsLocales}
-            rowHref={c => `/dashboard/compras/local/${c.id}`}
-            title="Compras registradas"
-            emptyState={{
-              icon:  PackagePlus,
-              title: 'No has registrado compras manuales',
-              hint:  'Usa "Nueva compra" para registrar entradas de inventario y actualizar tu stock.',
-            }}
-          />
-        </TabsContent>
+        {canVerLocales && tab === 'registradas' && (
+          <Box sx={{ mt: 2 }}>
+            <DataTable<CompraLocal>
+              data={comprasLocales}
+              loading={permLoading || localesLoading}
+              columns={columnsLocales}
+              rowHref={c => `/dashboard/compras/local/${c.id}`}
+              title="Compras registradas"
+              emptyState={{
+                icon:  PackagePlus,
+                title: 'No has registrado compras manuales',
+                hint:  'Usa "Nueva compra" para registrar entradas de inventario y actualizar tu stock.',
+              }}
+            />
+          </Box>
         )}
-      </Tabs>
-    </section>
+      </Box>
+    </Box>
   );
 }

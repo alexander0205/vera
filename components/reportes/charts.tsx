@@ -1,4 +1,5 @@
 'use client';
+import Box from '@mui/material/Box';
 /**
  * Gráficas reutilizables de reportes (recharts). Client-only.
  * Tema teal alineado al resto del dashboard. Montos siempre en CENTAVOS.
@@ -117,5 +118,5 @@ export function AgingChart({ buckets }: { buckets: Record<string, number> }) {
 }
 
 function Vacio() {
-  return <div className="h-[220px] flex items-center justify-center text-sm text-gray-400">Sin datos en este rango.</div>;
+  return <Box sx={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', color: '#9ca3af' }}>Sin datos en este rango.</Box>;
 }

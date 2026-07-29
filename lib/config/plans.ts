@@ -202,7 +202,9 @@ export const FREE_PLAN: PlanDef = {
   name:        'Gratis',
   price:       0,
   priceEnvKey: '',
-  limits: { docs: 0, users: 0, trialDocs: 0 },
+  // users: 1 → el propietario. Sin plan activo el negocio existe pero no puede
+  // invitar a nadie más (antes 0 hacía que el contador mostrara "1/0 usuarios").
+  limits: { docs: 0, users: 1, trialDocs: 0 },
   features:    [],
   ui: {
     description:       'Sin plan activo',

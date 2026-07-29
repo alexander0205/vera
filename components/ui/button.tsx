@@ -1,59 +1,110 @@
-import * as React from "react";
-import { Slot as SlotPrimitive } from "radix-ui";;
-import { cva, type VariantProps } from "class-variance-authority";
+'use client';
 
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import MuiButton from '@mui/material/Button';
+import MuiIconButton from '@mui/material/IconButton';
+import { Slot as RadixSlot } from 'radix-ui';
+import type { SxProps, Theme } from '@mui/material/styles';
 
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
-  {
-    variants: {
-      variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
-        outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline"
-      },
-      size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9"
-      }
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default"
-    }
-  }
-);
+type ShadcnVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+type ShadcnSize   = 'default' | 'sm' | 'lg' | 'icon';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?:  ShadcnVariant;
+  size?:     ShadcnSize;
+  asChild?:  boolean;
+  children?: React.ReactNode;
+  className?: string;
+}
+
+function getMuiVariant(v?: ShadcnVariant): 'contained' | 'outlined' | 'text' {
+  if (v === 'outline' || v === 'secondary') return 'outlined';
+  if (v === 'ghost'   || v === 'link')      return 'text';
+  return 'contained';
+}
+
+function getMuiColor(v?: ShadcnVariant): 'primary' | 'error' | 'inherit' {
+  if (v === 'destructive') return 'error';
+  if (v === 'secondary' || v === 'ghost') return 'inherit';
+  return 'primary';
+}
+
+function getMuiSize(s?: ShadcnSize): 'small' | 'medium' | 'large' {
+  if (s === 'sm') return 'small';
+  if (s === 'lg') return 'large';
+  return 'medium';
+}
+
+function getLinkSx(v?: ShadcnVariant): SxProps<Theme> {
+  if (v === 'link') return { textDecoration: 'underline', '&:hover': { textDecoration: 'underline' } };
+  return {};
+}
 
 function Button({
   className,
   variant,
   size,
   asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
-  }) {
-  const Comp = asChild ? SlotPrimitive.Slot : "button";
+  children,
+  type = 'button',
+  disabled,
+  onClick,
+  ...rest
+}: ButtonProps) {
+  if (asChild) {
+    const child = React.Children.only(children) as React.ReactElement<Record<string, unknown>>;
+    const muiVariant  = getMuiVariant(variant);
+    const muiColor    = getMuiColor(variant);
+    const muiSize     = getMuiSize(size);
+
+    return (
+      <MuiButton
+        variant={muiVariant}
+        color={muiColor}
+        size={muiSize}
+        disabled={disabled}
+        sx={getLinkSx(variant)}
+        component={React.forwardRef<HTMLElement, Record<string, unknown>>((p, ref) =>
+          React.cloneElement(child, { ...p, ref })
+        )}
+        className={className}
+      >
+        {(child.props as { children?: React.ReactNode }).children ?? children}
+      </MuiButton>
+    );
+  }
+
+  if (size === 'icon') {
+    return (
+      <MuiIconButton
+        size="small"
+        disabled={disabled}
+        onClick={onClick as React.MouseEventHandler<HTMLButtonElement>}
+        className={className}
+        type={type as 'button' | 'submit' | 'reset'}
+        {...(rest as object)}
+      >
+        {children}
+      </MuiIconButton>
+    );
+  }
 
   return (
-    <Comp
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
+    <MuiButton
+      variant={getMuiVariant(variant)}
+      color={getMuiColor(variant)}
+      size={getMuiSize(size)}
+      disabled={disabled}
+      onClick={onClick as React.MouseEventHandler<HTMLButtonElement>}
+      type={type as 'button' | 'submit' | 'reset'}
+      sx={getLinkSx(variant)}
+      className={className}
+      {...(rest as object)}
+    >
+      {children}
+    </MuiButton>
   );
 }
 
-export { Button, buttonVariants };
+export { Button };
+export type { ButtonProps };

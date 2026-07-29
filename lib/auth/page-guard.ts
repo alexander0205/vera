@@ -14,12 +14,15 @@
  */
 import 'server-only';
 import { redirect } from 'next/navigation';
-import { db } from '@/lib/db/drizzle';
-import { users, teamMembers } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { getUserModules, type ModuleKey } from '@/lib/auth/modules';
+
+// Perf: getUser (platformRole), getTeamIdForUser y getTeamRoleForUser están
+// memoizados con React.cache — llamarlos en cada guard es 0 queries extra
+// dentro del mismo request. Antes cada guard consultaba users + team_members
+// por su cuenta (2 queries × cada guard por página).
 
 /**
  * Verifica el permiso. Si falla:
@@ -34,19 +37,8 @@ export async function requirePermission(perm: Permission): Promise<void> {
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/dashboard/empresas');
 
-  const [u] = await db
-    .select({ platformRole: users.platformRole })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
-
-  const [m] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-    .limit(1);
-
-  if (!(await userCanForTeam(teamId, u?.platformRole, m?.role, perm))) {
+  const teamRole = await getTeamRoleForUser();
+  if (!(await userCanForTeam(teamId, user.platformRole, teamRole, perm))) {
     redirect('/dashboard');
   }
 }
@@ -64,20 +56,29 @@ export async function requirePermissionAny(perms: Permission[]): Promise<void> {
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/dashboard/empresas');
 
-  const [u] = await db
-    .select({ platformRole: users.platformRole })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
-
-  const [m] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-    .limit(1);
-
-  const ok = perms.some(perm => userCan(u?.platformRole, m?.role, perm));
+  const teamRole = await getTeamRoleForUser();
+  const ok = perms.some(perm => userCan(user.platformRole, teamRole, perm));
   if (!ok) redirect('/dashboard');
+}
+
+/**
+ * Gate de módulo a nivel de página. Verifica que el usuario tenga acceso al
+ * módulo (empresa ∩ rol). Si falla redirige a la ruta indicada (default:
+ * /sin-acceso, que muestra el switcher de módulos disponibles).
+ */
+export async function requireModule(
+  mod: ModuleKey,
+  fallback = '/sin-acceso',
+): Promise<void> {
+  const user = await getUser();
+  if (!user) redirect('/sign-in');
+
+  const teamId = await getTeamIdForUser();
+  if (!teamId) redirect('/dashboard/empresas');
+
+  const teamRole = await getTeamRoleForUser();
+  const mods = await getUserModules(teamId, user.platformRole, teamRole);
+  if (!mods.includes(mod)) redirect(fallback);
 }
 
 /**
@@ -96,17 +97,6 @@ export async function hasPermission(perm: Permission): Promise<boolean> {
   const teamId = await getTeamIdForUser();
   if (!teamId) return false;
 
-  const [u] = await db
-    .select({ platformRole: users.platformRole })
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
-
-  const [m] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
-    .limit(1);
-
-  return userCanForTeam(teamId, u?.platformRole, m?.role, perm);
+  const teamRole = await getTeamRoleForUser();
+  return userCanForTeam(teamId, user.platformRole, teamRole, perm);
 }

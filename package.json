@@ -20,6 +20,9 @@
     "corre:prod": "bash scripts/run-prod.sh start",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "db:setup": "npx tsx lib/db/setup.ts",
     "db:seed": "npx tsx lib/db/seed.ts",
     "db:generate": "drizzle-kit generate",
@@ -30,6 +33,11 @@
     "branch:setup": "bash scripts/branch-setup.sh"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.1.1",
+    "@mui/material": "^9.1.1",
+    "@mui/material-nextjs": "^9.1.1",
     "@react-pdf/renderer": "^4.4.0",
     "@tailwindcss/postcss": "4.1.7",
     "@types/adm-zip": "^0.5.8",
@@ -77,6 +85,7 @@
     "@playwright/test": "^1.59.1",
     "@types/papaparse": "^5.5.2",
     "@types/pdf-parse": "^1.1.5",
-    "@types/qrcode": "^1.5.6"
+    "@types/qrcode": "^1.5.6",
+    "vitest": "^4.1.10"
   }
 }

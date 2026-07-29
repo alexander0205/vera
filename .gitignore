@@ -58,4 +58,12 @@ scripts/check-user-role.ts
 scripts/check-cert-status.ts
 
 .claire/
+
+# Playwright artifacts
+test-results/
+playwright-report/
+
 .release-notes.md
+
+# Capturas de QA (evidencia local, no versionar)
+test-results/

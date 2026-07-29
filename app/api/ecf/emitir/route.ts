@@ -25,6 +25,7 @@ import { logAudit, getIp } from '@/lib/audit';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
 import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
+import { getDgiiReadiness } from '@/lib/ecf/readiness';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago, recalcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
@@ -276,6 +277,26 @@ export async function POST(request: NextRequest) {
         { error: 'tipoEcf sin-ncf solo puede usarse en modo borrador. Selecciona un tipo de e-CF para emitir a la DGII.' },
         { status: 400 },
       );
+    }
+
+    // ── Gate DGII (defensa en profundidad del gate de UI) ────────────────────
+    // Emitir un tipo fiscal exige empresa lista para DGII (registro en ecf-api
+    // + secuencia fiscal activa). La UI ya oculta E31/E32 cuando no lo está;
+    // esto corta requests directos a la API. skipRangeValidation (set de
+    // pruebas de habilitación) se exime: emite e-CF de prueba antes de tener
+    // secuencias de producción.
+    if (data.modo !== 'borrador' && data.tipoEcf !== 'sin-ncf' && !skipRangeValidation) {
+      const readiness = await getDgiiReadiness(teamId);
+      if (!readiness.ready) {
+        return NextResponse.json(
+          {
+            error: 'Tu empresa aún no está conectada a la DGII. Completa la habilitación para emitir e-CF, o guarda la venta sin NCF.',
+            code: 'DGII_NO_LISTA',
+            detalles: readiness,
+          },
+          { status: 422 },
+        );
+      }
     }
 
     // ── Fecha de emisión personalizada (sin-ncf) ─────────────────────────────

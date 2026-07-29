@@ -4,6 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
 
+import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+
 interface Props {
   navLinks: { href: string; label: string }[];
   isLoggedIn: boolean;
@@ -15,59 +18,126 @@ export function SiteHeaderClient({ navLinks, isLoggedIn }: Props) {
   return (
     <>
       {/* Botón hamburger */}
-      <button
-        className="md:hidden p-2 -mr-2 text-gray-600 hover:text-gray-900"
+      <IconButton
         onClick={() => setOpen(!open)}
         aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
+        sx={{
+          display: { md: 'none' },
+          p: 1,
+          mr: -1,
+          color: '#4b5563',
+          '&:hover': { color: '#111827', bgcolor: 'transparent' },
+        }}
       >
-        {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-      </button>
+        {open ? <X style={{ width: 24, height: 24 }} /> : <Menu style={{ width: 24, height: 24 }} />}
+      </IconButton>
 
       {/* Panel móvil */}
       {open && (
-        <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-lg md:hidden">
-          <div className="px-4 py-4 space-y-1">
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            bgcolor: '#ffffff',
+            borderBottom: '1px solid #e5e7eb',
+            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+            display: { md: 'none' },
+          }}
+        >
+          <Box sx={{ px: 2, py: 2, '& > * + *': { mt: 0.5 } }}>
             {navLinks.map((link) => (
-              <Link
+              <Box
                 key={link.href}
+                component={Link}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
+                sx={{
+                  display: 'block',
+                  px: 1.5,
+                  py: 1.25,
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  color: '#374151',
+                  borderRadius: '8px',
+                  textDecoration: 'none',
+                  '&:hover': { bgcolor: '#f9fafb' },
+                }}
               >
                 {link.label}
-              </Link>
+              </Box>
             ))}
 
-            <div className="pt-3 mt-3 border-t border-gray-100 space-y-2">
+            <Box sx={{ pt: 1.5, mt: 1.5, borderTop: '1px solid #f3f4f6', '& > * + *': { mt: 1 } }}>
               {isLoggedIn ? (
-                <Link
+                <Box
+                  component={Link}
                   href="/dashboard"
                   onClick={() => setOpen(false)}
-                  className="block w-full text-center bg-teal-600 text-white text-sm font-medium px-4 py-2.5 rounded-full"
+                  sx={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'center',
+                    bgcolor: '#0d9488',
+                    color: '#ffffff',
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    px: 2,
+                    py: 1.25,
+                    borderRadius: '9999px',
+                    textDecoration: 'none',
+                  }}
                 >
                   Ir al dashboard
-                </Link>
+                </Box>
               ) : (
                 <>
-                  <Link
+                  <Box
+                    component={Link}
                     href="/sign-in"
                     onClick={() => setOpen(false)}
-                    className="block w-full text-center text-sm font-medium text-gray-700 px-4 py-2.5 rounded-full border border-gray-200"
+                    sx={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'center',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: '#374151',
+                      px: 2,
+                      py: 1.25,
+                      borderRadius: '9999px',
+                      border: '1px solid #e5e7eb',
+                      textDecoration: 'none',
+                    }}
                   >
                     Iniciar sesión
-                  </Link>
-                  <Link
+                  </Box>
+                  <Box
+                    component={Link}
                     href="/sign-up"
                     onClick={() => setOpen(false)}
-                    className="block w-full text-center bg-teal-600 text-white text-sm font-medium px-4 py-2.5 rounded-full"
+                    sx={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'center',
+                      bgcolor: '#0d9488',
+                      color: '#ffffff',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      px: 2,
+                      py: 1.25,
+                      borderRadius: '9999px',
+                      textDecoration: 'none',
+                    }}
                   >
                     Empezar gratis →
-                  </Link>
+                  </Box>
                 </>
               )}
-            </div>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Box>
       )}
     </>
   );

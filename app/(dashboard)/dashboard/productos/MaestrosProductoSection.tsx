@@ -10,11 +10,14 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Loader2, Plus, Check } from 'lucide-react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import { Plus, Check } from 'lucide-react';
 
 interface Valor { id: number; valor: string; }
 interface Maestro {
@@ -115,83 +118,100 @@ export default function MaestrosProductoSection({ productId }: { productId: numb
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-        <Loader2 className="h-4 w-4 animate-spin" /> Cargando atributos…
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.875rem', color: '#9ca3af', py: 1 }}>
+        <CircularProgress size={16} sx={{ color: '#9ca3af' }} /> Cargando atributos…
+      </Box>
     );
   }
 
   if (maestros.length === 0) return null;
 
   return (
-    <div className="space-y-3 border-t pt-3">
-      <div className="flex items-center justify-between">
-        <Label>Atributos</Label>
-        {savingState === 'saving' && <span className="text-xs text-gray-400 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />Guardando…</span>}
-        {savingState === 'saved'  && <span className="text-xs text-green-600 flex items-center gap-1"><Check className="h-3 w-3" />Guardado</span>}
-        {savingState === 'error'  && <span className="text-xs text-red-600">Error al guardar</span>}
-      </div>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, borderTop: '1px solid #e5e7eb', pt: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>Atributos</Typography>
+        {savingState === 'saving' && <Box component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 0.5 }}><CircularProgress size={12} sx={{ color: '#9ca3af' }} />Guardando…</Box>}
+        {savingState === 'saved'  && <Box component="span" sx={{ fontSize: '0.75rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: 0.5 }}><Check size={12} />Guardado</Box>}
+        {savingState === 'error'  && <Box component="span" sx={{ fontSize: '0.75rem', color: '#dc2626' }}>Error al guardar</Box>}
+      </Box>
 
       {visibles.length === 0 && (
-        <p className="text-xs text-gray-400">No hay atributos aplicables. Agrega uno manual abajo.</p>
+        <Typography variant="caption" sx={{ color: '#9ca3af' }}>No hay atributos aplicables. Agrega uno manual abajo.</Typography>
       )}
 
       {visibles.map((m) => {
         const set = sel.get(m.id) ?? new Set<number>();
         return (
-          <div key={m.id} className="space-y-1.5">
-            <Label className="text-xs text-gray-500">{m.nombre}</Label>
+          <Box key={m.id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography variant="caption" sx={{ color: '#6b7280' }}>{m.nombre}</Typography>
             {m.multiple ? (
               m.valores.length === 0 ? (
-                <p className="text-xs text-gray-300">Sin valores definidos en este maestro.</p>
+                <Typography variant="caption" sx={{ color: '#d1d5db' }}>Sin valores definidos en este maestro.</Typography>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
                   {m.valores.map((v) => {
                     const on = set.has(v.id);
                     return (
-                      <button
+                      <Button
                         key={v.id}
                         type="button"
                         onClick={() => toggleMulti(m.id, v.id)}
-                        className={`text-sm rounded-full px-3 py-1 border transition ${
-                          on ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-300 hover:border-teal-400'
-                        }`}
+                        disableElevation
+                        variant={on ? 'contained' : 'outlined'}
+                        sx={{
+                          textTransform: 'none',
+                          borderRadius: '9999px',
+                          px: 1.5,
+                          py: 0.5,
+                          minWidth: 0,
+                          fontSize: '0.875rem',
+                          ...(on
+                            ? { bgcolor: '#0d9488', color: '#fff', borderColor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }
+                            : { bgcolor: '#fff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#2dd4bf', bgcolor: '#fff' } }),
+                        }}
                       >
                         {v.valor}
-                      </button>
+                      </Button>
                     );
                   })}
-                </div>
+                </Box>
               )
             ) : (
-              <Select
-                value={set.size ? String([...set][0]) : NONE}
-                onValueChange={(val) => setSingle(m.id, val === NONE ? null : parseInt(val))}
-              >
-                <SelectTrigger><SelectValue placeholder="Seleccionar…" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>— Ninguno —</SelectItem>
-                  {m.valores.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.valor}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={set.size ? String([...set][0]) : NONE}
+                  onChange={(e) => setSingle(m.id, e.target.value === NONE ? null : parseInt(e.target.value))}
+                  sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+                >
+                  <MenuItem value={NONE}>— Ninguno —</MenuItem>
+                  {m.valores.map((v) => <MenuItem key={v.id} value={String(v.id)}>{v.valor}</MenuItem>)}
+                </Select>
+              </FormControl>
             )}
-          </div>
+          </Box>
         );
       })}
 
       {agregables.length > 0 && (
-        <div className="pt-1">
-          <Select value="" onValueChange={(v) => setExtra((p) => new Set(p).add(parseInt(v)))}>
-            <SelectTrigger className="w-auto gap-2 text-teal-700 border-dashed">
-              <Plus className="h-4 w-4" />
-              <SelectValue placeholder="Agregar atributo" />
-            </SelectTrigger>
-            <SelectContent>
-              {agregables.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+        <Box sx={{ pt: 0.5 }}>
+          <FormControl size="small">
+            <Select
+              value=""
+              displayEmpty
+              onChange={(e) => setExtra((p) => new Set(p).add(parseInt(e.target.value)))}
+              renderValue={() => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#0f766e' }}>
+                  <Plus size={16} />
+                  Agregar atributo
+                </Box>
+              )}
+              sx={{ borderRadius: '8px', fontSize: '0.875rem', color: '#0f766e', '& .MuiOutlinedInput-notchedOutline': { borderStyle: 'dashed', borderColor: '#99f6e4' } }}
+            >
+              {agregables.map((m) => <MenuItem key={m.id} value={String(m.id)}>{m.nombre}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

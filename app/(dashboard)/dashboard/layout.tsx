@@ -7,15 +7,35 @@ import useSWR from 'swr';
 import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import {
   LayoutDashboard, Users, Package,
-  Settings, Activity, Shield, Menu, Plus, ChevronDown, ChevronRight,
+  Settings, Activity, Shield, Menu as MenuIcon, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
   PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store, BookOpen,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
+import { ModuleSwitcher } from '@/components/module-switcher';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { moduleUrl } from '@/lib/config/modules';
+
+// MUI imports
+import Box from '@mui/material/Box';
+import Drawer from '@mui/material/Drawer';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
+import Divider from '@mui/material/Divider';
+import Avatar from '@mui/material/Avatar';
+import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
+import Collapse from '@mui/material/Collapse';
+import InputBase from '@mui/material/InputBase';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,7 +43,7 @@ type NavGroup = {
   id: string;
   label: string;
   icon: React.ElementType;
-  children: { href: string; label: string; plusHref?: string }[];
+  children: { href: string; label: string; plusHref?: string; shared?: boolean }[];
 };
 
 type NavItem = {
@@ -92,8 +112,8 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
-      { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
-      { href: '/dashboard/equipo/permisos', label: 'Roles y permisos' },
+      // Usuarios, roles y plan viven en el área de Administración (/cuenta):
+      // son del negocio, no de Facturación. Se llega por el switcher de módulo.
       { href: '/dashboard/api-keys',      label: 'API Keys' },
       { href: '/dashboard/webhooks',      label: 'Webhooks' },
       { href: '/dashboard/impresoras',    label: 'Impresoras' },
@@ -115,8 +135,6 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   // Top items
   '/dashboard/clientes':              'clientes:ver',
   '/dashboard/reportes':              'reportes:ver',
-
-  // Ingresos
   '/dashboard/facturas':              'facturas:ver',
   '/dashboard/facturas/nueva':        'facturas:crear',
   '/dashboard/cuentas-por-cobrar':    'facturas:ver',
@@ -127,8 +145,6 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/cotizaciones':          'cotizaciones:ver',
   '/dashboard/cotizaciones/nueva':    'cotizaciones:gestionar',
   '/dashboard/facturas-recurrentes':  'facturas:ver',
-
-  // Inventario
   '/dashboard/productos':             'productos:ver',
   '/dashboard/categorias':            'productos:ver',
   '/dashboard/almacenes':             'productos:ver',
@@ -196,45 +212,7 @@ function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => voi
   }, [ref, cb]);
 }
 
-// ─── Company switcher (top bar, light theme) ──────────────────────────────────
-
-// ─── Helpers visuales para empresas ──────────────────────────────────────────
-
-function CompanyAvatar({ team, size = 'sm' }: { team: Team; size?: 'sm' | 'md' }) {
-  const dim  = size === 'md' ? 'h-7 w-7' : 'h-6 w-6';
-  const text = size === 'md' ? 'text-xs'  : 'text-[11px]';
-  const label = (team.razonSocial ?? team.rnc ?? 'E')[0]?.toUpperCase() ?? 'E';
-
-  if (team.logo) {
-    return (
-      <img
-        src={team.logo}
-        alt={team.razonSocial ?? 'Logo'}
-        className={`${dim} rounded-md object-cover shrink-0`}
-      />
-    );
-  }
-  return (
-    <div className={`${dim} rounded-md bg-teal-600 flex items-center justify-center shrink-0`}>
-      <span className={`text-white font-bold ${text}`}>{label}</span>
-    </div>
-  );
-}
-
-function planBadgeStyle(planName: string | null) {
-  const p = planName?.toLowerCase();
-  if (!p) return null;
-  if (p === 'pro')      return 'bg-purple-50 text-purple-700 border-purple-200';
-  if (p === 'business') return 'bg-teal-50 text-teal-700 border-teal-100';
-  if (p === 'invoice')  return 'bg-orange-50 text-orange-700 border-orange-200';
-  if (p === 'starter')  return 'bg-blue-50 text-blue-700 border-blue-200';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
-}
-
-// ─── Plan helpers ─────────────────────────────────────────────────────────────
-
 function teamHasPlan(t: Team) {
-  // Empresa creada manualmente por admin → acceso sin Stripe
   if (t.subscriptionStatus === 'admin') return true;
   const name = t.planName?.toLowerCase();
   if (!name || name === 'gratis') return false;
@@ -243,7 +221,16 @@ function teamHasPlan(t: Team) {
   return true;
 }
 
-// ─── Company switcher ─────────────────────────────────────────────────────────
+function planColor(planName: string | null): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {
+  const p = planName?.toLowerCase();
+  if (!p) return 'default';
+  if (p === 'pro')      return 'secondary';
+  if (p === 'business') return 'primary';
+  if (p === 'starter')  return 'info';
+  return 'default';
+}
+
+// ─── Company Switcher ─────────────────────────────────────────────────────────
 
 function CompanySwitcher({
   teams,
@@ -255,11 +242,9 @@ function CompanySwitcher({
   onSwitch: (teamId: number) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen]     = useState(false);
-  const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-
-  useOutsideClick(ref, () => { setOpen(false); setSearch(''); });
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [search, setSearch]     = useState('');
+  const open = Boolean(anchorEl);
 
   const active   = teams.find(t => t.id === activeTeamId) ?? teams[0];
   const filtered = teams.filter(t =>
@@ -269,8 +254,8 @@ function CompanySwitcher({
   );
 
   async function switchTeam(teamId: number) {
-    if (teamId === activeTeamId) { setOpen(false); setSearch(''); return; }
-    setOpen(false);
+    if (teamId === activeTeamId) { setAnchorEl(null); setSearch(''); return; }
+    setAnchorEl(null);
     setSearch('');
     await fetch('/api/empresa/switch', {
       method: 'POST',
@@ -282,102 +267,159 @@ function CompanySwitcher({
     if (!target || !teamHasPlan(target)) {
       router.push('/pricing?reason=no-plan');
     } else {
-      // Siempre ir al inicio y refrescar data del servidor al cambiar de empresa
       router.push('/dashboard');
       router.refresh();
     }
   }
 
+  const label = active?.razonSocial ?? active?.rnc ?? 'Mi empresa';
+
   return (
-    <div ref={ref} className="relative">
-      {/* Trigger */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 shadow-sm transition-colors max-w-xs"
+    <>
+      <Box
+        component="button"
+        onClick={(e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget)}
+        sx={{
+          display:       'flex',
+          alignItems:    'center',
+          gap:           1,
+          px:            1.5,
+          py:            0.75,
+          borderRadius:  '8px',
+          border:        '1px solid',
+          borderColor:   'divider',
+          bgcolor:       'background.paper',
+          cursor:        'pointer',
+          transition:    'all 0.15s',
+          maxWidth:      240,
+          '&:hover':     { bgcolor: 'grey.50', borderColor: 'grey.400' },
+        }}
       >
-        <CompanyAvatar team={active ?? { id: 0, razonSocial: null, rnc: null, planName: null, role: '', logo: null }} size="sm" />
-        <span className="text-sm font-semibold text-gray-800 truncate max-w-[140px]">
-          {active?.razonSocial ?? active?.rnc ?? 'Mi empresa'}
-        </span>
-        {active && teamHasPlan(active) && planBadgeStyle(active.planName) && (
-          <span className={`hidden sm:inline text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${planBadgeStyle(active.planName)}`}>
-            {active.planName}
-          </span>
+        {active?.logo ? (
+          <img src={active.logo} alt={label} style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'cover' }} />
+        ) : (
+          <Avatar sx={{ width: 24, height: 24, fontSize: '0.6875rem', fontWeight: 700, bgcolor: 'primary.main', borderRadius: '6px' }}>
+            {(label[0] ?? 'E').toUpperCase()}
+          </Avatar>
         )}
-        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{ maxWidth: 140, flex: 1, textAlign: 'left', fontWeight: 600, color: 'text.primary' }}
+        >
+          {label}
+        </Typography>
+        {active && teamHasPlan(active) && active.planName && (
+          <Chip
+            label={active.planName}
+            size="small"
+            color={planColor(active.planName)}
+            sx={{ height: 18, fontSize: '0.625rem', fontWeight: 700, display: { xs: 'none', sm: 'flex' } }}
+          />
+        )}
+        <ChevronDown
+          style={{
+            width:      14,
+            height:     14,
+            color:      '#9ca3af',
+            transform:  open ? 'rotate(180deg)' : undefined,
+            transition: 'transform 0.2s',
+            flexShrink: 0,
+          }}
+        />
+      </Box>
 
-      {/* Dropdown */}
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-xl shadow-xl border-2 border-gray-200 z-50 overflow-hidden">
-          {/* Search */}
-          {teams.length > 3 && (
-            <div className="p-2 border-b border-gray-100">
-              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-1.5">
-                <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <input
-                  autoFocus
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar empresa..."
-                  className="flex-1 text-sm bg-transparent outline-none text-gray-700 placeholder-gray-400"
-                />
-              </div>
-            </div>
-          )}
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={() => { setAnchorEl(null); setSearch(''); }}
+        slotProps={{
+          paper: {
+            elevation: 0,
+            sx: {
+              borderRadius: '12px',
+              border:       '1px solid #e5e7eb',
+              boxShadow:    '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+              minWidth:     280,
+              mt:           0.5,
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+      >
+        {teams.length > 3 && (
+          <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{
+              display: 'flex', alignItems: 'center', gap: 1,
+              bgcolor: 'grey.50', borderRadius: '8px', px: 1.5, py: 0.75,
+            }}>
+              <Search style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
+              <InputBase
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar empresa..."
+                sx={{ flex: 1, fontSize: '0.875rem' }}
+              />
+            </Box>
+          </Box>
+        )}
 
-          {/* Lista */}
-          <div className="py-1 max-h-60 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-400 text-center">Sin resultados</p>
-            ) : filtered.map(t => {
-              const hasPlan = teamHasPlan(t);
-              const isActive = t.id === activeTeamId;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => switchTeam(t.id)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
-                >
-                  <CompanyAvatar team={t} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {t.razonSocial ?? t.rnc ?? 'Sin nombre'}
-                    </p>
-                    {t.rnc && <p className="text-xs text-gray-400 mt-0.5">RNC {t.rnc}</p>}
-                  </div>
-                  {isActive && (
-                    <Check className="h-4 w-4 text-teal-600 shrink-0" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Footer — gestión de empresas movida al panel admin (no visible aquí) */}
-        </div>
-      )}
-    </div>
+        <Box sx={{ py: 0.5, maxHeight: 240, overflowY: 'auto' }}>
+          {filtered.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5, textAlign: 'center' }}>
+              Sin resultados
+            </Typography>
+          ) : filtered.map(t => (
+            <MenuItem
+              key={t.id}
+              onClick={() => switchTeam(t.id)}
+              sx={{
+                borderRadius: '6px',
+                mx: 0.5,
+                gap: 1.5,
+                py: 1,
+                '&:hover': { bgcolor: 'grey.50' },
+              }}
+            >
+              {t.logo ? (
+                <img src={t.logo} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} />
+              ) : (
+                <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', fontWeight: 700, bgcolor: 'primary.main', borderRadius: '6px', flexShrink: 0 }}>
+                  {((t.razonSocial ?? t.rnc ?? 'E')[0] ?? 'E').toUpperCase()}
+                </Avatar>
+              )}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+                  {t.razonSocial ?? t.rnc ?? 'Sin nombre'}
+                </Typography>
+                {t.rnc && (
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    RNC {t.rnc}
+                  </Typography>
+                )}
+              </Box>
+              {t.id === activeTeamId && (
+                <Check style={{ width: 16, height: 16, color: '#0d9488', flexShrink: 0 }} />
+              )}
+            </MenuItem>
+          ))}
+        </Box>
+      </Menu>
+    </>
   );
 }
 
-// ─── Profile dropdown (top bar) ───────────────────────────────────────────────
+// ─── Profile Dropdown ─────────────────────────────────────────────────────────
 
-function ProfileDropdown({
-  user,
-  canSeeActivity,
-}: {
-  user: UserInfo | null;
-  canSeeActivity: boolean;
-}) {
+function ProfileDropdown({ user }: { user: UserInfo | null }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useOutsideClick(ref, () => setOpen(false));
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const open = Boolean(anchorEl);
 
   async function handleSignOut() {
-    setOpen(false);
+    setAnchorEl(null);
     await fetch('/api/user', { method: 'DELETE' });
     router.push('/sign-in');
     router.refresh();
@@ -387,177 +429,136 @@ function ProfileDropdown({
     ...(user?.platformRole === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Panel admin' }] : []),
     { href: '/dashboard/perfil',      icon: UserCircle, label: 'Mi perfil' },
     { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
-    ...(canSeeActivity ? [{ href: '/dashboard/activity', icon: Activity, label: 'Actividad' }] : []),
+    { href: '/dashboard/activity',    icon: Activity,   label: 'Actividad' },
     { href: '/dashboard/security',    icon: Shield,     label: 'Seguridad' },
-    // /dashboard/empresas oculto — gestión solo desde panel admin
   ];
 
+  const initials = user ? getInitials(user.name, user.email) : '?';
+
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+    <>
+      <Tooltip title={user?.name ?? user?.email ?? ''} placement="bottom">
+        <IconButton
+          onClick={(e) => setAnchorEl(e.currentTarget)}
+          size="small"
+          sx={{ p: 0.5 }}
+        >
+          <Avatar
+            sx={{
+              width:    32,
+              height:   32,
+              bgcolor:  'primary.main',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}
+          >
+            {initials}
+          </Avatar>
+        </IconButton>
+      </Tooltip>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={() => setAnchorEl(null)}
+        onClick={() => setAnchorEl(null)}
+        slotProps={{
+          paper: {
+            elevation: 0,
+            sx: {
+              borderRadius: '12px',
+              border:       '1px solid #e5e7eb',
+              boxShadow:    '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+              minWidth:     220,
+              mt:           0.5,
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        <div className="h-7 w-7 rounded-full bg-teal-600 flex items-center justify-center shrink-0">
-          <span className="text-white text-xs font-semibold">
-            {user ? getInitials(user.name, user.email) : '?'}
-          </span>
-        </div>
-        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+            {user?.name ?? user?.email}
+          </Typography>
+          {user?.name && (
+            <Typography variant="caption" noWrap sx={{ display: 'block', color: 'text.secondary' }}>
+              {user.email}
+            </Typography>
+          )}
+        </Box>
 
-      {open && (
-        <div className="absolute top-full right-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-900 truncate">{user?.name ?? user?.email}</p>
-            {user?.name && <p className="text-xs text-gray-400 truncate">{user.email}</p>}
-          </div>
-
-          {/* Items */}
-          <div className="py-1">
-            {menuItems.map(item => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <item.icon className="h-4 w-4 text-gray-400" />
-                {item.label}
-              </Link>
-            ))}
-          </div>
-
-          {/* Sign out */}
-          <div className="border-t border-gray-100 py-1">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+        <Box sx={{ py: 0.5 }}>
+          {menuItems.map(item => (
+            <MenuItem
+              key={item.href}
+              component={Link}
+              href={item.href}
+              sx={{ borderRadius: '6px', mx: 0.5, gap: 1.5, py: '6px', fontSize: '0.875rem' }}
             >
-              <LogOut className="h-4 w-4" />
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+              <ListItemIcon sx={{ minWidth: 'auto' }}>
+                <item.icon style={{ width: 16, height: 16, color: '#6b7280' }} />
+              </ListItemIcon>
+              {item.label}
+            </MenuItem>
+          ))}
+        </Box>
+
+        <Divider sx={{ my: 0 }} />
+
+        <Box sx={{ py: 0.5 }}>
+          <MenuItem
+            onClick={handleSignOut}
+            sx={{
+              borderRadius: '6px',
+              mx: 0.5,
+              gap: 1.5,
+              py: '6px',
+              fontSize: '0.875rem',
+              color: 'error.main',
+              '&:hover': { bgcolor: '#fef2f2' },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 'auto' }}>
+              <LogOut style={{ width: 16, height: 16, color: '#ef4444' }} />
+            </ListItemIcon>
+            Cerrar sesión
+          </MenuItem>
+        </Box>
+      </Menu>
+    </>
   );
 }
 
-// ─── Ambiente DGII badge ──────────────────────────────────────────────────────
-// Advierte cuando el software NO está en Producción (comprobantes no fiscales).
-// Fuente: ecf-api /me → software.ambienteDefault (vía /api/sistema/ambiente).
+// ─── Ambiente Badge ───────────────────────────────────────────────────────────
 
 function AmbienteBadge({ ambiente }: { ambiente: string | null }) {
   if (!ambiente || ambiente === 'Produccion') return null;
 
-  const map: Record<string, { friendly: string; cls: string }> = {
-    TesteCF: { friendly: 'Pruebas',       cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-    CerteCF: { friendly: 'Certificación', cls: 'bg-purple-50 text-purple-700 border-purple-200' },
+  const map: Record<string, { label: string; color: 'warning' | 'secondary' | 'default' }> = {
+    TesteCF: { label: 'Pruebas',       color: 'warning' },
+    CerteCF: { label: 'Certificación', color: 'secondary' },
   };
-  const item = map[ambiente] ?? { friendly: 'No producción', cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+  const item = map[ambiente] ?? { label: 'No producción', color: 'default' as const };
 
   return (
-    <span
-      className={`inline-flex items-center gap-1 shrink-0 text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full border ${item.cls}`}
-      title={`Ambiente DGII: ${ambiente} — en vivo desde ecf-api (llamada directa al API, no de la DB local). Los comprobantes emitidos NO son fiscales.`}
-    >
-      <AlertCircle className="h-3 w-3 shrink-0" />
-      <span>{ambiente}</span>
-      <span className="hidden md:inline font-normal opacity-80">· {item.friendly}</span>
-    </span>
+    <Chip
+      icon={<AlertCircle style={{ width: 12, height: 12 }} />}
+      label={item.label}
+      size="small"
+      color={item.color}
+      variant="outlined"
+      sx={{ fontSize: '0.6875rem', fontWeight: 600, height: 22 }}
+    />
   );
 }
 
-// ─── Top bar ──────────────────────────────────────────────────────────────────
+// ─── Sidebar Content ──────────────────────────────────────────────────────────
 
-function DashboardTopBar({
-  teams,
-  activeTeamId,
-  user,
-  plan,
-  dgiiAmbiente,
-  cajaHabilitada,
-  onMenuClick,
-  onToggleSidebar,
-  sidebarCollapsed,
-  onSwitch,
-}: {
-  teams: Team[];
-  activeTeamId: number | null;
-  user: UserInfo | null;
-  plan: string | null;
-  dgiiAmbiente: string | null;
-  cajaHabilitada: boolean;
-  onMenuClick: () => void;
-  onToggleSidebar: () => void;
-  sidebarCollapsed: boolean;
-  onSwitch: (teamId: number) => void;
-}) {
-  const canSeeActivity = true;
+const SIDEBAR_WIDTH = 224;
+const RAIL_WIDTH = 68;   // ancho colapsado (solo iconos) del sidebar desktop
 
-  return (
-    <header className="h-12 bg-white border-b border-gray-200 flex items-center gap-3 px-4 shrink-0 z-30">
-      {/* Hamburger — mobile only */}
-      <button
-        onClick={onMenuClick}
-        className="lg:hidden text-gray-500 hover:text-gray-700 -ml-1"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
-      {/* Toggle sidebar — desktop only */}
-      <button
-        onClick={onToggleSidebar}
-        className="hidden lg:flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md p-1 -ml-1 transition-colors"
-        aria-label={sidebarCollapsed ? 'Mostrar menú' : 'Ocultar menú'}
-        title={sidebarCollapsed ? 'Mostrar menú' : 'Ocultar menú'}
-      >
-        {sidebarCollapsed
-          ? <PanelLeftOpen className="h-5 w-5" />
-          : <PanelLeftClose className="h-5 w-5" />}
-      </button>
-
-      {/* Logo — visible en mobile siempre, y en desktop cuando sidebar oculto */}
-      <div className={`flex items-center gap-2 mr-1 ${sidebarCollapsed ? '' : 'lg:hidden'}`}>
-        <div className="h-6 w-6 bg-teal-600 rounded-md flex items-center justify-center shrink-0">
-          <span className="text-white font-black text-xs">z</span>
-        </div>
-        <span className="text-gray-900 font-bold text-sm">Zero</span>
-      </div>
-
-      {/* Company switcher */}
-      <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={onSwitch} />
-
-      {/* Ambiente DGII — solo visible cuando no es Producción */}
-      <AmbienteBadge ambiente={dgiiAmbiente} />
-
-      {/* Turno de caja — solo aparece cuando queda poco para el límite */}
-      {cajaHabilitada && <TurnoCountdown />}
-
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Search trigger */}
-      <button
-        onClick={() => document.querySelector<HTMLButtonElement>('#global-search-trigger')?.click()}
-        className="hidden sm:flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
-      >
-        <Search className="h-4 w-4" />
-        <span className="hidden md:inline">Buscar</span>
-        <kbd className="hidden md:inline text-xs bg-gray-100 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
-      </button>
-
-      {/* Profile */}
-      <ProfileDropdown user={user} canSeeActivity={canSeeActivity} />
-    </header>
-  );
-}
-
-// ─── Sidebar (nav only) ───────────────────────────────────────────────────────
-
-function Sidebar({
+function SidebarContent({
   teams,
   activeTeamId,
   onClose,
@@ -566,20 +567,15 @@ function Sidebar({
   activeTeamId: number | null;
   onClose?: () => void;
 }) {
-  const pathname = usePathname();
-
-  const activeTeam = teams.find(t => t.id === activeTeamId) ?? teams[0];
-  const plan       = activeTeam?.planName;
-  // Nav siempre visible para todos los usuarios — sin gating por plan
-  const hasPlan    = true;
-
-  // Rol del usuario en el team activo — controla qué items se ven.
-  const role = activeTeam?.role;
+  const pathname    = usePathname();
+  const activeTeam  = teams.find(t => t.id === activeTeamId) ?? teams[0];
+  const role        = activeTeam?.role;
   const cajaHabilitada = activeTeam?.cajaHabilitada ?? false;
+  const hasPlan     = activeTeam ? teamHasPlan(activeTeam) : false;
 
   // Permisos efectivos (con overrides por empresa). null mientras carga →
   // canAccessHref usa el fallback estático del rol.
-  const { permissions, isLoading: permsLoading } = usePermissions();
+  const { permissions, modules, isLoading: permsLoading } = usePermissions();
   const permSet = useMemo(
     () => (permsLoading ? null : new Set<string>(permissions)),
     [permsLoading, permissions],
@@ -605,26 +601,30 @@ function Sidebar({
     ? { id: 'caja', label: 'Caja', icon: Wallet, children: cajaCandidatos }
     : null;
 
-  // Grupo Punto de venta — solo visible si posHabilitado y el rol tiene acceso.
-  const posHabilitado = activeTeam?.posHabilitado ?? false;
-  const posCandidatos: NavGroup['children'] = [
-    { href: '/pos',                      label: 'Abrir punto de venta' },
-    { href: '/dashboard/pos-terminales', label: 'Terminales' },
-  ].filter(c => can(c.href));
-
-  const posGroup: NavGroup | null = posHabilitado && posCandidatos.length > 0
-    ? { id: 'pos', label: 'Punto de venta', icon: Store, children: posCandidatos }
-    : null;
+  // Punto de Venta NO es un grupo dentro del nav de Facturación: es OTRO módulo.
+  // Como Alegra ("Ir a Alegra POS"), va como acceso separado al final del nav
+  // que cambia de producto (a /pos). Solo si el usuario tiene el módulo pos.
+  const puedeIrPos = (activeTeam?.posHabilitado ?? false)
+    && (permsLoading || modules.includes('pos'))
+    && can('/pos');
 
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
+  // Grupos que pertenecen SOLO a Facturación: si el usuario no tiene ese módulo
+  // (p.ej. un cajero solo-POS) no deben aparecer aunque un href suelto no esté
+  // gateado por permiso. Inventario/Configuración quedan (traen entidades
+  // compartidas como Productos). null en modules = aún cargando → no ocultar.
+  const FACTURACION_ONLY_GROUPS = new Set(['ingresos', 'compras']);
+  const sinFacturacion = !permsLoading && !modules.includes('facturacion');
+
   const topItemsVisibles  = TOP_ITEMS.filter(item => can(item.href));
   const staticGroupsVis   = GROUPS
+    .filter(g => !(sinFacturacion && FACTURACION_ONLY_GROUPS.has(g.id)))
     .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
     .filter(g => g.children.length > 0);
-  const groupsVisibles    = [posGroup, cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
+  const groupsVisibles    = [cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
 
   const defaultOpen = groupsVisibles.reduce((acc, g) => {
     acc[g.id] = g.children.some(c => pathname.startsWith(c.href));
@@ -633,177 +633,333 @@ function Sidebar({
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(defaultOpen);
 
-  function toggleGroup(id: string) {
+  const toggleGroup = (id: string) =>
     setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
-  }
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
   return (
-    <div className="flex flex-col h-full bg-teal-700">
+    <Box
+      sx={{
+        width:    SIDEBAR_WIDTH,
+        height:   '100%',
+        display:  'flex',
+        flexDirection: 'column',
+        bgcolor:  '#0f766e',
+        overflow: 'hidden',
+      }}
+    >
       {/* Logo */}
-      <div className="px-4 py-4 border-b border-teal-600/50">
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 bg-white rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-teal-700 font-black text-xs">z</span>
-          </div>
-          <span className="text-white font-bold text-sm tracking-wide">Zero</span>
-        </div>
-      </div>
+      <Box sx={{ px: 2, py: 2, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{
+            width:   28,
+            height:  28,
+            bgcolor: '#ffffff',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            <Typography sx={{ color: '#0f766e', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>z</Typography>
+          </Box>
+          {/* Identidad del producto: "Zero Facturación" (como Alegra Contabilidad). */}
+          <Box className="nav-text" sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+            <Typography sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '0.01em' }}>Zero</Typography>
+            <Typography sx={{ color: 'rgba(204,251,241,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Facturación</Typography>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
 
         {/* Sin plan — bloquear nav */}
         {!hasPlan && (
-          <div className="mx-1 mt-1 mb-3 rounded-xl bg-amber-500/20 border border-amber-400/30 px-4 py-4 flex flex-col gap-3">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-300 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-100 leading-snug">
+          <Box className="nav-children" sx={{ mx: 0.5, mt: 0.5, mb: 1.5, borderRadius: '12px', bgcolor: 'rgba(245,158,11,0.2)', border: '1px solid rgba(251,191,36,0.3)', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <AlertCircle style={{ width: 16, height: 16, color: '#fcd34d', marginTop: 2, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '0.75rem', color: '#fef3c7', lineHeight: 1.4 }}>
                 Esta empresa no tiene un plan activo. Activa un plan para acceder a todas las funciones.
-              </p>
-            </div>
-            <Link
+              </Typography>
+            </Box>
+            <Box
+              component={Link}
               href="/pricing?reason=no-plan"
               onClick={onClose}
-              className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-amber-900 text-xs font-semibold transition-colors"
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, width: '100%', py: 1, borderRadius: '8px', bgcolor: '#fbbf24', color: '#78350f', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none', transition: 'background-color 0.15s', '&:hover': { bgcolor: '#fcd34d' } }}
             >
-              <CreditCard className="h-3.5 w-3.5" />
+              <CreditCard style={{ width: 14, height: 14 }} />
               Activar plan
-            </Link>
-            {/* "Cambiar empresa" oculto — gestión solo desde admin */}
-          </div>
+            </Box>
+          </Box>
         )}
 
         {/* Nueva Factura — solo roles con facturas:crear */}
         {can('/dashboard/facturas/nueva') && (
-          <Link
+          <Box
+            component={Link}
             href="/dashboard/facturas/nueva"
-            onClick={hasPlan ? onClose : e => e.preventDefault()}
-            className={`flex items-center gap-2.5 w-full px-3 py-2 mb-2 rounded-lg bg-white/15 text-white text-sm font-medium transition-colors ${
-              hasPlan ? 'hover:bg-white/25' : 'opacity-40 cursor-not-allowed'
-            }`}
+            onClick={hasPlan ? onClose : (e: React.MouseEvent) => e.preventDefault()}
+            sx={{
+              display:     'flex',
+              alignItems:  'center',
+              gap:         1,
+              px:          1.5,
+              py:          1,
+              mb:          0.5,
+              borderRadius: '8px',
+              bgcolor:     'rgba(255,255,255,0.15)',
+              color:       '#ffffff',
+              fontSize:    '0.875rem',
+              fontWeight:  600,
+              textDecoration: 'none',
+              transition:  'background-color 0.15s',
+              ...(hasPlan
+                ? { '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' } }
+                : { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' }),
+            }}
           >
-            <Plus className="h-4 w-4 shrink-0" />
-            Nueva Factura
-          </Link>
+            <Plus style={{ width: 16, height: 16, flexShrink: 0 }} />
+            <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>Nueva Factura</Box>
+          </Box>
         )}
 
-        {/* Search trigger */}
-        <button
+        {/* Search */}
+        <Box
+          component="button"
           onClick={() => { onClose?.(); document.querySelector<HTMLButtonElement>('#global-search-trigger')?.click(); }}
-          className="flex items-center gap-2.5 w-full px-3 py-2 mb-1 rounded-lg text-teal-200 hover:bg-white/10 hover:text-white text-sm transition-colors"
+          sx={{
+            display:     'flex',
+            alignItems:  'center',
+            gap:         1,
+            width:       '100%',
+            px:          1.5,
+            py:          1,
+            mb:          0.5,
+            borderRadius: '8px',
+            color:       'rgba(204,251,241,0.8)',
+            fontSize:    '0.875rem',
+            cursor:      'pointer',
+            bgcolor:     'transparent',
+            border:      'none',
+            transition:  'all 0.15s',
+            '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+          }}
         >
-          <Search className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">Buscar...</span>
-          <kbd className="text-xs bg-white/10 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
-        </button>
+          <Search style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>Buscar...</Box>
+          <Box
+            component="kbd"
+            className="nav-text"
+            sx={{
+              fontSize:    '0.6875rem',
+              bgcolor:     'rgba(255,255,255,0.1)',
+              borderRadius: '4px',
+              px:          0.75,
+              py:          0.25,
+              fontFamily:  'monospace',
+            }}
+          >
+            ⌘K
+          </Box>
+        </Box>
 
-        {/* Activación e-CF oculta — flujo manejado desde panel admin */}
-
-        {/* Top items — filtrados por rol */}
+        {/* Top items */}
         {topItemsVisibles.map(item => {
-          const enabled = isEnabled(item.href);
-          const active  = enabled && isActive(item.href, item.exact);
+          const active = isActive(item.href, item.exact);
           return (
-            <Link
+            <Box
               key={item.href}
+              component={Link}
               href={item.href}
-              onClick={enabled ? onClose : e => e.preventDefault()}
-              className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-colors ${
-                !enabled
-                  ? 'text-teal-100/40 cursor-not-allowed'
-                  : active
-                    ? 'bg-white/20 text-white font-medium'
-                    : 'text-teal-100 hover:bg-white/10 hover:text-white'
-              }`}
+              onClick={onClose}
+              sx={{
+                display:     'flex',
+                alignItems:  'center',
+                gap:         1,
+                px:          1.5,
+                py:          0.875,
+                borderRadius: '8px',
+                fontSize:    '0.875rem',
+                fontWeight:  active ? 600 : 400,
+                color:       active ? '#ffffff' : 'rgba(204,251,241,0.85)',
+                bgcolor:     active ? 'rgba(255,255,255,0.2)' : 'transparent',
+                textDecoration: 'none',
+                transition:  'all 0.15s',
+                '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+              }}
             >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {item.label}
-            </Link>
+              <item.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>{item.label}</Box>
+            </Box>
           );
         })}
 
-        <div className="my-1 border-t border-teal-600/40" />
+        <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />
 
-        {/* Grupos — filtrados por rol (grupos sin hijos accesibles se omiten) */}
+        {/* Groups */}
         {groupsVisibles.map(group => {
           const groupActive = group.children.some(c => pathname.startsWith(c.href));
           const isOpen      = openGroups[group.id] ?? false;
-          return (
-            <div key={group.id}>
-              <button
-                onClick={() => toggleGroup(group.id)}
-                className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-colors ${
-                  groupActive ? 'text-white font-medium' : 'text-teal-100 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <group.icon className="h-4 w-4 shrink-0" />
-                <span className="flex-1 text-left">{group.label}</span>
-                {isOpen
-                  ? <ChevronUp className="h-3.5 w-3.5 opacity-70" />
-                  : <ChevronRight className="h-3.5 w-3.5 opacity-70" />
-                }
-              </button>
 
-              {isOpen && (
-                <div className="ml-6 pl-2 border-l border-teal-500/40 mt-0.5 mb-1 space-y-0.5">
+          return (
+            <Box key={group.id}>
+              <Box
+                component="button"
+                onClick={() => toggleGroup(group.id)}
+                sx={{
+                  display:     'flex',
+                  alignItems:  'center',
+                  gap:         1,
+                  width:       '100%',
+                  px:          1.5,
+                  py:          0.875,
+                  borderRadius: '8px',
+                  fontSize:    '0.875rem',
+                  fontWeight:  groupActive ? 600 : 400,
+                  color:       groupActive ? '#ffffff' : 'rgba(204,251,241,0.85)',
+                  bgcolor:     'transparent',
+                  border:      'none',
+                  cursor:      'pointer',
+                  transition:  'all 0.15s',
+                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+                }}
+              >
+                <group.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
+                <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>{group.label}</Box>
+                <Box component="span" className="nav-text" sx={{ display: 'flex' }}>
+                  {isOpen
+                    ? <ChevronUp style={{ width: 14, height: 14, opacity: 0.7 }} />
+                    : <ChevronRight style={{ width: 14, height: 14, opacity: 0.7 }} />
+                  }
+                </Box>
+              </Box>
+
+              <Collapse className="nav-children" in={isOpen} timeout="auto">
+                <Box sx={{ ml: 3, pl: 1, borderLeft: '1px solid rgba(255,255,255,0.2)', mt: 0.25, mb: 0.5 }}>
                   {group.children.map(child => {
-                    const enabled = isEnabled(child.href);
-                    const active  = enabled && pathname.startsWith(child.href);
+                    const active = pathname.startsWith(child.href);
                     return (
-                      <div key={child.href} className="flex items-center group/sub">
-                        <Link
+                      <Box
+                        key={child.href}
+                        sx={{ display: 'flex', alignItems: 'center', '&:hover .plus-btn': { opacity: 1 } }}
+                      >
+                        <Box
+                          component={Link}
                           href={child.href}
-                          onClick={enabled ? onClose : e => e.preventDefault()}
-                          className={`flex-1 py-1.5 px-2.5 text-sm rounded-lg truncate transition-colors ${
-                            !enabled
-                              ? 'text-teal-200/40 cursor-not-allowed'
-                              : active
-                                ? 'text-white font-medium bg-white/15'
-                                : 'text-teal-200 hover:text-white hover:bg-white/10'
-                          }`}
+                          onClick={onClose}
+                          sx={{
+                            flex:        1,
+                            minWidth:    0,
+                            py:          0.75,
+                            px:          1.25,
+                            borderRadius: '6px',
+                            fontSize:    '0.8125rem',
+                            fontWeight:  active ? 600 : 400,
+                            color:       active ? '#ffffff' : 'rgba(204,251,241,0.8)',
+                            bgcolor:     active ? 'rgba(255,255,255,0.15)' : 'transparent',
+                            textDecoration: 'none',
+                            transition:  'all 0.15s',
+                            whiteSpace:  'nowrap',
+                            overflow:    'hidden',
+                            textOverflow: 'ellipsis',
+                            display:     'flex',
+                            alignItems:  'center',
+                            gap:         0.75,
+                            '&:hover':   { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.08)' },
+                          }}
                         >
-                          {child.label}
-                        </Link>
-                        {child.plusHref && enabled && can(child.plusHref) && (
-                          <Link
+                          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{child.label}</Box>
+                          {child.shared && (
+                            <Box
+                              component="span"
+                              title="Compartido con Facturación — mismos productos y contactos en ambos módulos"
+                              sx={{ flexShrink: 0, fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', px: 0.625, py: '1px', borderRadius: '4px', bgcolor: 'rgba(255,255,255,0.16)', color: 'rgba(204,251,241,0.95)' }}
+                            >
+                              Compartido
+                            </Box>
+                          )}
+                        </Box>
+                        {child.plusHref && can(child.plusHref) && (
+                          <Box
+                            component={Link}
                             href={child.plusHref}
                             onClick={onClose}
+                            className="plus-btn"
                             title="Nuevo"
-                            className="opacity-0 group-hover/sub:opacity-100 p-1 rounded hover:bg-white/20 text-teal-300 hover:text-white transition-all ml-1"
+                            sx={{
+                              opacity:     0,
+                              p:           0.5,
+                              borderRadius: '4px',
+                              color:       'rgba(204,251,241,0.7)',
+                              transition:  'all 0.15s',
+                              display:     'flex',
+                              '&:hover':   { bgcolor: 'rgba(255,255,255,0.2)', color: '#ffffff' },
+                            }}
                           >
-                            <Plus className="h-3 w-3" />
-                          </Link>
+                            <Plus style={{ width: 12, height: 12 }} />
+                          </Box>
                         )}
-                      </div>
+                      </Box>
                     );
                   })}
-                </div>
-              )}
-            </div>
+                </Box>
+              </Collapse>
+            </Box>
           );
         })}
-      </nav>
+
+        {/* Cambiar de producto: Punto de Venta es OTRO módulo (como "Ir a
+            Alegra POS"). Va separado al final y abre /pos. */}
+        {puedeIrPos && (
+          <>
+            <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />
+            <Box
+              component={Link}
+              href={moduleUrl('pos')}
+              onClick={onClose}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.875,
+                borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
+                color: 'rgba(204,251,241,0.85)', transition: 'all 0.15s',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+              }}
+            >
+              <Store style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Punto de Venta</Box>
+              <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
+            </Box>
+          </>
+        )}
+      </Box>
 
       {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es
           el mismo gesto. Evita un item más en el menú para algo que se mira de
           vez en cuando. */}
-      <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
-        <Link
+      <Box sx={{ px: 2, py: 1.25, borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+        <Typography
+          component={Link}
           href="/dashboard/novedades"
-          className="text-[11px] text-gray-400 hover:text-teal-700 transition-colors"
+          onClick={onClose}
           title="Ver qué hay de nuevo"
+          className="nav-text"
+          sx={{
+            fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
+            textDecoration: 'none', transition: 'color 0.15s',
+            '&:hover': { color: 'rgba(204,251,241,0.9)' },
+          }}
         >
           Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
-        </Link>
-      </div>
-    </div>
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
-// ─── Root layout ──────────────────────────────────────────────────────────────
+// ─── Root Layout ──────────────────────────────────────────────────────────────
 
 const layoutFetcher = (url: string) => fetch(url).then(r => r.json()).catch(() => null);
 
@@ -813,106 +969,228 @@ type EmpresaListResponse = {
 } | null;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen]           = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen]         = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   const [activeTeamOverride, setActiveTeamOverride] = useState<number | null>(null);
 
-  // Hidratar collapsed desde localStorage (después de mount para evitar hydration mismatch)
   useEffect(() => {
     try {
       const stored = localStorage.getItem('emitedo:sidebarCollapsed');
-      if (stored === '1') setSidebarCollapsed(true);
+      if (stored === '1') setSidebarVisible(false);
     } catch {}
   }, []);
 
   function toggleSidebar() {
-    setSidebarCollapsed(prev => {
+    setSidebarVisible(prev => {
       const next = !prev;
-      try { localStorage.setItem('emitedo:sidebarCollapsed', next ? '1' : '0'); } catch {}
+      try { localStorage.setItem('emitedo:sidebarCollapsed', next ? '0' : '1'); } catch {}
       return next;
     });
   }
 
-  // SWR for user + empresa list — no auto refetch on focus/reconnect.
-  // We revalidate explicitly via mutate() on switch.
-  const { data: user } = useSWR<UserInfo | null>('/api/user', layoutFetcher, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false,
-  });
-  const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>(
-    '/api/empresa/list',
-    layoutFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  );
+  const { data: user }          = useSWR<UserInfo | null>('/api/user', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
+  const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>('/api/empresa/list', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
+  const { data: ambienteData, mutate: mutateAmbiente } = useSWR<{ ambiente: string | null } | null>('/api/sistema/ambiente', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
 
-  const { data: ambienteData, mutate: mutateAmbiente } = useSWR<{ ambiente: string | null } | null>(
-    '/api/sistema/ambiente',
-    layoutFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  );
   const dgiiAmbiente = ambienteData?.ambiente ?? null;
-
   const teams: Team[] = empresaData?.teams ?? [];
-  const activeTeamId = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
-
-  // Cuando el usuario cambia de empresa: actualizar activeTeamId optimistamente
-  // y revalidar la lista de empresas (trae plan/logo nuevos).
-  function handleSwitch(teamId: number) {
-    setActiveTeamOverride(teamId);
-    mutateEmpresa();
-    mutateAmbiente(); // ambiente es por-tenant → refrescar al cambiar de empresa
-  }
-
-  const plan = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.planName ?? null;
+  const activeTeamId  = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
   // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
   const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
 
+  function handleSwitch(teamId: number) {
+    setActiveTeamOverride(teamId);
+    mutateEmpresa();
+    mutateAmbiente();
+  }
+
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <Box sx={{ display: 'flex', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
       <GlobalSearch />
 
-      {/* Sidebar — desktop (oculto cuando collapsed) */}
-      {!sidebarCollapsed && (
-        <aside className="hidden lg:flex w-56 flex-col shrink-0">
-          <Sidebar teams={teams} activeTeamId={activeTeamId} />
-        </aside>
+      {/* Arquitectura idéntica al Punto de Venta: rail full-height a la izquierda
+          (mismo menú que se abre/cierra al pasar el mouse) + columna de contenido
+          (header + página) a la derecha. */}
+      {sidebarVisible && (
+        <Box
+          component="aside"
+          sx={{ width: RAIL_WIDTH, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'relative' }}
+        >
+          <Box
+            sx={{
+              position:   'absolute',
+              top:        0,
+              left:       0,
+              height:     '100%',
+              width:      RAIL_WIDTH,
+              overflow:   'hidden',
+              zIndex:     40,
+              transition: 'width 0.2s ease, box-shadow 0.2s ease',
+              '& .nav-text':      { opacity: 0, transition: 'opacity 0.12s ease' },
+              '& .nav-children':  { display: 'none' },
+              '&:hover':          { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
+              '&:hover .nav-text':     { opacity: 1 },
+              '&:hover .nav-children': { display: 'block' },
+            }}
+          >
+            <SidebarContent teams={teams} activeTeamId={activeTeamId} />
+          </Box>
+        </Box>
       )}
 
-      {/* Sidebar — mobile overlay */}
-      {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div className="w-56 flex flex-col">
-            <Sidebar teams={teams} activeTeamId={activeTeamId} onClose={() => setSidebarOpen(false)} />
-          </div>
-          <div className="flex-1 bg-black/50" onClick={() => setSidebarOpen(false)} />
-        </div>
-      )}
+      {/* Mobile Drawer */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: 'block', lg: 'none' },
+          '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, boxSizing: 'border-box', border: 'none' },
+        }}
+      >
+        <SidebarContent teams={teams} activeTeamId={activeTeamId} onClose={() => setMobileOpen(false)} />
+      </Drawer>
 
-      {/* Main column */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <DashboardTopBar
-          teams={teams}
-          activeTeamId={activeTeamId}
-          user={user ?? null}
-          plan={plan}
-          dgiiAmbiente={dgiiAmbiente}
-          cajaHabilitada={cajaHabilitada}
-          onMenuClick={() => setSidebarOpen(true)}
-          onToggleSidebar={toggleSidebar}
-          sidebarCollapsed={sidebarCollapsed}
-          onSwitch={handleSwitch}
-        />
+      {/* Columna de contenido: header (barra) + página */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        {/* Top bar */}
+        <AppBar
+          position="static"
+          elevation={0}
+          sx={{
+            bgcolor:      '#ffffff',
+            color:        'text.primary',
+            borderBottom: '1px solid #e5e7eb',
+            height:       56,
+            flexShrink:   0,
+            zIndex:       30,
+          }}
+        >
+          <Toolbar
+            variant="dense"
+            sx={{ height: 56, minHeight: 56, gap: 1, px: { xs: 1.5, sm: 2 } }}
+          >
+            {/* Mobile hamburger */}
+            <IconButton
+              onClick={() => setMobileOpen(true)}
+              size="small"
+              sx={{ display: { lg: 'none' }, color: 'text.secondary' }}
+            >
+              <MenuIcon style={{ width: 20, height: 20 }} />
+            </IconButton>
 
-        <main className="flex-1 overflow-y-auto">
+            {/* Desktop sidebar toggle */}
+            <Tooltip title={sidebarVisible ? 'Ocultar menú' : 'Mostrar menú'} placement="bottom">
+              <IconButton
+                onClick={toggleSidebar}
+                size="small"
+                sx={{ display: { xs: 'none', lg: 'flex' }, color: 'text.secondary' }}
+              >
+                {sidebarVisible
+                  ? <PanelLeftClose style={{ width: 20, height: 20 }} />
+                  : <PanelLeftOpen  style={{ width: 20, height: 20 }} />
+                }
+              </IconButton>
+            </Tooltip>
+
+            {/* Logo when sidebar collapsed */}
+            {!sidebarVisible && (
+              <Box
+                sx={{
+                  display:    { xs: 'none', lg: 'flex' },
+                  alignItems: 'center',
+                  gap:        1,
+                  mr:         1,
+                }}
+              >
+                <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
+                </Box>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary' }}>Zero</Typography>
+              </Box>
+            )}
+
+            {/* Mobile logo */}
+            <Box
+              sx={{
+                display:    { xs: 'flex', lg: 'none' },
+                alignItems: 'center',
+                gap:        1,
+                mr:         1,
+              }}
+            >
+              <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
+              </Box>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>Zero</Typography>
+            </Box>
+
+            {/* Company switcher */}
+            <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={handleSwitch} />
+
+            {/* Module switcher (Facturación ↔ POS) */}
+            <ModuleSwitcher current="facturacion" />
+
+            {/* DGII ambiente badge */}
+            <AmbienteBadge ambiente={dgiiAmbiente} />
+
+            {/* Turno de caja — solo aparece cuando queda poco para el límite */}
+            {cajaHabilitada && <TurnoCountdown />}
+
+            <Box sx={{ flex: 1 }} />
+
+            {/* Search button */}
+            <Box
+              component="button"
+              onClick={() => document.querySelector<HTMLButtonElement>('#global-search-trigger')?.click()}
+              sx={{
+                display:     { xs: 'none', sm: 'flex' },
+                alignItems:  'center',
+                gap:         1,
+                fontSize:    '0.875rem',
+                color:       'text.secondary',
+                px:          1.25,
+                py:          0.75,
+                borderRadius: '8px',
+                bgcolor:     'transparent',
+                border:      'none',
+                cursor:      'pointer',
+                transition:  'all 0.15s',
+                '&:hover':   { bgcolor: 'grey.50', color: 'text.primary' },
+              }}
+            >
+              <Search style={{ width: 16, height: 16 }} />
+              <Box component="span" sx={{ display: { xs: 'none', md: 'block' } }}>Buscar</Box>
+              <Box
+                component="kbd"
+                sx={{
+                  display:     { xs: 'none', md: 'block' },
+                  fontSize:    '0.6875rem',
+                  bgcolor:     'grey.100',
+                  borderRadius: '4px',
+                  px:          0.75,
+                  py:          0.25,
+                  fontFamily:  'monospace',
+                }}
+              >
+                ⌘K
+              </Box>
+            </Box>
+
+            {/* Profile */}
+            <ProfileDropdown user={user ?? null} />
+          </Toolbar>
+        </AppBar>
+
+        {/* Page content */}
+        <Box
+          component="main"
+          sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.50', minWidth: 0 }}
+        >
           {children}
-        </main>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }

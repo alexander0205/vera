@@ -2,8 +2,11 @@
 
 import { useState } from 'react';
 import { FileText, CreditCard, ChevronDown } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import { PagoMetodos, sumaPagos, type PagoLinea } from '@/components/pagos/PagoMetodos';
 import type { EmpresaPerfil, Retencion, ItemLinea } from '../utils/types';
 import { calcularMontoItem } from '../utils/calculos';
@@ -32,6 +35,30 @@ interface Props {
 const fmt = (n: number) =>
   `RD$ ${n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const cardSx = {
+  bgcolor: '#fff',
+  borderRadius: '12px',
+  border: '1px solid #e5e7eb',
+  boxShadow: '0 1px 3px 0 rgba(0,0,0,0.07)',
+  overflow: 'hidden',
+};
+
+const sectionHeaderSx = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1,
+  px: 2,
+  pt: 2,
+  pb: 1.5,
+  cursor: 'pointer',
+  bgcolor: 'transparent',
+  border: 'none',
+  textAlign: 'left' as const,
+  transition: 'background-color 0.15s',
+  '&:hover': { bgcolor: '#f9fafb' },
+};
+
 /**
  * Sticky right-side sidebar con Resumen + Pago como dos cards independientes.
  * Resumen muestra items, totales y saldo pendiente.
@@ -45,6 +72,7 @@ export function ResumenSidebar({
   pagoLineas = [{ metodo: 'efectivo', valor: '' }], setPagoLineas,
 }: Props) {
   const [resumenOpen, setResumenOpen] = useState(true);
+  const [pagoOpen, setPagoOpen]       = useState(true);
 
   // Pago efectivo = suma de las líneas. El saldo pendiente lo resta del total.
   const pagoNum = sumaPagos(pagoLineas);
@@ -54,138 +82,275 @@ export function ResumenSidebar({
   const itemsConNombre = items.filter(i => i.nombreItem.trim());
 
   return (
-    <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+    <Box
+      component="aside"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        position: { lg: 'sticky' },
+        top: { lg: 16 },
+        alignSelf: { lg: 'flex-start' },
+      }}
+    >
       {/* ─── Resumen card ─── */}
-      <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <button
+      <Box component="section" sx={cardSx}>
+        <Box
+          component="button"
           type="button"
           onClick={() => setResumenOpen(v => !v)}
-          className="w-full flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 hover:bg-gray-50 transition-colors"
           aria-expanded={resumenOpen}
+          sx={sectionHeaderSx}
         >
-          <FileText className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-gray-900 flex-1 text-left">Resumen</h2>
-          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${resumenOpen ? '' : '-rotate-90'}`} />
-        </button>
+          <FileText size={16} color="#0d9488" aria-hidden="true" style={{ flexShrink: 0 }} />
+          <Typography
+            sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}
+          >
+            Resumen
+          </Typography>
+          <Box
+            sx={{
+              display: 'inline-flex',
+              color: '#9ca3af',
+              transform: resumenOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+              transition: 'transform 0.2s',
+            }}
+          >
+            <ChevronDown size={16} />
+          </Box>
+        </Box>
 
         {resumenOpen && (
-          <div className="px-4 pb-4 md:px-5">
+          <Box sx={{ px: 2, pb: 2 }}>
             {/* Tabla items */}
             {itemsConNombre.length > 0 && (
               <>
-                <div className="grid grid-cols-[1fr_auto_auto] gap-3 text-[11px] text-gray-500 uppercase tracking-wide pb-2 border-b border-gray-100">
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto auto',
+                    gap: 1.5,
+                    fontSize: '0.6875rem',
+                    color: '#6b7280',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    pb: 1,
+                    borderBottom: '1px solid #f3f4f6',
+                  }}
+                >
                   <span>Descripción</span>
-                  <span className="text-right">Cant.</span>
-                  <span className="text-right">Total</span>
-                </div>
-                <div className="divide-y divide-gray-50">
+                  <span style={{ textAlign: 'right' }}>Cant.</span>
+                  <span style={{ textAlign: 'right' }}>Total</span>
+                </Box>
+                <Box sx={{ '& > *:not(:last-child)': { borderBottom: '1px solid #f9fafb' } }}>
                   {itemsConNombre.map(item => (
-                    <div key={item.id} className="grid grid-cols-[1fr_auto_auto] gap-3 py-2 text-sm">
-                      <span className="text-gray-700 truncate" title={item.nombreItem}>{item.nombreItem}</span>
-                      <span className="text-gray-600 text-right tabular-nums">{item.cantidadItem}</span>
-                      <span className="text-gray-900 font-medium text-right tabular-nums whitespace-nowrap">{fmt(calcularMontoItem(item))}</span>
-                    </div>
+                    <Box
+                      key={item.id}
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto auto',
+                        gap: 1.5,
+                        py: 1,
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      <Typography
+                        sx={{
+                          color: '#374151',
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                        title={item.nombreItem}
+                      >
+                        {item.nombreItem}
+                      </Typography>
+                      <Typography sx={{ color: '#4b5563', fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {item.cantidadItem}
+                      </Typography>
+                      <Typography sx={{ color: '#111827', fontWeight: 500, fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {fmt(calcularMontoItem(item))}
+                      </Typography>
+                    </Box>
                   ))}
-                </div>
+                </Box>
               </>
             )}
 
             {/* Totales */}
-            <div className="pt-3 mt-1 space-y-1.5 border-t border-gray-100">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Subtotal</span>
-                <span className="font-medium text-gray-800 tabular-nums">{fmt(totales.bruto - totales.descuento)}</span>
-              </div>
+            <Box sx={{ pt: 1.5, mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.75, borderTop: '1px solid #f3f4f6' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>Subtotal</Typography>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmt(totales.bruto - totales.descuento)}
+                </Typography>
+              </Box>
               {totales.descuento > 0 && (
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Descuento</span>
-                  <span className="tabular-nums">-{fmt(totales.descuento)}</span>
-                </div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Descuento</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>
+                    -{fmt(totales.descuento)}
+                  </Typography>
+                </Box>
               )}
               {totales.itbis > 0 && (
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>ITBIS (18%)</span>
-                  <span className="font-medium text-gray-800 tabular-nums">{fmt(totales.itbis)}</span>
-                </div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>ITBIS (18%)</Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmt(totales.itbis)}
+                  </Typography>
+                </Box>
               )}
               {retenciones.map((ret, idx) => (
-                <div key={idx} className="flex justify-between text-sm text-red-500">
-                  <span className="truncate pr-2">{ret.nombre} ({ret.porcentaje}%)</span>
-                  <span className="tabular-nums">-{fmt(ret.monto)}</span>
-                </div>
+                <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#ef4444', overflow: 'hidden', textOverflow: 'ellipsis', pr: 1 }}>
+                    {ret.nombre} ({ret.porcentaje}%)
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#ef4444', fontVariantNumeric: 'tabular-nums' }}>
+                    -{fmt(ret.monto)}
+                  </Typography>
+                </Box>
               ))}
-            </div>
+            </Box>
 
             {/* Total bold */}
-            <div className="flex justify-between text-base font-bold text-gray-900 border-t-2 border-gray-200 pt-3 mt-3">
-              <span>{totalLabel}</span>
-              <span className="tabular-nums">{fmt(totalNeto)}</span>
-            </div>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                borderTop: '2px solid #e5e7eb',
+                pt: 1.5,
+                mt: 1.5,
+              }}
+            >
+              <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>{totalLabel}</Typography>
+              <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>
+                {fmt(totalNeto)}
+              </Typography>
+            </Box>
 
             {/* Pagado + saldo */}
             {pagoRecibido && (
               <>
-                <div className="flex justify-between text-sm text-gray-600 mt-3">
-                  <span>Pagado</span>
-                  <span className="font-medium text-gray-800 tabular-nums">{fmt(pagoNum)}</span>
-                </div>
-                <div className="flex justify-between text-sm bg-teal-50 border border-teal-100 rounded-lg px-3 py-2 mt-2">
-                  <span className="text-teal-700 font-semibold">Saldo pendiente</span>
-                  <span className="text-teal-800 font-bold tabular-nums">{fmt(saldoPendiente)}</span>
-                </div>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5 }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>Pagado</Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmt(pagoNum)}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    bgcolor: '#f0fdfa',
+                    border: '1px solid #ccfbf1',
+                    borderRadius: '8px',
+                    px: 1.5,
+                    py: 1,
+                    mt: 1,
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.875rem', color: '#0f766e', fontWeight: 600 }}>
+                    Saldo pendiente
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#134e4a', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {fmt(saldoPendiente)}
+                  </Typography>
+                </Box>
               </>
             )}
-          </div>
+          </Box>
         )}
-      </section>
+      </Box>
 
       {/* ─── Pago card (sticky aparte) ─── */}
       {showPago && (
-      <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* Pago siempre abierto: el método de pago debe estar visible sin colapsar. */}
-        <div className="w-full flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-          <CreditCard className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-gray-900 flex-1 text-left">Pago</h2>
-        </div>
+        <Box component="section" sx={cardSx}>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setPagoOpen(v => !v)}
+            aria-expanded={pagoOpen}
+            sx={sectionHeaderSx}
+          >
+            <CreditCard size={16} color="#0d9488" aria-hidden="true" style={{ flexShrink: 0 }} />
+            <Typography
+              sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}
+            >
+              Pago
+            </Typography>
+            <Box
+              sx={{
+                display: 'inline-flex',
+                color: '#9ca3af',
+                transform: pagoOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                transition: 'transform 0.2s',
+              }}
+            >
+              <ChevronDown size={16} />
+            </Box>
+          </Box>
 
-        {(
-          <div className="px-4 pb-4 md:px-5 space-y-3">
-            {/* Toggle registrar pago */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={pagoRecibido}
-                onChange={e => setPagoRecibido?.(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-              />
-              <span className="text-sm text-gray-700">Registrar pago recibido</span>
-            </label>
-
-            {pagoRecibido && (
-              <>
-                <PagoMetodos
-                  lineas={pagoLineas}
-                  onChange={(v) => setPagoLineas?.(v)}
-                  total={totalNeto}
-                  showCuenta
-                />
-
-                {/* Fecha — compacta, default hoy, secundaria */}
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <Label className="text-[11px] text-gray-500">Fecha de pago</Label>
-                  <Input
-                    type="date"
-                    className="h-8 text-xs w-auto"
-                    value={pagoFecha}
-                    onChange={(e) => setPagoFecha?.(e.target.value)}
+          {pagoOpen && (
+            <Box sx={{ px: 2, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {/* Toggle registrar pago */}
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={pagoRecibido}
+                    onChange={e => setPagoRecibido?.(e.target.checked)}
+                    sx={{
+                      color: '#d1d5db',
+                      '&.Mui-checked': { color: '#0d9488' },
+                      '&:hover': { bgcolor: 'rgba(13,148,136,0.08)' },
+                    }}
                   />
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </section>
+                }
+                label={
+                  <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
+                    Registrar pago recibido
+                  </Typography>
+                }
+                sx={{ m: 0 }}
+              />
+
+              {pagoRecibido && (
+                <>
+                  <PagoMetodos
+                    lineas={pagoLineas}
+                    onChange={(v) => setPagoLineas?.(v)}
+                    total={totalNeto}
+                    showCuenta
+                  />
+
+                  {/* Fecha — compacta, default hoy, secundaria */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, pt: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.6875rem', color: '#6b7280' }}>
+                      Fecha de pago
+                    </Typography>
+                    <TextField
+                      type="date"
+                      size="small"
+                      value={pagoFecha}
+                      onChange={(e) => setPagoFecha?.(e.target.value)}
+                      sx={{
+                        width: 'auto',
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: '8px',
+                          fontSize: '0.75rem',
+                          height: 32,
+                        },
+                      }}
+                    />
+                  </Box>
+                </>
+              )}
+            </Box>
+          )}
+        </Box>
       )}
-    </aside>
+    </Box>
   );
 }

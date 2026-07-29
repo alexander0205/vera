@@ -1,5 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import { Download, ChevronRight } from 'lucide-react';
 import { DateRangeFilter } from '@/components/reportes/date-range-filter';
 import { getUser, getTeamIdForUser, getVentasGenerales } from '@/lib/db/queries';
@@ -21,13 +25,13 @@ const TIPO_NOMBRE: Record<string, string> = {
   '47': 'Pago Exterior',
 };
 
-const ESTADO_LABEL: Record<string, { label: string; color: string }> = {
-  ACEPTADO:             { label: 'Cobrada',    color: 'bg-emerald-100 text-emerald-700' },
-  ACEPTADO_CONDICIONAL: { label: 'Condicional', color: 'bg-amber-100 text-amber-700' },
-  EN_PROCESO:           { label: 'En Proceso', color: 'bg-blue-100 text-blue-700' },
-  RECHAZADO:            { label: 'Rechazada',  color: 'bg-red-100 text-red-700' },
-  ANULADO:              { label: 'Anulada',    color: 'bg-gray-200 text-gray-600' },
-  BORRADOR:             { label: 'Sin comprobante',   color: 'bg-gray-100 text-gray-500' },
+const ESTADO_LABEL: Record<string, { label: string; bgcolor: string; color: string; border: string }> = {
+  ACEPTADO:             { label: 'Cobrada',     bgcolor: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+  ACEPTADO_CONDICIONAL: { label: 'Condicional', bgcolor: '#fffbeb', color: '#92400e', border: '#fde68a' },
+  EN_PROCESO:           { label: 'En Proceso',  bgcolor: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+  RECHAZADO:            { label: 'Rechazada',   bgcolor: '#fef2f2', color: '#991b1b', border: '#fca5a5' },
+  ANULADO:              { label: 'Anulada',     bgcolor: '#f9fafb', color: '#4b5563', border: '#d1d5db' },
+  BORRADOR:             { label: 'Sin comprobante', bgcolor: '#f9fafb', color: '#6b7280', border: '#e5e7eb' },
 };
 
 function fmtDOP(centavos: number): string {
@@ -43,7 +47,6 @@ function parseRangeFromQuery(desde?: string, hasta?: string): { from: Date; to: 
   const now = new Date();
   const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1);
   const defaultTo   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
   const from = desde ? new Date(desde) : defaultFrom;
   const to   = hasta ? new Date(hasta + 'T23:59:59') : defaultTo;
   return { from, to };
@@ -60,7 +63,6 @@ export default async function VentasGeneralesPage({
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 
-  // Verificar permiso reportes:ver para acceder al reporte
   const [member] = await db
     .select({ role: teamMembers.role })
     .from(teamMembers)
@@ -80,116 +82,117 @@ export default async function VentasGeneralesPage({
   const hastaStr = to.toISOString().slice(0, 10);
 
   return (
-    <section className="p-4 sm:p-6 max-w-7xl mx-auto">
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto' }}>
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm text-gray-500 mb-2">
-        <Link href="/dashboard/reportes" className="hover:text-teal-600">Reportes</Link>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span>Ventas</span>
-        <ChevronRight className="h-3.5 w-3.5" />
-        <span className="text-teal-600 font-medium">Ventas generales</span>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+        <Link href="/dashboard/reportes" style={{ textDecoration: 'none' }}>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#0d9488' } }}>Reportes</Typography>
+        </Link>
+        <ChevronRight size={14} color="#9ca3af" />
+        <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Ventas</Typography>
+        <ChevronRight size={14} color="#9ca3af" />
+        <Typography sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Ventas generales</Typography>
+      </Box>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Ventas generales</h1>
-          <p className="text-sm text-gray-500 mt-1">
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: 'space-between', gap: 2, mb: 3 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Ventas generales</Typography>
+          <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
             Obtén una visión detallada de tus ventas y devoluciones para diseñar estrategias comerciales.
-          </p>
-        </div>
-        <a
+          </Typography>
+        </Box>
+        <Button
+          component="a"
           href={`/api/reportes/ventas-generales/export?desde=${desdeStr}&hasta=${hastaStr}`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors"
+          variant="contained"
+          disableElevation
+          startIcon={<Download size={16} />}
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, whiteSpace: 'nowrap', flexShrink: 0 }}
         >
-          <Download className="h-4 w-4" />
           Descargar
-        </a>
-      </div>
+        </Button>
+      </Box>
 
       {/* Filtros — navegación client-side (no recarga el layout) */}
       <DateRangeFilter desde={desdeStr} hasta={hastaStr} />
 
-      {/* Stat cards — fórmula: Brutas − Notas crédito = Antes impuestos + Impuestos = Después impuestos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <StatCard label="Ventas brutas"      value={data.montos.ventasBrutas}     />
-        <StatCard label="Notas crédito"      value={data.montos.notasCredito}      separator="−" />
-        <StatCard label="Antes de impuestos" value={data.montos.antesImpuestos}    separator="=" highlight />
-        <StatCard label="Impuestos"          value={data.montos.impuestos}         separator="+" />
+      {/* Stat cards */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(5, 1fr)' }, gap: 1.5, mb: 3 }}>
+        <StatCard label="Ventas brutas"        value={data.montos.ventasBrutas} />
+        <StatCard label="Notas crédito"        value={data.montos.notasCredito}   separator="−" />
+        <StatCard label="Antes de impuestos"   value={data.montos.antesImpuestos} separator="=" highlight />
+        <StatCard label="Impuestos"            value={data.montos.impuestos}      separator="+" />
         <StatCard label="Después de impuestos" value={data.montos.despuesImpuestos} separator="=" highlight />
-      </div>
+      </Box>
 
-      {/* Total ventas - placeholder por gráfica */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-900">Total ventas</h2>
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
-            <span className="px-3 py-1 text-xs font-medium bg-white rounded shadow-sm">Diario</span>
-            <span className="px-3 py-1 text-xs font-medium text-gray-500">Mensual</span>
-          </div>
-        </div>
+      {/* Gráfica */}
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2.5, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: '#111827' }}>Total ventas</Typography>
+          <Box sx={{ display: 'flex', bgcolor: '#f3f4f6', borderRadius: '8px', p: 0.5 }}>
+            <Typography sx={{ px: 1.5, py: 0.5, fontSize: '0.75rem', fontWeight: 500, bgcolor: '#fff', borderRadius: '6px', boxShadow: '0 1px 2px rgba(0,0,0,0.08)' }}>Diario</Typography>
+            <Typography sx={{ px: 1.5, py: 0.5, fontSize: '0.75rem', fontWeight: 500, color: '#6b7280' }}>Mensual</Typography>
+          </Box>
+        </Box>
         <SimpleBarChart docs={data.documentos} />
-      </div>
+      </Box>
 
       {/* Tabla documentos */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
             Documentos ({data.documentos.length})
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-2.5 text-left">Documento</th>
-                <th className="px-4 py-2.5 text-left">Cliente</th>
-                <th className="px-4 py-2.5 text-left">Estado</th>
-                <th className="px-4 py-2.5 text-left">Creación</th>
-                <th className="px-4 py-2.5 text-right">Subtotal</th>
-                <th className="px-4 py-2.5 text-right">Impuestos</th>
-                <th className="px-4 py-2.5 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+          </Typography>
+        </Box>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <Box component="thead">
+              <Box component="tr" sx={{ bgcolor: '#f9fafb' }}>
+                {['Documento', 'Cliente', 'Estado', 'Creación', 'Subtotal', 'Impuestos', 'Total'].map((h, i) => (
+                  <Box component="th" key={h} sx={{ px: 2, py: 1.5, textAlign: i >= 4 ? 'right' : 'left', fontSize: '0.6875rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                    {h}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+            <Box component="tbody">
               {data.documentos.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <Box component="tr">
+                  <Box component="td" colSpan={7} sx={{ px: 2, py: 6, textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
                     Sin documentos en este rango.
-                  </td>
-                </tr>
+                  </Box>
+                </Box>
               ) : data.documentos.map(d => {
-                const estado = ESTADO_LABEL[d.estado] ?? { label: d.estado, color: 'bg-gray-100 text-gray-700' };
+                const estado  = ESTADO_LABEL[d.estado] ?? { label: d.estado, bgcolor: '#f9fafb', color: '#6b7280', border: '#e5e7eb' };
                 const subtotal = d.montoTotal - d.totalItbis;
                 return (
-                  <tr key={d.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <Link href={`/dashboard/facturas/${d.id}`} className="text-teal-600 hover:text-teal-700 font-medium">
+                  <Box component="tr" key={d.id} sx={{ '&:hover': { bgcolor: '#f9fafb' }, borderBottom: '1px solid #f3f4f6' }}>
+                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                      <Link href={`/dashboard/facturas/${d.id}`} style={{ textDecoration: 'none', color: '#0d9488', fontWeight: 600 }}>
                         {d.encf}
                       </Link>
-                      <p className="text-xs text-gray-400">{TIPO_NOMBRE[d.tipoEcf] ?? `Tipo ${d.tipoEcf}`}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-gray-900">{d.razonSocialComprador ?? 'Consumidor Final'}</p>
-                      {d.rncComprador && <p className="text-xs text-gray-400">{d.rncComprador}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${estado.color}`}>
-                        {estado.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{fmtFecha(d.fechaEmision)}</td>
-                    <td className="px-4 py-3 text-right text-gray-700">{fmtDOP(subtotal)}</td>
-                    <td className="px-4 py-3 text-right text-gray-700">{fmtDOP(d.totalItbis)}</td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtDOP(d.montoTotal)}</td>
-                  </tr>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{TIPO_NOMBRE[d.tipoEcf] ?? `Tipo ${d.tipoEcf}`}</Typography>
+                    </Box>
+                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                      <Typography sx={{ color: '#111827', fontSize: '0.875rem' }}>{d.razonSocialComprador ?? 'Consumidor Final'}</Typography>
+                      {d.rncComprador && <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{d.rncComprador}</Typography>}
+                    </Box>
+                    <Box component="td" sx={{ px: 2, py: 1.5 }}>
+                      <Chip label={estado.label} size="small" sx={{ bgcolor: estado.bgcolor, color: estado.color, border: `1px solid ${estado.border}`, fontSize: '0.6875rem', height: 20 }} />
+                    </Box>
+                    <Box component="td" sx={{ px: 2, py: 1.5, color: '#374151', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{fmtFecha(d.fechaEmision)}</Box>
+                    <Box component="td" sx={{ px: 2, py: 1.5, textAlign: 'right', color: '#374151', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{fmtDOP(subtotal)}</Box>
+                    <Box component="td" sx={{ px: 2, py: 1.5, textAlign: 'right', color: '#374151', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{fmtDOP(d.totalItbis)}</Box>
+                    <Box component="td" sx={{ px: 2, py: 1.5, textAlign: 'right', fontWeight: 600, color: '#111827', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{fmtDOP(d.montoTotal)}</Box>
+                  </Box>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -201,40 +204,44 @@ function StatCard({
   separator,
   highlight,
 }: {
-  label: string;
-  value: number;
+  label:      string;
+  value:      number;
   separator?: '+' | '−' | '=';
   highlight?: boolean;
 }) {
   return (
-    <div className="relative bg-white border border-gray-200 rounded-xl p-4">
+    <Box sx={{ position: 'relative', bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
       {separator && (
-        <span className="absolute -left-2 top-1/2 -translate-y-1/2 hidden lg:flex h-5 w-5 items-center justify-center bg-white border border-gray-200 rounded-full text-gray-500 text-xs font-bold">
+        <Box sx={{
+          position: 'absolute', left: -10, top: '50%', transform: 'translateY(-50%)',
+          display: { xs: 'none', lg: 'flex' }, height: 20, width: 20, alignItems: 'center', justifyContent: 'center',
+          bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '50%',
+          fontSize: '0.6875rem', fontWeight: 700, color: '#6b7280',
+        }}>
           {separator}
-        </span>
+        </Box>
       )}
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={`font-bold ${highlight ? 'text-gray-900 text-lg' : 'text-gray-700 text-base'}`}>
+      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 0.5 }}>{label}</Typography>
+      <Typography sx={{ fontWeight: 700, color: '#111827', fontSize: highlight ? '1.125rem' : '1rem' }}>
         {fmtDOP(value)}
-      </p>
-    </div>
+      </Typography>
+    </Box>
   );
 }
 
-/**
- * Mini bar chart CSS-only — agrupa documentos por día y dibuja barras.
- * Sin librería de charts para mantener bundle pequeño.
- */
 function SimpleBarChart({
   docs,
 }: {
   docs: Array<{ fechaEmision: Date; montoTotal: number }>;
 }) {
   if (docs.length === 0) {
-    return <p className="text-sm text-gray-400 text-center py-8">Sin datos en este rango.</p>;
+    return (
+      <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', textAlign: 'center', py: 4 }}>
+        Sin datos en este rango.
+      </Typography>
+    );
   }
 
-  // Agrupar por día
   const byDay = new Map<string, number>();
   for (const d of docs) {
     const key = new Date(d.fechaEmision).toISOString().slice(0, 10);
@@ -245,26 +252,22 @@ function SimpleBarChart({
   const max = Math.max(...entries.map(([, v]) => v), 1);
 
   return (
-    <div className="flex items-end gap-1 h-40 px-2">
+    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 160, px: 1 }}>
       {entries.map(([day, total]) => {
         const heightPct = (total / max) * 100;
         return (
-          <div key={day} className="flex-1 flex flex-col items-center gap-1 group min-w-0">
-            <div
-              className="w-full bg-teal-500 hover:bg-teal-600 rounded-t transition-colors relative"
-              style={{ height: `${heightPct}%`, minHeight: '2px' }}
+          <Box key={day} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, minWidth: 0, '&:hover .bar': { bgcolor: '#0f766e' } }}>
+            <Box
+              className="bar"
               title={`${day}: ${fmtDOP(total)}`}
-            >
-              <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                {fmtDOP(total)}
-              </span>
-            </div>
-            <span className="text-[9px] text-gray-400 truncate w-full text-center">
+              sx={{ width: '100%', bgcolor: '#0d9488', borderRadius: '3px 3px 0 0', transition: 'background 0.15s', height: `${heightPct}%`, minHeight: 2 }}
+            />
+            <Typography sx={{ fontSize: '0.5625rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
               {day.slice(8, 10)}/{day.slice(5, 7)}
-            </span>
-          </div>
+            </Typography>
+          </Box>
         );
       })}
-    </div>
+    </Box>
   );
 }
