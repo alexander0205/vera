@@ -4,6 +4,16 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.8.1 — 2026-07-30
+
+### Arreglado
+
+- **auth**: el reset de contraseña fallaba con emails que tenían mayúsculas
+  - Normaliza el email al escribirlo: schemas de signIn/signUp, invitación de equipo y alta de empresa desde el panel admin.
+  - forgot-password compara con lower() para tolerar filas viejas.
+  - assertSent() lanza cuando Resend devuelve error, para que el catch de la ruta lo registre en vez de perderlo.
+  - Migración 0075: normaliza users e invitations, e índice único sobre lower(email) para que no vuelva a entrar sucio.
+
 ## v1.8.0 — 2026-07-30
 
 ### Nuevo
