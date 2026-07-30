@@ -13,6 +13,7 @@ import {
   generarCodigoEstudiante,
 } from '@/lib/administracion-escolar/queries';
 import { SEXOS_VALIDOS } from '@/lib/administracion-escolar/estudiante-utils';
+import { getColegioTope } from '@/lib/payments/module-subscriptions';
 import { eq, and } from 'drizzle-orm';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
@@ -54,6 +55,18 @@ export async function POST(req: NextRequest) {
   const { nombres, apellidos, sexo, fechaNacimiento, estado, matricula } = await req.json();
   if (!nombres?.trim()) return NextResponse.json({ error: 'Nombres requeridos' }, { status: 400 });
   if (!apellidos?.trim()) return NextResponse.json({ error: 'Apellidos requeridos' }, { status: 400 });
+
+  // Tope de estudiantes del tier del módulo Colegio (bloquea al llegar al límite).
+  const tope = await getColegioTope(teamId);
+  if (!tope.allowed) {
+    return NextResponse.json(
+      {
+        error: `Límite de estudiantes alcanzado. Tu plan ${tope.tierLabel} permite ${tope.topeEstudiantes} estudiantes. Tienes ${tope.usados}.`,
+        detalles: { tier: tope.tierKey, tope: tope.topeEstudiantes, usados: tope.usados, urlUpgrade: '/pricing' },
+      },
+      { status: 403 },
+    );
+  }
 
   // Validar la matrícula (opcional) antes de tocar nada.
   let periodoId: number | null = null;

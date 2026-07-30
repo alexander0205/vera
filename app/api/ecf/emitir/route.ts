@@ -15,8 +15,8 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { restaurarInventario } from '@/lib/inventario/devolucion';
-import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
-import { getPlan, PLANS } from '@/lib/config/plans';
+import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
+import { getFacturacionTope } from '@/lib/payments/module-subscriptions';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { calcularTotales } from '@/lib/ecf/types';
@@ -237,23 +237,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar límite del plan
+    // Verificar tope de facturación del módulo (monto facturado/mes, no conteo)
     if (modoPrevio !== 'borrador') {
-      const [monthlyCount, planLimit] = await Promise.all([
-        getMonthlyEcfCount(teamId),
-        Promise.resolve(getPlanLimit(team.planName, team.subscriptionStatus)),
-      ]);
-
-      if (planLimit !== -1 && monthlyCount >= planLimit) {
-        const currentPlan = getPlan(team.planName);
-        const nextPlan = PLANS.find(p => p.limits.docs > currentPlan.limits.docs || p.limits.docs === -1);
-        const sugerencia = nextPlan
-          ? `Actualiza al plan ${nextPlan.name} ($${nextPlan.price}/mes).`
-          : 'Contacta a soporte para un plan Enterprise.';
+      const tope = await getFacturacionTope(teamId);
+      if (!tope.allowed) {
+        const topeRD = ((tope.topeCents ?? 0) / 100).toLocaleString('es-DO');
+        const usadoRD = (tope.usadoCents / 100).toLocaleString('es-DO');
         return NextResponse.json(
           {
-            error: `Límite mensual alcanzado. Tu plan ${currentPlan.name} permite ${planLimit} comprobantes/mes. Has emitido ${monthlyCount} este mes.`,
-            detalles: { planActual: currentPlan.name, limite: planLimit, emitidoEsteMes: monthlyCount, sugerencia, urlUpgrade: '/pricing' },
+            error: `Límite de facturación alcanzado. Tu plan ${tope.tierLabel} permite RD$${topeRD} facturados por mes. Llevas RD$${usadoRD} este mes.`,
+            detalles: {
+              tier: tope.tierKey,
+              topeCents: tope.topeCents,
+              usadoCents: tope.usadoCents,
+              urlUpgrade: '/pricing',
+            },
           },
           { status: 403 },
         );

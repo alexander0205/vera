@@ -15,9 +15,15 @@
  */
 
 import 'server-only';
-import { and, eq, isNull, lt } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { teams, teamModules, type TeamModule } from '@/lib/db/schema';
+import {
+  teams,
+  teamModules,
+  ecfDocuments,
+  adminEscolarEstudiantes,
+  type TeamModule,
+} from '@/lib/db/schema';
 import {
   MODULES,
   MODULE_DEPENDENCIES,
@@ -28,6 +34,7 @@ import {
   statusGrantsAccess,
   TRIAL_DAYS,
   type ModuleStatus,
+  type ModuleTier,
 } from '@/lib/config/module-plans';
 
 // ─── Lectura ────────────────────────────────────────────────────────────────
@@ -194,4 +201,113 @@ export function trialDaysLeft(row: Pick<TeamModule, 'status' | 'trialEndsAt'>, n
   if (row.status !== 'trialing' || !row.trialEndsAt) return null;
   const ms = row.trialEndsAt.getTime() - now.getTime();
   return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+}
+
+// ─── Topes por tier ─────────────────────────────────────────────────────────
+
+/**
+ * Definición de tier del módulo, solo si la empresa lo tiene con acceso
+ * (trialing/active/past_due). undefined si no está activo o el tier no existe.
+ */
+export async function getModuleTierDef(
+  teamId: number,
+  modulo: ModuleKey,
+): Promise<ModuleTier | undefined> {
+  const row = await getModuleRow(teamId, modulo);
+  if (!row || !statusGrantsAccess(row.status as ModuleStatus)) return undefined;
+  return getTier(row.tier);
+}
+
+/**
+ * Monto facturado en el mes calendario en curso, en centavos DOP. Suma
+ * `ecfDocuments.montoTotal` de los comprobantes emitidos (excluye borradores y
+ * anulados). Mismo período que getMonthlyEcfCount (mes calendario, hora server).
+ */
+export async function getMonthlyFacturadoCents(
+  teamId: number,
+  now: Date = new Date(),
+): Promise<number> {
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [r] = await db
+    .select({ total: sql<string>`COALESCE(SUM(${ecfDocuments.montoTotal}), 0)` })
+    .from(ecfDocuments)
+    .where(
+      and(
+        eq(ecfDocuments.teamId, teamId),
+        gte(ecfDocuments.createdAt, startOfMonth),
+        sql`${ecfDocuments.estado} != 'BORRADOR'`,
+        sql`${ecfDocuments.estado} NOT LIKE 'ANULAD%'`,
+      ),
+    );
+  return Number(r?.total ?? 0);
+}
+
+export interface FacturacionTope {
+  /** Tope de monto/mes en centavos DOP. null = ilimitado (sin tope). */
+  topeCents: number | null;
+  /** Facturado en el mes en curso, centavos DOP. */
+  usadoCents: number;
+  /** false = alcanzó el tope → bloquear emisión. */
+  allowed: boolean;
+  tierKey: string | null;
+  tierLabel: string | null;
+}
+
+/**
+ * Estado del tope de facturación de una empresa. Bloquea (`allowed=false`)
+ * cuando lo ya facturado en el mes llega o supera el tope del tier.
+ * Sin módulo Facturación activo o tier sin tope → ilimitado.
+ */
+export async function getFacturacionTope(
+  teamId: number,
+  now: Date = new Date(),
+): Promise<FacturacionTope> {
+  const tier = await getModuleTierDef(teamId, 'facturacion');
+  const topeCents = tier?.topeMontoCents ?? null;
+  const usadoCents = await getMonthlyFacturadoCents(teamId, now);
+  return {
+    topeCents,
+    usadoCents,
+    allowed: topeCents === null || usadoCents < topeCents,
+    tierKey: tier?.key ?? null,
+    tierLabel: tier?.label ?? null,
+  };
+}
+
+export interface ColegioTope {
+  /** Tope de estudiantes del tier. null = ilimitado. */
+  topeEstudiantes: number | null;
+  /** Estudiantes en el roster (excluye retirado/graduado). */
+  usados: number;
+  /** false = alcanzó el tope → bloquear matrícula. */
+  allowed: boolean;
+  tierKey: string | null;
+  tierLabel: string | null;
+}
+
+/**
+ * Estado del tope de estudiantes de una empresa (módulo Colegio). Cuenta el
+ * roster activo (estados distintos de retirado/graduado). Sin módulo Escolar
+ * activo o tier sin tope → ilimitado.
+ */
+export async function getColegioTope(teamId: number): Promise<ColegioTope> {
+  const tier = await getModuleTierDef(teamId, 'escolar');
+  const topeEstudiantes = tier?.topeEstudiantes ?? null;
+  const [r] = await db
+    .select({ n: sql<string>`count(*)` })
+    .from(adminEscolarEstudiantes)
+    .where(
+      and(
+        eq(adminEscolarEstudiantes.teamId, teamId),
+        sql`${adminEscolarEstudiantes.estado} NOT IN ('retirado', 'graduado')`,
+      ),
+    );
+  const usados = Number(r?.n ?? 0);
+  return {
+    topeEstudiantes,
+    usados,
+    allowed: topeEstudiantes === null || usados < topeEstudiantes,
+    tierKey: tier?.key ?? null,
+    tierLabel: tier?.label ?? null,
+  };
 }
