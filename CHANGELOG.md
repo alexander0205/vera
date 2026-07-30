@@ -4,6 +4,29 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.9.0 — 2026-07-30
+
+### Nuevo
+
+- **pagos**: permiso y toggle admin/owner para la alerta de método de pago
+  - Permiso 'pagos:config-alerta' (owner+admin) en roles.ts + catálogo, visible en la matriz de permisos.
+  - Columna teams.alerta_metodo_pago_activa (default true) + migración 0075.
+  - Config: card "Alerta de método de pago" gateada por el permiso, guardado instantáneo vía endpoint dedicado /api/equipo/alerta-metodo-pago (gateado por userCan, aparte del perfil owner-only). GET perfil expone el flag.
+  - POS y factura leen el flag (default ON): si está apagado, el cobro se finaliza sin pedir reconfirmación del método.
+- **pagos**: alerta double-check del método de pago
+  - ConfirmarMetodoPagoDialog: componente presentacional reutilizable que pone el método al frente; cada pantalla arma sus líneas.
+  - POS (ModalCobro): confirmar() guarda el cobro pendiente y abre el double-check; cubre método simple, monedero y pago dividido.
+  - Factura nueva: gate al inicio de emitir() cuando hay pago con monto>0; va antes de la traza anti-duplicados para no registrar submits fantasma.
+
+### Cambios internos
+
+- **pagos**: alerta de método de pago por permiso, sin toggle de empresa
+  - Columna teams.alerta_metodo_pago_activa + migración 0075 + apply script.
+  - Endpoint /api/equipo/alerta-metodo-pago y su lectura en el perfil.
+  - Card "Alerta de método de pago" en Configuración de empresa.
+  - Factura: usePermissions().can('pagos:alerta-metodo') (cubre nueva/editar/NC/ND).
+  - POS: hasPermission('pagos:alerta-metodo') server-side, mismo prop threadeado.
+
 ## v1.8.1 — 2026-07-30
 
 ### Arreglado
