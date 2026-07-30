@@ -56,6 +56,31 @@ export function PricingClient({
     }
   }
 
+  async function suscribir(modulo: ModuleKey, tier: string) {
+    setError(null);
+    setBusy(tier);
+    try {
+      const res = await fetch('/api/modulos/activar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modulo, tier }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? 'No se pudo activar el módulo');
+      if (json.checkoutUrl) {
+        // Sin suscripción → completar pago en Stripe.
+        window.location.href = json.checkoutUrl;
+        return;
+      }
+      // Item agregado/cambiado en la suscripción existente.
+      router.push(MODULE_HOME[modulo]);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error desconocido');
+      setBusy(null);
+    }
+  }
+
   return (
     <Box>
       {isNew && (
@@ -110,6 +135,7 @@ export function PricingClient({
                     busy={busy === tier.key}
                     disabledOtro={busy !== null && busy !== tier.key}
                     onProbar={() => probar(modulo, tier.key)}
+                    onSuscribir={() => suscribir(modulo, tier.key)}
                   />
                 ))}
               </Box>
@@ -122,7 +148,7 @@ export function PricingClient({
 }
 
 function TierCard({
-  tier, esActual, moduloActivo, yaProbado, bloqueadoPorBase, busy, disabledOtro, onProbar,
+  tier, esActual, moduloActivo, yaProbado, bloqueadoPorBase, busy, disabledOtro, onProbar, onSuscribir,
 }: {
   tier: ModuleTier;
   esActual: boolean;
@@ -132,16 +158,23 @@ function TierCard({
   busy: boolean;
   disabledOtro: boolean;
   onProbar: () => void;
+  onSuscribir: () => void;
 }) {
   const destacado = tier.ui.highlighted;
 
+  // Acción del botón principal:
+  //  - trial:     módulo nuevo sin prueba previa → "Probar 15 días gratis"
+  //  - subscribe: cambiar de tier, o suscribir tras trial usado → pago Stripe
+  //  - none:      plan actual / bloqueado
+  let action: 'trial' | 'subscribe' | 'none' = 'trial';
   let label = 'Probar 15 días gratis';
   let disabled = disabledOtro;
-  if (esActual) { label = 'Plan actual'; disabled = true; }
-  else if (moduloActivo) { label = 'Cambiar de plan (pronto)'; disabled = true; }
-  else if (bloqueadoPorBase) { label = 'Activa Facturación primero'; disabled = true; }
-  else if (yaProbado) { label = 'Prueba usada — suscribir (pronto)'; disabled = true; }
-  if (busy) label = 'Activando…';
+  let onClick = onProbar;
+  if (esActual) { label = 'Plan actual'; disabled = true; action = 'none'; }
+  else if (bloqueadoPorBase) { label = 'Activa Facturación primero'; disabled = true; action = 'none'; }
+  else if (moduloActivo) { label = 'Cambiar a este plan'; action = 'subscribe'; onClick = onSuscribir; }
+  else if (yaProbado) { label = 'Suscribir'; action = 'subscribe'; onClick = onSuscribir; }
+  if (busy) label = action === 'trial' ? 'Activando…' : 'Redirigiendo…';
 
   return (
     <Box sx={{
@@ -172,7 +205,7 @@ function TierCard({
       </Box>
 
       <Button
-        variant={destacado ? 'contained' : 'outlined'} disabled={disabled} onClick={onProbar} fullWidth
+        variant={destacado ? 'contained' : 'outlined'} disabled={disabled} onClick={onClick} fullWidth
         sx={{
           py: 1.1, borderRadius: '99px', textTransform: 'none', fontWeight: 600,
           ...(destacado
@@ -182,6 +215,14 @@ function TierCard({
       >
         {label}
       </Button>
+      {action === 'trial' && !disabled && (
+        <Button
+          onClick={onSuscribir} disabled={disabledOtro} size="small"
+          sx={{ mt: 1, textTransform: 'none', color: '#6b7280', fontSize: '0.75rem' }}
+        >
+          o suscribir sin prueba
+        </Button>
+      )}
     </Box>
   );
 }

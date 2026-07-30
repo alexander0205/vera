@@ -15,14 +15,17 @@
  */
 
 import 'server-only';
+import type Stripe from 'stripe';
 import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
+import { stripe } from '@/lib/payments/stripe';
 import {
   teams,
   teamModules,
   ecfDocuments,
   adminEscolarEstudiantes,
   type TeamModule,
+  type Team,
 } from '@/lib/db/schema';
 import {
   MODULES,
@@ -31,6 +34,8 @@ import {
 } from '@/lib/config/modules';
 import {
   getTier,
+  getTierPriceId,
+  tierForPriceId,
   statusGrantsAccess,
   TRIAL_DAYS,
   type ModuleStatus,
@@ -310,4 +315,133 @@ export async function getColegioTope(teamId: number): Promise<ColegioTope> {
     tierKey: tier?.key ?? null,
     tierLabel: tier?.label ?? null,
   };
+}
+
+// ─── Billing por Stripe (tier-aware) ─────────────────────────────────────────
+
+/** Mapea el estado de una suscripción Stripe a nuestro ModuleStatus. */
+function mapStripeStatus(s: Stripe.Subscription.Status): ModuleStatus {
+  if (s === 'active') return 'active';
+  if (s === 'trialing') return 'trialing';
+  if (s === 'past_due') return 'past_due';
+  return 'canceled'; // canceled | unpaid | incomplete | incomplete_expired | paused
+}
+
+/**
+ * Deriva y persiste team_modules desde una suscripción Stripe: cada item cuyo
+ * price mapea a un tier (tierForPriceId) genera/actualiza su fila (modulo, tier,
+ * status, stripeItemId). Los módulos que estaban facturados por Stripe pero ya
+ * no están en la suscripción se marcan 'canceled'. Los trials LOCALES
+ * (stripe_item_id NULL) y módulos manuales NO se tocan. Al final re-deriva el
+ * gate (modulosHabilitados).
+ */
+export async function syncTeamModulesFromStripe(
+  teamId: number,
+  subscription: Stripe.Subscription,
+): Promise<void> {
+  const status = mapStripeStatus(subscription.status);
+  const now = new Date();
+  const seen = new Set<ModuleKey>();
+
+  for (const item of subscription.items.data) {
+    const tier = tierForPriceId(item.price?.id ?? '');
+    if (!tier) continue; // price ajeno al modelo modular
+    seen.add(tier.modulo);
+    await db
+      .insert(teamModules)
+      .values({
+        teamId,
+        modulo: tier.modulo,
+        tier: tier.key,
+        status,
+        stripeItemId: item.id,
+      })
+      .onConflictDoUpdate({
+        target: [teamModules.teamId, teamModules.modulo],
+        set: { tier: tier.key, status, stripeItemId: item.id, updatedAt: now },
+      });
+  }
+
+  // Módulos antes facturados por Stripe que ya no están en la sub → cancelar.
+  // (Los trials locales tienen stripe_item_id NULL y se preservan.)
+  const rows = await getModuleRows(teamId);
+  for (const r of rows) {
+    if (r.stripeItemId && !seen.has(r.modulo as ModuleKey)) {
+      await db
+        .update(teamModules)
+        .set({ status: 'canceled', updatedAt: now })
+        .where(eq(teamModules.id, r.id));
+    }
+  }
+
+  await deriveAndPersistModules(teamId);
+}
+
+/**
+ * Activa/cambia un módulo con COBRO por Stripe:
+ *  - con suscripción existente → agrega (o cambia el tier de) su item con
+ *    prorrateo, sincroniza team_modules y devuelve {ok:true}.
+ *  - sin suscripción → devuelve {checkoutUrl} para completar el pago; al volver,
+ *    el checkout/webhook llama syncTeamModulesFromStripe.
+ *
+ * Valida tier↔módulo, dependencias (base Facturación) y price configurado.
+ */
+export async function activarModulo(
+  team: Team,
+  modulo: ModuleKey,
+  tierKey: string,
+  actorUserId: number,
+): Promise<{ ok: true } | { checkoutUrl: string }> {
+  const tier = getTier(tierKey);
+  if (!tier || tier.modulo !== modulo) throw new Error('Tier inválido para este módulo');
+  const priceId = getTierPriceId(tierKey);
+  if (!priceId) throw new Error('Este tier no tiene price de Stripe configurado');
+
+  // Dependencias: un add-on requiere su base activa/en-prueba.
+  if (modulo !== 'facturacion') {
+    const rows = await getModuleRows(team.id);
+    const activos = new Set(
+      rows.filter(r => statusGrantsAccess(r.status as ModuleStatus)).map(r => r.modulo),
+    );
+    for (const dep of MODULE_DEPENDENCIES[modulo]) {
+      if (!activos.has(dep)) throw new Error(`Requiere el módulo ${dep} activo`);
+    }
+  }
+
+  if (team.stripeSubscriptionId) {
+    const existing = await getModuleRow(team.id, modulo);
+    if (existing?.stripeItemId) {
+      // Ya facturado por Stripe → cambiar el tier del item (prorrateado).
+      await stripe.subscriptionItems.update(existing.stripeItemId, {
+        price: priceId,
+        proration_behavior: 'create_prorations',
+      });
+    } else {
+      // Nuevo item en la suscripción existente.
+      await stripe.subscriptionItems.create({
+        subscription: team.stripeSubscriptionId,
+        price: priceId,
+        quantity: 1,
+        proration_behavior: 'create_prorations',
+      });
+    }
+    const sub = await stripe.subscriptions.retrieve(team.stripeSubscriptionId, {
+      expand: ['items.data.price'],
+    });
+    await syncTeamModulesFromStripe(team.id, sub);
+    return { ok: true };
+  }
+
+  // Sin suscripción → checkout (crea la suscripción con este primer item).
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    payment_method_types: ['card'],
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.BASE_URL}/pricing`,
+    customer: team.stripeCustomerId || undefined,
+    client_reference_id: `${actorUserId}:${team.id}`,
+    allow_promotion_codes: true,
+  });
+  return { checkoutUrl: session.url! };
 }
