@@ -816,19 +816,37 @@ export const emisionesGlobal = {
 
 // ─── Anulaciones (ANECF) ──────────────────────────────────────────────────────
 
+/** Un tramo de secuencias a anular. `tipoComprobante` va DENTRO del rango. */
+export interface RangoAnulacion {
+  tipoComprobante: string;
+  desde: number;
+  hasta: number;
+}
+
 export interface AnecfDto {
   id: string;
-  tipoComprobante: string;
-  rangos: Array<{ desde: number; hasta: number }>;
+  rnc: string;
+  rangos: RangoAnulacion[];
+  cantidadTotal: number;
+  /** PENDIENTE | ENVIADO | ACEPTADO | RECHAZADO | ERROR */
   estado: string;
+  trackId: string | null;
+  respuestaDgii: unknown;
+  enviadoEn: string | null;
+  procesadoEn: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export const anecf = {
   list: (codigoPublico: string) =>
     request<AnecfDto[]>('GET', `/contribuyentes/${codigoPublico}/anecf`),
 
-  create: (codigoPublico: string, dto: { tipoComprobante: string; rangos: Array<{ desde: number; hasta: number }> }) =>
+  /**
+   * Envía un ANECF firmado a DGII (`anulacionrangos/anularrango`).
+   * Máximo 10 tramos por envío según el XSD ANECF v1.0.
+   */
+  create: (codigoPublico: string, dto: { rangos: RangoAnulacion[] }) =>
     request<AnecfDto>('POST', `/contribuyentes/${codigoPublico}/anecf`, dto),
 };
 
