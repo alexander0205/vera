@@ -17,6 +17,7 @@ export type EstadoNcf =
   | 'FALLIDO'               // se intentó, NUNCA llegó a la DGII
   | 'NO_GENERADO'           // número consumido, sin rastro en ninguna fuente
   | 'EN_DGII_SIN_REGISTRO'  // ⚠️ existe en la DGII pero no en este sistema
+  | 'ANULADO_DGII'          // rango anulado ante la DGII vía ANECF
   | 'SIN_USAR';             // número aún no consumido
 
 /** Qué debe hacer el contador con este comprobante. Es la decisión que importa. */
@@ -94,11 +95,43 @@ export const ESTADO_NCF_META: Record<EstadoNcf, EstadoMeta> = {
     queSignifica: 'La DGII tiene este comprobante, pero en el sistema no aparece la factura.',
     queHacer: 'No lo declares todavía. Avisa a soporte para que lo registren correctamente.',
   },
+  ANULADO_DGII: {
+    label: 'Anulado ante la DGII', tone: 'muted', veredicto: 'no-declarar',
+    queSignifica: 'El número se anuló formalmente ante la DGII y ya no puede usarse en una factura.',
+    queHacer: 'No se declara. La DGII ya sabe que este número quedó sin usar — no hay que explicarlo.',
+  },
   SIN_USAR: {
     label: 'Disponible', tone: 'muted', veredicto: 'no-declarar',
     queSignifica: 'Número todavía sin usar.',
     queHacer: 'No aplica. Se usará en una factura futura.',
   },
+};
+
+/**
+ * Estados que la DGII permite anular vía ANECF. El criterio es que el número
+ * nunca llegó a existir como comprobante fiscal válido: o no se usó, o el
+ * intento murió antes de transmitirse, o la DGII lo rechazó (en cuyo caso el
+ * número queda quemado y la venta se refacturó con el siguiente).
+ *
+ * Un ACEPTADO / ACEPTADO_CONDICIONAL / EN_PROCESO NO entra aquí — esos existen
+ * ante la DGII y solo se revierten con Nota de Crédito (tipo 34).
+ */
+export const ESTADOS_ANULABLES_ANECF: EstadoNcf[] = [
+  'SIN_USAR', 'NO_GENERADO', 'FALLIDO', 'RECHAZADO',
+];
+
+/**
+ * Por qué un estado bloquea la anulación del tramo completo. El texto se
+ * muestra tal cual al usuario, así que explica la salida, no solo el problema.
+ */
+export const MOTIVO_BLOQUEO_ANECF: Partial<Record<EstadoNcf, string>> = {
+  ACEPTADO:             'La DGII lo aceptó: es un comprobante fiscal válido. Para revertirlo hay que emitir una Nota de Crédito (tipo 34), no un ANECF.',
+  ACEPTADO_CONDICIONAL: 'La DGII lo aceptó con observación: sigue siendo válido. Para revertirlo hay que emitir una Nota de Crédito (tipo 34).',
+  EN_PROCESO:           'Está enviado y esperando el veredicto de la DGII. Espera a que resuelva antes de anular el tramo.',
+  ANULADO:              'Ya se anuló como comprobante emitido (va en el 608). No se vuelve a anular por rango.',
+  ANULADO_DGII:         'Este número ya se anuló ante la DGII en un envío anterior.',
+  RESERVADO:            'Hay una factura en borrador usando este número. Anula o emite ese borrador primero — si anulas el rango, el borrador queda con un e-NCF inválido.',
+  EN_DGII_SIN_REGISTRO: 'La DGII tiene un comprobante con este número pero el sistema no. Revísalo con soporte antes de anular.',
 };
 
 /** Estados que representan un problema — alimentan el filtro "solo con problemas". */

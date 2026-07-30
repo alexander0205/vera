@@ -6,6 +6,7 @@
 import Link from 'next/link';
 import { ChevronRight, Download } from 'lucide-react';
 import { DateRangeFilter } from './date-range-filter';
+import { PrintButton } from './print-button';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -22,9 +23,11 @@ export function ReportShell({
   children: React.ReactNode;
 }) {
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto' }}>
+    // .print-area: al imprimir/guardar como PDF solo se ve este bloque, tal cual
+    // la pantalla. El cromo (breadcrumb, botones, filtro) queda oculto vía .no-print.
+    <Box component="section" className="print-area" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto' }}>
       {/* Breadcrumb */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, color: '#6b7280' }}>
+      <Box className="no-print" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, color: '#6b7280' }}>
         <Link href="/dashboard/reportes" style={{ textDecoration: 'none' }}>
           <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#0d9488' } }}>
             Reportes
@@ -34,29 +37,34 @@ export function ReportShell({
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>{migaja}</Typography>
       </Box>
 
-      {/* Header + export */}
+      {/* Header + acciones. El título/descripción sí entran en el PDF; los botones no. */}
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, mb: 3 }}>
         <Box>
           <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>{titulo}</Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>{descripcion}</Typography>
         </Box>
-        {exportHref && (
-          <Button
-            component="a"
-            href={exportHref}
-            nativeButton={false}
-            variant="contained"
-            disableElevation
-            startIcon={<Download style={{ width: 16, height: 16 }} />}
-            sx={{ px: 2, py: 1, borderRadius: '8px', textTransform: 'none', fontWeight: 500, bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, whiteSpace: 'nowrap', flexShrink: 0 }}
-          >
-            Descargar Excel
-          </Button>
-        )}
+        <Box className="no-print" sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+          <PrintButton />
+          {exportHref && (
+            <Button
+              component="a"
+              href={exportHref}
+              nativeButton={false}
+              variant="contained"
+              disableElevation
+              startIcon={<Download style={{ width: 16, height: 16 }} />}
+              sx={{ px: 2, py: 1, borderRadius: '8px', textTransform: 'none', fontWeight: 500, bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              Descargar Excel
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {/* Filtro de fecha — navegación client-side (no recarga el layout) */}
-      <DateRangeFilter desde={desde} hasta={hasta} />
+      <div className="no-print">
+        <DateRangeFilter desde={desde} hasta={hasta} />
+      </div>
 
       {children}
     </Box>

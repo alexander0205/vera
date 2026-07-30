@@ -36,6 +36,8 @@ export interface BorradorInicial {
   telefonoComprador:    string | null;
   tipoPago:             number | null;
   fechaLimitePago:      string | null;
+  /** Fecha de emisión guardada (YYYY-MM-DD) — para restaurar al editar. */
+  fechaEmision:         string | null;
   ncfModificado:        string | null;
   notas:                string | null;
   terminosCondiciones:  string | null;

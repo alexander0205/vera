@@ -4,6 +4,42 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.8.0 — 2026-07-30
+
+### Nuevo
+
+- **contabilidad**: anulación de e-NCF por rango ante DGII (ANECF)
+  - Tabla `anulaciones_ncf` (migración 0074): tramo, estado, trackId, respuesta DGII y autor de cada envío. Solo los tramos ACEPTADOS cuentan como anulados.
+  - `revisarTramo` inspecciona sin enviar y recorre por bloques de 1000, que es el tope de `consultarRango`. Sin el chunking un tramo de 5.000 se validaba solo en sus primeros 1.000 y el resto se anulaba sin revisar.
+  - `anularTramo` revalida antes de enviar (el preview envejece), persiste el registro ANTES de llamar a DGII y lo marca ERROR con el payload crudo si falla, para no dejar envíos huérfanos.
+  - Bloquean el envío: ACEPTADO, ACEPTADO_CONDICIONAL, EN_PROCESO, ANULADO, EN_DGII_SIN_REGISTRO y RESERVADO (hay un borrador usando el número). Cada bloqueo trae su explicación y links a la factura, la NC y la verificación DGII.
+  - La consulta muestra los anulados como ANULADO_DGII. Si el número además tiene rastro local gana el estado local y la anulación se añade como nota.
+
+## v1.7.0 — 2026-07-28
+
+### Nuevo
+
+- **reportes**: imprimir/guardar PDF de la vista además de Excel
+  - print-button.tsx: botón client con window.print().
+  - report-shell.tsx: .print-area envuelve el contenido; breadcrumb, botones y filtro marcados .no-print; el título/descripción entran en el PDF.
+  - globals.css: print-color-adjust: exact para conservar los colores de chips de antigüedad, KPIs y barras en el PDF.
+
+## v1.6.0 — 2026-07-27
+
+### Nuevo
+
+- **facturas**: fecha de emisión editable en sin-ncf para admin/owner
+  - roles: permiso nuevo en el type, en owner+admin y en PERMISSION_CATALOG.
+  - api/ecf/emitir: el schema acepta `fechaEmision`; el servidor solo la honra cuando el tipo es sin-ncf y el rol tiene el permiso (defensa en profundidad). Aplica al insert de borrador y al update. e-CF fiscal: la fecha la fija la DGII, nunca el usuario. Se usa T12:00:00 para evitar corrimiento UTC/RD.
+  - CompactHeader: el campo Fecha pasa a input de calendario cuando el rol tiene permiso y el documento es sin-ncf; en cualquier otro caso queda de solo lectura.
+  - Flujo de edición: BorradorInicial y la página de editar ahora incluyen fechaEmision, de modo que al reabrir un borrador se restaura la fecha guardada y no se pisa con la de hoy al re-guardar.
+
+## v1.5.5 — 2026-07-23
+
+### Arreglado
+
+- **cron**: sincronizar padrón RNC semanalmente (domingos 4am)
+
 ## v1.5.4 — 2026-07-22
 
 ### Arreglado

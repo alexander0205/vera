@@ -294,6 +294,12 @@
     top: 0;
     width: 100%;
   }
+  /* Conservar fondos/colores (chips de antigüedad, KPIs, barras) en el PDF. */
+  .print-area,
+  .print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .no-print,
   .no-print * {
     display: none !important;

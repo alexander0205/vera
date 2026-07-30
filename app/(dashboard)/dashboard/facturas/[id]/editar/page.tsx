@@ -174,6 +174,10 @@ export default async function EditarBorradorPage({
     telefonoComprador,
     tipoPago:             doc.tipoPago,
     fechaLimitePago:      doc.fechaLimitePago,
+    // Fecha de emisión guardada — restaurarla en el form (evita que un
+    // re-guardado la pise con la fecha de hoy). Custom se guarda a las 12:00,
+    // así que toISOString().slice(0,10) es estable.
+    fechaEmision:         doc.fechaEmision ? doc.fechaEmision.toISOString().slice(0, 10) : null,
     ncfModificado:        doc.ncfModificado,
     notas:                doc.notas,
     terminosCondiciones:  doc.terminosCondiciones,

@@ -25,13 +25,17 @@ interface Props {
   sinComprobante?: boolean;
   secuencia: SecuenciaInfo | null;
   fechaEmision: string;
+  /** Permite elegir la fecha de emisión (permiso facturas:fecha-personalizada). */
+  puedeEditarFecha?: boolean;
+  /** Actualiza la fecha de emisión (YYYY-MM-DD). Requerido si puedeEditarFecha. */
+  onChangeFecha?: (v: string) => void;
   onEditarNcf: () => void;
 }
 
 export function CompactHeader({
   empresa, categoriaId, setCategoriaId, tipoEcf, onChangeTipo,
   ocultarCategoria, mostrarCodigoTipo = true, sinComprobante = false,
-  secuencia, fechaEmision, onEditarNcf,
+  secuencia, fechaEmision, puedeEditarFecha = false, onChangeFecha, onEditarNcf,
 }: Props) {
   // "Sin comprobante" efectivo: la secuencia es sin-ncf, o es una nota sobre una
   // factura sin e-CF (nunca tendrá e-NCF real).
@@ -135,9 +139,31 @@ export function CompactHeader({
           )}
         </Box>
 
+        {/* Fecha — editable solo para roles con permiso y en sin-ncf (la fecha
+            de un e-CF fiscal la fija la DGII, no el usuario). */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem' }}>
           <Typography component="span" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>Fecha:</Typography>
-          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#111827' }}>{fechaFmt}</Typography>
+          {puedeEditarFecha && sinNcfEfectivo ? (
+            <Box
+              component="input"
+              type="date"
+              value={fechaEmision}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChangeFecha?.(e.target.value)}
+              aria-label="Fecha de emisión"
+              sx={{
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                color: '#111827',
+                border: '1px solid #e5e7eb',
+                borderRadius: '4px',
+                px: 0.75,
+                py: 0.25,
+                '&:focus': { outline: 'none', borderColor: '#0d9488', boxShadow: '0 0 0 1px #0d9488' },
+              }}
+            />
+          ) : (
+            <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#111827' }}>{fechaFmt}</Typography>
+          )}
         </Box>
 
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.75 }}>

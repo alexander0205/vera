@@ -869,6 +869,39 @@ export const paymentLinks = pgTable('payment_links', {
   uniqueIndex('paylink_orden_uq').on(t.teamId, t.ordenId),
 ]);
 
+// ─── Anulación de rangos de e-NCF ante DGII (ANECF) ──────────────────────────
+
+/**
+ * Un registro por envío ANECF. DGII solo permite anular e-NCF que nunca se
+ * transmitieron; los aceptados se revierten con Nota de Crédito (tipo 34).
+ *
+ * Los tramos en estado ACEPTADO son la fuente de verdad de "este número quedó
+ * anulado ante DGII" que consume Contabilidad → Consulta de e-NCF.
+ */
+export const anulacionesNcf = pgTable('anulaciones_ncf', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  tipoEcf:       varchar('tipo_ecf', { length: 10 }).notNull(),
+  desde:         bigint('desde', { mode: 'number' }).notNull(),
+  hasta:         bigint('hasta', { mode: 'number' }).notNull(),
+  /** hasta - desde + 1, denormalizado para reportes. */
+  cantidad:      integer('cantidad').notNull(),
+  /** PENDIENTE | ENVIADO | ACEPTADO | RECHAZADO | ERROR (espejo de ecf-api). */
+  estado:        varchar('estado', { length: 20 }).notNull().default('PENDIENTE'),
+  /** Id del registro `Anulacion` en ecf-api. */
+  anulacionId:   varchar('anulacion_id', { length: 40 }),
+  trackId:       varchar('track_id', { length: 64 }),
+  respuestaDgii: jsonb('respuesta_dgii'),
+  /** Nota interna del usuario — no viaja a DGII (el XSD ANECF no lo lleva). */
+  motivo:        varchar('motivo', { length: 500 }),
+  createdBy:     integer('created_by').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('anulncf_team_tipo_idx').on(t.teamId, t.tipoEcf, t.desde, t.hasta),
+  index('anulncf_team_estado_idx').on(t.teamId, t.estado),
+]);
+
 // ─── Relaciones ───────────────────────────────────────────────────────────────
 
 export const teamsRelations = relations(teams, ({ many }) => ({

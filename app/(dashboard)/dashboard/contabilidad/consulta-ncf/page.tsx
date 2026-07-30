@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { requirePermission } from '@/lib/auth/page-guard';
 import { ConsultaNcfClient } from './_client';
+import { AnularRangoPanel } from './_anular-rango';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
@@ -36,6 +37,13 @@ export default async function ConsultaNcfPage() {
       </Box>
 
       <ConsultaNcfClient />
+
+      {/* Acción fiscal: colgada del final a propósito — se llega aquí después de
+          revisar el rango, no antes. El panel se oculta solo si el usuario no
+          tiene `facturas:anular` (el contador consulta pero no anula). */}
+      <Box sx={{ mt: 2.5 }}>
+        <AnularRangoPanel />
+      </Box>
     </Box>
   );
 }
