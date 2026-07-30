@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
       rnc: body.rnc,
       nombreComercial: body.nombreComercial ?? null,
       planName: 'Gratis',
+      // Sin módulos: el gate la manda a /pricing a elegir plan/trial.
+      modulosHabilitados: [],
     })
     .returning();
 

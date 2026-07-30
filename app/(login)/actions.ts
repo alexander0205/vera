@@ -236,9 +236,11 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       return { error: 'Invalid or expired invitation.', email, password };
     }
   } else {
-    // Create a new team if there's no invitation
+    // Create a new team if there's no invitation.
+    // Sin módulos: el gate lo manda a /pricing a elegir plan/trial (modelo modular).
     const newTeam: NewTeam = {
-      name: `${email}'s Team`
+      name: `${email}'s Team`,
+      modulosHabilitados: [],
     };
 
     [createdTeam] = await db.insert(teams).values(newTeam).returning();
