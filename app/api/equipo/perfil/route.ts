@@ -163,6 +163,8 @@ export async function GET(_req: NextRequest) {
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)
     metodosObligaDgii:     (team.metodosObligaDgii as string[] | null) ?? [],
+    // Alerta double-check del método de pago (POS + factura)
+    alertaMetodoPagoActiva: team.alertaMetodoPagoActiva ?? true,
     // Rol del usuario en este team (para gating en el cliente)
     role:              member?.role ?? null,
   });

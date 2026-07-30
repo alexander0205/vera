@@ -34,6 +34,7 @@ export default async function PosPage() {
       turnoInicial={turno}
       terminalInicial={terminalActiva}
       escolarHabilitado={!!team.posEscolarHabilitado}
+      alertaMetodoPago={team.alertaMetodoPagoActiva !== false}
     />
   );
 }

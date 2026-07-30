@@ -876,8 +876,10 @@ export default function NuevaFacturaForm({
   async function emitir(modo: 'emitir' | 'borrador', opts?: EmitirOpts) {
     // Double-check del método de pago: si la factura registra un pago y aún no se
     // reconfirmó el método, paramos y abrimos el diálogo. Va ANTES de la traza para
-    // no registrar un submit fantasma en el diagnóstico anti-duplicados.
-    if (pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
+    // no registrar un submit fantasma en el diagnóstico anti-duplicados. La alerta
+    // se puede apagar por empresa (admin/owner) — default ON si no viene el flag.
+    const alertaMetodoOn = empresa?.alertaMetodoPagoActiva !== false;
+    if (alertaMetodoOn && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
       setConfirmMetodo({ modo, opts });
       return;
     }

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Palette, ImageIcon, PenLine,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard, ShieldCheck,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
@@ -126,8 +126,9 @@ export default function ConfiguracionPage() {
   const [role, setRole]           = useState<string | null>(null);
 
   // Permisos derivados del rol
-  const canManage     = roleHasPermission(role, 'configuracion:gestionar');
-  const canManageTeam = roleHasPermission(role, 'equipo:gestionar');
+  const canManage       = roleHasPermission(role, 'configuracion:gestionar');
+  const canManageTeam   = roleHasPermission(role, 'equipo:gestionar');
+  const canConfigAlerta = roleHasPermission(role, 'pagos:config-alerta');
 
   // Campos
   const [razonSocial, setRazonSocial]           = useState('');
@@ -159,6 +160,9 @@ export default function ConfiguracionPage() {
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
   const [metodosObligaDgii, setMetodosObligaDgii]      = useState<string[]>([]);
+  // Alerta double-check del método de pago (se guarda al instante por su endpoint)
+  const [alertaMetodoPago, setAlertaMetodoPago]         = useState(true);
+  const [alertaSaving, setAlertaSaving]                 = useState(false);
 
   // Cargar datos actuales
   useEffect(() => {
@@ -190,6 +194,7 @@ export default function ConfiguracionPage() {
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
+        setAlertaMetodoPago(d.alertaMetodoPagoActiva ?? true);
         setRole(d.role ?? null);
       })
       .finally(() => setLoading(false));
@@ -233,6 +238,27 @@ export default function ConfiguracionPage() {
       setError('No se pudo guardar. Intenta de nuevo.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Alerta de método de pago: se guarda al instante (endpoint aparte, permiso
+  // 'pagos:config-alerta'). Optimista: revierte si el server rechaza.
+  async function toggleAlertaMetodoPago(next: boolean) {
+    setAlertaMetodoPago(next);
+    setAlertaSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/equipo/alerta-metodo-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activa: next }),
+      });
+      if (!res.ok) throw new Error('rechazado');
+    } catch {
+      setAlertaMetodoPago(!next);
+      setError('No se pudo cambiar la alerta de método de pago.');
+    } finally {
+      setAlertaSaving(false);
     }
   }
 
@@ -568,6 +594,55 @@ export default function ConfiguracionPage() {
               <strong>Activo:</strong> las facturas cobradas con{' '}
               {metodosObligaDgii.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
               no se podrán guardar sin emitir — se deben emitir a la DGII.
+            </div>
+          )}
+        </CardContent>
+      </Card>}
+
+      {/* 5c. Alerta double-check del método de pago — solo 'pagos:config-alerta' (admin/owner) */}
+      {canConfigAlerta && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-teal-600" />
+            Alerta de método de pago
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Antes de finalizar un cobro (en el POS y al facturar), muestra un aviso
+            para reconfirmar el método elegido. Evita registrar efectivo por tarjeta
+            o transferencia por equivocación.
+          </p>
+
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Pedir confirmación del método</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Se aplica a todos los cobros. Se guarda al instante.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={alertaMetodoPago}
+              aria-label="Activar alerta de método de pago"
+              disabled={alertaSaving}
+              onClick={() => toggleAlertaMetodoPago(!alertaMetodoPago)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 disabled:opacity-60 ${
+                alertaMetodoPago ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  alertaMetodoPago ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {!alertaMetodoPago && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
+              <strong>Alerta desactivada:</strong> los cobros se registran sin pedir reconfirmación del método.
             </div>
           )}
         </CardContent>

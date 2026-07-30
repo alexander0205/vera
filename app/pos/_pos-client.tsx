@@ -148,12 +148,14 @@ function totalesCarrito(items: LineaCarrito[], descuento: DescuentoAplicado | nu
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function PosClient({
-  terminales, turnoInicial, terminalInicial, escolarHabilitado,
+  terminales, turnoInicial, terminalInicial, escolarHabilitado, alertaMetodoPago,
 }: {
   terminales:        TerminalProp[];
   turnoInicial:      TurnoProp | null;
   terminalInicial:   TerminalProp | null;
   escolarHabilitado: boolean;
+  /** Alerta double-check del método de pago activa (config de empresa). */
+  alertaMetodoPago:  boolean;
 }) {
   if (!turnoInicial) {
     return <Apertura terminales={terminales} />;
@@ -163,6 +165,7 @@ export default function PosClient({
       turno={turnoInicial}
       terminal={terminalInicial}
       escolarHabilitado={escolarHabilitado}
+      alertaMetodoPago={alertaMetodoPago}
     />
   );
 }
@@ -258,11 +261,12 @@ function Apertura({ terminales }: { terminales: TerminalProp[] }) {
 // ─── Pantalla de venta ───────────────────────────────────────────────────────
 
 function Venta({
-  turno, terminal, escolarHabilitado,
+  turno, terminal, escolarHabilitado, alertaMetodoPago,
 }: {
   turno: TurnoProp;
   terminal: TerminalProp | null;
   escolarHabilitado: boolean;
+  alertaMetodoPago: boolean;
 }) {
   const router = useRouter();
   const [productos, setProductos] = useState<ProductoPos[]>([]);
@@ -937,6 +941,7 @@ function Venta({
             cobrando={cobrando}
             onCobrar={cobrar}
             escolar={escolarHabilitado}
+            alertaMetodoPago={alertaMetodoPago}
             estudiante={estudiante}
             onSelectEstudiante={setEstudiante}
             listas={listas}
@@ -979,6 +984,7 @@ function Venta({
               cobrando={cobrando}
               onCobrar={cobrar}
               escolar={escolarHabilitado}
+              alertaMetodoPago={alertaMetodoPago}
               estudiante={estudiante}
               onSelectEstudiante={setEstudiante}
               listas={listas}
@@ -1025,7 +1031,7 @@ function Venta({
 // ─── Panel de carrito + cobro ────────────────────────────────────────────────
 
 function CarritoPanel({
-  carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, estudiante, onSelectEstudiante,
+  carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, alertaMetodoPago, estudiante, onSelectEstudiante,
   listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
   descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido,
 }: {
@@ -1036,6 +1042,7 @@ function CarritoPanel({
   cobrando: boolean;
   onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
   escolar: boolean;
+  alertaMetodoPago: boolean;
   estudiante: MonederoView | null;
   onSelectEstudiante: (e: MonederoView | null) => void;
   listas: ListaPrecio[];
@@ -1191,6 +1198,7 @@ function CarritoPanel({
           total={totales.total}
           cobrando={cobrando}
           estudiante={estudiante}
+          alertaMetodoPago={alertaMetodoPago}
           onClose={() => setAbrirCobro(false)}
           onConfirm={(pagos, recibido, propina) => { onCobrar(pagos, recibido, propina); setAbrirCobro(false); }}
         />
@@ -1540,11 +1548,13 @@ function EstudiantePicker({ estudiante, onSelect }: {
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
 
 function CobroModal({
-  total, cobrando, estudiante, onClose, onConfirm,
+  total, cobrando, estudiante, alertaMetodoPago, onClose, onConfirm,
 }: {
   total: number;
   cobrando: boolean;
   estudiante: MonederoView | null;
+  /** Si true, pide reconfirmar el método antes de finalizar (config de empresa). */
+  alertaMetodoPago: boolean;
   onClose: () => void;
   onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
 }) {
@@ -1598,22 +1608,31 @@ function CobroModal({
     setFilaValor(i, (resto / 100).toFixed(2));
   }
 
-  // Arma el cobro y abre el double-check (no finaliza todavía).
+  // Con la alerta activa, abre el double-check; si está apagada, finaliza directo.
+  function pedirOFinalizar(pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number) {
+    if (alertaMetodoPago) {
+      setPendienteConfirm({ pagos, recibidoCentavos });
+    } else {
+      onConfirm(pagos, recibidoCentavos, propinaCentavos);
+    }
+  }
+
+  // Arma el cobro y (según config) abre el double-check o finaliza.
   function confirmar() {
     if (split) {
       if (!splitCuadra) return;
       const pagos = filas
         .map((f) => ({ metodo: f.metodo as MetodoCobro, valorCentavos: Math.round((Number(f.valor) || 0) * 100) }))
         .filter((p) => p.valorCentavos > 0);
-      setPendienteConfirm({ pagos, recibidoCentavos: totalCobrar });
+      pedirOFinalizar(pagos, totalCobrar);
       return;
     }
     if (esMonedero) {
-      setPendienteConfirm({ pagos: [{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], recibidoCentavos: totalCobrar });
+      pedirOFinalizar([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar);
       return;
     }
     const recibidoOut = metodo === 'efectivo' ? recibidoCentavos : totalCobrar;
-    setPendienteConfirm({ pagos: [{ metodo, valorCentavos: totalCobrar }], recibidoCentavos: recibidoOut });
+    pedirOFinalizar([{ metodo, valorCentavos: totalCobrar }], recibidoOut);
   }
 
   // El cajero reconfirmó el método → finalizar la venta.
