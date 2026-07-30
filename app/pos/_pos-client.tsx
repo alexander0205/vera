@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft, LogOut, FileText, Star, Plus, Camera, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { RncSearch } from '@/components/RncSearch';
+import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
 
@@ -1560,6 +1561,12 @@ function CobroModal({
     { metodo: 'tarjeta', valor: '' },
   ]);
 
+  // Double-check del método: al confirmar, guardamos el cobro pendiente y pedimos
+  // reconfirmar el método antes de finalizar (evita cobrar efectivo por tarjeta).
+  const [pendienteConfirm, setPendienteConfirm] = useState<
+    null | { pagos: { metodo: MetodoCobro; valorCentavos: number }[]; recibidoCentavos: number }
+  >(null);
+
   const propinaCentavos = Math.max(0, Math.round((Number(propina) || 0) * 100));
   const totalCobrar = total + propinaCentavos;
 
@@ -1591,22 +1598,39 @@ function CobroModal({
     setFilaValor(i, (resto / 100).toFixed(2));
   }
 
+  // Arma el cobro y abre el double-check (no finaliza todavía).
   function confirmar() {
     if (split) {
       if (!splitCuadra) return;
       const pagos = filas
         .map((f) => ({ metodo: f.metodo as MetodoCobro, valorCentavos: Math.round((Number(f.valor) || 0) * 100) }))
         .filter((p) => p.valorCentavos > 0);
-      onConfirm(pagos, totalCobrar, propinaCentavos);
+      setPendienteConfirm({ pagos, recibidoCentavos: totalCobrar });
       return;
     }
     if (esMonedero) {
-      onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos);
+      setPendienteConfirm({ pagos: [{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], recibidoCentavos: totalCobrar });
       return;
     }
     const recibidoOut = metodo === 'efectivo' ? recibidoCentavos : totalCobrar;
-    onConfirm([{ metodo, valorCentavos: totalCobrar }], recibidoOut, propinaCentavos);
+    setPendienteConfirm({ pagos: [{ metodo, valorCentavos: totalCobrar }], recibidoCentavos: recibidoOut });
   }
+
+  // El cajero reconfirmó el método → finalizar la venta.
+  function finalizarConfirmado() {
+    if (!pendienteConfirm) return;
+    onConfirm(pendienteConfirm.pagos, pendienteConfirm.recibidoCentavos, propinaCentavos);
+  }
+
+  // Etiqueta legible del método para el resumen del double-check.
+  function labelMetodoCobro(m: MetodoCobro): string {
+    if (m === 'cuenta-estudiante') return estudiante ? `Cuenta de ${estudiante.nombre}` : 'Monedero';
+    return m.charAt(0).toUpperCase() + m.slice(1);
+  }
+  const resumenPago: ResumenMetodo[] = (pendienteConfirm?.pagos ?? []).map((p) => ({
+    label: labelMetodoCobro(p.metodo),
+    montoFmt: fmt(p.valorCentavos),
+  }));
 
   const puedeConfirmar = !cobrando && (split ? splitCuadra : (!faltaEfectivo && !monederoBloqueado));
 
@@ -1755,6 +1779,15 @@ function CobroModal({
             : 'Confirmar venta'}
         </button>
       </div>
+
+      {pendienteConfirm && (
+        <ConfirmarMetodoPagoDialog
+          lineas={resumenPago}
+          procesando={cobrando}
+          onCancel={() => setPendienteConfirm(null)}
+          onConfirm={finalizarConfirmado}
+        />
+      )}
     </div>
   );
 }
