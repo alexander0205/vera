@@ -28,6 +28,8 @@ import { RetencionesSection } from './sections/RetencionesSection';
 import { ResumenSidebar } from './sections/ResumenSidebar';
 import type { PagoLinea } from '@/components/pagos/PagoMetodos';
 import { sumaPagos } from '@/components/pagos/PagoMetodos';
+import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
+import { labelMetodo } from '@/lib/pagos/metodos';
 import { Terminos, Notas } from './sections/TerminosNotas';
 import { PieFactura } from './sections/PieFactura';
 import { Comentarios } from './sections/Comentarios';
@@ -57,6 +59,13 @@ import type {
 // Re-export for callers that import from this module.
 export type { BorradorInicial, EmpresaPerfil };
 
+/** Opciones de emitir(). `metodoConfirmado` marca que el double-check del método
+ *  de pago ya se aceptó, para no reabrir el diálogo en la segunda llamada. */
+type EmitirOpts = {
+  andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar';
+  metodoConfirmado?: boolean;
+};
+
 export default function NuevaFacturaForm({
   initialPerfil,
   initialData,
@@ -69,6 +78,9 @@ export default function NuevaFacturaForm({
 }) {
   const router  = useRouter();
   const empresa = initialPerfil;
+  const { can } = usePermissions();
+  // Alerta double-check del método: solo si el rol del usuario tiene el permiso.
+  const alertaMetodoPago = can('pagos:alerta-metodo');
 
   // ── Items iniciales desde borrador ─────────────────────────────────────────
   const itemsIniciales: ItemLinea[] = useMemo(() => {
@@ -195,7 +207,6 @@ export default function NuevaFacturaForm({
 
   // Fecha de emisión editable — solo roles con este permiso (admin/owner) y
   // solo aplica a sin-ncf. Ver CompactHeader y app/api/ecf/emitir/route.ts.
-  const { can } = usePermissions();
   const puedeEditarFecha = can('facturas:fecha-personalizada');
 
   // ── Condición de pago ──────────────────────────────────────────────────────
@@ -446,6 +457,13 @@ export default function NuevaFacturaForm({
       ? initialData.pagoLineas
       : [{ metodo: 'efectivo', valor: '', cuenta: '' }],
   );
+
+  // Double-check del método de pago: cuando la factura registra un pago, antes de
+  // emitir/guardar pedimos reconfirmar el método (evita registrar efectivo por
+  // transferencia, etc.). Guarda el emitir() pendiente hasta que el usuario acepte.
+  const [confirmMetodo, setConfirmMetodo] = useState<
+    null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
+  >(null);
 
   const [comentario, setComentario] = useState(initialData?.comentario ?? '');
 
@@ -857,7 +875,16 @@ export default function NuevaFacturaForm({
     }
   }
 
-  async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar' }) {
+  async function emitir(modo: 'emitir' | 'borrador', opts?: EmitirOpts) {
+    // Double-check del método de pago: si la factura registra un pago y aún no se
+    // reconfirmó el método, paramos y abrimos el diálogo. Va ANTES de la traza para
+    // no registrar un submit fantasma en el diagnóstico anti-duplicados. La alerta
+    // solo aplica si el rol del usuario tiene el permiso 'pagos:alerta-metodo'.
+    if (alertaMetodoPago && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
+      setConfirmMetodo({ modo, opts });
+      return;
+    }
+
     // Traza anti-duplicados: identifica el botón y la secuencia de clicks de este
     // montaje. Se loguea aquí (consola) y se manda al server (`_traza`) para ligar
     // cada submit con el documento creado y diagnosticar las facturas duplicadas.
@@ -1504,6 +1531,24 @@ export default function NuevaFacturaForm({
             setShowNuevoVendedor(false);
           }}
         />
+
+        {confirmMetodo && (
+          <ConfirmarMetodoPagoDialog
+            lineas={pagoLineas
+              .filter((l) => (parseFloat(l.valor || '0') || 0) > 0)
+              .map<ResumenMetodo>((l) => ({
+                label: labelMetodo(l.metodo),
+                montoFmt: `RD$ ${(parseFloat(l.valor || '0') || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              }))}
+            procesando={loading}
+            onCancel={() => setConfirmMetodo(null)}
+            onConfirm={() => {
+              const pend = confirmMetodo;
+              setConfirmMetodo(null);
+              void emitir(pend.modo, { ...pend.opts, metodoConfirmado: true });
+            }}
+          />
+        )}
 
       </div>
     </div>

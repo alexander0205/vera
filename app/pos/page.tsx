@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requirePermission } from '@/lib/auth/page-guard';
+import { requirePermission, hasPermission } from '@/lib/auth/page-guard';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
@@ -19,9 +19,10 @@ export default async function PosPage() {
   if (!team?.posHabilitado) redirect('/dashboard');
 
   const user = await getUser();
-  const [terminales, turno] = await Promise.all([
+  const [terminales, turno, alertaMetodoPago] = await Promise.all([
     listarTerminales(teamId),
     user ? getTurnoAbierto(teamId, user.id) : Promise.resolve(null),
+    hasPermission('pagos:alerta-metodo'),
   ]);
 
   const terminalActiva = turno?.terminalId
@@ -34,6 +35,7 @@ export default async function PosPage() {
       turnoInicial={turno}
       terminalInicial={terminalActiva}
       escolarHabilitado={!!team.posEscolarHabilitado}
+      alertaMetodoPago={alertaMetodoPago}
     />
   );
 }
