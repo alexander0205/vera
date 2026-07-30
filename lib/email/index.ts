@@ -2,6 +2,20 @@ import { Resend } from 'resend';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
+/**
+ * El SDK de Resend no lanza en errores de API: devuelve { data, error }. Sin
+ * esta comprobación un 401 (key inválida), 403 (dominio sin verificar) o 422
+ * (remitente mal formado) se resuelven como éxito y el fallo queda mudo.
+ */
+function assertSent(
+  result: { data: unknown; error: unknown },
+  contexto: string,
+): void {
+  if (result.error) {
+    throw new Error(`Resend falló en ${contexto}: ${JSON.stringify(result.error)}`);
+  }
+}
+
 function escapeHtml(s: string | null | undefined): string {
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -16,7 +30,7 @@ function escapeHtml(s: string | null | undefined): string {
 export async function sendPasswordResetEmail(email: string, token: string, name: string | null) {
   const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
     to: email,
     subject: 'Restablecer contraseña — Zero',
@@ -34,6 +48,7 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
       </div>
     `,
   });
+  assertSent(res, 'sendPasswordResetEmail');
 }
 
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {

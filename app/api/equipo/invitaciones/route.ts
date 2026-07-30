@@ -14,7 +14,9 @@ import { planUserLimit } from '@/lib/plans';
 import { listTeamRoles } from '@/lib/auth/permissions';
 
 const inviteSchema = z.object({
-  email: z.string().email('Correo electrónico inválido'),
+  // Normalizamos aquí: el email se guarda en minúsculas para que todas las
+  // búsquedas posteriores (login, invitaciones, reset de contraseña) matcheen.
+  email: z.string().email('Correo electrónico inválido').trim().toLowerCase(),
   role: z.string().min(1, 'Rol requerido'),
 });
 

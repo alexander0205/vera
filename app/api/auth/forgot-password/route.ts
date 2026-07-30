@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { users, passwordResetTokens } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { sendPasswordResetEmail } from '@/lib/email';
 import { randomBytes } from 'crypto';
 import { rateLimit } from '@/lib/rate-limit';
@@ -25,7 +25,15 @@ export async function POST(req: NextRequest) {
   // timing-based account enumeration significantly harder.
   const startedAt = Date.now();
 
-  const user = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+  // Comparación case-insensitive a propósito: normalizamos el email al
+  // guardarlo, pero un registro viejo con mayúsculas dejaba de matchear aquí
+  // y el reset fallaba en silencio (el handler siempre responde success).
+  const needle = email.trim().toLowerCase();
+  const user = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${needle}`)
+    .limit(1);
 
   if (user[0]) {
     const token = randomBytes(32).toString('hex');
