@@ -13,7 +13,7 @@
  * arqueología manual.
  */
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, sequences, users } from '@/lib/db/schema';
+import { anulacionesNcf, ecfDocuments, sequences, users } from '@/lib/db/schema';
 import { and, eq, desc, sql, count, gte, lte, inArray, or, ilike } from 'drizzle-orm';
 import { emision, type EmisionResponseDto } from '@/lib/ecf-api/client';
 import { getTeamProfile } from '@/lib/db/queries';
@@ -28,6 +28,13 @@ export type { EstadoNcf, Veredicto, EstadoMeta } from './estados';
 import { ESTADOS_ERROR, ESTADOS_FISCALES } from './estados';
 import type { EstadoNcf } from './estados';
 
+/**
+ * Máximo de números que `consultarRango` inspecciona en una llamada. Es un
+ * tope de rendimiento, no fiscal: cruzar el rango implica una consulta al
+ * proveedor por cada hueco.
+ */
+export const MAX_CONSULTA_RANGO = 1000;
+
 // ─── Helpers de formato e-NCF ────────────────────────────────────────────────
 
 export function formatEncf(tipoEcf: string, numero: number): string {
@@ -39,6 +46,46 @@ export function parseEncf(encf: string): { tipo: string; numero: number } | null
   const m = /^E(\d{2})(\d{10})$/.exec(encf.trim().toUpperCase());
   if (!m) return null;
   return { tipo: m[1], numero: parseInt(m[2], 10) };
+}
+
+// ─── Anulaciones por rango ante DGII (ANECF) ─────────────────────────────────
+
+/**
+ * Números anulados ante la DGII que caen dentro de un rango.
+ *
+ * Solo cuentan los tramos ACEPTADOS: un ANECF en ERROR o RECHAZADO no cambió
+ * nada ante la DGII, así que esos números siguen disponibles para facturar.
+ *
+ * Vive aquí y no en `anulacion-rangos` para evitar un ciclo de imports: ese
+ * módulo depende de `consultarRango` para validar antes de enviar.
+ */
+export async function numerosAnuladosEnRango(
+  teamId: number,
+  tipoEcf: string,
+  desde: number,
+  hasta: number,
+): Promise<Set<number>> {
+  const tramos = await db
+    .select({ desde: anulacionesNcf.desde, hasta: anulacionesNcf.hasta })
+    .from(anulacionesNcf)
+    .where(
+      and(
+        eq(anulacionesNcf.teamId, teamId),
+        eq(anulacionesNcf.tipoEcf, tipoEcf),
+        eq(anulacionesNcf.estado, 'ACEPTADO'),
+        // Intervalos que solapan: tramo.desde <= hasta && tramo.hasta >= desde
+        lte(anulacionesNcf.desde, hasta),
+        gte(anulacionesNcf.hasta, desde),
+      ),
+    );
+
+  const out = new Set<number>();
+  for (const t of tramos) {
+    const lo = Math.max(Number(t.desde), desde);
+    const hi = Math.min(Number(t.hasta), hasta);
+    for (let n = lo; n <= hi; n++) out.add(n);
+  }
+  return out;
 }
 
 // ─── Rangos de secuencia configurados ────────────────────────────────────────
@@ -263,13 +310,13 @@ export async function consultarRango(
   hasta: number,
 ): Promise<{ filas: FilaConsulta[]; resumen: ResumenConsulta }> {
   if (hasta < desde) [desde, hasta] = [hasta, desde];
-  // Tope duro: evita que una consulta 1–1.000.000 tumbe la página.
-  const MAX = 1000;
-  if (hasta - desde + 1 > MAX) hasta = desde + MAX - 1;
+  // Tope duro: evita que una consulta 1–1.000.000 tumbe la página. Quien
+  // necesite recorrer más números lo hace por bloques (ver `revisarTramo`).
+  if (hasta - desde + 1 > MAX_CONSULTA_RANGO) hasta = desde + MAX_CONSULTA_RANGO - 1;
 
   const encfs = Array.from({ length: hasta - desde + 1 }, (_, i) => formatEncf(tipoEcf, desde + i));
 
-  const [docs, seq, team] = await Promise.all([
+  const [docs, seq, team, anulados] = await Promise.all([
     db
       .select({
         id: ecfDocuments.id,
@@ -291,6 +338,7 @@ export async function consultarRango(
       .where(and(eq(sequences.teamId, teamId), eq(sequences.tipoEcf, tipoEcf)))
       .limit(1),
     getTeamProfile(teamId),
+    numerosAnuladosEnRango(teamId, tipoEcf, desde, hasta),
   ]);
 
   const porEncf = new Map(docs.map((d) => [d.encf, d]));
@@ -315,6 +363,13 @@ export async function consultarRango(
         }
       : null;
 
+    // Anulado por rango ante la DGII (ANECF aceptado). No cortocircuita las
+    // ramas de abajo: si el número además tiene rastro local o en el proveedor,
+    // ese detalle sigue siendo el que explica qué pasó — la anulación se suma
+    // como nota. Solo manda cuando no hay rastro en ningún lado (rama 3).
+    const anuladoDgii = anulados.has(numero);
+    const notaAnulado = 'Este número se anuló ante la DGII por rango (ANECF): ya no puede usarse en una factura.';
+
     // 1. Existe localmente → su estado manda.
     if (d) {
       const est = String(d.estado).toUpperCase();
@@ -326,6 +381,7 @@ export async function consultarRango(
       } else if (estado === 'RESERVADO') {
         motivo = 'Número reservado para una factura en borrador. Aún no se ha enviado a la DGII.';
       }
+      if (anuladoDgii) motivo = motivo ? `${motivo} ${notaAnulado}` : notaAnulado;
       return {
         numero, encf, estado, motivo,
         fecha: d.fechaEmision,
@@ -343,7 +399,8 @@ export async function consultarRango(
     if (p) {
       const { estado, motivo } = clasificarProveedor(p);
       return {
-        numero, encf, estado, motivo,
+        numero, encf, estado,
+        motivo: anuladoDgii ? (motivo ? `${motivo} ${notaAnulado}` : notaAnulado) : motivo,
         fecha: p.fechaEmision ?? null,
         cliente: null,
         rncComprador: null,
@@ -355,7 +412,16 @@ export async function consultarRango(
       };
     }
 
-    // 3. Sin rastro en ningún lado.
+    // 3. Sin rastro en ningún lado → aquí la anulación por rango es la
+    // explicación completa del número.
+    if (anuladoDgii) {
+      return {
+        numero, encf, estado: 'ANULADO_DGII', motivo: notaAnulado,
+        fecha: null, cliente: null, rncComprador: null, montoTotal: null,
+        trackId: null, urlVerificacion: null, documentoId: null, proveedor: null,
+      };
+    }
+
     const consumido = actual > 0 && numero < actual;
     return {
       numero, encf,
