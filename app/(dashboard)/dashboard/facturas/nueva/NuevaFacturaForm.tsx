@@ -78,6 +78,9 @@ export default function NuevaFacturaForm({
 }) {
   const router  = useRouter();
   const empresa = initialPerfil;
+  const { can } = usePermissions();
+  // Alerta double-check del método: solo si el rol del usuario tiene el permiso.
+  const alertaMetodoPago = can('pagos:alerta-metodo');
 
   // ── Items iniciales desde borrador ─────────────────────────────────────────
   const itemsIniciales: ItemLinea[] = useMemo(() => {
@@ -204,7 +207,6 @@ export default function NuevaFacturaForm({
 
   // Fecha de emisión editable — solo roles con este permiso (admin/owner) y
   // solo aplica a sin-ncf. Ver CompactHeader y app/api/ecf/emitir/route.ts.
-  const { can } = usePermissions();
   const puedeEditarFecha = can('facturas:fecha-personalizada');
 
   // ── Condición de pago ──────────────────────────────────────────────────────
@@ -877,9 +879,8 @@ export default function NuevaFacturaForm({
     // Double-check del método de pago: si la factura registra un pago y aún no se
     // reconfirmó el método, paramos y abrimos el diálogo. Va ANTES de la traza para
     // no registrar un submit fantasma en el diagnóstico anti-duplicados. La alerta
-    // se puede apagar por empresa (admin/owner) — default ON si no viene el flag.
-    const alertaMetodoOn = empresa?.alertaMetodoPagoActiva !== false;
-    if (alertaMetodoOn && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
+    // solo aplica si el rol del usuario tiene el permiso 'pagos:alerta-metodo'.
+    if (alertaMetodoPago && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
       setConfirmMetodo({ modo, opts });
       return;
     }

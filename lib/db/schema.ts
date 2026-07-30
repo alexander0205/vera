@@ -148,13 +148,6 @@ export const teams = pgTable('teams', {
   // como borrador: hay que emitirla a la DGII. Vacío = sin restricción.
   // Ej: ["tarjeta"] → toda venta con tarjeta va obligatoriamente a la DGII.
   metodosObligaDgii:      jsonb('metodos_obliga_dgii').notNull().default([]),
-
-  // ── Alerta double-check del método de pago ────────────────────────────────
-  // Red de seguridad: antes de finalizar un cobro (POS y factura) se muestra un
-  // diálogo que reconfirma el método elegido, para no cobrar efectivo por
-  // tarjeta (o viceversa). Nace ENCENDIDA. Solo roles con 'pagos:config-alerta'
-  // (owner/admin) pueden activarla o desactivarla.
-  alertaMetodoPagoActiva: boolean('alerta_metodo_pago_activa').notNull().default(true),
 });
 
 export const teamMembers = pgTable('team_members', {
