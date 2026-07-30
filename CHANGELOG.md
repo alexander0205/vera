@@ -4,6 +4,17 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.8.0 — 2026-07-30
+
+### Nuevo
+
+- **contabilidad**: anulación de e-NCF por rango ante DGII (ANECF)
+  - Tabla `anulaciones_ncf` (migración 0074): tramo, estado, trackId, respuesta DGII y autor de cada envío. Solo los tramos ACEPTADOS cuentan como anulados.
+  - `revisarTramo` inspecciona sin enviar y recorre por bloques de 1000, que es el tope de `consultarRango`. Sin el chunking un tramo de 5.000 se validaba solo en sus primeros 1.000 y el resto se anulaba sin revisar.
+  - `anularTramo` revalida antes de enviar (el preview envejece), persiste el registro ANTES de llamar a DGII y lo marca ERROR con el payload crudo si falla, para no dejar envíos huérfanos.
+  - Bloquean el envío: ACEPTADO, ACEPTADO_CONDICIONAL, EN_PROCESO, ANULADO, EN_DGII_SIN_REGISTRO y RESERVADO (hay un borrador usando el número). Cada bloqueo trae su explicación y links a la factura, la NC y la verificación DGII.
+  - La consulta muestra los anulados como ANULADO_DGII. Si el número además tiene rastro local gana el estado local y la anulación se añade como nota.
+
 ## v1.7.0 — 2026-07-28
 
 ### Nuevo
