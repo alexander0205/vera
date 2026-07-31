@@ -17,7 +17,6 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
 import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import {
@@ -26,6 +25,7 @@ import {
 
 const ICONS: Record<ModuleKey, typeof FileText> = {
   facturacion: FileText,
+  administracion: Building2,
   pos: Store,
   escolar: GraduationCap,
 };
@@ -96,26 +96,6 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
             </MenuItem>
           );
         })}
-
-        {/* Administración del negocio — NO es un módulo facturable (toda empresa
-            la necesita), pero vive en su propio espacio como los demás. */}
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem
-          component="a"
-          href="/cuenta"
-          onClick={() => setAnchor(null)}
-          sx={{ gap: 1.5, py: 1.25, mx: 0.75, borderRadius: '8px' }}
-        >
-          <Box sx={{ width: 34, height: 34, borderRadius: '10px', bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Building2 style={{ width: 17, height: 17 }} />
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>Administración</Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'normal' }}>
-              Mi empresa, usuarios, roles y plan
-            </Typography>
-          </Box>
-        </MenuItem>
       </Menu>
     </>
   );

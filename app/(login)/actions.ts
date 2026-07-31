@@ -27,6 +27,7 @@ import {
   validatedActionWithUser
 } from '@/lib/auth/middleware';
 import { rateLimit } from '@/lib/rate-limit';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -75,7 +76,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
   if (userWithTeam.length === 0) {
     return {
-      error: 'Invalid email or password. Please try again.',
+      error: 'Correo o contraseña incorrectos. Intenta de nuevo.',
       email,
       password
     };
@@ -90,7 +91,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
   if (!isPasswordValid) {
     return {
-      error: 'Invalid email or password. Please try again.',
+      error: 'Correo o contraseña incorrectos. Intenta de nuevo.',
       email,
       password
     };
@@ -170,7 +171,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   if (existingUser.length > 0) {
     return {
-      error: 'Failed to create user. Please try again.',
+      error: 'No se pudo crear el usuario. Intenta de nuevo.',
       email,
       password
     };
@@ -188,7 +189,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   if (!createdUser) {
     return {
-      error: 'Failed to create user. Please try again.',
+      error: 'No se pudo crear el usuario. Intenta de nuevo.',
       email,
       password
     };
@@ -233,7 +234,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
         .where(eq(teams.id, teamId))
         .limit(1);
     } else {
-      return { error: 'Invalid or expired invitation.', email, password };
+      return { error: 'La invitación no es válida o ya venció.', email, password };
     }
   } else {
     // Create a new team if there's no invitation
@@ -245,7 +246,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
     if (!createdTeam) {
       return {
-        error: 'Failed to create team. Please try again.',
+        error: 'No se pudo crear la empresa. Intenta de nuevo.',
         email,
         password
       };
@@ -276,8 +277,9 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  // Sin plan seleccionado → ir directo a pricing para elegir plan de prueba
-  redirect('/pricing?welcome=1');
+  // Con billing activo se elige plan de prueba; mientras el producto está en
+  // desarrollo no hay pricing que mostrar y se entra directo al dashboard.
+  redirect(BILLING_ENABLED ? '/pricing?welcome=1' : '/dashboard');
 });
 
 export async function signOut() {
@@ -310,7 +312,7 @@ export const updatePassword = validatedActionWithUser(
         currentPassword,
         newPassword,
         confirmPassword,
-        error: 'Current password is incorrect.'
+        error: 'La contraseña actual es incorrecta.'
       };
     }
 
@@ -319,7 +321,7 @@ export const updatePassword = validatedActionWithUser(
         currentPassword,
         newPassword,
         confirmPassword,
-        error: 'New password must be different from the current password.'
+        error: 'La nueva contraseña debe ser distinta de la actual.'
       };
     }
 
@@ -328,7 +330,7 @@ export const updatePassword = validatedActionWithUser(
         currentPassword,
         newPassword,
         confirmPassword,
-        error: 'New password and confirmation password do not match.'
+        error: 'La nueva contraseña y su confirmación no coinciden.'
       };
     }
 
@@ -362,7 +364,7 @@ export const deleteAccount = validatedActionWithUser(
     if (!isPasswordValid) {
       return {
         password,
-        error: 'Incorrect password. Account deletion failed.'
+        error: 'Contraseña incorrecta. No se eliminó la cuenta.'
       };
     }
 
@@ -401,7 +403,7 @@ export const deleteAccount = validatedActionWithUser(
 
 const updateAccountSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
-  email: z.string().email('Invalid email address')
+  email: z.string().email('Correo electrónico inválido')
 });
 
 export const updateAccount = validatedActionWithUser(
@@ -430,7 +432,7 @@ export const removeTeamMember = validatedActionWithUser(
     const userWithTeam = await getUserWithTeam(user.id);
 
     if (!userWithTeam?.teamId) {
-      return { error: 'User is not part of a team' };
+      return { error: 'El usuario no pertenece a ninguna empresa' };
     }
 
     await db

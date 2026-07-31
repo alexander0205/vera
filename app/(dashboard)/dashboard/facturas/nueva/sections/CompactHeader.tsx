@@ -40,7 +40,7 @@ export function CompactHeader({
   // "Sin comprobante" efectivo: la secuencia es sin-ncf, o es una nota sobre una
   // factura sin e-CF (nunca tendrá e-NCF real).
   const sinNcfEfectivo = sinComprobante || !!secuencia?.sinNcf;
-  const { tipoVisible } = useTiposDisponibles();
+  const { tipoVisible, dgiiReady, motivo: motivoDgii } = useTiposDisponibles();
   const categoriaActual = CATEGORIAS_ECF.find(c => c.id === categoriaId) ?? CATEGORIAS_ECF[0];
   const tiposVisibles  = categoriaActual.tipos.filter(t => tipoVisible(t.codigo));
   const tiposCategoria = tiposVisibles.length ? tiposVisibles : categoriaActual.tipos;
@@ -174,6 +174,16 @@ export function CompactHeader({
 
       {secuencia?.disponibles !== undefined && secuencia.disponibles < 50 && secuencia.disponibles > 0 && (
         <Typography sx={{ fontSize: '0.6875rem', color: '#d97706', mt: 1 }}>{secuencia.disponibles} NCF restantes</Typography>
+      )}
+
+      {/* Sin tipos fiscales disponibles, decir por qué. Si no, el usuario ve
+          que "desaparecieron" el e31/e32 y no sabe si es un error del sistema. */}
+      {!dgiiReady && motivoDgii && (
+        <Box sx={{ mt: 1.25, borderRadius: '8px', border: '1px solid #fde68a', bgcolor: '#fffbeb', px: 1.5, py: 1 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: '#92400e', lineHeight: 1.4 }}>
+            {motivoDgii}
+          </Typography>
+        </Box>
       )}
     </Box>
   );

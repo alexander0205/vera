@@ -9,6 +9,8 @@
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
+import { BILLING_ENABLED } from '@/lib/config/billing';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -65,6 +67,7 @@ export type Permission =
   // un usuario a un módulo = módulo activo en la empresa (teams.modulosHabilitados)
   // ∩ este permiso en su rol. Ver lib/auth/modules.ts.
   | 'modulo:facturacion'
+  | 'modulo:administracion'
   | 'modulo:pos'
   | 'modulo:escolar'
   // Suscripción / billing
@@ -138,7 +141,7 @@ export const ROLES: RoleDef[] = [
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'pos:vender', 'pos:configurar',
-      'modulo:facturacion', 'modulo:pos', 'modulo:escolar',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
       'suscripcion:gestionar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
@@ -165,7 +168,7 @@ export const ROLES: RoleDef[] = [
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
       'pos:vender', 'pos:configurar',
-      'modulo:facturacion', 'modulo:pos', 'modulo:escolar',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
   },
@@ -189,7 +192,7 @@ export const ROLES: RoleDef[] = [
       // Solo lectura contable: el vendedor consulta secuencias y e-NCF, no toca asientos.
       'contabilidad:ver',
       'pos:vender',
-      'modulo:facturacion', 'modulo:pos',
+      'modulo:facturacion', 'modulo:administracion', 'modulo:pos',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
   },
@@ -208,7 +211,7 @@ export const ROLES: RoleDef[] = [
       'configuracion:ver',
       'compras:ver',
       'caja:ver',
-      'modulo:facturacion',
+      'modulo:facturacion', 'modulo:administracion',
       // Sin 'modulo:escolar': ver el colegio en solo lectura solo aplica si el
       // dueño le abre el módulo a este rol.
       'administracion-escolar:ver',
@@ -226,7 +229,7 @@ export const ROLES: RoleDef[] = [
       'productos:ver',
       'caja:ver', 'caja:operar',
       'pos:vender',
-      'modulo:pos',
+      'modulo:pos', 'modulo:administracion',
     ],
     ui: { color: 'text-teal-600 bg-teal-50 border-teal-200', icon: 'Store' },
   },
@@ -241,7 +244,7 @@ export const ROLES: RoleDef[] = [
       'clientes:ver', 'clientes:gestionar',
       'facturas:ver',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:pagos',
-      'modulo:escolar',
+      'modulo:escolar', 'modulo:administracion',
     ],
     ui: { color: 'text-indigo-600 bg-indigo-50 border-indigo-200', icon: 'GraduationCap' },
   },
@@ -303,9 +306,10 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'pos:configurar', label: 'Configurar terminales del POS' },
   ]},
   { module: 'Acceso a módulos', icon: 'LayoutGrid', permissions: [
-    { key: 'modulo:facturacion', label: 'Acceso al módulo Facturación' },
-    { key: 'modulo:pos',         label: 'Acceso al módulo Punto de Venta' },
-    { key: 'modulo:escolar',     label: 'Acceso al módulo Administración Escolar' },
+    { key: 'modulo:facturacion',    label: 'Acceso al módulo Facturación' },
+    { key: 'modulo:administracion', label: 'Acceso al módulo Administración' },
+    { key: 'modulo:pos',            label: 'Acceso al módulo Punto de Venta' },
+    { key: 'modulo:escolar',        label: 'Acceso al módulo Administración Escolar' },
   ]},
   { module: 'Equipo', icon: 'UserCog', permissions: [
     { key: 'equipo:ver',       label: 'Ver equipo' },
@@ -315,9 +319,11 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'configuracion:ver',       label: 'Ver configuración' },
     { key: 'configuracion:gestionar', label: 'Editar configuración' },
   ]},
-  { module: 'Suscripción', icon: 'CreditCard', permissions: [
-    { key: 'suscripcion:gestionar', label: 'Gestionar plan y pagos' },
-  ]},
+  // Suscripción solo se le ofrece al usuario con el billing activo; mientras
+  // tanto no hay plan que gestionar. Ver lib/config/billing.
+  ...(BILLING_ENABLED ? [{ module: 'Suscripción', icon: 'CreditCard', permissions: [
+    { key: 'suscripcion:gestionar' as Permission, label: 'Gestionar plan y pagos' },
+  ]}] : []),
   { module: 'Administración escolar', icon: 'GraduationCap', permissions: [
     { key: 'administracion-escolar:ver',         label: 'Ver estudiantes, matrículas, cargos y pagos' },
     { key: 'administracion-escolar:gestionar',    label: 'Crear / editar estudiantes, tutores, cursos y matrículas' },

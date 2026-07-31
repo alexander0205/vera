@@ -17,6 +17,7 @@
  */
 
 import useSWR from 'swr';
+import { motivoBloqueoDgii, type Readiness } from '@/lib/hooks/useDgiiReadiness';
 
 const SIEMPRE_VISIBLES = new Set(['31', '32', 'sin-ncf']);
 
@@ -26,7 +27,6 @@ interface SeqRow {
   disponibles: number;
 }
 
-interface Readiness { ready?: boolean }
 
 const fetcher = (url: string) =>
   fetch(url).then(r => (r.ok ? r.json() : null));
@@ -60,5 +60,12 @@ export function useTiposDisponibles() {
     return SIEMPRE_VISIBLES.has(tipo) || activos.has(tipo);
   };
 
-  return { tipoVisible, activos, dgiiReady, isLoading: isLoading || loadingReadiness };
+  return {
+    tipoVisible,
+    activos,
+    dgiiReady,
+    /** Por qué no hay tipos fiscales disponibles — para mostrarlo, no adivinarlo. */
+    motivo: motivoBloqueoDgii(readiness ?? null),
+    isLoading: isLoading || loadingReadiness,
+  };
 }

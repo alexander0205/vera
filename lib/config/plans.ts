@@ -9,6 +9,8 @@
  * ╚══════════════════════════════════════════════════════════════════╝
  */
 
+import { BILLING_ENABLED } from '@/lib/config/billing';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -255,6 +257,9 @@ export function getPlanDocLimit(
   planKey: string | null | undefined,
   trialing = false,
 ): number {
+  // Producto en desarrollo: sin billing no se le cobra ni se le limita a nadie.
+  // Ver lib/config/billing. Punto único: cubre la emisión de e-CF y la UI.
+  if (!BILLING_ENABLED) return -1;
   const plan = getPlan(planKey);
   if (trialing) return plan.limits.trialDocs;
   return plan.limits.docs;
@@ -265,6 +270,7 @@ export function getPlanDocLimit(
  * @returns -1 = ilimitado, 0 = sin acceso, >0 = límite exacto
  */
 export function getPlanUserLimit(planKey: string | null | undefined): number {
+  if (!BILLING_ENABLED) return -1;
   return getPlan(planKey).limits.users;
 }
 

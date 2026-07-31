@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -450,7 +451,7 @@ export default function EquipoPage() {
             >
               Invitar usuario
             </Button>
-            {atLimit && (
+            {atLimit && BILLING_ENABLED && (
               <Typography component="p" sx={{ fontSize: '0.75rem', color: '#dc2626' }}>
                 Límite alcanzado —{' '}
                 <Box

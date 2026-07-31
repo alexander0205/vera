@@ -14,5 +14,7 @@ export async function GET() {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
 
-  return NextResponse.json(await getDgiiReadiness(teamId));
+  // platformRole entra en el cálculo: el gate de Producción se omite en
+  // desarrollo y para admin de plataforma (ver lib/ecf/readiness.ts).
+  return NextResponse.json(await getDgiiReadiness(teamId, user.platformRole));
 }

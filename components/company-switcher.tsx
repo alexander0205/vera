@@ -1,0 +1,270 @@
+'use client';
+
+/**
+ * CompanySwitcher — cambia la empresa activa de la sesión.
+ *
+ * Vivía dentro del layout de Facturación, donde era el único módulo que podía
+ * cambiar de empresa; POS y Escolar no tenían forma de hacerlo. Se sacó acá
+ * para que el header único lo ofrezca en todos los módulos.
+ *
+ * El cambio recarga la sesión y todos los datos de la pantalla: son varios
+ * segundos en los que la vista vieja sigue ahí y parece que el clic no hizo
+ * nada, así que se tapa con el ZeroLoader.
+ */
+
+import { useState, useEffect, useRef, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import Box from '@mui/material/Box';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Typography from '@mui/material/Typography';
+import Avatar from '@mui/material/Avatar';
+import Chip from '@mui/material/Chip';
+import InputBase from '@mui/material/InputBase';
+import Divider from '@mui/material/Divider';
+import { Building2, Check, ChevronDown, Plus, Search } from 'lucide-react';
+import { BILLING_ENABLED } from '@/lib/config/billing';
+import { ZeroLoader } from '@/components/zero-loader';
+import type { Team } from '@/lib/db/schema';
+
+function teamHasPlan(t: Team) {
+  // Producto en desarrollo: sin billing no existe el concepto de "empresa sin
+  // plan", así que nada bloquea la navegación. Ver lib/config/billing.
+  if (!BILLING_ENABLED) return true;
+  if (t.subscriptionStatus === 'admin') return true;
+  const name = t.planName?.toLowerCase();
+  if (!name || name === 'gratis') return false;
+  const s = t.subscriptionStatus?.toLowerCase();
+  if (s === 'canceled' || s === 'unpaid') return false;
+  return true;
+}
+
+function planColor(planName: string | null): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {
+  const p = planName?.toLowerCase();
+  if (!p) return 'default';
+  if (p === 'pro')      return 'secondary';
+  if (p === 'business') return 'primary';
+  if (p === 'starter')  return 'info';
+  return 'default';
+}
+
+export function CompanySwitcher({
+  teams,
+  activeTeamId,
+  onSwitch,
+}: {
+  teams: Team[];
+  activeTeamId: number | null;
+  /**
+   * Aviso opcional de que se cambió de empresa. Facturación lo usa para su
+   * estado optimista del sidebar; POS y Escolar no necesitan enterarse.
+   */
+  onSwitch?: (teamId: number) => void;
+}) {
+  const router = useRouter();
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [search, setSearch]     = useState('');
+  const open = Boolean(anchorEl);
+
+  // Cambiar de empresa recarga la sesión y todos los datos del dashboard: son
+  // varios segundos en los que la pantalla vieja sigue ahí y parece que el
+  // clic no hizo nada. El loader tapa ese hueco.
+  const [cambiandoA, setCambiandoA] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  // Solo se cierra cuando una transición que SÍ empezó terminó; sin esto el
+  // efecto correría antes de que isPending llegue a true y lo cerraría al
+  // instante.
+  const transicionArranco = useRef(false);
+
+  const active   = teams.find(t => t.id === activeTeamId) ?? teams[0];
+  const filtered = teams.filter(t =>
+    !search ||
+    t.razonSocial?.toLowerCase().includes(search.toLowerCase()) ||
+    t.rnc?.includes(search)
+  );
+
+  useEffect(() => {
+    if (isPending) { transicionArranco.current = true; return; }
+    if (transicionArranco.current) {
+      transicionArranco.current = false;
+      setCambiandoA(null);
+    }
+  }, [isPending]);
+
+  // Red de seguridad: si algo se cuelga, el loader no se queda pegado para
+  // siempre tapando la app.
+  useEffect(() => {
+    if (!cambiandoA) return;
+    const t = setTimeout(() => setCambiandoA(null), 15000);
+    return () => clearTimeout(t);
+  }, [cambiandoA]);
+
+  async function switchTeam(teamId: number) {
+    if (teamId === activeTeamId) { setAnchorEl(null); setSearch(''); return; }
+    setAnchorEl(null);
+    setSearch('');
+
+    const target = teams.find(t => t.id === teamId);
+    setCambiandoA(target?.razonSocial ?? target?.rnc ?? null);
+
+    try {
+      await fetch('/api/empresa/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamId }),
+      });
+    } catch {
+      setCambiandoA(null);   // no dejar el loader tapando la app si falla
+      return;
+    }
+
+    onSwitch?.(teamId);
+    startTransition(() => {
+      if (BILLING_ENABLED && (!target || !teamHasPlan(target))) {
+        router.push('/pricing?reason=no-plan');
+      } else {
+        router.push('/dashboard');
+        router.refresh();
+      }
+    });
+  }
+
+  const label = active?.razonSocial ?? active?.rnc ?? 'Mi empresa';
+
+  return (
+    <>
+      <ZeroLoader open={!!cambiandoA} subtitulo={cambiandoA ? `Abriendo ${cambiandoA}` : undefined} />
+      <Box
+        component="button"
+        onClick={(e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget)}
+        sx={{
+          display:       'flex',
+          alignItems:    'center',
+          gap:           1,
+          px:            1.5,
+          py:            0.75,
+          borderRadius:  '8px',
+          border:        '1px solid',
+          borderColor:   'divider',
+          bgcolor:       'background.paper',
+          cursor:        'pointer',
+          transition:    'all 0.15s',
+          maxWidth:      240,
+          '&:hover':     { bgcolor: 'grey.50', borderColor: 'grey.400' },
+        }}
+      >
+        {active?.logo ? (
+          <img src={active.logo} alt={label} style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'cover' }} />
+        ) : (
+          <Avatar sx={{ width: 24, height: 24, fontSize: '0.6875rem', fontWeight: 700, bgcolor: 'primary.main', borderRadius: '6px' }}>
+            {(label[0] ?? 'E').toUpperCase()}
+          </Avatar>
+        )}
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{ maxWidth: 140, flex: 1, textAlign: 'left', fontWeight: 600, color: 'text.primary' }}
+        >
+          {label}
+        </Typography>
+        {BILLING_ENABLED && active && teamHasPlan(active) && active.planName && (
+          <Chip
+            label={active.planName}
+            size="small"
+            color={planColor(active.planName)}
+            sx={{ height: 18, fontSize: '0.625rem', fontWeight: 700, display: { xs: 'none', sm: 'flex' } }}
+          />
+        )}
+        <ChevronDown
+          style={{
+            width:      14,
+            height:     14,
+            color:      '#9ca3af',
+            transform:  open ? 'rotate(180deg)' : undefined,
+            transition: 'transform 0.2s',
+            flexShrink: 0,
+          }}
+        />
+      </Box>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={() => { setAnchorEl(null); setSearch(''); }}
+        slotProps={{
+          paper: {
+            elevation: 0,
+            sx: {
+              borderRadius: '12px',
+              border:       '1px solid #e5e7eb',
+              boxShadow:    '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+              minWidth:     280,
+              mt:           0.5,
+            },
+          },
+        }}
+        transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+      >
+        {teams.length > 3 && (
+          <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{
+              display: 'flex', alignItems: 'center', gap: 1,
+              bgcolor: 'grey.50', borderRadius: '8px', px: 1.5, py: 0.75,
+            }}>
+              <Search style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
+              <InputBase
+                autoFocus
+                value={search}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                placeholder="Buscar empresa..."
+                sx={{ flex: 1, fontSize: '0.875rem' }}
+              />
+            </Box>
+          </Box>
+        )}
+
+        <Box sx={{ py: 0.5, maxHeight: 240, overflowY: 'auto' }}>
+          {filtered.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5, textAlign: 'center' }}>
+              Sin resultados
+            </Typography>
+          ) : filtered.map(t => (
+            <MenuItem
+              key={t.id}
+              onClick={() => switchTeam(t.id)}
+              sx={{
+                borderRadius: '6px',
+                mx: 0.5,
+                gap: 1.5,
+                py: 1,
+                '&:hover': { bgcolor: 'grey.50' },
+              }}
+            >
+              {t.logo ? (
+                <img src={t.logo} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} />
+              ) : (
+                <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', fontWeight: 700, bgcolor: 'primary.main', borderRadius: '6px', flexShrink: 0 }}>
+                  {((t.razonSocial ?? t.rnc ?? 'E')[0] ?? 'E').toUpperCase()}
+                </Avatar>
+              )}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+                  {t.razonSocial ?? t.rnc ?? 'Sin nombre'}
+                </Typography>
+                {t.rnc && (
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    RNC {t.rnc}
+                  </Typography>
+                )}
+              </Box>
+              {t.id === activeTeamId && (
+                <Check style={{ width: 16, height: 16, color: '#0d9488', flexShrink: 0 }} />
+              )}
+            </MenuItem>
+          ))}
+        </Box>
+      </Menu>
+    </>
+  );
+}

@@ -15,6 +15,7 @@ import { revalidatePath } from 'next/cache';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -23,7 +24,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import {
   MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS, sanitizeModules,
-  withDependencies, dependentsOf, type ModuleKey,
+  withDependencies, dependentsOf, isBaseModule, withBaseModules, type ModuleKey,
 } from '@/lib/config/modules';
 
 // ─── Server Action: invitar usuario ──────────────────────────────────────────
@@ -168,6 +169,9 @@ async function toggleModulo(formData: FormData) {
   const modulo = formData.get('modulo') as ModuleKey;
   const habilitar = formData.get('habilitar') === '1';
   if (isNaN(teamId) || !MODULES.includes(modulo)) return;
+  // Los módulos base (facturación + administración) los tiene toda empresa y no
+  // se apagan: apagar administración dejaría al dueño sin acceso a su empresa.
+  if (isBaseModule(modulo) && !habilitar) return;
 
   const [t] = await db.select({ mods: teams.modulosHabilitados }).from(teams).where(eq(teams.id, teamId)).limit(1);
   if (!t) return;
@@ -175,9 +179,9 @@ async function toggleModulo(formData: FormData) {
   // Activar arrastra dependencias (escolar cobra con facturas → necesita
   // Facturación); desactivar arrastra a los que dependen de él, si no el
   // módulo dependiente queda encendido pero roto.
-  const next = habilitar
+  const next = withBaseModules(habilitar
     ? withDependencies([...current, modulo])
-    : current.filter(m => m !== modulo && !dependentsOf(modulo).includes(m));
+    : current.filter(m => m !== modulo && !dependentsOf(modulo).includes(m)));
 
   // Compat legacy: posHabilitado sigue reflejando el módulo pos hasta retirar
   // su último consumidor.
@@ -407,7 +411,10 @@ export default async function EmpresaDetailPage({
             este toggle es su ÚNICA vía de activación. */}
         {MODULES.map(mod => {
           const mods = Array.isArray(team.modulosHabilitados) ? (team.modulosHabilitados as string[]) : [];
-          const activo = mods.includes(mod);
+          // Los módulos base los tiene toda empresa: se muestran siempre activos
+          // y sin botón, no hay nada que decidir sobre ellos.
+          const base = isBaseModule(mod);
+          const activo = base || mods.includes(mod);
           const label = MODULE_LABELS[mod];
           const desc = MODULE_DESCRIPTIONS[mod];
           return (
@@ -416,6 +423,14 @@ export default async function EmpresaDetailPage({
                 <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>{label}</Typography>
                 <Typography variant="caption" sx={{ color: '#9ca3af', mt: 0.5, display: 'block' }}>{desc}</Typography>
               </Box>
+              {base ? (
+                <Chip
+                  size="small"
+                  icon={<ToggleRight style={{ width: 14, height: 14 }} />}
+                  label="Incluido"
+                  sx={{ bgcolor: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontWeight: 500, fontSize: '0.75rem' }}
+                />
+              ) : (
               <form action={toggleModulo}>
                 <input type="hidden" name="teamId" value={teamId} />
                 <input type="hidden" name="modulo" value={mod} />
@@ -442,6 +457,7 @@ export default async function EmpresaDetailPage({
                   {activo ? 'Habilitado' : 'Deshabilitado'}
                 </Button>
               </form>
+              )}
             </Box>
           );
         })}

@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
@@ -44,7 +45,8 @@ export function ProfileDropdown({ user }: { user: UserInfo | null }) {
   const menuItems = [
     ...(user?.platformRole === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Panel admin' }] : []),
     { href: '/dashboard/perfil',      icon: UserCircle, label: 'Mi perfil' },
-    { href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' },
+    // Suscripción solo con billing activo (lib/config/billing).
+    ...(BILLING_ENABLED ? [{ href: '/dashboard/suscripcion', icon: CreditCard, label: 'Suscripción' }] : []),
     { href: '/dashboard/activity',    icon: Activity,   label: 'Actividad' },
     { href: '/dashboard/security',    icon: Shield,     label: 'Seguridad' },
   ];

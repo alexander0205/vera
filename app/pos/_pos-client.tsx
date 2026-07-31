@@ -233,7 +233,7 @@ function Apertura({ terminales }: { terminales: TerminalProp[] }) {
   // fallback solo cubre el caso extremo de todas desactivadas manualmente.
   if (terminales.length === 0) {
     return (
-      <Box sx={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', p: 3 }}>
+      <Box sx={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', p: 3 }}>
         <Box sx={{ maxWidth: 448, textAlign: 'center' }}>
           <Typography component="h1" sx={{ fontSize: 20, fontWeight: 500 }}>Todas las terminales están inactivas</Typography>
           <Typography sx={{ mt: 1, fontSize: 14, color: '#6b7280' }}>
@@ -245,7 +245,7 @@ function Apertura({ terminales }: { terminales: TerminalProp[] }) {
   }
 
   return (
-    <Box sx={{ position: 'relative', display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', p: 3 }}>
+    <Box sx={{ position: 'relative', display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', p: 3 }}>
       <Button
         component={Link}
         href="/dashboard"
@@ -812,7 +812,7 @@ function Venta({
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column', overflow: 'hidden' }}>
       {mesaActiva && (
         <Box sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #fde68a', bgcolor: '#fffbeb', px: { xs: 1.5, sm: 2 }, py: 0.75, fontSize: 14 }}>
           <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1 }}>
@@ -1184,7 +1184,7 @@ function CarritoPanel({
   // Gate DGII: sin conexión DGII lista, el POS solo emite tickets sin NCF.
   // Oculta e31/e32 del selector y fuerza sin-ncf si la terminal traía otro
   // default (defensa adicional en /api/ecf/emitir).
-  const { ready: dgiiReady } = useDgiiReadiness();
+  const { ready: dgiiReady, motivo: motivoDgii } = useDgiiReadiness();
   useEffect(() => {
     if (!dgiiReady && tipoEcf !== 'sin-ncf') onSelectTipoEcf('sin-ncf');
   }, [dgiiReady, tipoEcf, onSelectTipoEcf]);
@@ -1238,6 +1238,13 @@ function CarritoPanel({
               {dgiiReady && <MenuItem value="32">Consumo (e32)</MenuItem>}
               {dgiiReady && <MenuItem value="31">Crédito fiscal (e31)</MenuItem>}
             </TextField>
+            {/* Sin tipos fiscales, decir POR QUÉ: si no, el cajero ve el
+                selector con una sola opción y no sabe si es un error. */}
+            {!dgiiReady && motivoDgii && (
+              <Typography sx={{ mt: 0.75, fontSize: 12, color: '#92400e', lineHeight: 1.35 }}>
+                {motivoDgii}
+              </Typography>
+            )}
           </Box>
         </Box>
         <ClientePicker cliente={cliente} onSelect={onSelectCliente} />
@@ -2161,7 +2168,7 @@ function GridMesas({ terminalNombre, terminalId, mesero, refresco, onAbrirMesa, 
   useEffect(() => { cargar(); }, [cargar, refresco]);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column', overflow: 'hidden' }}>
       <Box component="header" sx={{ zIndex: 20, display: 'flex', flexShrink: 0, alignItems: 'center', justifyContent: 'space-between', gap: 1, borderBottom: '1px solid #e5e7eb', bgcolor: '#fff', px: { xs: 1.5, sm: 2 }, py: 1 }}>
         <Box sx={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 1 }}>
           <Button component={Link} href="/dashboard" nativeButton={false} variant="outlined" title="Volver al panel" sx={iconActionSx}>

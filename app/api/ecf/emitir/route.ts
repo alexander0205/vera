@@ -280,18 +280,27 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Gate DGII (defensa en profundidad del gate de UI) ────────────────────
-    // Emitir un tipo fiscal exige empresa lista para DGII (registro en ecf-api
-    // + secuencia fiscal activa). La UI ya oculta E31/E32 cuando no lo está;
-    // esto corta requests directos a la API. skipRangeValidation (set de
-    // pruebas de habilitación) se exime: emite e-CF de prueba antes de tener
-    // secuencias de producción.
-    if (data.modo !== 'borrador' && data.tipoEcf !== 'sin-ncf' && !skipRangeValidation) {
-      const readiness = await getDgiiReadiness(teamId);
+    // Emitir un tipo fiscal exige: empresa lista (registro en ecf-api +
+    // secuencia fiscal activa) Y ambiente 'Produccion' confirmado por ecf-api.
+    // La UI ya oculta E31/E32 cuando no aplica; esto corta requests directos.
+    //
+    // El gate de Producción se omite solo en desarrollo o para admin de
+    // plataforma (lib/ecf/readiness.ts). Antes se eximía por
+    // `skipRangeValidation`, un campo del body — o sea que cualquier cliente
+    // apagaba el gate mandando un JSON. Ahora el privilegio se deriva de la
+    // sesión; `skipRangeValidation` volvió a ser solo lo que dice el nombre.
+    if (data.modo !== 'borrador' && data.tipoEcf !== 'sin-ncf') {
+      const readiness = await getDgiiReadiness(teamId, user?.platformRole);
       if (!readiness.ready) {
+        const enPruebas = readiness.ambienteConfirmado && !readiness.enProduccion;
         return NextResponse.json(
           {
-            error: 'Tu empresa aún no está conectada a la DGII. Completa la habilitación para emitir e-CF, o guarda la venta sin NCF.',
-            code: 'DGII_NO_LISTA',
+            error: enPruebas
+              ? `Tu empresa está en ambiente de pruebas de la DGII (${readiness.ambiente}). Solo puedes guardar facturas sin comprobante fiscal hasta que la DGII apruebe el paso a Producción.`
+              : !readiness.ambienteConfirmado && readiness.registradaEcfApi
+                ? 'No se pudo confirmar con la DGII que tu empresa esté en Producción. Intenta de nuevo en un momento o guarda la venta sin NCF.'
+                : 'Tu empresa aún no está conectada a la DGII. Completa la habilitación para emitir e-CF, o guarda la venta sin NCF.',
+            code: enPruebas ? 'DGII_NO_PRODUCCION' : 'DGII_NO_LISTA',
             detalles: readiness,
           },
           { status: 422 },

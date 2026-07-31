@@ -6,11 +6,25 @@
  * componentes cliente (module-switcher, hooks).
  */
 
-export const MODULES = ['facturacion', 'pos', 'escolar'] as const;
+export const MODULES = ['facturacion', 'administracion', 'pos', 'escolar'] as const;
 export type ModuleKey = (typeof MODULES)[number];
+
+/**
+ * Módulos base que toda empresa tiene siempre. No se venden ni se apagan:
+ * facturación es el producto, y administración es donde el dueño gestiona su
+ * propia empresa, usuarios y roles. El panel admin los muestra activos y no
+ * permite desmarcarlos; el resto de módulos sí se encienden uno a uno.
+ */
+export const MODULES_BASE = ['facturacion', 'administracion'] as const satisfies readonly ModuleKey[];
+
+/** ¿Es un módulo base (siempre activo, no desactivable)? */
+export function isBaseModule(mod: ModuleKey): boolean {
+  return (MODULES_BASE as readonly ModuleKey[]).includes(mod);
+}
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   facturacion: 'Facturación',
+  administracion: 'Administración',
   pos: 'Punto de Venta',
   escolar: 'Administración Escolar',
 };
@@ -22,6 +36,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
  */
 export const MODULE_DEPENDENCIES: Record<ModuleKey, readonly ModuleKey[]> = {
   facturacion: [],
+  administracion: [],
   pos: [],
   escolar: ['facturacion'],
 };
@@ -43,6 +58,7 @@ export function dependentsOf(mod: ModuleKey): ModuleKey[] {
 
 export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   facturacion: 'Facturas, e-CF, clientes, cotizaciones y reportes',
+  administracion: 'Mi empresa, usuarios y roles',
   pos: 'Terminal de venta, turnos de caja e inventario en piso',
   escolar: 'Estudiantes, matrículas, cargos y pagos del colegio',
 };
@@ -50,6 +66,7 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
 /** Icono lucide-react de cada módulo (para switcher y cards). */
 export const MODULE_ICONS: Record<ModuleKey, string> = {
   facturacion: 'FileText',
+  administracion: 'Building2',
   pos: 'Store',
   escolar: 'GraduationCap',
 };
@@ -57,6 +74,7 @@ export const MODULE_ICONS: Record<ModuleKey, string> = {
 /** Ruta interna raíz de cada módulo (rewrites del proxy apuntan aquí). */
 export const MODULE_HOME: Record<ModuleKey, string> = {
   facturacion: '/dashboard',
+  administracion: '/cuenta',
   pos: '/pos',
   escolar: '/escolar',
 };
@@ -72,15 +90,23 @@ export const MODULE_HOME: Record<ModuleKey, string> = {
  */
 export function moduleUrl(mod: ModuleKey): string {
   const env =
-    mod === 'facturacion' ? process.env.NEXT_PUBLIC_FACTURACION_URL
-    : mod === 'pos'       ? process.env.NEXT_PUBLIC_POS_URL
-    :                       process.env.NEXT_PUBLIC_ESCOLAR_URL;
+    mod === 'facturacion'    ? process.env.NEXT_PUBLIC_FACTURACION_URL
+    : mod === 'pos'          ? process.env.NEXT_PUBLIC_POS_URL
+    : mod === 'escolar'      ? process.env.NEXT_PUBLIC_ESCOLAR_URL
+    // Administración no tiene subdominio propio: vive en el mismo host.
+    :                          undefined;
   return env || MODULE_HOME[mod];
 }
 
 export function sanitizeModules(value: unknown): ModuleKey[] {
   if (!Array.isArray(value)) return [];
   return MODULES.filter(m => value.includes(m));
+}
+
+/** Completa una lista con los módulos base, que toda empresa tiene siempre. */
+export function withBaseModules(mods: readonly ModuleKey[]): ModuleKey[] {
+  const out = new Set<ModuleKey>([...MODULES_BASE, ...mods]);
+  return MODULES.filter(m => out.has(m));
 }
 
 /**

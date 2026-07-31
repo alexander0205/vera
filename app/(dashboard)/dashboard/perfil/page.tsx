@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { User, Mail, Shield, CreditCard, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -158,11 +159,12 @@ export default function PerfilPage() {
             value: `2FA ${user?.twoFactorEnabled ? '· Activo' : '· No configurado'}`,
             action: '/dashboard/security', actionLabel: 'Gestionar',
           },
-          {
+          // Plan actual solo con billing activo (lib/config/billing).
+          ...(BILLING_ENABLED ? [{
             icon: CreditCard, label: 'Plan actual',
             value: `${team?.planName ?? 'Sin plan'}${isTrialing ? ' · Prueba gratis' : ''}`,
             action: '/dashboard/suscripcion', actionLabel: 'Ver plan',
-          },
+          }] : []),
         ].map((row, i) => (
           <Box key={row.label}>
             {i > 0 && <Divider />}

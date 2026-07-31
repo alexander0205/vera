@@ -1,4 +1,5 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 import Link from 'next/link';
 import { CreditCard, Zap, AlertCircle, TrendingUp } from 'lucide-react';
 import Box from '@mui/material/Box';
@@ -22,6 +23,10 @@ import { PlanSwitcher } from './_plan-switcher';
 import { ChangePlan } from './_change-plan';
 
 export default async function SuscripcionPage() {
+  // Producto en desarrollo: planes y suscripción no se le muestran al usuario;
+  // los módulos y límites los administramos desde /admin. Ver lib/config/billing.
+  if (!BILLING_ENABLED) notFound();
+
   const teamId = await getTeamIdForUser();
   if (!teamId) redirect('/sign-in');
 

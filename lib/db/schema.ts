@@ -149,13 +149,15 @@ export const teams = pgTable('teams', {
   // Ej: ["tarjeta"] → toda venta con tarjeta va obligatoriamente a la DGII.
   metodosObligaDgii:      jsonb('metodos_obliga_dgii').notNull().default([]),
 
-  // ── Módulos del producto (facturación / pos) ─────────────────────────────
-  // Qué módulos tiene contratados/activos la empresa. Fuente de verdad para
-  // el gate de acceso (lib/auth/modules.ts). En producción se deriva de la
-  // suscripción Stripe (items por módulo); `modulosOverride` permite al admin
-  // de plataforma forzar módulos (comps, demos) por encima del billing.
+  // ── Módulos del producto ─────────────────────────────────────────────────
+  // Qué módulos tiene activos la empresa. Fuente de verdad para el gate de
+  // acceso (lib/auth/modules.ts). Toda empresa arranca con los módulos base
+  // (facturación + administración) y los demás se encienden uno a uno desde
+  // el panel admin (/admin/empresas/[id]); `modulosOverride` fuerza la lista
+  // por encima de esta. Mientras el billing esté apagado (lib/config/billing)
+  // esta columna la administramos nosotros, no Stripe.
   // posHabilitado (arriba) queda como columna legacy hasta retirar su lectura.
-  modulosHabilitados:     jsonb('modulos_habilitados').notNull().default(['facturacion']),
+  modulosHabilitados:     jsonb('modulos_habilitados').notNull().default(['facturacion', 'administracion']),
   modulosOverride:        jsonb('modulos_override'),
 });
 

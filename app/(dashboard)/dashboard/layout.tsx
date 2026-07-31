@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
-import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import {
   LayoutDashboard, Users, Package,
   Settings, Activity, Shield, Menu as MenuIcon, Plus, ChevronDown, ChevronRight,
@@ -14,30 +13,23 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
-import { ModuleSwitcher } from '@/components/module-switcher';
+import { ModuleHeader } from '@/components/module-header';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { moduleUrl } from '@/lib/config/modules';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 import { ProfileDropdown, getInitials, type UserInfo } from '@/components/profile-dropdown';
 
 // MUI imports
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
-import AppBar from '@mui/material/AppBar';
-import Toolbar from '@mui/material/Toolbar';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
-import Avatar from '@mui/material/Avatar';
-import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Collapse from '@mui/material/Collapse';
-import InputBase from '@mui/material/InputBase';
 import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import ListItemIcon from '@mui/material/ListItemIcon';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -239,6 +231,9 @@ function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => voi
 }
 
 function teamHasPlan(t: Team) {
+  // Producto en desarrollo: sin billing no existe el concepto de "empresa sin
+  // plan", así que nada bloquea la navegación. Ver lib/config/billing.
+  if (!BILLING_ENABLED) return true;
   if (t.subscriptionStatus === 'admin') return true;
   const name = t.planName?.toLowerCase();
   if (!name || name === 'gratis') return false;
@@ -256,212 +251,8 @@ function planColor(planName: string | null): 'default' | 'primary' | 'secondary'
   return 'default';
 }
 
-// ─── Company Switcher ─────────────────────────────────────────────────────────
-
-function CompanySwitcher({
-  teams,
-  activeTeamId,
-  onSwitch,
-}: {
-  teams: Team[];
-  activeTeamId: number | null;
-  onSwitch: (teamId: number) => void;
-}) {
-  const router = useRouter();
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const [search, setSearch]     = useState('');
-  const open = Boolean(anchorEl);
-
-  const active   = teams.find(t => t.id === activeTeamId) ?? teams[0];
-  const filtered = teams.filter(t =>
-    !search ||
-    t.razonSocial?.toLowerCase().includes(search.toLowerCase()) ||
-    t.rnc?.includes(search)
-  );
-
-  async function switchTeam(teamId: number) {
-    if (teamId === activeTeamId) { setAnchorEl(null); setSearch(''); return; }
-    setAnchorEl(null);
-    setSearch('');
-    await fetch('/api/empresa/switch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ teamId }),
-    });
-    onSwitch(teamId);
-    const target = teams.find(t => t.id === teamId);
-    if (!target || !teamHasPlan(target)) {
-      router.push('/pricing?reason=no-plan');
-    } else {
-      router.push('/dashboard');
-      router.refresh();
-    }
-  }
-
-  const label = active?.razonSocial ?? active?.rnc ?? 'Mi empresa';
-
-  return (
-    <>
-      <Box
-        component="button"
-        onClick={(e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget)}
-        sx={{
-          display:       'flex',
-          alignItems:    'center',
-          gap:           1,
-          px:            1.5,
-          py:            0.75,
-          borderRadius:  '8px',
-          border:        '1px solid',
-          borderColor:   'divider',
-          bgcolor:       'background.paper',
-          cursor:        'pointer',
-          transition:    'all 0.15s',
-          maxWidth:      240,
-          '&:hover':     { bgcolor: 'grey.50', borderColor: 'grey.400' },
-        }}
-      >
-        {active?.logo ? (
-          <img src={active.logo} alt={label} style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'cover' }} />
-        ) : (
-          <Avatar sx={{ width: 24, height: 24, fontSize: '0.6875rem', fontWeight: 700, bgcolor: 'primary.main', borderRadius: '6px' }}>
-            {(label[0] ?? 'E').toUpperCase()}
-          </Avatar>
-        )}
-        <Typography
-          variant="body2"
-          noWrap
-          sx={{ maxWidth: 140, flex: 1, textAlign: 'left', fontWeight: 600, color: 'text.primary' }}
-        >
-          {label}
-        </Typography>
-        {active && teamHasPlan(active) && active.planName && (
-          <Chip
-            label={active.planName}
-            size="small"
-            color={planColor(active.planName)}
-            sx={{ height: 18, fontSize: '0.625rem', fontWeight: 700, display: { xs: 'none', sm: 'flex' } }}
-          />
-        )}
-        <ChevronDown
-          style={{
-            width:      14,
-            height:     14,
-            color:      '#9ca3af',
-            transform:  open ? 'rotate(180deg)' : undefined,
-            transition: 'transform 0.2s',
-            flexShrink: 0,
-          }}
-        />
-      </Box>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={() => { setAnchorEl(null); setSearch(''); }}
-        slotProps={{
-          paper: {
-            elevation: 0,
-            sx: {
-              borderRadius: '12px',
-              border:       '1px solid #e5e7eb',
-              boxShadow:    '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-              minWidth:     280,
-              mt:           0.5,
-            },
-          },
-        }}
-        transformOrigin={{ horizontal: 'left', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-      >
-        {teams.length > 3 && (
-          <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{
-              display: 'flex', alignItems: 'center', gap: 1,
-              bgcolor: 'grey.50', borderRadius: '8px', px: 1.5, py: 0.75,
-            }}>
-              <Search style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
-              <InputBase
-                autoFocus
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar empresa..."
-                sx={{ flex: 1, fontSize: '0.875rem' }}
-              />
-            </Box>
-          </Box>
-        )}
-
-        <Box sx={{ py: 0.5, maxHeight: 240, overflowY: 'auto' }}>
-          {filtered.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5, textAlign: 'center' }}>
-              Sin resultados
-            </Typography>
-          ) : filtered.map(t => (
-            <MenuItem
-              key={t.id}
-              onClick={() => switchTeam(t.id)}
-              sx={{
-                borderRadius: '6px',
-                mx: 0.5,
-                gap: 1.5,
-                py: 1,
-                '&:hover': { bgcolor: 'grey.50' },
-              }}
-            >
-              {t.logo ? (
-                <img src={t.logo} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} />
-              ) : (
-                <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', fontWeight: 700, bgcolor: 'primary.main', borderRadius: '6px', flexShrink: 0 }}>
-                  {((t.razonSocial ?? t.rnc ?? 'E')[0] ?? 'E').toUpperCase()}
-                </Avatar>
-              )}
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                  {t.razonSocial ?? t.rnc ?? 'Sin nombre'}
-                </Typography>
-                {t.rnc && (
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    RNC {t.rnc}
-                  </Typography>
-                )}
-              </Box>
-              {t.id === activeTeamId && (
-                <Check style={{ width: 16, height: 16, color: '#0d9488', flexShrink: 0 }} />
-              )}
-            </MenuItem>
-          ))}
-        </Box>
-      </Menu>
-    </>
-  );
-}
-
 // ─── Profile Dropdown ─────────────────────────────────────────────────────────
 
-
-// ─── Ambiente Badge ───────────────────────────────────────────────────────────
-
-function AmbienteBadge({ ambiente }: { ambiente: string | null }) {
-  if (!ambiente || ambiente === 'Produccion') return null;
-
-  const map: Record<string, { label: string; color: 'warning' | 'secondary' | 'default' }> = {
-    TesteCF: { label: 'Pruebas',       color: 'warning' },
-    CerteCF: { label: 'Certificación', color: 'secondary' },
-  };
-  const item = map[ambiente] ?? { label: 'No producción', color: 'default' as const };
-
-  return (
-    <Chip
-      icon={<AlertCircle style={{ width: 12, height: 12 }} />}
-      label={item.label}
-      size="small"
-      color={item.color}
-      variant="outlined"
-      sx={{ fontSize: '0.6875rem', fontWeight: 600, height: 22 }}
-    />
-  );
-}
 
 // ─── Sidebar Content ──────────────────────────────────────────────────────────
 
@@ -991,134 +782,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Columna de contenido: header (barra) + página */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        {/* Top bar */}
-        <AppBar
-          position="static"
-          elevation={0}
-          sx={{
-            bgcolor:      '#ffffff',
-            color:        'text.primary',
-            borderBottom: '1px solid #e5e7eb',
-            height:       56,
-            flexShrink:   0,
-            zIndex:       30,
-          }}
-        >
-          <Toolbar
-            variant="dense"
-            sx={{ height: 56, minHeight: 56, gap: 1, px: { xs: 1.5, sm: 2 } }}
-          >
-            {/* Mobile hamburger */}
-            <IconButton
-              onClick={() => setMobileOpen(true)}
-              size="small"
-              sx={{ display: { lg: 'none' }, color: 'text.secondary' }}
-            >
-              <MenuIcon style={{ width: 20, height: 20 }} />
-            </IconButton>
-
-            {/* Desktop sidebar toggle */}
-            <Tooltip title={sidebarVisible ? 'Ocultar menú' : 'Mostrar menú'} placement="bottom">
-              <IconButton
-                onClick={toggleSidebar}
-                size="small"
-                sx={{ display: { xs: 'none', lg: 'flex' }, color: 'text.secondary' }}
-              >
-                {sidebarVisible
-                  ? <PanelLeftClose style={{ width: 20, height: 20 }} />
-                  : <PanelLeftOpen  style={{ width: 20, height: 20 }} />
-                }
-              </IconButton>
-            </Tooltip>
-
-            {/* Logo when sidebar collapsed */}
-            {!sidebarVisible && (
-              <Box
-                sx={{
-                  display:    { xs: 'none', lg: 'flex' },
-                  alignItems: 'center',
-                  gap:        1,
-                  mr:         1,
-                }}
-              >
-                <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
-                </Box>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary' }}>Zero</Typography>
-              </Box>
-            )}
-
-            {/* Mobile logo */}
-            <Box
-              sx={{
-                display:    { xs: 'flex', lg: 'none' },
-                alignItems: 'center',
-                gap:        1,
-                mr:         1,
-              }}
-            >
-              <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
-              </Box>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>Zero</Typography>
-            </Box>
-
-            {/* Company switcher */}
-            <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={handleSwitch} />
-
-            {/* Module switcher (Facturación ↔ POS) */}
-            <ModuleSwitcher current="facturacion" />
-
-            {/* DGII ambiente badge */}
-            <AmbienteBadge ambiente={dgiiAmbiente} />
-
-            {/* Turno de caja — solo aparece cuando queda poco para el límite */}
-            {cajaHabilitada && <TurnoCountdown />}
-
-            <Box sx={{ flex: 1 }} />
-
-            {/* Search button */}
-            <Box
-              component="button"
-              onClick={() => document.querySelector<HTMLButtonElement>('#global-search-trigger')?.click()}
-              sx={{
-                display:     { xs: 'none', sm: 'flex' },
-                alignItems:  'center',
-                gap:         1,
-                fontSize:    '0.875rem',
-                color:       'text.secondary',
-                px:          1.25,
-                py:          0.75,
-                borderRadius: '8px',
-                bgcolor:     'transparent',
-                border:      'none',
-                cursor:      'pointer',
-                transition:  'all 0.15s',
-                '&:hover':   { bgcolor: 'grey.50', color: 'text.primary' },
-              }}
-            >
-              <Search style={{ width: 16, height: 16 }} />
-              <Box component="span" sx={{ display: { xs: 'none', md: 'block' } }}>Buscar</Box>
-              <Box
-                component="kbd"
-                sx={{
-                  display:     { xs: 'none', md: 'block' },
-                  fontSize:    '0.6875rem',
-                  bgcolor:     'grey.100',
-                  borderRadius: '4px',
-                  px:          0.75,
-                  py:          0.25,
-                  fontFamily:  'monospace',
-                }}
-              >
-                ⌘K
-              </Box>
-            </Box>
-
-            {/* Profile */}
-            <ProfileDropdown user={user ?? null} />
-          </Toolbar>
-        </AppBar>
+        {/* Header único del sistema — el mismo que montan POS, Escolar y
+            Administración. Ver components/module-header.tsx. */}
+        <ModuleHeader
+          current="facturacion"
+          user={user ?? null}
+          onAbrirMenu={() => setMobileOpen(true)}
+          onToggleSidebar={toggleSidebar}
+          sidebarVisible={sidebarVisible}
+          mostrarLogo={!sidebarVisible}
+          onSwitchEmpresa={handleSwitch}
+          breakpointMenu="lg"
+        />
 
         {/* Page content */}
         <Box

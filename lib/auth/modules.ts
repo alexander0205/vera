@@ -21,13 +21,14 @@ import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { getEffectivePermissions } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/config/roles';
-import { sanitizeModules, type ModuleKey } from '@/lib/config/modules';
+import { sanitizeModules, withBaseModules, type ModuleKey } from '@/lib/config/modules';
 
 export { MODULES, MODULE_LABELS, MODULE_HOME, moduleUrl } from '@/lib/config/modules';
 export type { ModuleKey } from '@/lib/config/modules';
 
 const MODULE_PERMISSION: Record<ModuleKey, Permission> = {
   facturacion: 'modulo:facturacion',
+  administracion: 'modulo:administracion',
   pos: 'modulo:pos',
   escolar: 'modulo:escolar',
 };
@@ -35,6 +36,10 @@ const MODULE_PERMISSION: Record<ModuleKey, Permission> = {
 /**
  * Módulos activos de la empresa. `modulosOverride` (admin plataforma) manda
  * sobre `modulosHabilitados` (billing). Team inexistente → [].
+ *
+ * Los módulos base (facturación + administración) se agregan siempre: toda
+ * empresa los tiene y no se venden. Así una fila vieja o un override mal
+ * guardado nunca puede dejar a un dueño sin acceso a su propia empresa.
  */
 export const getTeamModules = cache(async (teamId: number): Promise<ModuleKey[]> => {
   const [row] = await db
@@ -46,8 +51,8 @@ export const getTeamModules = cache(async (teamId: number): Promise<ModuleKey[]>
     .where(eq(teams.id, teamId))
     .limit(1);
   if (!row) return [];
-  if (row.override != null) return sanitizeModules(row.override);
-  return sanitizeModules(row.habilitados);
+  const guardados = sanitizeModules(row.override != null ? row.override : row.habilitados);
+  return withBaseModules(guardados);
 });
 
 /** ¿La empresa tiene el módulo activo? */

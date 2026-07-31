@@ -22,9 +22,11 @@ import { MODULES, sanitizeModules, type ModuleKey } from '@/lib/config/modules';
 export const MODULE_PRICE_IDS: Record<ModuleKey, string> = {
   facturacion: process.env.STRIPE_PRICE_MODULO_FACTURACION ?? '',
   pos:         process.env.STRIPE_PRICE_MODULO_POS ?? '',
-  // Administración Escolar no tiene price: se habilita a mano (modulosOverride
-  // desde el panel admin). Ver isBillableModule.
-  escolar:     '',
+  // Módulos sin price: se habilitan a mano (modulosOverride desde el panel
+  // admin) y ninguna suscripción opina sobre ellos. Ver isBillableModule.
+  // Administración es base — toda empresa la tiene, nunca se cobra.
+  administracion: '',
+  escolar:        '',
 };
 
 /**

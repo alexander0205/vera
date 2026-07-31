@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Building2, Users, ShieldCheck, CreditCard, Layers, LayoutGrid } from 'lucide-react';
 import { moduleUrl } from '@/lib/config/modules';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 
 const RAIL = 68;
 const OPEN = 224;
@@ -28,7 +29,8 @@ const ITEMS: Item[] = [
   { href: '/cuenta/empresa',  label: 'Mi empresa',       icon: Building2 },
   { href: '/cuenta/usuarios', label: 'Usuarios',         icon: Users },
   { href: '/cuenta/roles',    label: 'Roles y permisos', icon: ShieldCheck },
-  { href: '/cuenta/plan',     label: 'Plan y facturación', icon: CreditCard },
+  // Plan y facturación solo cuando el billing está activo (lib/config/billing).
+  ...(BILLING_ENABLED ? [{ href: '/cuenta/plan', label: 'Plan y facturación', icon: CreditCard }] : []),
   { href: '/cuenta/empresas', label: 'Mis empresas',     icon: Layers },
 ];
 

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 import { Command } from 'cmdk';
 import {
   Search, FileText, Users, Package, Hash, Plus, LayoutDashboard,
@@ -21,7 +22,8 @@ const STATIC_ITEMS = [
   { group: 'Páginas', label: 'Secuencias NCF', href: '/dashboard/secuencias', icon: Hash },
   { group: 'Páginas', label: 'Reportes DGII', href: '/dashboard/reportes', icon: BarChart3 },
   { group: 'Páginas', label: 'Configuración', href: '/dashboard/configuracion', icon: Settings },
-  { group: 'Páginas', label: 'Suscripción', href: '/dashboard/suscripcion', icon: CreditCard },
+  // Suscripción solo con billing activo (lib/config/billing).
+  ...(BILLING_ENABLED ? [{ group: 'Páginas', label: 'Suscripción', href: '/dashboard/suscripcion', icon: CreditCard }] : []),
   { group: 'Páginas', label: 'Seguridad', href: '/dashboard/security', icon: Shield },
   { group: 'Páginas', label: 'Actividad', href: '/dashboard/activity', icon: Activity },
   { group: 'Acciones', label: 'Nueva factura', href: '/dashboard/facturas/nueva', icon: Plus },

@@ -1,4 +1,6 @@
+import { notFound } from 'next/navigation';
 import { checkoutAction } from '@/lib/payments/actions';
+import { BILLING_ENABLED } from '@/lib/config/billing';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
@@ -13,6 +15,8 @@ export default function PricingPage({
 }: {
   searchParams: Promise<{ reason?: string; welcome?: string; new_company?: string }>;
 }) {
+  // Producto en desarrollo: no se le muestra pricing a nadie. Ver lib/config/billing.
+  if (!BILLING_ENABLED) notFound();
   return <PricingPageInner searchParams={searchParams} />;
 }
 

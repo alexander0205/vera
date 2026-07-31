@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { BILLING_ENABLED } from '@/lib/config/billing';
+import { ZeroLoader } from '@/components/zero-loader';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -64,6 +66,14 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
   const router = useRouter();
   const [showCrear, setShowCrear] = useState(false);
   const [switching, setSwitching] = useState<number | null>(null);
+  const [cambiandoA, setCambiandoA] = useState<string | null>(null);
+
+  // Red de seguridad: que el loader no se quede pegado tapando la app.
+  useEffect(() => {
+    if (!cambiandoA) return;
+    const t = setTimeout(() => setCambiandoA(null), 15000);
+    return () => clearTimeout(t);
+  }, [cambiandoA]);
 
   const [razonSocial, setRazonSocial]         = useState('');
   const [rnc, setRnc]                         = useState('');
@@ -74,12 +84,19 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
   async function handleSwitch(teamId: number) {
     if (teamId === activeTeamId) return;
     setSwitching(teamId);
+    const destino = empresas.find(e => e.id === teamId);
+    setCambiandoA(destino?.razonSocial ?? destino?.name ?? null);
     try {
       await fetch('/api/empresa/switch', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ teamId }),
       });
+      // El loader se queda puesto a propósito: la navegación tarda y taparlo
+      // es justo el punto. Lo baja el unmount al cambiar de página, o el
+      // timeout de seguridad si algo se cuelga.
       router.push('/dashboard'); router.refresh();
+    } catch {
+      setCambiandoA(null);
     } finally { setSwitching(null); }
   }
 
@@ -92,7 +109,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error creando empresa');
-      router.push('/pricing?new_company=1');
+      router.push(BILLING_ENABLED ? '/pricing?new_company=1' : '/dashboard');
     } catch (e) {
       setCrearError(e instanceof Error ? e.message : 'Error desconocido');
       setCreando(false);
@@ -105,6 +122,8 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
 
   return (
     <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+
+      <ZeroLoader open={!!cambiandoA} subtitulo={cambiandoA ? `Abriendo ${cambiandoA}` : undefined} />
 
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -175,13 +194,16 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
                       RNC {empresa.rnc}
                     </Typography>
                   )}
-                  <Chip label={badge.label} size="small" sx={{ bgcolor: badge.bgcolor, color: badge.color, border: `1px solid ${badge.border}`, fontSize: '0.6875rem', height: 20, fontWeight: 500 }} />
+                  {/* Badge del plan solo con billing activo (lib/config/billing). */}
+                  {BILLING_ENABLED && (
+                    <Chip label={badge.label} size="small" sx={{ bgcolor: badge.bgcolor, color: badge.color, border: `1px solid ${badge.border}`, fontSize: '0.6875rem', height: 20, fontWeight: 500 }} />
+                  )}
                 </Box>
               </Box>
 
               {/* Acciones */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-                {isOwner && !hasPlan && (
+                {BILLING_ENABLED && isOwner && !hasPlan && (
                   <Button variant="outlined" size="small"
                     startIcon={<CreditCard size={14} />}
                     onClick={async () => {
@@ -192,7 +214,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
                     Elegir plan
                   </Button>
                 )}
-                {isOwner && hasPlan && (
+                {BILLING_ENABLED && isOwner && hasPlan && (
                   <Button variant="text" size="small"
                     startIcon={<CreditCard size={14} />}
                     onClick={async () => {

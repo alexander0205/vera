@@ -40,6 +40,10 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
         p:              2,
       }}
     >
+      {/* Sin loader de pantalla completa acá a propósito: `pending` también se
+          prende cuando las credenciales están mal, así que taparía la pantalla
+          para después mostrar el error. El spinner del botón es el aviso
+          correcto para un formulario que puede fallar. */}
       <Box sx={{ width: '100%', maxWidth: 400 }}>
         {/* Logo */}
         <Box sx={{ textAlign: 'center', mb: 4 }}>
