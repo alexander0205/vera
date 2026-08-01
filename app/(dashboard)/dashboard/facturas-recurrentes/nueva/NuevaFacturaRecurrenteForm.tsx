@@ -40,6 +40,9 @@ const TIPOS_ECF = [
   { value: '43', label: 'Gastos menores (43)' },
   { value: '44', label: 'Regímenes especiales (44)' },
   { value: '45', label: 'Gubernamental (45)' },
+  // Genera facturas internas sin comprobante fiscal: no consumen secuencia
+  // ni se envían a la DGII.
+  { value: 'sin-ncf', label: 'Sin NCF — factura interna' },
 ];
 
 // tipoPago recurrente: 1 = contado, 2 = crédito (con N días para pago)
