@@ -4,6 +4,16 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.10.0 — 2026-08-01
+
+### Nuevo
+
+- **recurrentes**: permitir planes sin comprobante fiscal (sin-ncf)
+  - Migración 0076: ensancha tipo_ecf a varchar(10). ecf_documents.tipo_ecf ya era varchar(10), el cuello estaba solo en el plan.
+  - El generador emite encf vacío para sin-ncf en vez de BOR-sin-ncf-XXX, que mostraría un identificador con pinta de e-NCF en un documento que nunca va a tener uno. Mismo criterio que el alta manual.
+  - Whitelist de tipoEcf en POST y PUT: un valor inválido ahora responde 422 en lugar de reventar como 500. La lista vive en lib/ecf/categorias.ts para no duplicarla entre las rutas y el formulario.
+  - Opción "Sin NCF — factura interna" en el selector del formulario, que ya usan tanto el alta como la edición.
+
 ## v1.9.0 — 2026-07-30
 
 ### Nuevo
