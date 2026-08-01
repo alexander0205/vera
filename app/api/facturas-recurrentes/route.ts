@@ -9,6 +9,7 @@ import { facturasRecurrentes, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, desc, and } from 'drizzle-orm';
+import { esTipoEcfRecurrenteValido } from '@/lib/ecf/categorias';
 
 // GET /api/facturas-recurrentes?page=1&limit=50
 export async function GET(req: NextRequest) {
@@ -66,6 +67,12 @@ export async function POST(req: NextRequest) {
   const ESTADOS_VALIDOS = ['activa', 'pausada', 'finalizada'] as const;
   if (body.estado != null && !ESTADOS_VALIDOS.includes(body.estado)) {
     return NextResponse.json({ error: 'Estado inválido' }, { status: 422 });
+  }
+
+  // Sin esta comprobación, un tipoEcf arbitrario llegaba crudo al INSERT y
+  // reventaba como 500 del driver en vez de 422.
+  if (body.tipoEcf != null && !esTipoEcfRecurrenteValido(body.tipoEcf)) {
+    return NextResponse.json({ error: 'Tipo de comprobante inválido' }, { status: 422 });
   }
 
   const frecuencia = body.frecuencia ?? 'mensual';

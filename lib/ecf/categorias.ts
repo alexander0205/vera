@@ -24,6 +24,23 @@ export interface CategoriaEcf {
   tipos: TipoEcfOpcion[];
 }
 
+/**
+ * Tipos que un plan de facturación recurrente puede emitir.
+ *
+ * Se excluyen 33/34 (notas de débito y crédito), que corrigen un documento
+ * previo y no se cobran en ciclo, y 46/47 (exportaciones y pagos al exterior),
+ * que no se ofrecen en el formulario.
+ *
+ * 'sin-ncf' genera una factura interna sin comprobante fiscal: el documento
+ * queda con `encf` vacío y nunca se envía a la DGII.
+ */
+export const TIPOS_ECF_RECURRENTES = ['31', '32', '41', '43', '44', '45', 'sin-ncf'] as const;
+
+export function esTipoEcfRecurrenteValido(codigo: unknown): boolean {
+  return typeof codigo === 'string'
+    && (TIPOS_ECF_RECURRENTES as readonly string[]).includes(codigo);
+}
+
 export const CATEGORIAS_ECF: CategoriaEcf[] = [
   {
     // Todos los comprobantes que emites al VENDER — B01, B02, B14, B15, B16

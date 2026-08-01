@@ -10,6 +10,7 @@ import { facturasRecurrentes, ecfDocuments, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and, ne, desc, sql } from 'drizzle-orm';
+import { esTipoEcfRecurrenteValido } from '@/lib/ecf/categorias';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -194,6 +195,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const ESTADOS_VALIDOS = ['activa', 'pausada', 'finalizada'] as const;
   if (body.estado != null && !ESTADOS_VALIDOS.includes(body.estado)) {
     return NextResponse.json({ error: 'Estado inválido' }, { status: 422 });
+  }
+
+  if (body.tipoEcf != null && !esTipoEcfRecurrenteValido(body.tipoEcf)) {
+    return NextResponse.json({ error: 'Tipo de comprobante inválido' }, { status: 422 });
   }
 
   // diaCobro solo aplica para frecuencias mensual/trimestral/anual.

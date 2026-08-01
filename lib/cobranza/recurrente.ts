@@ -138,7 +138,13 @@ export async function generarFacturaDeRecurrente(
 
   // e-NCF de BORRADOR (igual que el flujo manual): NO consume secuencia ni asigna
   // un e-NCF fiscal real. El e-NCF real se asigna al "Enviar a DGII" (emitir-ecf).
-  const encf = `BOR-${fr.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+  //
+  // sin-ncf: encf vacío. No hay comprobante que reservar, así que un BOR-sin-ncf-XXX
+  // mostraría un identificador con pinta de e-NCF en un documento que nunca va a
+  // tener uno. Mismo criterio que app/api/ecf/emitir/route.ts para el alta manual.
+  const encf = fr.tipoEcf === 'sin-ncf'
+    ? ''
+    : `BOR-${fr.tipoEcf}-${Date.now().toString(36).toUpperCase().slice(-8)}`;
 
   // Fecha límite de pago para crédito
   let fechaLimitePago: string | null = null;

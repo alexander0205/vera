@@ -728,7 +728,9 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   nombre:           varchar('nombre', { length: 100 }).notNull(),
   /** Descripción corta opcional del plan (visible en UI/PDF). Distinto de notas. */
   descripcion:      varchar('descripcion', { length: 200 }),
-  tipoEcf:          varchar('tipo_ecf', { length: 2 }).notNull().default('31'),
+  /** Códigos de e-CF ('31', '32', …) o el sentinel 'sin-ncf' (7 chars) para
+   *  planes que generan facturas internas sin comprobante fiscal. */
+  tipoEcf:          varchar('tipo_ecf', { length: 10 }).notNull().default('31'),
   tipoPago:         integer('tipo_pago').notNull().default(1),
   /** Días desde fechaEmision hasta fechaLimitePago cuando tipoPago=2 (crédito).
    *  null = inmediato. Caso colegio: 5 días → vence el día 5, AR detecta vencida día 6. */
