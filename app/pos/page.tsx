@@ -19,11 +19,13 @@ export default async function PosPage() {
   if (!team?.posHabilitado) redirect('/dashboard');
 
   const user = await getUser();
-  const [terminales, turno, alertaMetodoPago] = await Promise.all([
+  const [terminales, turno, tienePermisoAlerta] = await Promise.all([
     listarTerminales(teamId),
     user ? getTurnoAbierto(teamId, user.id) : Promise.resolve(null),
     hasPermission('pagos:alerta-metodo'),
   ]);
+  // Combina el toggle por-empresa con el permiso por-rol.
+  const alertaMetodoPago = !!team.alertaMetodoPagoActivo && tienePermisoAlerta;
 
   const terminalActiva = turno?.terminalId
     ? (terminales.find((t) => t.id === turno.terminalId) ?? null)
