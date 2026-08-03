@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { logAudit, getIp } from '@/lib/audit';
 import { listarTerminales, crearTerminal } from '@/lib/pos/terminales';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
+import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 export async function GET() {
   const auth = await requirePermission('pos:vender');
@@ -21,7 +23,9 @@ const terminalSchema = z.object({
   almacenId:      z.number().int().positive(),
   impresoraId:    z.number().int().positive().nullable().optional(),
   listaPreciosId: z.number().int().positive().nullable().optional(),
-  tipoEcf:        z.string().max(10).optional(),
+  // Enum, no string libre: antes cualquier valor de 10 chars pasaba y el
+  // terminal se lo heredaba a todas sus ventas.
+  tipoEcf:        z.enum(['sin-ncf', '31', '32']).optional(),
   activo:         z.boolean().optional(),
   mesas:          z.boolean().optional(),
 });
@@ -35,6 +39,13 @@ export async function POST(req: NextRequest) {
   const parsed = terminalSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
+  }
+
+  if (parsed.data.tipoEcf && esTipoVentaFiscal(parsed.data.tipoEcf)) {
+    const ambiente = await getAmbienteTenant(teamId);
+    if (ambiente !== 'Produccion') {
+      return NextResponse.json({ error: mensajeAmbienteNoProduccion(ambiente), ambiente }, { status: 403 });
+    }
   }
 
   try {

@@ -36,6 +36,21 @@ export interface CategoriaEcf {
  */
 export const TIPOS_ECF_RECURRENTES = ['31', '32', '41', '43', '44', '45', 'sin-ncf'] as const;
 
+/**
+ * Comprobantes fiscales de VENTA. Son los que una empresa fuera de Producción
+ * no puede ofrecer: para ella no existen, porque lo que emitiría en TesteCF o
+ * CerteCF no tiene validez ante la DGII. En su lugar solo queda 'sin-ncf'.
+ *
+ * No incluye 33/34 (notas de crédito y débito) ni 41/43/47 (compras y gastos):
+ * esos siguen disponibles como documentos internos que ajustan saldos, igual
+ * que la nota de débito de mora, que nunca se envía a la DGII.
+ */
+export const TIPOS_VENTA_FISCAL = ['31', '32', '44', '45', '46'] as const;
+
+export function esTipoVentaFiscal(codigo: string): boolean {
+  return (TIPOS_VENTA_FISCAL as readonly string[]).includes(codigo);
+}
+
 export function esTipoEcfRecurrenteValido(codigo: unknown): boolean {
   return typeof codigo === 'string'
     && (TIPOS_ECF_RECURRENTES as readonly string[]).includes(codigo);
