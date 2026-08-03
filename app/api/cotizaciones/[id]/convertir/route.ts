@@ -36,21 +36,28 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
   const rand = Math.random().toString(36).substring(2, 10).toUpperCase();
   const encf = `BOR-${rand}`;
 
-  // Mapear ítems de cotización a lineasJson del formulario de factura
+  // Mapear ítems de cotización a lineasJson del formulario de factura.
+  // Las cotizaciones nuevas guardan el shape rico de ItemLinea (mismo que factura);
+  // las viejas guardaban { descripcion, precio, cantidad }. Se soportan ambos.
   let lineasJson: string | null = null;
   try {
-    const rawItems: Array<{ descripcion: string; precio: number; cantidad: number }> =
-      cot.items ? JSON.parse(cot.items) : [];
+    const rawItems: Array<Record<string, unknown>> = cot.items ? JSON.parse(cot.items) : [];
 
-    const lineas = rawItems.map((it, idx) => ({
-      id:                  idx + 1,
-      nombreItem:          it.descripcion,
-      descripcionItem:     '',
-      cantidadItem:        it.cantidad,
-      precioUnitarioItem:  it.precio,
-      descuentoPct:        0,
-      tasaItbis:           'exento',
-    }));
+    const lineas = rawItems.map((it, idx) => {
+      const esViejo = it.descripcion !== undefined && it.nombreItem === undefined;
+      return {
+        id:                     idx + 1,
+        nombreItem:             String(esViejo ? it.descripcion : (it.nombreItem ?? '')),
+        referencia:             String(it.referencia ?? ''),
+        descripcionItem:        String(it.descripcionItem ?? ''),
+        cantidadItem:           Number(it.cantidad ?? it.cantidadItem ?? 1),
+        precioUnitarioItem:     Number(it.precio ?? it.precioUnitarioItem ?? 0),
+        descuentoPct:           Number(it.descuentoPct ?? 0),
+        tasaItbis:              String(it.tasaItbis ?? 'exento'),
+        indicadorBienoServicio: String(it.indicadorBienoServicio ?? '2'),
+        unidadMedida:           String(it.unidadMedida ?? ''),
+      };
+    });
 
     lineasJson = JSON.stringify(lineas);
   } catch { /* sin ítems */ }
@@ -75,9 +82,12 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
       razonSocialComprador: cot.razonSocialComprador ?? null,
       emailComprador:       cot.emailComprador ?? null,
       montoTotal:           cot.montoTotal,
-      totalItbis:           0,
+      totalItbis:           cot.totalItbis ?? 0,
       notas:                cot.notas ?? null,
       terminosCondiciones:  cot.terminosCondiciones ?? null,
+      retenciones:          cot.retenciones ?? null,
+      comentario:           cot.comentario ?? null,
+      pieFactura:           cot.pieFactura ?? null,
       lineasJson,
       tipoPago:             1,
     })
