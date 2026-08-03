@@ -22,7 +22,9 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
  */
 export const MODULE_DEPENDENCIES: Record<ModuleKey, readonly ModuleKey[]> = {
   facturacion: [],
-  pos: [],
+  // POS y Escolar cobran a través de Facturación: sin ese módulo (base
+  // obligatoria) no hay forma de emitir ni saldar cargos.
+  pos: ['facturacion'],
   escolar: ['facturacion'],
 };
 

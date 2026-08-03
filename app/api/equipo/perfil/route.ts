@@ -9,6 +9,8 @@ import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { METODO_PAGO_VALUES } from '@/lib/pagos/metodos';
+import { getModuleRow } from '@/lib/payments/module-subscriptions';
+import { statusGrantsAccess, type ModuleStatus } from '@/lib/config/module-plans';
 
 const MAX_IMG_SIZE = 1_000_000; // 1 MB en base64
 
@@ -21,6 +23,11 @@ const schema = z.object({
   direccion:         z.string().max(500).optional(),
   provincia:         z.string().max(100).optional().or(z.literal('')),
   municipio:         z.string().max(100).optional().or(z.literal('')),
+  actividadEconomica: z.string().max(20).optional().or(z.literal('')),
+  // Representante legal — requerido para postulación DGII, opcional al registrar.
+  cedulaRepresentante: z.string().max(11).optional().or(z.literal('')),
+  nombreRepresentante: z.string().max(255).optional().or(z.literal('')),
+  correoRepresentante: z.string().email().max(255).optional().or(z.literal('')),
   telefono:          z.string().max(30).optional(),
   sitioWeb:          z.string().max(200).optional(),
   emailFacturacion:  z.string().email().max(255).optional().or(z.literal('')),
@@ -86,6 +93,19 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
+
+  // Paywall POS: habilitar el punto de venta desde config exige el módulo `pos`
+  // contratado (trial o pago). Sin plan activo no se puede autoservir el toggle.
+  if (data.posHabilitado === true) {
+    const posRow = await getModuleRow(teamId, 'pos');
+    if (!statusGrantsAccess(posRow?.status as ModuleStatus | undefined)) {
+      return NextResponse.json(
+        { error: 'Necesitas activar el plan de Punto de Venta antes de habilitarlo.' },
+        { status: 403 },
+      );
+    }
+  }
+
   await db.update(teams).set({
     ...(data.razonSocial       !== undefined && { razonSocial: data.razonSocial }),
     ...(data.nombreComercial   !== undefined && { nombreComercial: data.nombreComercial }),
@@ -93,6 +113,10 @@ export async function POST(req: NextRequest) {
     ...(data.direccion         !== undefined && { direccion: data.direccion }),
     ...(data.provincia         !== undefined && { provincia: data.provincia || null }),
     ...(data.municipio         !== undefined && { municipio: data.municipio || null }),
+    ...(data.actividadEconomica  !== undefined && { actividadEconomica: data.actividadEconomica || null }),
+    ...(data.cedulaRepresentante !== undefined && { cedulaRepresentante: data.cedulaRepresentante || null }),
+    ...(data.nombreRepresentante !== undefined && { nombreRepresentante: data.nombreRepresentante || null }),
+    ...(data.correoRepresentante !== undefined && { correoRepresentante: data.correoRepresentante || null }),
     ...(data.telefono          !== undefined && { telefono: data.telefono } as any),
     ...(data.sitioWeb          !== undefined && { sitioWeb: data.sitioWeb } as any),
     ...(data.emailFacturacion  !== undefined && { emailFacturacion: data.emailFacturacion } as any),
@@ -138,12 +162,16 @@ export async function GET(_req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const [[team], [member]] = await Promise.all([
+  const [[team], [member], posRow] = await Promise.all([
     db.select().from(teams).where(eq(teams.id, teamId)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers)
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1),
+    getModuleRow(teamId, 'pos'),
   ]);
+
+  // ¿El módulo POS está contratado (trial/pago)? Gatea el toggle en config.
+  const posModuloActivo = statusGrantsAccess(posRow?.status as ModuleStatus | undefined);
 
   return NextResponse.json({
     razonSocial:       team.razonSocial,
@@ -152,6 +180,10 @@ export async function GET(_req: NextRequest) {
     direccion:         team.direccion,
     provincia:         team.provincia,
     municipio:         team.municipio,
+    actividadEconomica: team.actividadEconomica,
+    cedulaRepresentante: team.cedulaRepresentante,
+    nombreRepresentante: team.nombreRepresentante,
+    correoRepresentante: team.correoRepresentante,
     telefono:          (team as any).telefono,
     sitioWeb:          (team as any).sitioWeb,
     emailFacturacion:  (team as any).emailFacturacion,
@@ -172,6 +204,8 @@ export async function GET(_req: NextRequest) {
     // Módulo POS
     posHabilitado:         team.posHabilitado,
     posEscolarHabilitado:  team.posEscolarHabilitado,
+    // ¿Plan POS contratado? El toggle de config se bloquea si es false.
+    posModuloActivo,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)
     metodosObligaDgii:     (team.metodosObligaDgii as string[] | null) ?? [],

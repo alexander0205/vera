@@ -159,6 +159,32 @@ export const teams = pgTable('teams', {
   modulosOverride:        jsonb('modulos_override'),
 });
 
+// ── Suscripción modular — un renglón por (empresa, módulo) ────────────────────
+// Fuente de verdad del billing por módulo: qué tier tiene contratado la empresa
+// en cada módulo, su estado y su prueba gratis. `teams.modulosHabilitados` (el
+// gate de acceso) SE DERIVA de esta tabla (filas con status activo) — ver
+// lib/payments/modulos.ts. El catálogo de tiers vive en lib/config/module-plans.ts.
+export const teamModules = pgTable('team_modules', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id),
+  // ModuleKey: 'facturacion' | 'pos' | 'escolar'
+  modulo: varchar('modulo', { length: 20 }).notNull(),
+  // Clave de tier del catálogo (ej. 'fact_250', 'pos_std', 'col_100').
+  tier: varchar('tier', { length: 30 }).notNull(),
+  // ModuleStatus: 'trialing' | 'active' | 'trial_expired' | 'canceled' | 'past_due'
+  status: varchar('status', { length: 20 }).notNull().default('active'),
+  // Prueba local de 15 días (sin tarjeta). Null si el módulo nunca fue trial.
+  trialStartedAt: timestamp('trial_started_at'),
+  trialEndsAt:    timestamp('trial_ends_at'),
+  // Item de la suscripción Stripe que cobra este módulo. Null = trial local o
+  // comp de admin (nada que cobrar). Distingue trial-local de trial-Stripe.
+  stripeItemId:   text('stripe_item_id'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  teamModuloUq: uniqueIndex('team_modules_team_modulo_idx').on(t.teamId, t.modulo),
+}));
+
 export const teamMembers = pgTable('team_members', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
@@ -1805,6 +1831,8 @@ export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type NewTeamMember = typeof teamMembers.$inferInsert;
+export type TeamModule = typeof teamModules.$inferSelect;
+export type NewTeamModule = typeof teamModules.$inferInsert;
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;

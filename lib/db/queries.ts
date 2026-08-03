@@ -260,6 +260,7 @@ export async function getUserTeams() {
         logo: teams.logo,
         cajaHabilitada: teams.cajaHabilitada,
         posHabilitado: teams.posHabilitado,
+        modulosHabilitados: teams.modulosHabilitados,
       })
       .from(teams)
       .orderBy(teams.createdAt);
@@ -279,6 +280,7 @@ export async function getUserTeams() {
       logo: teams.logo,
       cajaHabilitada: teams.cajaHabilitada,
       posHabilitado: teams.posHabilitado,
+      modulosHabilitados: teams.modulosHabilitados,
     })
     .from(teamMembers)
     .innerJoin(teams, eq(teamMembers.teamId, teams.id))

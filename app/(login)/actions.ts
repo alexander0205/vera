@@ -236,9 +236,11 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       return { error: 'Invalid or expired invitation.', email, password };
     }
   } else {
-    // Create a new team if there's no invitation
+    // Create a new team if there's no invitation.
+    // Sin módulos: el gate lo manda a /pricing a elegir plan/trial (modelo modular).
     const newTeam: NewTeam = {
-      name: `${email}'s Team`
+      name: `${email}'s Team`,
+      modulosHabilitados: [],
     };
 
     [createdTeam] = await db.insert(teams).values(newTeam).returning();
@@ -276,8 +278,13 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  // Sin plan seleccionado → ir directo a pricing para elegir plan de prueba
-  redirect('/pricing?welcome=1');
+  // Usuario invitado (se unió a un team existente) → directo al dashboard.
+  // Registro nuevo (creó su propio team, aún vacío) → paso 2: registrar el
+  // negocio (datos fiscales) antes de elegir plan/módulos.
+  if (inviteToken || inviteId) {
+    redirect('/dashboard');
+  }
+  redirect('/onboarding/negocio');
 });
 
 export async function signOut() {

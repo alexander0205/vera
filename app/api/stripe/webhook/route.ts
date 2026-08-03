@@ -6,7 +6,7 @@ import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getTeamByStripeCustomerId, updateTeamSubscription } from '@/lib/db/queries';
 import { getPlanByPriceId } from '@/lib/config/plans';
-import { syncModulesFromSubscription } from '@/lib/payments/modulos';
+import { syncTeamModulesFromStripe } from '@/lib/payments/module-subscriptions';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Billing por módulo: deriva modulosHabilitados de los items.
-        await syncModulesFromSubscription(team.id, subscription);
+        await syncTeamModulesFromStripe(team.id, subscription);
 
         console.log(`[webhook] checkout completed — team ${team.id} → plan ${planName}`);
         break;
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Billing por módulo: deriva modulosHabilitados de los items/estado.
-        await syncModulesFromSubscription(team.id, subscription);
+        await syncTeamModulesFromStripe(team.id, subscription);
 
         console.log(`[webhook] subscription updated — team ${team.id} → ${planName} (${status})`);
         break;
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Billing por módulo: al cancelar todo, degrada a solo facturación.
-        await syncModulesFromSubscription(team.id, subscription);
+        await syncTeamModulesFromStripe(team.id, subscription);
 
         console.log(`[webhook] subscription deleted — team ${team.id} → Gratis`);
         break;

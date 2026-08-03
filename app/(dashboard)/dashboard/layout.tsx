@@ -226,7 +226,7 @@ function canAccessHref(
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; }
+interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; modulosHabilitados: string[] | null; }
 
 function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => void) {
   useEffect(() => {
@@ -238,13 +238,14 @@ function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => voi
   }, [ref, cb]);
 }
 
+// Acceso al dashboard = tener el módulo base Facturación activo (trial o pago).
+// modulosHabilitados se deriva de team_modules (lib/payments/module-subscriptions),
+// así el gate honra el modelo modular en vez del planName viejo. 'admin' (comps
+// de plataforma) sigue con bypass.
 function teamHasPlan(t: Team) {
   if (t.subscriptionStatus === 'admin') return true;
-  const name = t.planName?.toLowerCase();
-  if (!name || name === 'gratis') return false;
-  const s = t.subscriptionStatus?.toLowerCase();
-  if (s === 'canceled' || s === 'unpaid') return false;
-  return true;
+  const mods = Array.isArray(t.modulosHabilitados) ? t.modulosHabilitados : [];
+  return mods.includes('facturacion');
 }
 
 function planColor(planName: string | null): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {

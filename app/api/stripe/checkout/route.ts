@@ -5,6 +5,7 @@ import { setSession } from '@/lib/auth/session';
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/payments/stripe';
 import { getPlanByPriceId } from '@/lib/config/plans';
+import { syncTeamModulesFromStripe } from '@/lib/payments/module-subscriptions';
 import Stripe from 'stripe';
 
 export async function GET(request: NextRequest) {
@@ -119,6 +120,10 @@ export async function GET(request: NextRequest) {
         updatedAt:            new Date(),
       })
       .where(eq(teams.id, teamId));
+
+    // Billing por módulo: escribe team_modules por tier desde la suscripción y
+    // re-deriva el gate (sincroniza aquí por si el webhook no llega en local).
+    await syncTeamModulesFromStripe(teamId, subscription);
 
     console.log(`[checkout] team ${teamId} → plan ${planName} (${subscription.status})`);
 

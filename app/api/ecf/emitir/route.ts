@@ -15,8 +15,8 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { restaurarInventario } from '@/lib/inventario/devolucion';
-import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
-import { getPlan, PLANS } from '@/lib/config/plans';
+import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
+import { getFacturacionTope } from '@/lib/payments/module-subscriptions';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { calcularTotales } from '@/lib/ecf/types';
@@ -237,28 +237,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar límite del plan
-    if (modoPrevio !== 'borrador') {
-      const [monthlyCount, planLimit] = await Promise.all([
-        getMonthlyEcfCount(teamId),
-        Promise.resolve(getPlanLimit(team.planName, team.subscriptionStatus)),
-      ]);
-
-      if (planLimit !== -1 && monthlyCount >= planLimit) {
-        const currentPlan = getPlan(team.planName);
-        const nextPlan = PLANS.find(p => p.limits.docs > currentPlan.limits.docs || p.limits.docs === -1);
-        const sugerencia = nextPlan
-          ? `Actualiza al plan ${nextPlan.name} ($${nextPlan.price}/mes).`
-          : 'Contacta a soporte para un plan Enterprise.';
-        return NextResponse.json(
-          {
-            error: `Límite mensual alcanzado. Tu plan ${currentPlan.name} permite ${planLimit} comprobantes/mes. Has emitido ${monthlyCount} este mes.`,
-            detalles: { planActual: currentPlan.name, limite: planLimit, emitidoEsteMes: monthlyCount, sugerencia, urlUpgrade: '/pricing' },
-          },
-          { status: 403 },
-        );
-      }
-    }
+    // (El tope de facturación se verifica más abajo, tras parsear los items,
+    // porque el modo estricto necesita el monto de esta factura.)
 
     const parsed = emitirSchema.safeParse(body);
     if (!parsed.success) {
@@ -273,6 +253,31 @@ export async function POST(request: NextRequest) {
         { error: 'tipoEcf sin-ncf solo puede usarse en modo borrador. Selecciona un tipo de e-CF para emitir a la DGII.' },
         { status: 400 },
       );
+    }
+
+    // Tope de facturación del módulo (monto facturado/mes). Estricto: rechaza la
+    // emisión que haría CRUZAR el techo del tier — el tope es un límite duro.
+    if (data.modo !== 'borrador') {
+      const nuevoCents = Math.round(calcularTotales(data.items).montoTotal * 100);
+      const tope = await getFacturacionTope(teamId);
+      if (tope.topeCents !== null && tope.usadoCents + nuevoCents > tope.topeCents) {
+        const topeRD  = (tope.topeCents / 100).toLocaleString('es-DO');
+        const usadoRD = (tope.usadoCents / 100).toLocaleString('es-DO');
+        const nuevoRD = (nuevoCents / 100).toLocaleString('es-DO');
+        return NextResponse.json(
+          {
+            error: `Límite de facturación alcanzado. Tu plan ${tope.tierLabel} permite RD$${topeRD} facturados por mes. Llevas RD$${usadoRD} y esta factura (RD$${nuevoRD}) lo supera. Actualiza tu plan para seguir facturando.`,
+            detalles: {
+              tier: tope.tierKey,
+              topeCents: tope.topeCents,
+              usadoCents: tope.usadoCents,
+              nuevoCents,
+              urlUpgrade: '/pricing',
+            },
+          },
+          { status: 403 },
+        );
+      }
     }
 
     // ── Gate DGII (defensa en profundidad del gate de UI) ────────────────────

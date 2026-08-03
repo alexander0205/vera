@@ -37,7 +37,11 @@ export default async function DashboardPage() {
   const teamRole = await getTeamRoleForUser();
   const modules = await getUserModules(teamId, user?.platformRole, teamRole);
   if (!modules.includes('facturacion')) {
-    redirect(modules.includes('pos') ? '/pos' : '/sin-acceso');
+    if (modules.includes('pos')) redirect('/pos');
+    // Sin ningún módulo activo: el owner va a elegir plan/trial; los demás
+    // (miembros sin acceso) ven /sin-acceso.
+    const esOwner = teamRole === 'owner' || user?.platformRole === 'admin';
+    redirect(esOwner && modules.length === 0 ? '/pricing?reason=no-plan' : '/sin-acceso');
   }
 
   const [stats, recentDocs, ar] = await Promise.all([
