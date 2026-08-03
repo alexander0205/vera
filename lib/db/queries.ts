@@ -704,6 +704,9 @@ export async function getPagosListado(
   if (opts.desde)  filtros.push(gte(pagosRecibidos.fechaPago, opts.desde));
   if (opts.hasta)  filtros.push(lte(pagosRecibidos.fechaPago, opts.hasta));
   if (opts.metodo) filtros.push(eq(pagosRecibidos.metodo, opts.metodo));
+  // Excluir cobros de comprobantes ANULADOS: la fila de pago sobrevive a la
+  // anulación (traza + arqueo de caja), pero no debe listarse ni sumarse aquí.
+  filtros.push(sql`(${ecfDocuments.estado} IS NULL OR ${ecfDocuments.estado} <> 'ANULADO')`);
 
   // Techo al dataset (antes cargaba el ledger completo del team sin límite).
   const limit  = Math.min(opts.limit ?? 2000, 2000);

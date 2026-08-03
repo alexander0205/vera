@@ -716,6 +716,10 @@ export const cotizaciones = pgTable('cotizaciones', {
   items: text('items'),
   notas: text('notas'),
   terminosCondiciones: text('terminos_condiciones'),
+  // Reusan el form de Nueva Factura → mismos extras que ecf_documents.
+  retenciones: text('retenciones'),   // JSON string de Retencion[]
+  comentario: text('comentario'),
+  pieFactura: text('pie_factura'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

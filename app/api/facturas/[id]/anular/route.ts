@@ -137,11 +137,14 @@ export async function POST(
     );
   }
 
-  // Si force, revertir: eliminar filas pagos_recibidos + limpiar flags legacy
+  // Si force, revertir el cobro. Las filas de pagos_recibidos NO se eliminan:
+  // quedan como traza y — clave — mantienen íntegro el arqueo de los turnos de
+  // caja donde se registraron (borrarlas desbalancearía turnos ya cerrados). El
+  // que la factura pase a estado ANULADO es lo que hace que el pago deje de
+  // contar en TODAS las vistas: caja, reportes por método/usuario y el listado
+  // de pagos filtran `estado <> 'ANULADO'`. Solo se limpia el mirror legacy
+  // inline (pagoRecibido/pagoValorCts) que alimenta ticket PDF y 606/607.
   if (tienePagos && force) {
-    if (pagos.length > 0) {
-      await db.delete(pagosRecibidos).where(eq(pagosRecibidos.ecfDocumentId, docId));
-    }
     if (legacyPagado) {
       await db.update(ecfDocuments).set({
         pagoRecibido: 'false',

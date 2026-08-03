@@ -50,6 +50,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(body.items != null && { items: JSON.stringify(body.items) }),
       ...(body.notas != null && { notas: body.notas }),
       ...(body.terminosCondiciones != null && { terminosCondiciones: body.terminosCondiciones }),
+      ...(body.retenciones !== undefined && { retenciones: body.retenciones ? JSON.stringify(body.retenciones) : null }),
+      ...(body.comentario !== undefined && { comentario: body.comentario }),
+      ...(body.pieFactura !== undefined && { pieFactura: body.pieFactura }),
       updatedAt: new Date(),
     })
     .where(and(eq(cotizaciones.id, numId), eq(cotizaciones.teamId, teamId)))

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -100,6 +101,7 @@ export default function CotizacionDetallePage() {
   const [sendingEmail, setSendingEmail] = useState(false);
 
   const [converting, setConverting]     = useState(false);
+  const [showConfirmConvert, setShowConfirmConvert] = useState(false);
 
   const [changingEstado, setChangingEstado] = useState(false);
 
@@ -213,9 +215,23 @@ export default function CotizacionDetallePage() {
   const estadoCfg   = ESTADO_CONFIG[cot.estado] ?? { label: cot.estado, className: '', icon: Clock };
   const EstadoIcon  = estadoCfg.icon;
   const transiciones = NEXT_STATES[cot.estado] ?? [];
+  // Convertir a factura disponible desde el inicio (no exige llegar a "aceptada").
+  // Solo se excluyen los estados terminales negativos (rechazada/vencida).
+  const puedeConvertir = ['borrador', 'enviada', 'aceptada'].includes(cot.estado);
 
+  // Normaliza ítems a { descripcion, precio, cantidad } soportando el shape rico
+  // (ItemLinea, cotizaciones nuevas) y el viejo { descripcion, precio, cantidad }.
   let parsedItems: LineItem[] = [];
-  try { if (cot.items) parsedItems = JSON.parse(cot.items); } catch { /* ignore */ }
+  try {
+    if (cot.items) {
+      const raw = JSON.parse(cot.items) as Array<Record<string, unknown>>;
+      parsedItems = raw.map(it => ({
+        descripcion: String((it.nombreItem ?? it.descripcion) ?? ''),
+        precio:      Number(it.precioUnitarioItem ?? it.precio ?? 0),
+        cantidad:    Number(it.cantidadItem ?? it.cantidad ?? 1),
+      }));
+    }
+  } catch { /* ignore */ }
 
   return (
     <section className="p-4 sm:p-6 min-h-full flex flex-col">
@@ -309,9 +325,9 @@ export default function CotizacionDetallePage() {
                 <Mail className="h-4 w-4 text-gray-500" />
                 Enviar por correo
               </DropdownMenuItem>
-              {cot.estado === 'aceptada' && (
+              {puedeConvertir && (
                 <DropdownMenuItem
-                  onSelect={handleConvertir}
+                  onSelect={() => { setTimeout(() => setShowConfirmConvert(true), 0); }}
                   className="flex items-center gap-2 cursor-pointer"
                   disabled={converting}
                 >
@@ -476,10 +492,10 @@ export default function CotizacionDetallePage() {
               <Mail className="h-4 w-4 mr-2" />
               Enviar por correo
             </Button>
-            {cot.estado === 'aceptada' && (
+            {puedeConvertir && (
               <Button
                 className="w-full bg-teal-600 hover:bg-teal-700 text-sm"
-                onClick={handleConvertir}
+                onClick={() => setShowConfirmConvert(true)}
                 disabled={converting}
               >
                 {converting
@@ -519,6 +535,17 @@ export default function CotizacionDetallePage() {
       </div>
 
       {/* ── Modal: Enviar email ──────────────────────────────────────────────── */}
+      <ConfirmDialog
+        open={showConfirmConvert}
+        onOpenChange={setShowConfirmConvert}
+        title="Convertir a factura"
+        description={<>Se creará un <strong>borrador de factura</strong> a partir de esta cotización ({cot.numero}) y se abrirá para completarla. La cotización se conserva.</>}
+        confirmLabel="Convertir"
+        icon={<FileCheck className="h-5 w-5 text-teal-600" />}
+        loading={converting}
+        onConfirm={handleConvertir}
+      />
+
       <Dialog open={showEmail} onOpenChange={setShowEmail}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

@@ -39,17 +39,23 @@ export async function GET(
     const { cot, team } = row;
 
     // Parsear ítems
-    let parsedItems: Array<{ descripcion: string; precio: number; cantidad: number }> = [];
+    // Soporta el shape rico (ItemLinea, cotizaciones nuevas) y el viejo.
+    let parsedItems: Array<Record<string, unknown>> = [];
     try {
       if (cot.items) parsedItems = JSON.parse(cot.items);
     } catch { /* ignore */ }
 
-    const items = parsedItems.map(it => ({
-      descripcion: it.descripcion,
-      precio:      it.precio,
-      cantidad:    it.cantidad,
-      total:       it.precio * it.cantidad,
-    }));
+    const items = parsedItems.map(it => {
+      const descripcion = String((it.nombreItem ?? it.descripcion) ?? '');
+      const precio      = Number(it.precioUnitarioItem ?? it.precio ?? 0);
+      const cantidad    = Number(it.cantidadItem ?? it.cantidad ?? 1);
+      return {
+      descripcion,
+      precio,
+      cantidad,
+      total:       precio * cantidad,
+      };
+    });
 
     const montoTotalDOP = cot.montoTotal / 100;
     const subtotalDOP   = cot.montoSubtotal / 100;

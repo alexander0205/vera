@@ -80,6 +80,9 @@ export async function POST(req: NextRequest) {
       items: body.items ? JSON.stringify(body.items) : null,
       notas: body.notas ?? null,
       terminosCondiciones: body.terminosCondiciones ?? null,
+      retenciones: body.retenciones ? JSON.stringify(body.retenciones) : null,
+      comentario: body.comentario ?? null,
+      pieFactura: body.pieFactura ?? null,
     })
     .returning();
 
