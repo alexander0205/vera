@@ -4,6 +4,27 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.11.0 — 2026-08-03
+
+### Nuevo
+
+- **ui**: confirmación antes de convertir cotización y generar mora
+- **cotizaciones**: convertir a factura disponible desde el inicio
+- **cotizaciones**: nueva cotización reusa el form de factura sin pago
+  - page.tsx server component con gate cotizaciones:gestionar + perfil empresa
+  - guarda ítems en shape rico ItemLinea; convertir/route lee ambos shapes
+  - migración 0075: cols retenciones/comentario/pie_factura en cotizaciones
+
+### Arreglado
+
+- **ui**: el modal de confirmación abre tras cerrar el dropdown
+- **cotizaciones**: detalle y PDF normalizan shape de ítems rico/viejo
+- **cotizaciones**: editar reusa el form nuevo (arregla items NaN y crash)
+- **cotizaciones**: Resumen vuelve al rail derecho (misma posición que factura)
+- **facturas**: al anular, el pago no cuenta en ninguna vista
+  - reportes: ventasPorMetodo y pagosPorUsuario (add join + estado<>ANULADO)
+  - getPagosListado (add filtro estado)
+
 ## v1.10.1 — 2026-08-03
 
 _1 commit(s) de mantenimiento no listados._
