@@ -213,6 +213,9 @@ export default function CotizacionDetallePage() {
   const estadoCfg   = ESTADO_CONFIG[cot.estado] ?? { label: cot.estado, className: '', icon: Clock };
   const EstadoIcon  = estadoCfg.icon;
   const transiciones = NEXT_STATES[cot.estado] ?? [];
+  // Convertir a factura disponible desde el inicio (no exige llegar a "aceptada").
+  // Solo se excluyen los estados terminales negativos (rechazada/vencida).
+  const puedeConvertir = ['borrador', 'enviada', 'aceptada'].includes(cot.estado);
 
   // Normaliza ítems a { descripcion, precio, cantidad } soportando el shape rico
   // (ItemLinea, cotizaciones nuevas) y el viejo { descripcion, precio, cantidad }.
@@ -320,7 +323,7 @@ export default function CotizacionDetallePage() {
                 <Mail className="h-4 w-4 text-gray-500" />
                 Enviar por correo
               </DropdownMenuItem>
-              {cot.estado === 'aceptada' && (
+              {puedeConvertir && (
                 <DropdownMenuItem
                   onSelect={handleConvertir}
                   className="flex items-center gap-2 cursor-pointer"
@@ -487,7 +490,7 @@ export default function CotizacionDetallePage() {
               <Mail className="h-4 w-4 mr-2" />
               Enviar por correo
             </Button>
-            {cot.estado === 'aceptada' && (
+            {puedeConvertir && (
               <Button
                 className="w-full bg-teal-600 hover:bg-teal-700 text-sm"
                 onClick={handleConvertir}
