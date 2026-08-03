@@ -4,6 +4,10 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.11.2 — 2026-08-03
+
+_1 commit(s) de mantenimiento no listados._
+
 ## v1.11.1 — 2026-08-03
 
 ### Arreglado
