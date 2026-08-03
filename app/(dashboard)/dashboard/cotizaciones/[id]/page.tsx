@@ -214,8 +214,19 @@ export default function CotizacionDetallePage() {
   const EstadoIcon  = estadoCfg.icon;
   const transiciones = NEXT_STATES[cot.estado] ?? [];
 
+  // Normaliza ítems a { descripcion, precio, cantidad } soportando el shape rico
+  // (ItemLinea, cotizaciones nuevas) y el viejo { descripcion, precio, cantidad }.
   let parsedItems: LineItem[] = [];
-  try { if (cot.items) parsedItems = JSON.parse(cot.items); } catch { /* ignore */ }
+  try {
+    if (cot.items) {
+      const raw = JSON.parse(cot.items) as Array<Record<string, unknown>>;
+      parsedItems = raw.map(it => ({
+        descripcion: String((it.nombreItem ?? it.descripcion) ?? ''),
+        precio:      Number(it.precioUnitarioItem ?? it.precio ?? 0),
+        cantidad:    Number(it.cantidadItem ?? it.cantidad ?? 1),
+      }));
+    }
+  } catch { /* ignore */ }
 
   return (
     <section className="p-4 sm:p-6 min-h-full flex flex-col">
