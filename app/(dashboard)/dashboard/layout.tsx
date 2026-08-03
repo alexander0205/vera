@@ -9,11 +9,12 @@ import {
   Settings, Activity, Shield, Menu as MenuIcon, Plus, ChevronDown, ChevronRight,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
   Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, Store, BookOpen,
-  GraduationCap,
-} from 'lucide-react';
+  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, BookOpen,
+  } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleHeader } from '@/components/module-header';
+import { RailBrand } from '@/components/rail-brand';
+import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -356,28 +357,7 @@ function SidebarContent({
         overflow: 'hidden',
       }}
     >
-      {/* Logo */}
-      <Box sx={{ px: 2, py: 2, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{
-            width:   28,
-            height:  28,
-            bgcolor: '#ffffff',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            <Typography sx={{ color: '#0f766e', fontWeight: 900, fontSize: '0.75rem', lineHeight: 1 }}>z</Typography>
-          </Box>
-          {/* Identidad del producto: "Zero Facturación" (como Alegra Contabilidad). */}
-          <Box className="nav-text" sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
-            <Typography sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem', letterSpacing: '0.01em' }}>Zero</Typography>
-            <Typography sx={{ color: 'rgba(204,251,241,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Facturación</Typography>
-          </Box>
-        </Box>
-      </Box>
+      <RailBrand modulo="facturacion" />
 
       {/* Nav */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
@@ -618,50 +598,10 @@ function SidebarContent({
           );
         })}
 
-        {/* Cambiar de producto: Punto de Venta es OTRO módulo (como "Ir a
-            Alegra POS"). Va separado al final y abre /pos. */}
-        {puedeIrPos && (
-          <>
-            <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />
-            <Box
-              component={Link}
-              href={moduleUrl('pos')}
-              onClick={onClose}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.875,
-                borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
-                color: 'rgba(204,251,241,0.85)', transition: 'all 0.15s',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
-              }}
-            >
-              <Store style={{ width: 16, height: 16, flexShrink: 0 }} />
-              <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Punto de Venta</Box>
-              <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
-            </Box>
-          </>
-        )}
-
-        {/* Administración Escolar: también otro módulo. */}
-        {puedeIrEscolar && (
-          <>
-            {!puedeIrPos && <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />}
-            <Box
-              component={Link}
-              href={moduleUrl('escolar')}
-              onClick={onClose}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.875,
-                borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
-                color: 'rgba(204,251,241,0.85)', transition: 'all 0.15s',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
-              }}
-            >
-              <GraduationCap style={{ width: 16, height: 16, flexShrink: 0 }} />
-              <Box component="span" className="nav-text" sx={{ flex: 1, whiteSpace: 'nowrap' }}>Administración Escolar</Box>
-              <ChevronRight className="nav-text" style={{ width: 14, height: 14, opacity: 0.7 }} />
-            </Box>
-          </>
-        )}
+        {/* Saltar a otro módulo NO vive acá: lo hace el switcher del header,
+            que es idéntico en los 4 módulos. Tenerlo además dentro del menú
+            hacía que el menú de Facturación ofreciera cosas que el de POS o
+            Escolar no, y al revés. */}
       </Box>
 
       {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es
@@ -697,24 +637,22 @@ type EmpresaListResponse = {
 } | null;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // El provider envuelve todo: el rail y el header deben leer el MISMO estado
+  // de "menú fijo", y el provider tiene que estar por encima de los dos.
+  return (
+    <NavFijoProvider>
+      <DashboardLayoutInterno>{children}</DashboardLayoutInterno>
+    </NavFijoProvider>
+  );
+}
+
+function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen]         = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
   const [activeTeamOverride, setActiveTeamOverride] = useState<number | null>(null);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('emitedo:sidebarCollapsed');
-      if (stored === '1') setSidebarVisible(false);
-    } catch {}
-  }, []);
-
-  function toggleSidebar() {
-    setSidebarVisible(prev => {
-      const next = !prev;
-      try { localStorage.setItem('emitedo:sidebarCollapsed', next ? '0' : '1'); } catch {}
-      return next;
-    });
-  }
+  // Preferencia compartida con POS, Escolar y Administración: quien fija el
+  // menú acá lo encuentra fijo allá. Antes esto era un localStorage propio de
+  // Facturación ('emitedo:sidebarCollapsed') que ningún otro módulo leía.
+  const { fijo: navFijo, alternar: alternarNavFijo } = useNavFijo();
 
   const { data: user }          = useSWR<UserInfo | null>('/api/user', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
   const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>('/api/empresa/list', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
@@ -739,10 +677,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Arquitectura idéntica al Punto de Venta: rail full-height a la izquierda
           (mismo menú que se abre/cierra al pasar el mouse) + columna de contenido
           (header + página) a la derecha. */}
-      {sidebarVisible && (
-        <Box
+      <Box
           component="aside"
-          sx={{ width: RAIL_WIDTH, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'relative' }}
+          sx={{ width: navFijo ? SIDEBAR_WIDTH : RAIL_WIDTH, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'relative' }}
         >
           <Box
             sx={{
@@ -750,21 +687,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               top:        0,
               left:       0,
               height:     '100%',
-              width:      RAIL_WIDTH,
+              width:      navFijo ? SIDEBAR_WIDTH : RAIL_WIDTH,
               overflow:   'hidden',
               zIndex:     40,
               transition: 'width 0.2s ease, box-shadow 0.2s ease',
-              '& .nav-text':      { opacity: 0, transition: 'opacity 0.12s ease' },
-              '& .nav-children':  { display: 'none' },
-              '&:hover':          { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
-              '&:hover .nav-text':     { opacity: 1 },
-              '&:hover .nav-children': { display: 'block' },
+              '& .nav-text':      { opacity: navFijo ? 1 : 0, transition: 'opacity 0.12s ease' },
+              '& .nav-children':  { display: navFijo ? 'block' : 'none' },
+              ...(navFijo ? {} : {
+                '&:hover':               { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
+                '&:hover .nav-text':     { opacity: 1 },
+                '&:hover .nav-children': { display: 'block' },
+              }),
             }}
           >
             <SidebarContent teams={teams} activeTeamId={activeTeamId} />
           </Box>
         </Box>
-      )}
 
       {/* Mobile Drawer */}
       <Drawer
@@ -788,9 +726,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           current="facturacion"
           user={user ?? null}
           onAbrirMenu={() => setMobileOpen(true)}
-          onToggleSidebar={toggleSidebar}
-          sidebarVisible={sidebarVisible}
-          mostrarLogo={!sidebarVisible}
+          onFijarMenu={alternarNavFijo}
+          menuFijo={navFijo}
           onSwitchEmpresa={handleSwitch}
           breakpointMenu="lg"
         />

@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
       .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
 
     const [mov] = await tx.insert(inventoryMovements).values({
+      // NULL cuando el ajuste no especifica almacén: igual que antes.
+      almacenId: almacenId ?? null,
       teamId,
       productoId,
       tipo,

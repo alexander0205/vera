@@ -333,6 +333,9 @@ export const products = pgTable('products', {
   permiteVentaSinStock: boolean('permite_venta_sin_stock').notNull().default(true),
   // POS: si aparece en la grilla del punto de venta (excluye servicios/no vendibles en mostrador).
   visiblePos: boolean('visible_pos').notNull().default(true),
+  // Espejo de visiblePos: permite sacar un producto del catálogo de Facturación
+  // sin borrarlo. Ver lib/productos/visibilidad.ts para la regla completa.
+  visibleFacturacion: boolean('visible_facturacion').notNull().default(true),
   // POS: favorito → se muestra primero en la grilla.
   posFavorito: boolean('pos_favorito').notNull().default(false),
   esMora: boolean('es_mora').notNull().default(false),                        // servicio de sistema: línea de las ND de mora (1 por team)
@@ -1064,6 +1067,9 @@ export const almacenes = pgTable('almacenes', {
   direccion:   varchar('direccion', { length: 500 }),
   observacion: text('observacion'),
   esDefault:   varchar('es_default', { length: 5 }).notNull().default('false'),
+  // Almacén de uso exclusivo del punto de venta (p. ej. la cafetería). Lo que
+  // vive solo acá no ensucia el catálogo de Facturación.
+  soloPos:     boolean('solo_pos').notNull().default(false),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -1093,6 +1099,9 @@ export const inventoryMovements = pgTable('inventory_movements', {
   stockDespues:    integer('stock_despues').notNull(),
   referenciaId:    integer('referencia_id').references(() => ecfDocuments.id),
   referenciaEncf:  varchar('referencia_encf', { length: 40 }),
+  // En qué almacén ocurrió. NULL = no se supo (ventas sin almacén, ajustes
+  // globales, y todo el histórico anterior a la migración 0094).
+  almacenId:       integer('almacen_id').references(() => almacenes.id),
   motivo:          text('motivo'),
   createdBy:       integer('created_by').references(() => users.id),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
@@ -1171,6 +1180,9 @@ export const listasPrecios = pgTable('listas_precios', {
   esDescuento: varchar('es_descuento', { length: 5 }).notNull().default('true'),
   descripcion: text('descripcion'),
   esDefault:   varchar('es_default', { length: 5 }).notNull().default('false'),
+  // Almacén de uso exclusivo del punto de venta (p. ej. la cafetería). Lo que
+  // vive solo acá no ensucia el catálogo de Facturación.
+  soloPos:     boolean('solo_pos').notNull().default(false),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
 

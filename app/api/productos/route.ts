@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { visibleEnFacturacion } from '@/lib/productos/visibilidad';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { products } from '@/lib/db/schema';
@@ -29,6 +30,7 @@ const productoSchema = z.object({
   imagen:               z.string().max(1_500_000).optional().nullable(),
   // POS: si aparece en la grilla del punto de venta y si es favorito.
   visiblePos:           z.boolean().optional(),
+  visibleFacturacion:   z.boolean().optional(),
   posFavorito:          z.boolean().optional(),
 });
 
@@ -63,6 +65,14 @@ export async function GET(req: NextRequest) {
     ) as typeof whereCondition;
   } else if (tipo) {
     whereCondition = and(eq(products.teamId, teamId), eq(products.tipo, tipo)) as typeof whereCondition;
+  }
+
+  // `?contexto=facturacion` aplica la regla de visibilidad (producto oculto o
+  // almacén solo-POS). Es OPT-IN a propósito: la pantalla de Productos tiene que
+  // seguir mostrándolos todos, si no no habría forma de editarlos ni de volver a
+  // hacerlos visibles. Solo lo pide el buscador de las facturas.
+  if (params.get('contexto') === 'facturacion') {
+    whereCondition = and(whereCondition, visibleEnFacturacion()) as typeof whereCondition;
   }
 
   // Paginación opcional (compatible: sin params trae hasta 1000).
@@ -102,7 +112,7 @@ export async function POST(req: NextRequest) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
-    categoriaId, imagen, visiblePos, posFavorito,
+    categoriaId, imagen, visiblePos, visibleFacturacion, posFavorito,
   } = parsed.data;
 
   // Default inteligente: un servicio no se muestra en el mostrador salvo que
@@ -127,6 +137,7 @@ export async function POST(req: NextRequest) {
     categoriaId:          categoriaId ?? null,
     imagen:               imagen ?? null,
     visiblePos:           visiblePosFinal,
+    visibleFacturacion:   visibleFacturacion ?? true,
     posFavorito:          posFavorito ?? false,
     controlaInventario:   tipo === 'bien' ? (controlaInventario ?? false) : false,
     permiteVentaSinStock: permiteVentaSinStock ?? true,

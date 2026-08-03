@@ -39,9 +39,8 @@ export function ModuleHeader({
   titulo,
   user: userProp,
   onAbrirMenu,
-  onToggleSidebar,
-  sidebarVisible,
-  mostrarLogo = true,
+  onFijarMenu,
+  menuFijo,
   onSwitchEmpresa,
   breakpointMenu = 'md',
 }: {
@@ -53,11 +52,13 @@ export function ModuleHeader({
   user?: UserInfo | null;
   /** Abre el cajón de navegación. Solo se muestra por debajo de md. */
   onAbrirMenu?: () => void;
-  /** Colapsa/expande el sidebar de escritorio (solo Facturación lo tiene). */
-  onToggleSidebar?: () => void;
-  sidebarVisible?: boolean;
-  /** El logo se oculta cuando el rail del módulo ya lo muestra al lado. */
-  mostrarLogo?: boolean;
+  /**
+   * Fija o suelta el menú lateral. Suelto = rail de iconos que se expande al
+   * pasar el mouse; fijo = abierto todo el tiempo. La preferencia se guarda y
+   * vale para los 4 módulos (lib/hooks/useNavFijo).
+   */
+  onFijarMenu?: () => void;
+  menuFijo?: boolean;
   /** Aviso de cambio de empresa, para estado optimista del que lo necesite. */
   onSwitchEmpresa?: (teamId: number) => void;
   /**
@@ -118,33 +119,34 @@ export function ModuleHeader({
             </IconButton>
           )}
 
-          {/* Colapsar sidebar (escritorio) */}
-          {onToggleSidebar && (
-            <Tooltip title={sidebarVisible ? 'Ocultar menú' : 'Mostrar menú'} placement="bottom">
+          {/* Fijar / soltar el menú lateral (escritorio) */}
+          {onFijarMenu && (
+            <Tooltip title={menuFijo ? 'Soltar menú' : 'Fijar menú abierto'} placement="bottom">
               <IconButton
-                onClick={onToggleSidebar}
+                onClick={onFijarMenu}
                 size="small"
-                aria-label={sidebarVisible ? 'Ocultar menú' : 'Mostrar menú'}
-                sx={{ display: { xs: 'none', lg: 'flex' }, color: 'text.secondary' }}
+                aria-label={menuFijo ? 'Soltar menú' : 'Fijar menú abierto'}
+                aria-pressed={!!menuFijo}
+                sx={{ display: { xs: 'none', [breakpointMenu]: 'flex' }, color: menuFijo ? 'primary.main' : 'text.secondary' }}
               >
-                {sidebarVisible
+                {menuFijo
                   ? <PanelLeftClose style={{ width: 20, height: 20 }} />
                   : <PanelLeftOpen  style={{ width: 20, height: 20 }} />}
               </IconButton>
             </Tooltip>
           )}
 
-          {/* Logo — se oculta cuando el rail lateral ya lo muestra */}
-          {(mostrarLogo || sidebarVisible === false) && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
-              <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
-              </Box>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>
-                Zero
-              </Typography>
+          {/* Logo SIEMPRE, en la misma posición en los 4 módulos. Antes
+              Facturación lo escondía con el sidebar abierto y los demás no, así
+              que la zona izquierda del header cambiaba de un módulo a otro. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
+            <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
             </Box>
-          )}
+            <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>
+              Zero
+            </Typography>
+          </Box>
 
           {titulo && (
             <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: 'text.primary' }}>

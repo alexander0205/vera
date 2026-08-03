@@ -9,13 +9,14 @@
  */
 
 import Box from '@mui/material/Box';
+import { RailBrand } from '@/components/rail-brand';
+import { useNavFijo } from '@/lib/hooks/useNavFijo';
 import Typography from '@mui/material/Typography';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   GraduationCap, Users, ClipboardList, Receipt, Wallet, Settings, FileText,
 } from 'lucide-react';
-import { moduleUrl } from '@/lib/config/modules';
 
 const RAIL = 68;
 const OPEN = 224;
@@ -38,7 +39,11 @@ const ITEMS: Item[] = [
  */
 export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   const pathname = usePathname();
-  const abierto = variant === 'drawer';
+  // El cajón móvil va siempre abierto; en escritorio manda la preferencia
+  // "menú fijo". Ambos casos usan la misma rama: ancho completo, texto visible
+  // y sin expansión por hover.
+  const { fijo } = useNavFijo();
+  const abierto = variant === 'drawer' || fijo;
 
   return (
     <Box
@@ -46,7 +51,7 @@ export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawe
       sx={{
         width: abierto ? OPEN : RAIL,
         flexShrink: 0,
-        display: abierto ? 'block' : { xs: 'none', md: 'block' },
+        display: abierto ? 'block' : { xs: 'none', lg: 'block' },
         position: 'relative',
         height: '100%',
       }}
@@ -68,23 +73,7 @@ export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawe
           }),
         }}
       >
-        {/* Identidad del módulo */}
-        <Box
-          component={Link}
-          href="/escolar"
-          sx={{
-            px: 2, py: 2, borderBottom: '1px solid rgba(255,255,255,0.1)',
-            display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none',
-          }}
-        >
-          <Box sx={{ width: 28, height: 28, bgcolor: '#fff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <GraduationCap style={{ width: 16, height: 16, color: '#0f766e' }} />
-          </Box>
-          <Box className="nav-text" sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-            <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.875rem' }}>Zero</Typography>
-            <Typography sx={{ color: 'rgba(204,251,241,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Escolar</Typography>
-          </Box>
-        </Box>
+        <RailBrand modulo="escolar" />
 
         <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
           {ITEMS.map(it => {
@@ -109,23 +98,6 @@ export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawe
               </Box>
             );
           })}
-        </Box>
-
-        {/* El cobro vive en Facturación: el colegio genera la deuda, la factura la cobra. */}
-        <Box sx={{ px: 1.5, py: 1.5, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <Box
-            component={Link}
-            href={moduleUrl('facturacion')}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
-              borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
-              color: 'rgba(204,251,241,0.85)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },
-            }}
-          >
-            <FileText style={{ width: 18, height: 18, flexShrink: 0 }} />
-            <Box component="span" className="nav-text">Ir a Facturación</Box>
-          </Box>
         </Box>
       </Box>
     </Box>

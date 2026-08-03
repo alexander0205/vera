@@ -22,7 +22,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
       current="pos"
       user={user ?? null}
       rail={<PosNavRail />}
-      railMovil={<PosNavRail />}
+      railMovil={<PosNavRail variant="drawer" />}
     >
       {children}
     </ModuleShell>

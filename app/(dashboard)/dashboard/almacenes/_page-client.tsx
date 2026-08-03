@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Checkbox from '@mui/material/Checkbox';
+import MenuItem from '@mui/material/MenuItem';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -29,10 +30,11 @@ interface Almacen {
   direccion: string | null;
   observacion: string | null;
   esDefault: string;
+  soloPos: boolean;
   createdAt: string;
 }
 
-const EMPTY_FORM = { nombre: '', direccion: '', observacion: '', esDefault: false };
+const EMPTY_FORM = { nombre: '', direccion: '', observacion: '', esDefault: false, soloPos: false };
 
 const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
 
@@ -69,7 +71,7 @@ export default function AlmacenesPage() {
 
   function abrirEdicion(a: Almacen) {
     setEditTarget(a);
-    setForm({ nombre: a.nombre, direccion: a.direccion ?? '', observacion: a.observacion ?? '', esDefault: a.esDefault === 'true' });
+    setForm({ nombre: a.nombre, direccion: a.direccion ?? '', observacion: a.observacion ?? '', esDefault: a.esDefault === 'true', soloPos: !!a.soloPos });
     setOpError(null);
     setShowForm(true);
   }
@@ -89,6 +91,7 @@ export default function AlmacenesPage() {
           direccion:   form.direccion.trim() || null,
           observacion: form.observacion.trim() || null,
           esDefault:   form.esDefault,
+          soloPos:     form.soloPos,
         }),
       });
       const data = await res.json();
@@ -273,6 +276,30 @@ export default function AlmacenesPage() {
             }
             label={<Typography variant="body2" sx={{ color: '#374151' }}>Establecer como almacén por defecto</Typography>}
           />
+          {/* En positivo: se elige con quién se comparte, no qué se esconde. */}
+          <Typography component="label" sx={{ mt: 1, mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>
+            ¿Con quién se comparte este almacén?
+          </Typography>
+          <TextField
+            select
+            value={form.soloPos ? 'pos' : 'ambos'}
+            onChange={e => setForm(f => ({ ...f, soloPos: e.target.value === 'pos' }))}
+            fullWidth
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+          >
+            <MenuItem value="ambos">
+              <Box>
+                <Typography sx={{ fontSize: 14 }}>Facturación y Punto de Venta</Typography>
+                <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>Su mercancía se puede facturar y vender en la caja.</Typography>
+              </Box>
+            </MenuItem>
+            <MenuItem value="pos">
+              <Box>
+                <Typography sx={{ fontSize: 14 }}>Solo Punto de Venta</Typography>
+                <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>Lo que exista únicamente aquí no aparece al facturar. Para la cafetería, por ejemplo.</Typography>
+              </Box>
+            </MenuItem>
+          </TextField>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
           <Button

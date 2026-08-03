@@ -751,7 +751,8 @@ export default function NuevaFacturaForm({
 
   // ─── Búsqueda productos ───────────────────────────────────────────────────
   async function buscarProductos(q: string): Promise<Producto[]> {
-    const res  = await fetch(`/api/productos?q=${encodeURIComponent(q)}`);
+    // contexto=facturacion: excluye lo que es solo del POS (cafetería).
+    const res  = await fetch(`/api/productos?contexto=facturacion&q=${encodeURIComponent(q)}`);
     const data = await res.json();
     return data.productos ?? [];
   }

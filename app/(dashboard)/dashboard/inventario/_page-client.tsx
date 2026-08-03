@@ -74,7 +74,11 @@ const EMPTY_AJUSTE: AjusteForm = {
   motivo:     '',
 };
 
-export function InventarioPageClient() {
+/**
+ * `almacenId` fija la pantalla a UN almacén — lo usa el POS para mostrar solo
+ * el inventario de la terminal. Sin él (Facturación) se ven todos.
+ */
+export function InventarioPageClient({ almacenId }: { almacenId?: number | null } = {}) {
   const [movimientos, setMovimientos]     = useState<Movimiento[]>([]);
   const [productos,   setProductos]       = useState<ProductoBasico[]>([]);
   const [loading,     setLoading]         = useState(true);
@@ -94,13 +98,14 @@ export function InventarioPageClient() {
       const p = new URLSearchParams();
       if (productoId) p.set('productoId', productoId);
       if (tipo)       p.set('tipo', tipo);
+      if (almacenId)  p.set('almacenId', String(almacenId));
       const res  = await fetch(`/api/inventario/movimientos?${p}`);
       const data = await res.json();
       setMovimientos(data.movimientos ?? []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [almacenId]);
 
   useEffect(() => { cargar(productoFilter, tipoFilter); }, [productoFilter, tipoFilter, cargar]);
 

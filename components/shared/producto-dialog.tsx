@@ -21,7 +21,10 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Switch from '@mui/material/Switch';
-import { Camera, X, Package, Wrench, Store, Star } from 'lucide-react';
+import { Camera, X, Package, Wrench, Star } from 'lucide-react';
+import {
+  OPCIONES_DONDE_SE_VENDE, aBanderas, defaultPorTipo, type DondeSeVende,
+} from '@/lib/productos/donde-se-vende';
 import { toast } from 'sonner';
 
 interface CategoriaOpt { id: number; nombre: string }
@@ -54,8 +57,9 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
   const [tasaItbis, setTasaItbis] = useState('0.18');
   const [imagen, setImagen]       = useState('');
   const [guardando, setGuardando] = useState(false);
-  // POS: visibilidad en la grilla, favorito y categoría (sección de la grilla).
-  const [visiblePos, setVisiblePos] = useState(tipoInicial === 'bien');
+  // Una sola pregunta en vez de dos interruptores sueltos: ver
+  // lib/productos/donde-se-vende.ts.
+  const [donde, setDonde] = useState<DondeSeVende>(defaultPorTipo(tipoInicial));
   const [favorito, setFavorito]     = useState(false);
   const [categoriaId, setCategoriaId] = useState<number | ''>('');
   const [categorias, setCategorias]   = useState<CategoriaOpt[]>([]);
@@ -67,11 +71,12 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
     fetch('/api/categorias').then(r => r.json()).then(d => setCategorias(d.categorias ?? [])).catch(() => {});
   }, [open]);
 
-  // Default inteligente: bien → visible en POS; servicio → no. Solo mientras el
-  // usuario no lo haya tocado manualmente.
+  // Default inteligente: un bien se vende en los dos lados; un servicio
+  // (mensualidad, matrícula) solo en Facturación. Se respeta mientras el usuario
+  // no haya elegido explícitamente.
   function cambiarTipo(val: 'bien' | 'servicio') {
     setTipo(val);
-    if (!tocóVisible) setVisiblePos(val === 'bien');
+    if (!tocóVisible) setDonde(defaultPorTipo(val));
   }
 
   async function handleImagen(file: File) {
@@ -89,7 +94,7 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nombre, precio: p, tasaItbis, tipo, imagen: imagen || null,
-        visiblePos, posFavorito: favorito,
+        ...aBanderas(donde), posFavorito: favorito,
         categoriaId: categoriaId === '' ? null : categoriaId,
       }),
     });
@@ -174,19 +179,29 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
           {categorias.map(c => <MenuItem key={c.id} value={c.id}>{c.nombre}</MenuItem>)}
         </TextField>
 
-        {/* POS: visible en mostrador + favorito */}
-        <Box sx={{ mb: 1.5, borderRadius: '10px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, borderBottom: '1px solid #f3f4f6' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Store style={{ width: 16, height: 16, color: '#0d9488' }} />
+        {/* Dónde se vende — una pregunta, tres respuestas. Antes eran dos
+            interruptores sueltos y se podían apagar los dos, dejando el producto
+            invisible en todas partes sin aviso. */}
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>¿Dónde se vende?</Typography>
+        <TextField
+          select
+          value={donde}
+          onChange={(e) => { setDonde(e.target.value as DondeSeVende); setTocóVisible(true); }}
+          fullWidth
+          sx={{ mb: 1.5 }}
+        >
+          {OPCIONES_DONDE_SE_VENDE.map(o => (
+            <MenuItem key={o.valor} value={o.valor}>
               <Box>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Mostrar en Punto de Venta</Typography>
-                <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>Aparece en la grilla de la caja.</Typography>
+                <Typography sx={{ fontSize: 14 }}>{o.label}</Typography>
+                <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>{o.ayuda}</Typography>
               </Box>
-            </Box>
-            <Switch checked={visiblePos} onChange={(_, v) => { setVisiblePos(v); setTocóVisible(true); }} color="primary" />
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, opacity: visiblePos ? 1 : 0.5, pointerEvents: visiblePos ? 'auto' : 'none' }}>
+            </MenuItem>
+          ))}
+        </TextField>
+
+        <Box sx={{ mb: 1.5, borderRadius: '10px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 1, opacity: donde === 'facturacion' ? 0.5 : 1, pointerEvents: donde === 'facturacion' ? 'none' : 'auto' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Star style={{ width: 16, height: 16, color: '#fbbf24' }} />
               <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Favorito (se muestra primero)</Typography>

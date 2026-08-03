@@ -23,6 +23,9 @@ import Collapse from '@mui/material/Collapse';
 import Switch from '@mui/material/Switch';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
+import {
+  OPCIONES_DONDE_SE_VENDE, aBanderas, desdeBanderas, type DondeSeVende,
+} from '@/lib/productos/donde-se-vende';
 
 interface Producto {
   id:                   number;
@@ -41,6 +44,8 @@ interface Producto {
   stockActual:          number;
   stockMinimo:          number;
   controlaInventario:   boolean;
+  visiblePos?:          boolean;
+  visibleFacturacion?:  boolean;
   permiteVentaSinStock: boolean;
   categoriaId:          number | null;
   imagen?:              string | null;  // no viene en el listado; se carga al editar
@@ -88,6 +93,7 @@ const EMPTY_FORM = {
   costo: '', stockActual: '', stockMinimo: '',
   controlaInventario: false, permiteVentaSinStock: true,
   categoriaId: '', imagen: '',
+  donde: 'ambos' as DondeSeVende,
 };
 
 export default function ProductosPage() {
@@ -164,6 +170,7 @@ export default function ProductosPage() {
       permiteVentaSinStock: p.permiteVentaSinStock ?? true,
       categoriaId:          p.categoriaId != null ? String(p.categoriaId) : '',
       imagen:               p.imagen ?? '',
+      donde:                desdeBanderas(p),
     });
     setOpError(null);
     setShowForm(true);
@@ -207,6 +214,7 @@ export default function ProductosPage() {
           controlaInventario:   form.controlaInventario,
           permiteVentaSinStock: form.permiteVentaSinStock,
           categoriaId:          form.categoriaId ? Number(form.categoriaId) : null,
+          ...aBanderas(form.donde),
           imagen:               form.imagen || null,
         }),
       });
@@ -491,6 +499,27 @@ export default function ProductosPage() {
                 sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
               />
             )}
+
+            {/* Dónde se vende — una pregunta, tres respuestas. Ver
+                lib/productos/donde-se-vende.ts. */}
+            <FormControl size="small" fullWidth>
+              <InputLabel>¿Dónde se vende?</InputLabel>
+              <Select
+                label="¿Dónde se vende?"
+                value={form.donde}
+                onChange={(e) => setForm((f) => ({ ...f, donde: e.target.value as DondeSeVende }))}
+                sx={{ borderRadius: '8px' }}
+              >
+                {OPCIONES_DONDE_SE_VENDE.map((o) => (
+                  <MenuItem key={o.valor} value={o.valor}>
+                    <Box>
+                      <Typography sx={{ fontSize: 14 }}>{o.label}</Typography>
+                      <Typography sx={{ fontSize: 11, color: '#9ca3af' }}>{o.ayuda}</Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
             {/* Categoría */}
             <FormControl size="small" fullWidth>

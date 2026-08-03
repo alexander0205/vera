@@ -74,7 +74,11 @@ interface ClienteView { id: number; razonSocial: string; rnc: string | null; ema
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
-type MetodoCobro = Metodo | 'cuenta-estudiante';
+// 'credito' = fiado: la venta se registra SIN pago y queda con saldo
+// pendiente, así aparece sola en cuentas por cobrar (facturación y POS
+// leen la misma cartera). No confundir con 'cuenta-estudiante', que es el
+// monedero prepago y sí descuenta saldo en el momento.
+type MetodoCobro = Metodo | 'cuenta-estudiante' | 'credito';
 
 /** Venta aparcada (hold) — se persiste en localStorage por turno para no perder
  *  el carrito al atender otra venta o si se recarga la página. */
@@ -636,7 +640,16 @@ function Venta({
     propinaCentavos = 0,
   ) {
     const esMonedero = pagos.length === 1 && pagos[0].metodo === 'cuenta-estudiante';
+    // Fiado: sin pagos. El motor calcula estado_pago = PENDIENTE y el documento
+    // entra a cuentas por cobrar, la misma cartera que lee Facturación.
+    const esCredito = pagos.length === 0;
     const totalConPropina = totales.total + propinaCentavos;
+
+    // Sin alguien a quien cobrarle, la deuda queda huérfana en la cartera.
+    if (esCredito && !cliente && !estudiante) {
+      toast.error('Para fiar hay que elegir el cliente o el estudiante');
+      return;
+    }
 
     // Crédito fiscal (e31) exige RNC del comprador (DGII #38). El servidor lo
     // revalida, pero se corta aquí para no perder la venta con un error tardío.
@@ -704,15 +717,24 @@ function Venta({
     const payload = {
       modo:                 'borrador',
       tipoEcf,
-      razonSocialComprador: esMonedero ? estudiante!.nombre : (cliente?.razonSocial ?? 'Consumidor Final'),
+      razonSocialComprador: esMonedero || (esCredito && !cliente)
+                              ? estudiante!.nombre
+                              : (cliente?.razonSocial ?? 'Consumidor Final'),
+      clientId:             !esMonedero && cliente ? cliente.id : undefined,
       rncComprador:         esMonedero ? undefined : (cliente?.rnc ?? undefined),
       emailComprador:       esMonedero ? undefined : (cliente?.email ?? undefined),
-      dependienteId:        esMonedero ? estudiante!.dependienteId : undefined,
-      dependienteNombre:    esMonedero ? estudiante!.nombre : undefined,
-      tipoPago:             1,
+      // Fiar a un estudiante ata la deuda a él, igual que el monedero: si no,
+      // la cartera muestra el nombre pero no a quién corresponde.
+      dependienteId:        esMonedero || (esCredito && !cliente && estudiante)
+                              ? estudiante!.dependienteId : undefined,
+      dependienteNombre:    esMonedero || (esCredito && !cliente && estudiante)
+                              ? estudiante!.nombre : undefined,
+      // 2 = crédito (DGII). El motor exige fechaLimitePago solo al emitir a la
+      // DGII, no en borrador; el POS guarda en borrador.
+      tipoPago:             esCredito ? 2 : 1,
       items,
       lineasJson,
-      pagoRecibido:         true,
+      pagoRecibido:         !esCredito,
       pagos:                pagos.map((p) => ({ metodo: p.metodo, valor: p.valorCentavos / 100 })),
       almacenId:            terminal?.almacenId ?? null,
     };
@@ -1341,6 +1363,7 @@ function CarritoPanel({
           total={totales.total}
           cobrando={cobrando}
           estudiante={estudiante}
+          cliente={cliente}
           onClose={() => setAbrirCobro(false)}
           onConfirm={(pagos, recibido, propina) => { onCobrar(pagos, recibido, propina); setAbrirCobro(false); }}
         />
@@ -1628,11 +1651,13 @@ function EstudiantePicker({ estudiante, onSelect }: {
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
 
 function CobroModal({
-  total, cobrando, estudiante, onClose, onConfirm,
+  total, cobrando, estudiante, cliente, onClose, onConfirm,
 }: {
   total: number;
   cobrando: boolean;
   estudiante: MonederoView | null;
+  /** Necesario para el fiado: sin alguien a quien cobrarle no hay crédito. */
+  cliente: ClienteView | null;
   onClose: () => void;
   onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
 }) {
@@ -1653,6 +1678,7 @@ function CobroModal({
   const totalCobrar = total + propinaCentavos;
 
   const esMonedero = metodo === 'cuenta-estudiante' && !split;
+  const esCredito  = metodo === 'credito' && !split;
   const recibidoCentavos = Math.round((Number(recibido) || 0) * 100);
   const cambio = metodo === 'efectivo' && !split ? recibidoCentavos - totalCobrar : 0;
   const faltaEfectivo = metodo === 'efectivo' && !split && recibidoCentavos < totalCobrar;
@@ -1691,6 +1717,12 @@ function CobroModal({
     }
     if (esMonedero) {
       onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos);
+      return;
+    }
+    // Crédito: se confirma SIN pagos. El motor calcula estado_pago = PENDIENTE
+    // y el documento entra a la cartera.
+    if (esCredito) {
+      onConfirm([], 0, propinaCentavos);
       return;
     }
     const recibidoOut = metodo === 'efectivo' ? recibidoCentavos : totalCobrar;
@@ -1769,6 +1801,29 @@ function CobroModal({
                 <Box component="span">Cuenta de {estudiante.nombre}</Box>
                 <Box component="span" sx={{ fontSize: 12, ...MONEY }}>saldo {fmt(estudiante.saldoCentavos)}</Box>
               </ButtonBase>
+            )}
+
+            {(cliente || estudiante) && (
+              <ButtonBase
+                onClick={() => setMetodo('credito')}
+                sx={{
+                  mb: 1.5, display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+                  borderRadius: '8px', border: '1px solid', px: 1.5, py: 1, fontSize: 14,
+                  borderColor: metodo === 'credito' ? '#0d9488' : '#e5e7eb',
+                  bgcolor: metodo === 'credito' ? '#f0fdfa' : 'transparent',
+                  color: metodo === 'credito' ? '#0f766e' : '#4b5563',
+                }}
+              >
+                <Box component="span">A crédito (fiado)</Box>
+                <Box component="span" sx={{ fontSize: 12 }}>queda en cuentas por cobrar</Box>
+              </ButtonBase>
+            )}
+
+            {esCredito && (
+              <Box sx={{ mb: 1.5, borderRadius: '8px', bgcolor: '#fffbeb', px: 1.5, py: 1, fontSize: 12, color: '#92400e' }}>
+                Se registra la venta sin cobrar. Queda como deuda de{' '}
+                {estudiante?.nombre ?? cliente?.razonSocial} en cuentas por cobrar.
+              </Box>
             )}
 
             {monederoBloqueado && (

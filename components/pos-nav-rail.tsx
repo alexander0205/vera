@@ -13,13 +13,13 @@
  */
 
 import Box from '@mui/material/Box';
+import { RailBrand } from '@/components/rail-brand';
+import { useNavFijo } from '@/lib/hooks/useNavFijo';
 import Typography from '@mui/material/Typography';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Store, Clock, Wallet, Undo2, Users, Package, Settings, FileText, LayoutGrid,
-} from 'lucide-react';
-import { moduleUrl } from '@/lib/config/modules';
+  Store, Clock, Wallet, Undo2, Users, Package, Settings, FileText, } from 'lucide-react';
 
 const RAIL = 68;
 const OPEN = 224;
@@ -38,33 +38,52 @@ const ITEMS: Item[] = [
   { href: '/pos/configuracion', label: 'Configuración',      icon: Settings },
 ];
 
-export function PosNavRail() {
+/**
+ * `variant`:
+ *  - 'rail'   → columna de iconos que se expande al pasar el mouse (escritorio).
+ *  - 'drawer' → siempre abierto, sin animación: contenido del cajón móvil.
+ *
+ * Mismo contrato que EscolarNavRail y CuentaNavRail. Sin la variante 'drawer'
+ * el cajón móvil del POS mostraba el rail de escritorio, que solo se expande al
+ * pasar el mouse — o sea, en una pantalla táctil quedaban solo los iconos.
+ */
+export function PosNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   const pathname = usePathname();
+  // El cajón móvil va siempre abierto; en escritorio manda la preferencia
+  // "menú fijo". Ambos casos usan la misma rama: ancho completo, texto visible
+  // y sin expansión por hover.
+  const { fijo } = useNavFijo();
+  const abierto = variant === 'drawer' || fijo;
 
   return (
-    <Box component="aside" sx={{ width: RAIL, flexShrink: 0, display: { xs: 'none', md: 'block' }, position: 'relative' }}>
+    <Box
+      component="aside"
+      sx={{
+        width: abierto ? OPEN : RAIL,
+        flexShrink: 0,
+        display: abierto ? 'block' : { xs: 'none', lg: 'block' },
+        position: 'relative',
+        height: '100%',
+      }}
+    >
       <Box
         sx={{
-          position: 'absolute', top: 0, left: 0, height: '100%',
-          width: RAIL, overflow: 'hidden', zIndex: 40,
+          position: abierto ? 'static' : 'absolute', top: 0, left: 0, height: '100%',
+          width: abierto ? OPEN : RAIL, overflow: 'hidden', zIndex: 40,
           bgcolor: '#0f766e', display: 'flex', flexDirection: 'column',
           transition: 'width 0.2s ease, box-shadow 0.2s ease',
-          '& .nav-text': { opacity: 0, transition: 'opacity 0.12s ease', whiteSpace: 'nowrap' },
-          '&:hover': { width: OPEN, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
-          '&:hover .nav-text': { opacity: 1 },
+          '& .nav-text': {
+            opacity: abierto ? 1 : 0,
+            transition: 'opacity 0.12s ease',
+            whiteSpace: 'nowrap',
+          },
+          ...(abierto ? {} : {
+            '&:hover': { width: OPEN, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
+            '&:hover .nav-text': { opacity: 1 },
+          }),
         }}
       >
-        {/* Logo */}
-        <Box sx={{ px: 2, py: 2, borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ width: 28, height: 28, bgcolor: '#fff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Store style={{ width: 16, height: 16, color: '#0f766e' }} />
-          </Box>
-          {/* Identidad del producto: "Zero Punto de Venta" (como Alegra POS). */}
-          <Box className="nav-text" sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
-            <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.875rem' }}>Zero</Typography>
-            <Typography sx={{ color: 'rgba(204,251,241,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Punto de Venta</Typography>
-          </Box>
-        </Box>
+        <RailBrand modulo="pos" />
 
         {/* Items */}
         <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
@@ -95,25 +114,6 @@ export function PosNavRail() {
               </Box>
             );
           })}
-        </Box>
-
-        {/* Cambiar a Facturación */}
-        <Box sx={{ px: 1.5, py: 1.5, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <Box
-            component={Link}
-            href={moduleUrl('facturacion')}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
-              borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
-              color: 'rgba(204,251,241,0.85)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },
-            }}
-          >
-            <LayoutGrid style={{ width: 18, height: 18, flexShrink: 0 }} />
-            <Box component="span" className="nav-text" sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <FileText style={{ width: 14, height: 14 }} /> Ir a Facturación
-            </Box>
-          </Box>
         </Box>
       </Box>
     </Box>

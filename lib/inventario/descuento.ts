@@ -51,6 +51,8 @@ export async function descontarInventario(
           .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
 
         await tx.insert(inventoryMovements).values({
+          // NULL cuando la venta no trae almacén: se comporta como antes.
+          almacenId: almacenId ?? null,
           teamId,
           productoId,
           tipo:           'VENTA',

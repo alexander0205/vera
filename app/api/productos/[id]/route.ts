@@ -27,6 +27,8 @@ const updateSchema = z.object({
   stockMinimo:          z.number().int().min(0).optional(),
   controlaInventario:   z.boolean().optional(),
   permiteVentaSinStock: z.boolean().optional(),
+  visiblePos:           z.boolean().optional(),
+  visibleFacturacion:   z.boolean().optional(),
   categoriaId:          z.number().int().positive().optional().nullable(),
   imagen:               z.string().max(1_500_000).optional().nullable(),
 });
