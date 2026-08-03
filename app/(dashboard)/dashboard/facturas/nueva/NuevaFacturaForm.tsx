@@ -51,6 +51,7 @@ import { useItemsState } from './hooks/useFacturaState';
 import { calcularTotales } from './utils/calculos';
 import { buildPayload as buildPayloadFn } from './utils/buildPayload';
 import { validate as validateEcf } from '@/lib/factura/validator';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import type {
   BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Producto,
   ResultadoEmision, Retencion,
@@ -294,7 +295,13 @@ export default function NuevaFacturaForm({
 
   // Factura de origen sin-ncf (sin comprobante fiscal): no tiene e-NCF ni lo
   // tendrá → la nota es interna (borrador), sin referencia DGII (no se pide e-NCF).
-  const esPadreSinNcf = padreNota?.tipoEcf === 'sin-ncf';
+  //
+  // Mismo tratamiento si la empresa no está habilitada en DGII: la nota se
+  // guarda como documento interno en vez de reservar un e-NCF fiscal que no se
+  // puede emitir. Se conserva el tipo 33/34 para que siga apareciendo en su
+  // listado — los listados filtran por tipoEcf, no por el e-NCF.
+  const { enProduccion } = useTiposDisponibles();
+  const esPadreSinNcf = padreNota?.tipoEcf === 'sin-ncf' || !enProduccion;
 
   // Aplica una factura padre (payload de /api/facturas/:id) al formulario:
   // e-NCF modificado, fecha, cliente y líneas. Reutilizado por el prefill via
