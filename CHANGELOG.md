@@ -4,6 +4,12 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.11.1 — 2026-08-03
+
+### Arreglado
+
+- **cxc**: mostrar en cuentas por cobrar los borradores con e-NCF real
+
 ## v1.11.0 — 2026-08-03
 
 ### Nuevo

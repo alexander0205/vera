@@ -47,6 +47,11 @@
         "tipo": "arreglo",
         "titulo": "La sesión ya no se cierra sola",
         "detalle": "En algunos casos el sistema perdía la sesión y mostraba un error raro al guardar. Ahora, si la sesión vence, te lleva al inicio de sesión con un mensaje claro."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Ya no se pierden facturas en cuentas por cobrar",
+        "detalle": "Algunas facturas con saldo pendiente no aparecían en cuentas por cobrar, incluso cuando ya tenían abonos registrados, y la deuda quedaba fuera de la cartera sin aviso. Ahora se muestran todas."
       }
     ]
   },
