@@ -588,12 +588,14 @@ export async function getCuentasPorCobrar(
       // cobrables).
       sql`${ecfDocuments.estadoPago} IN ('PENDIENTE', 'PARCIAL')`,
       sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
-      // Un BORRADOR con e-NCF REAL no es una venta: es la reserva que deja un
-      // intento de emisión fallido (ver /api/ecf/emitir). La venta se re-facturó
-      // con otro número, así que contarlo aquí duplica la deuda del cliente.
-      // Los borradores legítimos traen `BOR-…` o encf vacío (tickets sin-ncf),
-      // y esos sí deben seguir apareciendo.
-      sql`NOT (${ecfDocuments.estado} = 'BORRADOR' AND ${ecfDocuments.encf} ~ '^E[0-9]{12}$')`,
+      // NOTA: aquí vivía un filtro que excluía los BORRADOR con e-NCF real
+      // (`NOT (estado='BORRADOR' AND encf ~ '^E[0-9]{12}$')`, commit 3ffe6a9),
+      // asumiendo que solo podían ser la reserva de un intento de emisión
+      // fallido ya re-facturado con otro número. La premisa no se sostiene:
+      // escondía facturas reales sin reemplazo — incluidas algunas con cobros
+      // parciales registrados en pagos_recibidos, que un fantasma nunca tendría.
+      // El caso que motivó el filtro (doble deuda por re-facturación) hoy lo
+      // cubre la condición de arriba: el intento fallido queda ANULADO.
       // Las ND de mora ya NO son cuentas propias: se agrupan dentro de su
       // factura padre. Solo listamos facturas raíz (mora_origen_id IS NULL).
       sql`${ecfDocuments.moraOrigenId} IS NULL`,
