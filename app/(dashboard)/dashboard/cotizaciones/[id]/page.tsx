@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -100,6 +101,7 @@ export default function CotizacionDetallePage() {
   const [sendingEmail, setSendingEmail] = useState(false);
 
   const [converting, setConverting]     = useState(false);
+  const [showConfirmConvert, setShowConfirmConvert] = useState(false);
 
   const [changingEstado, setChangingEstado] = useState(false);
 
@@ -325,7 +327,7 @@ export default function CotizacionDetallePage() {
               </DropdownMenuItem>
               {puedeConvertir && (
                 <DropdownMenuItem
-                  onSelect={handleConvertir}
+                  onSelect={(e) => { e.preventDefault(); setShowConfirmConvert(true); }}
                   className="flex items-center gap-2 cursor-pointer"
                   disabled={converting}
                 >
@@ -493,7 +495,7 @@ export default function CotizacionDetallePage() {
             {puedeConvertir && (
               <Button
                 className="w-full bg-teal-600 hover:bg-teal-700 text-sm"
-                onClick={handleConvertir}
+                onClick={() => setShowConfirmConvert(true)}
                 disabled={converting}
               >
                 {converting
@@ -533,6 +535,17 @@ export default function CotizacionDetallePage() {
       </div>
 
       {/* ── Modal: Enviar email ──────────────────────────────────────────────── */}
+      <ConfirmDialog
+        open={showConfirmConvert}
+        onOpenChange={setShowConfirmConvert}
+        title="Convertir a factura"
+        description={<>Se creará un <strong>borrador de factura</strong> a partir de esta cotización ({cot.numero}) y se abrirá para completarla. La cotización se conserva.</>}
+        confirmLabel="Convertir"
+        icon={<FileCheck className="h-5 w-5 text-teal-600" />}
+        loading={converting}
+        onConfirm={handleConvertir}
+      />
+
       <Dialog open={showEmail} onOpenChange={setShowEmail}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

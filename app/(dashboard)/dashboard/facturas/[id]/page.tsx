@@ -11,6 +11,7 @@ import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   ArrowLeft, Download, FileText, RefreshCw, XCircle,
   Loader2, AlertTriangle, CheckCircle, Clock,
@@ -695,6 +696,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
   // ─── Generar Nota de Débito por mora (borrador interno, no DGII) ────────────
   const [generandoMora, setGenerandoMora] = useState(false);
+  const [showConfirmMora, setShowConfirmMora] = useState(false);
 
   async function handleGenerarNotaDebitoMora() {
     if (!factura) return;
@@ -1009,7 +1011,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               )}
               {puedeGenerarMora && (
                 <DropdownMenuItem
-                  onSelect={() => { if (!generandoMora) handleGenerarNotaDebitoMora(); }}
+                  onSelect={(e) => { e.preventDefault(); setShowConfirmMora(true); }}
                   disabled={generandoMora}
                   className="flex items-center gap-2 cursor-pointer text-orange-700"
                 >
@@ -1802,6 +1804,19 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       </div>
 
       {/* ─── Modals ───────────────────────────────────────────────────────── */}
+
+      {/* Confirmar generación de nota de débito por mora */}
+      <ConfirmDialog
+        open={showConfirmMora}
+        onOpenChange={setShowConfirmMora}
+        title="Generar nota de débito por mora"
+        description="Se creará una nota de débito interna (borrador, no se envía a la DGII) con el recargo por mora sobre el saldo vencido de esta factura."
+        confirmLabel="Generar mora"
+        confirmClassName="bg-orange-600 hover:bg-orange-700 text-white"
+        icon={<AlertTriangle className="h-5 w-5 text-orange-600" />}
+        loading={generandoMora}
+        onConfirm={() => { setShowConfirmMora(false); handleGenerarNotaDebitoMora(); }}
+      />
 
       {/* Confirmar anulación */}
       <Dialog open={showAnular} onOpenChange={setShowAnular}>
