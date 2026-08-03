@@ -330,10 +330,9 @@ export default function NuevaCotizacionForm({
             onOpenNuevoVendedor={() => setShowNuevoVendedor(true)}
           />
 
-          {/* Cotización no tiene card de Pago → una sola columna (evita el rail
-              derecho vacío que dejaría el Resumen corto). El Resumen va al final,
-              alineado a la derecha como en una cotización impresa. */}
-          <div className="space-y-4">
+          {/* ── SPLIT LAYOUT: form left, sticky Resumen right (igual que factura) ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 lg:gap-5">
+            {/* LEFT column */}
             <div className="space-y-4 min-w-0">
               <SectionCard number={1} title="Datos del cliente" icon={User}>
                 <ClienteSection
@@ -438,18 +437,16 @@ export default function NuevaCotizacionForm({
               </AccordionSection>
             </div>
 
-            {/* Resumen (sin Pago) — al final, alineado a la derecha */}
-            <div className="lg:max-w-md lg:ml-auto">
-              <ResumenSidebar
-                empresa={empresa}
-                totales={totales}
-                retenciones={retenciones}
-                totalNeto={totalNeto}
-                totalLabel="Total"
-                items={items}
-                showPago={false}
-              />
-            </div>
+            {/* RIGHT column — sticky sidebar: Resumen (sin Pago), misma posición que factura */}
+            <ResumenSidebar
+              empresa={empresa}
+              totales={totales}
+              retenciones={retenciones}
+              totalNeto={totalNeto}
+              totalLabel="Total"
+              items={items}
+              showPago={false}
+            />
           </div>
 
           {/* Barra de acciones — sticky abajo. mt-auto empuja la barra al fondo
