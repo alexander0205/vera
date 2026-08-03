@@ -1,10 +1,30 @@
 name: CI
 
+# DESACTIVADO (2026-08-03). Solo corre a mano desde la pestaña Actions.
+#
+# Por qué: llevaba semanas en rojo en todos los PR y en todos los merges a main,
+# hasta el punto de que ya nadie lo miraba. Un check que siempre falla no avisa
+# de nada y tapa los que sí importan.
+#
+# Qué lo rompió: `lib/env.ts` exige 9 variables y el paso `Build` de abajo solo
+# define 7. Faltan PROVIDER_RNC, PROVIDER_RAZON_SOCIAL, ECF_API_URL y
+# ECF_API_KEY, así que `next build` revienta al cargar next.config.ts, antes de
+# compilar una sola línea. No es un error del código.
+#
+# Cómo revivirlo: agregar esas 4 al bloque `env:` del paso `Build` con valores
+# placeholder (el build no llama a la DGII, solo valida que existan), y devolver
+# los triggers de abajo:
+#
+#   on:
+#     push:
+#       branches: [main, develop]
+#     pull_request:
+#       branches: [main]
+#
+# Mientras tanto el build real que cuenta es el de Vercel, que sí corre en cada
+# PR y en cada push a main.
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
