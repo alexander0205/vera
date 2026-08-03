@@ -80,7 +80,9 @@ export default function NuevaFacturaForm({
   const empresa = initialPerfil;
   const { can } = usePermissions();
   // Alerta double-check del método: solo si el rol del usuario tiene el permiso.
-  const alertaMetodoPago = can('pagos:alerta-metodo');
+  // Combina el toggle por-empresa con el permiso por-rol: la alerta sale solo si
+  // la empresa la tiene activa Y el rol del usuario tiene el permiso.
+  const alertaMetodoPago = !!empresa?.alertaMetodoPagoActivo && can('pagos:alerta-metodo');
 
   // ── Items iniciales desde borrador ─────────────────────────────────────────
   const itemsIniciales: ItemLinea[] = useMemo(() => {
@@ -1045,7 +1047,10 @@ export default function NuevaFacturaForm({
           });
         } catch {}
       }
-      if (opts?.andThen === 'nueva') {
+      // Si la creación pasó por el double-check del método de pago (cobro real),
+      // mostramos la pantalla de éxito con los detalles en vez de resetear el
+      // formulario — el usuario acaba de confirmar un cobro y espera el recibo.
+      if (opts?.andThen === 'nueva' && !opts?.metodoConfirmado) {
         resetForm();
         return;
       }
