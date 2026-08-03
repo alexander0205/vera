@@ -1,13 +1,16 @@
 /**
  * /dashboard/cotizaciones/[id]/editar
- * Server component: carga la cotización y renderiza el formulario de edición.
+ * Server component: carga la cotización y renderiza el MISMO formulario que
+ * "Nueva cotización" en modo edición (reusa los componentes de factura).
  */
 import { notFound, redirect } from 'next/navigation';
 import { db } from '@/lib/db/drizzle';
 import { cotizaciones } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getTeamIdForUser } from '@/lib/db/queries';
-import EditarCotizacionClient from './_editar-client';
+import { getEmpresaPerfil } from '@/lib/facturas/empresa-perfil';
+import NuevaCotizacionFormClient from '../../nueva/_nueva-cotizacion-client';
+import type { Retencion } from '../../../facturas/nueva/utils/types';
 
 export default async function EditarCotizacionPage({
   params,
@@ -34,10 +37,13 @@ export default async function EditarCotizacionPage({
     redirect(`/dashboard/cotizaciones/${cotId}`);
   }
 
-  let parsedItems: Array<{ descripcion: string; precio: number; cantidad: number }> = [];
-  try {
-    if (cot.items) parsedItems = JSON.parse(cot.items);
-  } catch { /* ignore */ }
+  let items: Array<Record<string, unknown>> = [];
+  try { if (cot.items) items = JSON.parse(cot.items); } catch { /* ignore */ }
+
+  let retenciones: Retencion[] = [];
+  try { if (cot.retenciones) retenciones = JSON.parse(cot.retenciones); } catch { /* ignore */ }
+
+  const perfil = await getEmpresaPerfil();
 
   const initialData = {
     id:                   cot.id,
@@ -49,10 +55,13 @@ export default async function EditarCotizacionPage({
     fechaVencimiento:     cot.fechaVencimiento
       ? new Date(cot.fechaVencimiento).toISOString().split('T')[0]
       : '',
+    items,
+    retenciones,
     notas:               cot.notas ?? '',
     terminosCondiciones: cot.terminosCondiciones ?? '',
-    items:               parsedItems,
+    pieFactura:          cot.pieFactura ?? '',
+    comentario:          cot.comentario ?? '',
   };
 
-  return <EditarCotizacionClient initialData={initialData} />;
+  return <NuevaCotizacionFormClient initialPerfil={perfil} initialData={initialData} />;
 }

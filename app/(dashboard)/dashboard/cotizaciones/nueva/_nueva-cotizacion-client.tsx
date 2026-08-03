@@ -7,6 +7,7 @@
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import type { EmpresaPerfil } from '../../facturas/nueva/utils/types';
+import type { CotizacionInicial } from './NuevaCotizacionForm';
 
 const NuevaCotizacionForm = dynamic(() => import('./NuevaCotizacionForm'), {
   ssr: false,
@@ -19,8 +20,10 @@ const NuevaCotizacionForm = dynamic(() => import('./NuevaCotizacionForm'), {
 
 export default function NuevaCotizacionFormClient({
   initialPerfil,
+  initialData,
 }: {
   initialPerfil: EmpresaPerfil | null;
+  initialData?: CotizacionInicial | null;
 }) {
-  return <NuevaCotizacionForm initialPerfil={initialPerfil} />;
+  return <NuevaCotizacionForm initialPerfil={initialPerfil} initialData={initialData} />;
 }

@@ -50,42 +50,91 @@ import type {
 
 export type { EmpresaPerfil };
 
+/** Datos de una cotización existente, para el modo edición. */
+export interface CotizacionInicial {
+  id:                   number;
+  numero:               string;
+  estado:               string;
+  razonSocialComprador: string;
+  rncComprador:         string;
+  emailComprador:       string;
+  fechaVencimiento:     string; // YYYY-MM-DD
+  /** Shape rico ItemLinea o viejo { descripcion, precio, cantidad }. */
+  items:                Array<Record<string, unknown>>;
+  retenciones:          Retencion[];
+  notas:                string;
+  terminosCondiciones:  string;
+  pieFactura:           string;
+  comentario:           string;
+}
+
+/** Normaliza los ítems guardados (shape rico o viejo) a ItemLinea del form. */
+function itemsDesdeInicial(raw: Array<Record<string, unknown>>): ItemLinea[] {
+  if (!raw || raw.length === 0) return [];
+  return raw.map((it, i) => {
+    const viejo = it.descripcion !== undefined && it.nombreItem === undefined;
+    return {
+      id:                     i + 1,
+      productoId:             typeof it.productoId === 'number' ? it.productoId : undefined,
+      nombreItem:             String(viejo ? it.descripcion : (it.nombreItem ?? '')),
+      referencia:             String(it.referencia ?? ''),
+      descripcionItem:        String(it.descripcionItem ?? ''),
+      cantidadItem:           Number(it.cantidad ?? it.cantidadItem ?? 1),
+      precioUnitarioItem:     Number(it.precio ?? it.precioUnitarioItem ?? 0),
+      descuentoPct:           Number(it.descuentoPct ?? 0),
+      tasaItbis:              (['exento', '0.18', '0.16', '0'].includes(String(it.tasaItbis))
+                                ? String(it.tasaItbis) : '0.18') as ItemLinea['tasaItbis'],
+      indicadorBienoServicio: String(it.indicadorBienoServicio) === '1' ? '1' : '2',
+      unidadMedida:           String(it.unidadMedida ?? ''),
+      dependienteId:          null,
+      dependienteNombre:      '',
+    };
+  });
+}
+
 export default function NuevaCotizacionForm({
   initialPerfil,
+  initialData,
 }: {
   initialPerfil: EmpresaPerfil | null;
+  /** Presente → modo edición (PUT); ausente → nueva cotización (POST). */
+  initialData?: CotizacionInicial | null;
 }) {
-  const router  = useRouter();
-  const empresa = initialPerfil;
+  const router   = useRouter();
+  const empresa  = initialPerfil;
+  const editId   = initialData?.id ?? null;
+  const editando = editId != null;
 
   // ── Cliente / comprador ────────────────────────────────────────────────────
   const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
-  const [rncManual, setRncManual]             = useState('');
-  const [rncManualNombre, setRncManualNombre] = useState('');
-  const [emailManual, setEmailManual]         = useState('');
+  const [rncManual, setRncManual]             = useState(initialData?.rncComprador ?? '');
+  const [rncManualNombre, setRncManualNombre] = useState(initialData?.razonSocialComprador ?? '');
+  const [emailManual, setEmailManual]         = useState(initialData?.emailComprador ?? '');
   const [telefonoManual, setTelefonoManual]   = useState('');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
 
   // ── Fechas ─────────────────────────────────────────────────────────────────
   const today = new Date().toISOString().slice(0, 10);
-  const [fechaVencimiento, setFechaVencimiento] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState(initialData?.fechaVencimiento ?? '');
 
   // ── Items (mismo reducer que factura) ──────────────────────────────────────
-  const [items, dispatchItems] = useItemsState();
+  const [items, dispatchItems] = useItemsState(
+    initialData ? itemsDesdeInicial(initialData.items) : undefined,
+  );
   const [showNuevoProductoIdx, setShowNuevoProductoIdx] = useState<number | null>(null);
 
   // ── Retenciones ────────────────────────────────────────────────────────────
-  const [retenciones, setRetenciones] = useState<Retencion[]>([]);
+  const [retenciones, setRetenciones] = useState<Retencion[]>(initialData?.retenciones ?? []);
 
   // ── Columnas opcionales de items (Referencia / Descripción) ────────────────
   const [showItemRef, setShowItemRef]   = useState(false);
   const [showItemDesc, setShowItemDesc] = useState(false);
 
   // ── Textos ─────────────────────────────────────────────────────────────────
-  const [notas, setNotas]                  = useState('');
-  const [terminosCondiciones, setTerminos] = useState('');
-  const [pieFactura, setPieFactura]        = useState('');
-  const [comentario, setComentario]        = useState('');
+  const [notas, setNotas]                  = useState(initialData?.notas ?? '');
+  const [terminosCondiciones, setTerminos] = useState(initialData?.terminosCondiciones ?? '');
+  const [pieFactura, setPieFactura]        = useState(initialData?.pieFactura ?? '');
+  const [comentario, setComentario]        = useState(initialData?.comentario ?? '');
 
   // ── Top bar: Almacén / Lista de precios / Vendedor ─────────────────────────
   const [showAlmacen, setShowAlmacen]           = useState(false);
@@ -253,31 +302,34 @@ export default function NuevaCotizacionForm({
           unidadMedida:           it.unidadMedida ?? '',
         }));
 
-      const res = await fetch('/api/cotizaciones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId:             clienteSeleccionado?.id ?? null,
-          razonSocialComprador: razonFinal.trim() || null,
-          rncComprador:         (clienteSeleccionado?.rnc ?? rncManual).trim() || null,
-          emailComprador:       emailManual.trim() || null,
-          fechaVencimiento:     fechaVencimiento || null,
-          montoSubtotal:        totales.subtotal,
-          montoDescuento:       totales.descuento,
-          totalItbis:           totales.itbis,
-          montoTotal:           totalNeto,
-          items:                itemsPayload,
-          notas:                notas.trim() || null,
-          terminosCondiciones:  terminosCondiciones.trim() || null,
-          retenciones:          retenciones.length > 0 ? retenciones : null,
-          comentario:           comentario.trim() || null,
-          pieFactura:           pieFactura.trim() || null,
-        }),
-      });
+      const res = await fetch(
+        editando ? `/api/cotizaciones/${editId}` : '/api/cotizaciones',
+        {
+          method: editando ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId:             clienteSeleccionado?.id ?? null,
+            razonSocialComprador: razonFinal.trim() || null,
+            rncComprador:         (clienteSeleccionado?.rnc ?? rncManual).trim() || null,
+            emailComprador:       emailManual.trim() || null,
+            fechaVencimiento:     fechaVencimiento || null,
+            montoSubtotal:        totales.subtotal,
+            montoDescuento:       totales.descuento,
+            totalItbis:           totales.itbis,
+            montoTotal:           totalNeto,
+            items:                itemsPayload,
+            notas:                notas.trim() || null,
+            terminosCondiciones:  terminosCondiciones.trim() || null,
+            retenciones:          retenciones.length > 0 ? retenciones : null,
+            comentario:           comentario.trim() || null,
+            pieFactura:           pieFactura.trim() || null,
+          }),
+        },
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando la cotización');
-      toast.success('Cotización guardada');
-      router.push('/dashboard/cotizaciones');
+      toast.success(editando ? 'Cotización actualizada' : 'Cotización guardada');
+      router.push(editando ? `/dashboard/cotizaciones/${editId}` : '/dashboard/cotizaciones');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error guardando la cotización');
     } finally {
@@ -291,7 +343,7 @@ export default function NuevaCotizacionForm({
       <a href="#main-content" className="skip-link">Saltar al contenido</a>
       <div className="p-3 sm:p-4 md:p-5 flex-1 flex flex-col">
         <NavBar
-          title="Nueva cotización"
+          title={editando ? `Editar cotización ${initialData!.numero}` : 'Nueva cotización'}
           showAlmacen={showAlmacen}           setShowAlmacen={setShowAlmacen}
           showListaPrecios={showListaPrecios} setShowListaPrecios={setShowListaPrecios}
           showVendedor={showVendedor}         setShowVendedor={setShowVendedor}
@@ -466,7 +518,7 @@ export default function NuevaCotizacionForm({
               className="bg-teal-600 hover:bg-teal-700 text-white"
             >
               {saving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
-              {saving ? 'Guardando…' : 'Guardar cotización'}
+              {saving ? 'Guardando…' : editando ? 'Guardar cambios' : 'Guardar cotización'}
             </Button>
           </div>
         </form>
