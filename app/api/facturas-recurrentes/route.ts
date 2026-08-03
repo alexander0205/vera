@@ -9,7 +9,8 @@ import { facturasRecurrentes, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, desc, and } from 'drizzle-orm';
-import { esTipoEcfRecurrenteValido } from '@/lib/ecf/categorias';
+import { esTipoEcfRecurrenteValido, esTipoVentaFiscal } from '@/lib/ecf/categorias';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
 
 // GET /api/facturas-recurrentes?page=1&limit=50
 export async function GET(req: NextRequest) {
@@ -75,6 +76,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Tipo de comprobante inválido' }, { status: 422 });
   }
 
+  // Un plan de venta fiscal fuera de Producción generaría, ciclo tras ciclo,
+  // borradores que nunca se pueden emitir. Se bloquea en el servidor: esconder
+  // la opción en el formulario no impide el POST directo.
+  //
+  // Ojo con el default: omitir tipoEcf daba '31', que se saltaba este control.
+  // Por eso se resuelve el tipo efectivo ANTES de comprobarlo.
+  const enProduccion = (await getAmbienteTenant(teamId)) === 'Produccion';
+  const tipoEcf: string = body.tipoEcf ?? (enProduccion ? '31' : 'sin-ncf');
+
+  if (esTipoVentaFiscal(tipoEcf) && !enProduccion) {
+    const ambiente = await getAmbienteTenant(teamId);
+    return NextResponse.json({ error: mensajeAmbienteNoProduccion(ambiente), ambiente }, { status: 403 });
+  }
+
   const frecuencia = body.frecuencia ?? 'mensual';
   // diaCobro solo aplica para frecuencias mensual/trimestral/anual
   const diaCobro = ['mensual', 'trimestral', 'anual'].includes(frecuencia)
@@ -88,7 +103,7 @@ export async function POST(req: NextRequest) {
       clientId:       body.clientId ?? null,
       nombre:         body.nombre.trim(),
       descripcion:    body.descripcion?.trim() ? body.descripcion.trim().slice(0, 200) : null,
-      tipoEcf:        body.tipoEcf ?? '31',
+      tipoEcf,
       tipoPago:       body.tipoPago ?? 1,
       diasParaPago:   body.tipoPago === 2 && body.diasParaPago ? parseInt(body.diasParaPago) : null,
       frecuencia,
