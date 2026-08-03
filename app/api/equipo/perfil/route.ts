@@ -9,6 +9,8 @@ import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { METODO_PAGO_VALUES } from '@/lib/pagos/metodos';
+import { getModuleRow } from '@/lib/payments/module-subscriptions';
+import { statusGrantsAccess, type ModuleStatus } from '@/lib/config/module-plans';
 
 const MAX_IMG_SIZE = 1_000_000; // 1 MB en base64
 
@@ -91,6 +93,19 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
+
+  // Paywall POS: habilitar el punto de venta desde config exige el módulo `pos`
+  // contratado (trial o pago). Sin plan activo no se puede autoservir el toggle.
+  if (data.posHabilitado === true) {
+    const posRow = await getModuleRow(teamId, 'pos');
+    if (!statusGrantsAccess(posRow?.status as ModuleStatus | undefined)) {
+      return NextResponse.json(
+        { error: 'Necesitas activar el plan de Punto de Venta antes de habilitarlo.' },
+        { status: 403 },
+      );
+    }
+  }
+
   await db.update(teams).set({
     ...(data.razonSocial       !== undefined && { razonSocial: data.razonSocial }),
     ...(data.nombreComercial   !== undefined && { nombreComercial: data.nombreComercial }),
@@ -147,12 +162,16 @@ export async function GET(_req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const [[team], [member]] = await Promise.all([
+  const [[team], [member], posRow] = await Promise.all([
     db.select().from(teams).where(eq(teams.id, teamId)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers)
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1),
+    getModuleRow(teamId, 'pos'),
   ]);
+
+  // ¿El módulo POS está contratado (trial/pago)? Gatea el toggle en config.
+  const posModuloActivo = statusGrantsAccess(posRow?.status as ModuleStatus | undefined);
 
   return NextResponse.json({
     razonSocial:       team.razonSocial,
@@ -185,6 +204,8 @@ export async function GET(_req: NextRequest) {
     // Módulo POS
     posHabilitado:         team.posHabilitado,
     posEscolarHabilitado:  team.posEscolarHabilitado,
+    // ¿Plan POS contratado? El toggle de config se bloquea si es false.
+    posModuloActivo,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)
     metodosObligaDgii:     (team.metodosObligaDgii as string[] | null) ?? [],

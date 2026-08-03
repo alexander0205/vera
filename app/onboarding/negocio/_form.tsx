@@ -9,6 +9,7 @@ import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Collapse from '@mui/material/Collapse';
 import { Building2, ChevronDown } from 'lucide-react';
+import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 
 interface Form {
   razonSocial: string;
@@ -120,10 +121,13 @@ export function OnboardingNegocioForm() {
             <TextField label="Actividad económica" value={form.actividadEconomica} onChange={set('actividadEconomica')} size="small" fullWidth />
           </Box>
           <TextField label="Dirección" value={form.direccion} onChange={set('direccion')} size="small" fullWidth />
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-            <TextField label="Provincia" value={form.provincia} onChange={set('provincia')} size="small" fullWidth />
-            <TextField label="Municipio" value={form.municipio} onChange={set('municipio')} size="small" fullWidth />
-          </Box>
+          <ProvinciaMunicipioSelect
+            provincia={form.provincia}
+            municipio={form.municipio}
+            onProvinciaChange={(codigo) => setForm(f => ({ ...f, provincia: codigo }))}
+            onMunicipioChange={(codigo) => setForm(f => ({ ...f, municipio: codigo }))}
+            sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}
+          />
 
           <Button
             type="button" onClick={() => setShowRep(s => !s)}

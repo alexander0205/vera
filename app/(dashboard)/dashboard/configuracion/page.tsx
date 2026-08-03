@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { mutate } from 'swr';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -149,6 +150,8 @@ export default function ConfiguracionPage() {
   // Módulo punto de venta (POS)
   const [posHabilitado, setPosHabilitado]               = useState(false);
   const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
+  // ¿Plan POS contratado? Si es false, el toggle se bloquea (paywall).
+  const [posModuloActivo, setPosModuloActivo]           = useState(false);
   // Plazo de pago por defecto: '' = de contado; '8'/'15'/'30'/'60' = crédito N días
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
@@ -184,6 +187,7 @@ export default function ConfiguracionPage() {
         // Módulo POS
         setPosHabilitado(d.posHabilitado ?? false);
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
+        setPosModuloActivo(d.posModuloActivo ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
         setRole(d.role ?? null);
@@ -593,26 +597,50 @@ export default function ConfiguracionPage() {
               <Typography variant="body2" sx={{ color: '#6b7280' }}>
                 Habilita la pantalla de punto de venta para ventas rápidas de mostrador. Ideal para tiendas, colmados, cafeterías y cantinas escolares.
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar punto de venta</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
-                    Aparecerá el módulo «POS» en el panel para registrar ventas rápidas de mostrador.
-                  </Typography>
+
+              {!posModuloActivo ? (
+                // Sin plan POS contratado → paywall. No se puede autoservir el toggle.
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5, border: '1px dashed #e5e7eb', bgcolor: '#f9fafb', borderRadius: '12px', px: 2, py: 1.75 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                    <Lock size={18} color="#9ca3af" />
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Módulo no contratado</Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                        Activa el plan de Punto de Venta (15 días de prueba gratis) para habilitarlo aquí.
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Link href="/pricing" style={{ textDecoration: 'none' }}>
+                    <Button variant="contained" disableElevation size="small"
+                      sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                      Ver planes
+                    </Button>
+                  </Link>
                 </Box>
-                <Switch checked={posHabilitado} onChange={(_, v) => setPosHabilitado(v)} color="primary"
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Modo monedero escolar</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
-                    Habilita saldos por estudiante y consumo con monedero prepago en el punto de venta.
-                  </Typography>
-                </Box>
-                <Switch checked={posEscolarHabilitado} onChange={(_, v) => setPosEscolarHabilitado(v)} color="primary"
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
-              </Box>
+              ) : (
+                <>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar punto de venta</Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                        Aparecerá el módulo «POS» en el panel para registrar ventas rápidas de mostrador.
+                      </Typography>
+                    </Box>
+                    <Switch checked={posHabilitado} onChange={(_, v) => setPosHabilitado(v)} color="primary"
+                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Modo monedero escolar</Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                        Habilita saldos por estudiante y consumo con monedero prepago en el punto de venta.
+                      </Typography>
+                    </Box>
+                    <Switch checked={posEscolarHabilitado} onChange={(_, v) => setPosEscolarHabilitado(v)} color="primary"
+                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                  </Box>
+                </>
+              )}
             </Box>
           </Box>
 
