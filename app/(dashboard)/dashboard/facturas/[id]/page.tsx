@@ -1011,7 +1011,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               )}
               {puedeGenerarMora && (
                 <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); setShowConfirmMora(true); }}
+                  onSelect={() => { setTimeout(() => setShowConfirmMora(true), 0); }}
                   disabled={generandoMora}
                   className="flex items-center gap-2 cursor-pointer text-orange-700"
                 >

@@ -327,7 +327,7 @@ export default function CotizacionDetallePage() {
               </DropdownMenuItem>
               {puedeConvertir && (
                 <DropdownMenuItem
-                  onSelect={(e) => { e.preventDefault(); setShowConfirmConvert(true); }}
+                  onSelect={() => { setTimeout(() => setShowConfirmConvert(true), 0); }}
                   className="flex items-center gap-2 cursor-pointer"
                   disabled={converting}
                 >
