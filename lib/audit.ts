@@ -58,7 +58,9 @@ export type AuditAction =
   | 'MONEDERO_CONSUMO'
   | 'MONEDERO_LIMITE'
   // Cobranza — acciones hacia el cliente, deben quedar trazadas
-  | 'RECORDATORIOS_COBRO_ENVIADOS';
+  | 'RECORDATORIOS_COBRO_ENVIADOS'
+  // WhatsApp (crm-escolar)
+  | 'WHATSAPP_CONECTAR';
 
 export interface AuditParams {
   teamId:    number;
