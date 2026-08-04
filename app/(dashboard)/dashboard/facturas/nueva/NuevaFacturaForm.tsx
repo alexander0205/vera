@@ -1349,6 +1349,8 @@ export default function NuevaFacturaForm({
                   diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
                   tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
+                  empresa={empresa}
+                  sinPagoRegistrado={!pagoRecibido || sumaPagos(pagoLineas) <= 0}
                 />
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <ClasificacionFactura

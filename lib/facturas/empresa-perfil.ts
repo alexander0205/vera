@@ -18,6 +18,12 @@ export interface EmpresaPerfil {
   recargoMoraActivo?:     boolean;
   recargoMoraPorcentaje?: number;  // basis points (200 = 2.00%)
   recargoMoraDiasGracia?: number;
+  recargoMoraModo?:       'porcentaje' | 'fijo';
+  recargoMoraMontoCents?: number;
+  recargoMoraPeriodicidadDias?: number;
+  recargoMoraCompuesta?:  boolean;
+  recargoMoraTopeBps?:    number;
+  recargoMoraMaxPeriodos?: number;
   // Plazo de pago por defecto. null = de contado; N = crédito a N días.
   plazoPagoDefaultDias?:  number | null;
   // Toggle empresa: alerta double-check del método de pago (combina con permiso).
@@ -37,11 +43,25 @@ export async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
       recargoMoraActivo:     teams.recargoMoraActivo,
       recargoMoraPorcentaje: teams.recargoMoraPorcentaje,
       recargoMoraDiasGracia: teams.recargoMoraDiasGracia,
+      recargoMoraModo:       teams.recargoMoraModo,
+      recargoMoraMontoCents: teams.recargoMoraMontoCents,
+      recargoMoraPeriodicidadDias: teams.recargoMoraPeriodicidadDias,
+      recargoMoraCompuesta:  teams.recargoMoraCompuesta,
+      recargoMoraTopeBps:    teams.recargoMoraTopeBps,
+      recargoMoraMaxPeriodos: teams.recargoMoraMaxPeriodos,
       plazoPagoDefaultDias:  teams.plazoPagoDefaultDias,
       alertaMetodoPagoActivo: teams.alertaMetodoPagoActivo,
     })
     .from(teams)
     .where(eq(teams.id, teamId))
     .limit(1);
-  return team ?? null;
+  if (!team) return null;
+
+  // La columna es varchar; se estrecha aquí para que el resto del sistema
+  // trabaje con la unión y no con un string libre. Cualquier valor inesperado
+  // cae a 'porcentaje', que es el comportamiento histórico.
+  return {
+    ...team,
+    recargoMoraModo: team.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje',
+  };
 }

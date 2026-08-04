@@ -18,10 +18,16 @@ import { and, eq, ne, sql } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
 import { getNcAplicadoCts } from '@/lib/facturas/notas-credito';
+import {
+  calcularMora, fechaPeriodo,
+  type ConfigMora, type ModoMora,
+} from '@/lib/cobranza/mora-calculo';
 
 export type GenerarNotaDebitoMoraResult =
   | { ok: true; notaDebitoId: number; montoCentavos: number }
-  | { ok: false; reason: 'not_found' | 'es_nota_mora' | 'anulada' | 'sin_saldo' | 'ya_existe' | 'mora_cero' };
+  | { ok: false; reason:
+      | 'not_found' | 'es_nota_mora' | 'anulada' | 'sin_saldo' | 'ya_existe'
+      | 'mora_cero' | 'no_vencida' | 'max_periodos' | 'tope_alcanzado' };
 
 export async function generarNotaDebitoMora(
   ecfDocumentId: number,
@@ -41,8 +47,12 @@ export async function generarNotaDebitoMora(
       razonSocialComprador: ecfDocuments.razonSocialComprador,
       moraOrigenId:         ecfDocuments.moraOrigenId,
       tipoEcf:              ecfDocuments.tipoEcf,
-      // Override por factura — % de mora en bps (null = usar default del team).
+      fechaLimitePago:      ecfDocuments.fechaLimitePago,
+      // Overrides por factura (null = usar el default del team).
       moraPorcentaje:       ecfDocuments.moraPorcentaje,
+      moraDiasGracia:       ecfDocuments.moraDiasGracia,
+      moraModo:             ecfDocuments.moraModo,
+      moraMontoCents:       ecfDocuments.moraMontoCents,
     })
     .from(ecfDocuments)
     .where(eq(ecfDocuments.id, ecfDocumentId))
@@ -55,19 +65,37 @@ export async function generarNotaDebitoMora(
 
   if (padre.estado === 'ANULADO') return { ok: false, reason: 'anulada' };
 
-  // ── % del team ─────────────────────────────────────────────────────────────
+  // ── Config del team ────────────────────────────────────────────────────────
   // recargoMoraActivo no se valida aquí: la generación manual debe funcionar
   // aunque esté desactivado. El cron solo procesa teams activos por su cuenta.
   const [team] = await db
-    .select({ recargoMoraPorcentaje: teams.recargoMoraPorcentaje })
+    .select({
+      porcentaje:       teams.recargoMoraPorcentaje,
+      diasGracia:       teams.recargoMoraDiasGracia,
+      modo:             teams.recargoMoraModo,
+      montoCents:       teams.recargoMoraMontoCents,
+      periodicidadDias: teams.recargoMoraPeriodicidadDias,
+      compuesta:        teams.recargoMoraCompuesta,
+      topeBps:          teams.recargoMoraTopeBps,
+      maxPeriodos:      teams.recargoMoraMaxPeriodos,
+    })
     .from(teams)
     .where(eq(teams.id, padre.teamId))
     .limit(1);
 
-  // El override por factura tiene prioridad; fallback al default del team.
-  const pct = padre.moraPorcentaje ?? team?.recargoMoraPorcentaje ?? 0;
+  // Los overrides por factura tienen prioridad; fallback al default del team.
+  const config: ConfigMora = {
+    modo:             (padre.moraModo ?? team?.modo ?? 'porcentaje') as ModoMora,
+    porcentajeBps:    padre.moraPorcentaje ?? team?.porcentaje ?? 0,
+    montoCents:       padre.moraMontoCents ?? team?.montoCents ?? 0,
+    diasGracia:       padre.moraDiasGracia ?? team?.diasGracia ?? 0,
+    periodicidadDias: team?.periodicidadDias ?? 0,
+    compuesta:        team?.compuesta ?? false,
+    topeBps:          team?.topeBps ?? 0,
+    maxPeriodos:      team?.maxPeriodos ?? 0,
+  };
 
-  // ── Saldo del padre = montoTotal − SUM(pagos) ──────────────────────────────
+  // ── Saldo del padre = montoTotal − SUM(pagos) − NC aplicadas ───────────────
   const [{ pagado }] = await db
     .select({
       pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
@@ -84,28 +112,67 @@ export async function generarNotaDebitoMora(
   const saldoPadre = padre.montoTotal - Number(pagado ?? 0) - ncAplicado;
   if (saldoPadre <= 0) return { ok: false, reason: 'sin_saldo' };
 
-  // ── Idempotencia: mora ÚNICA por factura ───────────────────────────────────
-  // Cron: si ya existió una ND de mora (aunque esté ANULADA), no regenera —
-  // anularla equivale a condonar la mora sin que reaparezca al día siguiente.
-  // Manual: solo bloquea si hay una ACTIVA (permite regenerar tras anular una
-  // mora mal calculada). El índice único parcial (migración 0043) protege
-  // contra carreras a nivel DB.
-  const condicionExistente = opts.origen === 'cron'
-    ? eq(ecfDocuments.moraOrigenId, padre.id)
-    : and(
-        eq(ecfDocuments.moraOrigenId, padre.id),
-        ne(ecfDocuments.estado, 'ANULADO'),
-      );
-  const [{ existentes }] = await db
-    .select({ existentes: sql<number>`count(*)` })
+  // ── Moras ya emitidas para esta factura ────────────────────────────────────
+  // Se necesitan tres cifras: cuántos períodos van cobrados (para saber si
+  // toca uno nuevo), cuánta mora sigue impaga (base compuesta) y cuánta se
+  // cobró en total (tope). Las ANULADAS no cuentan para ninguna: anular una
+  // mora es condonarla.
+  const notasMora = await db
+    .select({
+      montoTotal: ecfDocuments.montoTotal,
+      pagado: sql<number>`coalesce((
+        SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
+        WHERE pr.ecf_document_id = ${ecfDocuments.id}
+      ), 0)`,
+    })
     .from(ecfDocuments)
-    .where(condicionExistente);
+    .where(and(
+      eq(ecfDocuments.moraOrigenId, padre.id),
+      ne(ecfDocuments.estado, 'ANULADO'),
+    ));
 
-  if (Number(existentes) > 0) return { ok: false, reason: 'ya_existe' };
+  const periodosCobrados     = notasMora.length;
+  const moraCobradaAcumCents = notasMora.reduce((s, n) => s + n.montoTotal, 0);
+  const moraImpagaCents      = notasMora.reduce(
+    (s, n) => s + Math.max(0, n.montoTotal - Number(n.pagado ?? 0)), 0);
 
-  // ── Monto de la mora ───────────────────────────────────────────────────────
-  const montoMora = Math.round((saldoPadre * pct) / 10000);
-  if (montoMora <= 0) return { ok: false, reason: 'mora_cero' };
+  // ── Días vencido ───────────────────────────────────────────────────────────
+  // La generación manual sobre una factura sin fecha límite se trata como
+  // vencida hoy: el usuario está pidiendo el cargo explícitamente.
+  const diasVencido = padre.fechaLimitePago
+    ? Math.floor((Date.now() - Date.parse(`${padre.fechaLimitePago}T00:00:00Z`)) / 86_400_000)
+    : config.diasGracia;
+
+  const calculo = calcularMora({
+    config,
+    montoFacturaCents: padre.montoTotal,
+    saldoFacturaCents: saldoPadre,
+    moraImpagaCents,
+    moraCobradaAcumCents,
+    periodosCobrados,
+    diasVencido,
+  });
+
+  if (!calculo.aplica) {
+    // 'periodo_ya_cobrado' conserva el nombre histórico 'ya_existe' hacia
+    // afuera para no romper a los llamadores ni los mensajes de la UI.
+    const mapa: Record<string, GenerarNotaDebitoMoraResult> = {
+      no_vencida:         { ok: false, reason: 'no_vencida' },
+      sin_saldo:          { ok: false, reason: 'sin_saldo' },
+      periodo_ya_cobrado: { ok: false, reason: 'ya_existe' },
+      max_periodos:       { ok: false, reason: 'max_periodos' },
+      tope_alcanzado:     { ok: false, reason: 'tope_alcanzado' },
+      monto_cero:         { ok: false, reason: 'mora_cero' },
+    };
+    return mapa[calculo.razon] ?? { ok: false, reason: 'mora_cero' };
+  }
+
+  const montoMora = calculo.montoCents;
+  // Clave del período: es lo que hace idempotente al cron vía el índice único
+  // (mora_origen_id, mora_periodo).
+  const periodoClave = padre.fechaLimitePago
+    ? fechaPeriodo(padre.fechaLimitePago, calculo.periodo, config)
+    : new Date().toISOString().slice(0, 10);
 
   // ── Servicio "Interés por mora" del catálogo (find-or-create, reutilizable) ─
   // La línea de la ND referencia este producto en vez de texto suelto. El % de
@@ -141,6 +208,7 @@ export async function generarNotaDebitoMora(
       // Referencia fiscal solo si el padre tiene un e-NCF real (empieza con 'E').
       ncfModificado:        padre.encf.startsWith('E') ? padre.encf : null,
       moraOrigenId:         padre.id,
+      moraPeriodo:          periodoClave,
       notas:                `Nota de débito por mora — ${padre.codigo ?? padre.encf}`,
       lineasJson:           JSON.stringify([{
         productoId:              moraProductoId,
