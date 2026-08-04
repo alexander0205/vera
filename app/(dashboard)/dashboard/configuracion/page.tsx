@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
+import { WhatsAppCard } from './WhatsAppCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { roleHasPermission } from '@/lib/config/roles';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -647,6 +648,9 @@ export default function ConfiguracionPage() {
               </Box>
             </Box>
           </Box>
+
+        {/* WhatsApp Business */}
+        <WhatsAppCard />
 
         {/* Equipo y permisos */}
         <EquipoCard />

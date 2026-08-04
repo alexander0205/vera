@@ -2160,6 +2160,45 @@ export type ContabilidadConfig       = typeof contabilidadConfig.$inferSelect;
 export type ContabilidadConfigMetodo = typeof contabilidadConfigMetodosPago.$inferSelect;
 export type ContabilidadConfigIngreso = typeof contabilidadConfigIngresos.$inferSelect;
 
+// ── WhatsApp — conexión por negocio (vía crm-escolar, API pública /api/v1) ────
+// Ver docs/superpowers/specs/2026-08-03-whatsapp-conexion-envio-design.md.
+export const whatsappConfig = pgTable('whatsapp_config', {
+  id:       serial('id').primaryKey(),
+  teamId:   integer('team_id').notNull().unique().references(() => teams.id),
+  negocioId: text('negocio_id').notNull(),
+
+  apiKeyCiphered: text('api_key_ciphered').notNull(),
+  apiKeyIv:       text('api_key_iv').notNull(),
+  apiKeyAuthTag:  text('api_key_auth_tag').notNull(),
+
+  webhookSecretCiphered: text('webhook_secret_ciphered'),
+  webhookSecretIv:       text('webhook_secret_iv'),
+  webhookSecretAuthTag:  text('webhook_secret_auth_tag'),
+
+  conectado:      boolean('conectado').notNull().default(false),
+  numeroWhatsapp: text('numero_whatsapp'),
+
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+});
+
+export const whatsappMensajes = pgTable('whatsapp_mensajes', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  telefono:       text('telefono').notNull(),
+  nombreContacto: text('nombre_contacto'),
+  texto:          text('texto'),
+  tipo:           text('tipo').notNull(),
+  conversationId: text('conversation_id').notNull(),
+  messageId:      text('message_id').notNull().unique(),
+  recibidoEn:     timestamp('recibido_en').notNull().defaultNow(),
+}, (t) => ({
+  teamIdx: index('whatsapp_mensajes_team_idx').on(t.teamId, t.recibidoEn),
+}));
+
+export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
+export type WhatsappMensaje = typeof whatsappMensajes.$inferSelect;
+
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
