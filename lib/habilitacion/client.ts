@@ -228,6 +228,9 @@ export async function emitirEcfPrueba(params: {
 }): Promise<EmitirEcfResult> {
   const body = {
     modo: 'emitir' as const,
+    // Marca el Set de Pruebas: es el único flujo que puede emitir fuera de
+    // Producción. El backend exige además permiso de administrador.
+    origen: 'habilitacion' as const,
     tipoEcf: params.tipoEcf,
     encfOverride: params.encf,
     rncComprador: params.rncComprador,

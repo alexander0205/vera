@@ -512,7 +512,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // ─── Permisos del usuario (gating de UI) ─────────────────────────────────────
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
   const { can } = usePermissions();
-  const { tipoVisible } = useTiposDisponibles();
+  const { tipoVisible, enProduccion, ambiente } = useTiposDisponibles();
   const canCreate = can('facturas:crear');
   const canEdit   = can('facturas:editar');
   const canAnular = can('facturas:anular');
@@ -788,6 +788,16 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // es de contado y no tiene pago registrado, abre el alert de confirmación.
   function triggerEnviarDgii() {
     if (!factura) return;
+    // Sin habilitación en DGII el servidor devuelve 403. Se corta antes para
+    // explicar el porqué en vez de mostrar un error de emisión.
+    if (!enProduccion) {
+      toast.info(
+        ambiente
+          ? `Esta empresa está en ambiente ${ambiente}. Completa la habilitación ante la DGII para emitir comprobantes fiscales.`
+          : 'No se pudo verificar el ambiente DGII de la empresa. Intenta de nuevo en un momento.',
+      );
+      return;
+    }
     if (sinLineas) {
       // Sin ítems hay que editar primero. El rol `user` no puede editar →
       // se le indica que pida al admin en lugar de redirigir al guard.

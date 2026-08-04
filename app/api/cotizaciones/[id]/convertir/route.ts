@@ -12,6 +12,7 @@ import { requirePermission } from '@/lib/auth/api-guard';
 import { and, eq, desc } from 'drizzle-orm';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
+import { getAmbienteTenant } from '@/lib/ecf-api/ambiente';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -32,9 +33,15 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
 
   if (!cot) return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 });
 
-  // Generar encf temporal tipo borrador (BOR-XXXXXXXX)
+  // Tipo del borrador resultante: e32 solo si la empresa está habilitada en
+  // DGII. Fuera de Producción la factura nace sin comprobante fiscal, si no
+  // sería un borrador que nunca se puede emitir.
+  const ambiente    = await getAmbienteTenant(teamId);
+  const tipoDestino = ambiente === 'Produccion' ? '32' : 'sin-ncf';
+
+  // sin-ncf no reserva comprobante: encf vacío, igual que el alta manual.
   const rand = Math.random().toString(36).substring(2, 10).toUpperCase();
-  const encf = `BOR-${rand}`;
+  const encf = tipoDestino === 'sin-ncf' ? '' : `BOR-${rand}`;
 
   // Mapear ítems de cotización a lineasJson del formulario de factura.
   // Las cotizaciones nuevas guardan el shape rico de ItemLinea (mismo que factura);
@@ -62,12 +69,12 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
     lineasJson = JSON.stringify(lineas);
   } catch { /* sin ítems */ }
 
-  const codigo     = await generarCodigoFactura(db, { teamId, userId: null, tipoEcf: '32' });
+  const codigo     = await generarCodigoFactura(db, { teamId, userId: null, tipoEcf: tipoDestino });
   const estadoPago = calcularEstadoPago({
     estado: 'BORRADOR', tipoPago: 1, montoTotal: cot.montoTotal, totalPagado: 0,
   });
 
-  // Crear borrador en ecf_documents (tipo 32 por defecto — consumo)
+  // Crear borrador en ecf_documents (e32 si hay habilitación DGII; si no, sin-ncf)
   const [newDoc] = await db
     .insert(ecfDocuments)
     .values({
@@ -75,7 +82,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
       clientId:             cot.clientId ?? null,
       encf,
       codigo,
-      tipoEcf:              '32',
+      tipoEcf:              tipoDestino,
       estado:               'BORRADOR',
       estadoPago,
       rncComprador:         cot.rncComprador ?? null,

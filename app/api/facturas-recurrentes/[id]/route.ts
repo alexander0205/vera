@@ -10,7 +10,8 @@ import { facturasRecurrentes, ecfDocuments, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, and, ne, desc, sql } from 'drizzle-orm';
-import { esTipoEcfRecurrenteValido } from '@/lib/ecf/categorias';
+import { esTipoEcfRecurrenteValido, esTipoVentaFiscal } from '@/lib/ecf/categorias';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -199,6 +200,15 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
   if (body.tipoEcf != null && !esTipoEcfRecurrenteValido(body.tipoEcf)) {
     return NextResponse.json({ error: 'Tipo de comprobante inválido' }, { status: 422 });
+  }
+
+  // Mismo gate que en el alta: no dejar que un plan pase a tipo fiscal si la
+  // empresa no está habilitada en DGII.
+  if (body.tipoEcf != null && esTipoVentaFiscal(body.tipoEcf)) {
+    const ambiente = await getAmbienteTenant(teamId);
+    if (ambiente !== 'Produccion') {
+      return NextResponse.json({ error: mensajeAmbienteNoProduccion(ambiente), ambiente }, { status: 403 });
+    }
   }
 
   // diaCobro solo aplica para frecuencias mensual/trimestral/anual.

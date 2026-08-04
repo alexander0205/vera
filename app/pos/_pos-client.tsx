@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { ArrowLeft, LogOut, FileText, Star, Plus, Camera, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { RncSearch } from '@/components/RncSearch';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
+import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
@@ -286,6 +288,13 @@ function Venta({
   const [listas, setListas] = useState<ListaPrecio[]>([]);
   const [listaPreciosId, setListaPreciosId] = useState<number | 'general'>('general');
   const [tipoEcf, setTipoEcf] = useState<string>(terminal?.tipoEcf ?? 'sin-ncf');
+  const { enProduccion } = useTiposDisponibles();
+
+  // Un terminal configurado con e31/e32 antes de este gate arrastraría ese tipo
+  // a cada venta. Si la empresa no está en Producción, se cae a ticket.
+  useEffect(() => {
+    if (!enProduccion && esTipoVentaFiscal(tipoEcf)) setTipoEcf('sin-ncf');
+  }, [enProduccion, tipoEcf]);
   const [cliente, setCliente] = useState<ClienteView | null>(null);
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false);
   const [descuentoAplicado, setDescuentoAplicado] = useState<DescuentoAplicado | null>(null);
@@ -949,6 +958,7 @@ function Venta({
             onSelectLista={setListaPreciosId}
             tipoEcf={tipoEcf}
             onSelectTipoEcf={setTipoEcf}
+              enProduccion={enProduccion}
             cliente={cliente}
             onSelectCliente={setCliente}
             descuentoAplicado={descuentoAplicado}
@@ -992,6 +1002,7 @@ function Venta({
               onSelectLista={setListaPreciosId}
               tipoEcf={tipoEcf}
               onSelectTipoEcf={setTipoEcf}
+              enProduccion={enProduccion}
               cliente={cliente}
               onSelectCliente={setCliente}
               descuentoAplicado={descuentoAplicado}
@@ -1032,7 +1043,7 @@ function Venta({
 
 function CarritoPanel({
   carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, alertaMetodoPago, estudiante, onSelectEstudiante,
-  listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
+  listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, enProduccion, cliente, onSelectCliente,
   descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido,
 }: {
   carrito: LineaCarrito[];
@@ -1050,6 +1061,8 @@ function CarritoPanel({
   onSelectLista: (id: number | 'general') => void;
   tipoEcf: string;
   onSelectTipoEcf: (t: string) => void;
+  /** false ⇒ la empresa no está habilitada en DGII: solo ticket sin NCF. */
+  enProduccion: boolean;
   cliente: ClienteView | null;
   onSelectCliente: (c: ClienteView | null) => void;
   descuentoAplicado: DescuentoAplicado | null;
@@ -1102,8 +1115,10 @@ function CarritoPanel({
               className="h-11 w-full rounded-lg border border-gray-300 px-2.5 text-sm outline-none focus:border-blue-500"
             >
               <option value="sin-ncf">Ticket (sin NCF)</option>
-              <option value="32">Consumo (e32)</option>
-              <option value="31">Crédito fiscal (e31)</option>
+              {/* Fuera de Producción no existen comprobantes fiscales para esta
+                  empresa: solo queda el ticket. */}
+              {enProduccion && <option value="32">Consumo (e32)</option>}
+              {enProduccion && <option value="31">Crédito fiscal (e31)</option>}
             </select>
           </div>
         </div>
