@@ -31,6 +31,8 @@ const schema = z.object({
   recargoMoraActivo:     z.boolean().optional(),
   recargoMoraPorcentaje: z.number().int().min(0).max(10000).optional(),  // 0–100% en bps (0 = desactivado)
   recargoMoraDiasGracia: z.number().int().min(0).max(365).optional(),
+  // Alerta double-check del método de pago (toggle por-empresa)
+  alertaMetodoPagoActivo: z.boolean().optional(),
   // Módulo cuadre de caja
   cajaHabilitada:        z.boolean().optional(),
   // Límite de duración del turno (horas). null = sin límite.
@@ -103,6 +105,7 @@ export async function POST(req: NextRequest) {
     ...(data.recargoMoraActivo     !== undefined && { recargoMoraActivo: data.recargoMoraActivo }),
     ...(data.recargoMoraPorcentaje !== undefined && { recargoMoraPorcentaje: data.recargoMoraPorcentaje }),
     ...(data.recargoMoraDiasGracia !== undefined && { recargoMoraDiasGracia: data.recargoMoraDiasGracia }),
+    ...(data.alertaMetodoPagoActivo !== undefined && { alertaMetodoPagoActivo: data.alertaMetodoPagoActivo }),
     // Módulo caja
     ...(data.cajaHabilitada !== undefined && { cajaHabilitada: data.cajaHabilitada }),
     ...(data.cajaLimiteHoras  !== undefined && { cajaLimiteHoras: data.cajaLimiteHoras }),
@@ -152,6 +155,8 @@ export async function GET(_req: NextRequest) {
     recargoMoraActivo:     team.recargoMoraActivo,
     recargoMoraPorcentaje: team.recargoMoraPorcentaje,
     recargoMoraDiasGracia: team.recargoMoraDiasGracia,
+    // Alerta double-check del método de pago
+    alertaMetodoPagoActivo: team.alertaMetodoPagoActivo,
     // Módulo caja
     cajaHabilitada:        team.cajaHabilitada,
     cajaLimiteHoras:       team.cajaLimiteHoras,

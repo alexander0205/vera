@@ -152,6 +152,8 @@ export default function ConfiguracionPage() {
   const [cajaLimiteHoras, setCajaLimiteHoras]           = useState<number | null>(null);
   const [cajaAvisoMinutos, setCajaAvisoMinutos]         = useState(60);
   const [cajaGraciaHoras, setCajaGraciaHoras]           = useState<number | null>(2);
+  // Alerta double-check del método de pago
+  const [alertaMetodoPagoActivo, setAlertaMetodoPagoActivo] = useState(false);
   // Módulo punto de venta (POS)
   const [posHabilitado, setPosHabilitado]               = useState(false);
   const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
@@ -185,6 +187,8 @@ export default function ConfiguracionPage() {
         setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
         setCajaAvisoMinutos(d.cajaAvisoMinutos ?? 60);
         setCajaGraciaHoras(d.cajaGraciaHoras ?? null);
+        // Alerta método de pago
+        setAlertaMetodoPagoActivo(d.alertaMetodoPagoActivo ?? false);
         // Módulo POS
         setPosHabilitado(d.posHabilitado ?? false);
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
@@ -219,6 +223,7 @@ export default function ConfiguracionPage() {
           cajaLimiteHoras,
           cajaAvisoMinutos,
           cajaGraciaHoras,
+          alertaMetodoPagoActivo,
           posHabilitado,
           posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
@@ -787,6 +792,38 @@ export default function ConfiguracionPage() {
           )}
         </CardContent>
       </Card>}
+
+      {/* ── Alerta de método de pago ────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Alerta de método de pago</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Al cobrar una factura o venta en POS, pide reconfirmar el método de pago antes de
+            finalizar (evita registrar efectivo por transferencia, o viceversa). Aplica solo a los
+            roles que además tengan el permiso <code>Alerta double-check de método de pago</code>.
+          </p>
+
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Pedir confirmación del método de pago</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Aparece una alerta al cobrar para revisar el método antes de crear la factura.
+              </p>
+            </div>
+            <button
+              type="button" role="switch" aria-checked={alertaMetodoPagoActivo}
+              onClick={() => setAlertaMetodoPagoActivo(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                alertaMetodoPagoActivo ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${alertaMetodoPagoActivo ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── Módulo Punto de Venta (POS) ─────────────────────────────────── */}
       <Card>

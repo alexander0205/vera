@@ -115,6 +115,12 @@ export const teams = pgTable('teams', {
   recargoMoraPorcentaje:  integer('recargo_mora_porcentaje').notNull().default(200),  // basis points; 200 = 2.00%
   recargoMoraDiasGracia:  integer('recargo_mora_dias_gracia').notNull().default(5),
 
+  // ── Alerta double-check del método de pago ────────────────────────────────
+  // Toggle por empresa. Si está activo (Y el rol tiene el permiso
+  // 'pagos:alerta-metodo'), al cobrar una factura/POS se pide reconfirmar el
+  // método de pago antes de finalizar. Nace apagado.
+  alertaMetodoPagoActivo: boolean('alerta_metodo_pago_activo').notNull().default(false),
+
   // ── Módulo Cuadre de Caja ─────────────────────────────────────────────────
   // Toggle por empresa. Si está activo: aparece el grupo "Caja" en el sidebar,
   // el badge de estado en el header, y no se puede facturar sin turno abierto.
