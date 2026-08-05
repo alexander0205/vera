@@ -62,6 +62,11 @@
         "tipo": "arreglo",
         "titulo": "Enviar la factura por correo vuelve a funcionar",
         "detalle": "Al enviar una factura o una cotización por correo salía un error y el cliente nunca la recibía. Ya sale con el PDF adjunto. Además, si el correo llegara a fallar, ahora el sistema lo avisa en vez de decir que se envió."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "El correo de la factura ahora sale a nombre de tu institución",
+        "detalle": "Antes el cliente recibía un correo genérico del sistema. Ahora llega con tu logo, tus colores, tu nombre y tus datos de contacto, y si responde te escribe a ti. Igual para las cotizaciones."
       }
     ]
   },
