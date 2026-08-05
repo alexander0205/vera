@@ -326,8 +326,15 @@ export default function NuevaCotizacionForm({
           }),
         },
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error guardando la cotización');
+      // Un 500 del route handler llega con body vacío (o con el HTML de error de
+      // la plataforma), así que parsear a ciegas convertía cualquier fallo del
+      // servidor en un "Unexpected end of JSON input" que no dice nada.
+      const raw = await res.text();
+      let data: { error?: string } | null = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch { /* body no-JSON */ }
+      if (!res.ok) {
+        throw new Error(data?.error ?? `Error guardando la cotización (HTTP ${res.status})`);
+      }
       toast.success(editando ? 'Cotización actualizada' : 'Cotización guardada');
       router.push(editando ? `/dashboard/cotizaciones/${editId}` : '/dashboard/cotizaciones');
     } catch (e: unknown) {
