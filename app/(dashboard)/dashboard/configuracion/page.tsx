@@ -164,7 +164,6 @@ export default function ConfiguracionPage() {
   const [recargoMontoFijo, setRecargoMontoFijo]         = useState('500.00'); // mostrado en RD$
   const [recargoDiasGracia, setRecargoDiasGracia]       = useState('0');      // días tras el vencimiento
   const [recargoPeriodicidad, setRecargoPeriodicidad]   = useState('0');      // días; 0 = una sola vez
-  const [recargoCompuesta, setRecargoCompuesta]         = useState(false);    // base incluye moras impagas
   const [recargoTope, setRecargoTope]                   = useState('');       // % de mora acumulada; '' = sin tope
   const [recargoMaxPeriodos, setRecargoMaxPeriodos]     = useState('');       // '' = sin límite
   const [recargoLimites, setRecargoLimites]             = useState(false);    // muestra tope + máx. de cargos
@@ -208,7 +207,6 @@ export default function ConfiguracionPage() {
         setRecargoMontoFijo(((d.recargoMoraMontoCents ?? 50000) / 100).toFixed(2));
         setRecargoDiasGracia(String(d.recargoMoraDiasGracia ?? 0));
         setRecargoPeriodicidad(String(d.recargoMoraPeriodicidadDias ?? 0));
-        setRecargoCompuesta(d.recargoMoraCompuesta ?? false);
         setRecargoTope(d.recargoMoraTopeBps ? (d.recargoMoraTopeBps / 100).toFixed(0) : '');
         setRecargoMaxPeriodos(d.recargoMoraMaxPeriodos ? String(d.recargoMoraMaxPeriodos) : '');
         // El toggle de límites nace encendido si ya había un tope o un máximo.
@@ -252,7 +250,9 @@ export default function ConfiguracionPage() {
           recargoMoraMontoCents: Math.round(parseFloat(recargoMontoFijo || '0') * 100),
           recargoMoraDiasGracia: parseInt(recargoDiasGracia || '0', 10),
           recargoMoraPeriodicidadDias: parseInt(recargoPeriodicidad || '0', 10),
-          recargoMoraCompuesta:  recargoCompuesta,
+          // Mora sobre mora descartada: la mora siempre se calcula sobre el
+          // saldo de la factura (base simple). La columna queda en false.
+          recargoMoraCompuesta:  false,
           // Sin el toggle de límites activo, no se guarda ni tope ni máximo.
           recargoMoraTopeBps:    recargoLimites && recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
           recargoMoraMaxPeriodos: recargoLimites && recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
@@ -770,33 +770,9 @@ export default function ConfiguracionPage() {
               </div>
             </div>
 
-            {/* Base compuesta — solo tiene sentido si se repite */}
+            {/* Límites de la mora — solo con cobro periódico */}
             {parseInt(recargoPeriodicidad || '0', 10) > 0 && (
               <>
-                <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
-                  <div className="pr-4">
-                    <p className="text-sm font-medium text-gray-800">Mora sobre mora (base compuesta)</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Cada cargo se calcula incluyendo las moras anteriores no pagadas.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={recargoCompuesta}
-                    onClick={() => setRecargoCompuesta(v => !v)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                      recargoCompuesta ? 'bg-teal-600' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                        recargoCompuesta ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
                 {/* Límites de la mora — opcionales, detrás de su propio toggle */}
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
                   <div className="pr-4">
@@ -872,7 +848,7 @@ export default function ConfiguracionPage() {
                   montoCents: Math.round(parseFloat(recargoMontoFijo || '0') * 100),
                   diasGracia: parseInt(recargoDiasGracia || '0', 10),
                   periodicidadDias: parseInt(recargoPeriodicidad || '0', 10),
-                  compuesta: recargoCompuesta,
+                  compuesta: false,
                   topeBps: recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
                   maxPeriodos: recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
                 },
