@@ -64,10 +64,6 @@ async function getPlan(teamId: number, id: number): Promise<InitialPlan | null> 
     clientId:     row.clientId,
     items:        row.items,
     notas:        row.notas,
-    moraModo:       row.moraModo,
-    moraMontoCents: row.moraMontoCents,
-    moraPorcentaje: row.moraPorcentaje,
-    moraDiasGracia: row.moraDiasGracia,
   };
 }
 

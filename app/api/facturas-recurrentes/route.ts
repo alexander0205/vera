@@ -90,10 +90,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: mensajeAmbienteNoProduccion(ambiente), ambiente }, { status: 403 });
   }
 
-  if (body.moraModo != null && body.moraModo !== 'porcentaje' && body.moraModo !== 'fijo') {
-    return NextResponse.json({ error: 'Modo de mora inválido' }, { status: 422 });
-  }
-
   const frecuencia = body.frecuencia ?? 'mensual';
   // diaCobro solo aplica para frecuencias mensual/trimestral/anual
   const diaCobro = ['mensual', 'trimestral', 'anual'].includes(frecuencia)
@@ -119,11 +115,6 @@ export async function POST(req: NextRequest) {
       items:          body.items ? JSON.stringify(body.items) : '[]',
       notas:          body.notas ?? null,
       totalEstimado:  Math.round((body.totalEstimado ?? 0) * 100),
-      // Overrides de mora por plan (null = usar el default de la empresa).
-      moraModo:       body.moraModo ?? null,
-      moraMontoCents: body.moraMontoCents != null ? Math.round(body.moraMontoCents) : null,
-      moraPorcentaje: body.moraPorcentaje != null ? Math.round(body.moraPorcentaje) : null,
-      moraDiasGracia: body.moraDiasGracia != null ? parseInt(body.moraDiasGracia) : null,
     })
     .returning();
 

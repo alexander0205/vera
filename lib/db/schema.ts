@@ -495,12 +495,6 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // sin .references() para evitar import circular (FK declarada en la migración).
   moraOrigenId: integer('mora_origen_id'),
 
-  // Override por factura del recargo por mora (crédito + recargo activo).
-  // NULL = usar el default del team (recargoMoraPorcentaje / recargoMoraDiasGracia).
-  moraPorcentaje: integer('mora_porcentaje'),  // basis points (200 = 2%)
-  moraDiasGracia: integer('mora_dias_gracia'), // días de gracia
-  moraModo:       varchar('mora_modo', { length: 12 }),  // 'porcentaje' | 'fijo'
-  moraMontoCents: integer('mora_monto_cents'),           // cargo fijo en centavos
   /** Período que cubre esta nota de mora (inicio del período). Solo en las notas. */
   moraPeriodo:    date('mora_periodo'),
 
@@ -772,14 +766,6 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   items:            text('items').notNull().default('[]'),
   notas:            text('notas'),
   totalEstimado:    integer('total_estimado').notNull().default(0),
-  /** Override de mora por plan (bps; 200=2%). null → usa config global del team. */
-  moraPorcentaje:   integer('mora_porcentaje'),
-  /** Override de días de gracia por plan. null → usa config global del team. */
-  moraDiasGracia:   integer('mora_dias_gracia'),
-  /** Override del modo de mora por plan: 'porcentaje' | 'fijo'. */
-  moraModo:         varchar('mora_modo', { length: 12 }),
-  /** Override del cargo fijo por plan, en centavos. */
-  moraMontoCents:   integer('mora_monto_cents'),
   facturasEmitidas: integer('facturas_emitidas').notNull().default(0),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),

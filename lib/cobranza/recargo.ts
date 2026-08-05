@@ -84,8 +84,6 @@ export async function aplicarRecargosMoraVencidos(
         encf:            ecfDocuments.encf,
         montoTotal:      ecfDocuments.montoTotal,
         fechaLimitePago: ecfDocuments.fechaLimitePago,
-        // Override por factura — días de gracia (null = usar default del team).
-        moraDiasGracia:  ecfDocuments.moraDiasGracia,
         // Saldo = montoTotal - pagos recibidos
         pagado: sql<number>`coalesce((
           SELECT SUM(monto_centavos) FROM pagos_recibidos

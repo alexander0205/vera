@@ -48,11 +48,6 @@ export async function generarNotaDebitoMora(
       moraOrigenId:         ecfDocuments.moraOrigenId,
       tipoEcf:              ecfDocuments.tipoEcf,
       fechaLimitePago:      ecfDocuments.fechaLimitePago,
-      // Overrides por factura (null = usar el default del team).
-      moraPorcentaje:       ecfDocuments.moraPorcentaje,
-      moraDiasGracia:       ecfDocuments.moraDiasGracia,
-      moraModo:             ecfDocuments.moraModo,
-      moraMontoCents:       ecfDocuments.moraMontoCents,
     })
     .from(ecfDocuments)
     .where(eq(ecfDocuments.id, ecfDocumentId))
@@ -83,12 +78,13 @@ export async function generarNotaDebitoMora(
     .where(eq(teams.id, padre.teamId))
     .limit(1);
 
-  // Los overrides por factura tienen prioridad; fallback al default del team.
+  // La mora se rige solo por la configuración central del team (sin overrides
+  // por factura ni por plan).
   const config: ConfigMora = {
-    modo:             (padre.moraModo ?? team?.modo ?? 'porcentaje') as ModoMora,
-    porcentajeBps:    padre.moraPorcentaje ?? team?.porcentaje ?? 0,
-    montoCents:       padre.moraMontoCents ?? team?.montoCents ?? 0,
-    diasGracia:       padre.moraDiasGracia ?? team?.diasGracia ?? 0,
+    modo:             (team?.modo ?? 'porcentaje') as ModoMora,
+    porcentajeBps:    team?.porcentaje ?? 0,
+    montoCents:       team?.montoCents ?? 0,
+    diasGracia:       team?.diasGracia ?? 0,
     periodicidadDias: team?.periodicidadDias ?? 0,
     compuesta:        team?.compuesta ?? false,
     topeBps:          team?.topeBps ?? 0,

@@ -1,8 +1,9 @@
 -- Mora: cargo por monto fijo, cobro periódico, base compuesta y topes.
 --
 -- Hasta ahora la mora era un único cargo porcentual sobre el saldo de la
--- factura. Se amplía en cuatro ejes, todos configurables por empresa y
--- overridables por factura y por plan recurrente.
+-- factura. Se amplía en cuatro ejes, todos configurables por empresa.
+-- (La personalización por factura/plan se descartó: la mora se rige solo
+-- por la configuración central del team.)
 --
 -- COMPATIBILIDAD: las empresas existentes quedan en periodicidad = 0
 -- (una sola vez, el comportamiento de hoy). Activar el cobro periódico sobre
@@ -33,17 +34,9 @@ ALTER TABLE "teams" ADD COLUMN IF NOT EXISTS "recargo_mora_tope_bps" integer NOT
 -- Máximo de períodos a cobrar. 0 = sin límite.
 ALTER TABLE "teams" ADD COLUMN IF NOT EXISTS "recargo_mora_max_periodos" integer NOT NULL DEFAULT 0;
 
--- ── Override por factura ─────────────────────────────────────────────────────
-ALTER TABLE "ecf_documents" ADD COLUMN IF NOT EXISTS "mora_modo" varchar(12);
-ALTER TABLE "ecf_documents" ADD COLUMN IF NOT EXISTS "mora_monto_cents" integer;
-
 -- Período que cubre esta nota de mora (fecha de inicio del período).
 -- NULL en las notas generadas antes de este cambio.
 ALTER TABLE "ecf_documents" ADD COLUMN IF NOT EXISTS "mora_periodo" date;
-
--- ── Override por plan recurrente ─────────────────────────────────────────────
-ALTER TABLE "facturas_recurrentes" ADD COLUMN IF NOT EXISTS "mora_modo" varchar(12);
-ALTER TABLE "facturas_recurrentes" ADD COLUMN IF NOT EXISTS "mora_monto_cents" integer;
 
 -- ── Índices ──────────────────────────────────────────────────────────────────
 
