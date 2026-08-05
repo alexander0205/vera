@@ -96,22 +96,6 @@ const S = StyleSheet.create({
     color:             '#1a1a1a',
   },
 
-  // ── Watermark BORRADOR ──
-  watermark: {
-    position: 'absolute',
-    top:      280,
-    left:     60,
-    right:    60,
-    alignItems: 'center',
-  },
-  watermarkText: {
-    fontFamily:  'Helvetica-Bold',
-    fontSize:    108,
-    color:       '#e8e8e8',
-    letterSpacing: 4,
-    transform:   'rotate(-30deg)',
-  },
-
   // ── Header (fixed) ──
   header: {
     flexDirection:  'row',
@@ -280,8 +264,6 @@ const S = StyleSheet.create({
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
-  const esBorrador = data.estado === 'borrador';
-
   return (
     <Document
       title={`Cotización ${data.numero}`}
@@ -290,12 +272,8 @@ export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
     >
       <Page size="A4" style={S.page}>
 
-        {/* ── Watermark BORRADOR ── */}
-        {esBorrador && (
-          <View style={S.watermark} fixed>
-            <Text style={S.watermarkText}>BORRADOR</Text>
-          </View>
-        )}
+        {/* Sin marca de agua: el cliente recibe la cotización tal cual, y para
+            él «borrador» es un estado interno nuestro, no información suya. */}
 
         {/* ── Header (fixed) ── */}
         <View style={S.header} fixed>

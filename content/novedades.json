@@ -87,6 +87,11 @@
         "tipo": "mejora",
         "titulo": "«Convertir a factura» siempre a la vista",
         "detalle": "El botón vivía en la columna de la derecha, que en pantallas chicas queda al final de la página. Ahora está también en la barra fija de abajo."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "La cotización ya no sale marcada como borrador",
+        "detalle": "El PDF llevaba un sello gigante de BORRADOR cruzando la página mientras la cotización no se hubiera enviado. El cliente recibía un documento que parecía a medio hacer. Ya sale limpio."
       }
     ]
   },
