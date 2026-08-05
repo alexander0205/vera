@@ -151,6 +151,11 @@ export interface InitialPlan {
   clientId:     number | null;
   items:        string; // JSON: ItemLinea[]
   notas:        string | null;
+  // Overrides de mora por plan (null = usar el default de la empresa).
+  moraModo?:       string | null;
+  moraMontoCents?: number | null;
+  moraPorcentaje?: number | null;
+  moraDiasGracia?: number | null;
 }
 
 interface Props {
@@ -321,6 +326,48 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   const [notas, setNotas]                  = useState(initialPlan?.notas ?? '');
   const [pieFactura, setPieFactura]        = useState('');
 
+  // ── Override de mora por plan ────────────────────────────────────────────────
+  // Personaliza modo/monto/porcentaje/gracia solo para este plan; la periodicidad,
+  // base compuesta y topes siguen viniendo de la config de la empresa.
+  const tieneOverrideMora =
+    initialPlan?.moraModo != null || initialPlan?.moraMontoCents != null ||
+    initialPlan?.moraPorcentaje != null || initialPlan?.moraDiasGracia != null;
+  const [moraOverride, setMoraOverride] = useState(tieneOverrideMora);
+  const [moraModoPlan, setMoraModoPlan] = useState<'porcentaje' | 'fijo'>(
+    initialPlan?.moraModo === 'fijo' ? 'fijo'
+      : initialPlan?.moraModo === 'porcentaje' ? 'porcentaje'
+      : (empresa?.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje'),
+  );
+  const [moraPctPlan, setMoraPctPlan] = useState(
+    ((initialPlan?.moraPorcentaje ?? empresa?.recargoMoraPorcentaje ?? 200) / 100).toFixed(2),
+  );
+  const [moraMontoPlan, setMoraMontoPlan] = useState(
+    ((initialPlan?.moraMontoCents ?? empresa?.recargoMoraMontoCents ?? 50000) / 100).toFixed(2),
+  );
+  const [moraGraciaPlan, setMoraGraciaPlan] = useState(
+    String(initialPlan?.moraDiasGracia ?? empresa?.recargoMoraDiasGracia ?? 0),
+  );
+
+  // Config de mora que aplicará realmente a este plan: si hay override se usan
+  // modo/monto/porcentaje/gracia del plan; periodicidad, base compuesta y topes
+  // siempre vienen de la empresa (no hay override por plan para esos).
+  const configMoraEfectiva = useMemo(() => ({
+    modo: (moraOverride ? moraModoPlan : (empresa?.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje')) as 'porcentaje' | 'fijo',
+    porcentajeBps: moraOverride
+      ? Math.round(parseFloat(moraPctPlan || '0') * 100)
+      : (empresa?.recargoMoraPorcentaje ?? 0),
+    montoCents: moraOverride
+      ? Math.round(parseFloat(moraMontoPlan || '0') * 100)
+      : (empresa?.recargoMoraMontoCents ?? 0),
+    diasGracia: moraOverride
+      ? parseInt(moraGraciaPlan || '0', 10)
+      : (empresa?.recargoMoraDiasGracia ?? 0),
+    periodicidadDias: empresa?.recargoMoraPeriodicidadDias ?? 0,
+    compuesta: empresa?.recargoMoraCompuesta ?? false,
+    topeBps: empresa?.recargoMoraTopeBps ?? 0,
+    maxPeriodos: empresa?.recargoMoraMaxPeriodos ?? 0,
+  }), [moraOverride, moraModoPlan, moraPctPlan, moraMontoPlan, moraGraciaPlan, empresa]);
+
   // ── UI state ───────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -483,6 +530,13 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
           clientId:       clienteSeleccionado?.id ?? null,
           notas:          notasFinal,
           totalEstimado:  totales.total,
+          // Override de mora por plan. Sin personalizar → null = default empresa.
+          moraModo:       moraOverride ? moraModoPlan : null,
+          moraMontoCents: moraOverride && moraModoPlan === 'fijo'
+            ? Math.round(parseFloat(moraMontoPlan || '0') * 100) : null,
+          moraPorcentaje: moraOverride && moraModoPlan === 'porcentaje'
+            ? Math.round(parseFloat(moraPctPlan || '0') * 100) : null,
+          moraDiasGracia: moraOverride ? parseInt(moraGraciaPlan || '0', 10) : null,
           items:          items.filter(i => i.nombreItem.trim()).map(item => ({
             nombreItem:         item.nombreItem,
             referencia:         item.referencia || undefined,
@@ -795,23 +849,75 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
                     </p>
                     {empresa?.recargoMoraActivo && (
                       <p>
-                        <span className="font-semibold">Mora:</span>{' '}
+                        <span className="font-semibold">Mora{moraOverride ? ' (personalizada)' : ''}:</span>{' '}
                         {describirMora(
-                          {
-                            modo: empresa.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje',
-                            porcentajeBps: empresa.recargoMoraPorcentaje ?? 0,
-                            montoCents: empresa.recargoMoraMontoCents ?? 0,
-                            diasGracia: empresa.recargoMoraDiasGracia ?? 0,
-                            periodicidadDias: empresa.recargoMoraPeriodicidadDias ?? 0,
-                            compuesta: empresa.recargoMoraCompuesta ?? false,
-                            topeBps: empresa.recargoMoraTopeBps ?? 0,
-                            maxPeriodos: empresa.recargoMoraMaxPeriodos ?? 0,
-                          },
+                          configMoraEfectiva,
                           (cents) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                         )}
                       </p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Override de mora por plan — solo crédito y si la empresa tiene mora activa */}
+              {tipoPago === '2' && empresa?.recargoMoraActivo && (
+                <div className="rounded-lg border border-gray-200 px-3 py-2.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="pr-4">
+                      <p className="text-sm font-medium text-gray-800">Personalizar mora para este plan</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Sobrescribe modo, monto/porcentaje y gracia solo para este plan. La periodicidad y los topes siguen los de la empresa.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={moraOverride}
+                      onClick={() => setMoraOverride(v => !v)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                        moraOverride ? 'bg-teal-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        moraOverride ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {moraOverride && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Tipo</Label>
+                        <select
+                          value={moraModoPlan}
+                          onChange={e => setMoraModoPlan(e.target.value as 'porcentaje' | 'fijo')}
+                          className="w-full h-10 rounded-md border border-gray-200 px-2 text-sm"
+                        >
+                          <option value="porcentaje">Porcentaje</option>
+                          <option value="fijo">Monto fijo</option>
+                        </select>
+                      </div>
+                      {moraModoPlan === 'porcentaje' ? (
+                        <div className="space-y-1">
+                          <Label className="text-xs">Porcentaje (%)</Label>
+                          <Input type="number" step="0.01" min="0.01" max="100"
+                            value={moraPctPlan} onChange={e => setMoraPctPlan(e.target.value)} className="h-10" />
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <Label className="text-xs">Monto fijo (RD$)</Label>
+                          <Input type="number" step="0.01" min="0.01"
+                            value={moraMontoPlan} onChange={e => setMoraMontoPlan(e.target.value)} className="h-10" />
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Días de gracia</Label>
+                        <Input type="number" step="1" min="0" max="365"
+                          value={moraGraciaPlan} onChange={e => setMoraGraciaPlan(e.target.value)} className="h-10" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -202,6 +202,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: 'Tipo de comprobante inválido' }, { status: 422 });
   }
 
+  if (body.moraModo != null && body.moraModo !== 'porcentaje' && body.moraModo !== 'fijo') {
+    return NextResponse.json({ error: 'Modo de mora inválido' }, { status: 422 });
+  }
+
   // Mismo gate que en el alta: no dejar que un plan pase a tipo fiscal si la
   // empresa no está habilitada en DGII.
   if (body.tipoEcf != null && esTipoVentaFiscal(body.tipoEcf)) {
@@ -257,6 +261,11 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(body.clientId      !== undefined && { clientId: body.clientId ?? null }),
       ...(body.totalEstimado != null && { totalEstimado: Math.round(body.totalEstimado * 100) }),
       ...(body.facturasEmitidas != null && { facturasEmitidas: body.facturasEmitidas }),
+      // Overrides de mora por plan (null = usar el default de la empresa).
+      ...(body.moraModo       !== undefined && { moraModo: body.moraModo ?? null }),
+      ...(body.moraMontoCents !== undefined && { moraMontoCents: body.moraMontoCents != null ? Math.round(body.moraMontoCents) : null }),
+      ...(body.moraPorcentaje !== undefined && { moraPorcentaje: body.moraPorcentaje != null ? Math.round(body.moraPorcentaje) : null }),
+      ...(body.moraDiasGracia !== undefined && { moraDiasGracia: body.moraDiasGracia != null ? parseInt(body.moraDiasGracia) : null }),
       updatedAt: new Date(),
     })
     .where(and(eq(facturasRecurrentes.id, numId), eq(facturasRecurrentes.teamId, teamId)))

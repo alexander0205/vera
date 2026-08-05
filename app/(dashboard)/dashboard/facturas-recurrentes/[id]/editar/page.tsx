@@ -26,12 +26,20 @@ async function getEmpresaPerfil(teamId: number): Promise<EmpresaPerfil | null> {
       recargoMoraActivo:     teams.recargoMoraActivo,
       recargoMoraPorcentaje: teams.recargoMoraPorcentaje,
       recargoMoraDiasGracia: teams.recargoMoraDiasGracia,
+      recargoMoraModo:       teams.recargoMoraModo,
+      recargoMoraMontoCents: teams.recargoMoraMontoCents,
+      recargoMoraPeriodicidadDias: teams.recargoMoraPeriodicidadDias,
+      recargoMoraCompuesta:  teams.recargoMoraCompuesta,
+      recargoMoraTopeBps:    teams.recargoMoraTopeBps,
+      recargoMoraMaxPeriodos: teams.recargoMoraMaxPeriodos,
       plazoPagoDefaultDias:  teams.plazoPagoDefaultDias,
     })
     .from(teams)
     .where(eq(teams.id, teamId))
     .limit(1);
-  return team ?? null;
+  if (!team) return null;
+  // El schema tipa recargo_mora_modo como string; se estrecha a la unión.
+  return { ...team, recargoMoraModo: team.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje' };
 }
 
 async function getPlan(teamId: number, id: number): Promise<InitialPlan | null> {
@@ -56,6 +64,10 @@ async function getPlan(teamId: number, id: number): Promise<InitialPlan | null> 
     clientId:     row.clientId,
     items:        row.items,
     notas:        row.notas,
+    moraModo:       row.moraModo,
+    moraMontoCents: row.moraMontoCents,
+    moraPorcentaje: row.moraPorcentaje,
+    moraDiasGracia: row.moraDiasGracia,
   };
 }
 
