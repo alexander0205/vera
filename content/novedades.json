@@ -77,6 +77,16 @@
         "tipo": "nuevo",
         "titulo": "Escribe tus términos y condiciones una sola vez",
         "detalle": "En Configuración puedes dejar guardados los términos y condiciones de tu empresa. A partir de ahí se escriben solos en cada factura, cotización o plan recurrente que crees, y los puedes editar o borrar documento por documento."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Los beneficiarios ya funcionan en las cotizaciones",
+        "detalle": "El selector de beneficiario por línea salía siempre vacío, así que no se podía cotizar por estudiante. Ahora se elige igual que en la factura, se ve en el PDF y se conserva al convertir la cotización en factura."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "«Convertir a factura» siempre a la vista",
+        "detalle": "El botón vivía en la columna de la derecha, que en pantallas chicas queda al final de la página. Ahora está también en la barra fija de abajo."
       }
     ]
   },

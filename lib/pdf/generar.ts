@@ -385,6 +385,7 @@ export async function generarCotizacionPdf(opts: {
       precio,
       cantidad,
       total:       precio * cantidad,
+      dependienteNombre: String(it.dependienteNombre ?? '') || null,
     };
   });
 

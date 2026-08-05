@@ -13,6 +13,8 @@ export interface ItemCotizacionPDF {
   precio:       number; // DOP
   cantidad:     number;
   total:        number; // DOP
+  /** Beneficiario de la línea (dependiente del cliente), si tiene. */
+  dependienteNombre?: string | null;
 }
 
 export interface CotizacionPDFData {
@@ -383,7 +385,9 @@ export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
         {data.items.map((item, idx) => (
           <View key={idx} style={[S.tableRow, idx % 2 === 1 ? S.tableRowAlt : {}]}>
             <Text style={[S.tdCell, S.colCant]}>{item.cantidad}</Text>
-            <Text style={[S.tdBold, S.colDesc]}>{item.descripcion}</Text>
+            <Text style={[S.tdBold, S.colDesc]}>
+              {item.dependienteNombre ? `${item.dependienteNombre} - ${item.descripcion}` : item.descripcion}
+            </Text>
             <Text style={[S.tdCell, S.colPrecio]}>{fmt(item.precio)}</Text>
             <Text style={[S.tdCell, S.colValor]}>{fmt(item.total)}</Text>
           </View>
