@@ -4,6 +4,19 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.15.0 — 2026-08-05
+
+### Nuevo
+
+- **configuracion**: términos y condiciones por defecto
+- **cotizaciones**: enviar por correo desde la lista
+  - El e-NCF solo se muestra cuando existe. Las facturas sin comprobante fiscal guardan un placeholder (BOR-XXXXXXXX) en esa misma columna, y se estaba imprimiendo como si fuera un número fiscal real.
+  - El encabezado y el asunto dicen qué es el documento según su código: una nota de crédito no es una factura.
+
+### Arreglado
+
+- **cotizaciones**: borrar términos o notas no se guardaba
+
 ## v1.14.0 — 2026-08-05
 
 ### Nuevo
