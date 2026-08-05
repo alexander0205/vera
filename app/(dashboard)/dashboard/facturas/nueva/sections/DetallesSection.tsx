@@ -107,7 +107,7 @@ export function DetallesSection({
         <div>
           <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
           <Select value={condicionPago} onValueChange={setCondicionPago}>
-            <SelectTrigger className="mt-1 h-10">
+            <SelectTrigger className="mt-1 h-10 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
