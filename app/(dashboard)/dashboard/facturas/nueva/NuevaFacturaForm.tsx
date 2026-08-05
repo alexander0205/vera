@@ -843,7 +843,7 @@ export default function NuevaFacturaForm({
     if (tipoEcf === '32' && totales.total >= 250000 && !rncFinal.trim())
       return 'Factura de Consumo ≥ DOP 250,000 requiere RNC o cédula del comprador';
     if (condicionPago === '2' && !fechaLimitePago)
-      return 'Para crédito falta el plazo de vencimiento. Configúralo en el plazo de pago por defecto de la empresa (Configuración).';
+      return 'Para tipo de pago Crédito, debes definir el plazo de vencimiento.';
     if (dependientesCliente.length > 0) {
       const itemsConProducto = items.filter(i => i.nombreItem.trim());
       if (itemsConProducto.some(i => !i.dependienteId))
@@ -1390,7 +1390,7 @@ export default function NuevaFacturaForm({
                 <DetallesSection
                   regla={regla} tipoEcf={tipoEcf}
                   condicionPago={condicionPago} setCondicionPago={setCondicionPago}
-                  diasParaPago={diasParaPago}
+                  diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
                   tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
                   empresa={empresa}

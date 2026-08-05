@@ -1,5 +1,6 @@
 'use client';
 
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -43,24 +44,17 @@ const TIPOS_INGRESO = [
 // Tipos donde TipoIngresos NO aplica (campo prohibido en IdDoc): Compras, Gastos, Pagos Exterior.
 const SIN_TIPO_INGRESO = ['41', '43', '47'];
 
-/** Formatea YYYY-MM-DD → DD/MM/YYYY */
-function formatFechaCorta(iso: string): string {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  if (!y || !m || !d) return '';
-  return `${d}/${m}/${y}`;
-}
-
 interface Props {
   regla: TipoEcfRegla | undefined;
   tipoEcf: string;
   condicionPago: string;
   setCondicionPago: (v: string) => void;
-  /** Plazo de crédito en días (viene de la config central; no editable aquí). */
+  /** Plazo de crédito en días (editable; arranca del default de la empresa). */
   diasParaPago: string;
+  setDiasParaPago: (v: string) => void;
   tipoIngresos: string;
   setTipoIngresos: (v: string) => void;
-  /** Vencimiento derivado (YYYY-MM-DD) — solo para mostrar el info pill. */
+  /** Vencimiento derivado (YYYY-MM-DD) — se muestra read-only y en el info pill. */
   fechaLimitePago: string;
   /** Config de mora de la empresa, para avisar los términos al elegir crédito. */
   empresa?: EmpresaPerfil | null;
@@ -72,7 +66,7 @@ export function DetallesSection({
   regla,
   tipoEcf,
   condicionPago, setCondicionPago,
-  diasParaPago,
+  diasParaPago, setDiasParaPago,
   tipoIngresos, setTipoIngresos,
   fechaLimitePago,
   empresa,
@@ -100,10 +94,9 @@ export function DetallesSection({
 
   return (
     <div className="space-y-4">
-      {/* Fila: Condición de pago · Tipo de ingresos.
-          El plazo de vencimiento ya no se edita aquí: se toma de la
-          configuración central de la empresa y se muestra en el aviso de abajo. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Fila: Condición de pago · Plazo de vencimiento (días) · Vence el (fecha
+          read-only, derivada del plazo) · Tipo de ingresos. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div>
           <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
           <Select value={condicionPago} onValueChange={setCondicionPago}>
@@ -118,11 +111,43 @@ export function DetallesSection({
           </Select>
         </div>
 
+        <div>
+          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
+            Plazo de vencimiento {esCredito && <span className="text-red-500">*</span>}
+          </Label>
+          <div className="relative mt-1">
+            <Input
+              type="number"
+              min={1}
+              value={diasParaPago}
+              onChange={(e) => setDiasParaPago(e.target.value)}
+              disabled={!esCredito}
+              className="h-10 pr-10 disabled:bg-gray-50 disabled:text-gray-300"
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+          </div>
+        </div>
+
+        <div>
+          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
+            Vence el
+          </Label>
+          {/* Read-only: se recalcula solo cuando cambia el plazo de vencimiento. */}
+          <Input
+            type="date"
+            value={esCredito ? fechaLimitePago : ''}
+            readOnly
+            disabled
+            tabIndex={-1}
+            className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+          />
+        </div>
+
         {muestraTipoIngresos && (
           <div>
             <Label className="text-xs text-gray-600 uppercase tracking-wide">Tipo de ingresos</Label>
             <Select value={tipoIngresos} onValueChange={setTipoIngresos}>
-              <SelectTrigger className="mt-1 h-10">
+              <SelectTrigger className="mt-1 h-10 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -135,21 +160,13 @@ export function DetallesSection({
         )}
       </div>
 
-      {/* Info pill: vencimiento derivado + mora que aplicará si no se paga */}
-      {esCredito && fechaLimitePago && (
+      {/* Info: mora que aplicará si la factura vence sin pagarse */}
+      {esCredito && fechaLimitePago && textoMora && (
         <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
           <Info className="h-4 w-4 text-teal-700 shrink-0 mt-0.5" />
-          <div className="text-sm text-teal-900">
-            <p>
-              Crédito a <span className="font-semibold">{diasParaPago} días</span> · vence el{' '}
-              <span className="font-semibold">{formatFechaCorta(fechaLimitePago)}</span>.
-            </p>
-            {textoMora && (
-              <p className="mt-0.5 text-teal-800">
-                Si no se paga, se aplicará una mora de <span className="font-semibold">{textoMora}</span>
-              </p>
-            )}
-          </div>
+          <p className="text-sm text-teal-900">
+            Si no se paga tras el vencimiento, se aplicará una mora de <span className="font-semibold">{textoMora}</span>
+          </p>
         </div>
       )}
 
