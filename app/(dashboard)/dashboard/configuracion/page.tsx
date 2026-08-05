@@ -167,6 +167,7 @@ export default function ConfiguracionPage() {
   const [recargoCompuesta, setRecargoCompuesta]         = useState(false);    // base incluye moras impagas
   const [recargoTope, setRecargoTope]                   = useState('');       // % de mora acumulada; '' = sin tope
   const [recargoMaxPeriodos, setRecargoMaxPeriodos]     = useState('');       // '' = sin límite
+  const [recargoLimites, setRecargoLimites]             = useState(false);    // muestra tope + máx. de cargos
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
   // null = sin límite. Es el estado real por defecto: la función nace apagada.
@@ -210,6 +211,8 @@ export default function ConfiguracionPage() {
         setRecargoCompuesta(d.recargoMoraCompuesta ?? false);
         setRecargoTope(d.recargoMoraTopeBps ? (d.recargoMoraTopeBps / 100).toFixed(0) : '');
         setRecargoMaxPeriodos(d.recargoMoraMaxPeriodos ? String(d.recargoMoraMaxPeriodos) : '');
+        // El toggle de límites nace encendido si ya había un tope o un máximo.
+        setRecargoLimites(Boolean(d.recargoMoraTopeBps) || Boolean(d.recargoMoraMaxPeriodos));
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
@@ -250,8 +253,9 @@ export default function ConfiguracionPage() {
           recargoMoraDiasGracia: parseInt(recargoDiasGracia || '0', 10),
           recargoMoraPeriodicidadDias: parseInt(recargoPeriodicidad || '0', 10),
           recargoMoraCompuesta:  recargoCompuesta,
-          recargoMoraTopeBps:    recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
-          recargoMoraMaxPeriodos: recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
+          // Sin el toggle de límites activo, no se guarda ni tope ni máximo.
+          recargoMoraTopeBps:    recargoLimites && recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
+          recargoMoraMaxPeriodos: recargoLimites && recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
           cajaHabilitada,
           cajaLimiteHoras,
           cajaAvisoMinutos,
@@ -793,37 +797,68 @@ export default function ConfiguracionPage() {
                   </button>
                 </div>
 
-                {/* Topes — solo relevantes con cobro periódico */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-md">
-                  <div className="space-y-1.5">
-                    <Label>Tope de mora acumulada (%)</Label>
-                    <div className="relative">
+                {/* Límites de la mora — opcionales, detrás de su propio toggle */}
+                <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+                  <div className="pr-4">
+                    <p className="text-sm font-medium text-gray-800">Ponerle un límite a la mora</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Deja de acumular al llegar a un monto máximo o a cierto número de cobros.
+                      Sin esto, la mora se sigue cobrando mientras la factura siga vencida.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={recargoLimites}
+                    onClick={() => setRecargoLimites(v => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                      recargoLimites ? 'bg-teal-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        recargoLimites ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {recargoLimites && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-md pl-1">
+                    <div className="space-y-1.5">
+                      <Label>Dejar de cobrar al llegar a</Label>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          step="1"
+                          min="0"
+                          value={recargoTope}
+                          onChange={e => setRecargoTope(e.target.value)}
+                          placeholder="Sin tope"
+                          className="pr-8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        % del monto de la factura. Ej.: 50% → la mora acumulada nunca pasa de la mitad de la factura.
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Máximo de veces que se cobra</Label>
                       <Input
                         type="number"
                         step="1"
                         min="0"
-                        value={recargoTope}
-                        onChange={e => setRecargoTope(e.target.value)}
-                        placeholder="Sin tope"
-                        className="pr-8"
+                        value={recargoMaxPeriodos}
+                        onChange={e => setRecargoMaxPeriodos(e.target.value)}
+                        placeholder="Sin límite"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                      <p className="text-xs text-gray-400">
+                        Ej.: 6 → se cobra a lo sumo 6 veces y luego se detiene.
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-400">% del monto de la factura. Vacío = sin tope.</p>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Máximo de períodos</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      min="0"
-                      value={recargoMaxPeriodos}
-                      onChange={e => setRecargoMaxPeriodos(e.target.value)}
-                      placeholder="Sin límite"
-                    />
-                    <p className="text-xs text-gray-400">Cuántas veces como máximo. Vacío = sin límite.</p>
-                  </div>
-                </div>
+                )}
               </>
             )}
 
