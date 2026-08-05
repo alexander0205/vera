@@ -92,6 +92,11 @@
         "tipo": "mejora",
         "titulo": "La cotización ya no sale marcada como borrador",
         "detalle": "El PDF llevaba un sello gigante de BORRADOR cruzando la página mientras la cotización no se hubiera enviado. El cliente recibía un documento que parecía a medio hacer. Ya sale limpio."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Abre una factura o cotización haciendo clic en cualquier parte de la fila",
+        "detalle": "Para ver el detalle había que atinarle a un icono gris diminuto al final de la fila, y en cotizaciones ni eso existía. Ahora la fila completa abre el documento, el número se ve como enlace y las cotizaciones tienen su botón de ver detalle."
       }
     ]
   },

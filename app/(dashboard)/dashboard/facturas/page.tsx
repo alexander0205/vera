@@ -195,7 +195,7 @@ export default function FacturasPage() {
       render: doc => (
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          className="font-mono text-xs font-semibold text-gray-700 hover:text-teal-700 hover:underline tabular-nums leading-tight block"
+          className="font-mono text-xs font-semibold text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600 tabular-nums leading-tight block"
           title={doc.codigo ?? `#${doc.id}`}
         >
           {doc.codigo ?? `#${doc.id}`}
@@ -426,6 +426,9 @@ export default function FacturasPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        // Toda la fila abre el detalle: el ojo de la derecha y el código son
+        // dianas chicas en una tabla ancha, y se leían como decoración.
+        rowHref={doc => `/dashboard/facturas/${doc.id}`}
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
