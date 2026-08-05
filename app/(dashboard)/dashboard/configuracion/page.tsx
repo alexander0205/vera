@@ -31,6 +31,19 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+/** Traduce la periodicidad en días a una frase clara para el usuario. */
+function etiquetaPeriodicidad(dias: number): string {
+  if (!dias || dias <= 0) return 'Se cobra una sola vez al vencer.';
+  const equivalente =
+    dias === 7  ? ' (semanal)' :
+    dias === 15 ? ' (quincenal)' :
+    dias === 30 ? ' (mensual)' :
+    dias === 60 ? ' (cada 2 meses)' :
+    dias === 90 ? ' (trimestral)' :
+    dias === 365 ? ' (anual)' : '';
+  return `Se repite cada ${dias} días${equivalente} mientras siga vencida.`;
+}
+
 const COLORES = [
   { label: 'Azul DGII',    value: '#1e40af' },
   { label: 'Azul oscuro',  value: '#1e3a5f' },
@@ -617,7 +630,7 @@ export default function ConfiguracionPage() {
             <div>
               <p className="text-sm font-medium text-gray-800">Activar recargo por mora</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                El cron diario (09:00 UTC) aplicará el recargo a las facturas a crédito vencidas.
+                Cada día, de forma automática, se aplicará el recargo a las facturas a crédito vencidas.
               </p>
             </div>
             <button
@@ -672,7 +685,7 @@ export default function ConfiguracionPage() {
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
                 </div>
-                <p className="text-xs text-gray-400">Default: 2.00% (200 basis points).</p>
+                <p className="text-xs text-gray-400">Ejemplo: 2.00% del saldo pendiente en cada cargo.</p>
               </div>
             ) : (
               <div className="space-y-1.5 md:max-w-xs">
@@ -709,17 +722,47 @@ export default function ConfiguracionPage() {
                 <p className="text-xs text-gray-400">Días tras el vencimiento antes del primer cargo. 0 = al vencer.</p>
               </div>
               <div className="space-y-1.5">
-                <Label>Repetir cada (días)</Label>
-                <Input
-                  type="number"
-                  step="1"
-                  min="0"
-                  max="365"
-                  value={recargoPeriodicidad}
-                  onChange={e => setRecargoPeriodicidad(e.target.value)}
-                  placeholder="0"
-                />
-                <p className="text-xs text-gray-400">0 = una sola vez. 30 = mensual mientras siga vencida.</p>
+                <Label>¿Cada cuánto se repite?</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { dias: 0,  label: 'Una sola vez' },
+                    { dias: 15, label: 'Cada 15 días' },
+                    { dias: 30, label: 'Cada 30 días' },
+                    { dias: 60, label: 'Cada 60 días' },
+                  ].map(opt => {
+                    const activo = parseInt(recargoPeriodicidad || '0', 10) === opt.dias;
+                    return (
+                      <button
+                        key={opt.dias}
+                        type="button"
+                        onClick={() => setRecargoPeriodicidad(String(opt.dias))}
+                        className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                          activo
+                            ? 'border-teal-600 bg-teal-50 text-teal-700 font-medium'
+                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="365"
+                    value={recargoPeriodicidad}
+                    onChange={e => setRecargoPeriodicidad(e.target.value)}
+                    placeholder="0"
+                    className="pr-16"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  {etiquetaPeriodicidad(parseInt(recargoPeriodicidad || '0', 10))}
+                </p>
               </div>
             </div>
 
