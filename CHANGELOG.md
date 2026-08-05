@@ -4,6 +4,14 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.13.1 — 2026-08-05
+
+### Arreglado
+
+- **cotizaciones**: renumerar migración 0075 duplicada y no tragarse el error
+  - Renumera la migración a 0078 (y su script) para que la colisión no vuelva a esconderla. El journal de drizzle solo llega a 0004; de ahí en adelante las migraciones se corren a mano, así que nada avisa de un archivo que se saltó.
+  - El formulario lee el body con `res.text()` y parsea dentro de un try, cayendo al status HTTP cuando no hay JSON que parsear.
+
 ## v1.13.0 — 2026-08-04
 
 ### Nuevo
