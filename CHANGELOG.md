@@ -4,6 +4,12 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.14.0 — 2026-08-05
+
+### Nuevo
+
+- **email**: los comprobantes salen a nombre de la institución
+
 ## v1.13.2 — 2026-08-05
 
 ### Arreglado
