@@ -12,7 +12,31 @@ import { teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
-import { generarNotaDebitoMora } from '@/lib/cobranza/nota-debito-mora';
+import { generarNotaDebitoMora, previsualizarMoraDeFactura } from '@/lib/cobranza/nota-debito-mora';
+
+/**
+ * GET /api/facturas/[id]/nota-debito-mora
+ * Preview de la próxima mora automática (cuándo + cuánto), sin generar nada.
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  const teamId = await getTeamIdForUser();
+  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+
+  const { id } = await params;
+  const ecfDocumentId = Number(id);
+  if (!Number.isInteger(ecfDocumentId) || ecfDocumentId <= 0) {
+    return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+  }
+
+  const preview = await previsualizarMoraDeFactura(ecfDocumentId);
+  return NextResponse.json({ preview });
+}
 
 export async function POST(
   _req: NextRequest,

@@ -23,6 +23,140 @@ import {
   type ConfigMora, type ModoMora,
 } from '@/lib/cobranza/mora-calculo';
 
+/**
+ * Preview de la próxima mora automática de una factura, para mostrarla en el
+ * detalle SIN generar nada. Read-only. Reusa `calcularMora`, así que el monto
+ * coincide con lo que cobraría el cron.
+ *   - 'inactiva'  → la empresa no tiene mora automática activa.
+ *   - 'no_aplica' → no habrá cargo (sin saldo, sin vencimiento, tope, etc.).
+ *   - 'pendiente' → habrá un cargo: `fecha` (cuándo) e `montoCents` (cuánto).
+ *                   `yaVencida` = el cargo ya es exigible hoy; false = proyección.
+ */
+export type PreviewMora =
+  | { estado: 'inactiva' }
+  | { estado: 'no_aplica'; razon: string }
+  | { estado: 'pendiente'; fecha: string; montoCents: number; yaVencida: boolean };
+
+export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise<PreviewMora> {
+  const [padre] = await db
+    .select({
+      id:              ecfDocuments.id,
+      teamId:          ecfDocuments.teamId,
+      encf:            ecfDocuments.encf,
+      montoTotal:      ecfDocuments.montoTotal,
+      estado:          ecfDocuments.estado,
+      moraOrigenId:    ecfDocuments.moraOrigenId,
+      tipoPago:        ecfDocuments.tipoPago,
+      fechaLimitePago: ecfDocuments.fechaLimitePago,
+    })
+    .from(ecfDocuments)
+    .where(eq(ecfDocuments.id, ecfDocumentId))
+    .limit(1);
+
+  if (!padre) return { estado: 'no_aplica', razon: 'not_found' };
+  // La mora automática solo aplica a facturas a crédito con vencimiento; una
+  // ND de mora nunca genera mora sobre sí misma; anulada no cobra.
+  if (padre.moraOrigenId != null) return { estado: 'no_aplica', razon: 'es_nota_mora' };
+  if (padre.estado === 'ANULADO') return { estado: 'no_aplica', razon: 'anulada' };
+  if (padre.tipoPago !== 2 || !padre.fechaLimitePago) return { estado: 'no_aplica', razon: 'sin_vencimiento' };
+
+  const [team] = await db
+    .select({
+      activo:           teams.recargoMoraActivo,
+      porcentaje:       teams.recargoMoraPorcentaje,
+      diasGracia:       teams.recargoMoraDiasGracia,
+      modo:             teams.recargoMoraModo,
+      montoCents:       teams.recargoMoraMontoCents,
+      periodicidadDias: teams.recargoMoraPeriodicidadDias,
+      compuesta:        teams.recargoMoraCompuesta,
+      topeBps:          teams.recargoMoraTopeBps,
+      maxPeriodos:      teams.recargoMoraMaxPeriodos,
+    })
+    .from(teams)
+    .where(eq(teams.id, padre.teamId))
+    .limit(1);
+
+  if (!team?.activo) return { estado: 'inactiva' };
+
+  const config: ConfigMora = {
+    modo:             (team.modo ?? 'porcentaje') as ModoMora,
+    porcentajeBps:    team.porcentaje ?? 0,
+    montoCents:       team.montoCents ?? 0,
+    diasGracia:       team.diasGracia ?? 0,
+    periodicidadDias: team.periodicidadDias ?? 0,
+    compuesta:        team.compuesta ?? false,
+    topeBps:          team.topeBps ?? 0,
+    maxPeriodos:      team.maxPeriodos ?? 0,
+  };
+
+  // Saldo real = total − pagos − NC aplicadas.
+  const [{ pagado }] = await db
+    .select({ pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)` })
+    .from(pagosRecibidos)
+    .where(and(eq(pagosRecibidos.ecfDocumentId, padre.id), eq(pagosRecibidos.teamId, padre.teamId)));
+  const ncAplicado = await getNcAplicadoCts(padre.teamId, padre.id, padre.encf);
+  const saldoPadre = padre.montoTotal - Number(pagado ?? 0) - ncAplicado;
+  if (saldoPadre <= 0) return { estado: 'no_aplica', razon: 'sin_saldo' };
+
+  // Moras ya emitidas (mismo LEFT JOIN + GROUP BY que el generador).
+  const notasMora = await db
+    .select({
+      montoTotal: ecfDocuments.montoTotal,
+      pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
+    })
+    .from(ecfDocuments)
+    .leftJoin(pagosRecibidos, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
+    .where(and(eq(ecfDocuments.moraOrigenId, padre.id), ne(ecfDocuments.estado, 'ANULADO')))
+    .groupBy(ecfDocuments.id, ecfDocuments.montoTotal);
+
+  const periodosCobrados     = notasMora.length;
+  const moraCobradaAcumCents = notasMora.reduce((s, n) => s + n.montoTotal, 0);
+  const moraImpagaCents      = notasMora.reduce((s, n) => s + Math.max(0, n.montoTotal - Number(n.pagado ?? 0)), 0);
+
+  const diasVencidoReal = Math.floor(
+    (Date.now() - Date.parse(`${padre.fechaLimitePago}T00:00:00Z`)) / 86_400_000,
+  );
+
+  const entradaBase = {
+    config,
+    montoFacturaCents: padre.montoTotal,
+    saldoFacturaCents: saldoPadre,
+    moraImpagaCents,
+    moraCobradaAcumCents,
+    periodosCobrados,
+  };
+
+  // Cargo exigible HOY.
+  const ahora = calcularMora({ ...entradaBase, diasVencido: diasVencidoReal });
+  if (ahora.aplica) {
+    return {
+      estado: 'pendiente',
+      fecha: fechaPeriodo(padre.fechaLimitePago, ahora.periodo, config),
+      montoCents: ahora.montoCents,
+      yaVencida: diasVencidoReal >= config.diasGracia,
+    };
+  }
+
+  // Aún no vencida (o dentro de la gracia): proyectar el primer período pendiente
+  // como si ya hubiera pasado la gracia, para anticipar cuándo y cuánto.
+  if (ahora.razon === 'no_vencida') {
+    const proyeccion = calcularMora({
+      ...entradaBase,
+      diasVencido: config.diasGracia + periodosCobrados * config.periodicidadDias,
+    });
+    if (proyeccion.aplica) {
+      return {
+        estado: 'pendiente',
+        fecha: fechaPeriodo(padre.fechaLimitePago, proyeccion.periodo, config),
+        montoCents: proyeccion.montoCents,
+        yaVencida: false,
+      };
+    }
+  }
+
+  return { estado: 'no_aplica', razon: ahora.aplica ? 'ok' : ahora.razon };
+}
+
 export type GenerarNotaDebitoMoraResult =
   | { ok: true; notaDebitoId: number; montoCentavos: number }
   | { ok: false; reason:

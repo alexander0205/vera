@@ -698,6 +698,24 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const [generandoMora, setGenerandoMora] = useState(false);
   const [showConfirmMora, setShowConfirmMora] = useState(false);
 
+  // Preview de la próxima mora automática (cuándo + cuánto), sin generar nada.
+  const [moraPreview, setMoraPreview] = useState<
+    | { estado: 'inactiva' }
+    | { estado: 'no_aplica'; razon: string }
+    | { estado: 'pendiente'; fecha: string; montoCents: number; yaVencida: boolean }
+    | null
+  >(null);
+
+  useEffect(() => {
+    if (!factura || factura.moraOrigenId != null) { setMoraPreview(null); return; }
+    let cancelled = false;
+    fetch(`/api/facturas/${docId}/nota-debito-mora`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled && d?.preview) setMoraPreview(d.preview); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [factura, docId]);
+
   async function handleGenerarNotaDebitoMora() {
     if (!factura) return;
     setGenerandoMora(true);
@@ -1666,6 +1684,25 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   </div>
                 )}
               </dl>
+            </section>
+          )}
+
+          {/* Próxima mora automática (preview, no genera nada) */}
+          {moraPreview?.estado === 'pendiente' && (
+            <section className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+              <div className="flex items-start gap-3 px-4 py-3.5 md:px-5">
+                <Clock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-gray-900">Próxima mora automática</h2>
+                  <p className="text-sm text-gray-600 mt-0.5">
+                    {moraPreview.yaVencida ? (
+                      <>Exigible desde el <span className="font-semibold text-gray-900">{fmtFechaCorta(moraPreview.fecha)}</span> — se generará <span className="font-semibold">{fmtDOP(moraPreview.montoCents / 100)}</span> en la próxima corrida automática.</>
+                    ) : (
+                      <>Si no se paga, el <span className="font-semibold text-gray-900">{fmtFechaCorta(moraPreview.fecha)}</span> se cobrará <span className="font-semibold">{fmtDOP(moraPreview.montoCents / 100)}</span>.</>
+                    )}
+                  </p>
+                </div>
+              </div>
             </section>
           )}
 
