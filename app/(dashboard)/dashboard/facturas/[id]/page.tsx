@@ -1687,46 +1687,79 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </section>
           )}
 
-          {/* Próxima mora automática (preview, no genera nada) */}
-          {moraPreview?.estado === 'pendiente' && (
-            <section className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
-              <div className="flex items-start gap-3 px-4 py-3.5 md:px-5">
-                <Clock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-                <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-gray-900">Próxima mora automática</h2>
-                  <p className="text-sm text-gray-600 mt-0.5">
-                    {moraPreview.yaVencida ? (
-                      <>Exigible desde el <span className="font-semibold text-gray-900">{fmtFechaCorta(moraPreview.fecha)}</span> — se generará <span className="font-semibold">{fmtDOP(moraPreview.montoCents / 100)}</span> en la próxima corrida automática.</>
-                    ) : (
-                      <>Si no se paga, el <span className="font-semibold text-gray-900">{fmtFechaCorta(moraPreview.fecha)}</span> se cobrará <span className="font-semibold">{fmtDOP(moraPreview.montoCents / 100)}</span>.</>
-                    )}
-                  </p>
+          {/* ── Sección Mora: cuánto se ha aplicado + próxima automática + notas ── */}
+          {(() => {
+            const notasActivas = (factura.notasMora ?? []).filter(nd => nd.estado !== 'ANULADO');
+            const aplicadoCents = notasActivas.reduce((s, nd) => s + nd.montoTotal, 0);
+            const hayProxima = moraPreview?.estado === 'pendiente';
+            // Solo mostrar la sección si ya hay mora aplicada o viene una.
+            if (notasActivas.length === 0 && !hayProxima) return null;
+            return (
+              <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
+                  <TrendingUp className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
+                  <h2 className="text-sm font-semibold text-gray-900">Mora</h2>
                 </div>
-              </div>
-            </section>
-          )}
+                <div className="px-4 pb-4 md:px-5 space-y-3">
+                  {/* Resumen: aplicado + próxima */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5">
+                      <p className="text-xs text-gray-500">Mora aplicada</p>
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                        {fmtDOP(aplicadoCents / 100)}
+                        {notasActivas.length > 0 && (
+                          <span className="ml-1 text-xs font-normal text-gray-400">
+                            · {notasActivas.length} nota{notasActivas.length === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2.5">
+                      <p className="text-xs text-gray-500">Próxima mora automática</p>
+                      {hayProxima ? (
+                        <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                          {fmtDOP(moraPreview!.montoCents / 100)}
+                          <span className="ml-1 text-xs font-normal text-gray-500">
+                            · {fmtFechaCorta(moraPreview!.fecha)}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-sm text-gray-400 mt-0.5">Sin cargos programados</p>
+                      )}
+                    </div>
+                  </div>
 
-          {/* Notas de débito por mora atadas a esta factura */}
-          {factura.notasMora && factura.notasMora.length > 0 && (
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-                <Plus className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
-                <h2 className="text-sm font-semibold text-gray-900">Notas de débito por mora</h2>
-              </div>
-              <div className="px-4 pb-4 md:px-5 space-y-2">
-                {factura.notasMora.map(nd => (
-                  <Link
-                    key={nd.id}
-                    href={`/dashboard/facturas/${nd.id}`}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
-                  >
-                    <span className="font-mono text-xs font-semibold text-orange-800">{nd.codigo ?? `#${nd.id}`}</span>
-                    <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(nd.montoTotal / 100)}</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
+                  {/* Frase de contexto de la próxima mora */}
+                  {hayProxima && (
+                    <p className="text-xs text-gray-500">
+                      {moraPreview!.yaVencida
+                        ? `Ya exigible desde el ${fmtFechaCorta(moraPreview!.fecha)}; se generará en la próxima corrida automática.`
+                        : `Si no se paga, el ${fmtFechaCorta(moraPreview!.fecha)} se cobrará ${fmtDOP(moraPreview!.montoCents / 100)}.`}
+                    </p>
+                  )}
+
+                  {/* Detalle: notas de débito por mora emitidas */}
+                  {notasActivas.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Notas de débito por mora
+                      </p>
+                      {notasActivas.map(nd => (
+                        <Link
+                          key={nd.id}
+                          href={`/dashboard/facturas/${nd.id}`}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
+                        >
+                          <span className="font-mono text-xs font-semibold text-orange-800">{nd.codigo ?? `#${nd.id}`}</span>
+                          <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(nd.montoTotal / 100)}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            );
+          })()}
 
           {/* Pago — historial read-only (los pagos se gestionan en Cuentas por cobrar).
               No aplica a notas de crédito: acreditan, no se cobran. */}
