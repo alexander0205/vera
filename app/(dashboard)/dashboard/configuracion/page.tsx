@@ -822,6 +822,20 @@ export default function ConfiguracionPage() {
                         );
                       })}
                     </div>
+                    {/* Días personalizados: para cualquier valor fuera de los presets. */}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-gray-400 shrink-0">o cada</span>
+                      <div className="relative w-24">
+                        <Input
+                          type="number" step="1" min="0" max="365"
+                          value={recargoPeriodicidad}
+                          onChange={e => setRecargoPeriodicidad(e.target.value)}
+                          placeholder="0"
+                          className="h-9 pr-10 text-sm"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+                      </div>
+                    </div>
                     <p className="text-xs text-gray-400">
                       {etiquetaPeriodicidad(parseInt(recargoPeriodicidad || '0', 10))}
                     </p>
