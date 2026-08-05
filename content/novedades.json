@@ -97,6 +97,11 @@
         "tipo": "mejora",
         "titulo": "Abre una factura o cotización haciendo clic en cualquier parte de la fila",
         "detalle": "Para ver el detalle había que atinarle a un icono gris diminuto al final de la fila, y en cotizaciones ni eso existía. Ahora la fila completa abre el documento, el número se ve como enlace y las cotizaciones tienen su botón de ver detalle."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Los montos ya no se montan unos sobre otros en el PDF",
+        "detalle": "En facturas con precios de seis dígitos, las columnas de precio, ITBIS y total se encimaban y el documento quedaba ilegible. Ahora cada columna tiene su propio espacio con una separación fija entre ellas, y la descripción baja de línea cuando es larga en vez de empujar a los montos."
       }
     ]
   },

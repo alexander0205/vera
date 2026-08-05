@@ -126,6 +126,7 @@ function numeroALetras(n: number): string {
 const fmt = (n: number) =>
   'RD$' + n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+
 // Labels desde la fuente única (lib/pagos/metodos). 'Pago' si viene vacío.
 const metodoLabelPDF = (m: string) => (m ? labelMetodo(m) : 'Pago');
 
@@ -321,15 +322,21 @@ const S = StyleSheet.create({
     color:    '#666666',
   },
 
-  // column widths
-  colCant:   { width: 52,  textAlign: 'left'  },
-  colDesc:   { flex: 3,                       },
-  colUnidad: { width: 56,  textAlign: 'left'  },
-  colPrecio: { width: 56,  textAlign: 'right' },
-  colDesc2:  { width: 50,  textAlign: 'right' },
-  colImp:    { width: 46,  textAlign: 'right' },
-  colValor:  { width: 64,  textAlign: 'right' },
-  colNum:    { width: 20,  textAlign: 'left'  },
+  // Anchos de columna. Las de dinero se dimensionan para el peor caso —
+  // "RD$99,999,999.99" a 8.5pt ≈ 74pt— más un canal de 8pt a la izquierda, para
+  // que dos cifras largas seguidas no puedan tocarse. Antes medían 56/46/64 sin
+  // canal y a partir de RD$47,250.00 el texto se salía sobre la columna vecina.
+  //
+  // La descripción es la única flexible: cuando el texto es largo baja de línea
+  // dentro de su celda en vez de robarle ancho a los montos.
+  colCant:   { width: 46,  textAlign: 'left',  paddingRight: 6 },
+  colDesc:   { flex: 3,                        paddingRight: 8 },
+  colUnidad: { width: 50,  textAlign: 'left',  paddingRight: 6 },
+  colPrecio: { width: 82,  textAlign: 'right', paddingLeft: 8  },
+  colDesc2:  { width: 50,  textAlign: 'right', paddingLeft: 8  },
+  colImp:    { width: 76,  textAlign: 'right', paddingLeft: 8  },
+  colValor:  { width: 88,  textAlign: 'right', paddingLeft: 8  },
+  colNum:    { width: 16,  textAlign: 'left'  },
 
   // COMPRADOR section
   compLabel: {
