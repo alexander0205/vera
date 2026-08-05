@@ -31,6 +31,7 @@ import { calcularTotales } from '../../facturas/nueva/utils/calculos';
 import { BottomActionBar } from '../../facturas/nueva/sections/BottomActionBar';
 import { EmpresaBlock } from '../../facturas/nueva/sections/EmpresaBlock';
 import type { Cliente, ItemLinea, Producto, EmpresaPerfil } from '../../facturas/nueva/utils/types';
+import { describirMora } from '@/lib/cobranza/mora-calculo';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -784,13 +785,33 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
                 </div>
               </div>
 
-              {/* Info pill: vencimiento */}
+              {/* Info pill: vencimiento + mora */}
               {tipoPago === '2' && diasParaPago && (
-                <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
-                  <Info className="h-4 w-4 text-teal-700 shrink-0" />
-                  <p className="text-sm text-teal-900">
-                    Vence <span className="font-semibold">{diasParaPago} días</span> después de cada emisión.
-                  </p>
+                <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
+                  <Info className="h-4 w-4 text-teal-700 shrink-0 mt-0.5" />
+                  <div className="text-sm text-teal-900 space-y-0.5">
+                    <p>
+                      Vence <span className="font-semibold">{diasParaPago} días</span> después de cada emisión.
+                    </p>
+                    {empresa?.recargoMoraActivo && (
+                      <p>
+                        <span className="font-semibold">Mora:</span>{' '}
+                        {describirMora(
+                          {
+                            modo: empresa.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje',
+                            porcentajeBps: empresa.recargoMoraPorcentaje ?? 0,
+                            montoCents: empresa.recargoMoraMontoCents ?? 0,
+                            diasGracia: empresa.recargoMoraDiasGracia ?? 0,
+                            periodicidadDias: empresa.recargoMoraPeriodicidadDias ?? 0,
+                            compuesta: empresa.recargoMoraCompuesta ?? false,
+                            topeBps: empresa.recargoMoraTopeBps ?? 0,
+                            maxPeriodos: empresa.recargoMoraMaxPeriodos ?? 0,
+                          },
+                          (cents) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        )}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 

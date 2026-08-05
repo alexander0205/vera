@@ -117,19 +117,23 @@ export async function generarNotaDebitoMora(
   // toca uno nuevo), cuánta mora sigue impaga (base compuesta) y cuánta se
   // cobró en total (tope). Las ANULADAS no cuentan para ninguna: anular una
   // mora es condonarla.
+  // LEFT JOIN + GROUP BY en vez de subconsulta correlacionada: al interpolar
+  // ${ecfDocuments.id} dentro de un `sql` anidado, Drizzle lo renderiza sin
+  // calificar ("id"), y como pagos_recibidos también tiene columna id la
+  // correlación casaba pr.ecf_document_id = pr.id → SUM siempre 0 (toda mora se
+  // contaba impaga). El join califica bien y arregla la base compuesta.
   const notasMora = await db
     .select({
       montoTotal: ecfDocuments.montoTotal,
-      pagado: sql<number>`coalesce((
-        SELECT SUM(pr.monto_centavos) FROM pagos_recibidos pr
-        WHERE pr.ecf_document_id = ${ecfDocuments.id}
-      ), 0)`,
+      pagado: sql<number>`coalesce(sum(${pagosRecibidos.montoCentavos}), 0)`,
     })
     .from(ecfDocuments)
+    .leftJoin(pagosRecibidos, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
     .where(and(
       eq(ecfDocuments.moraOrigenId, padre.id),
       ne(ecfDocuments.estado, 'ANULADO'),
-    ));
+    ))
+    .groupBy(ecfDocuments.id, ecfDocuments.montoTotal);
 
   const periodosCobrados     = notasMora.length;
   const moraCobradaAcumCents = notasMora.reduce((s, n) => s + n.montoTotal, 0);

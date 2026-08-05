@@ -18,6 +18,7 @@ import { EquipoCard } from './EquipoCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { roleHasPermission } from '@/lib/config/roles';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
+import { describirMora } from '@/lib/cobranza/mora-calculo';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,13 @@ export default function ConfiguracionPage() {
   // Recargo por mora
   const [recargoActivo, setRecargoActivo]               = useState(false);
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
+  const [recargoModo, setRecargoModo]                   = useState<'porcentaje' | 'fijo'>('porcentaje');
+  const [recargoMontoFijo, setRecargoMontoFijo]         = useState('500.00'); // mostrado en RD$
+  const [recargoDiasGracia, setRecargoDiasGracia]       = useState('0');      // días tras el vencimiento
+  const [recargoPeriodicidad, setRecargoPeriodicidad]   = useState('0');      // días; 0 = una sola vez
+  const [recargoCompuesta, setRecargoCompuesta]         = useState(false);    // base incluye moras impagas
+  const [recargoTope, setRecargoTope]                   = useState('');       // % de mora acumulada; '' = sin tope
+  const [recargoMaxPeriodos, setRecargoMaxPeriodos]     = useState('');       // '' = sin límite
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
   // null = sin límite. Es el estado real por defecto: la función nace apagada.
@@ -182,6 +190,13 @@ export default function ConfiguracionPage() {
         // Recargo por mora — convertir bps → %
         setRecargoActivo(d.recargoMoraActivo ?? false);
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
+        setRecargoModo(d.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje');
+        setRecargoMontoFijo(((d.recargoMoraMontoCents ?? 50000) / 100).toFixed(2));
+        setRecargoDiasGracia(String(d.recargoMoraDiasGracia ?? 0));
+        setRecargoPeriodicidad(String(d.recargoMoraPeriodicidadDias ?? 0));
+        setRecargoCompuesta(d.recargoMoraCompuesta ?? false);
+        setRecargoTope(d.recargoMoraTopeBps ? (d.recargoMoraTopeBps / 100).toFixed(0) : '');
+        setRecargoMaxPeriodos(d.recargoMoraMaxPeriodos ? String(d.recargoMoraMaxPeriodos) : '');
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
@@ -217,8 +232,13 @@ export default function ConfiguracionPage() {
           logo, firma,
           recargoMoraActivo:     recargoActivo,
           recargoMoraPorcentaje: pctBps,
-          // Gracia eliminada del config: la mora aplica al vencer.
-          recargoMoraDiasGracia: 0,
+          recargoMoraModo:       recargoModo,
+          recargoMoraMontoCents: Math.round(parseFloat(recargoMontoFijo || '0') * 100),
+          recargoMoraDiasGracia: parseInt(recargoDiasGracia || '0', 10),
+          recargoMoraPeriodicidadDias: parseInt(recargoPeriodicidad || '0', 10),
+          recargoMoraCompuesta:  recargoCompuesta,
+          recargoMoraTopeBps:    recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
+          recargoMoraMaxPeriodos: recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
           cajaHabilitada,
           cajaLimiteHoras,
           cajaAvisoMinutos,
@@ -597,7 +617,7 @@ export default function ConfiguracionPage() {
             <div>
               <p className="text-sm font-medium text-gray-800">Activar recargo por mora</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                El cron diario (09:00 UTC) aplicará el recargo una sola vez por factura.
+                El cron diario (09:00 UTC) aplicará el recargo a las facturas a crédito vencidas.
               </p>
             </div>
             <button
@@ -617,26 +637,169 @@ export default function ConfiguracionPage() {
             </button>
           </div>
 
-          {/* Porcentaje de recargo */}
-          <div className={`transition-opacity ${recargoActivo ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+          <div className={`space-y-4 transition-opacity ${recargoActivo ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+            {/* Modo del recargo */}
             <div className="space-y-1.5 md:max-w-xs">
-              <Label>Porcentaje de recargo (%)</Label>
-              <div className="relative">
+              <Label>Tipo de recargo</Label>
+              <Select value={recargoModo} onValueChange={v => setRecargoModo(v as 'porcentaje' | 'fijo')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="porcentaje">Porcentaje del saldo</SelectItem>
+                  <SelectItem value="fijo">Monto fijo</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-400">
+                Porcentaje: crece con la deuda. Monto fijo: siempre el mismo cargo (ej. RD$500 por mora).
+              </p>
+            </div>
+
+            {/* Porcentaje o Monto fijo, según el modo */}
+            {recargoModo === 'porcentaje' ? (
+              <div className="space-y-1.5 md:max-w-xs">
+                <Label>Porcentaje de recargo (%)</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max="100"
+                    value={recargoPorcentaje}
+                    onChange={e => setRecargoPorcentaje(e.target.value)}
+                    placeholder="2.00"
+                    className="pr-8"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                </div>
+                <p className="text-xs text-gray-400">Default: 2.00% (200 basis points).</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 md:max-w-xs">
+                <Label>Monto fijo del recargo</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">RD$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={recargoMontoFijo}
+                    onChange={e => setRecargoMontoFijo(e.target.value)}
+                    placeholder="500.00"
+                    className="pl-11"
+                  />
+                </div>
+                <p className="text-xs text-gray-400">Se cobra este monto exacto por cada período de mora.</p>
+              </div>
+            )}
+
+            {/* Gracia y periodicidad */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-md">
+              <div className="space-y-1.5">
+                <Label>Días de gracia</Label>
                 <Input
                   type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="100"
-                  value={recargoPorcentaje}
-                  onChange={e => setRecargoPorcentaje(e.target.value)}
-                  placeholder="2.00"
-                  className="pr-8"
+                  step="1"
+                  min="0"
+                  max="365"
+                  value={recargoDiasGracia}
+                  onChange={e => setRecargoDiasGracia(e.target.value)}
+                  placeholder="0"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                <p className="text-xs text-gray-400">Días tras el vencimiento antes del primer cargo. 0 = al vencer.</p>
               </div>
-              <p className="text-xs text-gray-400">
-                Se aplica al vencer la factura. Default: 2.00% (200 basis points).
-              </p>
+              <div className="space-y-1.5">
+                <Label>Repetir cada (días)</Label>
+                <Input
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="365"
+                  value={recargoPeriodicidad}
+                  onChange={e => setRecargoPeriodicidad(e.target.value)}
+                  placeholder="0"
+                />
+                <p className="text-xs text-gray-400">0 = una sola vez. 30 = mensual mientras siga vencida.</p>
+              </div>
+            </div>
+
+            {/* Base compuesta — solo tiene sentido si se repite */}
+            {parseInt(recargoPeriodicidad || '0', 10) > 0 && (
+              <>
+                <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+                  <div className="pr-4">
+                    <p className="text-sm font-medium text-gray-800">Mora sobre mora (base compuesta)</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Cada cargo se calcula incluyendo las moras anteriores no pagadas.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={recargoCompuesta}
+                    onClick={() => setRecargoCompuesta(v => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                      recargoCompuesta ? 'bg-teal-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        recargoCompuesta ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Topes — solo relevantes con cobro periódico */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-md">
+                  <div className="space-y-1.5">
+                    <Label>Tope de mora acumulada (%)</Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        value={recargoTope}
+                        onChange={e => setRecargoTope(e.target.value)}
+                        placeholder="Sin tope"
+                        className="pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                    </div>
+                    <p className="text-xs text-gray-400">% del monto de la factura. Vacío = sin tope.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Máximo de períodos</Label>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={recargoMaxPeriodos}
+                      onChange={e => setRecargoMaxPeriodos(e.target.value)}
+                      placeholder="Sin límite"
+                    />
+                    <p className="text-xs text-gray-400">Cuántas veces como máximo. Vacío = sin límite.</p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Vista previa en vivo */}
+            <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-sm text-teal-800">
+              <span className="font-medium">Se aplicará: </span>
+              {describirMora(
+                {
+                  modo: recargoModo,
+                  porcentajeBps: Math.round(parseFloat(recargoPorcentaje || '0') * 100),
+                  montoCents: Math.round(parseFloat(recargoMontoFijo || '0') * 100),
+                  diasGracia: parseInt(recargoDiasGracia || '0', 10),
+                  periodicidadDias: parseInt(recargoPeriodicidad || '0', 10),
+                  compuesta: recargoCompuesta,
+                  topeBps: recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
+                  maxPeriodos: recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
+                },
+                (cents) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              )}
             </div>
           </div>
 
