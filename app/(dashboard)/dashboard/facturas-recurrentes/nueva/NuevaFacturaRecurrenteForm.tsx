@@ -316,7 +316,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   // En modo edición no podemos separar términos/notas/pie porque se guardan
   // concatenados en `notas`. Dump completo al campo de notas y se mantienen
   // los otros dos campos vacíos hasta que el usuario los edite explícitamente.
-  const [terminosCondiciones, setTerminos] = useState('');
+  // Solo en un plan nuevo: al editar, el texto ya vive dentro de las notas del
+  // plan y precargarlo aquí lo duplicaría al guardar.
+  const [terminosCondiciones, setTerminos] = useState(
+    initialPlan ? '' : (empresa?.terminosCondicionesDefault ?? ''),
+  );
   const [notas, setNotas]                  = useState(initialPlan?.notas ?? '');
   const [pieFactura, setPieFactura]        = useState('');
 

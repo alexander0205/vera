@@ -132,7 +132,11 @@ export default function NuevaCotizacionForm({
 
   // ── Textos ─────────────────────────────────────────────────────────────────
   const [notas, setNotas]                  = useState(initialData?.notas ?? '');
-  const [terminosCondiciones, setTerminos] = useState(initialData?.terminosCondiciones ?? '');
+  // Cotización nueva → términos por defecto de la empresa. Al editar una
+  // existente NO: si el usuario los borró, borrados se quedan.
+  const [terminosCondiciones, setTerminos] = useState(
+    initialData ? (initialData.terminosCondiciones ?? '') : (empresa?.terminosCondicionesDefault ?? ''),
+  );
   const [pieFactura, setPieFactura]        = useState(initialData?.pieFactura ?? '');
   const [comentario, setComentario]        = useState(initialData?.comentario ?? '');
 

@@ -154,6 +154,12 @@ export const teams = pgTable('teams', {
   // como borrador: hay que emitirla a la DGII. Vacío = sin restricción.
   // Ej: ["tarjeta"] → toda venta con tarjeta va obligatoriamente a la DGII.
   metodosObligaDgii:      jsonb('metodos_obliga_dgii').notNull().default([]),
+
+  // ── Textos por defecto de los comprobantes ────────────────────────────────
+  // Se copian al crear una factura o cotización nueva para no reescribirlos
+  // cada vez. Es una plantilla, no una atadura: el texto queda en el documento
+  // y ahí se puede editar. Cambiarlo aquí NO reescribe lo ya emitido.
+  terminosCondicionesDefault: text('terminos_condiciones_default'),
 });
 
 export const teamMembers = pgTable('team_members', {
