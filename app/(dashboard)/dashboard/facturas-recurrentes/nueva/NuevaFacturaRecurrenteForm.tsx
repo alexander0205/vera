@@ -271,6 +271,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
       const cols = prefs.itemsCols ?? {};
       setShowItemRef(Boolean(cols.referencia));
       setShowItemDesc(Boolean(cols.descripcion));
+      if (prefs.ocultarAvisoContado) setOcultarAvisoContado(true);
     } catch {}
   }, []);
   // Hydrate cliente cuando estamos en modo edición. Hace fetch una vez al montar.
@@ -342,6 +343,18 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   const [error, setError]     = useState<string | null>(null);
   // Aviso al guardar un plan "de contado" con mora configurada.
   const [confirmContado, setConfirmContado] = useState(false);
+  // "No volver a mostrar" — persistido en localStorage (compartido con la factura).
+  const [ocultarAvisoContado, setOcultarAvisoContado] = useState(false);
+  const [noMostrarContado, setNoMostrarContado] = useState(false);
+
+  function persistOcultarAvisoContado() {
+    try {
+      const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
+      prefs.ocultarAvisoContado = true;
+      localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
+    } catch {}
+    setOcultarAvisoContado(true);
+  }
 
   // ── Cobro automático (feature no implementada — dialog Próximamente) ────────
   const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
@@ -477,7 +490,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
 
     // Aviso: plan "de contado" con mora configurada. Las facturas generadas
     // quedarán por cobrar sin vencimiento ni mora automática.
-    if (tipoPago === '1' && empresa?.recargoMoraActivo) {
+    if (tipoPago === '1' && empresa?.recargoMoraActivo && !ocultarAvisoContado) {
+      setNoMostrarContado(false);
       setConfirmContado(true);
       return;
     }
@@ -1037,6 +1051,15 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
               vencimiento y la mora, o continuar de contado.
             </DialogDescription>
           </DialogHeader>
+          <label className="flex items-center gap-2 mt-1 text-sm text-gray-600 select-none cursor-pointer">
+            <input
+              type="checkbox"
+              checked={noMostrarContado}
+              onChange={(e) => setNoMostrarContado(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+            />
+            No volver a mostrar este mensaje
+          </label>
           <DialogFooter className="gap-2 mt-2 flex-col-reverse sm:flex-row">
             <Button variant="outline" onClick={() => setConfirmContado(false)} disabled={loading}>
               Cancelar
@@ -1044,14 +1067,14 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
             <Button
               variant="outline"
               className="border-teal-600 text-teal-700 hover:bg-teal-50"
-              onClick={() => { setTipoPago('2'); setConfirmContado(false); }}
+              onClick={() => { if (noMostrarContado) persistOcultarAvisoContado(); setTipoPago('2'); setConfirmContado(false); }}
               disabled={loading}
             >
               Cambiar a crédito
             </Button>
             <Button
               className="bg-amber-500 hover:bg-amber-600 text-white"
-              onClick={() => { setConfirmContado(false); void doSubmit(); }}
+              onClick={() => { if (noMostrarContado) persistOcultarAvisoContado(); setConfirmContado(false); void doSubmit(); }}
               disabled={loading}
             >
               Continuar de contado

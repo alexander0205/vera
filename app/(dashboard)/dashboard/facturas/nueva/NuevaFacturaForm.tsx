@@ -484,6 +484,19 @@ export default function NuevaFacturaForm({
   const [confirmContado, setConfirmContado] = useState<
     null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
   >(null);
+  // "No volver a mostrar": persistido en localStorage (por navegador).
+  const [ocultarAvisoContado, setOcultarAvisoContado] = useState(false);
+  // Estado del checkbox dentro del diálogo (se reinicia al abrir).
+  const [noMostrarContado, setNoMostrarContado] = useState(false);
+
+  function persistOcultarAvisoContado() {
+    try {
+      const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
+      prefs.ocultarAvisoContado = true;
+      localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
+    } catch {}
+    setOcultarAvisoContado(true);
+  }
 
   const [comentario, setComentario] = useState(initialData?.comentario ?? '');
 
@@ -555,6 +568,7 @@ export default function NuevaFacturaForm({
       if (prefs.almacen)      setShowAlmacen(true);
       if (prefs.listaPrecios) setShowListaPrecios(true);
       if (prefs.vendedor)     setShowVendedor(true);
+      if (prefs.ocultarAvisoContado) setOcultarAvisoContado(true);
     } catch {}
   }, []);
 
@@ -911,7 +925,8 @@ export default function NuevaFacturaForm({
     const esVentaCobrable = ['31', '32', '45', '46', '47', 'sin-ncf'].includes(tipoEcf);
     const sinPago = !pagoRecibido || sumaPagos(pagoLineas) <= 0;
     if (esVentaCobrable && condicionPago === '1' && sinPago
-        && empresa?.recargoMoraActivo && !opts?.contadoConfirmado) {
+        && empresa?.recargoMoraActivo && !opts?.contadoConfirmado && !ocultarAvisoContado) {
+      setNoMostrarContado(false);
       setConfirmContado({ modo, opts });
       return;
     }
@@ -1602,6 +1617,15 @@ export default function NuevaFacturaForm({
                   vencimiento y la mora, o continuar de contado.
                 </DialogDescription>
               </DialogHeader>
+              <label className="flex items-center gap-2 mt-1 text-sm text-gray-600 select-none cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={noMostrarContado}
+                  onChange={(e) => setNoMostrarContado(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                />
+                No volver a mostrar este mensaje
+              </label>
               <DialogFooter className="gap-2 mt-2 flex-col-reverse sm:flex-row">
                 <Button
                   variant="outline"
@@ -1613,7 +1637,7 @@ export default function NuevaFacturaForm({
                 <Button
                   variant="outline"
                   className="border-teal-600 text-teal-700 hover:bg-teal-50"
-                  onClick={() => { setCondicionPago('2'); setConfirmContado(null); }}
+                  onClick={() => { if (noMostrarContado) persistOcultarAvisoContado(); setCondicionPago('2'); setConfirmContado(null); }}
                   disabled={loading}
                 >
                   Cambiar a crédito
@@ -1622,6 +1646,7 @@ export default function NuevaFacturaForm({
                   className="bg-amber-500 hover:bg-amber-600 text-white"
                   onClick={() => {
                     const pend = confirmContado;
+                    if (noMostrarContado) persistOcultarAvisoContado();
                     setConfirmContado(null);
                     void emitir(pend.modo, { ...pend.opts, contadoConfirmado: true });
                   }}
