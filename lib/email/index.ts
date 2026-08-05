@@ -7,7 +7,7 @@ export const resend = new Resend(process.env.RESEND_API_KEY);
  * esta comprobación un 401 (key inválida), 403 (dominio sin verificar) o 422
  * (remitente mal formado) se resuelven como éxito y el fallo queda mudo.
  */
-function assertSent(
+export function assertSent(
   result: { data: unknown; error: unknown },
   contexto: string,
 ): void {
@@ -54,7 +54,7 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {
   const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
     to: email,
     subject: 'Verificar tu email — Zero',
@@ -72,6 +72,7 @@ export async function sendEmailVerificationEmail(email: string, token: string, n
       </div>
     `,
   });
+  assertSent(res, 'sendEmailVerificationEmail');
 }
 
 export async function sendInvitationEmail(
@@ -83,7 +84,7 @@ export async function sendInvitationEmail(
   const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${encodeURIComponent(token)}`;
   const safeInvitedBy = escapeHtml(invitedByName) || 'Alguien';
   const safeTeam = escapeHtml(teamName);
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
     to: email,
     subject: `Invitación a ${teamName} en Zero`,
@@ -100,6 +101,7 @@ export async function sendInvitationEmail(
       </div>
     `,
   });
+  assertSent(res, 'sendInvitationEmail');
 }
 
 // ─── Cuadre de caja ───────────────────────────────────────────────────────────
@@ -205,6 +207,10 @@ export async function sendCajaCierreAprobacionEmail(opts: {
         to:      email,
         subject: `⚠️ Cierre de caja pendiente — ${numeroCierre} · ${teamName}`,
         html,
+      }).then(res => {
+        // Un error de API de Resend llega en el cuerpo, no como excepción:
+        // sin este assert el fallo por destinatario quedaba mudo.
+        assertSent(res, `sendCajaCierreAprobacionEmail(${email})`);
       }).catch(err => {
         console.error(`[caja-email] Error enviando a ${email}:`, err);
       }),
@@ -242,7 +248,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
       <td style="padding:10px 14px;text-align:right;font-weight:700;color:#d97706;">DOP ${escapeHtml(diferenciaDOP)}</td>
     </tr>`;
 
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from:    'Zero <noreply@zero.com.do>',
     to:      cajeroEmail,
     subject: `✓ Cuadre aprobado — ${numeroCierre} · ${teamName}`,
@@ -285,6 +291,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
         </div>
       </div>`,
   });
+  assertSent(res, 'sendCajaCierreAprobadoEmail');
 }
 
 /** Notifica al cajero que su cuadre fue rechazado y debe recontar. */
@@ -303,7 +310,7 @@ export async function sendCajaCierreRechazadoEmail(opts: {
   const safeMot  = escapeHtml(motivo);
   const safeUrl  = escapeHtml(appUrl);
 
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from:    'Zero <noreply@zero.com.do>',
     to:      cajeroEmail,
     subject: `✗ Cuadre rechazado — ${numeroCierre} · ${teamName}`,
@@ -337,6 +344,7 @@ export async function sendCajaCierreRechazadoEmail(opts: {
         </div>
       </div>`,
   });
+  assertSent(res, 'sendCajaCierreRechazadoEmail');
 }
 
 export async function sendInvoiceEmail(
@@ -349,7 +357,7 @@ export async function sendInvoiceEmail(
   const safeEncf = escapeHtml(encf);
   const safeRazon = escapeHtml(razonSocial);
   const safeMonto = escapeHtml((montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 }));
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
     to: email,
     subject: `Factura ${encf}`,
@@ -367,4 +375,44 @@ export async function sendInvoiceEmail(
       },
     ],
   });
+  assertSent(res, 'sendInvoiceEmail');
+}
+
+/** Envía la cotización como PDF adjunto al cliente. */
+export async function sendCotizacionEmail(opts: {
+  email:            string;
+  numero:           string;
+  montoTotal:       number;   // en centavos
+  fechaVencimiento: Date | null;
+  pdfBuffer:        Buffer;
+}) {
+  const { email, numero, montoTotal, fechaVencimiento, pdfBuffer } = opts;
+  const safeNumero = escapeHtml(numero);
+  const safeMonto = escapeHtml((montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 }));
+  const safeVence = fechaVencimiento
+    ? escapeHtml(new Date(fechaVencimiento).toLocaleDateString('es-DO', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      }))
+    : null;
+
+  const res = await resend.emails.send({
+    from:    'Zero <noreply@zero.com.do>',
+    to:      email,
+    subject: `Cotización ${numero}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
+        <h2 style="color: #0f766e;">Cotización ${safeNumero}</h2>
+        <p>Adjuntamos la cotización <strong>${safeNumero}</strong> por un monto de <strong>DOP ${safeMonto}</strong>.</p>
+        ${safeVence ? `<p style="color:#6b7280;font-size:14px;">Válida hasta: ${safeVence}.</p>` : ''}
+        <p style="color:#6b7280;font-size:14px;">Gracias por su preferencia.</p>
+      </div>
+    `,
+    attachments: [
+      {
+        filename: `cotizacion-${numero}.pdf`,
+        content:  pdfBuffer,
+      },
+    ],
+  });
+  assertSent(res, 'sendCotizacionEmail');
 }
