@@ -8,7 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil, Mail,
+  FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil, Mail, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
@@ -128,7 +128,14 @@ export default function CotizacionesPage() {
       id: 'numero',
       header: 'Número',
       sortable: true,
-      render: c => <span className="font-mono font-medium text-sm">{c.numero}</span>,
+      render: c => (
+        <Link
+          href={`/dashboard/cotizaciones/${c.id}`}
+          className="font-mono font-medium text-sm text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
+        >
+          {c.numero}
+        </Link>
+      ),
     },
     {
       id: 'cliente',
@@ -162,6 +169,9 @@ export default function CotizacionesPage() {
   ], []);
 
   const rowActions = (c: Cotizacion): RowAction[] => [
+    // El detalle es donde vive "Convertir a factura"; sin esta puerta había que
+    // adivinar que el número era un enlace.
+    { icon: Eye,    title: 'Ver detalle', href: `/dashboard/cotizaciones/${c.id}`, primary: true },
     { icon: Mail,   title: 'Enviar por correo', onClick: () => setEmailTarget({ cot: c, email: c.emailComprador ?? '' }) },
     { icon: Pencil, title: 'Editar',   href: `/dashboard/cotizaciones/${c.id}/editar` },
     { icon: Trash2, title: 'Eliminar', variant: 'danger', onClick: () => { setDeleteTarget(c); setOpError(null); } },
@@ -180,6 +190,7 @@ export default function CotizacionesPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        rowHref={c => `/dashboard/cotizaciones/${c.id}`}
         rowActions={rowActions}
         emptyState={{
           icon: FileText,
