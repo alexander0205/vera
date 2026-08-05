@@ -52,6 +52,11 @@
         "tipo": "arreglo",
         "titulo": "Ya no se pierden facturas en cuentas por cobrar",
         "detalle": "Algunas facturas con saldo pendiente no aparecían en cuentas por cobrar, incluso cuando ya tenían abonos registrados, y la deuda quedaba fuera de la cartera sin aviso. Ahora se muestran todas."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Las cotizaciones vuelven a guardarse",
+        "detalle": "Al guardar una cotización aparecía un error técnico y el trabajo se perdía. Ya se guarda normal. Además, si algo llega a fallar del lado del servidor, ahora verás un mensaje que se entiende en vez de un error en inglés."
       }
     ]
   },
