@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
   StickyNote, ScrollText, MessageSquare, CreditCard, Send,
 } from 'lucide-react';
@@ -65,6 +68,8 @@ export type { BorradorInicial, EmpresaPerfil };
 type EmitirOpts = {
   andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar';
   metodoConfirmado?: boolean;
+  /** El aviso de "contado sin pago" ya se aceptó → no reabrir en la 2ª llamada. */
+  contadoConfirmado?: boolean;
 };
 
 export default function NuevaFacturaForm({
@@ -474,6 +479,12 @@ export default function NuevaFacturaForm({
     null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
   >(null);
 
+  // Aviso al guardar una factura de venta marcada "de contado" que queda sin
+  // pago y la empresa tiene mora configurada. Guarda el emitir() pendiente.
+  const [confirmContado, setConfirmContado] = useState<
+    null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
+  >(null);
+
   const [comentario, setComentario] = useState(initialData?.comentario ?? '');
 
   // ── Enviar por correo modal ────────────────────────────────────────────────
@@ -818,7 +829,7 @@ export default function NuevaFacturaForm({
     if (tipoEcf === '32' && totales.total >= 250000 && !rncFinal.trim())
       return 'Factura de Consumo ≥ DOP 250,000 requiere RNC o cédula del comprador';
     if (condicionPago === '2' && !fechaLimitePago)
-      return 'Para tipo de pago Crédito, debes definir el plazo de vencimiento.';
+      return 'Para crédito falta el plazo de vencimiento. Configúralo en el plazo de pago por defecto de la empresa (Configuración).';
     if (dependientesCliente.length > 0) {
       const itemsConProducto = items.filter(i => i.nombreItem.trim());
       if (itemsConProducto.some(i => !i.dependienteId))
@@ -891,6 +902,17 @@ export default function NuevaFacturaForm({
     // solo aplica si el rol del usuario tiene el permiso 'pagos:alerta-metodo'.
     if (alertaMetodoPago && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
       setConfirmMetodo({ modo, opts });
+      return;
+    }
+
+    // Aviso: venta "de contado" sin pago registrado y con mora configurada. La
+    // factura quedaría por cobrar sin vencimiento ni mora automática. Se ofrece
+    // corregir la condición a crédito o continuar. Solo ventas cobrables.
+    const esVentaCobrable = ['31', '32', '45', '46', '47', 'sin-ncf'].includes(tipoEcf);
+    const sinPago = !pagoRecibido || sumaPagos(pagoLineas) <= 0;
+    if (esVentaCobrable && condicionPago === '1' && sinPago
+        && empresa?.recargoMoraActivo && !opts?.contadoConfirmado) {
+      setConfirmContado({ modo, opts });
       return;
     }
 
@@ -1353,7 +1375,7 @@ export default function NuevaFacturaForm({
                 <DetallesSection
                   regla={regla} tipoEcf={tipoEcf}
                   condicionPago={condicionPago} setCondicionPago={setCondicionPago}
-                  diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
+                  diasParaPago={diasParaPago}
                   tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
                   empresa={empresa}
@@ -1562,6 +1584,54 @@ export default function NuevaFacturaForm({
               void emitir(pend.modo, { ...pend.opts, metodoConfirmado: true });
             }}
           />
+        )}
+
+        {/* Aviso al guardar una factura de contado sin pago (con mora configurada) */}
+        {confirmContado && (
+          <Dialog open onOpenChange={(o) => { if (!o && !loading) setConfirmContado(null); }}>
+            <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                  Factura sin pago registrado
+                </DialogTitle>
+                <DialogDescription className="pt-1 text-sm text-gray-600">
+                  Está marcada <span className="font-semibold">de contado</span> pero no registraste
+                  ningún pago. Quedará por cobrar, sin fecha de vencimiento y sin generar la mora
+                  automática que tienes configurada. Puedes cambiarla a crédito para que aplique el
+                  vencimiento y la mora, o continuar de contado.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 mt-2 flex-col-reverse sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmContado(null)}
+                  disabled={loading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-teal-600 text-teal-700 hover:bg-teal-50"
+                  onClick={() => { setCondicionPago('2'); setConfirmContado(null); }}
+                  disabled={loading}
+                >
+                  Cambiar a crédito
+                </Button>
+                <Button
+                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                  onClick={() => {
+                    const pend = confirmContado;
+                    setConfirmContado(null);
+                    void emitir(pend.modo, { ...pend.opts, contadoConfirmado: true });
+                  }}
+                  disabled={loading}
+                >
+                  Continuar de contado
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
 
       </div>

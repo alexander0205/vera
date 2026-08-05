@@ -10,8 +10,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import {
   ArrowLeft, X, User, Package, Calendar, ScrollText, StickyNote, FileText,
-  CreditCard, ChevronRight, Info, Receipt, RefreshCw,
+  CreditCard, ChevronRight, Info, Receipt, RefreshCw, AlertTriangle,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
@@ -337,6 +340,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
+  // Aviso al guardar un plan "de contado" con mora configurada.
+  const [confirmContado, setConfirmContado] = useState(false);
 
   // ── Cobro automático (feature no implementada — dialog Próximamente) ────────
   const { openProximamente, dialog: proximamenteDialog } = useProximamenteDialog();
@@ -470,6 +475,17 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
       setError('Cada ítem requiere un beneficiario'); return;
     }
 
+    // Aviso: plan "de contado" con mora configurada. Las facturas generadas
+    // quedarán por cobrar sin vencimiento ni mora automática.
+    if (tipoPago === '1' && empresa?.recargoMoraActivo) {
+      setConfirmContado(true);
+      return;
+    }
+
+    await doSubmit();
+  }
+
+  async function doSubmit() {
     const proximaEmision = fechaInicio; // Primera emisión = fecha de inicio
     const notasFinal = [terminosCondiciones, notas, pieFactura]
       .filter(s => s.trim()).join('\n\n') || null;
@@ -780,25 +796,9 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label className={`text-xs uppercase tracking-wide ${tipoPago === '2' ? 'text-gray-600' : 'text-gray-300'}`}>
-                    Plazo de vencimiento {tipoPago === '2' && <span className="text-red-500">*</span>}
-                  </Label>
-                  <div className="relative mt-1 w-28">
-                    <Input
-                      type="number"
-                      min={1}
-                      value={diasParaPago}
-                      onChange={(e) => setDiasParaPago(e.target.value)}
-                      disabled={tipoPago !== '2'}
-                      className="h-10 pr-10 disabled:bg-gray-50 disabled:text-gray-300"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
-                  </div>
-                </div>
               </div>
 
-              {/* Info pill: vencimiento + mora */}
+              {/* Info pill: vencimiento (según config central) + mora */}
               {tipoPago === '2' && diasParaPago && (
                 <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
                   <Info className="h-4 w-4 text-teal-700 shrink-0 mt-0.5" />
@@ -1021,6 +1021,44 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
       </div>
 
       {proximamenteDialog}
+
+      {/* Aviso al guardar un plan de contado con mora configurada */}
+      <Dialog open={confirmContado} onOpenChange={(o) => { if (!o && !loading) setConfirmContado(false); }}>
+        <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+              Plan de contado
+            </DialogTitle>
+            <DialogDescription className="pt-1 text-sm text-gray-600">
+              Este plan está marcado <span className="font-semibold">de contado</span>. Las facturas
+              que genere quedarán por cobrar sin fecha de vencimiento y sin generar la mora
+              automática que tienes configurada. Puedes cambiarlo a crédito para que aplique el
+              vencimiento y la mora, o continuar de contado.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 mt-2 flex-col-reverse sm:flex-row">
+            <Button variant="outline" onClick={() => setConfirmContado(false)} disabled={loading}>
+              Cancelar
+            </Button>
+            <Button
+              variant="outline"
+              className="border-teal-600 text-teal-700 hover:bg-teal-50"
+              onClick={() => { setTipoPago('2'); setConfirmContado(false); }}
+              disabled={loading}
+            >
+              Cambiar a crédito
+            </Button>
+            <Button
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={() => { setConfirmContado(false); void doSubmit(); }}
+              disabled={loading}
+            >
+              Continuar de contado
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

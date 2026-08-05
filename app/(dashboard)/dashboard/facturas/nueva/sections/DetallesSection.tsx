@@ -1,6 +1,5 @@
 'use client';
 
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -57,8 +56,8 @@ interface Props {
   tipoEcf: string;
   condicionPago: string;
   setCondicionPago: (v: string) => void;
+  /** Plazo de crédito en días (viene de la config central; no editable aquí). */
   diasParaPago: string;
-  setDiasParaPago: (v: string) => void;
   tipoIngresos: string;
   setTipoIngresos: (v: string) => void;
   /** Vencimiento derivado (YYYY-MM-DD) — solo para mostrar el info pill. */
@@ -73,7 +72,7 @@ export function DetallesSection({
   regla,
   tipoEcf,
   condicionPago, setCondicionPago,
-  diasParaPago, setDiasParaPago,
+  diasParaPago,
   tipoIngresos, setTipoIngresos,
   fechaLimitePago,
   empresa,
@@ -101,8 +100,10 @@ export function DetallesSection({
 
   return (
     <div className="space-y-4">
-      {/* Fila: Condición de pago · Plazo de vencimiento */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Fila: Condición de pago · Tipo de ingresos.
+          El plazo de vencimiento ya no se edita aquí: se toma de la
+          configuración central de la empresa y se muestra en el aviso de abajo. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
           <Select value={condicionPago} onValueChange={setCondicionPago}>
@@ -115,22 +116,6 @@ export function DetallesSection({
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div>
-          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
-            Plazo de vencimiento {esCredito && <span className="text-red-500">*</span>}
-          </Label>
-          <div className="relative mt-1 w-28">
-            <Input
-              type="number"
-              min={1}
-              value={diasParaPago}
-              onChange={(e) => setDiasParaPago(e.target.value)}
-              disabled={!esCredito}
-              className="h-10 pr-10 disabled:bg-gray-50 disabled:text-gray-300"
-            />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
-          </div>
         </div>
 
         {muestraTipoIngresos && (
@@ -156,7 +141,8 @@ export function DetallesSection({
           <Info className="h-4 w-4 text-teal-700 shrink-0 mt-0.5" />
           <div className="text-sm text-teal-900">
             <p>
-              Vence el <span className="font-semibold">{formatFechaCorta(fechaLimitePago)}</span>.
+              Crédito a <span className="font-semibold">{diasParaPago} días</span> · vence el{' '}
+              <span className="font-semibold">{formatFechaCorta(fechaLimitePago)}</span>.
             </p>
             {textoMora && (
               <p className="mt-0.5 text-teal-800">
