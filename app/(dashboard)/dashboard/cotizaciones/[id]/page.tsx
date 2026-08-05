@@ -524,11 +524,24 @@ export default function CotizacionDetallePage() {
             </a>
           </Button>
           {['borrador', 'enviada'].includes(cot.estado) && (
-            <Button className="bg-teal-600 hover:bg-teal-700 h-11 sm:h-9 flex-1 sm:flex-none" asChild>
+            <Button variant="outline" className="h-11 sm:h-9 flex-1 sm:flex-none" asChild>
               <Link href={`/dashboard/cotizaciones/${cot.id}/editar`}>
                 <Pencil className="h-4 w-4 mr-1.5" />
                 Editar
               </Link>
+            </Button>
+          )}
+          {/* Convertir vivía solo en la columna derecha y en el menú "⋮": en
+              pantallas chicas la columna cae al final y el botón no se veía. */}
+          {puedeConvertir && (
+            <Button
+              className="bg-teal-600 hover:bg-teal-700 h-11 sm:h-9 flex-1 sm:flex-none"
+              onClick={() => setShowConfirmConvert(true)}
+              disabled={converting}
+            >
+              {converting
+                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Convirtiendo…</>
+                : <><FileCheck className="h-4 w-4 mr-1.5" />Convertir a factura</>}
             </Button>
           )}
         </div>

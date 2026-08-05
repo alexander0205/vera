@@ -13,7 +13,7 @@
  *  - Al guardar se crea una COTIZACIÓN (COT-XXXX), no una factura.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,8 @@ export interface CotizacionInicial {
   id:                   number;
   numero:               string;
   estado:               string;
+  /** Cliente asociado — necesario para recargar sus beneficiarios al editar. */
+  clientId:             number | null;
   razonSocialComprador: string;
   rncComprador:         string;
   emailComprador:       string;
@@ -86,8 +88,8 @@ function itemsDesdeInicial(raw: Array<Record<string, unknown>>): ItemLinea[] {
                                 ? String(it.tasaItbis) : '0.18') as ItemLinea['tasaItbis'],
       indicadorBienoServicio: String(it.indicadorBienoServicio) === '1' ? '1' : '2',
       unidadMedida:           String(it.unidadMedida ?? ''),
-      dependienteId:          null,
-      dependienteNombre:      '',
+      dependienteId:          typeof it.dependienteId === 'number' ? it.dependienteId : null,
+      dependienteNombre:      String(it.dependienteNombre ?? ''),
     };
   });
 }
@@ -112,6 +114,25 @@ export default function NuevaCotizacionForm({
   const [emailManual, setEmailManual]         = useState(initialData?.emailComprador ?? '');
   const [telefonoManual, setTelefonoManual]   = useState('');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
+  // Beneficiarios (dependientes) del cliente: alimentan el selector por línea.
+  const [dependientesCliente, setDependientesCliente] = useState<
+    { id: number; nombre: string; apellido: string }[]
+  >([]);
+
+  /** Carga los beneficiarios de un cliente; deja la lista vacía si falla. */
+  const cargarDependientes = useCallback((clientId: number) => {
+    fetch(`/api/clientes/${clientId}/dependientes`)
+      .then(r => r.json())
+      .then(data => setDependientesCliente(Array.isArray(data.dependientes) ? data.dependientes : []))
+      .catch(() => setDependientesCliente([]));
+  }, []);
+
+  // Al editar una cotización con cliente, recargar sus beneficiarios: sin la
+  // lista el selector de cada línea sale vacío y el que ya estaba elegido no
+  // se puede cambiar.
+  useEffect(() => {
+    if (initialData?.clientId) cargarDependientes(initialData.clientId);
+  }, [initialData?.clientId, cargarDependientes]);
 
   // ── Fechas ─────────────────────────────────────────────────────────────────
   const today = new Date().toISOString().slice(0, 10);
@@ -217,10 +238,20 @@ export default function NuevaCotizacionForm({
     setRncManualNombre('');
     setEmailManual(c.email ?? '');
     setTelefonoManual(c.telefono ?? '');
+    // Los beneficiarios son del cliente anterior: se limpian antes de cargar.
+    setDependientesCliente([]);
+    dispatchItems({ type: 'CLEAR_BENEFICIARIOS' });
+    cargarDependientes(c.id);
   }
   function limpiarCliente() {
     setClienteSeleccionado(null);
     setRncManual(''); setRncManualNombre(''); setEmailManual(''); setTelefonoManual('');
+    setDependientesCliente([]);
+    dispatchItems({ type: 'CLEAR_BENEFICIARIOS' });
+  }
+
+  function handleSelectBeneficiario(itemId: number, depId: number | null, nombreCompleto: string) {
+    dispatchItems({ type: 'UPDATE_BENEFICIARIO', id: itemId, dependienteId: depId, dependienteNombre: nombreCompleto });
   }
 
   // ── Búsqueda / selección de productos ──────────────────────────────────────
@@ -304,6 +335,10 @@ export default function NuevaCotizacionForm({
           tasaItbis:              it.tasaItbis,
           indicadorBienoServicio: it.indicadorBienoServicio,
           unidadMedida:           it.unidadMedida ?? '',
+          // Beneficiario por línea: viaja en el JSON de ítems, se ve en el PDF
+          // y lo hereda la factura al convertir.
+          dependienteId:          it.dependienteId ?? null,
+          dependienteNombre:      it.dependienteNombre ?? '',
         }));
 
       const res = await fetch(
@@ -459,11 +494,11 @@ export default function NuevaCotizacionForm({
                   onAddItem={addItem}
                   onRemoveItem={removeItem}
                   onUpdateItem={updateItem}
-                  onSelectBeneficiario={() => {}}
+                  onSelectBeneficiario={handleSelectBeneficiario}
                   onOpenNuevoProducto={(idx) => setShowNuevoProductoIdx(idx)}
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
-                  dependientes={[]}
+                  dependientes={dependientesCliente}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}
