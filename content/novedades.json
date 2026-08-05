@@ -72,6 +72,11 @@
         "tipo": "nuevo",
         "titulo": "Envía una cotización por correo desde la lista",
         "detalle": "Antes había que entrar a la cotización para mandarla. Ahora la envías directo desde la lista, y al enviarla pasa sola de borrador a enviada."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Escribe tus términos y condiciones una sola vez",
+        "detalle": "En Configuración puedes dejar guardados los términos y condiciones de tu empresa. A partir de ahí se escriben solos en cada factura, cotización o plan recurrente que crees, y los puedes editar o borrar documento por documento."
       }
     ]
   },

@@ -48,6 +48,8 @@ const schema = z.object({
   plazoPagoDefaultDias:  z.number().int().min(1).max(365).nullable().optional(),
   // Métodos de pago que obligan emisión a la DGII (no permiten borrador).
   metodosObligaDgii:     z.array(z.enum(METODO_PAGO_VALUES)).optional(),
+  // Términos y condiciones que se precargan en cada comprobante nuevo.
+  terminosCondicionesDefault: z.string().max(2000).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -116,6 +118,10 @@ export async function POST(req: NextRequest) {
     ...(data.posEscolarHabilitado !== undefined && { posEscolarHabilitado: data.posEscolarHabilitado }),
     ...(data.plazoPagoDefaultDias  !== undefined && { plazoPagoDefaultDias: data.plazoPagoDefaultDias }),
     ...(data.metodosObligaDgii     !== undefined && { metodosObligaDgii: data.metodosObligaDgii }),
+    // Texto vacío = sin plantilla; se guarda como NULL para no precargar comillas sueltas.
+    ...(data.terminosCondicionesDefault !== undefined && {
+      terminosCondicionesDefault: data.terminosCondicionesDefault?.trim() || null,
+    }),
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
@@ -168,6 +174,8 @@ export async function GET(_req: NextRequest) {
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)
     metodosObligaDgii:     (team.metodosObligaDgii as string[] | null) ?? [],
+    // Plantilla de términos y condiciones para comprobantes nuevos
+    terminosCondicionesDefault: team.terminosCondicionesDefault ?? '',
     // Rol del usuario en este team (para gating en el cliente)
     role:              member?.role ?? null,
   });
