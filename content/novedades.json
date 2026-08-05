@@ -57,6 +57,11 @@
         "tipo": "arreglo",
         "titulo": "Las cotizaciones vuelven a guardarse",
         "detalle": "Al guardar una cotización aparecía un error técnico y el trabajo se perdía. Ya se guarda normal. Además, si algo llega a fallar del lado del servidor, ahora verás un mensaje que se entiende en vez de un error en inglés."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Enviar la factura por correo vuelve a funcionar",
+        "detalle": "Al enviar una factura o una cotización por correo salía un error y el cliente nunca la recibía. Ya sale con el PDF adjunto. Además, si el correo llegara a fallar, ahora el sistema lo avisa en vez de decir que se envió."
       }
     ]
   },

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { headers } from 'next/headers';
-import { resend } from '@/lib/email';
+import { resend, assertSent } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
 
 const schema = z.object({
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   const destinatario = process.env.CONTACTO_EMAIL ?? 'hola@zero.com.do';
 
   try {
-    await resend.emails.send({
+    const res = await resend.emails.send({
       from: 'Zero Contacto <noreply@zero.com.do>',
       to: destinatario,
       replyTo: email,
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
         </div>
       `,
     });
+    assertSent(res, 'contacto');
   } catch (e) {
     console.error('[contacto] resend error:', e);
     return NextResponse.json(
