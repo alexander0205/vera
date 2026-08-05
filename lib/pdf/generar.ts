@@ -28,8 +28,24 @@ import { FacturaTirillaPDF } from '@/lib/pdf/FacturaTirillaPDF';
 import { CotizacionPDF, type CotizacionPDFData } from '@/lib/pdf/CotizacionPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
+import type { EmisorEmail } from '@/lib/email';
 
 export type FormatoFacturaPdf = 'grande' | 'tirilla';
+
+/** Datos de marca del emisor — los usa el correo al cliente. */
+function emisorDeTeam(team: typeof teams.$inferSelect): EmisorEmail {
+  return {
+    razonSocial:      team.razonSocial ?? team.name,
+    nombreComercial:  team.nombreComercial,
+    rnc:              team.rnc,
+    direccion:        team.direccion,
+    telefono:         team.telefono,
+    sitioWeb:         team.sitioWeb,
+    emailFacturacion: team.emailFacturacion,
+    logo:             team.logo,
+    colorPrimario:    team.colorPrimario ?? '#1e40af',
+  };
+}
 
 /**
  * Extrae la fecha/hora de firma del XML firmado.
@@ -80,6 +96,14 @@ export type FacturaPdfResult = {
   filename: string;
   encf:     string;
   codigo:   string | null;
+  emisor:   EmisorEmail;
+  /** Lo mismo que ve el cliente en el PDF, para no recalcularlo en el correo. */
+  resumen: {
+    fechaEmision:  string;
+    clienteNombre: string | null;
+    montoTotalCts: number;
+    saldoCts:      number;
+  };
 };
 
 /**
@@ -296,13 +320,32 @@ export async function generarFacturaPdf(opts: {
     ? `factura-${nombreBase}-tirilla.pdf`
     : `factura-${nombreBase}.pdf`;
 
-  return { buffer, filename, encf: doc.encf, codigo: doc.codigo ?? null };
+  return {
+    buffer,
+    filename,
+    encf:   doc.encf,
+    codigo: doc.codigo ?? null,
+    emisor: emisorDeTeam(team),
+    resumen: {
+      fechaEmision:  pdfData.fechaEmision,
+      clienteNombre: doc.razonSocialComprador ?? null,
+      montoTotalCts: doc.montoTotal,
+      saldoCts:      saldoCts,
+    },
+  };
 }
 
 export type CotizacionPdfResult = {
   buffer:   Buffer;
   filename: string;
   numero:   string;
+  emisor:   EmisorEmail;
+  resumen: {
+    fechaEmision:     string;
+    fechaVencimiento: string | null;
+    clienteNombre:    string | null;
+    montoTotalCts:    number;
+  };
 };
 
 /**
@@ -386,5 +429,16 @@ export async function generarCotizacionPdf(opts: {
     createElement(CotizacionPDF, { data: pdfData }) as any
   );
 
-  return { buffer, filename: `cotizacion-${cot.numero}.pdf`, numero: cot.numero };
+  return {
+    buffer,
+    filename: `cotizacion-${cot.numero}.pdf`,
+    numero:   cot.numero,
+    emisor:   emisorDeTeam(team),
+    resumen: {
+      fechaEmision:     pdfData.fechaEmision,
+      fechaVencimiento: pdfData.fechaVencimiento ?? null,
+      clienteNombre:    cot.razonSocialComprador ?? null,
+      montoTotalCts:    cot.montoTotal,
+    },
+  };
 }

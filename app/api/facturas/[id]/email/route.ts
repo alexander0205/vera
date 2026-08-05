@@ -41,24 +41,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const targetEmail = email || doc[0].emailComprador;
   if (!targetEmail) return NextResponse.json({ error: 'Email del cliente requerido' }, { status: 400 });
 
-  let pdfBuffer: Buffer;
+  let pdf: Awaited<ReturnType<typeof generarFacturaPdf>>;
   try {
-    const pdf = await generarFacturaPdf({ teamId, docId: doc[0].id });
+    pdf = await generarFacturaPdf({ teamId, docId: doc[0].id });
     if (!pdf) return NextResponse.json({ error: 'Factura no encontrada' }, { status: 404 });
-    pdfBuffer = pdf.buffer;
   } catch (e) {
     console.error('[factura email] Error generando PDF:', e);
     return NextResponse.json({ error: 'No se pudo generar el PDF' }, { status: 500 });
   }
 
   try {
-    await sendInvoiceEmail(
-      targetEmail,
-      doc[0].encf,
-      doc[0].razonSocialComprador ?? 'Cliente',
-      doc[0].montoTotal,
-      pdfBuffer,
-    );
+    await sendInvoiceEmail({
+      email:     targetEmail,
+      encf:      pdf.encf,
+      codigo:    pdf.codigo,
+      emisor:    pdf.emisor,
+      pdfBuffer: pdf.buffer,
+      ...pdf.resumen,
+    });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error('Error sending invoice email:', e);

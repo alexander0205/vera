@@ -44,11 +44,10 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: 'Email del cliente requerido' }, { status: 400 });
   }
 
-  let pdfBuffer: Buffer;
+  let pdf: Awaited<ReturnType<typeof generarCotizacionPdf>>;
   try {
-    const pdf = await generarCotizacionPdf({ teamId, cotId });
+    pdf = await generarCotizacionPdf({ teamId, cotId });
     if (!pdf) return NextResponse.json({ error: 'Cotización no encontrada' }, { status: 404 });
-    pdfBuffer = pdf.buffer;
   } catch (e) {
     console.error('[cotizacion email] Error generando PDF:', e);
     return NextResponse.json({ error: 'No se pudo generar el PDF' }, { status: 500 });
@@ -56,11 +55,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   try {
     await sendCotizacionEmail({
-      email:            targetEmail,
-      numero:           cot.numero,
-      montoTotal:       cot.montoTotal,
-      fechaVencimiento: cot.fechaVencimiento,
-      pdfBuffer,
+      email:     targetEmail,
+      numero:    pdf.numero,
+      emisor:    pdf.emisor,
+      pdfBuffer: pdf.buffer,
+      ...pdf.resumen,
     });
     return NextResponse.json({ success: true });
   } catch (e) {
