@@ -1488,6 +1488,27 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                       <span className="font-bold tabular-nums">{fmtDOP(saldo)}</span>
                     </div>
 
+                    {/* Vencimiento: cuándo se vence la factura y su estado. */}
+                    {factura.fechaLimitePago && saldo > 0 && (() => {
+                      const dias = Math.floor(
+                        (Date.now() - Date.parse(`${factura.fechaLimitePago}T00:00:00`)) / 86_400_000,
+                      );
+                      const estado = dias > 0
+                        ? { texto: `vencida hace ${dias} día${dias === 1 ? '' : 's'}`, clase: 'text-red-600' }
+                        : dias === 0
+                          ? { texto: 'vence hoy', clase: 'text-amber-600' }
+                          : { texto: `en ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`, clase: 'text-gray-400' };
+                      return (
+                        <div className="flex justify-between items-center text-sm mt-2">
+                          <span className="text-gray-600">Vence el</span>
+                          <span className="tabular-nums text-right">
+                            <span className="font-medium text-gray-900">{fmtDate(factura.fechaLimitePago)}</span>
+                            <span className={`ml-1.5 text-xs font-medium ${estado.clase}`}>· {estado.texto}</span>
+                          </span>
+                        </div>
+                      );
+                    })()}
+
                     {facturaPagada && (
                       <p className="text-[11px] text-emerald-700 mt-2 flex items-center gap-1">
                         <CheckCircle className="h-3 w-3" />
