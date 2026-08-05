@@ -31,6 +31,8 @@ import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
 import { labelMetodo } from '@/lib/pagos/metodos';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
+import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 // ─── Schema de validación ─────────────────────────────────────────────────────
 
@@ -60,6 +62,12 @@ const retencionSchema = z.object({
 
 const emitirSchema = z.object({
   modo:                 z.enum(['emitir', 'borrador']).default('emitir'),
+  /**
+   * Origen de la petición. 'habilitacion' identifica el Set de Pruebas del
+   * asistente DGII, único flujo autorizado a emitir fuera de Producción.
+   * Requiere 'configuracion:gestionar' (ver el gate de ambiente más abajo).
+   */
+  origen:               z.enum(['habilitacion']).optional(),
   // 'sin-ncf' only allowed in borrador mode (validated below)
   tipoEcf:              z.enum(['31', '32', '33', '34', '41', '43', '44', '45', '46', '47', 'sin-ncf']),
   rncComprador:         z.preprocess(
@@ -276,6 +284,40 @@ export async function POST(request: NextRequest) {
         { error: 'tipoEcf sin-ncf solo puede usarse en modo borrador. Selecciona un tipo de e-CF para emitir a la DGII.' },
         { status: 400 },
       );
+    }
+
+    // ── Gate de ambiente DGII ────────────────────────────────────────────────
+    // Solo un contribuyente en 'Produccion' emite comprobantes con valor fiscal.
+    // La excepción es el Set de Pruebas de la habilitación, que corre en
+    // TesteCF/CerteCF por definición: sin él nadie podría llegar a Producción.
+    //
+    // La excepción NO se apoya en `skipRangeValidation` — ese flag lo puede
+    // poner cualquier cliente. Exige un origen explícito + permiso de admin.
+    const esHabilitacion = data.origen === 'habilitacion';
+
+    if (esHabilitacion) {
+      // El Set de Pruebas corre en TesteCF/CerteCF por definición; sin esta
+      // excepción ninguna empresa podría completar la habilitación. Se exige
+      // permiso de administrador porque salta el gate de ambiente.
+      if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'configuracion:gestionar')) {
+        return NextResponse.json(
+          { error: 'Solo un administrador puede ejecutar el Set de Pruebas de habilitación.' },
+          { status: 403 },
+        );
+      }
+    } else if (data.modo !== 'borrador' || esTipoVentaFiscal(data.tipoEcf)) {
+      // Se consulta el ambiente en dos casos: al emitir cualquier cosa a la
+      // DGII, y al crear un borrador de VENTA con tipo fiscal — ese borrador
+      // solo existe para emitirse después, así que fuera de Producción nace
+      // muerto. Las notas de crédito/débito y compras/gastos sí pueden
+      // guardarse como borrador: son documentos internos.
+      const ambiente = await getAmbienteTenant(teamId);
+      if (ambiente !== 'Produccion') {
+        return NextResponse.json(
+          { error: mensajeAmbienteNoProduccion(ambiente), ambiente },
+          { status: 403 },
+        );
+      }
     }
 
     // ── Fecha de emisión personalizada (sin-ncf) ─────────────────────────────

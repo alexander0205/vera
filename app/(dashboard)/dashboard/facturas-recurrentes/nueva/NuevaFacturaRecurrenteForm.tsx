@@ -16,6 +16,7 @@ import {
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
+import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 import { SectionCard } from '../../facturas/nueva/sections/SectionCard';
 import { AccordionSection } from '../../facturas/nueva/sections/AccordionSection';
@@ -161,13 +162,19 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan 
   const router = useRouter();
   const empresa = initialPerfil;
   const isEdit = Boolean(initialPlan);
-  const { tipoVisible } = useTiposDisponibles();
+  const { tipoVisible, enProduccion } = useTiposDisponibles();
 
   // Plazo de pago por defecto del team (solo aplica al crear, no al editar).
   // null/undefined → contado; N → crédito a N días.
   const defaultDias = empresa?.plazoPagoDefaultDias;
   // ── Cabecera ───────────────────────────────────────────────────────────────
   const [tipoEcf, setTipoEcf]           = useState(initialPlan?.tipoEcf ?? '31');
+
+  // Fuera de Producción el plan no puede emitir comprobantes fiscales: se cae a
+  // sin-ncf, tanto en el alta como al editar un plan viejo que tuviera e31/e32.
+  useEffect(() => {
+    if (!enProduccion && esTipoVentaFiscal(tipoEcf)) setTipoEcf('sin-ncf');
+  }, [enProduccion, tipoEcf]);
   const [tipoPago, setTipoPago]         = useState(
     initialPlan
       ? String(initialPlan.tipoPago)

@@ -4,6 +4,23 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.13.0 — 2026-08-04
+
+### Nuevo
+
+- **dgii**: notas internas sin e-NCF y quitar el badge de ambiente
+- **dgii**: ocultar y bloquear comprobantes fiscales fuera de Producción
+  - lib/ecf-api/ambiente.ts — getAmbienteTenant() con caché de 5 min por instancia. Falla cerrado: si ecf-api no responde, no se emite. Un comprobante emitido contra el ambiente equivocado no se puede des-emitir.
+  - /api/ecf/emitir y /api/facturas/[id]/emitir-ecf — 403 si el tenant no está en Producción. También bloquea crear borradores de VENTA con tipo fiscal: solo existirían para emitirse después.
+  - Excepción para el Set de Pruebas de habilitación, que corre en TesteCF por definición — sin ella ninguna empresa podría llegar a Producción. Se marca con `origen:'habilitacion'` y exige 'configuracion:gestionar'; NO se apoya en skipRangeValidation, que cualquier cliente puede poner.
+  - useTiposDisponibles — esconde los tipos de venta fiscal fuera de Producción. Asume "no Producción" mientras carga.
+  - POS y terminales POS tenían los <option> hardcodeados y su API aceptaba `z.string().max(10)` sin enum: un terminal con default '31' se lo heredaba a cada venta. Ahora enum + gate de ambiente.
+  - Cotización→factura hardcodeaba '32'; fuera de Producción nace sin-ncf.
+
+### Arreglado
+
+- **dgii**: cerrar el gate de ambiente también en facturas recurrentes
+
 ## v1.12.0 — 2026-08-03
 
 ### Nuevo

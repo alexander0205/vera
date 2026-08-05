@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 
 interface Ref { id: number; nombre: string; }
 interface Terminal {
@@ -29,6 +30,7 @@ export default function TerminalesClient({
   impresoras: Ref[];
   listas: Ref[];
 }) {
+  const { enProduccion } = useTiposDisponibles();
   const router = useRouter();
   const [terminales, setTerminales] = useState<Terminal[]>(terminalesIniciales);
   const [editId, setEditId] = useState<number | null>(null);
@@ -190,8 +192,10 @@ export default function TerminalesClient({
               className="mb-5 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
             >
               <option value="sin-ncf">Ticket (sin NCF)</option>
-              <option value="32">Factura de consumo (e32)</option>
-              <option value="31">Crédito fiscal (e31)</option>
+              {/* Sin habilitación en DGII no hay comprobante fiscal que asignar
+                  por defecto: cada venta del terminal lo heredaría. */}
+              {enProduccion && <option value="32">Factura de consumo (e32)</option>}
+              {enProduccion && <option value="31">Crédito fiscal (e31)</option>}
             </select>
 
             <label className="mb-5 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3">
