@@ -67,6 +67,11 @@
         "tipo": "mejora",
         "titulo": "El correo de la factura ahora sale a nombre de tu institución",
         "detalle": "Antes el cliente recibía un correo genérico del sistema. Ahora llega con tu logo, tus colores, tu nombre y tus datos de contacto, y si responde te escribe a ti. Igual para las cotizaciones."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Envía una cotización por correo desde la lista",
+        "detalle": "Antes había que entrar a la cotización para mandarla. Ahora la envías directo desde la lista, y al enviarla pasa sola de borrador a enviada."
       }
     ]
   },

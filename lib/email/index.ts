@@ -427,7 +427,7 @@ function cabeceraEmisor(emisor: EmisorEmail, logoImg: string | null, etiqueta: s
 }
 
 /** Pie con los datos fiscales y de contacto de la institución. */
-function pieEmisor(emisor: EmisorEmail): string {
+function pieEmisor(emisor: EmisorEmail, motivo: string): string {
   const lineas = [
     emisor.razonSocial && emisor.nombreComercial ? escapeHtml(emisor.razonSocial) : null,
     emisor.rnc ? `RNC: ${escapeHtml(emisor.rnc)}` : null,
@@ -443,7 +443,7 @@ function pieEmisor(emisor: EmisorEmail): string {
     <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:18px 28px;">
       ${lineas.map(l => `<p style="margin:0 0 3px;font-size:12px;color:#6b7280;">${l}</p>`).join('')}
       <p style="margin:10px 0 0;font-size:11px;color:#9ca3af;">
-        Recibes este correo porque se emitió un comprobante a tu nombre. Si tienes alguna duda, responde a este mensaje.
+        ${escapeHtml(motivo)} Si tienes alguna duda, responde a este mensaje.
       </p>
     </div>`;
 }
@@ -479,10 +479,17 @@ export async function sendInvoiceEmail(opts: {
   const referencia = codigo ?? encf;
   const logo = logoInline(emisor.logo);
   const saldado = saldoCts <= 0;
+  // Las facturas sin comprobante fiscal guardan un placeholder (BOR-XXXXXXXX)
+  // en la misma columna. Solo se muestra el e-NCF cuando es uno de verdad.
+  const encfReal = /^E\d{12}$/.test(encf) && encf !== referencia;
+  // Una nota de crédito no es una factura; el código lo dice (NC-, ND-, FA-).
+  const tipoTexto = /^NC-/i.test(referencia) ? 'Nota de crédito'
+    : /^ND-/i.test(referencia) ? 'Nota de débito'
+    : 'Factura';
 
   const html = `
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-      ${cabeceraEmisor(emisor, logo?.img ?? null, 'Factura')}
+      ${cabeceraEmisor(emisor, logo?.img ?? null, tipoTexto)}
       <div style="padding:28px;">
         <p style="margin:0 0 18px;color:#374151;font-size:15px;">
           ${clienteNombre ? `Estimado/a <strong>${escapeHtml(clienteNombre)}</strong>,` : 'Estimado/a cliente,'}
@@ -490,7 +497,7 @@ export async function sendInvoiceEmail(opts: {
         </p>
         <table style="width:100%;border-collapse:collapse;">
           ${fila('Comprobante', escapeHtml(referencia))}
-          ${codigo ? fila('e-NCF', escapeHtml(encf)) : ''}
+          ${encfReal ? fila('e-NCF', escapeHtml(encf)) : ''}
           ${fila('Fecha', escapeHtml(fechaEmision))}
           ${fila('Total', `DOP ${montoDOP(montoTotalCts)}`, true)}
           ${saldado
@@ -498,7 +505,7 @@ export async function sendInvoiceEmail(opts: {
             : fila('Pendiente', `<span style="color:#b45309;">DOP ${montoDOP(saldoCts)}</span>`)}
         </table>
       </div>
-      ${pieEmisor(emisor)}
+      ${pieEmisor(emisor, `Recibes este correo porque se emitió este documento a tu nombre.`)}
     </div>`;
 
   const attachments: Attachment[] = [{ filename: `${referencia}.pdf`, content: pdfBuffer }];
@@ -508,7 +515,7 @@ export async function sendInvoiceEmail(opts: {
     from:    remitente(emisor),
     to:      email,
     replyTo: emisor.emailFacturacion ?? undefined,
-    subject: `Factura ${referencia} — ${nombreEmisor(emisor)}`,
+    subject: `${tipoTexto} ${referencia} — ${nombreEmisor(emisor)}`,
     html,
     attachments,
   });
@@ -549,7 +556,7 @@ export async function sendCotizacionEmail(opts: {
         </table>
         <p style="margin:0;color:#6b7280;font-size:13px;">Gracias por su preferencia. Quedamos atentos a cualquier consulta.</p>
       </div>
-      ${pieEmisor(emisor)}
+      ${pieEmisor(emisor, `Recibes este correo porque se preparó esta cotización a tu nombre.`)}
     </div>`;
 
   const attachments: Attachment[] = [{ filename: `cotizacion-${numero}.pdf`, content: pdfBuffer }];
