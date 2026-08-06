@@ -13,12 +13,12 @@ import {
   } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleHeader } from '@/components/module-header';
+import { RailModulos } from '@/components/rail-modulos';
 import { RailBrand } from '@/components/rail-brand';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import { planHasFeature } from '@/lib/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { moduleUrl } from '@/lib/config/modules';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { ProfileDropdown, getInitials, type UserInfo } from '@/components/profile-dropdown';
 
@@ -120,8 +120,6 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
       // Usuarios, roles y plan viven en el área de Administración (/cuenta):
       // son del negocio, no de Facturación. Se llega por el switcher de módulo.
-      { href: '/dashboard/api-keys',      label: 'API Keys' },
-      { href: '/dashboard/webhooks',      label: 'Webhooks' },
       { href: '/dashboard/impresoras',    label: 'Impresoras' },
     ],
   },
@@ -161,7 +159,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/compras':               ['compras:ver', 'productos:gestionar'],
 
   // Administración Escolar no vive aquí: es otro módulo, con su propio nav en
-  // /escolar. Desde este sidebar solo se ofrece el salto (ver puedeIrEscolar).
+  // /escolar. El salto entre módulos lo ofrece RailModulos, al pie del menú.
 
   // Caja
   '/dashboard/caja':                  'caja:operar',
@@ -196,8 +194,6 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
   '/dashboard/certificado':           'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
   '/dashboard/equipo/permisos':       'equipo:gestionar',
-  '/dashboard/api-keys':              'configuracion:gestionar',
-  '/dashboard/webhooks':              'configuracion:gestionar',
   '/dashboard/impresoras':            'configuracion:ver',
 };
 
@@ -306,14 +302,9 @@ function SidebarContent({
   // Punto de Venta NO es un grupo dentro del nav de Facturación: es OTRO módulo.
   // Como Alegra ("Ir a Alegra POS"), va como acceso separado al final del nav
   // que cambia de producto (a /pos). Solo si el usuario tiene el módulo pos.
-  const puedeIrPos = (activeTeam?.posHabilitado ?? false)
-    && (permsLoading || modules.includes('pos'))
-    && can('/pos');
-
   // Mismo trato para Administración Escolar. A diferencia del POS no tiene
   // flag propio en teams: manda `modules` (empresa ∩ rol), así que mientras
   // cargan los permisos NO se muestra — es opt-in y la mayoría no lo tiene.
-  const puedeIrEscolar = !permsLoading && modules.includes('escolar');
 
   // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
@@ -598,10 +589,11 @@ function SidebarContent({
           );
         })}
 
-        {/* Saltar a otro módulo NO vive acá: lo hace el switcher del header,
-            que es idéntico en los 4 módulos. Tenerlo además dentro del menú
-            hacía que el menú de Facturación ofreciera cosas que el de POS o
-            Escolar no, y al revés. */}
+        {/* Justo después de Configuración, dentro de la lista que hace scroll —
+            no anclado al pie. Mismo componente y misma fuente de datos que en
+            los otros 3 menús: los módulos que la empresa tiene y el rol puede
+            ver. Antes acá había enlaces sueltos a POS y Escolar a mano. */}
+        <RailModulos current="facturacion" />
       </Box>
 
       {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es

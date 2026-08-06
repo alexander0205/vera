@@ -33,7 +33,6 @@ export interface EmisorPDF {
   sitioWeb?:         string;
   emailFacturacion?: string;
   logo?:             string;
-  firma?:            string;
   colorPrimario?:    string;
 }
 

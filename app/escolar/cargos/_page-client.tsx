@@ -13,6 +13,8 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { NativeSelect } from '@/components/ui/native-select';
+import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
@@ -446,8 +448,9 @@ export default function CargosClient() {
 
       <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) setOpen(false); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Generar cargos masivos</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
+          <ModalHeaderIcon icon={Receipt} title="Generar cargos masivos"
+            subtitle="Crea el mismo cargo para todas las matrículas del filtro." />
+          <div className="space-y-4 px-6 py-4">
             {opError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>}
             {resultado && (
               <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg p-3">
@@ -458,51 +461,44 @@ export default function CargosClient() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Período *</Label>
-                <Select value={form.periodoId} onValueChange={(v) => {
-                  const periodo = periodos.find((p) => String(p.id) === v);
+                <NativeSelect value={form.periodoId} onChange={(e) => {
+                  const periodo = periodos.find((p) => String(p.id) === e.target.value);
                   const siguiente = mesInicial(periodo);
                   setForm((f) => ({
                     ...f,
-                    periodoId: v,
+                    periodoId: e.target.value,
                     ...(perteneceMes(periodo, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) }),
                   }));
                 }}>
-                  <SelectTrigger><SelectValue placeholder="Período" /></SelectTrigger>
-                  <SelectContent>
-                    {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                  <option value="" disabled>Período</option>
+                  {periodos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+                </NativeSelect>
               </div>
               <div className="space-y-1.5">
                 <Label>Curso</Label>
-                <Select value={form.cursoId} onValueChange={(v) => setForm((f) => ({ ...f, cursoId: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los cursos</SelectItem>
-                    {cursosActivos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <NativeSelect value={form.cursoId} onChange={(e) => setForm((f) => ({ ...f, cursoId: e.target.value }))}>
+                  <option value="todos">Todos los cursos</option>
+                  {cursosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                </NativeSelect>
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label>Concepto *</Label>
-              <Select value={form.conceptoId} onValueChange={(v) => {
-                const concepto = conceptos.find((c) => String(c.id) === v);
+              <NativeSelect value={form.conceptoId} onChange={(e) => {
+                const concepto = conceptos.find((c) => String(c.id) === e.target.value);
                 const siguiente = mesInicial(periodoForm);
                 setForm((f) => ({
                   ...f,
-                  conceptoId: v,
+                  conceptoId: e.target.value,
                   ...(concepto?.tipo === 'mensualidad'
                     ? (perteneceMes(periodoForm, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
                     : { mes: '' }),
                 }));
               }}>
-                <SelectTrigger><SelectValue placeholder="Concepto" /></SelectTrigger>
-                <SelectContent>
-                  {conceptosActivos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
+                <option value="" disabled>Concepto</option>
+                {conceptosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+              </NativeSelect>
             </div>
 
             {conceptoSeleccionado?.tipo === 'mensualidad' ? (
@@ -546,8 +542,9 @@ export default function CargosClient() {
       {/* Cargo individual — un estudiante */}
       <Dialog open={openInd} onOpenChange={(o: boolean) => { if (!o) setOpenInd(false); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Cargo individual</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
+          <ModalHeaderIcon icon={Receipt} title="Cargo individual"
+            subtitle="Un cargo para un estudiante en específico." />
+          <div className="space-y-4 px-6 py-4">
             {errInd && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{errInd}</div>}
             {okInd && <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg p-3">{okInd}</div>}
 
@@ -555,32 +552,27 @@ export default function CargosClient() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Período *</Label>
-                <Select value={formInd.periodoId} onValueChange={(v) => {
-                  const periodo = periodos.find((p) => String(p.id) === v);
+                <NativeSelect value={formInd.periodoId} onChange={(e) => {
+                  const periodo = periodos.find((p) => String(p.id) === e.target.value);
                   const siguiente = mesInicial(periodo);
                   setFormInd((f) => ({
                     ...f,
-                    periodoId: v,
+                    periodoId: e.target.value,
                     estudianteId: '',
                     matriculaId: '',
                     ...(perteneceMes(periodo, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) }),
                   }));
                 }}>
-                  <SelectTrigger><SelectValue placeholder="Período" /></SelectTrigger>
-                  <SelectContent>
-                    {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                  <option value="" disabled>Período</option>
+                  {periodos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+                </NativeSelect>
               </div>
               <div className="space-y-1.5">
                 <Label>Curso</Label>
-                <Select value={formInd.cursoId} onValueChange={(v) => setFormInd((f) => ({ ...f, cursoId: v, estudianteId: '', matriculaId: '' }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los cursos</SelectItem>
-                    {cursosActivos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <NativeSelect value={formInd.cursoId} onChange={(e) => setFormInd((f) => ({ ...f, cursoId: e.target.value, estudianteId: '', matriculaId: '' }))}>
+                  <option value="todos">Todos los cursos</option>
+                  {cursosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                </NativeSelect>
               </div>
             </div>
 
@@ -615,22 +607,20 @@ export default function CargosClient() {
             {/* Concepto */}
             <div className="space-y-1.5">
               <Label>Concepto *</Label>
-              <Select value={formInd.conceptoId} onValueChange={(v) => {
-                const concepto = conceptos.find((c) => String(c.id) === v);
+              <NativeSelect value={formInd.conceptoId} onChange={(e) => {
+                const concepto = conceptos.find((c) => String(c.id) === e.target.value);
                 const siguiente = mesInicial(periodoInd);
                 setFormInd((f) => ({
                   ...f,
-                  conceptoId: v,
+                  conceptoId: e.target.value,
                   ...(concepto?.tipo === 'mensualidad'
                     ? (perteneceMes(periodoInd, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
                     : { mes: '' }),
                 }));
               }}>
-                <SelectTrigger><SelectValue placeholder="Concepto" /></SelectTrigger>
-                <SelectContent>
-                  {conceptosActivos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
+                <option value="" disabled>Concepto</option>
+                {conceptosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+              </NativeSelect>
             </div>
 
             {conceptoIndSel?.tipo === 'mensualidad' ? (
@@ -691,15 +681,12 @@ function MesAcademicoSelect({ periodo, meses, mes, anio, onChange }: {
   return (
     <div className="space-y-1.5">
       <Label>Mes de la mensualidad *</Label>
-      <Select value={value} onValueChange={(v) => {
-        const seleccionado = meses.find((m) => m.key === v);
+      <NativeSelect value={value} onChange={(e) => {
+        const seleccionado = meses.find((m) => m.key === e.target.value);
         if (seleccionado) onChange(seleccionado);
       }}>
-        <SelectTrigger><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {meses.map((m) => <SelectItem key={m.key} value={m.key}>{MESES[m.mes]} {m.anio}</SelectItem>)}
-        </SelectContent>
-      </Select>
+        {meses.map((m) => <option key={m.key} value={m.key}>{MESES[m.mes]} {m.anio}</option>)}
+      </NativeSelect>
     </div>
   );
 }

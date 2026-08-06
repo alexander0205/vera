@@ -1,0 +1,199 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { and, asc, desc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/drizzle';
+import {
+  adminEscolarServicios, adminEscolarGrados, adminEscolarCursos, adminEscolarPeriodos,
+  adminEscolarConceptosPago, adminEscolarConceptoPrecios, products,
+} from '@/lib/db/schema';
+import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { agruparProductos, raizConcepto } from '@/lib/administracion-escolar/agrupar-productos';
+
+const TIPOS_OBJ = new Set(['servicio', 'grado', 'seccion']);
+
+/** Productos que son venta de mostrador, no cargo escolar. */
+const NO_ES_CARGO = /t-?shirt|camis|uniforme|polo/i;
+
+/**
+ * Estructura, conceptos, tarifas y servicios de facturación de UN año escolar.
+ *
+ * Todo va acotado al período: la tarifa de 2026-2027 no es la de 2025-2026, y
+ * los servicios ya cuelgan de su año. Sin `?periodoId=` se usa el activo.
+ */
+export async function GET(req: NextRequest) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
+  if (!auth.ok) return auth.response;
+  const t = auth.teamId;
+
+  const periodos = await db
+    .select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre, activo: adminEscolarPeriodos.activo })
+    .from(adminEscolarPeriodos)
+    .where(eq(adminEscolarPeriodos.teamId, t))
+    .orderBy(desc(adminEscolarPeriodos.id));
+
+  const pedido = Number(new URL(req.url).searchParams.get('periodoId')) || 0;
+  const periodo = periodos.find((p) => p.id === pedido)
+    ?? periodos.find((p) => p.activo)
+    ?? periodos[0];
+
+  if (!periodo) {
+    return NextResponse.json({
+      periodos: [], periodo: null, servicios: [], grados: [], secciones: [],
+      conceptos: [], precios: [], productos: [], sugerencias: [],
+    });
+  }
+
+  const [servicios, conceptos, precios, productos] = await Promise.all([
+    db.select({ id: adminEscolarServicios.id, nombre: adminEscolarServicios.nombre, tanda: adminEscolarServicios.tanda, orden: adminEscolarServicios.orden })
+      .from(adminEscolarServicios)
+      .where(and(eq(adminEscolarServicios.teamId, t), eq(adminEscolarServicios.periodoId, periodo.id)))
+      .orderBy(asc(adminEscolarServicios.orden)),
+    db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre, tipo: adminEscolarConceptosPago.tipo, recurrente: adminEscolarConceptosPago.recurrente })
+      .from(adminEscolarConceptosPago).where(eq(adminEscolarConceptosPago.teamId, t)).orderBy(asc(adminEscolarConceptosPago.nombre)),
+    db.select().from(adminEscolarConceptoPrecios)
+      .where(and(eq(adminEscolarConceptoPrecios.teamId, t), eq(adminEscolarConceptoPrecios.periodoId, periodo.id))),
+    db.select({ id: products.id, nombre: products.nombre, referencia: products.referencia, precio: products.precio })
+      .from(products).where(eq(products.teamId, t)).orderBy(asc(products.nombre)),
+  ]);
+
+  // Grados y secciones se recortan a los servicios del período: traer los del
+  // team entero mezclaría años.
+  const idsServicio = new Set(servicios.map((s) => s.id));
+  const grados = (await db
+    .select({ id: adminEscolarGrados.id, servicioId: adminEscolarGrados.servicioId, nombre: adminEscolarGrados.nombre, orden: adminEscolarGrados.orden })
+    .from(adminEscolarGrados).where(eq(adminEscolarGrados.teamId, t)).orderBy(asc(adminEscolarGrados.orden))
+  ).filter((g) => idsServicio.has(g.servicioId));
+
+  const idsGrado = new Set(grados.map((g) => g.id));
+  const secciones = (await db
+    .select({ id: adminEscolarCursos.id, gradoId: adminEscolarCursos.gradoId, nombre: adminEscolarCursos.nombre })
+    .from(adminEscolarCursos).where(eq(adminEscolarCursos.teamId, t)).orderBy(asc(adminEscolarCursos.nombre))
+  ).filter((s) => idsGrado.has(s.gradoId));
+
+  // Asistente: lo que el colegio ya factura y todavía no es un concepto.
+  const sugerencias = agruparProductos(
+    productos.filter((p) => !NO_ES_CARGO.test(p.nombre)),
+    new Set(conceptos.map((c) => raizConcepto(c.nombre))),
+  );
+
+  return NextResponse.json({
+    periodos, periodo, servicios, grados, secciones, conceptos, precios, productos, sugerencias,
+  });
+}
+
+/**
+ * Fija la tarifa de un concepto en un nodo, para un año escolar.
+ *
+ * Body: `{ conceptoId, periodoId, objetivoTipo, objetivoId, monto, productId? }`
+ * o, para estrenar servicio de facturación, `nuevoProducto: { nombre, referencia, precio }`.
+ */
+export async function POST(req: NextRequest) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
+  if (!auth.ok) return auth.response;
+  const t = auth.teamId;
+  const { conceptoId, periodoId, objetivoTipo, objetivoId, monto, productId, nuevoProducto } = await req.json();
+
+  const cId = Number(conceptoId), oId = Number(objetivoId), pId = Number(periodoId);
+  if (!cId || !oId || !pId || !TIPOS_OBJ.has(objetivoTipo)) {
+    return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
+  }
+
+  const [c] = await db.select({ id: adminEscolarConceptosPago.id }).from(adminEscolarConceptosPago)
+    .where(and(eq(adminEscolarConceptosPago.id, cId), eq(adminEscolarConceptosPago.teamId, t))).limit(1);
+  if (!c) return NextResponse.json({ error: 'Concepto no encontrado' }, { status: 404 });
+
+  const [per] = await db.select({ id: adminEscolarPeriodos.id }).from(adminEscolarPeriodos)
+    .where(and(eq(adminEscolarPeriodos.id, pId), eq(adminEscolarPeriodos.teamId, t))).limit(1);
+  if (!per) return NextResponse.json({ error: 'Período no encontrado' }, { status: 404 });
+
+  // El monto puede venir de tres sitios, en este orden: el que se escribe, el
+  // del servicio recién creado, o el del servicio existente que se eligió.
+  let montoCentavos = monto != null ? Math.round(Number(monto) * 100) : null;
+  let prodId: number | null = null;
+
+  if (nuevoProducto?.nombre?.trim()) {
+    const precioNuevo = Math.round(Number(nuevoProducto.precio) * 100);
+    if (!Number.isFinite(precioNuevo) || precioNuevo < 0) {
+      return NextResponse.json({ error: 'Precio inválido' }, { status: 400 });
+    }
+    const [creado] = await db.insert(products).values({
+      teamId: t,
+      nombre: String(nuevoProducto.nombre).trim(),
+      referencia: nuevoProducto.referencia ? String(nuevoProducto.referencia).trim().slice(0, 100) : null,
+      precio: precioNuevo,
+      // La enseñanza es servicio exento de itbis; el POS no la vende en mostrador.
+      tasaItbis: 'exento',
+      tipo: 'servicio',
+      visiblePos: false,
+      controlaInventario: false,
+    }).returning({ id: products.id, precio: products.precio });
+    prodId = creado.id;
+    montoCentavos ??= creado.precio;
+  } else if (productId != null) {
+    const [p] = await db.select({ id: products.id, precio: products.precio }).from(products)
+      .where(and(eq(products.id, Number(productId)), eq(products.teamId, t))).limit(1);
+    if (!p) return NextResponse.json({ error: 'Servicio de facturación no encontrado' }, { status: 404 });
+    prodId = p.id;
+    montoCentavos ??= p.precio;
+  }
+
+  if (!Number.isFinite(montoCentavos) || montoCentavos == null || montoCentavos < 0) {
+    return NextResponse.json({ error: 'Monto inválido' }, { status: 400 });
+  }
+
+  const [row] = await db.insert(adminEscolarConceptoPrecios)
+    .values({ teamId: t, conceptoId: cId, periodoId: pId, objetivoTipo, objetivoId: oId, montoCentavos, productId: prodId })
+    .onConflictDoUpdate({
+      target: [
+        adminEscolarConceptoPrecios.teamId, adminEscolarConceptoPrecios.conceptoId,
+        adminEscolarConceptoPrecios.periodoId, adminEscolarConceptoPrecios.objetivoTipo,
+        adminEscolarConceptoPrecios.objetivoId,
+      ],
+      set: { montoCentavos, ...(prodId != null ? { productId: prodId } : {}), updatedAt: new Date() },
+    })
+    .returning();
+  return NextResponse.json({ precio: row });
+}
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
+  if (!auth.ok) return auth.response;
+  const id = Number(new URL(req.url).searchParams.get('id'));
+  if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 });
+
+  const [row] = await db.delete(adminEscolarConceptoPrecios)
+    .where(and(eq(adminEscolarConceptoPrecios.id, id), eq(adminEscolarConceptoPrecios.teamId, auth.teamId)))
+    .returning({ id: adminEscolarConceptoPrecios.id });
+  if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  return NextResponse.json({ ok: true });
+}
+
+/** Crea de un tirón los conceptos que el colegio ya factura. */
+export async function PUT(req: NextRequest) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
+  if (!auth.ok) return auth.response;
+  const t = auth.teamId;
+  const { nombres } = await req.json();
+  if (!Array.isArray(nombres) || nombres.length === 0) {
+    return NextResponse.json({ error: 'Nada que traer' }, { status: 400 });
+  }
+
+  const existentes = await db.select({ nombre: adminEscolarConceptosPago.nombre })
+    .from(adminEscolarConceptosPago).where(eq(adminEscolarConceptosPago.teamId, t));
+  const ya = new Set(existentes.map((c) => c.nombre.trim().toLowerCase()));
+
+  const aCrear = (nombres as unknown[])
+    .map((n) => String(n).trim())
+    .filter((n) => n && !ya.has(n.toLowerCase()));
+  if (aCrear.length === 0) return NextResponse.json({ conceptos: [] });
+
+  const creados = await db.insert(adminEscolarConceptosPago).values(
+    aCrear.map((nombre) => ({
+      teamId: t,
+      nombre,
+      // La colegiatura es lo único que se cobra mes a mes; lo demás es de una vez.
+      tipo: /colegiatura|mensualidad/i.test(nombre) ? 'mensualidad' : 'otro',
+      recurrente: /colegiatura|mensualidad/i.test(nombre),
+    })),
+  ).returning();
+  return NextResponse.json({ conceptos: creados });
+}

@@ -4,6 +4,7 @@ import { adminEscolarEstudiantes, dependientes, clients } from '@/lib/db/schema'
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
 import { SEXOS_VALIDOS } from '@/lib/administracion-escolar/estudiante-utils';
+import { limpiarCamposSigerd } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
 import { eq, and } from 'drizzle-orm';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
@@ -46,7 +47,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { codigo, nombres, apellidos, sexo, fechaNacimiento, estado, dependienteId } = await req.json();
+  const body = await req.json();
+  const { codigo, nombres, apellidos, sexo, fechaNacimiento, estado, dependienteId } = body;
+  // Campos extra de la ficha: solo los que vengan en el cuerpo (update parcial).
+  const extra = limpiarCamposSigerd(body, { soloPresentes: true });
 
   // dependienteId: null desvincula; si viene un id, debe pertenecer al team.
   if (dependienteId !== undefined && dependienteId !== null) {
@@ -65,6 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(fechaNacimiento !== undefined ? { fechaNacimiento: fechaNacimiento || null } : {}),
       ...(estado !== undefined && ESTADOS.includes(estado) ? { estado } : {}),
       ...(dependienteId !== undefined ? { dependienteId } : {}),
+      ...extra,
       updatedAt: new Date(),
     })
     .where(and(eq(adminEscolarEstudiantes.id, parseInt(id)), eq(adminEscolarEstudiantes.teamId, teamId)))

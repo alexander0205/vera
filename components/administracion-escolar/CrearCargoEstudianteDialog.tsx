@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { NativeSelect } from '@/components/ui/native-select';
+import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
+import { Loader2, Receipt } from 'lucide-react';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 
 interface Concepto {
@@ -143,31 +144,29 @@ export function CrearCargoEstudianteDialog({
   return (
     <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>
-          Agregar cargo · {mesBloqueado
+        <ModalHeaderIcon icon={Receipt} subtitle="Se suma a la cuenta del estudiante."
+          title={<>Agregar cargo · {mesBloqueado
             ? new Intl.DateTimeFormat('es-DO', { month: 'long', year: 'numeric' }).format(new Date(Number(form.anio), (mesInicial ?? 1) - 1, 1))
-            : periodoNombre}
-        </DialogTitle></DialogHeader>
-        <div className="space-y-4 py-2">
+            : periodoNombre}</>} />
+        <div className="space-y-4 px-6 py-4">
           {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           {loading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div> : <>
             <div className="space-y-1.5">
               <Label>Concepto *</Label>
-              <Select value={form.conceptoId} onValueChange={(conceptoId) => setForm((f) => ({ ...f, conceptoId }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar concepto" /></SelectTrigger>
-                <SelectContent>{conceptos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}</SelectContent>
-              </Select>
+              <NativeSelect value={form.conceptoId} onChange={(e) => setForm((f) => ({ ...f, conceptoId: e.target.value }))}>
+                <option value="" disabled>Seleccionar concepto</option>
+                {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+              </NativeSelect>
             </div>
             {concepto?.tipo === 'mensualidad' && (
               meses.length ? <div className="space-y-1.5">
                 <Label>Mes de mensualidad *</Label>
-                <Select value={`${form.anio}-${String(form.mes).padStart(2, '0')}`} disabled={mesBloqueado} onValueChange={(value) => {
-                  const seleccionado = meses.find((m) => m.key === value);
+                <NativeSelect value={`${form.anio}-${String(form.mes).padStart(2, '0')}`} disabled={mesBloqueado} onChange={(e) => {
+                  const seleccionado = meses.find((m) => m.key === e.target.value);
                   if (seleccionado) setForm((f) => ({ ...f, mes: String(seleccionado.mes), anio: String(seleccionado.anio), fechaVencimiento: vencimientoDefault(seleccionado.anio, seleccionado.mes) }));
                 }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{meses.map((m) => <SelectItem key={m.key} value={m.key}>{new Intl.DateTimeFormat('es-DO', { month: 'long', year: 'numeric' }).format(new Date(m.anio, m.mes - 1, 1))}</SelectItem>)}</SelectContent>
-                </Select>
+                  {meses.map((m) => <option key={m.key} value={m.key}>{new Intl.DateTimeFormat('es-DO', { month: 'long', year: 'numeric' }).format(new Date(m.anio, m.mes - 1, 1))}</option>)}
+                </NativeSelect>
               </div> : <p className="text-sm text-amber-700">Configura fechas de inicio y fin del período antes de crear una mensualidad.</p>
             )}
             <div className="grid grid-cols-2 gap-3">

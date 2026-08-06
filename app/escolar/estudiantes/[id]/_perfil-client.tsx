@@ -10,11 +10,14 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { NativeSelect } from '@/components/ui/native-select';
+import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ArrowLeft, Loader2, Receipt, Link2, Wallet, AlertTriangle, Pencil, CalendarDays, FileText, MoreVertical, Plus, ChevronRight, Ban } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
+import { CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
@@ -413,6 +416,9 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
           )}
         </div>
       )}
+
+      {/* Ficha extendida (solo lo que esté lleno). */}
+      <FichaAdicional estudiante={estudiante} />
 
       {/* Secciones: Por período · Tutores · Historial */}
       <div className="border border-gray-200 rounded-xl bg-white p-4">
@@ -987,8 +993,9 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Facturar varios meses en una sola factura</DialogTitle></DialogHeader>
-        <p className="text-sm text-gray-500">
+        <ModalHeaderIcon icon={FileText} title="Facturar varios meses"
+          subtitle="Une varias mensualidades en una sola factura." />
+        <p className="px-6 text-sm text-gray-500">
           Marca los meses/cargos a incluir. Se crea <b>una sola factura</b> que los cubre
           (un mes por línea). Luego la cobras normal: puedes abonar en partes y los
           pagos se acumulan en su historial hasta saldarla.
@@ -1008,12 +1015,10 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label className="text-xs">Concepto</Label>
-                    <Select value={conceptoId} onValueChange={setConceptoId}>
-                      <SelectTrigger><SelectValue placeholder="Concepto" /></SelectTrigger>
-                      <SelectContent>
-                        {conceptos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <NativeSelect value={conceptoId} onChange={(e) => setConceptoId(e.target.value)}>
+                      <option value="" disabled>Concepto</option>
+                      {conceptos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                    </NativeSelect>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Monto por mes (RD$)</Label>
@@ -1628,6 +1633,35 @@ function InfoChip({ k, v }: { k: string; v: string }) {
 
 function EmptyBox({ text }: { text: string }) {
   return <div className="text-center py-10 text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">{text}</div>;
+}
+
+/**
+ * Ficha extendida (los campos "estilo SIGERD"). Solo lista lo que esté lleno; si
+ * el estudiante no tiene ninguno, no pinta nada (no ensucia el perfil).
+ */
+function FichaAdicional({ estudiante }: { estudiante: Estudiante }) {
+  const ex = estudiante as unknown as Record<string, string | null>;
+  const llenos = CAMPOS_SIGERD_ESTUDIANTE.filter((c) => (ex[c.key] ?? '').toString().trim() !== '');
+  if (llenos.length === 0) return null;
+  const grupos = GRUPOS_SIGERD.filter((g) => llenos.some((c) => c.grupo === g));
+  return (
+    <div className="border border-gray-200 rounded-xl bg-white p-4 space-y-4">
+      <h2 className="text-base font-semibold text-gray-900">Datos adicionales</h2>
+      {grupos.map((g) => (
+        <div key={g} className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{g}</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+            {llenos.filter((c) => c.grupo === g).map((c) => (
+              <div key={c.key} className="min-w-0">
+                <p className="text-[11px] text-gray-400">{c.label}</p>
+                <p className="text-sm text-gray-900 break-words">{ex[c.key]}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {

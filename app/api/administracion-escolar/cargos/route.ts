@@ -9,6 +9,7 @@ import {
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
+import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
 import { eq, and, desc } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
   if (!estudianteId || !matriculaId || !periodoId || !conceptoId) {
     return NextResponse.json({ error: 'estudianteId, matriculaId, periodoId y conceptoId son requeridos' }, { status: 400 });
   }
-  if (!Number.isInteger(montoCentavos) || montoCentavos <= 0) {
+  if (montoCentavos != null && (!Number.isInteger(montoCentavos) || montoCentavos <= 0)) {
     return NextResponse.json({ error: 'montoCentavos debe ser un entero positivo' }, { status: 400 });
   }
   if (!Number.isInteger(anio)) return NextResponse.json({ error: 'anio requerido' }, { status: 400 });
@@ -80,6 +81,24 @@ export async function POST(req: NextRequest) {
     periodo:    periodoId,
   });
   if (!refs.ok) return NextResponse.json({ error: refs.error }, { status: 404 });
+
+  // Sin monto explícito se resuelve la tarifa: beca del estudiante, si no el
+  // precio del grado, si no el del servicio. Que el llamador pueda mandarlo
+  // igual deja la puerta abierta al cobro puntual que no sigue la lista.
+  let montoFinal = montoCentavos as number | null | undefined;
+  if (montoFinal == null) {
+    const tarifa = await resolverTarifa(teamId, refs.ids.matricula!, refs.ids.concepto!);
+    if (!tarifa) {
+      return NextResponse.json(
+        { error: 'Este concepto no tiene precio configurado para el grado ni el servicio del estudiante. Ponle un monto o configúralo en Configuración → Conceptos.' },
+        { status: 422 },
+      );
+    }
+    montoFinal = tarifa.montoCentavos;
+  }
+  if (!Number.isInteger(montoFinal) || montoFinal <= 0) {
+    return NextResponse.json({ error: 'El monto resuelto no es válido' }, { status: 400 });
+  }
 
   const [periodo] = await db
     .select({ fechaInicio: adminEscolarPeriodos.fechaInicio, fechaFin: adminEscolarPeriodos.fechaFin })
@@ -101,8 +120,8 @@ export async function POST(req: NextRequest) {
     conceptoId:   refs.ids.concepto!,
     mes: mes ?? null,
     anio,
-    montoCentavos,
-    saldoCentavos: montoCentavos,
+    montoCentavos: montoFinal,
+    saldoCentavos: montoFinal,
     fechaVencimiento: fechaVencimiento || null,
     estado: 'pendiente',
   }).returning();

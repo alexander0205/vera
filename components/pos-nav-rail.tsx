@@ -14,6 +14,7 @@
 
 import Box from '@mui/material/Box';
 import { RailBrand } from '@/components/rail-brand';
+import { RailModulos } from '@/components/rail-modulos';
 import { useNavFijo } from '@/lib/hooks/useNavFijo';
 import Typography from '@mui/material/Typography';
 import Link from 'next/link';
@@ -114,6 +115,9 @@ export function PosNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' }
               </Box>
             );
           })}
+
+          {/* Al final de la lista de items, no anclado al pie. */}
+          <RailModulos current="pos" />
         </Box>
       </Box>
     </Box>

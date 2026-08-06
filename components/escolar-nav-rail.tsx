@@ -10,12 +10,13 @@
 
 import Box from '@mui/material/Box';
 import { RailBrand } from '@/components/rail-brand';
+import { RailModulos } from '@/components/rail-modulos';
 import { useNavFijo } from '@/lib/hooks/useNavFijo';
 import Typography from '@mui/material/Typography';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  GraduationCap, Users, ClipboardList, Receipt, Wallet, Settings, FileText,
+  GraduationCap, Users, ClipboardList, Receipt, Wallet, Settings, FileText, DownloadCloud, Contact, ClipboardCheck,
 } from 'lucide-react';
 
 const RAIL = 68;
@@ -25,9 +26,12 @@ type Item = { href: string; label: string; icon: typeof Users };
 
 const ITEMS: Item[] = [
   { href: '/escolar/estudiantes',   label: 'Estudiantes',    icon: Users },
+  { href: '/escolar/personal',      label: 'Personal',       icon: Contact },
+  { href: '/escolar/condicion-academica', label: 'Condición académica', icon: ClipboardCheck },
   { href: '/escolar/matriculas',    label: 'Matrículas',     icon: ClipboardList },
   { href: '/escolar/cargos',        label: 'Cargos y deudas', icon: Receipt },
   { href: '/escolar/pagos',         label: 'Pagos',          icon: Wallet },
+  { href: '/escolar/sigerd',        label: 'SIGERD',         icon: DownloadCloud },
   { href: '/escolar/configuracion', label: 'Configuración',  icon: Settings },
 ];
 
@@ -98,6 +102,9 @@ export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawe
               </Box>
             );
           })}
+
+          {/* Al final de la lista de items, no anclado al pie. */}
+          <RailModulos current="escolar" />
         </Box>
       </Box>
     </Box>

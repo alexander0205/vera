@@ -1636,18 +1636,79 @@ export const adminEscolarPeriodos = pgTable('admin_escolar_periodos', {
   index('admin_escolar_periodos_team_idx').on(t.teamId),
 ]);
 
-/** Curso/grado (ej. Primero A, Segundo B). `orden` para ordenar en la UI. */
+/**
+ * Grado (Primero, Segundo…) dentro de un nivel/servicio. Agrupa las secciones.
+ * Modelo SIGERD: Servicio → Grado → Sección. `orden` ordena en la UI.
+ */
+/**
+ * Servicio = la TANDA/nivel del centro (como SIGERD): "Inicial-Matutina",
+ * "Secundario-Matutina"… Es el nivel más alto de la estructura académica.
+ * Debajo van los grados.
+ */
+export const adminEscolarServicios = pgTable('admin_escolar_servicios', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  /** Período (año escolar) al que pertenece. Jerarquía: Período → Servicio →
+   *  Curso(grado) → Sección. */
+  periodoId: integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id),
+  /** Nivel: "Inicial", "Primario", "Secundario", "Bachillerato"… */
+  nombre:    varchar('nombre', { length: 100 }).notNull(),
+  /** Tanda: "Matutina" | "Vespertina" | "Nocturna" | "Sabatina"… */
+  tanda:     varchar('tanda', { length: 30 }),
+  orden:     integer('orden').notNull().default(0),
+  /** IdServicio de SIGERD (reconciliación). Nullable. */
+  sigerdServicioId: integer('sigerd_servicio_id'),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_servicios_team_idx').on(t.teamId),
+]);
+
+export const adminEscolarGrados = pgTable('admin_escolar_grados', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  /** Servicio/tanda al que pertenece este grado. */
+  servicioId: integer('servicio_id').notNull().references(() => adminEscolarServicios.id),
+  /** Ej. "Primero", "Primer grado (7mo Nivel Básico)". */
+  nombre:    varchar('nombre', { length: 100 }).notNull(),
+  /** Nivel/servicio al que pertenece: "Primaria", "Secundario-Matutina"… */
+  nivel:     varchar('nivel', { length: 80 }),
+  orden:     integer('orden').notNull().default(0),
+  /** IdGrado de SIGERD (reconciliación). Nullable. */
+  sigerdGradoId: integer('sigerd_grado_id'),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_grados_team_idx').on(t.teamId),
+]);
+
+/**
+ * Sección (A, B, C…) de un grado. Es a lo que se matricula el estudiante.
+ *
+ * Tabla física histórica `admin_escolar_cursos`; ahora representa la SECCIÓN
+ * (se conserva el nombre físico para no reescribir las FK de matrículas/cargos,
+ * pero en producto/UI es "Sección"). `nombre` es la etiqueta ("A", "B").
+ */
 export const adminEscolarCursos = pgTable('admin_escolar_cursos', {
   id:        serial('id').primaryKey(),
   teamId:    integer('team_id').notNull().references(() => teams.id),
+  /** Grado al que pertenece esta sección. */
+  gradoId:   integer('grado_id').notNull().references(() => adminEscolarGrados.id),
   nombre:    varchar('nombre', { length: 80 }).notNull(),
   nivel:     varchar('nivel', { length: 60 }),
+  /** IdSeccion de SIGERD. Reconcilia sin depender del nombre. Nullable. */
+  sigerdSeccionId: integer('sigerd_seccion_id'),
+  /** Cupo máximo de estudiantes (opcional; `tope` en SIGERD). */
+  cupo:      integer('cupo'),
   orden:     integer('orden').notNull().default(0),
   activo:    boolean('activo').notNull().default(true),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('admin_escolar_cursos_team_idx').on(t.teamId),
+  index('admin_escolar_cursos_grado_idx').on(t.gradoId),
 ]);
 
 /** Materia/asignatura. Catálogo simple; aún no ligado a matrícula en el MVP. */
@@ -1673,10 +1734,41 @@ export const adminEscolarEstudiantes = pgTable('admin_escolar_estudiantes', {
   fechaNacimiento: date('fecha_nacimiento'),
   /** masculino | femenino | otro. Opcional. La edad se deriva de fechaNacimiento. */
   sexo:            varchar('sexo', { length: 20 }),
+  /** IdEstudiante de SIGERD. Clave estable de reconciliación (no cambia aunque
+   *  cambie el RNE). Nullable — solo lo llevan los importados de SIGERD. */
+  sigerdId:        integer('sigerd_id'),
   /** activo | inactivo | retirado | graduado */
   estado:          varchar('estado', { length: 20 }).notNull().default('activo'),
   /** Enlace futuro con Contactos (dependientes). Nullable — integración post-MVP. */
   dependienteId:   integer('dependiente_id').references(() => dependientes.id),
+
+  // ── Ficha extendida (misma forma que la ficha de SIGERD). TODO opcional; se
+  //    llena a mano en el alta o llegará de SIGERD al reconciliar. Ver
+  //    lib/administracion-escolar/estudiante-sigerd-campos.ts.
+  nacionalidad:                varchar('nacionalidad', { length: 60 }),
+  estadoCivil:                 varchar('estado_civil', { length: 30 }),
+  codigoRne:                   varchar('codigo_rne', { length: 40 }),
+  telefono:                    varchar('telefono', { length: 30 }),
+  celular:                     varchar('celular', { length: 30 }),
+  whatsapp:                    varchar('whatsapp', { length: 30 }),
+  actaEstado:                  varchar('acta_estado', { length: 40 }),
+  actaNumero:                  varchar('acta_numero', { length: 40 }),
+  actaMunicipioJce:            varchar('acta_municipio_jce', { length: 120 }),
+  actaOficialiaJce:            varchar('acta_oficialia_jce', { length: 120 }),
+  actaLibro:                   varchar('acta_libro', { length: 30 }),
+  actaFolio:                   varchar('acta_folio', { length: 30 }),
+  actaAnio:                    varchar('acta_anio', { length: 10 }),
+  dirProvincia:                varchar('dir_provincia', { length: 80 }),
+  dirMunicipio:                varchar('dir_municipio', { length: 80 }),
+  dirDistritoMunicipal:        varchar('dir_distrito_municipal', { length: 80 }),
+  dirSeccion:                  varchar('dir_seccion', { length: 80 }),
+  dirBarrio:                   varchar('dir_barrio', { length: 120 }),
+  dirSubBarrio:                varchar('dir_sub_barrio', { length: 120 }),
+  direccion:                   varchar('direccion', { length: 255 }),
+  programa:                    varchar('programa', { length: 80 }),
+  tarjetaSolidaridad:          varchar('tarjeta_solidaridad', { length: 60 }),
+  tarjetaSolidaridadFamiliar:  varchar('tarjeta_solidaridad_familiar', { length: 60 }),
+
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
@@ -1730,12 +1822,27 @@ export const adminEscolarMatriculas = pgTable('admin_escolar_matriculas', {
   cursoId:          integer('curso_id').notNull().references(() => adminEscolarCursos.id),
   codigoMatricula:  varchar('codigo_matricula', { length: 40 }),
   fechaInscripcion: date('fecha_inscripcion'),
+  /** Condición académica final de SIGERD (Promovido/Reprobado/Aplazado…). Nullable. */
+  sigerdCondicion:  varchar('sigerd_condicion', { length: 40 }),
   /** activa | finalizada | retirada | anulada */
   estado:           varchar('estado', { length: 20 }).notNull().default('activa'),
   /** Plan genérico que genera la mensualidad automática de esta matrícula. */
   facturaRecurrenteId: integer('factura_recurrente_id').references(() => facturasRecurrentes.id),
   /** Concepto escolar que recibirá cada cargo generado por el plan. */
   conceptoMensualidadId: integer('concepto_mensualidad_id').references(() => adminEscolarConceptosPago.id),
+  /**
+   * Beca. Es de la persona, no del aula: en una misma sección conviven quien
+   * paga completo y quien tiene media beca, todos contra la misma tarifa. Solo
+   * afecta la colegiatura; inscripción y materiales se cobran completos.
+   *
+   * `'porcentaje'` → `becaValor` es el % que se descuenta (50 = media beca,
+   * 100 = completa). `'monto'` → `becaValor` es lo que paga, en centavos.
+   * NULL en ambos = paga la tarifa que le toque.
+   */
+  becaTipo:   varchar('beca_tipo', { length: 12 }),
+  becaValor:  integer('beca_valor'),
+  /** Por qué: hermano, hijo de empleado, mérito. Sin esto nadie sabe explicarlo después. */
+  becaMotivo: varchar('beca_motivo', { length: 80 }),
   notas:            text('notas'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
@@ -1763,6 +1870,42 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('admin_escolar_conceptos_team_idx').on(t.teamId),
+]);
+
+/**
+ * Precio de un concepto ATADO a un nodo de la estructura (servicio/grado/
+ * sección), con su propio monto. Así "Mensualidad" puede costar distinto en
+ * Secundario vs Primario, o por grado/sección. `objetivoTipo` + `objetivoId`
+ * apuntan a servicios / grados / cursos(=sección).
+ */
+export const adminEscolarConceptoPrecios = pgTable('admin_escolar_concepto_precios', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  conceptoId:    integer('concepto_id').notNull().references(() => adminEscolarConceptosPago.id),
+  /**
+   * Año escolar al que pertenece esta tarifa. La colegiatura sube cada año; sin
+   * esto habría que duplicar el catálogo entero por año (que es justo como los
+   * colegios terminan con 30+ productos "Pago de colegiatura").
+   */
+  periodoId:     integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id),
+  /** 'servicio' | 'grado' | 'seccion' */
+  objetivoTipo:  varchar('objetivo_tipo', { length: 12 }).notNull(),
+  /** id del servicio / grado / curso(sección) según `objetivoTipo`. */
+  objetivoId:    integer('objetivo_id').notNull(),
+  montoCentavos: integer('monto_centavos').notNull(),
+  /**
+   * Servicio de facturación con el que se cobra esta tarifa. Va aquí y no en el
+   * concepto porque los colegios tienen un producto por grado. Opcional: quien
+   * hereda el precio del servicio hereda también su producto.
+   */
+  productId:     integer('product_id').references(() => products.id),
+  activo:        boolean('activo').notNull().default(true),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_concepto_precios_team_idx').on(t.teamId),
+  index('admin_escolar_concepto_precios_periodo_idx').on(t.periodoId),
+  uniqueIndex('admin_escolar_concepto_precios_uniq').on(t.teamId, t.conceptoId, t.periodoId, t.objetivoTipo, t.objetivoId),
 ]);
 
 /** Cargo/deuda escolar. La deuda vive AQUÍ, no depende de facturas.
@@ -2185,3 +2328,143 @@ export enum ActivityType {
   UPLOAD_CERT = 'UPLOAD_CERT',
   REGISTER_SEQUENCES = 'REGISTER_SEQUENCES',
 }
+
+// ─── Integración SIGERD (MINERD) ────────────────────────────────────────────
+
+/**
+ * Trabajo de sincronización + snapshot fiel de un centro en SIGERD.
+ *
+ * Una fila por (team, centro, año académico). Cumple TRES roles:
+ *  1. CANDADO de concurrencia: `estado='corriendo'` bloquea otra sync del mismo
+ *     colegio. La lógica de "una a la vez" se apoya en esto.
+ *  2. ESTADO para la UI: `pendiente | corriendo | error | completado` + mensaje.
+ *  3. ARCHIVO fiel: `dump` guarda TODO lo que SIGERD entregó (estructura +
+ *     estudiantes + condición + personal + fichas). Así no hay que reconectar:
+ *     el dato ya vive aquí.
+ */
+export const sigerdImportaciones = pgTable('sigerd_importaciones', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  /** Se llena tras la descarga (sale de la sesión SIGERD). El candado se
+   *  identifica por (team, año), no por centro — un colegio = un centro. */
+  idCentro:      integer('id_centro'),
+  idRegional:    integer('id_regional'),
+  idDistrito:    integer('id_distrito'),
+  anoAcademico:  integer('ano_academico').notNull(),
+  /** pendiente | corriendo | error | completado */
+  estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  /** Último mensaje: progreso o causa del error (ej. "SIGERD no disponible"). */
+  mensaje:       text('mensaje'),
+  /** Volcado completo (DumpCentro). Se llena al completar. */
+  dump:          jsonb('dump'),
+  nEstudiantes:  integer('n_estudiantes'),
+  nSecciones:    integer('n_secciones'),
+  nEmpleados:    integer('n_empleados'),
+  iniciadoEn:    timestamp('iniciado_en'),
+  completadoEn:  timestamp('completado_en'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('sigerd_importaciones_team_ano_uniq').on(t.teamId, t.anoAcademico),
+  index('sigerd_importaciones_estado_idx').on(t.estado),
+]);
+
+/**
+ * Empleado del centro proyectado desde SIGERD. El módulo escolar no tiene tabla
+ * de personal, así que vive aquí — consultable por cargo. Se repuebla en cada
+ * sync (upsert por `sigerd_id_persona`).
+ */
+export const sigerdPersonal = pgTable('sigerd_personal', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  idCentro:       integer('id_centro').notNull(),
+  /** IdPersona de SIGERD. Clave estable de reconciliación. */
+  sigerdIdPersona: integer('sigerd_id_persona').notNull(),
+  cedula:         varchar('cedula', { length: 20 }),
+  nombres:        varchar('nombres', { length: 160 }),
+  apellidos:      varchar('apellidos', { length: 160 }),
+  cargo:          varchar('cargo', { length: 120 }),
+  estado:         varchar('estado', { length: 40 }),
+  sexo:           varchar('sexo', { length: 20 }),
+  fechaNacimiento: date('fecha_nacimiento'),
+  nacionalidad:   varchar('nacionalidad', { length: 60 }),
+  telefono:       varchar('telefono', { length: 30 }),
+  email:          varchar('email', { length: 160 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('sigerd_personal_persona_uniq').on(t.teamId, t.sigerdIdPersona),
+  index('sigerd_personal_team_idx').on(t.teamId),
+]);
+
+/**
+ * Personal AGREGADO A MANO por el colegio (no viene de SIGERD). Es el "overlay"
+ * editable sobre el mirror de solo-lectura `sigerd_personal`: la sync NUNCA toca
+ * esta tabla, así lo que el usuario escribe no se pierde al re-sincronizar.
+ *
+ * La pantalla Personal une ambas: filas de SIGERD (read-only) + estas (editables
+ * y borrables). `sigerdIdPersona` queda para un futuro enlace/reconciliación,
+ * hoy siempre null (alta manual pura).
+ */
+export const escolarPersonal = pgTable('escolar_personal', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  /** Enlace opcional a una persona de SIGERD (reconciliación futura). Hoy null. */
+  sigerdIdPersona: integer('sigerd_id_persona'),
+  cedula:          varchar('cedula', { length: 20 }),
+  nombres:         varchar('nombres', { length: 160 }),
+  apellidos:       varchar('apellidos', { length: 160 }),
+  cargo:           varchar('cargo', { length: 120 }),
+  /** 'maestro' | 'otro'. Si null, se deriva del cargo como en las filas SIGERD. */
+  tipo:            varchar('tipo', { length: 20 }),
+  estado:          varchar('estado', { length: 40 }).notNull().default('Activo'),
+  sexo:            varchar('sexo', { length: 20 }),
+  fechaNacimiento: date('fecha_nacimiento'),
+  nacionalidad:    varchar('nacionalidad', { length: 60 }),
+  telefono:        varchar('telefono', { length: 30 }),
+  email:           varchar('email', { length: 160 }),
+  notas:           text('notas'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('escolar_personal_team_idx').on(t.teamId),
+]);
+
+// ── WhatsApp — conexión por negocio (vía crm-escolar, API pública /api/v1) ────
+// Ver docs/superpowers/specs/2026-08-03-whatsapp-conexion-envio-design.md.
+export const whatsappConfig = pgTable('whatsapp_config', {
+  id:       serial('id').primaryKey(),
+  teamId:   integer('team_id').notNull().unique().references(() => teams.id),
+  negocioId: text('negocio_id').notNull(),
+
+  apiKeyCiphered: text('api_key_ciphered').notNull(),
+  apiKeyIv:       text('api_key_iv').notNull(),
+  apiKeyAuthTag:  text('api_key_auth_tag').notNull(),
+
+  webhookSecretCiphered: text('webhook_secret_ciphered'),
+  webhookSecretIv:       text('webhook_secret_iv'),
+  webhookSecretAuthTag:  text('webhook_secret_auth_tag'),
+
+  conectado:      boolean('conectado').notNull().default(false),
+  numeroWhatsapp: text('numero_whatsapp'),
+
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+});
+
+export const whatsappMensajes = pgTable('whatsapp_mensajes', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  telefono:       text('telefono').notNull(),
+  nombreContacto: text('nombre_contacto'),
+  texto:          text('texto'),
+  tipo:           text('tipo').notNull(),
+  conversationId: text('conversation_id').notNull(),
+  messageId:      text('message_id').notNull().unique(),
+  recibidoEn:     timestamp('recibido_en').notNull().defaultNow(),
+}, (t) => ({
+  teamIdx: index('whatsapp_mensajes_team_idx').on(t.teamId, t.recibidoEn),
+}));
+
+export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
+export type WhatsappMensaje = typeof whatsappMensajes.$inferSelect;

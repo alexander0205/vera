@@ -13,6 +13,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { NativeSelect } from '@/components/ui/native-select';
+import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
 import { CalendarDays, ClipboardList, GraduationCap, Loader2, Plus, Search, Users } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -274,42 +276,37 @@ export default function MatriculasClient() {
       {/* Modal nueva matrícula */}
       <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Nueva matrícula</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
+          <ModalHeaderIcon icon={ClipboardList} title="Nueva matrícula"
+            subtitle="Inscribe un estudiante en un período y curso." />
+          <div className="space-y-4 px-6 py-4">
             {opError && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>
             )}
             <div className="space-y-1.5">
               <Label>Estudiante *</Label>
-              <Select value={form.estudianteId} onValueChange={(v) => setForm((f) => ({ ...f, estudianteId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecciona un estudiante" /></SelectTrigger>
-                <SelectContent>
-                  {estudiantesActivos.map((e) => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.nombres} {e.apellidos}{e.codigo ? ` (${e.codigo})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <NativeSelect value={form.estudianteId} onChange={(e) => setForm((f) => ({ ...f, estudianteId: e.target.value }))}>
+                <option value="" disabled>Selecciona un estudiante</option>
+                {estudiantesActivos.map((es) => (
+                  <option key={es.id} value={String(es.id)}>
+                    {es.nombres} {es.apellidos}{es.codigo ? ` (${es.codigo})` : ''}
+                  </option>
+                ))}
+              </NativeSelect>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Período *</Label>
-                <Select value={form.periodoId} onValueChange={(v) => setForm((f) => ({ ...f, periodoId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Período" /></SelectTrigger>
-                  <SelectContent>
-                    {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <NativeSelect value={form.periodoId} onChange={(e) => setForm((f) => ({ ...f, periodoId: e.target.value }))}>
+                  <option value="" disabled>Período</option>
+                  {periodos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+                </NativeSelect>
               </div>
               <div className="space-y-1.5">
                 <Label>Curso *</Label>
-                <Select value={form.cursoId} onValueChange={(v) => setForm((f) => ({ ...f, cursoId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Curso" /></SelectTrigger>
-                  <SelectContent>
-                    {cursosActivos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <NativeSelect value={form.cursoId} onChange={(e) => setForm((f) => ({ ...f, cursoId: e.target.value }))}>
+                  <option value="" disabled>Curso</option>
+                  {cursosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                </NativeSelect>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

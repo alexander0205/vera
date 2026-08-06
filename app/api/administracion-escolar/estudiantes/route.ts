@@ -13,6 +13,7 @@ import {
   generarCodigoEstudiante,
 } from '@/lib/administracion-escolar/queries';
 import { SEXOS_VALIDOS } from '@/lib/administracion-escolar/estudiante-utils';
+import { limpiarCamposSigerd } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
 import { eq, and } from 'drizzle-orm';
 
 const ESTADOS = ['activo', 'inactivo', 'retirado', 'graduado'];
@@ -51,9 +52,12 @@ export async function POST(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
-  const { nombres, apellidos, sexo, fechaNacimiento, estado, matricula } = await req.json();
+  const body = await req.json();
+  const { nombres, apellidos, sexo, fechaNacimiento, estado, matricula } = body;
   if (!nombres?.trim()) return NextResponse.json({ error: 'Nombres requeridos' }, { status: 400 });
   if (!apellidos?.trim()) return NextResponse.json({ error: 'Apellidos requeridos' }, { status: 400 });
+  // Campos extra de la ficha (todos opcionales).
+  const extra = limpiarCamposSigerd(body);
 
   // Validar la matrícula (opcional) antes de tocar nada.
   let periodoId: number | null = null;
@@ -87,6 +91,7 @@ export async function POST(req: NextRequest) {
     sexo: SEXOS_VALIDOS.includes(sexo) ? sexo : null,
     fechaNacimiento: fechaNacimiento || null,
     estado: ESTADOS.includes(estado) ? estado : 'activo',
+    ...extra,
   }).returning();
 
   if (matricula && periodoId && cursoId) {

@@ -9,10 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Plus, Pencil, X, Loader2, Search, Link2, Building2, Camera, User } from 'lucide-react';
+import { NativeSelect } from '@/components/ui/native-select';
+import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
+import { Plus, Pencil, X, Loader2, Search, Link2, Building2, Camera, User, AlertTriangle } from 'lucide-react';
 
 export interface TutorVinculo {
   id: number;
@@ -331,10 +330,10 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
       {/* Modal agregar/editar tutor */}
       <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editVinculo ? `Editar — ${editVinculo.nombre}` : 'Agregar tutor'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
+          <ModalHeaderIcon icon={User}
+            title={editVinculo ? `Editar — ${editVinculo.nombre}` : 'Agregar tutor'}
+            subtitle="Vincula un responsable de pago al estudiante." />
+          <div className="space-y-4 px-6 py-4">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>
             )}
@@ -357,16 +356,14 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
             {(!editVinculo && !modoNuevo) ? (
               <div className="space-y-1.5">
                 <Label>Tutor *</Label>
-                <Select value={tutorSeleccionado} onValueChange={setTutorSeleccionado}>
-                  <SelectTrigger><SelectValue placeholder="Selecciona un tutor" /></SelectTrigger>
-                  <SelectContent>
-                    {disponibles.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>
-                        {t.nombre}{t.clientId ? ` · ${t.clienteRazonSocial}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <NativeSelect value={tutorSeleccionado} onChange={(e) => setTutorSeleccionado(e.target.value)}>
+                  <option value="" disabled>Selecciona un tutor</option>
+                  {disponibles.map((t) => (
+                    <option key={t.id} value={String(t.id)}>
+                      {t.nombre}{t.clientId ? ` · ${t.clienteRazonSocial}` : ''}
+                    </option>
+                  ))}
+                </NativeSelect>
                 {/* Preview del tutor elegido: foto + cédula + contacto */}
                 {tutorPreview && (
                   <div className="mt-2 flex items-center gap-3 border border-gray-200 rounded-lg p-3">
@@ -458,12 +455,9 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Relación</Label>
-                <Select value={relacion} onValueChange={setRelacion}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {RELACIONES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <NativeSelect value={relacion} onChange={(e) => setRelacion(e.target.value)}>
+                  {RELACIONES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </NativeSelect>
               </div>
               <div className="flex items-end pb-2">
                 <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -487,8 +481,8 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
       {/* Confirmar quitar */}
       <Dialog open={!!quitarTarget} onOpenChange={(o: boolean) => { if (!o) setQuitarTarget(null); }}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>¿Quitar tutor?</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-700 py-2">
+          <ModalHeaderIcon icon={AlertTriangle} tono="amber" title="¿Quitar tutor?" />
+          <p className="text-sm text-gray-700 px-6 py-2">
             Vas a desvincular a <strong>{quitarTarget?.nombre}</strong> de este estudiante. El tutor no se elimina del sistema.
           </p>
           <DialogFooter>

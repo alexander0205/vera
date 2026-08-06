@@ -16,11 +16,12 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import InputAdornment from '@mui/material/InputAdornment';
 import {
-  Building2, Palette, ImageIcon, PenLine,
+  Building2, Palette, ImageIcon,
   CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard, Store,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
+import { WhatsAppCard } from './WhatsAppCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { roleHasPermission } from '@/lib/config/roles';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -134,7 +135,6 @@ export default function ConfiguracionPage() {
   const [emailFacturacion, setEmailFacturacion] = useState('');
   const [colorPrimario, setColorPrimario]       = useState('#1e40af');
   const [logo, setLogo]                         = useState('');
-  const [firma, setFirma]                       = useState('');
   const [provincia, setProvincia]               = useState('');
   const [municipio, setMunicipio]               = useState('');
   // Recargo por mora
@@ -172,7 +172,6 @@ export default function ConfiguracionPage() {
         setEmailFacturacion(d.emailFacturacion ?? '');
         setColorPrimario(d.colorPrimario ?? '#1e40af');
         setLogo(d.logo ?? '');
-        setFirma(d.firma ?? '');
         setProvincia(d.provincia ?? '');
         setMunicipio(d.municipio ?? '');
         setRecargoActivo(d.recargoMoraActivo ?? false);
@@ -202,7 +201,7 @@ export default function ConfiguracionPage() {
           razonSocial, nombreComercial, rnc, direccion,
           provincia, municipio,
           telefono, sitioWeb, emailFacturacion, colorPrimario,
-          logo, firma,
+          logo,
           recargoMoraActivo:     recargoActivo,
           recargoMoraPorcentaje: pctBps,
           // Gracia eliminada del config: la mora aplica al vencer.
@@ -306,19 +305,6 @@ export default function ConfiguracionPage() {
             <UploadImagen label="Logo"
               hint="Aparece en la esquina superior izquierda de cada factura. Fondo transparente recomendado."
               value={logo} onChange={setLogo} />
-          </Box>
-        </Box>
-
-        {/* 3. Firma */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <PenLine size={16} color="#0d9488" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Firma autorizada</Typography>
-          </Box>
-          <Box sx={cardContentSx}>
-            <UploadImagen label="Imagen de firma"
-              hint="Aparece en el pie de cada factura. Usa fondo blanco o transparente."
-              value={firma} onChange={setFirma} />
           </Box>
         </Box>
 
@@ -650,6 +636,9 @@ export default function ConfiguracionPage() {
 
         {/* Equipo y permisos */}
         <EquipoCard />
+
+        {/* WhatsApp Business */}
+        <WhatsAppCard />
 
       </Box>
 

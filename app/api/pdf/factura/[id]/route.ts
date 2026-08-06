@@ -249,7 +249,6 @@ export async function GET(
         sitioWeb:         team.sitioWeb ?? undefined,
         emailFacturacion: team.emailFacturacion ?? undefined,
         logo:             team.logo ?? undefined,
-        firma:            team.firma ?? undefined,
         colorPrimario:    team.colorPrimario ?? '#1e40af',
       },
 

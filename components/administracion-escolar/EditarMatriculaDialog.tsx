@@ -7,10 +7,9 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Loader2, Plus, X } from 'lucide-react';
+import { NativeSelect } from '@/components/ui/native-select';
+import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
+import { ClipboardList, Loader2, Plus, X } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 interface Periodo { id: number; nombre: string; activo: boolean }
@@ -162,8 +161,10 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved, crear
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>{esCrear ? 'Reinscribir estudiante' : 'Editar matrícula'}</DialogTitle></DialogHeader>
-        <div className="space-y-4 py-2">
+        <ModalHeaderIcon icon={ClipboardList}
+          title={esCrear ? 'Reinscribir estudiante' : 'Editar matrícula'}
+          subtitle={esCrear ? 'Inscríbelo en otro período y curso.' : 'Cambia el período, curso o estado.'} />
+        <div className="space-y-4 px-6 py-4">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{error}</div>
           )}
@@ -174,12 +175,10 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved, crear
                 onCancelar={() => setNuevoPeriodo(null)} saving={guardandoCat} placeholder="Ej: 2026-2027" />
             ) : (
               <div className="flex gap-2">
-                <Select value={form.periodoId} onValueChange={(v) => setForm((f) => ({ ...f, periodoId: v }))}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <NativeSelect className="flex-1" value={form.periodoId} onChange={(e) => setForm((f) => ({ ...f, periodoId: e.target.value }))}>
+                  <option value="" disabled>Seleccionar</option>
+                  {periodos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+                </NativeSelect>
                 {puedeConfigurar && (
                   <Button type="button" variant="outline" size="icon" onClick={() => setNuevoPeriodo('')} title="Nuevo período">
                     <Plus className="h-4 w-4" />
@@ -195,12 +194,10 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved, crear
                 onCancelar={() => setNuevoCurso(null)} saving={guardandoCat} placeholder="Ej: Primero A" />
             ) : (
               <div className="flex gap-2">
-                <Select value={form.cursoId} onValueChange={(v) => setForm((f) => ({ ...f, cursoId: v }))}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {cursos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <NativeSelect className="flex-1" value={form.cursoId} onChange={(e) => setForm((f) => ({ ...f, cursoId: e.target.value }))}>
+                  <option value="" disabled>Seleccionar</option>
+                  {cursos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
+                </NativeSelect>
                 {puedeConfigurar && (
                   <Button type="button" variant="outline" size="icon" onClick={() => setNuevoCurso('')} title="Nuevo curso">
                     <Plus className="h-4 w-4" />
@@ -217,12 +214,9 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved, crear
             </div>
             <div className="space-y-1.5">
               <Label>Estado</Label>
-              <Select value={form.estado} onValueChange={(v) => setForm((f) => ({ ...f, estado: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ESTADOS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <NativeSelect value={form.estado} onChange={(e) => setForm((f) => ({ ...f, estado: e.target.value }))}>
+                {ESTADOS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </NativeSelect>
             </div>
           </div>
           <div className="space-y-1.5">

@@ -21,3 +21,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!row) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
   return NextResponse.json({ materia: row });
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
+  const { id } = await params;
+  const [row] = await db.delete(adminEscolarMaterias)
+    .where(and(eq(adminEscolarMaterias.id, parseInt(id)), eq(adminEscolarMaterias.teamId, teamId)))
+    .returning({ id: adminEscolarMaterias.id });
+  if (!row) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
+  return NextResponse.json({ ok: true });
+}
