@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
 import { db } from '@/lib/db/drizzle';
@@ -154,6 +154,63 @@ export async function GET(
       telefonoComprador = cl?.telefono ?? undefined;
     }
 
+    // ── Relación con la mora ────────────────────────────────────────────────
+    // Si el doc ES una ND de mora (moraOrigenId) → referencia a su factura padre,
+    // para que el PDF diga claramente a qué factura corresponde. Si es una
+    // factura → listar sus ND de mora (recargos) para mostrarlas en su PDF.
+    let moraOrigen: FacturaPDFData['moraOrigen'];
+    let moras: FacturaPDFData['moras'];
+    if (doc.moraOrigenId != null) {
+      const [padre] = await db
+        .select({ codigo: ecfDocuments.codigo, encf: ecfDocuments.encf, fechaEmision: ecfDocuments.fechaEmision })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.id, doc.moraOrigenId), eq(ecfDocuments.teamId, teamId)))
+        .limit(1);
+      if (padre) {
+        moraOrigen = {
+          codigo: padre.codigo ?? undefined,
+          encf:   padre.encf && !padre.encf.startsWith('BOR-') ? padre.encf : undefined,
+          fecha:  padre.fechaEmision ? new Date(padre.fechaEmision).toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }) : undefined,
+        };
+      }
+    } else {
+      const ndRows = await db
+        .select({
+          id:         ecfDocuments.id,
+          codigo:     ecfDocuments.codigo,
+          encf:       ecfDocuments.encf,
+          montoTotal: ecfDocuments.montoTotal,
+          fechaEmision: ecfDocuments.fechaEmision,
+          pagado: sql<number>`coalesce((
+            SELECT SUM(monto_centavos) FROM pagos_recibidos
+            WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
+          ), 0)`,
+        })
+        .from(ecfDocuments)
+        .where(and(
+          eq(ecfDocuments.moraOrigenId, docId),
+          eq(ecfDocuments.teamId, teamId),
+          ne(ecfDocuments.estado, 'ANULADO'),
+        ))
+        .orderBy(ecfDocuments.id);
+      if (ndRows.length > 0) {
+        moras = ndRows.map(nd => {
+          const pagado = Number(nd.pagado);
+          const saldo  = Math.max(0, nd.montoTotal - pagado);
+          const estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA' =
+            saldo <= 0 ? 'PAGADA' : pagado > 0 ? 'PARCIAL' : 'PENDIENTE';
+          return {
+            codigo:     nd.codigo ?? undefined,
+            encf:       nd.encf && !nd.encf.startsWith('BOR-') ? nd.encf : undefined,
+            fecha:      nd.fechaEmision ? new Date(nd.fechaEmision).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : undefined,
+            montoDOP:   nd.montoTotal / 100,
+            saldoDOP:   saldo / 100,
+            estado,
+          };
+        });
+      }
+    }
+
     // QR URL DGII — viene tal cual desde ecf-api (doc.urlVerificacion).
     // No reconstruimos client-side: ecf-api ya devuelve la URL canónica firmada.
     // Fallback legacy: facturas emitidas antes de persistir urlVerificacion → re-fetch
@@ -278,6 +335,8 @@ export async function GET(
       terminosCondiciones: doc.terminosCondiciones ?? undefined,
       notas:               doc.notas ?? undefined,
       dependienteNombre:   doc.dependienteNombre ?? undefined,
+      moraOrigen,
+      moras,
     };
 
     // Renderizar PDF — cast necesario por incompatibilidad de tipos con react-pdf
