@@ -8,7 +8,7 @@
 
 import { db } from '@/lib/db/drizzle';
 import { products, inventoryMovements } from '@/lib/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 export interface ItemParaDescuento {
   productoId?:             number | null;
@@ -29,58 +29,105 @@ export async function descontarInventario(
   );
   if (bienesConId.length === 0) return;
 
+  // Una factura puede repetir el mismo producto en varias líneas; se suman
+  // antes de tocar la base para no leer un stock que la línea anterior acaba
+  // de cambiar.
+  const porProducto = new Map<number, number>();
   for (const item of bienesConId) {
-    const productoId = item.productoId!;
-    try {
-      await db.transaction(async (tx) => {
-        const [prod] = await tx.execute<{ stock_actual: number; controla_inventario: boolean }>(sql`
-          SELECT stock_actual, controla_inventario
-          FROM products
-          WHERE id = ${productoId} AND team_id = ${teamId}
-          FOR UPDATE
-        `);
+    const id = item.productoId!;
+    porProducto.set(id, (porProducto.get(id) ?? 0) + Math.ceil(item.cantidadItem));
+  }
+  const ids = [...porProducto.keys()];
 
-        if (!prod || !prod.controla_inventario) return;
+  try {
+    // Todo en UNA transacción. Antes se abría una por línea, así que una venta
+    // de veinte productos costaba veinte BEGIN/COMMIT contra Neon, con la
+    // latencia de red de cada uno.
+    await db.transaction(async (tx) => {
+      // FOR UPDATE sobre todas las filas de golpe: bloquea lo justo y evita que
+      // dos ventas simultáneas del mismo producto lean el mismo stock. El orden
+      // por id es deliberado — bloquear siempre en el mismo orden es lo que
+      // evita los interbloqueos entre dos ventas que comparten productos.
+      const filas = await tx
+        .select({
+          id: products.id,
+          stockActual: products.stockActual,
+          controlaInventario: products.controlaInventario,
+        })
+        .from(products)
+        .where(and(eq(products.teamId, teamId), inArray(products.id, ids)))
+        .orderBy(products.id)
+        .for('update');
 
-        const cantidadInt  = Math.ceil(item.cantidadItem);
-        const stockAntes   = prod.stock_actual;
-        const stockDespues = Math.max(0, stockAntes - cantidadInt);
+      const conControl = filas.filter((f) => f.controlaInventario);
+      if (conControl.length === 0) return;
 
-        await tx.update(products)
-          .set({ stockActual: stockDespues, updatedAt: new Date() })
-          .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
+      const calculados = conControl.map((f) => {
+        const cantidad = porProducto.get(f.id)!;
+        return {
+          id: f.id,
+          cantidad,
+          stockAntes: f.stockActual,
+          stockDespues: Math.max(0, f.stockActual - cantidad),
+        };
+      });
 
-        await tx.insert(inventoryMovements).values({
+      const valores = sql.join(
+        calculados.map((c) => sql`(${c.id}::int, ${c.stockDespues}::int)`),
+        sql`, `,
+      );
+      await tx.execute(sql`
+        UPDATE ${products} AS p
+        SET stock_actual = v.stock, updated_at = now()
+        FROM (VALUES ${valores}) AS v(id, stock)
+        WHERE p.id = v.id AND p.team_id = ${teamId}
+      `);
+
+      await tx.insert(inventoryMovements).values(
+        calculados.map((c) => ({
           // NULL cuando la venta no trae almacén: se comporta como antes.
           almacenId: almacenId ?? null,
           teamId,
-          productoId,
-          tipo:           'VENTA',
-          cantidad:       cantidadInt,
-          esEntrada:      false,
-          stockAntes,
-          stockDespues,
-          referenciaId:   ecfDocumentId,
+          productoId: c.id,
+          tipo: 'VENTA' as const,
+          cantidad: c.cantidad,
+          esEntrada: false,
+          stockAntes: c.stockAntes,
+          stockDespues: c.stockDespues,
+          referenciaId: ecfDocumentId,
           referenciaEncf: encf,
-          createdBy:      userId,
-        });
+          createdBy: userId,
+        })),
+      );
 
-        if (almacenId) {
-          await tx.execute(sql`
-            INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
-            VALUES (${teamId}, ${productoId}, ${almacenId},
-              GREATEST(0, COALESCE((
-                SELECT stock_actual FROM product_almacen_stock
-                WHERE product_id = ${productoId} AND almacen_id = ${almacenId}
-              ), 0) - ${cantidadInt})
-            )
-            ON CONFLICT (product_id, almacen_id)
-            DO UPDATE SET stock_actual = GREATEST(0, product_almacen_stock.stock_actual - ${cantidadInt})
-          `);
-        }
-      });
-    } catch (e) {
-      console.error(`[descontarInventario] producto=${productoId}`, e);
-    }
+      if (almacenId) {
+        // Va en dos pasos a propósito. Restar dentro de un ON CONFLICT obliga a
+        // repetir la lista de cantidades en el DO UPDATE, porque ahí EXCLUDED
+        // ya trae el valor calculado para la fila nueva y no la cantidad
+        // original. Primero se asegura que la fila exista y después se resta.
+        const enCero = sql.join(
+          calculados.map((c) => sql`(${teamId}::int, ${c.id}::int, ${almacenId}::int, 0::int)`),
+          sql`, `,
+        );
+        await tx.execute(sql`
+          INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
+          VALUES ${enCero}
+          ON CONFLICT (product_id, almacen_id) DO NOTHING
+        `);
+
+        const aRestar = sql.join(
+          calculados.map((c) => sql`(${c.id}::int, ${c.cantidad}::int)`),
+          sql`, `,
+        );
+        await tx.execute(sql`
+          UPDATE product_almacen_stock AS s
+          SET stock_actual = GREATEST(0, s.stock_actual - v.cantidad)
+          FROM (VALUES ${aRestar}) AS v(product_id, cantidad)
+          WHERE s.product_id = v.product_id AND s.almacen_id = ${almacenId}
+        `);
+      }
+    });
+  } catch (e) {
+    console.error(`[descontarInventario] ecf=${ecfDocumentId} productos=${ids.join(',')}`, e);
   }
 }
