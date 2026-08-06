@@ -11,11 +11,20 @@
 /** Sobra en el nombre: no distingue conceptos, solo instancias. */
 const RELLENO = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'a', 'por', 'para', 'en']);
 
-/** Quita el plural más común del español sin meterse en excepciones. */
+/**
+ * Lleva una palabra a una forma común para singular y plural.
+ *
+ * No intenta ser el singular correcto —eso pide un diccionario—, solo que
+ * "gastable" y "gastables" acaben igual. Se quita la ese final y después la e,
+ * que es lo que resuelve los dos plurales del español sin tener que
+ * distinguirlos: "gastables"→"gastabl" y "gastable"→"gastabl";
+ * "materiales"→"material" y "material"→"material".
+ */
 function singular(p: string): string {
-  if (p.length > 4 && p.endsWith('es')) return p.slice(0, -2);
-  if (p.length > 3 && p.endsWith('s')) return p.slice(0, -1);
-  return p;
+  let s = p;
+  if (s.length > 3 && s.endsWith('s')) s = s.slice(0, -1);
+  if (s.length > 3 && s.endsWith('e')) s = s.slice(0, -1);
+  return s;
 }
 
 /**
@@ -73,12 +82,26 @@ export function agruparProductos(
     porRaiz.set(raiz, g);
   }
 
-  // Fusiona raíces contenidas en otra. Se recorre de la más corta a la más
-  // larga para que la corta sea siempre la que absorbe.
-  const raices = [...porRaiz.keys()].sort((a, b) => a.length - b.length);
+  // Fusiona las raíces que hablan de lo mismo. No basta con mirar si una cadena
+  // contiene a la otra: "pago colegiatura" y "colegiatura pre primero" son el
+  // mismo concepto y ninguna contiene a la otra. Lo que las hermana es
+  // compartir una palabra con peso — "colegiatura" —, así que se agrupa por
+  // eso, ignorando las palabras cortas que aparecen en cualquier nombre.
+  const raices = [...porRaiz.keys()].sort((a, b) => a.length - b.length || a.localeCompare(b));
   const destino = new Map<string, string>();
+
+  const significativas = (r: string) => new Set(r.split(' ').filter((p) => p.length >= 6));
+
   for (const r of raices) {
-    const padre = raices.find((otra) => otra !== r && otra.length < r.length && r.includes(otra));
+    const mias = significativas(r);
+    const padre = raices.find((otra) => {
+      if (otra === r || otra.length > r.length) return false;
+      if (r.includes(otra)) return true;
+      for (const p of significativas(otra)) if (mias.has(p)) return true;
+      return false;
+    });
+    // Se sigue la cadena hasta la raíz del grupo: si A se fue con B y B con C,
+    // A tiene que acabar en C y no en B.
     destino.set(r, padre ? destino.get(padre) ?? padre : r);
   }
 

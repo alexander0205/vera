@@ -138,9 +138,13 @@ export async function listarEstudiantesEnriquecidos(
 
   const ids = base.map((e) => e.id);
 
-  // Matrícula activa + período + curso SOLO de la página. Si un estudiante tiene
-  // varias activas (distintos períodos), se muestra la del período más reciente.
-  const matriculas = await db
+  // Los cuatro enriquecimientos dependen solo de los ids de la página, así que
+  // se piden juntos: en serie eran cuatro viajes seguidos a la base para pintar
+  // una sola pantalla.
+  const [matriculas, tutores, deudas, pagos] = await Promise.all([
+  // Matrícula activa + período + curso. Si un estudiante tiene varias activas
+  // (distintos períodos), se muestra la del período más reciente.
+  db
     .select({
       id: adminEscolarMatriculas.id,
       periodoId: adminEscolarMatriculas.periodoId,
@@ -162,14 +166,10 @@ export async function listarEstudiantesEnriquecidos(
       eq(adminEscolarMatriculas.estado, 'activa'),
       inArray(adminEscolarMatriculas.estudianteId, ids),
     ))
-    .orderBy(desc(adminEscolarMatriculas.periodoId));
-  const matriculaPorEst = new Map<number, (typeof matriculas)[number]>();
-  for (const m of matriculas) {
-    if (!matriculaPorEst.has(m.estudianteId)) matriculaPorEst.set(m.estudianteId, m);
-  }
+    .orderBy(desc(adminEscolarMatriculas.periodoId)),
 
-  // Tutor responsable de pago SOLO de la página.
-  const tutores = await db
+  // Tutor responsable de pago.
+  db
     .select({
       estudianteId: adminEscolarEstudianteTutores.estudianteId,
       nombre: adminEscolarTutores.nombre,
@@ -185,11 +185,10 @@ export async function listarEstudiantesEnriquecidos(
       eq(adminEscolarEstudianteTutores.teamId, teamId),
       eq(adminEscolarEstudianteTutores.responsablePago, true),
       inArray(adminEscolarEstudianteTutores.estudianteId, ids),
-    ));
-  const tutorPorEst = new Map(tutores.map((t) => [t.estudianteId, t]));
+    )),
 
-  // Deuda viva (suma de saldo) + conteo de cargos pendientes SOLO de la página.
-  const deudas = await db
+  // Deuda viva (suma de saldo) + conteo de cargos pendientes.
+  db
     .select({
       estudianteId: adminEscolarCargos.estudianteId,
       deuda: sql<number>`COALESCE(SUM(${adminEscolarCargos.saldoCentavos}), 0)::int`,
@@ -201,11 +200,10 @@ export async function listarEstudiantesEnriquecidos(
       inArray(adminEscolarCargos.estado, [...ESTADOS_DEUDA]),
       inArray(adminEscolarCargos.estudianteId, ids),
     ))
-    .groupBy(adminEscolarCargos.estudianteId);
-  const deudaPorEst = new Map(deudas.map((d) => [d.estudianteId, d]));
+    .groupBy(adminEscolarCargos.estudianteId),
 
-  // Último pago SOLO de la página.
-  const pagos = await db
+  // Último pago.
+  db
     .select({
       estudianteId: adminEscolarPagos.estudianteId,
       fecha: adminEscolarPagos.fechaPago,
@@ -217,7 +215,15 @@ export async function listarEstudiantesEnriquecidos(
       eq(adminEscolarPagos.teamId, teamId),
       inArray(adminEscolarPagos.estudianteId, ids),
     ))
-    .orderBy(desc(adminEscolarPagos.fechaPago), desc(adminEscolarPagos.createdAt));
+    .orderBy(desc(adminEscolarPagos.fechaPago), desc(adminEscolarPagos.createdAt)),
+  ]);
+
+  const matriculaPorEst = new Map<number, (typeof matriculas)[number]>();
+  for (const m of matriculas) {
+    if (!matriculaPorEst.has(m.estudianteId)) matriculaPorEst.set(m.estudianteId, m);
+  }
+  const tutorPorEst = new Map(tutores.map((t) => [t.estudianteId, t]));
+  const deudaPorEst = new Map(deudas.map((d) => [d.estudianteId, d]));
   const ultimoPagoPorEst = new Map<number, { fecha: string; monto: number }>();
   for (const p of pagos) {
     if (!ultimoPagoPorEst.has(p.estudianteId)) {
@@ -337,9 +343,11 @@ export async function sincronizarSaldosDesdeFacturas(
     .filter((x): x is number => x != null);
   if (facturaIds.length === 0) return;
 
-  // 2. TODOS los cargos (cualquier estudiante) atados a esas facturas — se
-  //    necesitan completos para repartir bien el cobro. Excluye anulados.
-  const cargos = await db
+  // 2-3. Cargos, facturas y pagos dependen los tres solo de `facturaIds`, así
+  //       que se piden a la vez: en serie eran tres viajes a la base por cada
+  //       carga del listado.
+  const [cargos, facturas, pagos] = await Promise.all([
+    db
     .select({
       id: adminEscolarCargos.id,
       ecfDocumentId: adminEscolarCargos.ecfDocumentId,
@@ -353,10 +361,10 @@ export async function sincronizarSaldosDesdeFacturas(
       eq(adminEscolarCargos.teamId, teamId),
       inArray(adminEscolarCargos.ecfDocumentId, facturaIds),
       ne(adminEscolarCargos.estado, 'anulado'),
-    ));
+    )),
 
-  // 3. Info de cada factura + lo COBRADO = pagos recibidos + notas de crédito.
-  const facturas = await db
+  // Info de cada factura + lo COBRADO = pagos recibidos + notas de crédito.
+  db
     .select({
       id: ecfDocuments.id,
       montoTotal: ecfDocuments.montoTotal,
@@ -379,17 +387,19 @@ export async function sincronizarSaldosDesdeFacturas(
       ), 0)::int`,
     })
     .from(ecfDocuments)
-    .where(and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.id, facturaIds)));
-  const facturaById = new Map(facturas.map((f) => [f.id, f]));
+    .where(and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.id, facturaIds))),
 
-  const pagos = await db
+  db
     .select({
       ecfDocumentId: pagosRecibidos.ecfDocumentId,
       pagado: sql<number>`COALESCE(SUM(${pagosRecibidos.montoCentavos}), 0)::int`,
     })
     .from(pagosRecibidos)
     .where(and(eq(pagosRecibidos.teamId, teamId), inArray(pagosRecibidos.ecfDocumentId, facturaIds)))
-    .groupBy(pagosRecibidos.ecfDocumentId);
+    .groupBy(pagosRecibidos.ecfDocumentId),
+  ]);
+
+  const facturaById = new Map(facturas.map((f) => [f.id, f]));
   const pagadoById = new Map(pagos.map((p) => [p.ecfDocumentId, Number(p.pagado)]));
 
   const hoy = new Date().toISOString().slice(0, 10);
@@ -436,22 +446,27 @@ export async function sincronizarSaldosDesdeFacturas(
 
   // 5. Persistir solo los cambios, todo o nada: a medias quedarían saldos que
   //    no cuadran con la factura.
+  //
+  //    Va en UNA sentencia y no en un UPDATE por cargo dentro de una
+  //    transacción. Esto corre al abrir el listado de estudiantes, y un colegio
+  //    con 465 alumnos genera unos 5.100 cargos al año: un ida y vuelta por
+  //    cargo convertía una simple lectura en cientos de escrituras en serie,
+  //    con la tabla bloqueada mientras tanto.
   if (updates.length === 0) return;
-  await db.transaction(async (tx) => {
-    for (const u of updates) {
-      await tx.update(adminEscolarCargos)
-        .set({
-          saldoCentavos: u.saldo,
-          estado: u.estado,
-          ...(u.desvincular ? { ecfDocumentId: null } : {}),
-          updatedAt: new Date(),
-        })
-        .where(and(
-          eq(adminEscolarCargos.id, u.id),
-          eq(adminEscolarCargos.teamId, teamId),
-        ));
-    }
-  });
+
+  const valores = sql.join(
+    updates.map((u) => sql`(${u.id}::int, ${u.saldo}::int, ${u.estado}::varchar, ${u.desvincular}::boolean)`),
+    sql`, `,
+  );
+  await db.execute(sql`
+    UPDATE ${adminEscolarCargos} AS c
+    SET saldo_centavos = v.saldo,
+        estado         = v.estado,
+        ecf_document_id = CASE WHEN v.desvincular THEN NULL ELSE c.ecf_document_id END,
+        updated_at     = now()
+    FROM (VALUES ${valores}) AS v(id, saldo, estado, desvincular)
+    WHERE c.id = v.id AND c.team_id = ${teamId}
+  `);
 }
 
 /**

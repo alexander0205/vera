@@ -142,7 +142,7 @@ export default function CargosClient() {
       fetch('/api/administracion-escolar/cursos'),
       fetch('/api/administracion-escolar/conceptos'),
       fetch('/api/administracion-escolar/matriculas'),
-      fetch('/api/administracion-escolar/estudiantes'),
+      fetch('/api/administracion-escolar/estudiantes/opciones'),
     ]);
     const [p, c, k, m, e] = await Promise.all([
       periodosRes.json(), cursosRes.json(), conceptosRes.json(), matriculasRes.json(), estudiantesRes.json(),

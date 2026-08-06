@@ -38,6 +38,12 @@ export interface ResumenDrenaje {
   /** Snapshot de la última pasada, no la suma: los saltables se re-cuentan. */
   saltados: number;
   motivos:  Partial<Record<MotivoSalto, number>>;
+  /**
+   * Orígenes que reventaron, acumulados de todas las pasadas. Antes un origen
+   * roto tumbaba el barrido entero del team; ahora solo se queda sin asiento,
+   * pero el cron tiene que poder decir cuál para que no se pierda en silencio.
+   */
+  fallidos: Array<{ origenTipo: string; origenId: number; error: string }>;
   pasadas:  number;
   /** Se cortó por MAX_PASADAS_POR_TEAM sin terminar de drenar. */
   truncadoPorTope:   boolean;
@@ -67,7 +73,7 @@ export async function drenarBarrido(
   opts: { maxPasadas: number; sigueTiempo: () => boolean },
 ): Promise<ResumenDrenaje> {
   const acc: ResumenDrenaje = {
-    creados: 0, saltados: 0, motivos: {}, pasadas: 0,
+    creados: 0, saltados: 0, motivos: {}, fallidos: [], pasadas: 0,
     truncadoPorTope: false, truncadoPorTiempo: false,
   };
 
@@ -79,6 +85,14 @@ export async function drenarBarrido(
     acc.creados += r.creados;
     acc.saltados = r.saltados; // snapshot, no suma
     acc.motivos = r.motivos;
+    // Los fallos se acumulan sin repetir: un origen que revienta sigue sin
+    // asiento, así que la pasada siguiente lo vuelve a seleccionar y a fallar.
+    // Sumarlos a pelo daría "40 fallos" donde hay uno solo insistiendo.
+    for (const f of r.fallidos) {
+      if (!acc.fallidos.some((x) => x.origenTipo === f.origenTipo && x.origenId === f.origenId)) {
+        acc.fallidos.push(f);
+      }
+    }
 
     // Terminado (nada más) o sin progreso (solo quedan saltables): parar.
     if (!r.hayMas || r.creados === 0) return acc;

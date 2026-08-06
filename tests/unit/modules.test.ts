@@ -83,7 +83,7 @@ describe('dependencias entre módulos', () => {
 
   it('todo módulo tiene etiqueta visible', () => {
     for (const m of MODULES) expect(MODULE_LABELS[m]).toBeTruthy();
-    expect(MODULE_LABELS.escolar).toBe('Administración Escolar');
+    expect(MODULE_LABELS.escolar).toBe('Gobernanza de Colegios');
   });
 });
 

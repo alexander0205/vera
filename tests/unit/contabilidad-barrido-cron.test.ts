@@ -19,11 +19,19 @@ import type { ResumenBarrido } from '@/lib/contabilidad/libro-diario';
 const siempre = () => true;
 const nunca = () => false;
 
-/** Fabrica un runner que devuelve, en orden, las pasadas dadas. */
-function runnerDe(pasadas: ResumenBarrido[]): { correr: () => Promise<ResumenBarrido>; veces: () => number } {
+/**
+ * Fabrica un runner que devuelve, en orden, las pasadas dadas.
+ *
+ * Las pasadas se escriben sin `fallidos` porque a la terminación del drenaje le
+ * da igual: lo que la gobierna es `creados`/`hayMas`. Se rellena aquí para no
+ * repetir `fallidos: []` en cada caso.
+ */
+function runnerDe(
+  pasadas: Omit<ResumenBarrido, 'fallidos'>[],
+): { correr: () => Promise<ResumenBarrido>; veces: () => number } {
   let i = 0;
   return {
-    correr: async () => pasadas[Math.min(i++, pasadas.length - 1)],
+    correr: async () => ({ ...pasadas[Math.min(i++, pasadas.length - 1)], fallidos: [] }),
     veces: () => i,
   };
 }
@@ -102,7 +110,7 @@ describe('drenarBarrido — topes', () => {
     const sigueTiempo = () => llamadas < 2; // deja pasar 2 chequeos, luego corta
     const runner = async (): Promise<ResumenBarrido> => {
       llamadas++;
-      return { creados: 200, saltados: 0, motivos: {}, hayMas: true };
+      return { creados: 200, saltados: 0, motivos: {}, hayMas: true, fallidos: [] };
     };
     const out = await drenarBarrido(runner, { maxPasadas: 50, sigueTiempo });
     assert.equal(out.pasadas, 2);

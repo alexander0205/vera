@@ -35,6 +35,11 @@ export interface ResumenBarrido {
   motivos:   Partial<Record<MotivoSalto, number>>;
   /** true si se alcanzó el tope y quedan más por procesar. */
   hayMas:    boolean;
+  /**
+   * Orígenes que reventaron al asentarse. No son saltos: son bugs o datos
+   * imposibles, y se listan para poder ir a buscarlos.
+   */
+  fallidos:  Array<{ origenTipo: string; origenId: number; error: string }>;
 }
 
 /**
@@ -49,7 +54,9 @@ export async function generarAsientosPendientes(
   teamId: number,
   userId: number | null = null,
 ): Promise<ResumenBarrido> {
-  const resumen: ResumenBarrido = { creados: 0, saltados: 0, motivos: {}, hayMas: false };
+  const resumen: ResumenBarrido = {
+    creados: 0, saltados: 0, motivos: {}, hayMas: false, fallidos: [],
+  };
 
   const cfg = await getConfig(teamId);
   if (!cfg.activa) {
@@ -60,6 +67,32 @@ export async function generarAsientosPendientes(
   const anotar = (motivo?: MotivoSalto) => {
     resumen.saltados++;
     if (motivo) resumen.motivos[motivo] = (resumen.motivos[motivo] ?? 0) + 1;
+  };
+
+  /**
+   * Asienta una tanda aislando cada origen.
+   *
+   * **El try/catch por documento es el punto de esta función.** Sin él, un solo
+   * origen con datos imposibles (un asiento que no cuadra, una FK rota) lanzaba
+   * y se llevaba por delante el barrido entero: los cientos de documentos sanos
+   * que venían detrás se quedaban sin asentar y el usuario solo veía un 500 sin
+   * saber cuál fue el culpable. Un dato malo debe costar un asiento, no todos.
+   */
+  const procesar = async (
+    filas: unknown,
+    origenTipo: string,
+    generar: (id: number) => Promise<{ creado: boolean; motivo?: MotivoSalto }>,
+  ) => {
+    for (const { id } of filas as { id: number }[]) {
+      try {
+        const r = await generar(id);
+        if (r.creado) resumen.creados++;
+        else anotar(r.motivo);
+      } catch (e) {
+        resumen.fallidos.push({ origenTipo, origenId: id, error: String(e) });
+        console.error(`[contabilidad] ${origenTipo} ${id} del team ${teamId} no se pudo asentar:`, e);
+      }
+    }
   };
 
   // ── Facturas sin asiento ──────────────────────────────────────────────────
@@ -76,11 +109,7 @@ export async function generarAsientosPendientes(
     LIMIT ${TOPE_POR_BARRIDO}
   `);
 
-  for (const d of docs as unknown as { id: number }[]) {
-    const r = await generarAsientoFactura(teamId, d.id, userId);
-    if (r.creado) resumen.creados++;
-    else anotar(r.motivo);
-  }
+  await procesar(docs, 'factura', (id) => generarAsientoFactura(teamId, id, userId));
 
   // ── Notas de crédito sin asiento ──────────────────────────────────────────
   // Van después de las facturas porque una nota reduce la deuda que la factura
@@ -100,11 +129,7 @@ export async function generarAsientosPendientes(
     LIMIT ${TOPE_POR_BARRIDO}
   `);
 
-  for (const n of notas as unknown as { id: number }[]) {
-    const r = await generarAsientoNotaCredito(teamId, n.id, userId);
-    if (r.creado) resumen.creados++;
-    else anotar(r.motivo);
-  }
+  await procesar(notas, 'nota', (id) => generarAsientoNotaCredito(teamId, id, userId));
 
   // ── Pagos sin asiento ─────────────────────────────────────────────────────
   // Ya no se excluyen saldo_favor ni nota_credito: desde el Paso 5 tienen su
@@ -121,11 +146,7 @@ export async function generarAsientosPendientes(
     LIMIT ${TOPE_POR_BARRIDO}
   `);
 
-  for (const p of pagos as unknown as { id: number }[]) {
-    const r = await generarAsientoPago(teamId, p.id, userId);
-    if (r.creado) resumen.creados++;
-    else anotar(r.motivo);
-  }
+  await procesar(pagos, 'pago', (id) => generarAsientoPago(teamId, id, userId));
 
   // ── Anulaciones sin reversar ──────────────────────────────────────────────
   // Solo los documentos anulados que YA tenían asiento: si nunca se asentó, no
@@ -145,11 +166,7 @@ export async function generarAsientosPendientes(
     LIMIT ${TOPE_POR_BARRIDO}
   `);
 
-  for (const a of anulados as unknown as { id: number }[]) {
-    const r = await generarAsientoAnulacion(teamId, a.id, userId);
-    if (r.creado) resumen.creados++;
-    else anotar(r.motivo);
-  }
+  await procesar(anulados, 'anulacion', (id) => generarAsientoAnulacion(teamId, id, userId));
 
   // ── Compras locales sin asiento (nivel 3.2) ───────────────────────────────
   const compras = await db.execute(sql`
@@ -164,21 +181,14 @@ export async function generarAsientosPendientes(
     LIMIT ${TOPE_POR_BARRIDO}
   `);
 
-  for (const c of compras as unknown as { id: number }[]) {
-    const r = await generarAsientoCompra(teamId, c.id, userId);
-    if (r.creado) resumen.creados++;
-    else anotar(r.motivo);
-  }
+  await procesar(compras, 'compra', (id) => generarAsientoCompra(teamId, id, userId));
 
   const pagosProveedores = await db.execute(sql`
     SELECT p.id FROM pagos_proveedores p
     LEFT JOIN contabilidad_asientos a ON a.team_id = p.team_id AND a.origen_tipo = 'pago_proveedor' AND a.origen_id = p.id
     WHERE p.team_id = ${teamId} AND a.id IS NULL ORDER BY p.fecha_pago, p.id LIMIT ${TOPE_POR_BARRIDO}
   `);
-  for (const p of pagosProveedores as unknown as { id: number }[]) {
-    const r = await generarAsientoPagoProveedor(teamId, p.id, userId);
-    if (r.creado) resumen.creados++; else anotar(r.motivo);
-  }
+  await procesar(pagosProveedores, 'pago_proveedor', (id) => generarAsientoPagoProveedor(teamId, id, userId));
 
   // ── Gastos de caja sin asiento (nivel 3.2) ────────────────────────────────
   const gastos = await db.execute(sql`
@@ -194,11 +204,7 @@ export async function generarAsientosPendientes(
     LIMIT ${TOPE_POR_BARRIDO}
   `);
 
-  for (const g of gastos as unknown as { id: number }[]) {
-    const r = await generarAsientoGastoCaja(teamId, g.id, userId);
-    if (r.creado) resumen.creados++;
-    else anotar(r.motivo);
-  }
+  await procesar(gastos, 'gasto_caja', (id) => generarAsientoGastoCaja(teamId, id, userId));
 
   resumen.hayMas = [docs, notas, pagos, anulados, compras, pagosProveedores, gastos]
     .some((s) => (s as unknown as unknown[]).length === TOPE_POR_BARRIDO);
@@ -413,17 +419,25 @@ export async function getLineasAsiento(
 /**
  * Cuántos orígenes existen sin asiento. Para que la pantalla pueda decir
  * "faltan 12" en vez de obligar a barrer para averiguarlo.
+ *
+ * ⚠️ Cada sumando tiene que usar EXACTAMENTE el mismo criterio que su bucle en
+ * `generarAsientosPendientes`. Un conteo más estrecho que el barrido es peor
+ * que no tener conteo: la pantalla dice "0 sin asentar" mientras el botón sigue
+ * creando asientos, y el usuario concluye que el módulo está roto. Ya pasó con
+ * las ventas `sin-ncf` —el conteo filtraba por `tipo_ecf IN ('31',…)` y ellas
+ * no están en esa lista— y con compras, gastos de caja y pagos a proveedores,
+ * que el barrido asienta y aquí no se contaban.
  */
 export async function contarPendientes(teamId: number): Promise<number> {
   const [{ total }] = await db.execute<{ total: number }>(sql`
     SELECT (
-      -- Facturas y notas de débito (incluida la mora)
+      -- Ventas: e-CF fiscales, notas de débito por mora y ventas internas
+      -- sin-ncf. Mismo predicado que el barrido, vía VENTA_ASENTABLE_SQL.
       (SELECT count(*) FROM ecf_documents d
         LEFT JOIN contabilidad_asientos a
           ON a.team_id = d.team_id AND a.origen_tipo = 'factura' AND a.origen_id = d.id
         WHERE d.team_id = ${teamId} AND a.id IS NULL
-          AND d.estado IN ('ACEPTADO', 'ACEPTADO_CONDICIONAL', 'EN_PROCESO')
-          AND d.tipo_ecf IN ('31', '32', '33', '44', '45')
+          AND ${VENTA_ASENTABLE_SQL}
           AND d.monto_total > 0)
       +
       -- Notas de crédito con efecto monetario
@@ -451,6 +465,25 @@ export async function contarPendientes(teamId: number): Promise<number> {
         LEFT JOIN contabilidad_asientos rev
           ON rev.team_id = d.team_id AND rev.origen_tipo = 'anulacion' AND rev.origen_id = d.id
         WHERE d.team_id = ${teamId} AND d.estado = 'ANULADO' AND rev.id IS NULL)
+      +
+      -- Compras locales
+      (SELECT count(*) FROM compras_locales c
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = c.team_id AND a.origen_tipo = 'compra' AND a.origen_id = c.id
+        WHERE c.team_id = ${teamId} AND a.id IS NULL AND c.monto_total > 0)
+      +
+      -- Pagos a proveedores
+      (SELECT count(*) FROM pagos_proveedores p
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = p.team_id AND a.origen_tipo = 'pago_proveedor' AND a.origen_id = p.id
+        WHERE p.team_id = ${teamId} AND a.id IS NULL)
+      +
+      -- Gastos pagados por caja
+      (SELECT count(*) FROM caja_movimientos m
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = m.team_id AND a.origen_tipo = 'gasto_caja' AND a.origen_id = m.id
+        WHERE m.team_id = ${teamId} AND a.id IS NULL
+          AND m.tipo = 'GASTO' AND m.monto_centavos > 0)
     )::int AS total
   `);
   return total;

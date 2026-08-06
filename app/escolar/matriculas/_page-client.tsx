@@ -81,7 +81,7 @@ export default function MatriculasClient() {
     const [periodosRes, cursosRes, estudiantesRes] = await Promise.all([
       fetch('/api/administracion-escolar/periodos'),
       fetch('/api/administracion-escolar/cursos'),
-      fetch('/api/administracion-escolar/estudiantes'),
+      fetch('/api/administracion-escolar/estudiantes/opciones'),
     ]);
     const [p, c, e] = await Promise.all([periodosRes.json(), cursosRes.json(), estudiantesRes.json()]);
     if (!periodosRes.ok) throw new Error(p.error ?? 'Error cargando períodos');

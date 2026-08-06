@@ -197,6 +197,17 @@ export function LibroDiarioClient({
     }
     if (r.hayMas) partes.push('Quedan más pendientes: vuelve a pulsar para seguir.');
 
+    // Un fallo no es un salto: el resto del barrido siguió, pero esos
+    // documentos se quedaron sin asiento y alguien tiene que ir a mirarlos.
+    const fallidos = (r.fallidos ?? []) as { origenTipo: string; origenId: number }[];
+    if (fallidos.length > 0) {
+      partes.push(
+        `${fallidos.length} dieron error y no se asentaron: ` +
+        fallidos.slice(0, 5).map((f) => `${f.origenTipo} #${f.origenId}`).join(', ') +
+        (fallidos.length > 5 ? '…' : '') + '.',
+      );
+    }
+
     setAviso(partes.join(' '));
     startTransition(() => router.refresh());
   }
