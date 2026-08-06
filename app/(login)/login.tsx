@@ -58,8 +58,14 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
             Todo empieza<br />desde Zero.
           </h1>
 
-          <p className="mt-7 font-[family-name:var(--font-display)] text-[1.75rem] font-normal leading-snug text-zero-100">
-            Y no termina.
+          {/* El isotipo va en la línea, no de adorno: es el símbolo de infinito
+              y aquí hace de palabra. Por eso lo lee el lector de pantalla como
+              parte de la frase. */}
+          <p className="mt-7 flex items-center gap-4 font-[family-name:var(--font-display)] text-[1.75rem] font-normal leading-none text-zero-100">
+            Hasta el infinito
+            <span role="img" aria-label="infinito" className="inline-flex shrink-0">
+              <Isotipo size={54} color="#ffffff" />
+            </span>
           </p>
 
           <p className="mt-8 max-w-sm text-[15px] leading-relaxed text-zero-100/75">
