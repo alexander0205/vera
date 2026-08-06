@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Paginador } from '@/components/ui/paginador';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -53,20 +54,26 @@ export default function PagosEscolaresClient() {
   const [query, setQuery] = useState('');
   const [metodo, setMetodo] = useState('todos');
 
+  // El listado viene paginado del servidor: un colegio cobra miles de pagos al
+  // año y traerlos todos dejaba la pantalla en blanco.
+  const [pagina, setPagina] = useState(1);
+  const [paginaInfo, setPaginaInfo] = useState({ total: 0, paginas: 1, porPagina: 50 });
+
   const cargar = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch('/api/administracion-escolar/pagos');
+      const res = await fetch(`/api/administracion-escolar/pagos?pagina=${pagina}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error cargando pagos');
       setPagos(data.pagos ?? []);
+      setPaginaInfo({ total: data.total ?? 0, paginas: data.paginas ?? 1, porPagina: data.porPagina ?? 50 });
     } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : 'Error cargando pagos');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagina]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -177,6 +184,14 @@ export default function PagosEscolaresClient() {
               </table>
             </div>
           )}
+          <Paginador
+            pagina={pagina}
+            paginas={paginaInfo.paginas}
+            total={paginaInfo.total}
+            porPagina={paginaInfo.porPagina}
+            onCambiar={setPagina}
+            cargando={loading}
+          />
         </CardContent>
       </Card>
     </section>

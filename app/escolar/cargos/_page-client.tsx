@@ -14,6 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { NativeSelect } from '@/components/ui/native-select';
+import { Paginador } from '@/components/ui/paginador';
 import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
@@ -96,6 +97,10 @@ export default function CargosClient() {
   const puedeGestionar = permissions.includes('administracion-escolar:gestionar');
 
   const [cargos, setCargos] = useState<Cargo[]>([]);
+  // El listado viene paginado del servidor: un colegio genera miles de cargos
+  // al año y traerlos todos dejaba la pantalla en blanco varios segundos.
+  const [pagina, setPagina] = useState(1);
+  const [paginaInfo, setPaginaInfo] = useState({ total: 0, paginas: 1, porPagina: 50 });
   const [periodos, setPeriodos] = useState<Periodo[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [conceptos, setConceptos] = useState<Concepto[]>([]);
@@ -129,12 +134,17 @@ export default function CargosClient() {
     const params = new URLSearchParams();
     if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
     if (filtroEstado !== 'todos') params.set('estado', filtroEstado);
-    const url = `/api/administracion-escolar/cargos${params.toString() ? `?${params}` : ''}`;
-    const res = await fetch(url);
+    params.set('pagina', String(pagina));
+    const res = await fetch(`/api/administracion-escolar/cargos?${params}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Error cargando cargos');
     setCargos(data.cargos ?? []);
-  }, [filtroEstado, filtroPeriodo]);
+    setPaginaInfo({
+      total: data.total ?? 0,
+      paginas: data.paginas ?? 1,
+      porPagina: data.porPagina ?? 50,
+    });
+  }, [filtroEstado, filtroPeriodo, pagina]);
 
   const cargarCatalogos = useCallback(async () => {
     const [periodosRes, cursosRes, conceptosRes, matriculasRes, estudiantesRes] = await Promise.all([
@@ -371,14 +381,14 @@ export default function CargosClient() {
               <Input className="pl-8" placeholder="Buscar por estudiante, concepto o período..."
                 value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
-            <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+            <Select value={filtroPeriodo} onValueChange={(v: string) => { setPagina(1); setFiltroPeriodo(v); }}>
               <SelectTrigger className="lg:w-52"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Período: Todos</SelectItem>
                 {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+            <Select value={filtroEstado} onValueChange={(v: string) => { setPagina(1); setFiltroEstado(v); }}>
               <SelectTrigger className="lg:w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ESTADOS.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
@@ -443,6 +453,14 @@ export default function CargosClient() {
               </table>
             </div>
           )}
+          <Paginador
+            pagina={pagina}
+            paginas={paginaInfo.paginas}
+            total={paginaInfo.total}
+            porPagina={paginaInfo.porPagina}
+            onCambiar={setPagina}
+            cargando={loading}
+          />
         </CardContent>
       </Card>
 

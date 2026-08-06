@@ -9,7 +9,8 @@ import {
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, count } from 'drizzle-orm';
+import { armarPagina, leerPaginacion } from '@/lib/api/paginacion';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
 
@@ -22,7 +23,11 @@ export async function GET(req: NextRequest) {
   const where = [eq(adminEscolarMatriculas.teamId, teamId)];
   if (periodoId) where.push(eq(adminEscolarMatriculas.periodoId, parseInt(periodoId)));
 
-  const rows = await db
+  // Una matrícula por alumno y año, y se acumulan curso tras curso. Sin paginar, la ruta devolvía la tabla entera.
+  const pag = leerPaginacion(req.nextUrl);
+
+  const [rows, [{ total }]] = await Promise.all([
+    db
     .select({
       id: adminEscolarMatriculas.id,
       estudianteId: adminEscolarMatriculas.estudianteId,
@@ -51,8 +56,15 @@ export async function GET(req: NextRequest) {
       eq(adminEscolarCursos.teamId, teamId),
     ))
     .where(and(...where))
-    .orderBy(desc(adminEscolarMatriculas.fechaInscripcion), desc(adminEscolarMatriculas.id));
-  return NextResponse.json({ matriculas: rows });
+    .orderBy(desc(adminEscolarMatriculas.fechaInscripcion), desc(adminEscolarMatriculas.id))
+    .limit(pag.limit)
+    .offset(pag.offset),
+
+    db.select({ total: count() }).from(adminEscolarMatriculas).where(and(...where)),
+  ]);
+
+  const pagina = armarPagina(rows, total, pag);
+  return NextResponse.json({ matriculas: pagina.datos, ...pagina });
 }
 
 export async function POST(req: NextRequest) {

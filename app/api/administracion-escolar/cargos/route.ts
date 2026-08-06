@@ -10,7 +10,8 @@ import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { mesPerteneceAlPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
 import { resolverTarifa } from '@/lib/administracion-escolar/tarifas';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, count } from 'drizzle-orm';
+import { armarPagina, leerPaginacion } from '@/lib/api/paginacion';
 
 export async function GET(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
@@ -24,7 +25,12 @@ export async function GET(req: NextRequest) {
   if (periodoId) where.push(eq(adminEscolarCargos.periodoId, parseInt(periodoId)));
   if (estado) where.push(eq(adminEscolarCargos.estado, estado));
 
-  const rows = await db
+  // Un colegio genera un cargo por alumno, mes y concepto: unos 5.100 al año
+  // con 465 alumnos. Sin paginar, esta ruta devolvía todos de golpe.
+  const pag = leerPaginacion(req.nextUrl);
+
+  const [rows, [{ total }]] = await Promise.all([
+    db
     .select({
       id: adminEscolarCargos.id,
       estudianteId: adminEscolarCargos.estudianteId,
@@ -51,8 +57,17 @@ export async function GET(req: NextRequest) {
       eq(adminEscolarConceptosPago.teamId, teamId),
     ))
     .where(and(...where))
-    .orderBy(desc(adminEscolarCargos.anio), desc(adminEscolarCargos.mes), desc(adminEscolarCargos.id));
-  return NextResponse.json({ cargos: rows });
+    .orderBy(desc(adminEscolarCargos.anio), desc(adminEscolarCargos.mes), desc(adminEscolarCargos.id))
+    .limit(pag.limit)
+    .offset(pag.offset),
+
+    db.select({ total: count() }).from(adminEscolarCargos).where(and(...where)),
+  ]);
+
+  const pagina = armarPagina(rows, total, pag);
+  // Se mantiene `cargos` además de `datos` para no romper a quien ya lee esa
+  // clave; el paginador nuevo usa el resto de campos.
+  return NextResponse.json({ cargos: pagina.datos, ...pagina });
 }
 
 export async function POST(req: NextRequest) {

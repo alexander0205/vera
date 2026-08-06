@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { Paginador } from '@/components/ui/paginador';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,15 +68,19 @@ export default function MatriculasClient() {
   const [saving, setSaving]         = useState(false);
   const [opError, setOpError]       = useState<string | null>(null);
 
+  // Paginado en el servidor: las matrículas se acumulan curso tras curso.
+  const [pagina, setPagina] = useState(1);
+  const [paginaInfo, setPaginaInfo] = useState({ total: 0, paginas: 1, porPagina: 50 });
+
   const cargarMatriculas = useCallback(async () => {
-    const url = filtroPeriodo === 'todos'
-      ? '/api/administracion-escolar/matriculas'
-      : `/api/administracion-escolar/matriculas?periodoId=${filtroPeriodo}`;
-    const res = await fetch(url);
+    const params = new URLSearchParams({ pagina: String(pagina) });
+    if (filtroPeriodo !== 'todos') params.set('periodoId', filtroPeriodo);
+    const res = await fetch(`/api/administracion-escolar/matriculas?${params}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Error cargando matrículas');
     setMatriculas(data.matriculas ?? []);
-  }, [filtroPeriodo]);
+    setPaginaInfo({ total: data.total ?? 0, paginas: data.paginas ?? 1, porPagina: data.porPagina ?? 50 });
+  }, [filtroPeriodo, pagina]);
 
   const cargarCatalogos = useCallback(async () => {
     const [periodosRes, cursosRes, estudiantesRes] = await Promise.all([
@@ -191,7 +196,7 @@ export default function MatriculasClient() {
               <Input className="pl-8" placeholder="Buscar por estudiante, curso o código…"
                 value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
-            <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+            <Select value={filtroPeriodo} onValueChange={(v: string) => { setPagina(1); setFiltroPeriodo(v); }}>
               <SelectTrigger className="sm:w-48"><SelectValue placeholder="Período" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Período: Todos</SelectItem>
@@ -270,6 +275,14 @@ export default function MatriculasClient() {
               </table>
             </div>
           )}
+          <Paginador
+            pagina={pagina}
+            paginas={paginaInfo.paginas}
+            total={paginaInfo.total}
+            porPagina={paginaInfo.porPagina}
+            onCambiar={setPagina}
+            cargando={loading}
+          />
         </CardContent>
       </Card>
 
