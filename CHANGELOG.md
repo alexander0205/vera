@@ -4,6 +4,164 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.15.4 — 2026-08-05
+
+### Arreglado
+
+- **pdf**: las columnas de montos se encimaban en la factura
+
+## v1.15.3 — 2026-08-05
+
+### Arreglado
+
+- **listados**: abrir el detalle desde cualquier punto de la fila
+
+## v1.15.2 — 2026-08-05
+
+### Arreglado
+
+- **cotizaciones**: quitar la marca de agua BORRADOR del PDF
+
+## v1.15.1 — 2026-08-05
+
+### Arreglado
+
+- **cotizaciones**: beneficiarios por línea + convertir siempre visible
+
+## v1.15.0 — 2026-08-05
+
+### Nuevo
+
+- **configuracion**: términos y condiciones por defecto
+- **cotizaciones**: enviar por correo desde la lista
+  - El e-NCF solo se muestra cuando existe. Las facturas sin comprobante fiscal guardan un placeholder (BOR-XXXXXXXX) en esa misma columna, y se estaba imprimiendo como si fuera un número fiscal real.
+  - El encabezado y el asunto dicen qué es el documento según su código: una nota de crédito no es una factura.
+
+### Arreglado
+
+- **cotizaciones**: borrar términos o notas no se guardaba
+
+## v1.14.0 — 2026-08-05
+
+### Nuevo
+
+- **email**: los comprobantes salen a nombre de la institución
+
+## v1.13.2 — 2026-08-05
+
+### Arreglado
+
+- **email**: generar el PDF en proceso en vez de pedirlo por HTTP
+
+## v1.13.1 — 2026-08-05
+
+### Arreglado
+
+- **cotizaciones**: renumerar migración 0075 duplicada y no tragarse el error
+  - Renumera la migración a 0078 (y su script) para que la colisión no vuelva a esconderla. El journal de drizzle solo llega a 0004; de ahí en adelante las migraciones se corren a mano, así que nada avisa de un archivo que se saltó.
+  - El formulario lee el body con `res.text()` y parsea dentro de un try, cayendo al status HTTP cuando no hay JSON que parsear.
+
+## v1.13.0 — 2026-08-04
+
+### Nuevo
+
+- **dgii**: notas internas sin e-NCF y quitar el badge de ambiente
+- **dgii**: ocultar y bloquear comprobantes fiscales fuera de Producción
+  - lib/ecf-api/ambiente.ts — getAmbienteTenant() con caché de 5 min por instancia. Falla cerrado: si ecf-api no responde, no se emite. Un comprobante emitido contra el ambiente equivocado no se puede des-emitir.
+  - /api/ecf/emitir y /api/facturas/[id]/emitir-ecf — 403 si el tenant no está en Producción. También bloquea crear borradores de VENTA con tipo fiscal: solo existirían para emitirse después.
+  - Excepción para el Set de Pruebas de habilitación, que corre en TesteCF por definición — sin ella ninguna empresa podría llegar a Producción. Se marca con `origen:'habilitacion'` y exige 'configuracion:gestionar'; NO se apoya en skipRangeValidation, que cualquier cliente puede poner.
+  - useTiposDisponibles — esconde los tipos de venta fiscal fuera de Producción. Asume "no Producción" mientras carga.
+  - POS y terminales POS tenían los <option> hardcodeados y su API aceptaba `z.string().max(10)` sin enum: un terminal con default '31' se lo heredaba a cada venta. Ahora enum + gate de ambiente.
+  - Cotización→factura hardcodeaba '32'; fuera de Producción nace sin-ncf.
+
+### Arreglado
+
+- **dgii**: cerrar el gate de ambiente también en facturas recurrentes
+
+## v1.12.0 — 2026-08-03
+
+### Nuevo
+
+- **pagos**: alerta de método de pago configurable por empresa + fix pantalla de éxito
+
+## v1.11.2 — 2026-08-03
+
+_1 commit(s) de mantenimiento no listados._
+
+## v1.11.1 — 2026-08-03
+
+### Arreglado
+
+- **cxc**: mostrar en cuentas por cobrar los borradores con e-NCF real
+
+## v1.11.0 — 2026-08-03
+
+### Nuevo
+
+- **ui**: confirmación antes de convertir cotización y generar mora
+- **cotizaciones**: convertir a factura disponible desde el inicio
+- **cotizaciones**: nueva cotización reusa el form de factura sin pago
+  - page.tsx server component con gate cotizaciones:gestionar + perfil empresa
+  - guarda ítems en shape rico ItemLinea; convertir/route lee ambos shapes
+  - migración 0075: cols retenciones/comentario/pie_factura en cotizaciones
+
+### Arreglado
+
+- **ui**: el modal de confirmación abre tras cerrar el dropdown
+- **cotizaciones**: detalle y PDF normalizan shape de ítems rico/viejo
+- **cotizaciones**: editar reusa el form nuevo (arregla items NaN y crash)
+- **cotizaciones**: Resumen vuelve al rail derecho (misma posición que factura)
+- **facturas**: al anular, el pago no cuenta en ninguna vista
+  - reportes: ventasPorMetodo y pagosPorUsuario (add join + estado<>ANULADO)
+  - getPagosListado (add filtro estado)
+
+## v1.10.1 — 2026-08-03
+
+_1 commit(s) de mantenimiento no listados._
+
+## v1.10.0 — 2026-08-01
+
+### Nuevo
+
+- **recurrentes**: permitir planes sin comprobante fiscal (sin-ncf)
+  - Migración 0076: ensancha tipo_ecf a varchar(10). ecf_documents.tipo_ecf ya era varchar(10), el cuello estaba solo en el plan.
+  - El generador emite encf vacío para sin-ncf en vez de BOR-sin-ncf-XXX, que mostraría un identificador con pinta de e-NCF en un documento que nunca va a tener uno. Mismo criterio que el alta manual.
+  - Whitelist de tipoEcf en POST y PUT: un valor inválido ahora responde 422 en lugar de reventar como 500. La lista vive en lib/ecf/categorias.ts para no duplicarla entre las rutas y el formulario.
+  - Opción "Sin NCF — factura interna" en el selector del formulario, que ya usan tanto el alta como la edición.
+
+## v1.9.0 — 2026-07-30
+
+### Nuevo
+
+- **pagos**: permiso y toggle admin/owner para la alerta de método de pago
+  - Permiso 'pagos:config-alerta' (owner+admin) en roles.ts + catálogo, visible en la matriz de permisos.
+  - Columna teams.alerta_metodo_pago_activa (default true) + migración 0075.
+  - Config: card "Alerta de método de pago" gateada por el permiso, guardado instantáneo vía endpoint dedicado /api/equipo/alerta-metodo-pago (gateado por userCan, aparte del perfil owner-only). GET perfil expone el flag.
+  - POS y factura leen el flag (default ON): si está apagado, el cobro se finaliza sin pedir reconfirmación del método.
+- **pagos**: alerta double-check del método de pago
+  - ConfirmarMetodoPagoDialog: componente presentacional reutilizable que pone el método al frente; cada pantalla arma sus líneas.
+  - POS (ModalCobro): confirmar() guarda el cobro pendiente y abre el double-check; cubre método simple, monedero y pago dividido.
+  - Factura nueva: gate al inicio de emitir() cuando hay pago con monto>0; va antes de la traza anti-duplicados para no registrar submits fantasma.
+
+### Cambios internos
+
+- **pagos**: alerta de método de pago por permiso, sin toggle de empresa
+  - Columna teams.alerta_metodo_pago_activa + migración 0075 + apply script.
+  - Endpoint /api/equipo/alerta-metodo-pago y su lectura en el perfil.
+  - Card "Alerta de método de pago" en Configuración de empresa.
+  - Factura: usePermissions().can('pagos:alerta-metodo') (cubre nueva/editar/NC/ND).
+  - POS: hasPermission('pagos:alerta-metodo') server-side, mismo prop threadeado.
+
+## v1.8.1 — 2026-07-30
+
+### Arreglado
+
+- **auth**: el reset de contraseña fallaba con emails que tenían mayúsculas
+  - Normaliza el email al escribirlo: schemas de signIn/signUp, invitación de equipo y alta de empresa desde el panel admin.
+  - forgot-password compara con lower() para tolerar filas viejas.
+  - assertSent() lanza cuando Resend devuelve error, para que el catch de la ruta lo registre en vez de perderlo.
+  - Migración 0075: normaliza users e invitations, e índice único sobre lower(email) para que no vuelva a entrar sucio.
+
 ## v1.8.0 — 2026-07-30
 
 ### Nuevo

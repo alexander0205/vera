@@ -48,7 +48,7 @@ async function logActivity(
 }
 
 const signInSchema = z.object({
-  email: z.string().email().min(3).max(255),
+  email: z.string().email().min(3).max(255).trim().toLowerCase(),
   password: z.string().min(8).max(100),
   twoFactorCode: z.string().regex(/^\d{6}$/).optional(),
 });
@@ -146,7 +146,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 });
 
 const signUpSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().trim().toLowerCase(),
   password: z.string().min(8),
   inviteId: z.string().optional(), // legacy (integer id) — kept for compat
   inviteToken: z.string().optional(), // new secure token

@@ -248,10 +248,14 @@ export async function getIngresosPorMetodo(
     n:      count(),
   })
     .from(pagosRecibidos)
+    // Excluir cobros de comprobantes ANULADOS: al anular una factura su fila de
+    // pago sigue viva (traza + arqueo de caja), pero deja de contar como venta.
+    .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
     .where(and(
       eq(pagosRecibidos.teamId, teamId),
       sql`${pagosRecibidos.fechaPago} >= ${d0}`,
       sql`${pagosRecibidos.fechaPago} <= ${d1}`,
+      sql`${ecfDocuments.estado} <> 'ANULADO'`,
     ))
     .groupBy(pagosRecibidos.metodo)
     .orderBy(desc(sql`sum(${pagosRecibidos.montoCentavos})`));
@@ -461,10 +465,13 @@ export async function getPagosPorUsuario(
   })
     .from(pagosRecibidos)
     .leftJoin(users, eq(users.id, pagosRecibidos.createdBy))
+    // Excluir cobros de comprobantes ANULADOS (ver ventasPorMetodo).
+    .innerJoin(ecfDocuments, eq(ecfDocuments.id, pagosRecibidos.ecfDocumentId))
     .where(and(
       eq(pagosRecibidos.teamId, teamId),
       sql`${pagosRecibidos.fechaPago} >= ${d0}`,
       sql`${pagosRecibidos.fechaPago} <= ${d1}`,
+      sql`${ecfDocuments.estado} <> 'ANULADO'`,
     ))
     .groupBy(pagosRecibidos.createdBy, users.name, users.email)
     .orderBy(desc(sql`sum(${pagosRecibidos.montoCentavos})`));

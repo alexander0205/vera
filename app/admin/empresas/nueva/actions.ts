@@ -22,7 +22,7 @@ export async function crearEmpresa(formData: FormData) {
   const provincia       = (formData.get('provincia') as string | null)?.trim() || null;
   const municipio       = (formData.get('municipio') as string | null)?.trim() || null;
   const planKey         = (formData.get('planName') as string | null)?.trim() || null;
-  const inviteEmail     = (formData.get('inviteEmail') as string | null)?.trim() || null;
+  const inviteEmail     = (formData.get('inviteEmail') as string | null)?.trim().toLowerCase() || null;
 
   if (!razonSocial || !rnc) return;
 

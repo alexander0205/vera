@@ -18,6 +18,7 @@
 
 import useSWR from 'swr';
 import { motivoBloqueoDgii, type Readiness } from '@/lib/hooks/useDgiiReadiness';
+import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 const SIEMPRE_VISIBLES = new Set(['31', '32', 'sin-ncf']);
 
@@ -53,9 +54,18 @@ export function useTiposDisponibles() {
   // aparecer tarde que mostrar E31/E32 a una empresa sin DGII.
   const dgiiReady = readiness?.ready === true;
 
-  /** ¿Mostrar este tipo en el dropdown? */
+  /**
+   * ¿Mostrar este tipo en el desplegable?
+   *
+   * Fuera de Producción se esconden solo los comprobantes de VENTA: lo que se
+   * emitiría en TesteCF/CerteCF no vale ante la DGII. Las notas de crédito y
+   * débito y los de compras y gastos siguen a la vista, porque son documentos
+   * internos y el servidor bloquea su envío igual.
+   */
   const tipoVisible = (tipo: string) => {
     if (tipo === 'sin-ncf') return true;
+    if (!dgiiReady && esTipoVentaFiscal(tipo)) return false;
+    if (!dgiiReady && !SIEMPRE_VISIBLES.has(tipo)) return activos.has(tipo);
     if (!dgiiReady) return false;
     return SIEMPRE_VISIBLES.has(tipo) || activos.has(tipo);
   };
@@ -64,6 +74,12 @@ export function useTiposDisponibles() {
     tipoVisible,
     activos,
     dgiiReady,
+    /**
+     * Si la DGII confirmó el ambiente de Producción. Sale del mismo readiness,
+     * así que no hace falta una segunda petición para saberlo.
+     */
+    enProduccion: readiness?.enProduccion === true,
+    ambiente: readiness?.ambiente ?? null,
     /** Por qué no hay tipos fiscales disponibles — para mostrarlo, no adivinarlo. */
     motivo: motivoBloqueoDgii(readiness ?? null),
     isLoading: isLoading || loadingReadiness,

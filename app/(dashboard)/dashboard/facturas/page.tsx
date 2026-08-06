@@ -553,6 +553,9 @@ export default function FacturasPage() {
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
+        // Toda la fila abre el detalle: el ojo de la derecha y el código son
+        // dianas chicas en una tabla ancha, y se leían como decoración.
+        rowHref={doc => `/dashboard/facturas/${doc.id}`}
         rowActions={rowActions}
         pagination={{
           page,

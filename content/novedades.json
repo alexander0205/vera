@@ -47,6 +47,61 @@
         "tipo": "arreglo",
         "titulo": "La sesión ya no se cierra sola",
         "detalle": "En algunos casos el sistema perdía la sesión y mostraba un error raro al guardar. Ahora, si la sesión vence, te lleva al inicio de sesión con un mensaje claro."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Ya no se pierden facturas en cuentas por cobrar",
+        "detalle": "Algunas facturas con saldo pendiente no aparecían en cuentas por cobrar, incluso cuando ya tenían abonos registrados, y la deuda quedaba fuera de la cartera sin aviso. Ahora se muestran todas."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Las cotizaciones vuelven a guardarse",
+        "detalle": "Al guardar una cotización aparecía un error técnico y el trabajo se perdía. Ya se guarda normal. Además, si algo llega a fallar del lado del servidor, ahora verás un mensaje que se entiende en vez de un error en inglés."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Enviar la factura por correo vuelve a funcionar",
+        "detalle": "Al enviar una factura o una cotización por correo salía un error y el cliente nunca la recibía. Ya sale con el PDF adjunto. Además, si el correo llegara a fallar, ahora el sistema lo avisa en vez de decir que se envió."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "El correo de la factura ahora sale a nombre de tu institución",
+        "detalle": "Antes el cliente recibía un correo genérico del sistema. Ahora llega con tu logo, tus colores, tu nombre y tus datos de contacto, y si responde te escribe a ti. Igual para las cotizaciones."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Envía una cotización por correo desde la lista",
+        "detalle": "Antes había que entrar a la cotización para mandarla. Ahora la envías directo desde la lista, y al enviarla pasa sola de borrador a enviada."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Escribe tus términos y condiciones una sola vez",
+        "detalle": "En Configuración puedes dejar guardados los términos y condiciones de tu empresa. A partir de ahí se escriben solos en cada factura, cotización o plan recurrente que crees, y los puedes editar o borrar documento por documento."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Los beneficiarios ya funcionan en las cotizaciones",
+        "detalle": "El selector de beneficiario por línea salía siempre vacío, así que no se podía cotizar por estudiante. Ahora se elige igual que en la factura, se ve en el PDF y se conserva al convertir la cotización en factura."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "«Convertir a factura» siempre a la vista",
+        "detalle": "El botón vivía en la columna de la derecha, que en pantallas chicas queda al final de la página. Ahora está también en la barra fija de abajo."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "La cotización ya no sale marcada como borrador",
+        "detalle": "El PDF llevaba un sello gigante de BORRADOR cruzando la página mientras la cotización no se hubiera enviado. El cliente recibía un documento que parecía a medio hacer. Ya sale limpio."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Abre una factura o cotización haciendo clic en cualquier parte de la fila",
+        "detalle": "Para ver el detalle había que atinarle a un icono gris diminuto al final de la fila, y en cotizaciones ni eso existía. Ahora la fila completa abre el documento, el número se ve como enlace y las cotizaciones tienen su botón de ver detalle."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Los montos ya no se montan unos sobre otros en el PDF",
+        "detalle": "En facturas con precios de seis dígitos, las columnas de precio, ITBIS y total se encimaban y el documento quedaba ilegible. Ahora cada columna tiene su propio espacio con una separación fija entre ellas, y la descripción baja de línea cuando es larga en vez de empujar a los montos."
       }
     ]
   },

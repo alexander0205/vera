@@ -1,0 +1,167 @@
+name: Limpieza de branches Neon
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Borra branches de Neon que llevan semanas sin usarse.
+#
+# Por qué: el plan Launch incluye 10 branches por proyecto; cada una de más
+# cuesta $1.50/mes (~$0.002/hora), y se acumulan solas al trabajar por features.
+# En agosto 2026 el proyecto llegó a 15 branches = $7.50/mes de puro descuido.
+#
+# Cómo decide qué borrar: usa la última actividad REAL del compute
+# (endpoint.last_active), no la fecha de creación. Una branch que se sigue
+# usando nunca se toca por vieja que sea.
+#
+# Salvaguardas (en este orden):
+#   1. Nunca toca la branch default ni las marcadas como protegidas en Neon
+#   2. Nunca toca las de la lista PROTEGIDAS de abajo
+#   3. Solo borra si la última actividad es más vieja que DIAS_INACTIVA
+#   4. Si una branch tiene hijas, Neon rechaza el borrado y se reporta como
+#      omitida (hay que borrar las hijas primero)
+#
+# Para blindar una branch nueva: agrégala a PROTEGIDAS, o márcala como
+# protected en la consola de Neon (Branch → Protect).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # Domingos 06:00 UTC (2:00 AM en RD) — fuera de horario escolar.
+    - cron: '0 6 * * 0'
+  workflow_dispatch:
+    inputs:
+      dias_inactiva:
+        description: 'Días sin actividad para considerarla vieja'
+        required: false
+        default: '21'
+      simulacion:
+        description: 'Simulación: lista qué borraría sin borrar nada'
+        type: boolean
+        required: false
+        default: true
+
+concurrency:
+  group: neon-limpieza
+  cancel-in-progress: false
+
+jobs:
+  limpiar:
+    name: Revisar y borrar branches sin uso
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      PROJECT_ID:   ${{ secrets.NEON_PROJECT_ID }}
+      # En la corrida programada nunca es simulación; en la manual manda el input.
+      SIMULACION:   ${{ github.event_name == 'workflow_dispatch' && inputs.simulacion || 'false' }}
+      DIAS:         ${{ inputs.dias_inactiva || '21' }}
+
+    steps:
+      - name: Revisar y borrar
+        run: |
+          set -euo pipefail
+
+          # Branches que no se tocan pase lo que pase. Ampliar según haga falta.
+          PROTEGIDAS="main dev qa production staging launch-preparation-platform"
+
+          API="https://console.neon.tech/api/v2/projects/${PROJECT_ID}"
+          AUTH="Authorization: Bearer ${NEON_API_KEY}"
+
+          # Falla temprano y claro si las credenciales no sirven, en vez de
+          # reportar "0 branches" y dar la falsa impresión de que todo está bien.
+          if ! BRANCHES=$(curl -sf -H "$AUTH" "${API}/branches"); then
+            echo "::error::No se pudo consultar la API de Neon. Revisar NEON_API_KEY y NEON_PROJECT_ID."
+            exit 1
+          fi
+
+          ENDPOINTS=$(curl -sf -H "$AUTH" "${API}/endpoints" || echo '{"endpoints":[]}')
+
+          TOTAL=$(echo "$BRANCHES" | jq '.branches | length')
+          LIMITE_INCLUIDO=10
+          AHORA=$(date -u +%s)
+          UMBRAL=$((DIAS * 86400))
+
+          echo "## Limpieza de branches Neon" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Branches al empezar: **${TOTAL}** (el plan incluye ${LIMITE_INCLUIDO})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Umbral de inactividad: **${DIAS} días**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SIMULACION" = "true" ]; then
+            echo "Modo: **SIMULACIÓN** (no se borra nada)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | Últ. actividad | Días | Resultado |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+
+          # Se ordena de más vieja a más nueva para que, si hay jerarquías,
+          # las hijas (creadas después) se intenten antes que las madres.
+          echo "$BRANCHES" | jq -r '
+            .branches
+            | sort_by(.created_at)
+            | reverse
+            | .[]
+            | [.id, .name, (.default // false), (.protected // false), (.updated_at // .created_at)]
+            | @tsv
+          ' | while IFS=$'\t' read -r ID NOMBRE ES_DEFAULT ES_PROTEGIDA ACTUALIZADA; do
+
+            if [ "$ES_DEFAULT" = "true" ] || [ "$ES_PROTEGIDA" = "true" ]; then
+              echo "| \`${NOMBRE}\` | — | — | protegida en Neon |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            if echo " $PROTEGIDAS " | grep -q " ${NOMBRE} "; then
+              echo "| \`${NOMBRE}\` | — | — | en lista protegida |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            # La actividad real del compute manda; si la branch no tiene
+            # endpoint, se cae a la fecha de actualización de la branch.
+            ULTIMA=$(echo "$ENDPOINTS" | jq -r --arg b "$ID" '
+              [.endpoints[]? | select(.branch_id == $b) | .last_active // empty] | max // empty
+            ')
+            [ -z "$ULTIMA" ] && ULTIMA="$ACTUALIZADA"
+
+            ULTIMA_TS=$(date -u -d "$ULTIMA" +%s 2>/dev/null || echo 0)
+            if [ "$ULTIMA_TS" -eq 0 ]; then
+              echo "| \`${NOMBRE}\` | ? | ? | sin fecha legible, se omite |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            EDAD=$(( (AHORA - ULTIMA_TS) / 86400 ))
+
+            if [ "$EDAD" -lt "$DIAS" ]; then
+              echo "| \`${NOMBRE}\` | ${ULTIMA:0:10} | ${EDAD} | activa, se conserva |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            if [ "$SIMULACION" = "true" ]; then
+              echo "| \`${NOMBRE}\` | ${ULTIMA:0:10} | ${EDAD} | **se borraría** |" >> "$GITHUB_STEP_SUMMARY"
+              echo "SIMULACION: se borraría ${NOMBRE} (${EDAD} días sin uso)"
+              continue
+            fi
+
+            RESP=$(curl -s -X DELETE -H "$AUTH" "${API}/branches/${ID}")
+            if echo "$RESP" | jq -e '.branch' >/dev/null 2>&1; then
+              echo "| \`${NOMBRE}\` | ${ULTIMA:0:10} | ${EDAD} | 🗑️ borrada |" >> "$GITHUB_STEP_SUMMARY"
+              echo "Borrada: ${NOMBRE} (${EDAD} días sin uso)"
+            else
+              MOTIVO=$(echo "$RESP" | jq -r '.message // "error desconocido"' | head -c 120)
+              echo "| \`${NOMBRE}\` | ${ULTIMA:0:10} | ${EDAD} | ⚠️ no se pudo: ${MOTIVO} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning::No se pudo borrar ${NOMBRE}: ${MOTIVO}"
+            fi
+          done
+
+          FINAL=$(curl -sf -H "$AUTH" "${API}/branches" | jq '.branches | length')
+          EXTRA=$(( FINAL > LIMITE_INCLUIDO ? FINAL - LIMITE_INCLUIDO : 0 ))
+          COSTO=$(awk "BEGIN{printf \"%.2f\", ${EXTRA} * 1.50}")
+
+          {
+            echo ""
+            echo "**Branches al terminar: ${FINAL}**"
+            if [ "$EXTRA" -gt 0 ]; then
+              echo ""
+              echo "Todavía hay ${EXTRA} por encima de las ${LIMITE_INCLUIDO} incluidas: **\$${COSTO}/mes**."
+              echo "Si alguna ya no hace falta, bórrala a mano o agrégala al umbral bajando \`dias_inactiva\`."
+            else
+              echo ""
+              echo "Dentro del límite incluido: **sin cargo por branches extra**."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

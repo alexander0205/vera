@@ -35,6 +35,9 @@ export type Permission =
   | 'facturas:fecha-personalizada'
   // Pagos recibidos (módulo de cobros)
   | 'pagos:ver'
+  // Alerta double-check del método de pago: tener el permiso = la alerta se pide
+  // al cobrar. El admin la activa asignándolo a un rol (Equipo → Permisos).
+  | 'pagos:alerta-metodo'
   // Clientes
   | 'clientes:ver'
   | 'clientes:gestionar'
@@ -276,6 +279,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   ]},
   { module: 'Pagos', icon: 'Wallet', permissions: [
     { key: 'pagos:ver', label: 'Ver pagos recibidos' },
+    { key: 'pagos:alerta-metodo', label: 'Alerta double-check de método de pago' },
   ]},
   { module: 'Clientes', icon: 'Users', permissions: [
     { key: 'clientes:ver',       label: 'Ver clientes' },

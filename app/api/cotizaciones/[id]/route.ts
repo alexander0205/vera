@@ -48,8 +48,14 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(body.totalItbis != null && { totalItbis: Math.round(body.totalItbis * 100) }),
       ...(body.montoTotal != null && { montoTotal: Math.round(body.montoTotal * 100) }),
       ...(body.items != null && { items: JSON.stringify(body.items) }),
-      ...(body.notas != null && { notas: body.notas }),
-      ...(body.terminosCondiciones != null && { terminosCondiciones: body.terminosCondiciones }),
+      // `!== undefined`, no `!= null`: el formulario manda null cuando el campo
+      // se deja vacío, y con `!= null` la línea se saltaba — borrar el texto no
+      // se guardaba nunca y volvía a aparecer al reabrir la cotización.
+      ...(body.notas !== undefined && { notas: body.notas }),
+      ...(body.terminosCondiciones !== undefined && { terminosCondiciones: body.terminosCondiciones }),
+      ...(body.retenciones !== undefined && { retenciones: body.retenciones ? JSON.stringify(body.retenciones) : null }),
+      ...(body.comentario !== undefined && { comentario: body.comentario }),
+      ...(body.pieFactura !== undefined && { pieFactura: body.pieFactura }),
       updatedAt: new Date(),
     })
     .where(and(eq(cotizaciones.id, numId), eq(cotizaciones.teamId, teamId)))

@@ -2,20 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import Alert from '@mui/material/Alert';
-import CircularProgress from '@mui/material/CircularProgress';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
-  FileText, Plus, Trash2, AlertTriangle, Pencil,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil, Mail, Eye,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { Input } from '@/components/ui/input';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 interface Cotizacion {
@@ -23,35 +20,38 @@ interface Cotizacion {
   numero: string;
   estado: string;
   razonSocialComprador: string | null;
+  emailComprador: string | null;
   montoTotal: number;
   fechaEmision: string;
   fechaVencimiento: string | null;
 }
 
-function EstadoChip({ estado }: { estado: string }) {
+function estadoBadge(estado: string) {
   switch (estado) {
     case 'borrador':
-      return <Chip label="Borrador" size="small" variant="outlined" sx={{ borderColor: '#d1d5db', color: '#4b5563', fontSize: '0.75rem' }} />;
+      return <Badge variant="outline" className="text-gray-600 border-gray-300">Borrador</Badge>;
     case 'enviada':
-      return <Chip label="Enviada" size="small" sx={{ bgcolor: '#dbeafe', color: '#1d4ed8', fontSize: '0.75rem', border: '1px solid #bfdbfe' }} />;
+      return <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">Enviada</Badge>;
     case 'aceptada':
-      return <Chip label="Aceptada" size="small" sx={{ bgcolor: '#16a34a', color: '#fff', fontSize: '0.75rem' }} />;
+      return <Badge className="bg-green-600 hover:bg-green-600 text-white">Aceptada</Badge>;
     case 'rechazada':
-      return <Chip label="Rechazada" size="small" sx={{ bgcolor: '#dc2626', color: '#fff', fontSize: '0.75rem' }} />;
+      return <Badge variant="destructive">Rechazada</Badge>;
     case 'vencida':
-      return <Chip label="Vencida" size="small" sx={{ bgcolor: '#fef3c7', color: '#92400e', fontSize: '0.75rem', border: '1px solid #fde68a' }} />;
+      return <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">Vencida</Badge>;
     default:
-      return <Chip label={estado} size="small" variant="outlined" sx={{ fontSize: '0.75rem' }} />;
+      return <Badge variant="outline">{estado}</Badge>;
   }
 }
 
 export default function CotizacionesPage() {
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<Cotizacion | null>(null);
-  const [deleting, setDeleting]         = useState(false);
-  const [opError, setOpError]           = useState<string | null>(null);
+  const [cotizaciones, setCotizaciones]   = useState<Cotizacion[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [filterValues, setFilterValues]   = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget]   = useState<Cotizacion | null>(null);
+  const [deleting, setDeleting]           = useState(false);
+  const [opError, setOpError]             = useState<string | null>(null);
+  const [emailTarget, setEmailTarget]     = useState<{ cot: Cotizacion; email: string } | null>(null);
+  const [sendingEmail, setSendingEmail]   = useState(false);
 
   const search = filterValues.q ?? '';
 
@@ -66,6 +66,7 @@ export default function CotizacionesPage() {
     }
   }, []);
 
+  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => cargar(search), 300);
     return () => clearTimeout(t);
@@ -88,23 +89,60 @@ export default function CotizacionesPage() {
     }
   }
 
+  /**
+   * Envía la cotización por correo. Igual que en el detalle: si seguía en
+   * borrador, pasa a "enviada" — se acaba de mandar, ya no es un borrador.
+   */
+  async function handleEnviarEmail() {
+    if (!emailTarget) return;
+    setSendingEmail(true);
+    try {
+      const res  = await fetch(`/api/cotizaciones/${emailTarget.cot.id}/email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: emailTarget.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error enviando email');
+
+      if (emailTarget.cot.estado === 'borrador') {
+        await fetch(`/api/cotizaciones/${emailTarget.cot.id}`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ estado: 'enviada' }),
+        });
+      }
+
+      toast.success('Cotización enviada por correo');
+      setEmailTarget(null);
+      cargar(search);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Error enviando email');
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
   const columns: DataTableColumn<Cotizacion>[] = useMemo(() => [
     {
       id: 'numero',
       header: 'Número',
       sortable: true,
       render: c => (
-        <Typography sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.875rem' }}>
+        <Link
+          href={`/dashboard/cotizaciones/${c.id}`}
+          className="font-mono font-medium text-sm text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
+        >
           {c.numero}
-        </Typography>
+        </Link>
       ),
     },
     {
       id: 'cliente',
       header: 'Cliente',
       render: c => c.razonSocialComprador
-        ? <Typography variant="body2" sx={{ color: '#374151' }}>{c.razonSocialComprador}</Typography>
-        : <Typography variant="body2" sx={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin cliente</Typography>,
+        ? <span className="text-gray-700">{c.razonSocialComprador}</span>
+        : <span className="text-gray-400 italic">Sin cliente</span>,
     },
     {
       id: 'montoTotal',
@@ -112,17 +150,13 @@ export default function CotizacionesPage() {
       align: 'right',
       sortable: true,
       sortAccessor: c => c.montoTotal,
-      render: c => (
-        <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {fmtDOP(c.montoTotal)}
-        </Typography>
-      ),
+      render: c => <span className="font-medium whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
     },
     {
       id: 'estado',
       header: 'Estado',
       visibleAt: 'md',
-      render: c => <EstadoChip estado={c.estado} />,
+      render: c => estadoBadge(c.estado),
     },
     {
       id: 'fechaEmision',
@@ -130,21 +164,21 @@ export default function CotizacionesPage() {
       visibleAt: 'lg',
       sortable: true,
       sortAccessor: c => c.fechaEmision,
-      render: c => (
-        <Typography variant="body2" sx={{ color: '#6b7280' }}>
-          {fmtFechaCorta(c.fechaEmision)}
-        </Typography>
-      ),
+      render: c => <span className="text-sm text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
     },
   ], []);
 
   const rowActions = (c: Cotizacion): RowAction[] => [
+    // El detalle es donde vive "Convertir a factura"; sin esta puerta había que
+    // adivinar que el número era un enlace.
+    { icon: Eye,    title: 'Ver detalle', href: `/dashboard/cotizaciones/${c.id}`, primary: true },
+    { icon: Mail,   title: 'Enviar por correo', onClick: () => setEmailTarget({ cot: c, email: c.emailComprador ?? '' }) },
     { icon: Pencil, title: 'Editar',   href: `/dashboard/cotizaciones/${c.id}/editar` },
     { icon: Trash2, title: 'Eliminar', variant: 'danger', onClick: () => { setDeleteTarget(c); setOpError(null); } },
   ];
 
   return (
-    <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3 }}>
+    <section className="bg-[#eef0f7] min-h-full p-6 space-y-6">
       <DataTable<Cotizacion>
         data={cotizaciones}
         loading={loading}
@@ -156,88 +190,100 @@ export default function CotizacionesPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        rowHref={c => `/dashboard/cotizaciones/${c.id}`}
         rowActions={rowActions}
         emptyState={{
           icon: FileText,
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin cotizaciones registradas',
           hint: search ? undefined : 'Crea tu primera cotización para enviarla a un cliente',
           cta: search ? undefined : (
-            <Link href="/dashboard/cotizaciones/nueva" style={{ textDecoration: 'none' }}>
-              <Button
-                variant="contained"
-                disableElevation
-                size="small"
-                startIcon={<Plus size={16} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
-              >
-                Nueva cotización
+            <Link href="/dashboard/cotizaciones/nueva">
+              <Button className="bg-teal-600 hover:bg-teal-700" size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Nueva cotización
               </Button>
             </Link>
           ),
         }}
         headerActions={
-          <Link href="/dashboard/cotizaciones/nueva" style={{ textDecoration: 'none' }}>
-            <Button
-              variant="contained"
-              disableElevation
-              startIcon={<Plus size={18} />}
-              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
-            >
+          <Link href="/dashboard/cotizaciones/nueva">
+            <Button className="bg-teal-600 hover:bg-teal-700">
+              <Plus className="h-4 w-4 mr-2" />
               Nueva cotización
             </Button>
           </Link>
         }
       />
 
-      {/* Modal: Confirmar eliminación */}
-      <Dialog
-        open={!!deleteTarget}
-        onClose={() => { if (!deleting) setDeleteTarget(null); }}
-        slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 360 } } as object }}
-      >
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 1 }}>
-          ¿Eliminar cotización?
-        </DialogTitle>
-        <DialogContent sx={{ pb: 1 }}>
-          {opError && (
-            <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }}>{opError}</Alert>
-          )}
-          <Typography variant="body2" sx={{ color: '#374151', mb: 2 }}>
-            Vas a eliminar la cotización{' '}
-            <strong>{deleteTarget?.numero}</strong>
-            {deleteTarget?.razonSocialComprador ? ` de ${deleteTarget.razonSocialComprador}` : ''}
-            . Esta acción no se puede deshacer.
-          </Typography>
-          <Alert
-            severity="warning"
-            icon={<AlertTriangle size={16} />}
-            sx={{ borderRadius: '8px', fontSize: '0.75rem' }}
-          >
-            Esta cotización no se convertirá en factura si la eliminas.
-          </Alert>
+      {/* ── Modal: Enviar por correo ──────────────────────────────────────────── */}
+      <Dialog open={!!emailTarget} onOpenChange={(o: boolean) => { if (!o) setEmailTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Enviar cotización por correo</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-gray-600">
+              Se enviará la cotización <strong>{emailTarget?.cot.numero}</strong> con el PDF adjunto.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Correo del cliente</label>
+              <Input
+                type="email"
+                value={emailTarget?.email ?? ''}
+                onChange={e => setEmailTarget(t => t && { ...t, email: e.target.value })}
+                placeholder="cliente@empresa.com"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailTarget(null)} disabled={sendingEmail}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-teal-600 hover:bg-teal-700"
+              onClick={handleEnviarEmail}
+              disabled={sendingEmail || !emailTarget?.email}
+            >
+              {sendingEmail
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
+                : <><Mail className="h-4 w-4 mr-1" />Enviar</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button
-            variant="outlined"
-            onClick={() => setDeleteTarget(null)}
-            disabled={deleting}
-            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}
-          >
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            disableElevation
-            color="error"
-            onClick={handleEliminar}
-            disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none' }}
-          >
-            {deleting ? 'Eliminando…' : 'Sí, eliminar'}
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Box>
+
+      {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>¿Eliminar cotización?</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-3">
+            {opError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+                {opError}
+              </div>
+            )}
+            <p className="text-sm text-gray-700">
+              Vas a eliminar la cotización{' '}
+              <strong>{deleteTarget?.numero}</strong>
+              {deleteTarget?.razonSocialComprador
+                ? ` de ${deleteTarget.razonSocialComprador}`
+                : ''}
+              . Esta acción no se puede deshacer.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>Esta cotización no se convertirá en factura si la eliminas.</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleEliminar} disabled={deleting}>
+              {deleting
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Eliminando…</>
+                : 'Sí, eliminar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }

@@ -132,6 +132,10 @@ export interface EmpresaPerfil {
   recargoMoraDiasGracia?: number;
   // Plazo de pago por defecto. null = de contado; N = crédito a N días.
   plazoPagoDefaultDias?:  number | null;
+  // Toggle empresa: alerta double-check del método de pago (combina con permiso).
+  alertaMetodoPagoActivo?: boolean;
+  // Términos y condiciones que se precargan en un comprobante NUEVO.
+  terminosCondicionesDefault?: string | null;
 }
 
 export const PLAZOS_BASE: Plazo[] = [

@@ -31,6 +31,8 @@ const schema = z.object({
   recargoMoraActivo:     z.boolean().optional(),
   recargoMoraPorcentaje: z.number().int().min(0).max(10000).optional(),  // 0–100% en bps (0 = desactivado)
   recargoMoraDiasGracia: z.number().int().min(0).max(365).optional(),
+  // Alerta double-check del método de pago (toggle por-empresa)
+  alertaMetodoPagoActivo: z.boolean().optional(),
   // Módulo cuadre de caja
   cajaHabilitada:        z.boolean().optional(),
   // Límite de duración del turno (horas). null = sin límite.
@@ -46,6 +48,8 @@ const schema = z.object({
   plazoPagoDefaultDias:  z.number().int().min(1).max(365).nullable().optional(),
   // Métodos de pago que obligan emisión a la DGII (no permiten borrador).
   metodosObligaDgii:     z.array(z.enum(METODO_PAGO_VALUES)).optional(),
+  // Términos y condiciones que se precargan en cada comprobante nuevo.
+  terminosCondicionesDefault: z.string().max(2000).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -103,6 +107,7 @@ export async function POST(req: NextRequest) {
     ...(data.recargoMoraActivo     !== undefined && { recargoMoraActivo: data.recargoMoraActivo }),
     ...(data.recargoMoraPorcentaje !== undefined && { recargoMoraPorcentaje: data.recargoMoraPorcentaje }),
     ...(data.recargoMoraDiasGracia !== undefined && { recargoMoraDiasGracia: data.recargoMoraDiasGracia }),
+    ...(data.alertaMetodoPagoActivo !== undefined && { alertaMetodoPagoActivo: data.alertaMetodoPagoActivo }),
     // Módulo caja
     ...(data.cajaHabilitada !== undefined && { cajaHabilitada: data.cajaHabilitada }),
     ...(data.cajaLimiteHoras  !== undefined && { cajaLimiteHoras: data.cajaLimiteHoras }),
@@ -113,6 +118,10 @@ export async function POST(req: NextRequest) {
     ...(data.posEscolarHabilitado !== undefined && { posEscolarHabilitado: data.posEscolarHabilitado }),
     ...(data.plazoPagoDefaultDias  !== undefined && { plazoPagoDefaultDias: data.plazoPagoDefaultDias }),
     ...(data.metodosObligaDgii     !== undefined && { metodosObligaDgii: data.metodosObligaDgii }),
+    // Texto vacío = sin plantilla; se guarda como NULL para no precargar comillas sueltas.
+    ...(data.terminosCondicionesDefault !== undefined && {
+      terminosCondicionesDefault: data.terminosCondicionesDefault?.trim() || null,
+    }),
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
@@ -164,6 +173,8 @@ export async function GET(_req: NextRequest) {
     recargoMoraActivo:     team.recargoMoraActivo,
     recargoMoraPorcentaje: team.recargoMoraPorcentaje,
     recargoMoraDiasGracia: team.recargoMoraDiasGracia,
+    // Alerta double-check del método de pago
+    alertaMetodoPagoActivo: team.alertaMetodoPagoActivo,
     // Módulo caja
     cajaHabilitada:        team.cajaHabilitada,
     cajaLimiteHoras:       team.cajaLimiteHoras,
@@ -175,6 +186,8 @@ export async function GET(_req: NextRequest) {
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)
     metodosObligaDgii:     (team.metodosObligaDgii as string[] | null) ?? [],
+    // Plantilla de términos y condiciones para comprobantes nuevos
+    terminosCondicionesDefault: team.terminosCondicionesDefault ?? '',
     // Rol del usuario en este team (para gating en el cliente)
     role:              member?.role ?? null,
   });

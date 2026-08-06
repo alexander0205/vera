@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Search, Filter, ChevronLeft, ChevronRight,
   ChevronDown, ChevronUp, ChevronsUpDown, Loader2, X, MoreVertical,
@@ -150,6 +151,7 @@ export function DataTable<T>({
   groupBy,
   renderGroupHeader,
 }: DataTableProps<T>) {
+  const router = useRouter();
   // Filter state
   const [internalFilters, setInternalFilters] = useState<Record<string, string>>({});
   const filterValues = filterValuesProp ?? internalFilters;
@@ -246,8 +248,10 @@ export function DataTable<T>({
         onClick={href ? (e) => {
           // No navegar si click vino de checkbox/botón/link interno
           const target = e.target as HTMLElement;
-          if (target.closest('input,button,a')) return;
-          window.location.href = href;
+          if (target.closest('input,button,a,[role="menuitem"]')) return;
+          // Navegación del cliente: `window.location` recargaba la app entera
+          // y perdía el estado de filtros y los datos ya cargados.
+          router.push(href);
         } : undefined}
         sx={{
           cursor:  href ? 'pointer' : 'default',

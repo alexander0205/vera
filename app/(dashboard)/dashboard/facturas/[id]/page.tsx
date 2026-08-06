@@ -38,6 +38,7 @@ import { EntityHistory } from '@/components/entity-history';
 import { StickyNote, History as HistoryIcon } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
@@ -545,7 +546,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // ─── Permisos del usuario (gating de UI) ─────────────────────────────────────
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
   const { can } = usePermissions();
-  const { tipoVisible } = useTiposDisponibles();
+  const { tipoVisible, enProduccion, ambiente } = useTiposDisponibles();
   const canCreate = can('facturas:crear');
   const canEdit   = can('facturas:editar');
   const canAnular = can('facturas:anular');
@@ -728,6 +729,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   }
 
   // ─── Generar Nota de Débito por mora (borrador interno, no DGII) ────────────
+  const [showConfirmMora, setShowConfirmMora] = useState(false);
   const [generandoMora, setGenerandoMora] = useState(false);
 
   async function handleGenerarNotaDebitoMora() {
@@ -820,6 +822,16 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // es de contado y no tiene pago registrado, abre el alert de confirmación.
   function triggerEnviarDgii() {
     if (!factura) return;
+    // Sin habilitación en DGII el servidor devuelve 403. Se corta antes para
+    // explicar el porqué en vez de mostrar un error de emisión.
+    if (!enProduccion) {
+      toast.info(
+        ambiente
+          ? `Esta empresa está en ambiente ${ambiente}. Completa la habilitación ante la DGII para emitir comprobantes fiscales.`
+          : 'No se pudo verificar el ambiente DGII de la empresa. Intenta de nuevo en un momento.',
+      );
+      return;
+    }
     if (sinLineas) {
       // Sin ítems hay que editar primero. El rol `user` no puede editar →
       // se le indica que pida al admin en lugar de redirigir al guard.
@@ -1073,7 +1085,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             ]}
             {puedeGenerarMora && (
               <MenuItem
-                onClick={() => { if (!generandoMora) { setMoreAnchor(null); handleGenerarNotaDebitoMora(); } }}
+                onClick={() => { setMoreAnchor(null); setTimeout(() => setShowConfirmMora(true), 0); }}
                 disabled={generandoMora}
                 sx={{ gap: 1, color: '#c2410c' }}
               >
@@ -2331,6 +2343,17 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           </Box>
         </Box>
       )}
+
+      {/* La nota de débito por mora crea un documento nuevo: se confirma antes,
+          y no al soltar el menú, para que no salga de un clic despistado. */}
+      <ConfirmDialog
+        open={showConfirmMora}
+        onOpenChange={setShowConfirmMora}
+        title="Generar nota de débito por mora"
+        description="Se creará una nota de débito interna (borrador, no se envía a la DGII) con el recargo por mora sobre el saldo vencido de esta factura."
+        confirmLabel="Generar"
+        onConfirm={() => { if (!generandoMora) void handleGenerarNotaDebitoMora(); }}
+      />
     </Box>
   );
 }

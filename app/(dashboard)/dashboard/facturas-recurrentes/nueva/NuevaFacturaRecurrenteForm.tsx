@@ -24,6 +24,7 @@ import {
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
+import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 import { SectionCard } from '../../facturas/nueva/sections/SectionCard';
 import { AccordionSection } from '../../facturas/nueva/sections/AccordionSection';
@@ -48,6 +49,9 @@ const TIPOS_ECF = [
   { value: '43', label: 'Gastos menores (43)' },
   { value: '44', label: 'Regímenes especiales (44)' },
   { value: '45', label: 'Gubernamental (45)' },
+  // Genera facturas internas sin comprobante fiscal: no consumen secuencia
+  // ni se envían a la DGII.
+  { value: 'sin-ncf', label: 'Sin NCF — factura interna' },
 ];
 
 // tipoPago recurrente: 1 = contado, 2 = crédito (con N días para pago)
@@ -191,13 +195,19 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
   const router = useRouter();
   const empresa = initialPerfil;
   const isEdit = Boolean(initialPlan);
-  const { tipoVisible } = useTiposDisponibles();
+  const { tipoVisible, enProduccion } = useTiposDisponibles();
 
   // Plazo de pago por defecto del team (solo aplica al crear, no al editar).
   // null/undefined → contado; N → crédito a N días.
   const defaultDias = empresa?.plazoPagoDefaultDias;
   // ── Cabecera ───────────────────────────────────────────────────────────────
   const [tipoEcf, setTipoEcf]           = useState(initialPlan?.tipoEcf ?? '31');
+
+  // Fuera de Producción el plan no puede emitir comprobantes fiscales: se cae a
+  // sin-ncf, tanto en el alta como al editar un plan viejo que tuviera e31/e32.
+  useEffect(() => {
+    if (!enProduccion && esTipoVentaFiscal(tipoEcf)) setTipoEcf('sin-ncf');
+  }, [enProduccion, tipoEcf]);
   const [tipoPago, setTipoPago]         = useState(
     initialPlan
       ? String(initialPlan.tipoPago)
@@ -359,7 +369,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
   // En modo edición no podemos separar términos/notas/pie porque se guardan
   // concatenados en `notas`. Dump completo al campo de notas y se mantienen
   // los otros dos campos vacíos hasta que el usuario los edite explícitamente.
-  const [terminosCondiciones, setTerminos] = useState('');
+  // Solo en un plan nuevo: al editar, el texto ya vive dentro de las notas del
+  // plan y precargarlo aquí lo duplicaría al guardar.
+  const [terminosCondiciones, setTerminos] = useState(
+    initialPlan ? '' : (empresa?.terminosCondicionesDefault ?? ''),
+  );
   const [notas, setNotas]                  = useState(initialPlan?.notas ?? '');
   const [pieFactura, setPieFactura]        = useState('');
 

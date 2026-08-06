@@ -13,6 +13,8 @@ export interface ItemCotizacionPDF {
   precio:       number; // DOP
   cantidad:     number;
   total:        number; // DOP
+  /** Beneficiario de la línea (dependiente del cliente), si tiene. */
+  dependienteNombre?: string | null;
 }
 
 export interface CotizacionPDFData {
@@ -92,22 +94,6 @@ const S = StyleSheet.create({
     paddingBottom:     60,
     paddingHorizontal: 40,
     color:             '#1a1a1a',
-  },
-
-  // ── Watermark BORRADOR ──
-  watermark: {
-    position: 'absolute',
-    top:      280,
-    left:     60,
-    right:    60,
-    alignItems: 'center',
-  },
-  watermarkText: {
-    fontFamily:  'Helvetica-Bold',
-    fontSize:    108,
-    color:       '#e8e8e8',
-    letterSpacing: 4,
-    transform:   'rotate(-30deg)',
   },
 
   // ── Header (fixed) ──
@@ -278,8 +264,6 @@ const S = StyleSheet.create({
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
-  const esBorrador = data.estado === 'borrador';
-
   return (
     <Document
       title={`Cotización ${data.numero}`}
@@ -288,12 +272,8 @@ export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
     >
       <Page size="A4" style={S.page}>
 
-        {/* ── Watermark BORRADOR ── */}
-        {esBorrador && (
-          <View style={S.watermark} fixed>
-            <Text style={S.watermarkText}>BORRADOR</Text>
-          </View>
-        )}
+        {/* Sin marca de agua: el cliente recibe la cotización tal cual, y para
+            él «borrador» es un estado interno nuestro, no información suya. */}
 
         {/* ── Header (fixed) ── */}
         <View style={S.header} fixed>
@@ -383,7 +363,9 @@ export function CotizacionPDF({ data }: { data: CotizacionPDFData }) {
         {data.items.map((item, idx) => (
           <View key={idx} style={[S.tableRow, idx % 2 === 1 ? S.tableRowAlt : {}]}>
             <Text style={[S.tdCell, S.colCant]}>{item.cantidad}</Text>
-            <Text style={[S.tdBold, S.colDesc]}>{item.descripcion}</Text>
+            <Text style={[S.tdBold, S.colDesc]}>
+              {item.dependienteNombre ? `${item.dependienteNombre} - ${item.descripcion}` : item.descripcion}
+            </Text>
             <Text style={[S.tdCell, S.colPrecio]}>{fmt(item.precio)}</Text>
             <Text style={[S.tdCell, S.colValor]}>{fmt(item.total)}</Text>
           </View>

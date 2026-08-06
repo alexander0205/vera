@@ -20,6 +20,10 @@ export interface EmpresaPerfil {
   recargoMoraDiasGracia?: number;
   // Plazo de pago por defecto. null = de contado; N = crédito a N días.
   plazoPagoDefaultDias?:  number | null;
+  // Toggle empresa: alerta double-check del método de pago (combina con permiso).
+  alertaMetodoPagoActivo?: boolean;
+  // Términos y condiciones que se precargan en un comprobante NUEVO.
+  terminosCondicionesDefault?: string | null;
 }
 
 export async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
@@ -36,6 +40,8 @@ export async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
       recargoMoraPorcentaje: teams.recargoMoraPorcentaje,
       recargoMoraDiasGracia: teams.recargoMoraDiasGracia,
       plazoPagoDefaultDias:  teams.plazoPagoDefaultDias,
+      alertaMetodoPagoActivo: teams.alertaMetodoPagoActivo,
+      terminosCondicionesDefault: teams.terminosCondicionesDefault,
     })
     .from(teams)
     .where(eq(teams.id, teamId))

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requirePermission, requireModule } from '@/lib/auth/page-guard';
+import { requirePermission, requireModule, hasPermission } from '@/lib/auth/page-guard';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
@@ -27,10 +27,15 @@ export default async function PosPage() {
   await ensurePosDefaults(teamId);
 
   const user = await getUser();
-  const [terminales, turno] = await Promise.all([
+  const [terminales, turno, tienePermisoAlerta] = await Promise.all([
     listarTerminales(teamId),
     user ? getTurnoAbierto(teamId, user.id) : Promise.resolve(null),
+    hasPermission('pagos:alerta-metodo'),
   ]);
+
+  // Combina el toggle por-empresa con el permiso por-rol: la alerta solo la ve
+  // quien puede hacer algo con ella.
+  const alertaMetodoPago = !!team.alertaMetodoPagoActivo && tienePermisoAlerta;
 
   const terminalActiva = turno?.terminalId
     ? (terminales.find((t) => t.id === turno.terminalId) ?? null)
@@ -42,6 +47,7 @@ export default async function PosPage() {
       turnoInicial={turno}
       terminalInicial={terminalActiva}
       escolarHabilitado={!!team.posEscolarHabilitado}
+      alertaMetodoPago={alertaMetodoPago}
     />
   );
 }

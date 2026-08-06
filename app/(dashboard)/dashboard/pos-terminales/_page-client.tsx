@@ -23,6 +23,7 @@ import {
   TableRow,
   TableCell,
 } from '@mui/material';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 
 interface Ref { id: number; nombre: string; }
 interface Terminal {
@@ -52,6 +53,7 @@ export default function TerminalesClient({
   listas: Ref[];
 }) {
   const router = useRouter();
+  const { enProduccion } = useTiposDisponibles();
   const [terminales, setTerminales] = useState<Terminal[]>(terminalesIniciales);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ ...EMPTY, almacenId: almacenes[0]?.id ?? 0 });
@@ -280,8 +282,10 @@ export default function TerminalesClient({
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           >
             <MenuItem value="sin-ncf">Ticket (sin NCF)</MenuItem>
-            <MenuItem value="32">Factura de consumo (e32)</MenuItem>
-            <MenuItem value="31">Crédito fiscal (e31)</MenuItem>
+            {/* Sin habilitación en DGII no hay comprobante fiscal que asignar
+                por defecto: cada venta del terminal lo heredaría. */}
+            {enProduccion && <MenuItem value="32">Factura de consumo (e32)</MenuItem>}
+            {enProduccion && <MenuItem value="31">Crédito fiscal (e31)</MenuItem>}
           </TextField>
 
           <Box

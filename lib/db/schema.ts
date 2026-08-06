@@ -115,6 +115,12 @@ export const teams = pgTable('teams', {
   recargoMoraPorcentaje:  integer('recargo_mora_porcentaje').notNull().default(200),  // basis points; 200 = 2.00%
   recargoMoraDiasGracia:  integer('recargo_mora_dias_gracia').notNull().default(5),
 
+  // ── Alerta double-check del método de pago ────────────────────────────────
+  // Toggle por empresa. Si está activo (Y el rol tiene el permiso
+  // 'pagos:alerta-metodo'), al cobrar una factura/POS se pide reconfirmar el
+  // método de pago antes de finalizar. Nace apagado.
+  alertaMetodoPagoActivo: boolean('alerta_metodo_pago_activo').notNull().default(false),
+
   // ── Módulo Cuadre de Caja ─────────────────────────────────────────────────
   // Toggle por empresa. Si está activo: aparece el grupo "Caja" en el sidebar,
   // el badge de estado en el header, y no se puede facturar sin turno abierto.
@@ -159,6 +165,11 @@ export const teams = pgTable('teams', {
   // posHabilitado (arriba) queda como columna legacy hasta retirar su lectura.
   modulosHabilitados:     jsonb('modulos_habilitados').notNull().default(['facturacion', 'administracion']),
   modulosOverride:        jsonb('modulos_override'),
+  // ── Textos por defecto de los comprobantes ────────────────────────────────
+  // Se copian al crear una factura o cotización nueva para no reescribirlos
+  // cada vez. Es una plantilla, no una atadura: el texto queda en el documento
+  // y ahí se puede editar. Cambiarlo aquí NO reescribe lo ya emitido.
+  terminosCondicionesDefault: text('terminos_condiciones_default'),
 });
 
 export const teamMembers = pgTable('team_members', {
@@ -730,6 +741,10 @@ export const cotizaciones = pgTable('cotizaciones', {
   items: text('items'),
   notas: text('notas'),
   terminosCondiciones: text('terminos_condiciones'),
+  // Reusan el form de Nueva Factura → mismos extras que ecf_documents.
+  retenciones: text('retenciones'),   // JSON string de Retencion[]
+  comentario: text('comentario'),
+  pieFactura: text('pie_factura'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -742,7 +757,9 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   nombre:           varchar('nombre', { length: 100 }).notNull(),
   /** Descripción corta opcional del plan (visible en UI/PDF). Distinto de notas. */
   descripcion:      varchar('descripcion', { length: 200 }),
-  tipoEcf:          varchar('tipo_ecf', { length: 2 }).notNull().default('31'),
+  /** Códigos de e-CF ('31', '32', …) o el sentinel 'sin-ncf' (7 chars) para
+   *  planes que generan facturas internas sin comprobante fiscal. */
+  tipoEcf:          varchar('tipo_ecf', { length: 10 }).notNull().default('31'),
   tipoPago:         integer('tipo_pago').notNull().default(1),
   /** Días desde fechaEmision hasta fechaLimitePago cuando tipoPago=2 (crédito).
    *  null = inmediato. Caso colegio: 5 días → vence el día 5, AR detecta vencida día 6. */

@@ -662,12 +662,13 @@ export async function getCuentasPorCobrar(
         -- PAGADA/ANULADA/GRATUITA/USO quedan fuera vía estado_pago.
         AND d.estado_pago IN ('PENDIENTE', 'PARCIAL')
         AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
-        -- Un BORRADOR con e-NCF REAL no es una venta: es la reserva que deja un
-        -- intento de emisión fallido (ver /api/ecf/emitir). La venta se
-        -- re-facturó con otro número, así que contarlo aquí duplica la deuda.
-        -- Los borradores legítimos traen 'BOR-...' o encf vacío (tickets
-        -- sin-ncf) y esos sí siguen apareciendo. (Fix 3ffe6a9 portado al CTE.)
-        AND NOT (d.estado = 'BORRADOR' AND d.encf ~ '^E[0-9]{12}$')
+        -- NOTA: aquí vivía un filtro que excluía los BORRADOR con e-NCF real
+        -- (NOT estado='BORRADOR' AND encf con formato e-NCF), asumiendo que
+        -- solo podían ser la reserva de un intento de emisión fallido ya
+        -- re-facturado con otro número. La premisa no se sostiene: escondía
+        -- facturas reales sin reemplazo —algunas con cobros parciales ya
+        -- registrados, que un fantasma nunca tendría—. El caso que lo motivó
+        -- lo cubre la condición de arriba: el intento fallido queda ANULADO.
         -- Las ND de mora no son cuentas propias: se agrupan en su factura padre.
         AND d.mora_origen_id IS NULL
         -- Las NC no son cuentas por cobrar: acreditan contra su factura padre.
@@ -856,6 +857,9 @@ export async function getPagosListado(
   if (opts.desde)  filtros.push(gte(pagosRecibidos.fechaPago, opts.desde));
   if (opts.hasta)  filtros.push(lte(pagosRecibidos.fechaPago, opts.hasta));
   if (opts.metodo) filtros.push(eq(pagosRecibidos.metodo, opts.metodo));
+  // Excluir cobros de comprobantes ANULADOS: la fila de pago sobrevive a la
+  // anulación (traza + arqueo de caja), pero no debe listarse ni sumarse aquí.
+  filtros.push(sql`(${ecfDocuments.estado} IS NULL OR ${ecfDocuments.estado} <> 'ANULADO')`);
 
   // Techo al dataset (antes cargaba el ledger completo del team sin límite).
   const limit  = Math.min(opts.limit ?? 2000, 2000);

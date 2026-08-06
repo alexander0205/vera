@@ -16,7 +16,7 @@ import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 import InputAdornment from '@mui/material/InputAdornment';
 import {
-  Building2, Palette, ImageIcon,
+  Building2, Palette, ImageIcon, FileText,
   CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard, Store,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
@@ -139,6 +139,10 @@ export default function ConfiguracionPage() {
   const [municipio, setMunicipio]               = useState('');
   // Recargo por mora
   const [recargoActivo, setRecargoActivo]               = useState(false);
+  // Doble confirmación del método de pago antes de cobrar.
+  const [alertaMetodoPagoActivo, setAlertaMetodoPagoActivo] = useState(false);
+  // Texto que se precarga en cada comprobante nuevo.
+  const [terminosDefault, setTerminosDefault]           = useState('');
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
@@ -175,6 +179,8 @@ export default function ConfiguracionPage() {
         setProvincia(d.provincia ?? '');
         setMunicipio(d.municipio ?? '');
         setRecargoActivo(d.recargoMoraActivo ?? false);
+        setAlertaMetodoPagoActivo(d.alertaMetodoPagoActivo ?? false);
+        setTerminosDefault(d.terminosCondicionesDefault ?? '');
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
@@ -204,8 +210,12 @@ export default function ConfiguracionPage() {
           logo,
           recargoMoraActivo:     recargoActivo,
           recargoMoraPorcentaje: pctBps,
-          // Gracia eliminada del config: la mora aplica al vencer.
-          recargoMoraDiasGracia: 0,
+          // La gracia NO se manda: esta pantalla no la edita, y mandarla en 0
+          // se la borraba a quien la tuviera puesta. El motor de mora la lee
+          // de la empresa (lib/cobranza/recargo.ts) y sin ella empezaba a
+          // recargar el día siguiente al vencimiento.
+          alertaMetodoPagoActivo,
+          terminosCondicionesDefault: terminosDefault,
           cajaHabilitada,
           cajaLimiteHoras,
           cajaAvisoMinutos,
@@ -405,6 +415,46 @@ export default function ConfiguracionPage() {
                 «De contado» no genera fecha de vencimiento.
               </Typography>
             </Box>
+          </Box>
+        </Box>
+
+        {/* 5a. Términos y condiciones por defecto */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <FileText size={16} color="#3658e1" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Términos y condiciones</Typography>
+          </Box>
+          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Typography variant="body2" sx={{ color: '#6b7280' }}>
+              Este texto se escribe solo al crear una factura o cotización nueva, para no
+              reescribirlo cada vez. Es una plantilla: queda dentro del documento y ahí se
+              puede editar. Cambiarlo aquí no reescribe lo ya emitido.
+            </Typography>
+            <TextField multiline minRows={3} fullWidth size="small"
+              placeholder="Ej. Precios sujetos a cambio sin previo aviso. Válido por 30 días."
+              value={terminosDefault} onChange={e => setTerminosDefault(e.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+          </Box>
+        </Box>
+
+        {/* 5b. Doble confirmación del método de pago */}
+        <Box sx={cardSx}>
+          <Box sx={cardHeaderSx}>
+            <Wallet size={16} color="#3658e1" />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Confirmar el método de pago</Typography>
+          </Box>
+          <Box sx={{ ...cardContentSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>
+                Preguntar antes de cobrar
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
+                Muestra el método elegido para que se confirme antes de emitir. Evita el
+                efectivo apuntado como tarjeta, que después no cuadra en el cierre de caja.
+              </Typography>
+            </Box>
+            <Switch checked={alertaMetodoPagoActivo} onChange={(_, v) => setAlertaMetodoPagoActivo(v)} color="primary"
+              sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
           </Box>
         </Box>
 

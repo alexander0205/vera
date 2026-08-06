@@ -21,6 +21,9 @@ import { getCategoriaDeEcf, CATEGORIAS_ECF } from '@/lib/ecf/categorias';
 
 import { NavBar, TopBar } from './sections/TopBar';
 import { CompactHeader } from './sections/CompactHeader';
+import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
+import { labelMetodo } from '@/lib/pagos/metodos';
+import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { FacturaOrigenSection, type FacturaResumen } from './sections/FacturaOrigenSection';
 import { SectionCard } from './sections/SectionCard';
@@ -62,6 +65,15 @@ import type {
 
 // Re-export for callers that import from this module.
 export type { BorradorInicial, EmpresaPerfil };
+
+/**
+ * Opciones de `emitir()`. `metodoConfirmado` marca que el doble-check del
+ * método de pago ya se aceptó, para no reabrir el diálogo en la segunda vuelta.
+ */
+type EmitirOpts = {
+  andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar';
+  metodoConfirmado?: boolean;
+};
 
 export default function NuevaFacturaForm({
   initialPerfil,
@@ -302,7 +314,14 @@ export default function NuevaFacturaForm({
 
   // Factura de origen sin-ncf (sin comprobante fiscal): no tiene e-NCF ni lo
   // tendrá → la nota es interna (borrador), sin referencia DGII (no se pide e-NCF).
-  const esPadreSinNcf = padreNota?.tipoEcf === 'sin-ncf';
+  // Sin habilitación en DGII la nota se guarda como documento interno en vez
+  // de reservar un e-NCF fiscal que no se puede emitir. Conserva el tipo 33/34
+  // para que siga saliendo en su listado: los listados filtran por tipoEcf.
+  const { enProduccion } = useTiposDisponibles();
+  const esPadreSinNcf = padreNota?.tipoEcf === 'sin-ncf' || !enProduccion;
+  // Combina el toggle por-empresa con el permiso por-rol: la alerta sale solo
+  // si la empresa la tiene activa Y el rol del usuario puede verla.
+  const alertaMetodoPago = !!empresa?.alertaMetodoPagoActivo && can('pagos:alerta-metodo');
 
   // Aplica una factura padre (payload de /api/facturas/:id) al formulario:
   // e-NCF modificado, fecha, cliente y líneas. Reutilizado por el prefill via
@@ -557,7 +576,21 @@ export default function NuevaFacturaForm({
   const [ncfError,  setNcfError]              = useState<string | null>(null);
 
   const [notas, setNotas]                  = useState(initialData?.notas ?? '');
-  const [terminosCondiciones, setTerminos] = useState(initialData?.terminosCondiciones ?? '');
+  // En una factura nueva se precargan los términos por defecto de la empresa.
+  // Al editar una existente NO: si el usuario los borró, borrados se quedan.
+  const [terminosCondiciones, setTerminos] = useState(
+    initialData ? (initialData.terminosCondiciones ?? '') : (empresa?.terminosCondicionesDefault ?? ''),
+  );
+  /**
+   * Doble confirmación del método de pago.
+   *
+   * Cuando la factura registra un cobro se pide reconfirmar el método antes de
+   * emitir: registrar efectivo como transferencia descuadra el cierre de caja y
+   * nadie lo nota hasta el arqueo. Guarda el `emitir()` pendiente.
+   */
+  const [confirmMetodo, setConfirmMetodo] = useState<
+    null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
+  >(null);
   const [pieFactura, setPieFactura]        = useState(initialData?.pieFactura ?? '');
 
   // ── Pago recibido ──────────────────────────────────────────────────────────
@@ -986,7 +1019,13 @@ export default function NuevaFacturaForm({
     }
   }
 
-  async function emitir(modo: 'emitir' | 'borrador', opts?: { andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar' }) {
+  async function emitir(modo: 'emitir' | 'borrador', opts?: EmitirOpts) {
+    // Va ANTES de la traza para no registrar un submit fantasma en el
+    // diagnóstico anti-duplicados.
+    if (alertaMetodoPago && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
+      setConfirmMetodo({ modo, opts });
+      return;
+    }
     // Traza anti-duplicados: identifica el botón y la secuencia de clicks de este
     // montaje. Se loguea aquí (consola) y se manda al server (`_traza`) para ligar
     // cada submit con el documento creado y diagnosticar las facturas duplicadas.
@@ -1864,6 +1903,24 @@ export default function NuevaFacturaForm({
             setShowNuevoVendedor(false);
           }}
         />
+
+        {confirmMetodo && (
+          <ConfirmarMetodoPagoDialog
+            lineas={pagoLineas
+              .filter((l) => (parseFloat(l.valor || '0') || 0) > 0)
+              .map<ResumenMetodo>((l) => ({
+                label: labelMetodo(l.metodo),
+                montoFmt: `RD$ ${(parseFloat(l.valor || '0') || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+              }))}
+            procesando={loading}
+            onCancel={() => setConfirmMetodo(null)}
+            onConfirm={() => {
+              const pend = confirmMetodo;
+              setConfirmMetodo(null);
+              void emitir(pend.modo, { ...pend.opts, metodoConfirmado: true });
+            }}
+          />
+        )}
 
       </Box>
     </Box>

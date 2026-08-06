@@ -29,6 +29,7 @@ import { resolveEcfApiError } from '@/lib/ecf-api/error-codes';
 import { ensureContribuyente } from '@/lib/ecf-api/contribuyente';
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
+import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,17 @@ export async function POST(
     ]);
     if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:emitir-dgii')) {
       return NextResponse.json({ error: 'Sin permiso para emitir a la DGII' }, { status: 403 });
+    }
+
+    // Gate de ambiente: esta ruta solo promueve borradores a e-CF real, así que
+    // no tiene la excepción de habilitación — el Set de Pruebas nunca pasa por
+    // aquí, emite directo contra /api/ecf/emitir.
+    const ambiente = await getAmbienteTenant(teamId);
+    if (ambiente !== 'Produccion') {
+      return NextResponse.json(
+        { error: mensajeAmbienteNoProduccion(ambiente), ambiente },
+        { status: 403 },
+      );
     }
 
     const { id } = await params;

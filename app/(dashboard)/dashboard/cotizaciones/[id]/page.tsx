@@ -4,27 +4,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  Menu,
-  MenuItem,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   ArrowLeft, Download, FileText, Loader2, XCircle, CheckCircle,
   Clock, ChevronDown, Mail, Pencil, FileCheck, MoreVertical,
@@ -54,19 +42,18 @@ interface LineItem {
   cantidad:    number;
 }
 
-// ─── Estado chip config ───────────────────────────────────────────────────────
+// ─── Estado badge ─────────────────────────────────────────────────────────────
 
 const ESTADO_CONFIG: Record<string, {
   label: string;
-  color: string;
-  bg:    string;
-  icon:  React.ElementType;
+  className: string;
+  icon: React.ElementType;
 }> = {
-  borrador:  { label: 'Pendiente', color: '#4b5563', bg: '#f3f4f6', icon: Clock },
-  enviada:   { label: 'Enviada',   color: '#1d4ed8', bg: '#dbeafe', icon: Mail },
-  aceptada:  { label: 'Aceptada',  color: '#15803d', bg: '#dcfce7', icon: CheckCircle },
-  rechazada: { label: 'Rechazada', color: '#b91c1c', bg: '#fee2e2', icon: XCircle },
-  vencida:   { label: 'Vencida',   color: '#92400e', bg: '#fef3c7', icon: Clock },
+  borrador:  { label: 'Pendiente',  className: 'border-gray-300 text-gray-600',        icon: Clock },
+  enviada:   { label: 'Enviada',   className: 'bg-blue-100 text-blue-700',             icon: Mail },
+  aceptada:  { label: 'Aceptada',  className: 'bg-green-100 text-green-700',           icon: CheckCircle },
+  rechazada: { label: 'Rechazada', className: 'bg-red-100 text-red-700',               icon: XCircle },
+  vencida:   { label: 'Vencida',   className: 'bg-amber-100 text-amber-700',           icon: Clock },
 };
 
 // Transiciones de estado válidas
@@ -98,15 +85,6 @@ function fmtDOP(centavos: number): string {
   })}`;
 }
 
-// ─── Card sx shorthand ────────────────────────────────────────────────────────
-
-const cardSx = {
-  bgcolor: '#fff',
-  border: '1px solid #e5e7eb',
-  borderRadius: '12px',
-  overflow: 'hidden',
-} as const;
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function CotizacionDetallePage() {
@@ -123,12 +101,9 @@ export default function CotizacionDetallePage() {
   const [sendingEmail, setSendingEmail] = useState(false);
 
   const [converting, setConverting]     = useState(false);
+  const [showConfirmConvert, setShowConfirmConvert] = useState(false);
 
   const [changingEstado, setChangingEstado] = useState(false);
-
-  // Dropdown anchors
-  const [estadoAnchor, setEstadoAnchor]   = useState<null | HTMLElement>(null);
-  const [moreAnchor, setMoreAnchor]       = useState<null | HTMLElement>(null);
 
   // ─── Carga ──────────────────────────────────────────────────────────────────
 
@@ -153,7 +128,6 @@ export default function CotizacionDetallePage() {
   // ─── Cambiar estado ──────────────────────────────────────────────────────────
 
   async function handleCambiarEstado(nuevoEstado: string) {
-    setEstadoAnchor(null);
     setChangingEstado(true);
     try {
       const res = await fetch(`/api/cotizaciones/${cotId}`, {
@@ -201,7 +175,6 @@ export default function CotizacionDetallePage() {
   // ─── Convertir a factura ─────────────────────────────────────────────────────
 
   async function handleConvertir() {
-    setMoreAnchor(null);
     setConverting(true);
     try {
       const res = await fetch(`/api/cotizaciones/${cotId}/convertir`, { method: 'POST' });
@@ -219,583 +192,410 @@ export default function CotizacionDetallePage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
-        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
-      </Box>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
     );
   }
 
   if (error || !cot) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Paper
-          sx={{
-            bgcolor: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: '12px',
-            p: 4,
-            textAlign: 'center',
-          }}
-        >
-          <XCircle size={48} style={{ color: '#f87171', margin: '0 auto 12px' }} />
-          <Typography sx={{ color: '#b91c1c', fontWeight: 500 }}>
-            {error ?? 'Cotización no encontrada'}
-          </Typography>
-          <Button
-            variant="outlined"
-            onClick={() => router.push('/dashboard/cotizaciones')}
-            sx={{ mt: 2, borderRadius: '8px', textTransform: 'none' }}
-          >
+      <section className="p-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
+          <XCircle className="h-12 w-12 mx-auto mb-3 text-red-400" />
+          <p className="font-medium">{error ?? 'Cotización no encontrada'}</p>
+          <Button variant="outline" className="mt-4" onClick={() => router.push('/dashboard/cotizaciones')}>
             Volver a cotizaciones
           </Button>
-        </Paper>
-      </Box>
+        </div>
+      </section>
     );
   }
 
-  const estadoCfg    = ESTADO_CONFIG[cot.estado] ?? { label: cot.estado, color: '#374151', bg: '#f3f4f6', icon: Clock };
-  const EstadoIcon   = estadoCfg.icon;
+  const estadoCfg   = ESTADO_CONFIG[cot.estado] ?? { label: cot.estado, className: '', icon: Clock };
+  const EstadoIcon  = estadoCfg.icon;
   const transiciones = NEXT_STATES[cot.estado] ?? [];
+  // Convertir a factura disponible desde el inicio (no exige llegar a "aceptada").
+  // Solo se excluyen los estados terminales negativos (rechazada/vencida).
+  const puedeConvertir = ['borrador', 'enviada', 'aceptada'].includes(cot.estado);
 
+  // Normaliza ítems a { descripcion, precio, cantidad } soportando el shape rico
+  // (ItemLinea, cotizaciones nuevas) y el viejo { descripcion, precio, cantidad }.
   let parsedItems: LineItem[] = [];
-  try { if (cot.items) parsedItems = JSON.parse(cot.items); } catch { /* ignore */ }
+  try {
+    if (cot.items) {
+      const raw = JSON.parse(cot.items) as Array<Record<string, unknown>>;
+      parsedItems = raw.map(it => ({
+        descripcion: String((it.nombreItem ?? it.descripcion) ?? ''),
+        precio:      Number(it.precioUnitarioItem ?? it.precio ?? 0),
+        cantidad:    Number(it.cantidadItem ?? it.cantidad ?? 1),
+      }));
+    }
+  } catch { /* ignore */ }
 
   return (
-    <Box
-      component="section"
-      sx={{ bgcolor: '#eef0f7', p: { xs: 2, sm: 3 }, minHeight: '100%', display: 'flex', flexDirection: 'column' }}
-    >
+    <section className="p-4 sm:p-6 min-h-full flex flex-col">
 
       {/* ── Header ────────────────────────────────────────────────────────────── */}
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', lg: 'row' },
-          alignItems: { lg: 'flex-start' },
-          justifyContent: { lg: 'space-between' },
-          gap: 1.5,
-          mb: 2.5,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Button
-            component={Link}
-            href="/dashboard/cotizaciones"
-            variant="text"
-            size="small"
-            startIcon={<ArrowLeft size={16} />}
-            sx={{ textTransform: 'none', color: '#374151', minWidth: 0 }}
-          >
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Cotizaciones</Box>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/dashboard/cotizaciones">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Cotizaciones</span>
+            </Link>
           </Button>
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Typography
-                variant="h5"
-                sx={{ fontWeight: 700, color: '#111827', fontFamily: 'monospace', fontSize: { xs: '1.125rem', sm: '1.25rem' } }}
-              >
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-mono">
                 {cot.numero}
-              </Typography>
-              <Chip
-                icon={<EstadoIcon size={14} />}
-                label={estadoCfg.label}
-                size="small"
-                sx={{
-                  bgcolor: estadoCfg.bg,
-                  color: estadoCfg.color,
-                  fontWeight: 500,
-                  fontSize: '0.75rem',
-                  height: 24,
-                  '& .MuiChip-icon': { color: estadoCfg.color },
-                }}
-              />
-            </Box>
-            <Typography variant="caption" sx={{ color: '#6b7280', mt: 0.25, display: 'block' }}>
+              </h1>
+              <Badge variant="outline" className={estadoCfg.className}>
+                <EstadoIcon className="h-3.5 w-3.5 mr-1" />
+                {estadoCfg.label}
+              </Badge>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
               Emitida: {fmtDate(cot.fechaEmision)}
               {cot.fechaVencimiento && (
-                <> · Válida hasta: <Box component="span" sx={{ color: '#2a45c4', fontWeight: 600 }}>{fmtDate(cot.fechaVencimiento)}</Box></>
+                <> · Válida hasta: <span className="text-teal-700 font-medium">{fmtDate(cot.fechaVencimiento)}</span></>
               )}
-            </Typography>
-          </Box>
-        </Box>
+            </p>
+          </div>
+        </div>
 
         {/* Acciones */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
 
           {/* Cambiar estado */}
           {transiciones.length > 0 && (
-            <>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={changingEstado}
-                onClick={(e) => setEstadoAnchor(e.currentTarget)}
-                startIcon={changingEstado
-                  ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  : <CheckCircle size={16} />}
-                endIcon={<ChevronDown size={14} style={{ opacity: 0.6 }} />}
-                sx={{ borderRadius: '8px', textTransform: 'none' }}
-              >
-                Cambiar estado
-              </Button>
-              <Menu
-                anchorEl={estadoAnchor}
-                open={Boolean(estadoAnchor)}
-                onClose={() => setEstadoAnchor(null)}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-              >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={changingEstado}>
+                  {changingEstado
+                    ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    : <CheckCircle className="h-4 w-4 mr-1" />}
+                  Cambiar estado
+                  <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
                 {transiciones.map(t => (
-                  <MenuItem key={t.value} onClick={() => handleCambiarEstado(t.value)}>
+                  <DropdownMenuItem key={t.value} onSelect={() => handleCambiarEstado(t.value)}>
                     {t.label}
-                  </MenuItem>
+                  </DropdownMenuItem>
                 ))}
-              </Menu>
-            </>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           {/* Editar */}
           {['borrador', 'enviada'].includes(cot.estado) && (
-            <Button
-              component={Link}
-              href={`/dashboard/cotizaciones/${cot.id}/editar`}
-              variant="outlined"
-              size="small"
-              startIcon={<Pencil size={16} />}
-              sx={{ borderRadius: '8px', textTransform: 'none' }}
-            >
-              Editar
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/cotizaciones/${cot.id}/editar`}>
+                <Pencil className="h-4 w-4 mr-1" />
+                Editar
+              </Link>
             </Button>
           )}
 
           {/* Más acciones */}
-          <>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={(e) => setMoreAnchor(e.currentTarget)}
-              sx={{ borderRadius: '8px', textTransform: 'none', minWidth: 0, px: 1 }}
-            >
-              <MoreVertical size={16} />
-            </Button>
-            <Menu
-              anchorEl={moreAnchor}
-              open={Boolean(moreAnchor)}
-              onClose={() => setMoreAnchor(null)}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-              slotProps={{ paper: { sx: { minWidth: 200 } } as object }}
-            >
-              <MenuItem
-                component="a"
-                href={`/api/pdf/cotizacion/${cot.id}`}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => setMoreAnchor(null)}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/cotizacion/${cot.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4 text-gray-500" />
+                  Descargar PDF
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setShowEmail(true)}
+                className="flex items-center gap-2 cursor-pointer"
               >
-                <Download size={16} style={{ color: '#6b7280', marginRight: 8 }} />
-                Descargar PDF
-              </MenuItem>
-              <MenuItem onClick={() => { setMoreAnchor(null); setShowEmail(true); }}>
-                <Mail size={16} style={{ color: '#6b7280', marginRight: 8 }} />
+                <Mail className="h-4 w-4 text-gray-500" />
                 Enviar por correo
-              </MenuItem>
-              {cot.estado === 'aceptada' && (
-                <MenuItem onClick={handleConvertir} disabled={converting}>
-                  <FileCheck size={16} style={{ color: '#3658e1', marginRight: 8 }} />
+              </DropdownMenuItem>
+              {puedeConvertir && (
+                <DropdownMenuItem
+                  onSelect={() => { setTimeout(() => setShowConfirmConvert(true), 0); }}
+                  className="flex items-center gap-2 cursor-pointer"
+                  disabled={converting}
+                >
+                  <FileCheck className="h-4 w-4 text-teal-600" />
                   {converting ? 'Convirtiendo…' : 'Convertir a factura'}
-                </MenuItem>
+                </DropdownMenuItem>
               )}
-            </Menu>
-          </>
-        </Box>
-      </Box>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
 
       {/* ── Layout split ────────────────────────────────────────────────────── */}
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '1fr 320px' },
-          gap: 2.5,
-        }}
-      >
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
 
         {/* ── LEFT: ítems + notas ── */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div className="space-y-4">
 
           {/* Cliente */}
-          <Paper sx={{ ...cardSx, p: 2.5 }}>
-            <Typography variant="subtitle2" sx={{ color: '#374151', fontWeight: 600, mb: 1.5 }}>
-              Datos del cliente
-            </Typography>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">Datos del cliente</h2>
             {cot.razonSocialComprador ? (
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-                  columnGap: 3,
-                  rowGap: 1,
-                }}
-              >
-                <Box>
-                  <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af' }}>
-                    Razón social
-                  </Typography>
-                  <Typography sx={{ fontWeight: 500, color: '#111827', fontSize: '0.875rem' }}>
-                    {cot.razonSocialComprador}
-                  </Typography>
-                </Box>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-gray-500">Razón social</dt>
+                  <dd className="font-medium text-gray-900">{cot.razonSocialComprador}</dd>
+                </div>
                 {cot.rncComprador && (
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af' }}>
-                      RNC
-                    </Typography>
-                    <Typography sx={{ color: '#1f2937', fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                      {cot.rncComprador}
-                    </Typography>
-                  </Box>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wide text-gray-500">RNC</dt>
+                    <dd className="text-gray-800 font-mono">{cot.rncComprador}</dd>
+                  </div>
                 )}
                 {cot.emailComprador && (
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af' }}>
-                      Email
-                    </Typography>
-                    <Typography sx={{ color: '#1f2937', wordBreak: 'break-all', fontSize: '0.875rem' }}>
-                      {cot.emailComprador}
-                    </Typography>
-                  </Box>
+                  <div>
+                    <dt className="text-[11px] uppercase tracking-wide text-gray-500">Email</dt>
+                    <dd className="text-gray-800 break-all">{cot.emailComprador}</dd>
+                  </div>
                 )}
-              </Box>
+              </dl>
             ) : (
-              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>
-                Sin cliente especificado
-              </Typography>
+              <p className="text-sm text-gray-400 italic">Sin cliente especificado</p>
             )}
-          </Paper>
+          </div>
 
           {/* Ítems */}
-          <Paper sx={cardSx}>
-            <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid #f3f4f6' }}>
-              <Typography variant="subtitle2" sx={{ color: '#374151', fontWeight: 600 }}>
-                Ítems / Servicios
-              </Typography>
-            </Box>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-700">Ítems / Servicios</h2>
+            </div>
             {parsedItems.length > 0 ? (
-              <Box sx={{ overflowX: 'auto' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 500, borderBottom: '1px solid #f3f4f6' }}>
-                        Descripción
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 500, borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
-                        Precio
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 500, borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
-                        Cant.
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', fontWeight: 500, borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
-                        Total
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-100">
+                      <th className="text-left font-medium py-2 px-5">Descripción</th>
+                      <th className="text-right font-medium py-2 px-3 whitespace-nowrap">Precio</th>
+                      <th className="text-right font-medium py-2 px-3 whitespace-nowrap">Cant.</th>
+                      <th className="text-right font-medium py-2 px-5 whitespace-nowrap">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
                     {parsedItems.map((it, idx) => (
-                      <TableRow
-                        key={idx}
-                        sx={{ '&:hover': { bgcolor: 'rgba(249,250,251,0.6)' } }}
-                      >
-                        <TableCell sx={{ fontWeight: 500, color: '#111827', borderBottom: '1px solid #f9fafb' }}>
-                          {it.descripcion}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#374151', borderBottom: '1px solid #f9fafb' }}>
+                      <tr key={idx} className="hover:bg-gray-50/60">
+                        <td className="py-2.5 px-5 font-medium text-gray-900">{it.descripcion}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-gray-700">
                           {fmtDOP(it.precio * 100)}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#374151', borderBottom: '1px solid #f9fafb' }}>
-                          {it.cantidad}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: '#111827', borderBottom: '1px solid #f9fafb' }}>
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-gray-700">{it.cantidad}</td>
+                        <td className="py-2.5 px-5 text-right tabular-nums font-semibold text-gray-900">
                           {fmtDOP(it.precio * it.cantidad * 100)}
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ))}
-                  </TableBody>
-                </Table>
-              </Box>
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic', px: 2.5, py: 3, textAlign: 'center' }}>
-                Sin ítems registrados
-              </Typography>
+              <p className="text-sm text-gray-400 italic px-5 py-6 text-center">Sin ítems registrados</p>
             )}
-          </Paper>
+          </div>
 
           {/* Notas */}
           {cot.notas && (
-            <Paper sx={{ ...cardSx, p: 2.5 }}>
-              <Typography variant="subtitle2" sx={{ color: '#374151', fontWeight: 600, mb: 1 }}>
-                Notas
-              </Typography>
-              <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', whiteSpace: 'pre-wrap' }}>
-                {cot.notas}
-              </Typography>
-            </Paper>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h2 className="text-sm font-semibold text-gray-700 mb-2">Notas</h2>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">{cot.notas}</p>
+            </div>
           )}
 
           {/* Términos */}
           {cot.terminosCondiciones && (
-            <Paper sx={{ ...cardSx, p: 2.5 }}>
-              <Typography variant="subtitle2" sx={{ color: '#374151', fontWeight: 600, mb: 1 }}>
-                Términos y condiciones
-              </Typography>
-              <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', whiteSpace: 'pre-wrap' }}>
-                {cot.terminosCondiciones}
-              </Typography>
-            </Paper>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h2 className="text-sm font-semibold text-gray-700 mb-2">Términos y condiciones</h2>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">{cot.terminosCondiciones}</p>
+            </div>
           )}
-        </Box>
+        </div>
 
         {/* ── RIGHT: sidebar ── */}
-        <Box
-          component="aside"
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            position: { lg: 'sticky' },
-            top: { lg: '16px' },
-            alignSelf: { lg: 'flex-start' },
-          }}
-        >
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
 
           {/* Resumen */}
-          <Paper sx={{ ...cardSx, p: 2.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-              <FileText size={16} style={{ color: '#3658e1' }} />
-              <Typography variant="subtitle2" sx={{ color: '#374151', fontWeight: 600 }}>
-                Resumen
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>Subtotal</Typography>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>{fmtDOP(cot.montoSubtotal)}</Typography>
-              </Box>
-              <Divider />
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5 }}>
-                <Typography sx={{ fontWeight: 700, color: '#111827' }}>Total</Typography>
-                <Typography sx={{ fontWeight: 700, color: '#111827', fontSize: '1rem' }}>{fmtDOP(cot.montoTotal)}</Typography>
-              </Box>
-            </Box>
-          </Paper>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-teal-600" />
+              Resumen
+            </h2>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-gray-600">
+                <span>Subtotal</span>
+                <span className="font-medium">{fmtDOP(cot.montoSubtotal)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-gray-900 border-t pt-2 mt-1 text-base">
+                <span>Total</span>
+                <span>{fmtDOP(cot.montoTotal)}</span>
+              </div>
+            </div>
+          </div>
 
           {/* Info */}
-          <Paper sx={{ ...cardSx, px: 2, py: 2 }}>
-            <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', mb: 1 }}>
-              Información
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Número</Typography>
-                <Typography sx={{ fontSize: '0.75rem', fontFamily: 'monospace', fontWeight: 600, color: '#111827' }}>{cot.numero}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Estado</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#1f2937', textTransform: 'capitalize' }}>{estadoCfg.label}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Fecha emisión</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#1f2937' }}>{fmtDate(cot.fechaEmision)}</Typography>
-              </Box>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4">
+            <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Información</h3>
+            <dl className="space-y-2 text-xs">
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500">Número</dt>
+                <dd className="font-mono font-semibold text-gray-900">{cot.numero}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500">Estado</dt>
+                <dd className="text-gray-800 capitalize">{estadoCfg.label}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-gray-500">Fecha emisión</dt>
+                <dd className="text-gray-800">{fmtDate(cot.fechaEmision)}</dd>
+              </div>
               {cot.fechaVencimiento && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Vencimiento</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#2a45c4', fontWeight: 600 }}>{fmtDate(cot.fechaVencimiento)}</Typography>
-                </Box>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">Vencimiento</dt>
+                  <dd className="text-teal-700 font-medium">{fmtDate(cot.fechaVencimiento)}</dd>
+                </div>
               )}
-            </Box>
-          </Paper>
+            </dl>
+          </div>
 
           {/* Acciones rápidas */}
-          <Paper sx={{ ...cardSx, p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Button
-              component="a"
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-2">
+            <a
               href={`/api/pdf/cotizacion/${cot.id}`}
               target="_blank"
               rel="noreferrer"
-              variant="outlined"
-              startIcon={<FileText size={16} />}
-              fullWidth
-              sx={{
-                borderRadius: '8px',
-                textTransform: 'none',
-                color: '#2a45c4',
-                borderColor: '#c7d2fc',
-                '&:hover': { bgcolor: '#f0fdf4', borderColor: '#3658e1' },
-              }}
+              className="flex items-center justify-center gap-2 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
             >
+              <FileText className="h-4 w-4" />
               Ver PDF
-            </Button>
+            </a>
             <Button
-              variant="outlined"
-              startIcon={<Mail size={16} />}
-              fullWidth
+              variant="outline"
+              className="w-full text-sm"
               onClick={() => setShowEmail(true)}
-              sx={{ borderRadius: '8px', textTransform: 'none' }}
             >
+              <Mail className="h-4 w-4 mr-2" />
               Enviar por correo
             </Button>
-            {cot.estado === 'aceptada' && (
+            {puedeConvertir && (
               <Button
-                variant="contained"
-                disableElevation
-                fullWidth
-                onClick={handleConvertir}
+                className="w-full bg-teal-600 hover:bg-teal-700 text-sm"
+                onClick={() => setShowConfirmConvert(true)}
                 disabled={converting}
-                startIcon={converting
-                  ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  : <FileCheck size={16} />}
-                sx={{
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  bgcolor: '#3658e1',
-                  '&:hover': { bgcolor: '#2a45c4' },
-                }}
               >
-                {converting ? 'Convirtiendo…' : 'Convertir a factura'}
+                {converting
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Convirtiendo…</>
+                  : <><FileCheck className="h-4 w-4 mr-2" />Convertir a factura</>}
               </Button>
             )}
-          </Paper>
-        </Box>
-      </Box>
+          </div>
+        </aside>
+      </div>
 
       {/* ── Bottom bar ───────────────────────────────────────────────────────── */}
-      <Box
-        sx={{
-          position: 'sticky',
-          bottom: 0,
-          zIndex: 30,
-          mx: { xs: -2, sm: -3 },
-          mt: 'auto',
-          bgcolor: 'rgba(255,255,255,0.95)',
-          backdropFilter: 'blur(8px)',
-          borderTop: '1px solid #e5e7eb',
-          boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)',
-          display: 'flex',
-          flexDirection: { xs: 'column-reverse', sm: 'row' },
-          alignItems: { sm: 'center' },
-          justifyContent: { sm: 'space-between' },
-          gap: 1.5,
-          px: { xs: 2, sm: 3 },
-          py: 1.5,
-        }}
-      >
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
-          variant="outlined"
+          variant="outline"
+          className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
           onClick={() => router.push('/dashboard/cotizaciones')}
-          sx={{
-            borderRadius: '8px',
-            textTransform: 'none',
-            color: '#4b5563',
-            height: { xs: 44, sm: 36 },
-            width: { xs: '100%', sm: 'auto' },
-          }}
         >
           Volver
         </Button>
-        <Box sx={{ display: 'flex', gap: 1, width: { xs: '100%', sm: 'auto' } }}>
-          <Button
-            component="a"
-            href={`/api/pdf/cotizacion/${cot.id}`}
-            target="_blank"
-            rel="noreferrer"
-            variant="outlined"
-            startIcon={<FileText size={16} />}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              height: { xs: 44, sm: 36 },
-              flex: { xs: 1, sm: 'none' },
-            }}
-          >
-            Ver PDF
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="h-11 sm:h-9 flex-1 sm:flex-none" asChild>
+            <a href={`/api/pdf/cotizacion/${cot.id}`} target="_blank" rel="noreferrer">
+              <FileText className="h-4 w-4 mr-1.5" />
+              Ver PDF
+            </a>
           </Button>
           {['borrador', 'enviada'].includes(cot.estado) && (
-            <Button
-              component={Link}
-              href={`/dashboard/cotizaciones/${cot.id}/editar`}
-              variant="contained"
-              disableElevation
-              startIcon={<Pencil size={16} />}
-              sx={{
-                borderRadius: '8px',
-                textTransform: 'none',
-                bgcolor: '#3658e1',
-                '&:hover': { bgcolor: '#2a45c4' },
-                height: { xs: 44, sm: 36 },
-                flex: { xs: 1, sm: 'none' },
-              }}
-            >
-              Editar
+            <Button variant="outline" className="h-11 sm:h-9 flex-1 sm:flex-none" asChild>
+              <Link href={`/dashboard/cotizaciones/${cot.id}/editar`}>
+                <Pencil className="h-4 w-4 mr-1.5" />
+                Editar
+              </Link>
             </Button>
           )}
-        </Box>
-      </Box>
+          {/* Convertir vivía solo en la columna derecha y en el menú "⋮": en
+              pantallas chicas la columna cae al final y el botón no se veía. */}
+          {puedeConvertir && (
+            <Button
+              className="bg-teal-600 hover:bg-teal-700 h-11 sm:h-9 flex-1 sm:flex-none"
+              onClick={() => setShowConfirmConvert(true)}
+              disabled={converting}
+            >
+              {converting
+                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Convirtiendo…</>
+                : <><FileCheck className="h-4 w-4 mr-1.5" />Convertir a factura</>}
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* ── Modal: Enviar email ──────────────────────────────────────────────── */}
-      <Dialog
-        open={showEmail}
-        onClose={() => setShowEmail(false)}
-        maxWidth="xs"
-        fullWidth
-        slotProps={{ paper: { sx: { borderRadius: '12px' } } as object }}
-      >
-        <DialogTitle sx={{ pb: 1 }}>Enviar cotización por correo</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <TextField
-              label="Destinatario"
-              type="email"
-              size="small"
-              fullWidth
-              value={emailTo}
-              onChange={(e) => setEmailTo(e.target.value)}
-              placeholder="cliente@dominio.com"
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-            />
-            <Typography variant="caption" sx={{ color: '#6b7280' }}>
+      <ConfirmDialog
+        open={showConfirmConvert}
+        onOpenChange={setShowConfirmConvert}
+        title="Convertir a factura"
+        description={<>Se creará un <strong>borrador de factura</strong> a partir de esta cotización ({cot.numero}) y se abrirá para completarla. La cotización se conserva.</>}
+        confirmLabel="Convertir"
+        icon={<FileCheck className="h-5 w-5 text-teal-600" />}
+        loading={converting}
+        onConfirm={handleConvertir}
+      />
+
+      <Dialog open={showEmail} onOpenChange={setShowEmail}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enviar cotización por correo</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <label className="block">
+              <span className="text-xs text-gray-600 uppercase tracking-wide">Destinatario</span>
+              <input
+                type="email"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="cliente@dominio.com"
+                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+              />
+            </label>
+            <p className="text-xs text-gray-500">
               Se adjuntará el PDF de la cotización. Si el estado es &quot;Borrador&quot;, se cambiará automáticamente a &quot;Enviada&quot;.
-            </Typography>
-          </Box>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmail(false)} disabled={sendingEmail}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={sendingEmail || !emailTo}
+              className="bg-teal-600 hover:bg-teal-700"
+            >
+              {sendingEmail
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
+                : <><Mail className="h-4 w-4 mr-1" />Enviar</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button
-            variant="outlined"
-            onClick={() => setShowEmail(false)}
-            disabled={sendingEmail}
-            sx={{ borderRadius: '8px', textTransform: 'none' }}
-          >
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            disableElevation
-            onClick={handleSendEmail}
-            disabled={sendingEmail || !emailTo}
-            startIcon={sendingEmail
-              ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-              : <Mail size={16} />}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              bgcolor: '#3658e1',
-              '&:hover': { bgcolor: '#2a45c4' },
-            }}
-          >
-            {sendingEmail ? 'Enviando…' : 'Enviar'}
-          </Button>
-        </DialogActions>
       </Dialog>
 
-    </Box>
+    </section>
   );
 }
