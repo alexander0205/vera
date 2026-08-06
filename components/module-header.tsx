@@ -20,6 +20,7 @@ import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { IsotipoZero } from '@/components/marca-zero';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import { Menu as MenuIcon, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
@@ -140,10 +141,8 @@ export function ModuleHeader({
               Facturación lo escondía con el sidebar abierto y los demás no, así
               que la zona izquierda del header cambiaba de un módulo a otro. */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
-            <Box sx={{ width: 24, height: 24, bgcolor: 'primary.main', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.75rem' }}>z</Typography>
-            </Box>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>
+            <IsotipoZero lado={24} />
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>
               Zero
             </Typography>
           </Box>

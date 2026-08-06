@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getUser, getTeamForUser } from '@/lib/db/queries';
-import { Receipt, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+import { IsotipoZero } from '@/components/marca-zero';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
@@ -22,7 +23,7 @@ export default async function LiteLayout({ children }: { children: React.ReactNo
       >
         <Box sx={{ maxWidth: '80rem', mx: 'auto', px: { xs: 2, sm: 3 }, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="a" href="/lite" sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none', minWidth: 0 }}>
-            <Receipt size={20} color="#ea580c" style={{ flexShrink: 0 }} />
+            <IsotipoZero lado={22} />
             <Typography sx={{ fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {team?.razonSocial ?? team?.name ?? 'Factura'}
             </Typography>

@@ -18,7 +18,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Fade from '@mui/material/Fade';
 import Portal from '@mui/material/Portal';
-import { Receipt } from 'lucide-react';
+import { IsotipoZero } from '@/components/marca-zero';
 import { citaAleatoria, type CitaCarga } from '@/lib/config/frases-carga';
 
 /**
@@ -123,21 +123,8 @@ export function ZeroLoader({
             '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
           }}
         >
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              bgcolor: 'primary.main',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <Receipt style={{ width: 26, height: 26, color: '#fff' }} />
-          </Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', letterSpacing: '-0.02em' }}>
+          <IsotipoZero lado={48} />
+          <Typography variant="h4" sx={{ fontWeight: 700, fontFamily: 'var(--font-display)', color: 'text.primary', letterSpacing: '-0.02em' }}>
             Zero
           </Typography>
         </Box>
