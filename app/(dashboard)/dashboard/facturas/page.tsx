@@ -83,6 +83,7 @@ interface Doc {
   fechaEmision: string;
   fechaLimitePago: string | null;
   pagado: number;
+  moraPendiente?: number;
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
@@ -318,8 +319,13 @@ export default function FacturasPage() {
         const saldo   = doc.montoTotal - pagado;
         const esCred  = doc.tipoPago === 2;
         const dias    = diasVencido(doc.fechaLimitePago);
+        const moraPend = doc.moraPendiente ?? 0;
         if (ep === 'GRATUITA') return <Badge color="gray">Gratuita</Badge>;
         if (ep === 'USO')      return <Badge color="gray">Uso</Badge>;
+        // Capital saldado pero con mora sin pagar: no es "Pagada" del todo.
+        if (ep === 'PAGADA' && moraPend > 0) {
+          return <Badge color="orange" title={`Capital pagado; falta mora ${fmtDOP(moraPend)}`}>Mora pendiente</Badge>;
+        }
         if (ep === 'PAGADA')   return <Badge color="green">Pagada</Badge>;
         if (ep === 'PARCIAL')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
         if (ep === 'PENDIENTE' && esCred && dias > 0) {
@@ -522,10 +528,11 @@ export default function FacturasPage() {
 // ─── Badge helper (uso interno a esta página) ─────────────────────────────────
 
 const BADGE_COLORS = {
-  green: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  amber: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  red:   'bg-red-50 text-red-700 ring-1 ring-red-200',
-  gray:  'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
+  green:  'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  amber:  'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  orange: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
+  red:    'bg-red-50 text-red-700 ring-1 ring-red-200',
+  gray:   'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
 } as const;
 
 function Badge({

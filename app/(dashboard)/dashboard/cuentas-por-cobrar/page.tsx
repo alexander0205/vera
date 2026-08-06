@@ -32,7 +32,7 @@ interface Cuenta {
   // Saldo combinado de las ND de mora atadas a esta factura.
   moraSaldo:            number;
   // Lista de ND de mora con saldo > 0 (para desglose).
-  moraNotas?:           { id: number; codigo: string | null; saldo: number }[];
+  moraNotas?:           { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL' }[];
   vencida:              boolean;
   diasVencido:          number;
 }
@@ -117,6 +117,11 @@ export default function CuentasPorCobrarPage() {
           {isHistorica(c) && (
             <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
               histórica
+            </span>
+          )}
+          {c.saldoFactura === 0 && c.moraSaldo > 0 && (
+            <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+              Mora pendiente
             </span>
           )}
         </div>
@@ -279,6 +284,8 @@ export default function CuentasPorCobrarPage() {
         filterValues={filterValues}
         onFilterChange={setFilterValues}
         rowActions={rowActions}
+        rowExpandable={c => (c.moraNotas?.length ?? 0) > 0}
+        renderExpanded={c => <MoraHijas cuenta={c} />}
         groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
@@ -341,6 +348,51 @@ function StatCard({ icon, label, value, color }: {
   );
 }
 
+// ─── Filas hijas: notas de débito por mora de una factura ────────────────────
+
+function MoraHijas({ cuenta }: { cuenta: Cuenta }) {
+  const notas = cuenta.moraNotas ?? [];
+  if (notas.length === 0) return null;
+  return (
+    <div className="ml-6 border-l-2 border-orange-100 pl-3 py-1 space-y-1.5">
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+        Notas de débito por mora
+      </p>
+      {notas.map(nd => (
+        <div key={nd.id} className="flex items-center justify-between gap-3 bg-orange-50/40 border border-orange-100 rounded-lg px-3 py-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href={`/dashboard/facturas/${nd.id}`}
+              className="font-mono text-xs font-semibold text-orange-800 hover:underline truncate"
+            >
+              {nd.codigo ?? `ND #${nd.id}`}
+            </Link>
+            <EstadoMoraBadge estado={nd.estado} />
+          </div>
+          <div className="text-right whitespace-nowrap">
+            <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(nd.saldo)}</span>
+            {nd.saldo !== nd.montoTotal && (
+              <span className="ml-1 text-[11px] text-gray-400">de {fmtDOP(nd.montoTotal)}</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EstadoMoraBadge({ estado }: { estado: 'PENDIENTE' | 'PARCIAL' }) {
+  const cls = estado === 'PARCIAL'
+    ? 'bg-amber-100 text-amber-700 border-amber-200'
+    : 'bg-orange-100 text-orange-700 border-orange-200';
+  const label = estado === 'PARCIAL' ? 'Parcial' : 'Pendiente';
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
 // ─── Modal: registrar pago ───────────────────────────────────────────────────
 
 function PagoModal({
@@ -360,6 +412,15 @@ function PagoModal({
   const [fecha, setFecha]         = useState(today);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  // Resultado del pago recién registrado → resumen claro (recibido / a factura /
+  // a mora / queda pendiente) antes de cerrar. null = aún en el formulario.
+  const [resultado, setResultado] = useState<{
+    recibidoCents: number;
+    facturaCents:  number;
+    moraCents:     number;
+    saldoNuevo:    number;
+    saldado:       boolean;
+  } | null>(null);
   // Cuando el pago se bloquea por método que obliga DGII sobre factura no emitida,
   // el backend devuelve el link al detalle para emitirla primero.
   const [emitirUrl, setEmitirUrl] = useState<string | null>(null);
@@ -410,7 +471,14 @@ function PagoModal({
         setEmitirUrl(typeof json.emitirUrl === 'string' ? json.emitirUrl : null);
         throw new Error(json.error ?? 'Error al registrar pago');
       }
-      onSuccess();
+      const recibidoCents = pagos.reduce((s, p) => s + Math.round(p.montoDOP * 100), 0);
+      setResultado({
+        recibidoCents,
+        facturaCents: json.repartido?.facturaCents ?? 0,
+        moraCents:    json.repartido?.moraCents ?? 0,
+        saldoNuevo:   json.saldoNuevo ?? 0,
+        saldado:      !!json.saldado,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -423,14 +491,22 @@ function PagoModal({
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Registrar pago</h2>
+            <h2 className="text-base font-semibold text-gray-900">
+              {resultado ? 'Pago registrado' : 'Registrar pago'}
+            </h2>
             <p className="text-xs text-gray-500 mt-0.5">{cuenta.codigo ?? `Factura #${cuenta.id}`}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+          <button
+            onClick={() => (resultado ? onSuccess() : onClose())}
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-400"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
+        {resultado ? (
+          <ResumenPago resultado={resultado} onListo={onSuccess} />
+        ) : (
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
             <div className="flex justify-between">
@@ -511,6 +587,70 @@ function PagoModal({
             </button>
           </div>
         </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Resumen del pago registrado (recibido / a factura / a mora / pendiente) ──
+
+function ResumenPago({
+  resultado, onListo,
+}: {
+  resultado: { recibidoCents: number; facturaCents: number; moraCents: number; saldoNuevo: number; saldado: boolean };
+  onListo: () => void;
+}) {
+  const { recibidoCents, facturaCents, moraCents, saldoNuevo, saldado } = resultado;
+  return (
+    <div className="p-5 space-y-4">
+      <div className={`flex items-start gap-2 p-3 rounded-lg border ${
+        saldado ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+      }`}>
+        <CheckCircle className={`h-5 w-5 mt-0.5 shrink-0 ${saldado ? 'text-emerald-600' : 'text-amber-600'}`} />
+        <p className="text-sm text-gray-800">
+          {saldado
+            ? 'Pago registrado. La cuenta quedó saldada por completo (factura y mora).'
+            : 'Pago registrado. Quedó un saldo pendiente — revisa el desglose.'}
+        </p>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1.5">
+        <div className="flex justify-between">
+          <span className="text-gray-500">Recibido</span>
+          <span className="text-gray-900 font-medium tabular-nums">{fmtDOP(recibidoCents)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Aplicado a la factura</span>
+          <span className="text-gray-700 tabular-nums">{fmtDOP(facturaCents)}</span>
+        </div>
+        {moraCents > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Aplicado a la mora</span>
+            <span className="text-orange-600 tabular-nums">{fmtDOP(moraCents)}</span>
+          </div>
+        )}
+        <div className="flex justify-between border-t border-gray-200 pt-1.5 mt-1.5 font-medium">
+          <span className="text-gray-700">Queda pendiente</span>
+          <span className={`tabular-nums ${saldoNuevo > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+            {fmtDOP(saldoNuevo)}
+          </span>
+        </div>
+        {saldoNuevo > 0 && (
+          <p className="text-[11px] text-gray-400 pt-0.5">
+            El pago cubre primero la factura; el resto se aplica a la mora. Lo que reste queda como saldo pendiente.
+          </p>
+        )}
+      </div>
+
+      <div className="flex justify-end pt-1">
+        <button
+          type="button"
+          onClick={onListo}
+          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg"
+        >
+          Listo
+        </button>
       </div>
     </div>
   );

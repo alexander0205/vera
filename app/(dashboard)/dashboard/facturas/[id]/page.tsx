@@ -120,7 +120,7 @@ interface FacturaDetalle {
   comentario: string | null;
   lineas: Linea[];
   ncsAsociadas?: NcAsociada[];
-  notasMora?: { id: number; codigo: string | null; montoTotal: number; estado: string; estadoPago: string }[];
+  notasMora?: { id: number; codigo: string | null; montoTotal: number; pagado: number; estado: string; estadoPago: string }[];
   moraOrigen?: { id: number; codigo: string | null; encf: string } | null;
   notaOrigen?: { id: number; codigo: string | null; encf: string; estado: string } | null;
   emisor: {
@@ -1712,6 +1712,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           {(() => {
             const notasActivas = (factura.notasMora ?? []).filter(nd => nd.estado !== 'ANULADO');
             const aplicadoCents = notasActivas.reduce((s, nd) => s + nd.montoTotal, 0);
+            // Saldo de mora aún sin pagar (mora aplicada − lo ya abonado a las NDs).
+            const moraPendienteCents = notasActivas.reduce(
+              (s, nd) => s + Math.max(0, nd.montoTotal - nd.pagado), 0);
+            // Capital de la factura cubierto pero con mora aún pendiente: el caso
+            // que el usuario quiere ver claro (pago original OK, mora sigue viva).
+            const capitalPagado = factura.pago?.recibido === true;
+            const hayMoraPendiente = moraPendienteCents > 0;
             const hayProxima = moraPreview?.estado === 'pendiente';
             // Solo mostrar la sección si ya hay mora aplicada o viene una.
             if (notasActivas.length === 0 && !hayProxima) return null;
@@ -1722,6 +1729,18 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <h2 className="text-sm font-semibold text-gray-900">Mora</h2>
                 </div>
                 <div className="px-4 pb-4 md:px-5 space-y-3">
+                  {/* Aviso: capital pagado pero mora aún pendiente (pago original OK,
+                      mora sigue viva). Lo que el usuario pidió ver claro. */}
+                  {capitalPagado && hayMoraPendiente && (
+                    <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
+                      <TrendingUp className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" aria-hidden="true" />
+                      <p className="text-xs text-gray-700">
+                        El pago de la factura está saldado, pero la mora sigue pendiente:
+                        {' '}<span className="font-semibold text-orange-700">{fmtDOP(moraPendienteCents / 100)}</span> por cobrar.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Resumen: aplicado + próxima */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5">
@@ -1734,6 +1753,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                           </span>
                         )}
                       </p>
+                      {hayMoraPendiente && (
+                        <p className="text-[11px] text-orange-600 mt-0.5">
+                          {fmtDOP(moraPendienteCents / 100)} pendiente
+                        </p>
+                      )}
                     </div>
                     <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2.5">
                       <p className="text-xs text-gray-500">Próxima mora automática</p>
@@ -1765,16 +1789,36 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
                         Notas de débito por mora
                       </p>
-                      {notasActivas.map(nd => (
-                        <Link
-                          key={nd.id}
-                          href={`/dashboard/facturas/${nd.id}`}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
-                        >
-                          <span className="font-mono text-xs font-semibold text-orange-800">{nd.codigo ?? `#${nd.id}`}</span>
-                          <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(nd.montoTotal / 100)}</span>
-                        </Link>
-                      ))}
+                      {notasActivas.map(nd => {
+                        const saldoNd = Math.max(0, nd.montoTotal - nd.pagado);
+                        const pagada  = saldoNd === 0;
+                        const parcial = !pagada && nd.pagado > 0;
+                        const badge = pagada
+                          ? { txt: 'Pagada',    cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                          : parcial
+                          ? { txt: 'Parcial',   cls: 'bg-amber-100 text-amber-700 border-amber-200' }
+                          : { txt: 'Pendiente', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
+                        return (
+                          <Link
+                            key={nd.id}
+                            href={`/dashboard/facturas/${nd.id}`}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono text-xs font-semibold text-orange-800 truncate">{nd.codigo ?? `#${nd.id}`}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${badge.cls}`}>
+                                {badge.txt}
+                              </span>
+                            </span>
+                            <span className="text-right whitespace-nowrap">
+                              <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(saldoNd / 100)}</span>
+                              {!pagada && saldoNd !== nd.montoTotal && (
+                                <span className="ml-1 text-[11px] text-gray-400">de {fmtDOP(nd.montoTotal / 100)}</span>
+                              )}
+                            </span>
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

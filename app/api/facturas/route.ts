@@ -103,6 +103,22 @@ export async function GET(req: NextRequest) {
           CASE WHEN ecf_documents.pago_recibido = 'true'
                THEN coalesce(ecf_documents.pago_valor_cts, 0) ELSE 0 END
         )`,
+        // Saldo de mora aún sin pagar: suma de (monto − pagos) de las ND de mora
+        // atadas a esta factura, no anuladas y con saldo > 0. Permite mostrar
+        // "Mora pendiente" cuando el capital ya está pagado.
+        moraPendiente: sql<number>`coalesce((
+          SELECT SUM(nd.monto_total - coalesce((
+            SELECT SUM(monto_centavos) FROM pagos_recibidos
+            WHERE pagos_recibidos.ecf_document_id = nd.id
+          ), 0))
+          FROM ecf_documents AS nd
+          WHERE nd.mora_origen_id = ecf_documents.id
+            AND nd.estado != 'ANULADO'
+            AND (nd.monto_total - coalesce((
+              SELECT SUM(monto_centavos) FROM pagos_recibidos
+              WHERE pagos_recibidos.ecf_document_id = nd.id
+            ), 0)) > 0
+        ), 0)`,
         createdByName:     users.name,
         dependienteNombre: ecfDocuments.dependienteNombre,
       })
