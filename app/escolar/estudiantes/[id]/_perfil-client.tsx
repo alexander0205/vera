@@ -278,7 +278,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
   useEffect(() => { cargar(); }, [cargar]);
 
   if (loading) {
-    return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>;
+    return <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>;
   }
   if (notFound || !estudiante) {
     return (
@@ -347,7 +347,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                 </p>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" onClick={() => setEditando(false)} disabled={savingEdit}>Cancelar</Button>
-                  <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={guardarEdicion} disabled={savingEdit}>
+                  <Button size="sm" className="bg-zero-600 hover:bg-zero-700" onClick={guardarEdicion} disabled={savingEdit}>
                     {savingEdit ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Guardar'}
                   </Button>
                 </div>
@@ -356,7 +356,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               <div className="flex flex-col md:flex-row md:items-center gap-4">
                 {/* Identidad + chips */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="h-14 w-14 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-lg font-semibold shrink-0">
+                  <div className="h-14 w-14 rounded-full bg-zero-100 text-zero-700 flex items-center justify-center text-lg font-semibold shrink-0">
                     {`${estudiante.nombres[0] ?? ''}${estudiante.apellidos[0] ?? ''}`.toUpperCase()}
                   </div>
                   <div className="min-w-0">
@@ -371,7 +371,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       {matriculaActiva?.curso && <InfoChip k="Curso" v={matriculaActiva.curso} />}
                       {matriculaActiva?.periodo && <InfoChip k="Período" v={matriculaActiva.periodo} />}
                       <InfoChip k="Sexo · edad" v={`${labelSexo(estudiante.sexo)}${calcularEdad(estudiante.fechaNacimiento) != null ? ` · ${calcularEdad(estudiante.fechaNacimiento)} años` : ''}`} />
-                      <span className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border ${estudiante.deudaCentavos > 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                      <span className={`inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border ${estudiante.deudaCentavos > 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-zero-50 text-zero-700 border-zero-200'}`}>
                         <span className="text-[11px] opacity-70">Pendiente</span>
                         <b className="font-semibold">{estudiante.deudaCentavos > 0 ? fmtDOP(estudiante.deudaCentavos) : 'Al día'}</b>
                       </span>
@@ -463,9 +463,9 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               <p className="text-sm font-medium text-gray-900 mb-2">Contacto vinculado</p>
               {estudiante.dependiente ? (
                 <Link href={`/dashboard/clientes/${estudiante.dependiente.clienteId}/editar`}
-                  className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 hover:border-teal-300 hover:bg-teal-50/40 transition-colors">
+                  className="inline-flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 hover:border-zero-300 hover:bg-zero-50/40 transition-colors">
                   <span className="font-semibold text-gray-900">{estudiante.dependiente.clienteRazonSocial}</span>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-teal-700">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-zero-700">
                     <Link2 className="h-3 w-3" />Ver contacto
                   </span>
                 </Link>
@@ -488,7 +488,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
                       t.telefono ?? '—',
                       t.email ?? '—',
                       t.responsablePago
-                        ? <Badge key="p" className="bg-teal-50 text-teal-700 border-teal-200">Pago</Badge>
+                        ? <Badge key="p" className="bg-zero-50 text-zero-700 border-zero-200">Pago</Badge>
                         : <span key="p" className="text-gray-300">—</span>,
                     ])} />
                 )}
@@ -534,7 +534,7 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
       {/* Cobro in-place: mismo modal de Cuentas por Cobrar, sin salir del perfil. */}
       {cargandoPago && !pagoCuenta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
-          <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
         </div>
       )}
       {pagoCuenta && (
@@ -617,12 +617,12 @@ function PeriodoFiltroBar({ grupos, value, onChange }: {
             onClick={() => onChange(g.key)}
             className={`rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
               activo
-                ? 'bg-teal-600 border-teal-600 text-white font-semibold'
+                ? 'bg-zero-600 border-zero-600 text-white font-semibold'
                 : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
             }`}
           >
             {g.periodo}
-            <span className={`ml-1.5 text-xs ${activo ? 'text-teal-50' : saldo > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+            <span className={`ml-1.5 text-xs ${activo ? 'text-zero-50' : saldo > 0 ? 'text-red-500' : 'text-gray-400'}`}>
               {g.curso}{saldo > 0 ? ` · ${fmtDOP(saldo)}` : ''}
             </span>
           </button>
@@ -706,7 +706,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
           <span className="text-sm text-gray-500">· {grupo.curso}</span>
           {puedeGestionar && grupo.matriculaId && (
             <button type="button" onClick={() => onEditarMatricula(grupo.matriculaId!)}
-              className="text-gray-400 hover:text-teal-600 transition-colors" title="Editar matrícula (curso/período)">
+              className="text-gray-400 hover:text-zero-600 transition-colors" title="Editar matrícula (curso/período)">
               <Pencil className="h-3.5 w-3.5" />
             </button>
           )}
@@ -759,7 +759,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
               type="button"
               onClick={() => setVista(value as typeof vista)}
               className={`pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                vista === value ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-900'
+                vista === value ? 'border-zero-600 text-zero-700' : 'border-transparent text-gray-500 hover:text-gray-900'
               }`}
             >
               {label}
@@ -795,7 +795,7 @@ function PeriodoDetalle({ grupo, pagos, puedeFacturar, puedePagos, puedeGestiona
                       c.fechaVencimiento ? fmtFechaCorta(c.fechaVencimiento) : '—',
                       fmtDOP(c.montoCentavos),
                       fmtDOP(pagadoCargo),
-                      <span key="saldo" className={c.saldoCentavos > 0 ? 'text-red-600 font-medium' : 'text-teal-700 font-medium'}>{fmtDOP(c.saldoCentavos)}</span>,
+                      <span key="saldo" className={c.saldoCentavos > 0 ? 'text-red-600 font-medium' : 'text-zero-700 font-medium'}>{fmtDOP(c.saldoCentavos)}</span>,
                       facturaLink(c),
                       <CargoActionsMenu
                         key="acciones"
@@ -1006,7 +1006,7 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
           <div className="rounded-lg border border-gray-200">
             {!mostrarCrear ? (
               <button type="button" onClick={() => setMostrarCrear(true)}
-                className="flex w-full items-center gap-1.5 px-3 py-2 text-sm font-medium text-teal-600 hover:text-teal-700">
+                className="flex w-full items-center gap-1.5 px-3 py-2 text-sm font-medium text-zero-600 hover:text-zero-700">
                 <Plus className="h-4 w-4" />Agregar un cargo a varios meses
               </button>
             ) : (
@@ -1032,7 +1032,7 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
                       const activo = mesesCargo.has(m.key);
                       return (
                         <button key={m.key} type="button" onClick={() => toggleMes(m.key)}
-                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${activo ? 'border-teal-600 bg-teal-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${activo ? 'border-zero-600 bg-zero-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
                           {MESES[m.mes]} {m.anio}
                         </button>
                       );
@@ -1047,7 +1047,7 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
                   </span>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="sm" onClick={() => setMostrarCrear(false)} disabled={creando}>Cancelar</Button>
-                    <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={crearCargos} disabled={creando}>
+                    <Button size="sm" className="bg-zero-600 hover:bg-zero-700" onClick={crearCargos} disabled={creando}>
                       {creando ? <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />Creando…</> : 'Crear cargos'}
                     </Button>
                   </div>
@@ -1061,9 +1061,9 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
           {cargos.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-gray-400">Sin cargos por facturar. Agrega uno arriba.</p>
           ) : cargos.map((cargo) => (
-            <label key={cargo.id} className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-teal-50/50">
+            <label key={cargo.id} className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-zero-50/50">
               <input type="checkbox" checked={sel.has(cargo.id)} onChange={() => toggle(cargo.id)}
-                className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                className="h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium text-gray-900">{cargo.concepto ?? 'Cargo'}</span>
                 <span className="block text-xs text-gray-500">{cargo.mes ? `${MESES[cargo.mes]} ${cargo.anio}` : cargo.anio}{cargo.fechaVencimiento ? ` · vence ${fmtFechaCorta(cargo.fechaVencimiento)}` : ''}</span>
@@ -1074,7 +1074,7 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700" disabled={ids.length === 0}
+          <Button className="bg-zero-600 hover:bg-zero-700" disabled={ids.length === 0}
             onClick={() => { onConfirm(ids); onOpenChange(false); }}>
             {ids.length > 1 ? `Facturar ${ids.length} en una factura (${fmtDOP(total)})` : 'Facturar cargo'}
           </Button>
@@ -1093,7 +1093,7 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
 }) {
   const toneClass = {
     blue: 'text-blue-600',
-    teal: 'text-teal-600',
+    teal: 'text-zero-600',
     red: 'text-red-600',
     gray: 'text-gray-600',
   }[tone];
@@ -1243,7 +1243,7 @@ function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestion
         <td className="px-3 py-2.5"><EstadoMesBadge estado={r.estado} /></td>
         <td className="px-3 py-2.5 text-right text-gray-700">{fmtDOP(r.total)}</td>
         <td className="px-3 py-2.5 text-right text-gray-700">{fmtDOP(r.pagado)}</td>
-        <td className={`px-3 py-2.5 text-right font-medium ${r.saldo > 0 ? 'text-red-600' : 'text-teal-700'}`}>
+        <td className={`px-3 py-2.5 text-right font-medium ${r.saldo > 0 ? 'text-red-600' : 'text-zero-700'}`}>
           {fmtDOP(r.saldo)}
         </td>
         <td className="px-3 py-2.5">{r.factura ? facturaLink(r.factura) : <span className="text-gray-400">—</span>}</td>
@@ -1298,7 +1298,7 @@ function MesPanel({ r, puedeGestionar, onAgregarCargoMes }: {
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
         <span className="text-xs font-semibold text-gray-700">Historial de pagos</span>
         <span className="text-xs text-gray-500">
-          Abonado <b className="text-teal-700">{fmtDOP(r.pagado)}</b>
+          Abonado <b className="text-zero-700">{fmtDOP(r.pagado)}</b>
           {r.saldo > 0 && <> · Pendiente <b className="text-red-600">{fmtDOP(r.saldo)}</b></>}
         </span>
       </div>
@@ -1335,7 +1335,7 @@ function MesPanel({ r, puedeGestionar, onAgregarCargoMes }: {
           <button
             type="button"
             onClick={() => onAgregarCargoMes(r.mes, r.anio)}
-            className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700"
+            className="inline-flex items-center gap-1 text-xs font-medium text-zero-600 hover:text-zero-700"
           >
             <Plus className="h-3.5 w-3.5" />Agregar cargo a {MESES[r.mes]}
           </button>
@@ -1517,7 +1517,7 @@ function MesAcademico({ mes, cargos, pagos }: { mes: number; cargos: Cargo[]; pa
       </div>
       <div className="text-xs text-gray-500 space-y-1">
         <div className="flex justify-between gap-2"><span>Total</span><span className="font-medium text-gray-700">{fmtDOP(total)}</span></div>
-        <div className="flex justify-between gap-2"><span>Saldo</span><span className={saldo > 0 ? 'font-medium text-red-600' : 'font-medium text-teal-700'}>{fmtDOP(saldo)}</span></div>
+        <div className="flex justify-between gap-2"><span>Saldo</span><span className={saldo > 0 ? 'font-medium text-red-600' : 'font-medium text-zero-700'}>{fmtDOP(saldo)}</span></div>
         {pagosMes.length > 0 && (
           <div className="flex justify-between gap-2"><span>Pagos</span><span className="font-medium text-gray-700">{pagosMes.length}</span></div>
         )}
@@ -1545,7 +1545,7 @@ function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pend
 }
 
 function EstadoMesBadge({ estado }: { estado: ReturnType<typeof estadoMes> }) {
-  if (estado === 'pagado') return <Badge className="bg-teal-50 text-teal-700 border-teal-200">Pagado</Badge>;
+  if (estado === 'pagado') return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
   if (estado === 'adelantado') return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Adelantado</Badge>;
   if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
   if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
@@ -1558,7 +1558,7 @@ function facturaLink(cargo: Cargo) {
   const ref = cargo.facturaEncf || cargo.facturaCodigo || `#${cargo.ecfDocumentId}`;
   return (
     <Link href={`/dashboard/facturas/${cargo.ecfDocumentId}`}
-      className="inline-flex items-center gap-1 text-xs text-teal-700 hover:text-teal-800 hover:underline">
+      className="inline-flex items-center gap-1 text-xs text-zero-700 hover:text-zero-800 hover:underline">
       <Receipt className="h-3 w-3" />{ref}
     </Link>
   );
@@ -1576,7 +1576,7 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
     const ref = cargo.facturaEncf || cargo.facturaCodigo || `#${cargo.ecfDocumentId}`;
     const chip = (
       <Link href={`/dashboard/facturas/${cargo.ecfDocumentId}`}
-        className="inline-flex items-center gap-1 text-xs text-teal-700 hover:text-teal-800 hover:underline">
+        className="inline-flex items-center gap-1 text-xs text-zero-700 hover:text-zero-800 hover:underline">
         <Receipt className="h-3 w-3" />{ref}
       </Link>
     );
@@ -1585,7 +1585,7 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
       return (
         <span className="inline-flex items-center justify-end gap-3">
           {chip}
-          <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
+          <button onClick={onRegistrarPago} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
             <Wallet className="h-3 w-3" />Registrar pago
           </button>
         </span>
@@ -1596,14 +1596,14 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
   const acciones: React.ReactNode[] = [];
   if (puedeFacturar && facturable) {
     acciones.push(
-      <button key="fac" onClick={onFacturar} className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
+      <button key="fac" onClick={onFacturar} className="inline-flex items-center gap-1 text-xs text-zero-600 hover:text-zero-700 font-medium transition-colors">
         <Receipt className="h-3 w-3" />Facturar
       </button>,
     );
   }
   if (puedeGestionar) {
     acciones.push(
-      <button key="vin" onClick={onVincular} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-teal-600 transition-colors">
+      <button key="vin" onClick={onVincular} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-zero-600 transition-colors">
         <Link2 className="h-3 w-3" />Vincular
       </button>,
     );
@@ -1615,7 +1615,7 @@ function FacturaCell({ cargo, puedeGestionar, puedeFacturar, puedePagos, onVincu
 function VolverLink() {
   return (
     <Link href="/escolar/estudiantes"
-      className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-teal-600 transition-colors">
+      className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-zero-600 transition-colors">
       <ArrowLeft className="h-4 w-4" />Volver a estudiantes
     </Link>
   );
@@ -1711,7 +1711,7 @@ function Historial({ matriculas, pagos }: { matriculas: Matricula[]; pagos: Pago
     <div className="space-y-3">
       {eventos.map((e, i) => (
         <div key={i} className="flex items-start gap-3">
-          <span className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${e.tipo === 'pago' ? 'bg-teal-500' : 'bg-gray-400'}`} />
+          <span className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${e.tipo === 'pago' ? 'bg-zero-500' : 'bg-gray-400'}`} />
           <div>
             <p className="text-sm text-gray-800">{e.texto}</p>
             <p className="text-xs text-gray-400">{fmtFechaCorta(e.fecha)}</p>

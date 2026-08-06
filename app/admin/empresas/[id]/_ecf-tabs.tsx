@@ -54,8 +54,8 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
-const TEAL = '#0d9488';
-const TEAL_HOVER = '#0f766e';
+const TEAL = '#3658e1';
+const TEAL_HOVER = '#2a45c4';
 
 interface Props {
   teamId: number;
@@ -177,8 +177,8 @@ export function EcfApiTabs({ teamId, autoLinked, contrib, certs, rangos, status,
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 10, fontWeight: 600, borderRadius: '999px',
                         px: 0.75, py: 0.25,
-                        bgcolor: tab === t ? '#ccfbf1' : '#f3f4f6',
-                        color: tab === t ? '#0f766e' : '#6b7280',
+                        bgcolor: tab === t ? '#e0e7fd' : '#f3f4f6',
+                        color: tab === t ? '#2a45c4' : '#6b7280',
                       }}
                     >
                       {tabCounts[t]}
@@ -759,7 +759,7 @@ function EmisionesTab({ emisiones, ambiente }: { emisiones: EmisionResponseDto[]
                 <TableRow
                   key={e.id}
                   onClick={() => setSelected(e)}
-                  sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#f0fdfa' }, '& td': { borderColor: '#f9fafb', py: 0.75 } }}
+                  sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#eef2fe' }, '& td': { borderColor: '#f9fafb', py: 0.75 } }}
                 >
                   <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: '#111827' }}>{e.eNcf}</TableCell>
                   <TableCell sx={{ fontSize: 12, color: '#4b5563' }}>e{e.tipoComprobante}</TableCell>

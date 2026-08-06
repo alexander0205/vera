@@ -134,7 +134,7 @@ export function VincularDependienteDialog({ estudianteId, open, onClose, onSaved
                 </div>
               </div>
               {buscando ? (
-                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-teal-600" /></div>
+                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
               ) : clientes.length > 0 ? (
                 <div className="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-56 overflow-y-auto">
                   {clientes.map((c) => (
@@ -154,12 +154,12 @@ export function VincularDependienteDialog({ estudianteId, open, onClose, onSaved
           ) : (
             <>
               <button onClick={() => { setClienteSel(null); setDependientes([]); }}
-                className="flex items-center gap-1 text-sm text-gray-500 hover:text-teal-600 transition-colors">
+                className="flex items-center gap-1 text-sm text-gray-500 hover:text-zero-600 transition-colors">
                 <ArrowLeft className="h-3.5 w-3.5" />{clienteSel.razonSocial}
               </button>
 
               {cargandoDeps ? (
-                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-teal-600" /></div>
+                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
               ) : (
                 <>
                   {dependientes.length > 0 && (
@@ -190,7 +190,7 @@ export function VincularDependienteDialog({ estudianteId, open, onClose, onSaved
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           {clienteSel && (
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={crearYVincular} disabled={saving || cargandoDeps}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={crearYVincular} disabled={saving || cargandoDeps}>
               {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Crear y vincular'}
             </Button>
           )}

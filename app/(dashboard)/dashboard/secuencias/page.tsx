@@ -278,8 +278,8 @@ export default function SecuenciasPage() {
             </Box>
           ) : filtradas.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 10, px: 3 }}>
-              <Box sx={{ width: 48, height: 48, bgcolor: '#f0fdfa', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
-                <Hash style={{ width: 22, height: 22, color: '#0d9488' }} />
+              <Box sx={{ width: 48, height: 48, bgcolor: '#eef2fe', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+                <Hash style={{ width: 22, height: 22, color: '#3658e1' }} />
               </Box>
               <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
                 Sin numeraciones registradas
@@ -333,7 +333,7 @@ export default function SecuenciasPage() {
                               fontFamily: 'monospace', fontSize: '0.625rem', fontWeight: 700, px: 0.75, py: 0.25, borderRadius: '4px', border: '1px solid', flexShrink: 0,
                               ...(esSinNcf
                                 ? { color: '#4b5563', bgcolor: '#f9fafb', borderColor: '#e5e7eb' }
-                                : { color: '#0d9488', bgcolor: '#f0fdfa', borderColor: '#99f6e4' }),
+                                : { color: '#3658e1', bgcolor: '#eef2fe', borderColor: '#c7d2fc' }),
                             }}>
                               {esSinNcf ? 'Sin NCF' : `e${s.tipoEcf}`}
                             </Box>
@@ -383,7 +383,7 @@ export default function SecuenciasPage() {
                               </Typography>
                               <LinearProgress variant="determinate" value={Math.min(pct, 100)}
                                 sx={{ mt: 0.75, height: 4, borderRadius: 2, width: 80, mx: 'auto', bgcolor: '#f3f4f6',
-                                  '& .MuiLinearProgress-bar': { bgcolor: pct > 80 ? '#f87171' : pct > 50 ? '#fbbf24' : '#2dd4bf' } }} />
+                                  '& .MuiLinearProgress-bar': { bgcolor: pct > 80 ? '#f87171' : pct > 50 ? '#fbbf24' : '#8193f5' } }} />
                             </Box>
                           )}
                         </TableCell>
@@ -391,7 +391,7 @@ export default function SecuenciasPage() {
                         {/* Disponibles */}
                         <TableCell align="center">
                           {esSinNcf ? (
-                            <Infinity style={{ width: 16, height: 16, color: '#0d9488', margin: '0 auto' }} />
+                            <Infinity style={{ width: 16, height: 16, color: '#3658e1', margin: '0 auto' }} />
                           ) : (
                             <Typography variant="body2" sx={{ fontWeight: 700, color: s.disponibles < 10 ? '#dc2626' : s.disponibles < 50 ? '#d97706' : '#059669' }}>
                               {s.disponibles.toLocaleString('es-DO')}
@@ -417,7 +417,7 @@ export default function SecuenciasPage() {
                         <TableCell align="right">
                           <Box sx={{ display: 'flex', gap: 0.25, justifyContent: 'flex-end' }}>
                             <IconButton size="small" onClick={() => abrirEdicion(s)} title="Editar numeración"
-                              sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#f0fdfa' }, borderRadius: '6px' }}>
+                              sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#eef2fe' }, borderRadius: '6px' }}>
                               <Pencil style={{ width: 14, height: 14 }} />
                             </IconButton>
                             <IconButton size="small" onClick={() => { setDeleteTarget(s); setOpError(null); }} title="Eliminar numeración"
@@ -449,7 +449,7 @@ export default function SecuenciasPage() {
               <Box sx={{ bgcolor: 'grey.50', border: '1px solid #f3f4f6', borderRadius: '12px', p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 <Box component="span" sx={{
                   fontFamily: 'monospace', fontSize: '0.6875rem', fontWeight: 700, px: 1, py: 0.5, borderRadius: '4px', border: '1px solid',
-                  ...(editEsSinNcf ? { color: '#4b5563', bgcolor: '#f3f4f6', borderColor: '#e5e7eb' } : { color: '#0d9488', bgcolor: '#f0fdfa', borderColor: '#99f6e4' }),
+                  ...(editEsSinNcf ? { color: '#4b5563', bgcolor: '#f3f4f6', borderColor: '#e5e7eb' } : { color: '#3658e1', bgcolor: '#eef2fe', borderColor: '#c7d2fc' }),
                 }}>
                   {editEsSinNcf ? 'Sin NCF' : `e${editTarget.tipoEcf}`}
                 </Box>

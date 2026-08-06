@@ -131,7 +131,7 @@ export default function PagosEscolaresClient() {
               <Button className="mt-4" variant="outline" size="sm" onClick={cargar}>Reintentar</Button>
             </div>
           ) : loading ? (
-            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>
+            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>
           ) : filtrados.length === 0 ? (
             <div className="text-center py-16">
               <Wallet className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -159,7 +159,7 @@ export default function PagosEscolaresClient() {
                       <td className="px-3 py-2.5 text-gray-600">{fmtFechaCorta(p.fechaPago)}</td>
                       <td className="px-3 py-2.5">
                         <Link href={`/escolar/estudiantes/${p.estudianteId}`}
-                          className="font-medium text-gray-900 hover:text-teal-600">
+                          className="font-medium text-gray-900 hover:text-zero-600">
                           {p.estudiante} {p.estudianteApellidos}
                         </Link>
                       </td>

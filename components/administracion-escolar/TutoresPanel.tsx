@@ -69,7 +69,7 @@ function TutorAvatar({ nombre, imagen, size = 'md' }: { nombre: string; imagen: 
     return <img src={imagen} alt={nombre} className={`${cls} rounded-full object-cover shrink-0 border border-gray-200`} />;
   }
   return (
-    <span className={`${cls} rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-semibold shrink-0`}>
+    <span className={`${cls} rounded-full bg-zero-100 text-zero-700 flex items-center justify-center font-semibold shrink-0`}>
       {iniciales || <User className="h-1/2 w-1/2" />}
     </span>
   );
@@ -292,7 +292,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                           <span className="font-medium text-gray-900 truncate">{t.nombre}</span>
                           {t.clientId && (
                             <Link href={`/dashboard/clientes/${t.clientId}/editar`}
-                              className="inline-flex items-center gap-1 text-[11px] text-teal-700 hover:text-teal-900 hover:underline shrink-0"
+                              className="inline-flex items-center gap-1 text-[11px] text-zero-700 hover:text-zero-900 hover:underline shrink-0"
                               title={`Editar contacto: ${t.clienteRazonSocial}`}>
                               <Link2 className="h-3 w-3" />Contacto
                             </Link>
@@ -307,7 +307,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                   <td className="px-3 py-2.5 text-gray-600">{t.email ?? '—'}</td>
                   <td className="px-3 py-2.5">
                     {t.responsablePago
-                      ? <Badge className="bg-teal-50 text-teal-700 border-teal-200">Pago</Badge>
+                      ? <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pago</Badge>
                       : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-3 py-2.5 text-right">
@@ -373,7 +373,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                       <p className="text-xs text-gray-500">Cédula: {tutorPreview.documento || '—'}</p>
                       {tutorPreview.telefono && <p className="text-xs text-gray-500">{tutorPreview.telefono}</p>}
                       {tutorPreview.clientId && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-teal-700 mt-0.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-zero-700 mt-0.5">
                           <Link2 className="h-3 w-3" />{tutorPreview.clienteRazonSocial}
                         </span>
                       )}
@@ -389,10 +389,10 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                     <Building2 className="h-3.5 w-3.5 text-gray-400" />Contacto / cliente (para facturar)
                   </Label>
                   {clienteVinculado ? (
-                    <div className="flex items-center justify-between gap-2 border border-teal-200 bg-teal-50 rounded-lg px-3 py-2">
-                      <span className="text-sm font-medium text-teal-800 truncate">{clienteVinculado.razonSocial}</span>
+                    <div className="flex items-center justify-between gap-2 border border-zero-200 bg-zero-50 rounded-lg px-3 py-2">
+                      <span className="text-sm font-medium text-zero-800 truncate">{clienteVinculado.razonSocial}</span>
                       <button onClick={() => setClienteVinculado(null)}
-                        className="text-teal-600 hover:text-teal-800 shrink-0">
+                        className="text-zero-600 hover:text-zero-800 shrink-0">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -404,7 +404,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                       {(buscandoCliente || clienteResultados.length > 0) && (
                         <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
                           {buscandoCliente ? (
-                            <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-teal-600" /></div>
+                            <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-zero-600" /></div>
                           ) : clienteResultados.map((c) => (
                             <button key={c.id} onClick={() => elegirCliente(c)}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
@@ -463,7 +463,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                 <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input type="checkbox" checked={responsablePago}
                     onChange={(e) => setResponsablePago(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                    className="h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500" />
                   Responsable de pago
                 </label>
               </div>
@@ -471,7 +471,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleGuardar} disabled={saving}>
               {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Guardar'}
             </Button>
           </DialogFooter>

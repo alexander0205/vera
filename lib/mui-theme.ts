@@ -2,25 +2,26 @@
 
 import { createTheme } from '@mui/material/styles';
 
-const TEAL = {
-  50:  '#f0fdfa',
-  100: '#ccfbf1',
-  200: '#99f6e4',
-  300: '#5eead4',
-  400: '#2dd4bf',
-  500: '#14b8a6',
-  600: '#0d9488',
-  700: '#0f766e',
-  800: '#115e59',
-  900: '#134e4a',
+/** Escala de marca Zero; el 600 es el azul corporativo. */
+const ZERO = {
+  50:  '#eef2fe',
+  100: '#e0e7fd',
+  200: '#c7d2fc',
+  300: '#a5b4f9',
+  400: '#8193f5',
+  500: '#5b73ec',
+  600: '#3658e1',
+  700: '#2a45c4',
+  800: '#253a9e',
+  900: '#24377d',
 };
 
 export const muiTheme = createTheme({
   palette: {
     primary: {
-      light:        TEAL[500],
-      main:         TEAL[600],
-      dark:         TEAL[700],
+      light:        ZERO[500],
+      main:         ZERO[600],
+      dark:         ZERO[700],
       contrastText: '#ffffff',
     },
     error: {
@@ -307,7 +308,7 @@ export const muiTheme = createTheme({
         indicator: {
           height:          2,
           borderRadius:    '2px 2px 0 0',
-          backgroundColor: '#0d9488',
+          backgroundColor: '#3658e1',
         },
       },
     },
@@ -321,7 +322,7 @@ export const muiTheme = createTheme({
           padding:       '8px 16px',
           color:         '#6b7280',
           '&.Mui-selected': {
-            color:      '#0d9488',
+            color:      '#3658e1',
             fontWeight: 600,
           },
         },

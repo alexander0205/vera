@@ -98,7 +98,7 @@ export default function CategoriasPage() {
           <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>Organiza tu catálogo por categorías</Typography>
         </Box>
         <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nueva categoría
         </Button>
       </Box>
@@ -113,7 +113,7 @@ export default function CategoriasPage() {
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-            <CircularProgress size={36} sx={{ color: '#0d9488' }} />
+            <CircularProgress size={36} sx={{ color: '#3658e1' }} />
           </Box>
         ) : categorias.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
@@ -121,7 +121,7 @@ export default function CategoriasPage() {
             <Typography sx={{ color: '#6b7280', fontWeight: 500 }}>Sin categorías registradas</Typography>
             <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.5 }}>Crea categorías para organizar mejor tu catálogo de productos</Typography>
             <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />} onClick={abrirNuevo}
-              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
               Nueva categoría
             </Button>
           </Box>
@@ -183,7 +183,7 @@ export default function CategoriasPage() {
             sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}>Cancelar</Button>
           <Button variant="contained" disableElevation onClick={handleGuardar} disabled={saving}
             startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
             {saving ? 'Guardando…' : editTarget ? 'Guardar cambios' : 'Crear categoría'}
           </Button>
         </DialogActions>

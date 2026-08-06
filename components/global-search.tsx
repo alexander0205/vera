@@ -66,7 +66,7 @@ const cmdkSx = {
     cursor: 'pointer',
   },
   '& [cmdk-item]:hover': { bgcolor: '#f9fafb' },
-  '& [cmdk-item][data-selected="true"]': { bgcolor: '#f0fdfa' },
+  '& [cmdk-item][data-selected="true"]': { bgcolor: '#eef2fe' },
 } as const;
 
 export function GlobalSearch() {
@@ -253,8 +253,8 @@ export function GlobalSearch() {
                             onSelect={() => navigate(r.href)}
                             style={{ padding: '10px 12px' }}
                           >
-                            <Box sx={{ height: 28, width: 28, borderRadius: '6px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <Icon style={{ width: 14, height: 14, color: '#0d9488' }} />
+                            <Box sx={{ height: 28, width: 28, borderRadius: '6px', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Icon style={{ width: 14, height: 14, color: '#3658e1' }} />
                             </Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{r.label}</Typography>
@@ -290,7 +290,7 @@ export function GlobalSearch() {
                             onSelect={() => navigate(item.href)}
                             style={{ padding: '8px 12px' }}
                           >
-                            <item.icon style={{ width: 16, height: 16, color: '#14b8a6' }} />
+                            <item.icon style={{ width: 16, height: 16, color: '#5b73ec' }} />
                             <Typography component="span" sx={{ fontSize: '0.875rem', color: '#374151' }}>{item.label}</Typography>
                           </Command.Item>
                         ))}

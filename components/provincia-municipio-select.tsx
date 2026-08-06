@@ -119,7 +119,7 @@ function AutocompleteInput({
                 width: '100%', textAlign: 'left', px: 2, py: 1.25,
                 fontSize: '0.875rem', color: '#374151', border: 'none',
                 bgcolor: 'transparent', cursor: 'pointer', display: 'block',
-                '&:hover': { bgcolor: '#f0fdfa', color: '#0f766e' },
+                '&:hover': { bgcolor: '#eef2fe', color: '#2a45c4' },
                 '&:first-of-type': { borderRadius: '12px 12px 0 0' },
                 '&:last-of-type': { borderRadius: '0 0 12px 12px' },
                 transition: 'background-color 0.12s, color 0.12s',

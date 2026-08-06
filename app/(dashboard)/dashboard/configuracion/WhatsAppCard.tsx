@@ -79,7 +79,7 @@ export function WhatsAppCard() {
   return (
     <Box sx={cardSx}>
       <Box sx={cardHeaderSx}>
-        <MessageCircle size={16} color="#0d9488" />
+        <MessageCircle size={16} color="#3658e1" />
         <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>WhatsApp Business</Typography>
       </Box>
       <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -90,11 +90,11 @@ export function WhatsAppCard() {
         {error && <Alert severity="error" sx={{ borderRadius: '8px' }}>{error}</Alert>}
 
         {loading ? (
-          <CircularProgress size={24} sx={{ color: '#0d9488' }} />
+          <CircularProgress size={24} sx={{ color: '#3658e1' }} />
         ) : !estado.configurado ? (
           <Button variant="contained" disableElevation onClick={conectar} disabled={busy}
             startIcon={busy ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, alignSelf: 'flex-start' }}>
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, alignSelf: 'flex-start' }}>
             Conectar WhatsApp
           </Button>
         ) : estado.conectado ? (

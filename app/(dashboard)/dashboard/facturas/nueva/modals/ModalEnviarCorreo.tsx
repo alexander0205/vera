@@ -32,7 +32,7 @@ export function ModalEnviarCorreo({
     >
       <DialogTitle sx={{ fontWeight: 600, fontSize: '1rem' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <MailOutlineIcon size={20} color="#0d9488" />
+          <MailOutlineIcon size={20} color="#3658e1" />
           Enviar comprobante
         </Box>
       </DialogTitle>
@@ -59,7 +59,7 @@ export function ModalEnviarCorreo({
               Se enviará el comprobante{' '}
               <Box
                 component="span"
-                sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#0f766e' }}
+                sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#2a45c4' }}
               >
                 {correoEncf}
               </Box>
@@ -101,9 +101,9 @@ export function ModalEnviarCorreo({
           }}
           sx={{
             textTransform: 'none',
-            bgcolor: '#0d9488',
-            '&:hover': { bgcolor: '#0f766e' },
-            '&.Mui-disabled': { bgcolor: '#0d948880' },
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
+            '&.Mui-disabled': { bgcolor: '#3658e180' },
           }}
         >
           {emailSending ? (

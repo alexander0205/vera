@@ -561,7 +561,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
       <Box sx={{ p: { xs: 1.5, sm: 2, md: 2.5 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
 
         {contextoEscolar && !isEdit && (
-          <div className="mb-4 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">
+          <div className="mb-4 rounded-lg border border-zero-200 bg-zero-50 px-3 py-2 text-sm text-zero-900">
             Mensualidad de <b>{contextoEscolar.estudianteNombre}</b> · {contextoEscolar.periodo}. Tutor responsable: <b>{contextoEscolar.tutorNombre}</b>.
             Al guardar, plan queda ligado a esta matrícula; cron creará factura y cargo del mismo mes.
           </div>
@@ -672,16 +672,16 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                   </FormControl>
                   <Box sx={{
                     mt: 2,
-                    bgcolor: '#f0fdfa',
-                    border: '1px solid #ccfbf1',
+                    bgcolor: '#eef2fe',
+                    border: '1px solid #e0e7fd',
                     borderRadius: '8px',
                     p: 1.5,
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 1.25,
                   }}>
-                    <Info size={16} style={{ color: '#0f766e', marginTop: 2, flexShrink: 0 }} />
-                    <Typography sx={{ fontSize: '12px', color: '#134e4a', lineHeight: 1.6 }}>
+                    <Info size={16} style={{ color: '#2a45c4', marginTop: 2, flexShrink: 0 }} />
+                    <Typography sx={{ fontSize: '12px', color: '#24377d', lineHeight: 1.6 }}>
                       <Box component="span" sx={{ fontWeight: 600 }}>Importante:</Box>{' '}
                       Cambiar el tipo de comprobante afectará las próximas facturas de esta suscripción. Las facturas ya emitidas no se modificarán.
                     </Typography>
@@ -754,8 +754,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 0.75,
-                        bgcolor: '#f0fdfa',
-                        color: '#0f766e',
+                        bgcolor: '#eef2fe',
+                        color: '#2a45c4',
                         fontSize: '11px',
                         fontWeight: 600,
                         textTransform: 'uppercase',
@@ -876,8 +876,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     {/* Info pill: día de cobro */}
                     {diaCobro && (
                       <Box sx={{
-                        bgcolor: '#f0fdfa',
-                        border: '1px solid #ccfbf1',
+                        bgcolor: '#eef2fe',
+                        border: '1px solid #e0e7fd',
                         borderRadius: '8px',
                         px: 1.5,
                         py: 1.25,
@@ -885,8 +885,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                         alignItems: 'center',
                         gap: 1.25,
                       }}>
-                        <Info size={16} style={{ color: '#0f766e', flexShrink: 0 }} />
-                        <Typography sx={{ fontSize: '14px', color: '#134e4a' }}>
+                        <Info size={16} style={{ color: '#2a45c4', flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
                           {frecuencia === 'semanal'    && <>Se cobrará cada <Box component="span" sx={{ fontWeight: 600 }}>{new Date(fechaInicio + 'T00:00').toLocaleDateString('es-DO', { weekday: 'long' })}</Box>.</>}
                           {frecuencia === 'quincenal'  && <>Se cobrará cada <Box component="span" sx={{ fontWeight: 600 }}>15 días</Box> desde {formatFechaCorta(fechaInicio)}.</>}
                           {frecuencia === 'mensual'    && <>Se cobrará el día <Box component="span" sx={{ fontWeight: 600 }}>{diaCobro}</Box> de cada mes.</>}
@@ -902,8 +902,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 0.75,
-                        bgcolor: '#f0fdfa',
-                        color: '#0f766e',
+                        bgcolor: '#eef2fe',
+                        color: '#2a45c4',
                         fontSize: '11px',
                         fontWeight: 600,
                         textTransform: 'uppercase',
@@ -980,8 +980,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     {/* Info pill: vencimiento */}
                     {tipoPago === '2' && diasParaPago && (
                       <Box sx={{
-                        bgcolor: '#f0fdfa',
-                        border: '1px solid #ccfbf1',
+                        bgcolor: '#eef2fe',
+                        border: '1px solid #e0e7fd',
                         borderRadius: '8px',
                         px: 1.5,
                         py: 1.25,
@@ -989,8 +989,8 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                         alignItems: 'center',
                         gap: 1.25,
                       }}>
-                        <Info size={16} style={{ color: '#0f766e', flexShrink: 0 }} />
-                        <Typography sx={{ fontSize: '14px', color: '#134e4a' }}>
+                        <Info size={16} style={{ color: '#2a45c4', flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
                           Vence <Box component="span" sx={{ fontWeight: 600 }}>{diasParaPago} días</Box> después de cada emisión.
                         </Typography>
                       </Box>
@@ -1096,9 +1096,9 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     cursor: 'pointer',
                     transition: 'border-color 0.15s, background-color 0.15s',
                     '&:hover': {
-                      borderColor: '#2dd4bf',
+                      borderColor: '#8193f5',
                       bgcolor: 'rgba(240,253,250,0.4)',
-                      '& .chevron-icon': { color: '#0d9488' },
+                      '& .chevron-icon': { color: '#3658e1' },
                     },
                   }}
                 >
@@ -1106,13 +1106,13 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     height: 36,
                     width: 36,
                     borderRadius: '8px',
-                    bgcolor: '#ccfbf1',
+                    bgcolor: '#e0e7fd',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
                   }}>
-                    <CreditCard size={18} style={{ color: '#0f766e' }} />
+                    <CreditCard size={18} style={{ color: '#2a45c4' }} />
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontSize: '14px', fontWeight: 500, color: 'text.primary' }}>
@@ -1170,7 +1170,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                           `e-CF (${tipoEcf})`
                         }
                         size="small"
-                        sx={{ bgcolor: '#f0fdfa', color: '#0f766e', fontWeight: 500, height: 22, fontSize: '12px' }}
+                        sx={{ bgcolor: '#eef2fe', color: '#2a45c4', fontWeight: 500, height: 22, fontSize: '12px' }}
                       />
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1187,7 +1187,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography sx={{ fontSize: '14px', color: 'text.secondary' }}>Próxima factura</Typography>
-                      <Typography sx={{ fontSize: '14px', color: '#0f766e', fontWeight: 500 }}>
+                      <Typography sx={{ fontSize: '14px', color: '#2a45c4', fontWeight: 500 }}>
                         {proximaEmisionPreview ? formatFechaCorta(proximaEmisionPreview) : '—'}
                       </Typography>
                     </Box>
@@ -1209,7 +1209,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                   <Box sx={{ borderTop: '1px solid #f3f4f6', px: 2, py: 1.5 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                       <Typography sx={{ fontSize: '14px', fontWeight: 600, color: 'text.primary' }}>Total estimado</Typography>
-                      <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#0f766e' }}>{formatDOP(totales.total)}</Typography>
+                      <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#2a45c4' }}>{formatDOP(totales.total)}</Typography>
                     </Box>
                     <Typography sx={{ fontSize: '10px', color: 'text.disabled', mt: 0.5 }}>
                       Este es un cálculo estimado por emisión.
@@ -1250,7 +1250,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                             <Chip
                               label={FRECUENCIA_LABEL[frecuencia] ?? frecuencia}
                               size="small"
-                              sx={{ bgcolor: '#f0fdfa', color: '#0f766e', fontWeight: 500, height: 18, fontSize: '10px' }}
+                              sx={{ bgcolor: '#eef2fe', color: '#2a45c4', fontWeight: 500, height: 18, fontSize: '10px' }}
                             />
                             <Typography sx={{ fontSize: '12px', fontWeight: 500, color: 'text.primary' }}>
                               {formatDOP(totales.total)}

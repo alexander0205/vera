@@ -49,7 +49,7 @@ export default async function AdminUsuariosPage() {
                   </TableCell>
                   <TableCell>
                     <Chip label={u.twoFactorEnabled ? 'Activo' : 'No'} size="small"
-                      sx={{ bgcolor: u.twoFactorEnabled ? '#f0fdfa' : '#f3f4f6', color: u.twoFactorEnabled ? '#0f766e' : '#6b7280', border: '1px solid', borderColor: u.twoFactorEnabled ? '#99f6e4' : '#e5e7eb', fontSize: '0.6875rem', height: 20 }} />
+                      sx={{ bgcolor: u.twoFactorEnabled ? '#eef2fe' : '#f3f4f6', color: u.twoFactorEnabled ? '#2a45c4' : '#6b7280', border: '1px solid', borderColor: u.twoFactorEnabled ? '#c7d2fc' : '#e5e7eb', fontSize: '0.6875rem', height: 20 }} />
                   </TableCell>
                   <TableCell><Typography sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{u.role}</Typography></TableCell>
                   <TableCell><Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{new Date(u.createdAt).toLocaleDateString('es-DO')}</Typography></TableCell>

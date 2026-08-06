@@ -134,14 +134,14 @@ export function ClienteSection({
             gap: 0.5,
             fontSize: '0.875rem',
             fontWeight: 500,
-            color: '#0d9488',
+            color: '#3658e1',
             bgcolor: 'transparent',
             border: 'none',
             cursor: 'pointer',
             whiteSpace: 'nowrap',
             py: 1,
             my: -0.5,
-            '&:hover': { color: '#0f766e' },
+            '&:hover': { color: '#2a45c4' },
           }}
         >
           <Plus size={14} />Nuevo contacto

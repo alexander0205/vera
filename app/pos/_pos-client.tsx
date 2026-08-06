@@ -276,8 +276,8 @@ function Apertura({ terminales }: { terminales: TerminalProp[] }) {
               sx={{
                 display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
                 borderRadius: '8px', border: '1px solid', px: 1.5, py: 1.25, textAlign: 'left', fontSize: 14,
-                borderColor: terminalId === t.id ? '#0d9488' : '#e5e7eb',
-                bgcolor: terminalId === t.id ? '#f0fdfa' : '#fff',
+                borderColor: terminalId === t.id ? '#3658e1' : '#e5e7eb',
+                bgcolor: terminalId === t.id ? '#eef2fe' : '#fff',
               }}
             >
               <Box component="span" sx={{ fontWeight: 500 }}>{t.nombre}</Box>
@@ -897,7 +897,7 @@ function Venta({
           >
             <ListChecks style={{ width: 18, height: 18 }} /> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' }, fontSize: 14 }}>Aparcadas</Box>
             {aparcadas.length > 0 && (
-              <Box component="span" sx={{ position: 'absolute', right: -4, top: -4, display: 'flex', height: 20, minWidth: 20, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#0d9488', px: 0.5, fontSize: 11, fontWeight: 600, color: '#fff' }}>{aparcadas.length}</Box>
+              <Box component="span" sx={{ position: 'absolute', right: -4, top: -4, display: 'flex', height: 20, minWidth: 20, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 0.5, fontSize: 11, fontWeight: 600, color: '#fff' }}>{aparcadas.length}</Box>
             )}
           </Button>
           <Button
@@ -940,9 +940,9 @@ function Venta({
                       onClick={() => setCategoriaActiva('todas')}
                       sx={{
                         flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, py: 1.25, fontSize: 16, fontWeight: 500,
-                        borderColor: categoriaActiva === 'todas' ? '#0d9488' : '#e5e7eb',
-                        bgcolor: categoriaActiva === 'todas' ? '#f0fdfa' : 'transparent',
-                        color: categoriaActiva === 'todas' ? '#0f766e' : '#4b5563',
+                        borderColor: categoriaActiva === 'todas' ? '#3658e1' : '#e5e7eb',
+                        bgcolor: categoriaActiva === 'todas' ? '#eef2fe' : 'transparent',
+                        color: categoriaActiva === 'todas' ? '#2a45c4' : '#4b5563',
                       }}
                     >
                       Todas
@@ -953,9 +953,9 @@ function Venta({
                         onClick={() => setCategoriaActiva(c.id)}
                         sx={{
                           flexShrink: 0, borderRadius: '9999px', border: '1px solid', px: 2.5, py: 1.25, fontSize: 16, fontWeight: 500,
-                          borderColor: categoriaActiva === c.id ? '#0d9488' : '#e5e7eb',
-                          bgcolor: categoriaActiva === c.id ? '#f0fdfa' : 'transparent',
-                          color: categoriaActiva === c.id ? '#0f766e' : '#4b5563',
+                          borderColor: categoriaActiva === c.id ? '#3658e1' : '#e5e7eb',
+                          bgcolor: categoriaActiva === c.id ? '#eef2fe' : 'transparent',
+                          color: categoriaActiva === c.id ? '#2a45c4' : '#4b5563',
                         }}
                       >
                         {c.nombre}
@@ -993,12 +993,12 @@ function Venta({
                 sx={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5,
                   borderRadius: '16px', border: '2px dashed #d1d5db', bgcolor: '#fff', minHeight: 180,
-                  '&:hover': { borderColor: '#2dd4bf', bgcolor: '#f0fdfa' },
+                  '&:hover': { borderColor: '#8193f5', bgcolor: '#eef2fe' },
                   '&:active': { transform: 'scale(0.97)' },
                 }}
               >
                 <Box sx={{ display: 'flex', height: 60, width: 60, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#f3f4f6' }}>
-                  <Zap style={{ width: 28, height: 28, color: '#0d9488' }} />
+                  <Zap style={{ width: 28, height: 28, color: '#3658e1' }} />
                 </Box>
                 <Box component="span" sx={{ fontSize: 17, fontWeight: 700, color: '#374151' }}>Venta simple</Box>
               </ButtonBase>
@@ -1018,10 +1018,10 @@ function Venta({
                     sx={{
                       position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'stretch', overflow: 'hidden', borderRadius: '12px', border: '1px solid', bgcolor: '#fff', textAlign: 'left',
                       '&:active': { transform: 'scale(0.97)' },
-                      borderColor: qty > 0 ? '#2dd4bf' : '#e5e7eb',
-                      boxShadow: qty > 0 ? '0 0 0 1px #2dd4bf' : 'none',
+                      borderColor: qty > 0 ? '#8193f5' : '#e5e7eb',
+                      boxShadow: qty > 0 ? '0 0 0 1px #8193f5' : 'none',
                       opacity: agotado ? 0.5 : 1,
-                      '&:hover': { borderColor: agotado ? '#e5e7eb' : '#2dd4bf' },
+                      '&:hover': { borderColor: agotado ? '#e5e7eb' : '#8193f5' },
                     }}
                   >
                     <Box sx={{ position: 'relative', aspectRatio: '1 / 1', width: '100%', bgcolor: '#f9fafb' }}>
@@ -1038,7 +1038,7 @@ function Venta({
                         })()
                       )}
                       {qty > 0 && (
-                        <Box component="span" sx={{ position: 'absolute', left: 8, top: 8, display: 'flex', height: 32, minWidth: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#0d9488', px: 1, fontSize: 14, fontWeight: 700, color: '#fff', boxShadow: 1, ...MONEY }}>
+                        <Box component="span" sx={{ position: 'absolute', left: 8, top: 8, display: 'flex', height: 32, minWidth: 32, alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', bgcolor: '#3658e1', px: 1, fontSize: 14, fontWeight: 700, color: '#fff', boxShadow: 1, ...MONEY }}>
                           {qty}
                         </Box>
                       )}
@@ -1100,7 +1100,7 @@ function Venta({
       <ButtonBase
         onClick={() => setCarritoMovilAbierto(true)}
         disabled={carrito.length === 0}
-        sx={{ position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 30, display: { xs: 'flex', md: 'none' }, alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px', bgcolor: '#0d9488', px: 2, py: 1.75, color: '#fff', boxShadow: 4, '&.Mui-disabled': { opacity: 0.5 } }}
+        sx={{ position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 30, display: { xs: 'flex', md: 'none' }, alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px', bgcolor: '#3658e1', px: 2, py: 1.75, color: '#fff', boxShadow: 4, '&.Mui-disabled': { opacity: 0.5 } }}
       >
         <Box component="span" sx={{ fontSize: 14, fontWeight: 500 }}>{carrito.length} {carrito.length === 1 ? 'artículo' : 'artículos'}</Box>
         <Box component="span" sx={{ fontWeight: 500, ...MONEY }}>Ver carrito · {fmt(totales.total)}</Box>
@@ -1508,7 +1508,7 @@ function ClientePicker({ cliente, onSelect }: {
       <Box sx={{ mb: 1, borderRadius: '8px', bgcolor: '#f9fafb', px: 1.5, py: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, fontWeight: 500, color: '#1f2937' }}>{cliente.razonSocial}</Box>
-          <Box component="button" onClick={() => onSelect(null)} sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#0f766e' }}>quitar</Box>
+          <Box component="button" onClick={() => onSelect(null)} sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4' }}>quitar</Box>
         </Box>
         {cliente.rnc && <Box sx={{ fontSize: 11, color: '#9ca3af' }}>RNC: {cliente.rnc}</Box>}
       </Box>
@@ -1555,7 +1555,7 @@ function ClientePicker({ cliente, onSelect }: {
           )}
           <Box component="button"
             onClick={() => { setAbierto(false); setNuevoAbierto(true); }}
-            sx={{ display: 'flex', width: '100%', alignItems: 'center', gap: 0.75, borderTop: '1px solid #f3f4f6', border: 'none', borderTopColor: '#f3f4f6', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, fontWeight: 500, color: '#0d9488', '&:hover': { bgcolor: '#f0fdfa' } }}
+            sx={{ display: 'flex', width: '100%', alignItems: 'center', gap: 0.75, borderTop: '1px solid #f3f4f6', border: 'none', borderTopColor: '#f3f4f6', bgcolor: 'transparent', cursor: 'pointer', px: 1.5, py: 1, textAlign: 'left', fontSize: 14, fontWeight: 500, color: '#3658e1', '&:hover': { bgcolor: '#eef2fe' } }}
           >
             <Plus style={{ width: 14, height: 14 }} /> Nuevo cliente
           </Box>
@@ -1606,15 +1606,15 @@ function EstudiantePicker({ estudiante, onSelect }: {
       : `${fmt(estudiante.gastadoHoyCentavos)} / ${fmt(estudiante.limiteDiarioCentavos)} hoy`;
     return (
       <>
-        <Box sx={{ mb: 1, borderRadius: '8px', bgcolor: '#f0fdfa', px: 1.5, py: 1 }}>
+        <Box sx={{ mb: 1, borderRadius: '8px', bgcolor: '#eef2fe', px: 1.5, py: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box component="span" sx={{ fontSize: 14, fontWeight: 500, color: '#115e59' }}>{estudiante.nombre}</Box>
+            <Box component="span" sx={{ fontSize: 14, fontWeight: 500, color: '#253a9e' }}>{estudiante.nombre}</Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box component="button" onClick={() => setGestion(true)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#0f766e', textDecoration: 'underline' }}>saldo</Box>
-              <Box component="button" onClick={() => onSelect(null)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#0f766e' }}>quitar</Box>
+              <Box component="button" onClick={() => setGestion(true)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4', textDecoration: 'underline' }}>saldo</Box>
+              <Box component="button" onClick={() => onSelect(null)} sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, color: '#2a45c4' }}>quitar</Box>
             </Box>
           </Box>
-          <Box sx={{ mt: 0.25, display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#0f766e' }}>
+          <Box sx={{ mt: 0.25, display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#2a45c4' }}>
             <Box component="span" sx={MONEY}>Saldo: {fmt(estudiante.saldoCentavos)}</Box>
             <Box component="span" sx={MONEY}>{limiteTxt}</Box>
           </Box>
@@ -1777,9 +1777,9 @@ function CobroModal({
                   onClick={() => setMetodo(m)}
                   sx={{
                     borderRadius: '8px', border: '1px solid', py: 1, fontSize: 12, textTransform: 'capitalize',
-                    borderColor: metodo === m ? '#0d9488' : '#e5e7eb',
-                    bgcolor: metodo === m ? '#f0fdfa' : 'transparent',
-                    color: metodo === m ? '#0f766e' : '#4b5563',
+                    borderColor: metodo === m ? '#3658e1' : '#e5e7eb',
+                    bgcolor: metodo === m ? '#eef2fe' : 'transparent',
+                    color: metodo === m ? '#2a45c4' : '#4b5563',
                   }}
                 >
                   {m}
@@ -1793,9 +1793,9 @@ function CobroModal({
                 sx={{
                   mb: 1.5, display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
                   borderRadius: '8px', border: '1px solid', px: 1.5, py: 1, fontSize: 14,
-                  borderColor: metodo === 'cuenta-estudiante' ? '#0d9488' : '#e5e7eb',
-                  bgcolor: metodo === 'cuenta-estudiante' ? '#f0fdfa' : 'transparent',
-                  color: metodo === 'cuenta-estudiante' ? '#0f766e' : '#4b5563',
+                  borderColor: metodo === 'cuenta-estudiante' ? '#3658e1' : '#e5e7eb',
+                  bgcolor: metodo === 'cuenta-estudiante' ? '#eef2fe' : 'transparent',
+                  color: metodo === 'cuenta-estudiante' ? '#2a45c4' : '#4b5563',
                 }}
               >
                 <Box component="span">Cuenta de {estudiante.nombre}</Box>
@@ -1809,9 +1809,9 @@ function CobroModal({
                 sx={{
                   mb: 1.5, display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
                   borderRadius: '8px', border: '1px solid', px: 1.5, py: 1, fontSize: 14,
-                  borderColor: metodo === 'credito' ? '#0d9488' : '#e5e7eb',
-                  bgcolor: metodo === 'credito' ? '#f0fdfa' : 'transparent',
-                  color: metodo === 'credito' ? '#0f766e' : '#4b5563',
+                  borderColor: metodo === 'credito' ? '#3658e1' : '#e5e7eb',
+                  bgcolor: metodo === 'credito' ? '#eef2fe' : 'transparent',
+                  color: metodo === 'credito' ? '#2a45c4' : '#4b5563',
                 }}
               >
                 <Box component="span">A crédito (fiado)</Box>
@@ -1855,9 +1855,9 @@ function CobroModal({
                       onClick={() => setRecibido((mc / 100).toFixed(2))}
                       sx={{
                         borderRadius: '8px', border: '1px solid', py: 0.875, fontSize: 12, ...MONEY,
-                        borderColor: recibidoCentavos === mc ? '#0d9488' : '#e5e7eb',
-                        bgcolor: recibidoCentavos === mc ? '#f0fdfa' : 'transparent',
-                        color: recibidoCentavos === mc ? '#0f766e' : '#4b5563',
+                        borderColor: recibidoCentavos === mc ? '#3658e1' : '#e5e7eb',
+                        bgcolor: recibidoCentavos === mc ? '#eef2fe' : 'transparent',
+                        color: recibidoCentavos === mc ? '#2a45c4' : '#4b5563',
                       }}
                     >
                       {fmt(mc)}
@@ -1908,7 +1908,7 @@ function CobroModal({
             </Box>
             <Box component="button"
               onClick={() => setFilas((prev) => [...prev, { metodo: 'transferencia', valor: '' }])}
-              sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5, border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, fontWeight: 500, color: '#0d9488' }}
+              sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5, border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, fontWeight: 500, color: '#3658e1' }}
             >
               <Plus style={{ width: 14, height: 14 }} /> Agregar método
             </Box>
@@ -1970,14 +1970,14 @@ function PrecioEditable({ linea, onEditar }: {
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValor(e.target.value)}
           onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false); }}
           onBlur={guardar}
-          sx={{ width: 64, borderRadius: '4px', border: '1px solid #5eead4', px: 0.5, py: 0.25, fontSize: 12, outline: 'none', ...MONEY }}
+          sx={{ width: 64, borderRadius: '4px', border: '1px solid #a5b4f9', px: 0.5, py: 0.25, fontSize: 12, outline: 'none', ...MONEY }}
         />
       </Box>
     );
   }
 
   return (
-    <Box component="button" onClick={abrir} title="Editar precio" sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2, color: editado ? '#0d9488' : '#9ca3af', ...MONEY }}>
+    <Box component="button" onClick={abrir} title="Editar precio" sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2, color: editado ? '#3658e1' : '#9ca3af', ...MONEY }}>
       {fmt(precioLinea(linea))} c/u{editado ? '*' : ''}
     </Box>
   );
@@ -2234,7 +2234,7 @@ function GridMesas({ terminalNombre, terminalId, mesero, refresco, onAbrirMesa, 
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {mesero ? (
-            <ButtonBase onClick={onCambiarMesero} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, borderRadius: '8px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', px: 1.5, py: 0.75, fontSize: 12, fontWeight: 500, color: '#0f766e' }}>
+            <ButtonBase onClick={onCambiarMesero} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, borderRadius: '8px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe', px: 1.5, py: 0.75, fontSize: 12, fontWeight: 500, color: '#2a45c4' }}>
               <UserRound style={{ width: 14, height: 14 }} /> {mesero.nombre} · cambiar
             </ButtonBase>
           ) : (
@@ -2264,7 +2264,7 @@ function GridMesas({ terminalNombre, terminalId, mesero, refresco, onAbrirMesa, 
                   display: 'flex', aspectRatio: '4 / 3', flexDirection: 'column', justifyContent: 'space-between', borderRadius: '12px', border: '1px solid', p: 1.5, textAlign: 'left',
                   borderColor: m.ocupada ? '#fcd34d' : '#e5e7eb',
                   bgcolor: m.ocupada ? '#fffbeb' : '#fff',
-                  '&:hover': { borderColor: m.ocupada ? '#fcd34d' : '#2dd4bf' },
+                  '&:hover': { borderColor: m.ocupada ? '#fcd34d' : '#8193f5' },
                 }}
               >
                 <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -2339,7 +2339,7 @@ function PinMeseroModal({ onClose, onOk }: { onClose: () => void; onOk: (m: Mese
         >
           {verificando ? 'Verificando…' : 'Entrar'}
         </Button>
-        <Box component="button" onClick={() => setGestion(true)} sx={{ mt: 1.5, width: '100%', border: 'none', bgcolor: 'transparent', cursor: 'pointer', textAlign: 'center', fontSize: 12, color: '#0d9488' }}>
+        <Box component="button" onClick={() => setGestion(true)} sx={{ mt: 1.5, width: '100%', border: 'none', bgcolor: 'transparent', cursor: 'pointer', textAlign: 'center', fontSize: 12, color: '#3658e1' }}>
           Registrar nuevo mesero
         </Box>
         {gestion && <NuevoMeseroModal onClose={() => setGestion(false)} onCreated={() => setGestion(false)} />}

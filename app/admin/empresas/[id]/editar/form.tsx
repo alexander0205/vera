@@ -169,7 +169,7 @@ export function EditarEmpresaForm({ initial, provincias }: Props) {
           <Box>
             <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
               Municipio
-              {loadingMunic && <CircularProgress size={12} sx={{ color: '#0d9488' }} />}
+              {loadingMunic && <CircularProgress size={12} sx={{ color: '#3658e1' }} />}
             </Typography>
             <FormControl size="small" fullWidth disabled={!provincia || loadingMunic}>
               <Select
@@ -259,9 +259,9 @@ export function EditarEmpresaForm({ initial, provincias }: Props) {
           sx={{
             textTransform: 'none',
             borderRadius: '8px',
-            bgcolor: '#0d9488',
+            bgcolor: '#3658e1',
             fontWeight: 500,
-            '&:hover': { bgcolor: '#0f766e' },
+            '&:hover': { bgcolor: '#2a45c4' },
           }}
         >
           Guardar cambios
@@ -287,17 +287,17 @@ function PlanCard({ plan, selected, onSelect }: { plan: PlanDef; selected: boole
       onClick={onSelect}
       sx={{
         position: 'relative', textAlign: 'left', borderRadius: '8px',
-        border: `2px solid ${selected ? '#0d9488' : '#e5e7eb'}`,
-        bgcolor: selected ? '#f0fdfa' : '#fff',
+        border: `2px solid ${selected ? '#3658e1' : '#e5e7eb'}`,
+        bgcolor: selected ? '#eef2fe' : '#fff',
         px: 1.5, py: 1.25, cursor: 'pointer',
         transition: 'border-color 0.15s, background-color 0.15s',
-        '&:hover': { borderColor: selected ? '#0d9488' : '#d1d5db' },
+        '&:hover': { borderColor: selected ? '#3658e1' : '#d1d5db' },
       }}
     >
       {selected && (
         <Box sx={{
           position: 'absolute', top: 8, right: 8,
-          bgcolor: '#0d9488', borderRadius: '50%', p: '2px',
+          bgcolor: '#3658e1', borderRadius: '50%', p: '2px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <Check style={{ width: 12, height: 12, color: '#fff' }} />

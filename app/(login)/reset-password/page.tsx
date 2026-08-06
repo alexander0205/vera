@@ -69,7 +69,7 @@ function ResetForm() {
         disableElevation
         fullWidth
         disabled={loading}
-        sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, py: 1 }}
+        sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, py: 1 }}
       >
         {loading ? 'Guardando…' : 'Restablecer contraseña'}
       </Button>
@@ -82,7 +82,7 @@ export default function ResetPasswordPage() {
     <Box sx={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#f9fafb', p: 2 }}>
       <Box sx={{ bgcolor: '#fff', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', width: '100%', maxWidth: 380, p: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-          <Box sx={{ height: 40, width: 40, bgcolor: '#0f766e', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ height: 40, width: 40, bgcolor: '#2a45c4', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '1.125rem', lineHeight: 1 }}>e</Typography>
           </Box>
         </Box>
@@ -91,7 +91,7 @@ export default function ResetPasswordPage() {
           <ResetForm />
         </Suspense>
         <Typography sx={{ textAlign: 'center', fontSize: '0.875rem', color: '#6b7280', mt: 2 }}>
-          <Link href="/sign-in" style={{ textDecoration: 'none', color: '#0d9488' }}>Volver al inicio de sesión</Link>
+          <Link href="/sign-in" style={{ textDecoration: 'none', color: '#3658e1' }}>Volver al inicio de sesión</Link>
         </Typography>
       </Box>
     </Box>

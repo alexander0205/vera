@@ -22,7 +22,7 @@ export function SubmitButton({
       disableElevation
       disabled={pending}
       endIcon={pending ? undefined : <ArrowRight size={16} />}
-      startIcon={pending ? <CircularProgress size={14} sx={{ color: destacado ? '#0f766e' : '#fff' }} /> : undefined}
+      startIcon={pending ? <CircularProgress size={14} sx={{ color: destacado ? '#2a45c4' : '#fff' }} /> : undefined}
       sx={{
         borderRadius: '99px',
         textTransform: 'none',
@@ -30,8 +30,8 @@ export function SubmitButton({
         fontWeight: 500,
         py: 1.25,
         ...(destacado
-          ? { bgcolor: '#fff', color: '#0f766e', '&:hover': { bgcolor: '#f0fdfa' }, '&:disabled': { bgcolor: '#fff', opacity: 0.7 } }
-          : { bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' } }),
+          ? { bgcolor: '#fff', color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' }, '&:disabled': { bgcolor: '#fff', opacity: 0.7 } }
+          : { bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' } }),
       }}
     >
       {pending ? 'Cargando…' : label}

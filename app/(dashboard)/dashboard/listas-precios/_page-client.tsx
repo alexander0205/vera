@@ -172,7 +172,7 @@ export default function ListasPreciosPage() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Tag size={22} color="#0d9488" />
+            <Tag size={22} color="#3658e1" />
             <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Listas de precios</Typography>
           </Box>
           <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
@@ -180,7 +180,7 @@ export default function ListasPreciosPage() {
           </Typography>
         </Box>
         <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={abrirNuevo}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nueva lista
         </Button>
       </Box>
@@ -195,7 +195,7 @@ export default function ListasPreciosPage() {
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-            <CircularProgress size={36} sx={{ color: '#0d9488' }} />
+            <CircularProgress size={36} sx={{ color: '#3658e1' }} />
           </Box>
         ) : listas.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
@@ -203,7 +203,7 @@ export default function ListasPreciosPage() {
             <Typography sx={{ color: '#6b7280', fontWeight: 500 }}>Sin listas de precios registradas</Typography>
             <Typography variant="body2" sx={{ color: '#9ca3af', mt: 0.5 }}>Crea listas para aplicar descuentos o recargos a grupos de clientes</Typography>
             <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />} onClick={abrirNuevo}
-              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
               Nueva lista
             </Button>
           </Box>
@@ -235,7 +235,7 @@ export default function ListasPreciosPage() {
                     </TableCell>
                     <TableCell>
                       {lista.tipo === 'valor'
-                        ? <Chip label="Fijo" size="small" sx={{ bgcolor: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '0.6875rem' }} />
+                        ? <Chip label="Fijo" size="small" sx={{ bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fc', fontSize: '0.6875rem' }} />
                         : <Chip label="% Porcentaje" size="small" sx={{ bgcolor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', fontSize: '0.6875rem' }} />
                       }
                     </TableCell>
@@ -331,7 +331,7 @@ export default function ListasPreciosPage() {
 
           <FormControlLabel
             control={<Checkbox checked={form.esDefault} onChange={(_, v) => setForm(f => ({ ...f, esDefault: v }))} size="small"
-              sx={{ color: '#0d9488', '&.Mui-checked': { color: '#0d9488' } }} />}
+              sx={{ color: '#3658e1', '&.Mui-checked': { color: '#3658e1' } }} />}
             label={<Typography variant="body2" sx={{ color: '#374151' }}>Establecer como lista por defecto</Typography>}
           />
         </DialogContent>
@@ -340,7 +340,7 @@ export default function ListasPreciosPage() {
             sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151' }}>Cancelar</Button>
           <Button variant="contained" disableElevation onClick={handleGuardar} disabled={saving}
             startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
             {saving ? 'Guardando…' : editTarget ? 'Guardar cambios' : 'Crear lista'}
           </Button>
         </DialogActions>
@@ -359,7 +359,7 @@ export default function ListasPreciosPage() {
             </Alert>
           ) : loadingItems ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
-              <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+              <CircularProgress size={32} sx={{ color: '#3658e1' }} />
             </Box>
           ) : itemsError ? (
             <Alert severity="error" sx={{ borderRadius: '8px' }}>{itemsError}</Alert>
@@ -382,7 +382,7 @@ export default function ListasPreciosPage() {
                   <TableRow key={item.id} sx={{ '& td': { borderBottom: '1px solid #f3f4f6' } }}>
                     <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{item.nombre}</Typography></TableCell>
                     <TableCell align="right"><Typography variant="body2" sx={{ color: '#6b7280' }}>{formatDOP(item.precioBase)}</Typography></TableCell>
-                    <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: '#0f766e' }}>{formatDOP(item.precio)}</Typography></TableCell>
+                    <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 700, color: '#2a45c4' }}>{formatDOP(item.precio)}</Typography></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

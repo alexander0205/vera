@@ -26,7 +26,7 @@ export function ModalNuevoPlazo({
       onClose={onClose}
       slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 480, width: '100%' } } as object }}
     >
-      <DialogTitle sx={{ color: '#0d9488', fontWeight: 600 }}>
+      <DialogTitle sx={{ color: '#3658e1', fontWeight: 600 }}>
         Agregar nuevo término de pago
       </DialogTitle>
 
@@ -77,7 +77,7 @@ export function ModalNuevoPlazo({
           variant="contained"
           onClick={onGuardar}
           disableElevation
-          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+          sx={{ textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
         >
           Aceptar
         </Button>

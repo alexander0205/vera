@@ -344,7 +344,7 @@ function SidebarContent({
         height:   '100%',
         display:  'flex',
         flexDirection: 'column',
-        bgcolor:  '#0f766e',
+        bgcolor:  '#2a45c4',
         overflow: 'hidden',
       }}
     >
@@ -417,7 +417,7 @@ function SidebarContent({
             py:          1,
             mb:          0.5,
             borderRadius: '8px',
-            color:       'rgba(204,251,241,0.8)',
+            color:       'rgba(224,231,253,0.8)',
             fontSize:    '0.875rem',
             cursor:      'pointer',
             bgcolor:     'transparent',
@@ -462,7 +462,7 @@ function SidebarContent({
                 borderRadius: '8px',
                 fontSize:    '0.875rem',
                 fontWeight:  active ? 600 : 400,
-                color:       active ? '#ffffff' : 'rgba(204,251,241,0.85)',
+                color:       active ? '#ffffff' : 'rgba(224,231,253,0.85)',
                 bgcolor:     active ? 'rgba(255,255,255,0.2)' : 'transparent',
                 textDecoration: 'none',
                 transition:  'all 0.15s',
@@ -497,7 +497,7 @@ function SidebarContent({
                   borderRadius: '8px',
                   fontSize:    '0.875rem',
                   fontWeight:  groupActive ? 600 : 400,
-                  color:       groupActive ? '#ffffff' : 'rgba(204,251,241,0.85)',
+                  color:       groupActive ? '#ffffff' : 'rgba(224,231,253,0.85)',
                   bgcolor:     'transparent',
                   border:      'none',
                   cursor:      'pointer',
@@ -536,7 +536,7 @@ function SidebarContent({
                             borderRadius: '6px',
                             fontSize:    '0.8125rem',
                             fontWeight:  active ? 600 : 400,
-                            color:       active ? '#ffffff' : 'rgba(204,251,241,0.8)',
+                            color:       active ? '#ffffff' : 'rgba(224,231,253,0.8)',
                             bgcolor:     active ? 'rgba(255,255,255,0.15)' : 'transparent',
                             textDecoration: 'none',
                             transition:  'all 0.15s',
@@ -554,7 +554,7 @@ function SidebarContent({
                             <Box
                               component="span"
                               title="Compartido con Facturación — mismos productos y contactos en ambos módulos"
-                              sx={{ flexShrink: 0, fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', px: 0.625, py: '1px', borderRadius: '4px', bgcolor: 'rgba(255,255,255,0.16)', color: 'rgba(204,251,241,0.95)' }}
+                              sx={{ flexShrink: 0, fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', px: 0.625, py: '1px', borderRadius: '4px', bgcolor: 'rgba(255,255,255,0.16)', color: 'rgba(224,231,253,0.95)' }}
                             >
                               Compartido
                             </Box>
@@ -571,7 +571,7 @@ function SidebarContent({
                               opacity:     0,
                               p:           0.5,
                               borderRadius: '4px',
-                              color:       'rgba(204,251,241,0.7)',
+                              color:       'rgba(224,231,253,0.7)',
                               transition:  'all 0.15s',
                               display:     'flex',
                               '&:hover':   { bgcolor: 'rgba(255,255,255,0.2)', color: '#ffffff' },
@@ -609,7 +609,7 @@ function SidebarContent({
           sx={{
             fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
             textDecoration: 'none', transition: 'color 0.15s',
-            '&:hover': { color: 'rgba(204,251,241,0.9)' },
+            '&:hover': { color: 'rgba(224,231,253,0.9)' },
           }}
         >
           Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades

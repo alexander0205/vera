@@ -20,7 +20,7 @@ export function ModalHeaderIcon({
   /** color del badge: teal (normal) o amber (confirmaciones/avisos). */
   tono?: 'teal' | 'amber';
 }) {
-  const color = tono === 'amber' ? 'bg-amber-50 text-amber-600' : 'bg-teal-50 text-teal-600';
+  const color = tono === 'amber' ? 'bg-amber-50 text-amber-600' : 'bg-zero-50 text-zero-600';
   return (
     <DialogHeader>
       <div className="flex items-start gap-3">

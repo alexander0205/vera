@@ -428,7 +428,7 @@ export default async function EmpresaDetailPage({
                   size="small"
                   icon={<ToggleRight style={{ width: 14, height: 14 }} />}
                   label="Incluido"
-                  sx={{ bgcolor: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontWeight: 500, fontSize: '0.75rem' }}
+                  sx={{ bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fc', fontWeight: 500, fontSize: '0.75rem' }}
                 />
               ) : (
               <form action={toggleModulo}>
@@ -449,7 +449,7 @@ export default async function EmpresaDetailPage({
                     fontWeight: 500,
                     fontSize: '0.8125rem',
                     ...(activo
-                      ? { bgcolor: '#f0fdfa', color: '#0f766e', borderColor: '#99f6e4', '&:hover': { bgcolor: '#ccfbf1', borderColor: '#5eead4' } }
+                      ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
                       : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
                     ),
                   }}
@@ -486,7 +486,7 @@ export default async function EmpresaDetailPage({
                 fontWeight: 500,
                 fontSize: '0.8125rem',
                 ...(team.cajaHabilitada
-                  ? { bgcolor: '#f0fdfa', color: '#0f766e', borderColor: '#99f6e4', '&:hover': { bgcolor: '#ccfbf1', borderColor: '#5eead4' } }
+                  ? { bgcolor: '#eef2fe', color: '#2a45c4', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#e0e7fd', borderColor: '#a5b4f9' } }
                   : { bgcolor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb', '&:hover': { bgcolor: '#f3f4f6', borderColor: '#d1d5db' } }
                 ),
               }}
@@ -644,7 +644,7 @@ export default async function EmpresaDetailPage({
                   target="_blank"
                   variant="caption"
                   sx={{
-                    color: '#0d9488', fontFamily: 'monospace', flex: 1, minWidth: 0,
+                    color: '#3658e1', fontFamily: 'monospace', flex: 1, minWidth: 0,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     '&:hover': { textDecoration: 'underline' },
                   }}
@@ -708,10 +708,10 @@ export default async function EmpresaDetailPage({
               sx={{
                 textTransform: 'none',
                 borderRadius: '8px',
-                bgcolor: '#0d9488',
+                bgcolor: '#3658e1',
                 fontWeight: 500,
                 whiteSpace: 'nowrap',
-                '&:hover': { bgcolor: '#0f766e' },
+                '&:hover': { bgcolor: '#2a45c4' },
               }}
             >
               Enviar invitación

@@ -84,7 +84,7 @@ function toCentavos(value: string): number {
 }
 
 function estadoBadge(estado: string, saldoCentavos: number) {
-  if (estado === 'pagado') return <Badge className="bg-teal-50 text-teal-700 border-teal-200">Pagado</Badge>;
+  if (estado === 'pagado') return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
   if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial · {fmtDOP(saldoCentavos)}</Badge>;
   if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido · {fmtDOP(saldoCentavos)}</Badge>;
   if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
@@ -349,7 +349,7 @@ export default function CargosClient() {
             <Button variant="outline" onClick={abrirIndividual} disabled={loading || sinCatalogos}>
               <Plus className="h-4 w-4 mr-2" />Cargo individual
             </Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirGenerar} disabled={loading || sinCatalogos}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirGenerar} disabled={loading || sinCatalogos}>
               <Plus className="h-4 w-4 mr-2" />Generar cargos
             </Button>
           </div>
@@ -389,22 +389,22 @@ export default function CargosClient() {
           {loadError ? (
             <EmptyState text={loadError} error onRetry={cargar} />
           ) : loading ? (
-            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>
+            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>
           ) : filtrados.length === 0 ? (
             <div className="text-center py-16">
               <Receipt className="h-12 w-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500 font-medium">{cargos.length === 0 ? 'Aún no hay cargos generados' : 'Sin resultados'}</p>
               {cargos.length === 0 && puedeGestionar && !sinCatalogos && (
-                <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirGenerar}>
+                <Button className="mt-4 bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirGenerar}>
                   <Plus className="h-4 w-4 mr-1" />Generar cargos
                 </Button>
               )}
               {sinCatalogos && (
                 <p className="text-sm text-gray-400 mt-2">
                   Primero crea conceptos en{' '}
-                  <Link href="/escolar/configuracion" className="text-teal-600 hover:underline">Configuración</Link>
+                  <Link href="/escolar/configuracion" className="text-zero-600 hover:underline">Configuración</Link>
                   {' '}y matrículas activas en{' '}
-                  <Link href="/escolar/matriculas" className="text-teal-600 hover:underline">Matrículas</Link>.
+                  <Link href="/escolar/matriculas" className="text-zero-600 hover:underline">Matrículas</Link>.
                 </p>
               )}
             </div>
@@ -427,7 +427,7 @@ export default function CargosClient() {
                     <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2.5">
                         <Link href={`/escolar/estudiantes/${c.estudianteId}`}
-                          className="font-medium text-gray-900 hover:text-teal-600">
+                          className="font-medium text-gray-900 hover:text-zero-600">
                           {c.estudiante} {c.estudianteApellidos}
                         </Link>
                       </td>
@@ -453,7 +453,7 @@ export default function CargosClient() {
           <div className="space-y-4 px-6 py-4">
             {opError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>}
             {resultado && (
-              <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg p-3">
+              <div className="bg-zero-50 border border-zero-200 text-zero-800 text-sm rounded-lg p-3">
                 Creados: {resultado.creados}. Omitidos por duplicado: {resultado.omitidos}. Total evaluado: {resultado.total}.
               </div>
             )}
@@ -532,7 +532,7 @@ export default function CargosClient() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cerrar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGenerar} disabled={saving || objetivo === 0}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleGenerar} disabled={saving || objetivo === 0}>
               {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Generando...</> : 'Generar cargos'}
             </Button>
           </DialogFooter>
@@ -546,7 +546,7 @@ export default function CargosClient() {
             subtitle="Un cargo para un estudiante en específico." />
           <div className="space-y-4 px-6 py-4">
             {errInd && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{errInd}</div>}
-            {okInd && <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg p-3">{okInd}</div>}
+            {okInd && <div className="bg-zero-50 border border-zero-200 text-zero-800 text-sm rounded-lg p-3">{okInd}</div>}
 
             {/* Filtros para encontrar al estudiante */}
             <div className="grid grid-cols-2 gap-3">
@@ -595,7 +595,7 @@ export default function CargosClient() {
                     return (
                       <button key={e.matriculaId} type="button"
                         onClick={() => setFormInd((f) => ({ ...f, estudianteId: String(e.estudianteId), matriculaId: String(e.matriculaId) }))}
-                        className={`w-full text-left px-3 py-2 text-sm transition-colors ${sel ? 'bg-teal-50 text-teal-800 font-medium' : 'hover:bg-gray-50 text-gray-800'}`}>
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors ${sel ? 'bg-zero-50 text-zero-800 font-medium' : 'hover:bg-gray-50 text-gray-800'}`}>
                         {e.nombre}
                       </button>
                     );
@@ -649,7 +649,7 @@ export default function CargosClient() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenInd(false)} disabled={savingInd}>Cerrar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleCrearIndividual}
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleCrearIndividual}
               disabled={savingInd || !formInd.estudianteId || !formInd.conceptoId}>
               {savingInd ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Creando...</> : 'Crear cargo'}
             </Button>

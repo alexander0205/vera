@@ -48,11 +48,11 @@ async function PricingPageInner({
         )}
 
         {isNew && (
-          <Box sx={{ mb: 4, display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '12px', px: 2.5, py: 2 }}>
+          <Box sx={{ mb: 4, display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: '#eef2fe', border: '1px solid #c7d2fc', borderRadius: '12px', px: 2.5, py: 2 }}>
             <Typography sx={{ fontSize: '1.5rem' }}>🎉</Typography>
             <Box>
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#0f766e' }}>¡Cuenta creada! Elige tu plan para empezar</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#0d9488', mt: 0.25 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#2a45c4' }}>¡Cuenta creada! Elige tu plan para empezar</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#3658e1', mt: 0.25 }}>
                 Todos los planes incluyen <strong>15 días de prueba gratis</strong>. Cancela cuando quieras.
               </Typography>
             </Box>
@@ -86,7 +86,7 @@ async function PricingPageInner({
           </Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af' }}>
             ¿Necesitas más de 800 comprobantes o integración personalizada?{' '}
-            <Box component="a" href="mailto:hola@zero.com.do" sx={{ color: '#0d9488', textDecoration: 'underline' }}>Contáctanos</Box>
+            <Box component="a" href="mailto:hola@zero.com.do" sx={{ color: '#3658e1', textDecoration: 'underline' }}>Contáctanos</Box>
           </Typography>
         </Box>
       </Box>
@@ -103,7 +103,7 @@ function PricingCard({ plan }: { plan: PlanDef }) {
       position: 'relative', display: 'flex', flexDirection: 'column', p: 4,
       borderRadius: '16px', border: '1px solid',
       ...(destacado
-        ? { borderColor: '#0d9488', bgcolor: '#0d9488', color: '#fff', boxShadow: '0 20px 40px rgba(13,148,136,0.3)' }
+        ? { borderColor: '#3658e1', bgcolor: '#3658e1', color: '#fff', boxShadow: '0 20px 40px rgba(13,148,136,0.3)' }
         : { borderColor: '#e5e7eb', bgcolor: '#fff' }),
     }}>
       {destacado && (
@@ -114,12 +114,12 @@ function PricingCard({ plan }: { plan: PlanDef }) {
 
       <Box sx={{ mb: 3 }}>
         <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, mb: 0.5, color: destacado ? '#fff' : '#111827' }}>{plan.name}</Typography>
-        <Typography sx={{ fontSize: '0.875rem', mb: 2, color: destacado ? '#ccfbf1' : '#6b7280' }}>{plan.ui.description}</Typography>
+        <Typography sx={{ fontSize: '0.875rem', mb: 2, color: destacado ? '#e0e7fd' : '#6b7280' }}>{plan.ui.description}</Typography>
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
           <Typography sx={{ fontSize: '2.25rem', fontWeight: 700, color: destacado ? '#fff' : '#111827' }}>${plan.price}</Typography>
-          <Typography sx={{ fontSize: '0.875rem', color: destacado ? '#ccfbf1' : '#6b7280' }}>USD/mes</Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: destacado ? '#e0e7fd' : '#6b7280' }}>USD/mes</Typography>
         </Box>
-        <Typography sx={{ fontSize: '0.75rem', mt: 0.5, color: destacado ? '#ccfbf1' : '#9ca3af' }}>
+        <Typography sx={{ fontSize: '0.75rem', mt: 0.5, color: destacado ? '#e0e7fd' : '#9ca3af' }}>
           15 días gratis, luego ${plan.price}/mes
         </Typography>
       </Box>
@@ -127,8 +127,8 @@ function PricingCard({ plan }: { plan: PlanDef }) {
       <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1.5, mb: 4, flex: 1 }}>
         {plan.ui.marketingFeatures.map((feature, i) => (
           <Box component="li" key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-            <Check size={16} color={destacado ? '#ccfbf1' : '#0d9488'} style={{ marginTop: 2, flexShrink: 0 }} />
-            <Typography sx={{ fontSize: '0.875rem', color: destacado ? '#f0fdfa' : '#4b5563' }}>{feature}</Typography>
+            <Check size={16} color={destacado ? '#e0e7fd' : '#3658e1'} style={{ marginTop: 2, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: '0.875rem', color: destacado ? '#eef2fe' : '#4b5563' }}>{feature}</Typography>
           </Box>
         ))}
       </Box>
@@ -143,8 +143,8 @@ function PricingCard({ plan }: { plan: PlanDef }) {
           <Box sx={{
             display: 'block', textAlign: 'center', py: 1.25, px: 2, borderRadius: '99px', fontSize: '0.875rem', fontWeight: 500, transition: 'background 0.15s',
             ...(destacado
-              ? { bgcolor: '#fff', color: '#0f766e', '&:hover': { bgcolor: '#f0fdfa' } }
-              : { bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' } }),
+              ? { bgcolor: '#fff', color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }
+              : { bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' } }),
           }}>
             Empezar prueba gratis
           </Box>

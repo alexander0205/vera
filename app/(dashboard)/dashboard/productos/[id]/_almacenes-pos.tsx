@@ -88,7 +88,7 @@ export default function AlmacenesPosSection({ productoId, visiblePos }: { produc
               <Box component="label" key={a.id}
                 sx={{ display: 'flex', cursor: 'pointer', alignItems: 'center', gap: 1.25, borderRadius: '8px', border: '1px solid #f3f4f6', px: 1.5, py: 1, fontSize: '0.875rem', '&:hover': { bgcolor: '#f9fafb' } }}>
                 <Checkbox checked={sel.has(a.id)} onChange={() => toggle(a.id)} size="small"
-                  sx={{ p: 0, color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' } }} />
+                  sx={{ p: 0, color: '#9ca3af', '&.Mui-checked': { color: '#3658e1' } }} />
                 <Box component="span" sx={{ flex: 1 }}>{a.nombre}</Box>
                 {a.stockActual > 0 && <Box component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>stock {a.stockActual}</Box>}
               </Box>

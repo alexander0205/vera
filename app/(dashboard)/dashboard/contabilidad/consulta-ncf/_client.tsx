@@ -244,7 +244,7 @@ export function ConsultaNcfClient() {
           </Box>
 
           {/* Frase de cierre — la respuesta corta */}
-          <Alert severity="info" icon={false} sx={{ bgcolor: '#f0fdfa', border: '1px solid #99f6e4', color: '#134e4a' }}>
+          <Alert severity="info" icon={false} sx={{ bgcolor: '#eef2fe', border: '1px solid #c7d2fc', color: '#24377d' }}>
             De los <strong>{resumen.total.toLocaleString('es-DO')}</strong> números revisados,{' '}
             <strong>{porVeredicto('declarar').toLocaleString('es-DO')}</strong> son comprobantes válidos que van en tu declaración.
             {porVeredicto('no-declarar') > 0 && (
@@ -355,7 +355,7 @@ export function ConsultaNcfClient() {
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 0.75, ...NO_PRINT }}>
                           {f.documentoId && (
                             <Link href={`/dashboard/facturas/${f.documentoId}`} style={{ textDecoration: 'none' }}>
-                              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#0d9488', '&:hover': { textDecoration: 'underline' } }}>
+                              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#3658e1', '&:hover': { textDecoration: 'underline' } }}>
                                 Ver factura
                               </Typography>
                             </Link>
@@ -363,7 +363,7 @@ export function ConsultaNcfClient() {
                           {f.urlVerificacion && (
                             <Box
                               component="a" href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
-                              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 500, color: '#0d9488', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 500, color: '#3658e1', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
                             >
                               Verificar en la DGII <ExternalLink style={{ width: 12, height: 12 }} />
                             </Box>

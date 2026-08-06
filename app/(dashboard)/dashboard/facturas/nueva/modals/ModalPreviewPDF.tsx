@@ -160,7 +160,7 @@ export function ModalPreviewPDF({
             onClick={onEmitir}
             disableElevation
             startIcon={loading ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : <CheckCircle size={14} />}
-            sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+            sx={{ textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
           >
             Emitir
           </Button>

@@ -27,11 +27,11 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
     subject: 'Restablecer contraseña — Zero',
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Restablecer contraseña</h2>
+        <h2 style="color: #2a45c4;">Restablecer contraseña</h2>
         <p>Hola${safeName ? ` ${safeName}` : ''},</p>
         <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta Zero.</p>
         <p>
-          <a href="${escapeHtml(resetUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
+          <a href="${escapeHtml(resetUrl)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Restablecer contraseña
           </a>
         </p>
@@ -50,11 +50,11 @@ export async function sendEmailVerificationEmail(email: string, token: string, n
     subject: 'Verificar tu email — Zero',
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Verifica tu email</h2>
+        <h2 style="color: #2a45c4;">Verifica tu email</h2>
         <p>Hola${safeName ? ` ${safeName}` : ''},</p>
         <p>Gracias por registrarte en Zero. Confirma tu dirección de email para comenzar.</p>
         <p>
-          <a href="${escapeHtml(verifyUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
+          <a href="${escapeHtml(verifyUrl)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Verificar email
           </a>
         </p>
@@ -79,10 +79,10 @@ export async function sendInvitationEmail(
     subject: `Invitación a ${teamName} en Zero`,
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Te invitaron a ${safeTeam}</h2>
+        <h2 style="color: #2a45c4;">Te invitaron a ${safeTeam}</h2>
         <p>${safeInvitedBy} te ha invitado a colaborar en <strong>${safeTeam}</strong> en Zero.</p>
         <p>
-          <a href="${escapeHtml(acceptUrl)}" style="background:#0f766e;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
+          <a href="${escapeHtml(acceptUrl)}" style="background:#2a45c4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">
             Aceptar invitación
           </a>
         </p>
@@ -129,7 +129,7 @@ export async function sendCajaCierreAprobacionEmail(opts: {
   const html = `
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
       <!-- Header -->
-      <div style="background:#0f766e;padding:24px 28px;">
+      <div style="background:#2a45c4;padding:24px 28px;">
         <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Zero · Cuadre de caja</p>
         <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">Aprobación pendiente</h1>
       </div>
@@ -168,7 +168,7 @@ export async function sendCajaCierreAprobacionEmail(opts: {
         <!-- CTA -->
         <div style="text-align:center;margin-bottom:8px;">
           <a href="${safeUrl}"
-             style="display:inline-block;background:#0f766e;color:#fff;padding:13px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
+             style="display:inline-block;background:#2a45c4;color:#fff;padding:13px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
             Revisar y aprobar
           </a>
         </div>
@@ -238,7 +238,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
     subject: `✓ Cuadre aprobado — ${numeroCierre} · ${teamName}`,
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
-        <div style="background:#0f766e;padding:24px 28px;">
+        <div style="background:#2a45c4;padding:24px 28px;">
           <p style="margin:0 0 4px;color:rgba(255,255,255,.7);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Zero · Cuadre de caja</p>
           <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700;">✓ Cuadre aprobado</h1>
         </div>
@@ -265,7 +265,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
           </div>` : ''}
           <div style="text-align:center;">
             <a href="${safeUrl}/dashboard/caja/historial"
-               style="display:inline-block;background:#0f766e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+               style="display:inline-block;background:#2a45c4;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
               Ver historial de caja
             </a>
           </div>
@@ -364,7 +364,7 @@ export async function sendRecordatorioCobroEmail(opts: {
     subject: `Recordatorio de pago · ${opts.documento}`,
     html: `
       <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto;">
-        <h2 style="color:#0f766e;">Recordatorio de pago</h2>
+        <h2 style="color:#2a45c4;">Recordatorio de pago</h2>
         <p>Estimado/a ${safeCliente},</p>
         <p>
           Le recordamos que el documento <strong>${safeDoc}</strong> tiene un
@@ -395,7 +395,7 @@ export async function sendInvoiceEmail(
     subject: `Factura ${encf}`,
     html: `
       <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Factura ${safeEncf}</h2>
+        <h2 style="color: #2a45c4;">Factura ${safeEncf}</h2>
         <p>Adjuntamos la factura <strong>${safeEncf}</strong> por un monto de <strong>DOP ${safeMonto}</strong>.</p>
         <p style="color:#6b7280;font-size:14px;">Emitida por ${safeRazon}.</p>
       </div>

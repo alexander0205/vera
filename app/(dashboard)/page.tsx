@@ -13,7 +13,7 @@ export default function HomePage() {
         <Box sx={{ maxWidth: '48rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 } }}>
           <Box sx={{ textAlign: 'center', mb: 6 }}>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mb: 3 }}>
-              <Receipt size={32} color="#0d9488" />
+              <Receipt size={32} color="#3658e1" />
               <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>Zero</Typography>
             </Box>
             <Typography variant="h3" sx={{ fontWeight: 700, color: '#111827', letterSpacing: '-0.02em', mb: 2, fontSize: { xs: '1.875rem', sm: '2.25rem' } }}>
@@ -34,7 +34,7 @@ export default function HomePage() {
 
           <Typography sx={{ textAlign: 'center', fontSize: '0.75rem', color: '#9ca3af', mt: 4 }}>
             ¿Ya tienes cuenta?{' '}
-            <Box component="a" href="/sign-in" sx={{ color: '#0d9488', fontWeight: 500, '&:hover': { textDecoration: 'underline' } }}>
+            <Box component="a" href="/sign-in" sx={{ color: '#3658e1', fontWeight: 500, '&:hover': { textDecoration: 'underline' } }}>
               Iniciar sesión
             </Box>
           </Typography>

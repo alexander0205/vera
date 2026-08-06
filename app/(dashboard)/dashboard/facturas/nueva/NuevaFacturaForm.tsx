@@ -166,7 +166,7 @@ export default function NuevaFacturaForm({
     },
   } as Record<string, { noun: string; totalLabel: string; primaryBtnClass: string }>)[categoriaId]
     ?? { noun: 'factura', totalLabel: 'Total',
-         primaryBtnClass: 'bg-teal-600 hover:bg-teal-700 border-teal-700' };
+         primaryBtnClass: 'bg-zero-600 hover:bg-zero-700 border-zero-700' };
 
   // Base de ruta del detalle/listado según el tipo — para que al crear una NC/ND
   // se aterrice en su vista propia (no en la de factura).
@@ -1242,7 +1242,7 @@ export default function NuevaFacturaForm({
             }}
           >
             <CheckCircle
-              style={{ width: 64, height: 64, color: '#0d9488', margin: '0 auto 16px' }}
+              style={{ width: 64, height: 64, color: '#3658e1', margin: '0 auto 16px' }}
             />
             {esNotaBorrador ? (
               <>
@@ -1301,7 +1301,7 @@ export default function NuevaFacturaForm({
               {!esSinEcf && resultado.codigoSeguridad && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography variant="body2" color="text.secondary">Código de seguridad</Typography>
-                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f766e' }}>{resultado.codigoSeguridad}</Typography>
+                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#2a45c4' }}>{resultado.codigoSeguridad}</Typography>
                 </Box>
               )}
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1344,8 +1344,8 @@ export default function NuevaFacturaForm({
             {origenCargos.length > 0 && (
               <Box
                 sx={{
-                  bgcolor: '#f0fdfa',
-                  border: '1px solid #ccfbf1',
+                  bgcolor: '#eef2fe',
+                  border: '1px solid #e0e7fd',
                   borderRadius: '12px',
                   p: 2,
                   textAlign: 'left',
@@ -1353,8 +1353,8 @@ export default function NuevaFacturaForm({
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1.5 }}>
-                  <GraduationCap style={{ width: 20, height: 20, color: '#0f766e', flexShrink: 0, marginTop: 2 }} />
-                  <Typography variant="body2" sx={{ color: '#134e4a' }}>
+                  <GraduationCap style={{ width: 20, height: 20, color: '#2a45c4', flexShrink: 0, marginTop: 2 }} />
+                  <Typography variant="body2" sx={{ color: '#24377d' }}>
                     {origenCargos.length > 1
                       ? `Esta factura cubre ${origenCargos.length} cargos escolares. Al vincularla, los ${origenCargos.length} meses quedarán ligados a esta factura y sus saldos reflejarán lo que se cobre aquí. El cobro se registra una sola vez en la factura.`
                       : 'Esta factura nació de un cargo escolar. Al vincularla, el cargo quedará ligado a esta factura y su saldo reflejará lo que se cobre aquí. El cobro se registra en la factura.'}
@@ -1370,8 +1370,8 @@ export default function NuevaFacturaForm({
                       ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" />
                       : <CheckCircle style={{ width: 16, height: 16 }} />}
                     sx={{
-                      bgcolor: '#0d9488',
-                      '&:hover': { bgcolor: '#0f766e' },
+                      bgcolor: '#3658e1',
+                      '&:hover': { bgcolor: '#2a45c4' },
                       textTransform: 'none',
                       borderRadius: '8px',
                     }}
@@ -1400,15 +1400,15 @@ export default function NuevaFacturaForm({
             {esNotaBorrador && (
               <Box
                 sx={{
-                  bgcolor: '#f0fdfa',
-                  border: '1px solid #ccfbf1',
+                  bgcolor: '#eef2fe',
+                  border: '1px solid #e0e7fd',
                   borderRadius: '12px',
                   p: 2,
                   textAlign: 'left',
                   mb: 3,
                 }}
               >
-                <Typography variant="body2" sx={{ color: '#134e4a', mb: 1.5 }}>
+                <Typography variant="body2" sx={{ color: '#24377d', mb: 1.5 }}>
                   ¿Deseas enviar esta nota a la DGII ahora? Solo es posible si la
                   factura original ya tiene e-CF emitido. También puedes dejarla
                   guardada y emitirla después desde su detalle.
@@ -1421,8 +1421,8 @@ export default function NuevaFacturaForm({
                     onClick={() => router.push(`${detalleBase}/${resultado.documentoId}?emitir=1`)}
                     startIcon={<Send style={{ width: 16, height: 16 }} />}
                     sx={{
-                      bgcolor: '#0d9488',
-                      '&:hover': { bgcolor: '#0f766e' },
+                      bgcolor: '#3658e1',
+                      '&:hover': { bgcolor: '#2a45c4' },
                       textTransform: 'none',
                       borderRadius: '8px',
                     }}
@@ -1484,8 +1484,8 @@ export default function NuevaFacturaForm({
                 disableElevation
                 onClick={() => router.push(detalleBase)}
                 sx={{
-                  bgcolor: '#0d9488',
-                  '&:hover': { bgcolor: '#0f766e' },
+                  bgcolor: '#3658e1',
+                  '&:hover': { bgcolor: '#2a45c4' },
                   textTransform: 'none',
                   borderRadius: '8px',
                 }}

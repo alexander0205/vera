@@ -52,13 +52,13 @@ export function ColumnasToggle({
             Mostrar columnas
           </Typography>
           <FormControlLabel
-            control={<Checkbox size="small" checked={showReferencia} onChange={(e) => onToggleReferencia(e.target.checked)} sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' }, p: 0.5 }} />}
+            control={<Checkbox size="small" checked={showReferencia} onChange={(e) => onToggleReferencia(e.target.checked)} sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#3658e1' }, p: 0.5 }} />}
             label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Referencia</Typography>}
             sx={{ display: 'flex', justifyContent: 'space-between', mx: 0, px: 0.75, py: 0.75, borderRadius: '6px', '&:hover': { bgcolor: '#f9fafb' } }}
             labelPlacement="start"
           />
           <FormControlLabel
-            control={<Checkbox size="small" checked={showDescripcion} onChange={(e) => onToggleDescripcion(e.target.checked)} sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' }, p: 0.5 }} />}
+            control={<Checkbox size="small" checked={showDescripcion} onChange={(e) => onToggleDescripcion(e.target.checked)} sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#3658e1' }, p: 0.5 }} />}
             label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Descripción</Typography>}
             sx={{ display: 'flex', justifyContent: 'space-between', mx: 0, px: 0.75, py: 0.75, borderRadius: '6px', '&:hover': { bgcolor: '#f9fafb' } }}
             labelPlacement="start"

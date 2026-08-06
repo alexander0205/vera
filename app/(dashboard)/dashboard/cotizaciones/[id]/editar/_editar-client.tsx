@@ -142,7 +142,7 @@ export default function EditarCotizacionClient({ initialData }: { initialData: I
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>
               Editar cotización{' '}
-              <Box component="span" sx={{ fontFamily: 'monospace', color: '#0f766e' }}>
+              <Box component="span" sx={{ fontFamily: 'monospace', color: '#2a45c4' }}>
                 {initialData.numero}
               </Box>
             </Typography>
@@ -395,9 +395,9 @@ export default function EditarCotizacionClient({ initialData }: { initialData: I
           startIcon={saving ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
           sx={{
             textTransform: 'none',
-            bgcolor: '#0d9488',
-            '&:hover': { bgcolor: '#0f766e' },
-            '&.Mui-disabled': { bgcolor: '#0d9488', opacity: 0.6, color: '#fff' },
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
+            '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.6, color: '#fff' },
           }}
         >
           {saving ? 'Guardando…' : 'Guardar cambios'}

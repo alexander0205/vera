@@ -35,11 +35,11 @@ export default async function PosConfiguracionPage() {
               sx={{
                 display: 'flex', flexDirection: 'column', gap: 1, p: 2.5, borderRadius: '14px',
                 border: '1px solid #e5e7eb', bgcolor: '#fff', height: '100%',
-                transition: 'all 0.15s', '&:hover': { borderColor: '#2dd4bf', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' },
+                transition: 'all 0.15s', '&:hover': { borderColor: '#8193f5', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' },
               }}
             >
-              <Box sx={{ width: 44, height: 44, borderRadius: '12px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <c.icon style={{ width: 22, height: 22, color: '#0d9488' }} />
+              <Box sx={{ width: 44, height: 44, borderRadius: '12px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <c.icon style={{ width: 22, height: 22, color: '#3658e1' }} />
               </Box>
               <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary', mt: 0.5 }}>{c.title}</Typography>
               <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>{c.desc}</Typography>

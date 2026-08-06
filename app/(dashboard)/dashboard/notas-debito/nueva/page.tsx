@@ -16,7 +16,7 @@ export default async function NuevaNotaDebitoPage() {
   return (
     <Suspense fallback={
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
       </Box>
     }>
       <NuevaFacturaFormClient initialPerfil={perfil} categoriaFija="nota-debito" />

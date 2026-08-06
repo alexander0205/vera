@@ -259,7 +259,7 @@ export function CompanySwitcher({
                 )}
               </Box>
               {t.id === activeTeamId && (
-                <Check style={{ width: 16, height: 16, color: '#0d9488', flexShrink: 0 }} />
+                <Check style={{ width: 16, height: 16, color: '#3658e1', flexShrink: 0 }} />
               )}
             </MenuItem>
           ))}

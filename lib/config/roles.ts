@@ -194,7 +194,7 @@ export const ROLES: RoleDef[] = [
       'pos:vender',
       'modulo:facturacion', 'modulo:administracion', 'modulo:pos',
     ],
-    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200',       icon: 'User'       },
+    ui: { color: 'text-zero-600 bg-zero-50 border-zero-200',       icon: 'User'       },
   },
   {
     key:         'lector',
@@ -231,7 +231,7 @@ export const ROLES: RoleDef[] = [
       'pos:vender',
       'modulo:pos', 'modulo:administracion',
     ],
-    ui: { color: 'text-teal-600 bg-teal-50 border-teal-200', icon: 'Store' },
+    ui: { color: 'text-zero-600 bg-zero-50 border-zero-200', icon: 'Store' },
   },
   {
     key:         'personal-escolar',

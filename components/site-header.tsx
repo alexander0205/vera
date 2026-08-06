@@ -57,7 +57,7 @@ export async function SiteHeader() {
                     fontWeight: 500,
                     textDecoration: 'none',
                     transition: 'color 0.15s',
-                    '&:hover': { color: '#5eead4' },
+                    '&:hover': { color: '#a5b4f9' },
                   }}
                 >
                   Ir al dashboard →
@@ -81,7 +81,7 @@ export async function SiteHeader() {
                   component="a"
                   href="/sign-up"
                   sx={{
-                    bgcolor: '#0d9488',
+                    bgcolor: '#3658e1',
                     color: '#ffffff',
                     px: 1.5,
                     py: 0.25,
@@ -89,7 +89,7 @@ export async function SiteHeader() {
                     fontWeight: 500,
                     textDecoration: 'none',
                     transition: 'background-color 0.15s',
-                    '&:hover': { bgcolor: '#14b8a6' },
+                    '&:hover': { bgcolor: '#5b73ec' },
                   }}
                 >
                   Crear cuenta
@@ -109,11 +109,11 @@ export async function SiteHeader() {
             href="/"
             sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, textDecoration: 'none' }}
           >
-            <Box sx={{ height: 32, width: 32, borderRadius: '8px', bgcolor: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ height: 32, width: 32, borderRadius: '8px', bgcolor: '#3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Typography component="span" sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem' }}>E</Typography>
             </Box>
             <Typography component="span" sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
-              Ze<Box component="span" sx={{ color: '#0d9488' }}>ro</Box>
+              Ze<Box component="span" sx={{ color: '#3658e1' }}>ro</Box>
             </Typography>
           </Box>
 
@@ -145,7 +145,7 @@ export async function SiteHeader() {
                 component="a"
                 href="/dashboard"
                 sx={{
-                  bgcolor: '#0d9488',
+                  bgcolor: '#3658e1',
                   color: '#ffffff',
                   fontSize: '0.875rem',
                   fontWeight: 500,
@@ -154,7 +154,7 @@ export async function SiteHeader() {
                   borderRadius: '9999px',
                   textDecoration: 'none',
                   transition: 'background-color 0.15s',
-                  '&:hover': { bgcolor: '#0f766e' },
+                  '&:hover': { bgcolor: '#2a45c4' },
                 }}
               >
                 Ir al dashboard
@@ -179,7 +179,7 @@ export async function SiteHeader() {
                   component="a"
                   href="/sign-up"
                   sx={{
-                    bgcolor: '#0d9488',
+                    bgcolor: '#3658e1',
                     color: '#ffffff',
                     fontSize: '0.875rem',
                     fontWeight: 500,
@@ -188,7 +188,7 @@ export async function SiteHeader() {
                     borderRadius: '9999px',
                     textDecoration: 'none',
                     transition: 'background-color 0.15s',
-                    '&:hover': { bgcolor: '#0f766e' },
+                    '&:hover': { bgcolor: '#2a45c4' },
                   }}
                 >
                   Empezar gratis →

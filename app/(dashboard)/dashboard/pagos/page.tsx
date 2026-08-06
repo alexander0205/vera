@@ -223,7 +223,7 @@ export default function PagosPage() {
           <Box
             component={Link}
             href={`/dashboard/facturas/${p.docId}`}
-            sx={{ color: '#0d9488', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+            sx={{ color: '#3658e1', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
           >
             {p.docCodigo ?? p.docEncf ?? `#${p.docId}`}
           </Box>
@@ -338,7 +338,7 @@ export default function PagosPage() {
             sx={{
               textTransform: 'none', px: 1.5, py: 1, fontSize: '0.875rem', fontWeight: 500, borderRadius: '8px',
               bgcolor: '#ffffff', color: '#374151', border: '1px solid #d1d5db',
-              '&:hover': { borderColor: '#5eead4', color: '#0f766e', bgcolor: '#ffffff' },
+              '&:hover': { borderColor: '#a5b4f9', color: '#2a45c4', bgcolor: '#ffffff' },
               '&.Mui-disabled': { opacity: 0.5 },
             }}
           >
@@ -356,8 +356,8 @@ export default function PagosPage() {
             sx={{
               textTransform: 'none', px: 1.5, py: 0.75, minWidth: 0, fontSize: '0.75rem', fontWeight: 500, borderRadius: '8px', border: '1px solid',
               ...(rango === r.key
-                ? { bgcolor: '#0d9488', color: '#ffffff', borderColor: '#0d9488', '&:hover': { bgcolor: '#0f766e', borderColor: '#0f766e' } }
-                : { bgcolor: '#ffffff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#5eead4', bgcolor: '#ffffff' } }),
+                ? { bgcolor: '#3658e1', color: '#ffffff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4', borderColor: '#2a45c4' } }
+                : { bgcolor: '#ffffff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#ffffff' } }),
             }}
           >
             {r.label}
@@ -397,7 +397,7 @@ export default function PagosPage() {
                     value={pct}
                     sx={{
                       height: 6, borderRadius: '9999px', bgcolor: '#f3f4f6',
-                      '& .MuiLinearProgress-bar': { borderRadius: '9999px', bgcolor: esEfectivo(metodo) ? '#10b981' : '#14b8a6' },
+                      '& .MuiLinearProgress-bar': { borderRadius: '9999px', bgcolor: esEfectivo(metodo) ? '#10b981' : '#5b73ec' },
                     }}
                   />
                 </Box>

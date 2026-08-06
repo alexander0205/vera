@@ -204,7 +204,7 @@ export function NuevoAsientoClient({ cuentas, hoy }: { cuentas: Cuenta[]; hoy: s
       <Button
         type="button" onClick={agregarLinea}
         startIcon={<Plus style={{ width: 16, height: 16 }} />}
-        sx={{ alignSelf: 'flex-start', color: '#0f766e' }}
+        sx={{ alignSelf: 'flex-start', color: '#2a45c4' }}
       >
         Agregar línea
       </Button>
@@ -231,7 +231,7 @@ export function NuevoAsientoClient({ cuentas, hoy }: { cuentas: Cuenta[]; hoy: s
       <Box sx={{ display: 'flex', gap: 1.5 }}>
         <Button
           variant="contained" onClick={guardar} disabled={!puedeGuardar}
-          sx={{ bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+          sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
         >
           {enviando ? 'Guardando…' : 'Guardar asiento'}
         </Button>

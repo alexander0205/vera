@@ -169,7 +169,7 @@ export function ImportModal({
                 gap: 1,
                 cursor: 'pointer',
                 transition: 'border-color 0.15s, background-color 0.15s',
-                '&:hover': { borderColor: '#5eead4', bgcolor: 'rgba(240,253,250,0.3)' },
+                '&:hover': { borderColor: '#a5b4f9', bgcolor: 'rgba(240,253,250,0.3)' },
               }}
             >
               <Upload style={{ width: 28, height: 28, color: '#9ca3af' }} />
@@ -276,7 +276,7 @@ export function ImportModal({
             variant="contained"
             disableElevation
             onClick={handleClose}
-            sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+            sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
           >
             Cerrar
           </Button>
@@ -296,7 +296,7 @@ export function ImportModal({
               onClick={onConfirm}
               disabled={busy || !preview || willImport === 0}
               startIcon={busy && preview ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : <FileText style={{ width: 16, height: 16 }} />}
-              sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&.Mui-disabled': { bgcolor: '#0d948880', color: '#fff' } }}
+              sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e180', color: '#fff' } }}
             >
               Importar {willImport > 0 ? `(${willImport})` : ''}
             </Button>

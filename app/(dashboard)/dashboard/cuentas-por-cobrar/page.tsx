@@ -43,7 +43,7 @@ interface Promesas {
 /** Cubetas en orden de urgencia creciente, con su etiqueta y color. */
 const CUBETAS: { id: Cubeta; label: string; hint: string; hover: string; activoBorder: string; activoBg: string }[] = [
   { id: 'porVencer', label: 'Por vencer', hint: 'aún no vencen',
-    hover: '#5eead4', activoBorder: '#14b8a6', activoBg: '#f0fdfa' },
+    hover: '#a5b4f9', activoBorder: '#5b73ec', activoBg: '#eef2fe' },
   { id: 'd1a30',     label: '1-30 días',  hint: 'de atraso',
     hover: '#fcd34d', activoBorder: '#f59e0b', activoBg: '#fffbeb' },
   { id: 'd31a60',    label: '31-60 días', hint: 'de atraso',
@@ -185,7 +185,7 @@ export default function CuentasPorCobrarPage() {
             component={Link}
             href={`/dashboard/facturas/${c.id}`}
             sx={{
-              color: '#0d9488', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500,
+              color: '#3658e1', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500,
               textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
             }}
           >
@@ -406,8 +406,8 @@ export default function CuentasPorCobrarPage() {
                 component="button"
                 onClick={() => { setCubeta(null); setPage(1); }}
                 sx={{
-                  fontSize: '0.75rem', color: '#0d9488', bgcolor: 'transparent', border: 0,
-                  cursor: 'pointer', p: 0, '&:hover': { color: '#0f766e', textDecoration: 'underline' },
+                  fontSize: '0.75rem', color: '#3658e1', bgcolor: 'transparent', border: 0,
+                  cursor: 'pointer', p: 0, '&:hover': { color: '#2a45c4', textDecoration: 'underline' },
                 }}
               >
                 Ver toda la cartera

@@ -68,7 +68,7 @@ export function PagoCard({ initial, totalDOP }: Props) {
           '&:hover': { bgcolor: '#f9fafb' }, transition: 'background 0.1s',
         }}
       >
-        <CreditCard size={16} color="#0d9488" style={{ flexShrink: 0 }} />
+        <CreditCard size={16} color="#3658e1" style={{ flexShrink: 0 }} />
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}>
           Historial de pagos
         </Typography>

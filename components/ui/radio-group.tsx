@@ -60,9 +60,9 @@ function RadioGroupItem({ value, id, disabled, className }: RadioGroupItemProps)
       onClick={() => !disabled && onChange(value)}
       className={[
         'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-        'focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2',
+        'focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        checked ? 'border-teal-600 bg-teal-600' : 'border-gray-300 bg-white hover:border-teal-400',
+        checked ? 'border-zero-600 bg-zero-600' : 'border-gray-300 bg-white hover:border-zero-400',
         className,
       ].filter(Boolean).join(' ')}
     >

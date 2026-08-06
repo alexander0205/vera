@@ -72,8 +72,8 @@ export default async function EditarBorradorPage({
             px: 2,
             py: 1,
             borderRadius: '8px',
-            bgcolor: '#0d9488',
-            '&:hover': { bgcolor: '#0f766e' },
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
           }}
         >
           Volver a facturas
@@ -213,7 +213,7 @@ export default async function EditarBorradorPage({
       )}
       <Suspense fallback={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-          <Loader2 style={{ width: 32, height: 32, color: '#0d9488', animation: 'spin 1s linear infinite' }} />
+          <Loader2 style={{ width: 32, height: 32, color: '#3658e1', animation: 'spin 1s linear infinite' }} />
         </div>
       }>
         <EditarBorradorClient initialPerfil={perfil} initialData={initialData} />

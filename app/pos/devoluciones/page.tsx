@@ -16,8 +16,8 @@ export default async function PosDevolucionesPage() {
   return (
     <Box sx={{ height: '100%', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3 }}>
       <Box sx={{ maxWidth: 460, textAlign: 'center' }}>
-        <Box sx={{ width: 64, height: 64, borderRadius: '18px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
-          <Undo2 style={{ width: 30, height: 30, color: '#0d9488' }} />
+        <Box sx={{ width: 64, height: 64, borderRadius: '18px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+          <Undo2 style={{ width: 30, height: 30, color: '#3658e1' }} />
         </Box>
         <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>Devoluciones</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>

@@ -213,7 +213,7 @@ export default function FacturaRecurrenteDetallePage() {
   if (loading) {
     return (
       <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
         <Typography sx={{ ml: 1.5, color: '#6b7280' }}>Cargando…</Typography>
       </Box>
     );
@@ -273,7 +273,7 @@ export default function FacturaRecurrenteDetallePage() {
                 variant="contained" disableElevation
                 onClick={() => handleGenerar()} disabled={generando}
                 startIcon={generando ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <Zap size={16} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
               >
                 {generando ? 'Generando…' : 'Generar ahora'}
               </Button>
@@ -295,7 +295,7 @@ export default function FacturaRecurrenteDetallePage() {
       <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
         <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CalendarClock size={16} color="#0d9488" />
+            <CalendarClock size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Calendario de pagos</Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -343,10 +343,10 @@ export default function FacturaRecurrenteDetallePage() {
                 const inner = (
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, py: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-                      <Box sx={{ height: 8, width: 8, borderRadius: '50%', flexShrink: 0, bgcolor: esProximo ? '#0d9488' : f ? '#9ca3af' : '#d1d5db' }} />
+                      <Box sx={{ height: 8, width: 8, borderRadius: '50%', flexShrink: 0, bgcolor: esProximo ? '#3658e1' : f ? '#9ca3af' : '#d1d5db' }} />
                       <Typography sx={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'nowrap' }}>{fmtFechaCorta(p.fecha)}</Typography>
                       {esProximo && (
-                        <Chip label="Próximo" size="small" sx={{ bgcolor: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '0.6875rem', height: 20 }} />
+                        <Chip label="Próximo" size="small" sx={{ bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fc', fontSize: '0.6875rem', height: 20 }} />
                       )}
                       {f && (
                         <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>

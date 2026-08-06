@@ -168,7 +168,7 @@ export default function CotizacionesPage() {
                 disableElevation
                 size="small"
                 startIcon={<Plus size={16} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
               >
                 Nueva cotización
               </Button>
@@ -181,7 +181,7 @@ export default function CotizacionesPage() {
               variant="contained"
               disableElevation
               startIcon={<Plus size={18} />}
-              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
             >
               Nueva cotización
             </Button>

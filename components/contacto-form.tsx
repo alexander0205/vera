@@ -10,7 +10,7 @@ import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 const inputSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: '8px',
-    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#0d9488', borderWidth: '2px' },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3658e1', borderWidth: '2px' },
   },
 } as const;
 
@@ -185,9 +185,9 @@ export function ContactoForm() {
         disabled={sending}
         startIcon={sending ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : undefined}
         sx={{
-          bgcolor: '#0d9488',
-          '&:hover': { bgcolor: '#0f766e' },
-          '&.Mui-disabled': { opacity: 0.6, color: '#fff', bgcolor: '#0d9488' },
+          bgcolor: '#3658e1',
+          '&:hover': { bgcolor: '#2a45c4' },
+          '&.Mui-disabled': { opacity: 0.6, color: '#fff', bgcolor: '#3658e1' },
           color: '#fff',
           fontWeight: 600,
           fontSize: '0.875rem',

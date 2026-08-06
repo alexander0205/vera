@@ -34,7 +34,7 @@ export function AccordionSection({
           '&:hover': { bgcolor: '#fafafa' }, transition: 'background 0.15s',
         }}
       >
-        <Box sx={{ height: 24, width: 24, borderRadius: '6px', bgcolor: '#0d9488', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '0.6875rem', flexShrink: 0 }}>
+        <Box sx={{ height: 24, width: 24, borderRadius: '6px', bgcolor: '#3658e1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '0.6875rem', flexShrink: 0 }}>
           {number}
         </Box>
         {Icon && <Icon size={16} color="#6b7280" aria-hidden />}

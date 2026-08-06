@@ -64,7 +64,7 @@ export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawe
         sx={{
           position: abierto ? 'static' : 'absolute', top: 0, left: 0, height: '100%',
           width: abierto ? OPEN : RAIL, overflow: 'hidden', zIndex: 40,
-          bgcolor: '#0f766e', display: 'flex', flexDirection: 'column',
+          bgcolor: '#2a45c4', display: 'flex', flexDirection: 'column',
           transition: 'width 0.2s ease, box-shadow 0.2s ease',
           '& .nav-text': {
             opacity: abierto ? 1 : 0,
@@ -91,7 +91,7 @@ export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawe
                   display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
                   borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
                   fontWeight: active ? 600 : 400,
-                  color: active ? '#fff' : 'rgba(204,251,241,0.85)',
+                  color: active ? '#fff' : 'rgba(224,231,253,0.85)',
                   bgcolor: active ? 'rgba(255,255,255,0.2)' : 'transparent',
                   transition: 'all 0.15s',
                   '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },

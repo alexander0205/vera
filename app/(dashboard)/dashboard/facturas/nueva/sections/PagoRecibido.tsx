@@ -49,7 +49,7 @@ export function PagoRecibido({
             size="small"
             sx={{
               color: 'grey.400',
-              '&.Mui-checked': { color: '#0d9488' },
+              '&.Mui-checked': { color: '#3658e1' },
               '&:hover': { bgcolor: 'rgba(13,148,136,0.06)' },
             }}
           />
@@ -201,7 +201,7 @@ export function PagoRecibido({
             onClick={() => openProximamente('Pagos múltiples (tarjeta + efectivo)')}
             sx={{
               fontSize: '0.75rem',
-              color: '#0d9488',
+              color: '#3658e1',
               fontWeight: 500,
               bgcolor: 'transparent',
               border: 'none',
@@ -210,7 +210,7 @@ export function PagoRecibido({
               alignItems: 'center',
               gap: 0.5,
               p: 0,
-              '&:hover': { color: '#0f766e' },
+              '&:hover': { color: '#2a45c4' },
             }}
           >
             + Agregar otro método de pago (split payment)

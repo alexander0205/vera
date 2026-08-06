@@ -274,7 +274,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
           cta: filtered.length === 0 && docs.length > 0 ? undefined : (
             <Link href="/dashboard/notas-debito/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Nueva Nota de Débito
               </Button>
             </Link>
@@ -291,7 +291,7 @@ export default function NotasDebitoClient({ docs }: { docs: NotaDebito[] }) {
             )}
             <Link href="/dashboard/notas-debito/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation startIcon={<Plus size={18} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Nueva Nota de Débito
               </Button>
             </Link>

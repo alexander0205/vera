@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { Isotipo, AZUL_ZERO } from '@/lib/marca/isotipo';
 
 // Ícono para iOS "Agregar a pantalla de inicio". Next inyecta el
 // <link rel="apple-touch-icon"> automáticamente.
@@ -15,14 +16,10 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#0d9488',
-          color: '#ffffff',
-          fontSize: 108,
-          fontWeight: 800,
-          fontFamily: 'sans-serif',
+          background: AZUL_ZERO,
         }}
       >
-        Z
+        <Isotipo size={130} />
       </div>
     ),
     { ...size }

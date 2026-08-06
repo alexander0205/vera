@@ -56,7 +56,7 @@ function FilaAdd({
           onChange={(e) => setAdd((a) => a && ({ ...a, tanda: e.target.value }))}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onGuardar(); } }} />
       )}
-      <Button size="sm" className="h-8 bg-teal-600 hover:bg-teal-700" onClick={onGuardar} disabled={ocupado || !add.nombre.trim()}>
+      <Button size="sm" className="h-8 bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={ocupado || !add.nombre.trim()}>
         {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Agregar'}
       </Button>
       <Button size="sm" variant="outline" className="h-8" onClick={() => setAdd(null)}>Cancelar</Button>
@@ -165,14 +165,14 @@ export function EstructuraTree() {
     await cargar();
   }
 
-  const btnAdd = 'inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-teal-400 hover:text-teal-600';
+  const btnAdd = 'inline-flex items-center gap-1 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600';
   const btnDel = 'text-gray-300 hover:text-red-500';
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
         <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-          <Layers className="h-4 w-4 text-teal-600" /> Estructura escolar
+          <Layers className="h-4 w-4 text-zero-600" /> Estructura escolar
         </h2>
         <span className="text-xs text-gray-400">Período → Servicio → Grado → Sección</span>
       </div>
@@ -189,11 +189,11 @@ export function EstructuraTree() {
             {periodos.map((p) => (
               <div key={p.id}>
                 <Fila sangria={0}>
-                  <CalendarDays className="h-4 w-4 shrink-0 text-teal-600" />
+                  <CalendarDays className="h-4 w-4 shrink-0 text-zero-600" />
                   <span className="font-semibold text-gray-900">{p.nombre}</span>
                   {p.activo
-                    ? <Badge className="border-teal-200 bg-teal-50 text-teal-700">Activo</Badge>
-                    : <button onClick={() => activarPeriodo(p.id)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-teal-600"><CheckCircle2 className="h-3.5 w-3.5" />Activar</button>}
+                    ? <Badge className="border-zero-200 bg-zero-50 text-zero-700">Activo</Badge>
+                    : <button onClick={() => activarPeriodo(p.id)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-zero-600"><CheckCircle2 className="h-3.5 w-3.5" />Activar</button>}
                   <div className="flex-1" />
                   <button className={btnAdd} onClick={() => abrir('servicio', p.id)}><Plus className="h-3 w-3" /> Servicio</button>
                   <button className={btnDel} title="Eliminar período" onClick={() => borrar(`/api/administracion-escolar/periodos/${p.id}`, `¿Eliminar el período "${p.nombre}"?`)}><Trash2 className="h-4 w-4" /></button>
@@ -204,7 +204,7 @@ export function EstructuraTree() {
                     <Fila sangria={1}>
                       <Layers className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                       <span className="text-sm font-medium text-gray-800">{sv.nombre}</span>
-                      {sv.tanda && <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">{sv.tanda}</span>}
+                      {sv.tanda && <span className="rounded-full bg-zero-100 px-2 py-0.5 text-xs font-medium text-zero-700">{sv.tanda}</span>}
                       <div className="flex-1" />
                       <button className={btnAdd} onClick={() => abrir('curso', sv.id)}><Plus className="h-3 w-3" /> Grado</button>
                       <button className={btnDel} title="Eliminar servicio" onClick={() => borrar(`/api/administracion-escolar/servicios/${sv.id}`, `¿Eliminar el servicio "${sv.nombre}"?`)}><X className="h-3.5 w-3.5" /></button>
@@ -228,7 +228,7 @@ export function EstructuraTree() {
                                 <Input autoFocus className="h-7 max-w-28" value={editSec.nombre}
                                   onChange={(e) => setEditSec({ id: s.id, nombre: e.target.value })}
                                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void guardarEdicionSeccion(); } if (e.key === 'Escape') setEditSec(null); }} />
-                                <button className="text-teal-600 hover:text-teal-700" title="Guardar" onClick={guardarEdicionSeccion}><Check className="h-4 w-4" /></button>
+                                <button className="text-zero-600 hover:text-zero-700" title="Guardar" onClick={guardarEdicionSeccion}><Check className="h-4 w-4" /></button>
                                 <button className="text-gray-400 hover:text-gray-600" title="Cancelar" onClick={() => setEditSec(null)}><X className="h-3.5 w-3.5" /></button>
                               </>
                             ) : (
@@ -253,7 +253,7 @@ export function EstructuraTree() {
 
             {add?.nivel === 'periodo'
               ? <FilaAdd sangria={0} add={add} setAdd={setAdd} onGuardar={guardarAdd} ocupado={ocupado} />
-              : <button onClick={() => abrir('periodo')} className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-teal-400 hover:text-teal-600"><Plus className="h-4 w-4" /> Nuevo período (año escolar)</button>}
+              : <button onClick={() => abrir('periodo')} className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 py-2 text-sm text-gray-500 hover:border-zero-400 hover:text-zero-600"><Plus className="h-4 w-4" /> Nuevo período (año escolar)</button>}
           </>
         )}
       </div>

@@ -227,9 +227,9 @@ export function RncSearch({
               onClick={() => usarManual(valorManual)}
               sx={{
                 mt: 0.5, mb: 1, display: 'inline-flex', alignItems: 'center', gap: 0.75,
-                borderRadius: '8px', bgcolor: '#f0fdfa', px: 1.5, py: 0.75, fontSize: '0.875rem',
-                fontWeight: 500, color: '#0f766e', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'background-color 0.15s', '&:hover': { bgcolor: '#ccfbf1' },
+                borderRadius: '8px', bgcolor: '#eef2fe', px: 1.5, py: 0.75, fontSize: '0.875rem',
+                fontWeight: 500, color: '#2a45c4', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'background-color 0.15s', '&:hover': { bgcolor: '#e0e7fd' },
               }}
             >
               Usar «{valorManual}» de todos modos
@@ -248,7 +248,7 @@ export function RncSearch({
                   alert('¡Listo! Vuelve a buscar el RNC o nombre.');
                 }}
                 sx={{
-                  color: '#0d9488', textDecoration: 'underline', border: 'none', bgcolor: 'transparent',
+                  color: '#3658e1', textDecoration: 'underline', border: 'none', bgcolor: 'transparent',
                   p: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit',
                 }}
               >

@@ -215,7 +215,7 @@ export default async function AdminDashboard() {
 
   // KPIs principales
   const kpis = [
-    { label: 'Empresas', value: num(n(t.total)), sub: `${num(n(t.habilitadas))} habilitadas DGII`, icon: Building2, color: 'text-teal-600', bg: 'bg-teal-50', href: '/admin/empresas' },
+    { label: 'Empresas', value: num(n(t.total)), sub: `${num(n(t.habilitadas))} habilitadas DGII`, icon: Building2, color: 'text-zero-600', bg: 'bg-zero-50', href: '/admin/empresas' },
     { label: 'Usuarios', value: num(n(u.total)), sub: `${num(n(u.verificados))} verificados`, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', href: '/admin/usuarios' },
     { label: 'e-CF emitidos (mes)', value: num(n(e.emitidosMes)), sub: `${num(totalEcf)} en total`, icon: FileText, color: 'text-purple-600', bg: 'bg-purple-50' },
     { label: 'Facturado (mes)', value: money(n(e.montoMes)), sub: `ITBIS ${money(n(e.itbisMes))}`, icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50' },
@@ -223,12 +223,12 @@ export default async function AdminDashboard() {
 
   const kpis2 = [
     { label: 'e-CF hoy', value: num(n(e.emitidosHoy)), icon: Calendar, color: 'text-indigo-600' },
-    { label: 'Empresas facturando (mes)', value: num(n(e.empresasFacturandoMes)), icon: TrendingUp, color: 'text-teal-600' },
+    { label: 'Empresas facturando (mes)', value: num(n(e.empresasFacturandoMes)), icon: TrendingUp, color: 'text-zero-600' },
     { label: 'Ticket promedio (mes)', value: n(e.emitidosMes) > 0 ? money(n(e.montoMes) / n(e.emitidosMes)) : money(0), icon: Receipt, color: 'text-amber-600' },
     { label: 'Facturado histórico', value: money(n(e.montoTotalHist)), icon: DollarSign, color: 'text-green-600' },
     { label: 'Usuarios con 2FA', value: `${num(n(u.con2fa))} / ${num(n(u.total))}`, icon: ShieldCheck, color: 'text-emerald-600' },
     { label: 'Registradas en ecf-api', value: num(n(t.registradasEcf)), icon: BadgeCheck, color: 'text-cyan-600' },
-    { label: 'Nuevas empresas (mes)', value: num(n(t.nuevasMes)), icon: Building2, color: 'text-teal-600' },
+    { label: 'Nuevas empresas (mes)', value: num(n(t.nuevasMes)), icon: Building2, color: 'text-zero-600' },
     { label: 'Nuevos usuarios (mes)', value: num(n(u.nuevosMes)), icon: UserPlus, color: 'text-blue-600' },
   ];
 
@@ -358,7 +358,7 @@ export default async function AdminDashboard() {
       {/* Top empresas por facturación del mes */}
       <div className="rounded-xl bg-white border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-teal-600" />
+          <TrendingUp className="w-4 h-4 text-zero-600" />
           <h2 className="text-sm font-semibold text-gray-700">Top empresas por facturación del mes</h2>
         </div>
         <div className="overflow-x-auto">
@@ -385,7 +385,7 @@ export default async function AdminDashboard() {
                   <td className="px-5 py-3 text-right text-gray-600 tabular-nums">{num(n(r.c))}</td>
                   <td className="px-5 py-3 text-right font-semibold text-gray-900 tabular-nums">{money(n(r.monto))}</td>
                   <td className="px-5 py-3 text-right">
-                    <Link href={`/admin/empresas/${r.teamId}`} className="text-xs text-teal-600 hover:text-teal-800 font-medium">Ver →</Link>
+                    <Link href={`/admin/empresas/${r.teamId}`} className="text-xs text-zero-600 hover:text-zero-800 font-medium">Ver →</Link>
                   </td>
                 </tr>
               ))}
@@ -428,10 +428,10 @@ export default async function AdminDashboard() {
         <div className="rounded-xl bg-white border border-gray-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-teal-600" />
+              <Building2 className="w-4 h-4 text-zero-600" />
               <h2 className="text-sm font-semibold text-gray-700">Empresas nuevas</h2>
             </div>
-            <Link href="/admin/empresas" className="text-xs text-teal-600 hover:text-teal-800">Ver todas</Link>
+            <Link href="/admin/empresas" className="text-xs text-zero-600 hover:text-zero-800">Ver todas</Link>
           </div>
           <ul className="divide-y divide-gray-50">
             {recentTeams.map(r => (

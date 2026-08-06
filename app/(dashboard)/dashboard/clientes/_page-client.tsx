@@ -244,7 +244,7 @@ export default function ClientesPage() {
       sortable: true,
       render: c => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#f0fdfa', color: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>
+          <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#eef2fe', color: '#3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase' }}>
             {initials(c.razonSocial)}
           </Box>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>{c.razonSocial}</Typography>

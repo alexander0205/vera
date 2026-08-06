@@ -153,7 +153,7 @@ export default function NuevaSecuenciaPage() {
             href="https://ayuda.dgii.gov.do"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: '#0d9488', textDecoration: 'none' }}
+            style={{ color: '#3658e1', textDecoration: 'none' }}
           >
             Saber más
           </a>
@@ -189,7 +189,7 @@ export default function NuevaSecuenciaPage() {
                     checked={preferida}
                     onChange={(_, v) => setPreferida(v)}
                     size="small"
-                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }}
+                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }}
                   />
                 }
                 label={<Typography variant="body2" sx={{ color: '#374151', fontWeight: 500 }}>Preferida</Typography>}
@@ -248,7 +248,7 @@ export default function NuevaSecuenciaPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pt: 0.5 }}>
                 <Box sx={{
                   height: 16, width: 16, borderRadius: '4px',
-                  bgcolor: '#0d9488', border: '2px solid #0d9488',
+                  bgcolor: '#3658e1', border: '2px solid #3658e1',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>
                   <svg style={{ height: 10, width: 10, color: '#fff' }} fill="none" viewBox="0 0 12 12">
@@ -418,7 +418,7 @@ export default function NuevaSecuenciaPage() {
                   </Typography>
                   <Box component="span" sx={{
                     fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700,
-                    color: '#0f766e', bgcolor: '#f0fdfa', border: '1px solid #99f6e4',
+                    color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
                     borderRadius: '8px', px: 1.5, py: 0.75, display: 'inline-block',
                   }}>
                     e{tipoCodigo}
@@ -447,7 +447,7 @@ export default function NuevaSecuenciaPage() {
               {showNumeroFinal && disponibles !== null && disponibles > 0 && (
                 <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                   <Typography variant="body2" sx={{ color: '#6b7280' }}>Total disponibles:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 700, color: '#0f766e' }}>
+                  <Typography variant="body1" sx={{ fontWeight: 700, color: '#2a45c4' }}>
                     {disponibles.toLocaleString('es-DO')} comprobantes
                   </Typography>
                 </Box>
@@ -487,7 +487,7 @@ export default function NuevaSecuenciaPage() {
             disabled={saving}
             onClick={handleGuardar}
             startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, px: 3 }}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, px: 3 }}
           >
             {saving ? 'Guardando…' : 'Guardar'}
           </Button>

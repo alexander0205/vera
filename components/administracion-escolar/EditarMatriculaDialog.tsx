@@ -227,7 +227,7 @@ export function EditarMatriculaDialog({ matricula, open, onClose, onSaved, crear
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={guardar} disabled={saving}>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={guardar} disabled={saving}>
             {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : (esCrear ? 'Crear matrícula' : 'Guardar cambios')}
           </Button>
         </DialogFooter>
@@ -245,7 +245,7 @@ function InlineCrear({ value, onChange, onGuardar, onCancelar, saving, placehold
       <Input autoFocus placeholder={placeholder} value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onGuardar(); } }} />
-      <Button type="button" size="icon" className="bg-teal-600 hover:bg-teal-700" onClick={onGuardar} disabled={saving}>
+      <Button type="button" size="icon" className="bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={saving}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
       </Button>
       <Button type="button" variant="outline" size="icon" onClick={onCancelar} disabled={saving}>

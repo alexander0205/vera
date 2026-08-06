@@ -251,7 +251,7 @@ export function DataTable<T>({
         } : undefined}
         sx={{
           cursor:  href ? 'pointer' : 'default',
-          bgcolor: isSelected ? '#f0fdfa' : undefined,
+          bgcolor: isSelected ? '#eef2fe' : undefined,
           '&.MuiTableRow-hover:hover': { bgcolor: '#fafafa' },
           '& .MuiTableCell-root': { borderBottom: '1px solid #f3f4f6' },
         }}
@@ -364,7 +364,7 @@ export function DataTable<T>({
                       px:           1.5,
                       py:           0.875,
                       transition:   'border-color 0.15s',
-                      '&:focus-within': { borderColor: '#0d9488', boxShadow: '0 0 0 3px rgba(13,148,136,0.1)' },
+                      '&:focus-within': { borderColor: '#3658e1', boxShadow: '0 0 0 3px rgba(13,148,136,0.1)' },
                     }}
                   >
                     <Search style={{ width: 14, height: 14, color: '#9ca3af', flexShrink: 0 }} />
@@ -418,7 +418,7 @@ export function DataTable<T>({
                       sx={{
                         border: '1px solid #e5e7eb', borderRadius: '8px', px: 1.5, py: 0.875,
                         fontSize: '0.8125rem', bgcolor: '#ffffff', outline: 'none',
-                        '&:focus': { borderColor: '#0d9488' },
+                        '&:focus': { borderColor: '#3658e1' },
                       }}
                     />
                     <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>→</Box>
@@ -430,7 +430,7 @@ export function DataTable<T>({
                       sx={{
                         border: '1px solid #e5e7eb', borderRadius: '8px', px: 1.5, py: 0.875,
                         fontSize: '0.8125rem', bgcolor: '#ffffff', outline: 'none',
-                        '&:focus': { borderColor: '#0d9488' },
+                        '&:focus': { borderColor: '#3658e1' },
                       }}
                     />
                     {(desde || hasta) && (
@@ -459,8 +459,8 @@ export function DataTable<T>({
               gap:        1.5,
               px:         2,
               py:         1.25,
-              bgcolor:    '#f0fdfa',
-              borderBottom: '1px solid #ccfbf1',
+              bgcolor:    '#eef2fe',
+              borderBottom: '1px solid #e0e7fd',
             }}
           >
             <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.dark' }}>
@@ -573,8 +573,8 @@ export function DataTable<T>({
                           {col.sortable && (
                             isSorted
                               ? (sortBy?.dir === 'asc'
-                                  ? <ChevronUp   style={{ width: 12, height: 12, color: '#0d9488' }} />
-                                  : <ChevronDown style={{ width: 12, height: 12, color: '#0d9488' }} />)
+                                  ? <ChevronUp   style={{ width: 12, height: 12, color: '#3658e1' }} />
+                                  : <ChevronDown style={{ width: 12, height: 12, color: '#3658e1' }} />)
                               : <ChevronsUpDown style={{ width: 12, height: 12, opacity: 0.3 }} />
                           )}
                         </Box>

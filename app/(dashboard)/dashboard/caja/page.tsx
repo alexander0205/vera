@@ -419,8 +419,8 @@ export default function CajaPage() {
     return (
       <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 440, mx: 'auto', mt: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Wallet style={{ width: 20, height: 20, color: '#0d9488' }} />
+          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Wallet style={{ width: 20, height: 20, color: '#3658e1' }} />
           </Box>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>Apertura de caja</Typography>
@@ -439,7 +439,7 @@ export default function CajaPage() {
                       <Box key={t.id} component="button" type="button" onClick={() => setTerminalId(t.id)}
                         sx={{ borderRadius: '10px', border: '1px solid', px: 1.5, py: 1.25, fontSize: '0.875rem', fontWeight: 500, textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s',
                           ...(terminalId === t.id
-                            ? { borderColor: '#0d9488', bgcolor: '#f0fdfa', color: '#065f46', boxShadow: '0 0 0 1px #0d9488' }
+                            ? { borderColor: '#3658e1', bgcolor: '#eef2fe', color: '#065f46', boxShadow: '0 0 0 1px #3658e1' }
                             : { borderColor: '#d1d5db', color: '#374151', bgcolor: 'white', '&:hover': { bgcolor: 'grey.50' } }) }}>
                         {t.nombre}
                       </Box>
@@ -542,8 +542,8 @@ export default function CajaPage() {
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Wallet style={{ width: 20, height: 20, color: '#0d9488' }} />
+          <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Wallet style={{ width: 20, height: 20, color: '#3658e1' }} />
           </Box>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{terminalActiva ? terminalActiva.nombre : 'Mi caja'}</Typography>

@@ -279,7 +279,7 @@ export default function ProductosPage() {
           sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 600,
             ...(p.tipo === 'bien'
               ? { bgcolor: '#f3f4f6', color: '#374151' }
-              : { bgcolor: '#f0fdfa', color: '#0d9488', border: '1px solid #99f6e4' }
+              : { bgcolor: '#eef2fe', color: '#3658e1', border: '1px solid #c7d2fc' }
             ),
             '& .MuiChip-label': { px: 1 }
           }}
@@ -440,7 +440,7 @@ export default function ProductosPage() {
                           px: 2, py: 1, borderRadius: '20px', border: '1px solid',
                           fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
                           ...(isSelected
-                            ? { bgcolor: '#f0fdfa', borderColor: '#0d9488', color: '#0d9488' }
+                            ? { bgcolor: '#eef2fe', borderColor: '#3658e1', color: '#3658e1' }
                             : { bgcolor: 'white', borderColor: '#e5e7eb', color: '#6b7280', '&:hover': { borderColor: '#d1d5db', bgcolor: 'grey.50' } }),
                         }}>
                         {isSelected && <Check style={{ width: 14, height: 14 }} />}
@@ -552,7 +552,7 @@ export default function ProductosPage() {
 
             {/* Control de inventario — solo para bienes */}
             {form.tipo === 'bien' && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, border: '1px dashed #99f6e4', borderRadius: '8px', p: 2, bgcolor: 'rgba(240,253,250,0.4)' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, border: '1px dashed #c7d2fc', borderRadius: '8px', p: 2, bgcolor: 'rgba(240,253,250,0.4)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
                   <Box>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Controlar inventario</Typography>
@@ -561,7 +561,7 @@ export default function ProductosPage() {
                   <Switch
                     checked={form.controlaInventario}
                     onChange={(e) => setForm((f) => ({ ...f, controlaInventario: e.target.checked }))}
-                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#0d9488' } }}
+                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#3658e1' } }}
                   />
                 </Box>
 
@@ -592,7 +592,7 @@ export default function ProductosPage() {
                       <Switch
                         checked={form.permiteVentaSinStock}
                         onChange={(e) => setForm((f) => ({ ...f, permiteVentaSinStock: e.target.checked }))}
-                        sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#0d9488' } }}
+                        sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#3658e1' } }}
                       />
                     </Box>
                   </>

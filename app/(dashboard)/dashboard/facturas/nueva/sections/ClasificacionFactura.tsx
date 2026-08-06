@@ -106,10 +106,10 @@ export function ClasificacionFactura({
                             border: '1px solid',
                             cursor: 'pointer',
                             transition: 'all 0.15s',
-                            bgcolor: on ? '#0d9488' : '#fff',
+                            bgcolor: on ? '#3658e1' : '#fff',
                             color: on ? '#fff' : '#4b5563',
-                            borderColor: on ? '#0d9488' : '#d1d5db',
-                            '&:hover': { borderColor: on ? '#0d9488' : '#2dd4bf' },
+                            borderColor: on ? '#3658e1' : '#d1d5db',
+                            '&:hover': { borderColor: on ? '#3658e1' : '#8193f5' },
                           }}
                         >
                           {v.valor}

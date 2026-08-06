@@ -44,8 +44,8 @@ export function ProximamenteDialog({ open, feature, onClose }: DialogProps) {
       slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 448, width: '100%', p: 3 } } as object }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
-        <Box sx={{ height: 40, width: 40, borderRadius: '9999px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Sparkles style={{ width: 20, height: 20, color: '#0f766e' }} />
+        <Box sx={{ height: 40, width: 40, borderRadius: '9999px', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Sparkles style={{ width: 20, height: 20, color: '#2a45c4' }} />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography id="proximamente-title" sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>

@@ -110,8 +110,8 @@ export function ChangePlan({ plans, currentPlan, priceIds, pendingPlan }: Props)
           return (
             <Box key={plan.key} sx={{
               display: 'flex', alignItems: 'center', gap: 2, p: 2, borderRadius: '12px', border: '1px solid',
-              borderColor: isCurrent ? '#0d9488' : isPending ? '#fcd34d' : '#e5e7eb',
-              bgcolor: isCurrent ? '#f0fdfa80' : isPending ? '#fffbeb80' : '#fff',
+              borderColor: isCurrent ? '#3658e1' : isPending ? '#fcd34d' : '#e5e7eb',
+              bgcolor: isCurrent ? '#eef2fe80' : isPending ? '#fffbeb80' : '#fff',
               transition: 'all 0.15s',
             }}>
               {/* Info */}
@@ -123,7 +123,7 @@ export function ChangePlan({ plans, currentPlan, priceIds, pendingPlan }: Props)
                       label="Plan actual"
                       size="small"
                       icon={<Check size={10} />}
-                      sx={{ bgcolor: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '0.625rem', height: 20, fontWeight: 600 }}
+                      sx={{ bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fc', fontSize: '0.625rem', height: 20, fontWeight: 600 }}
                     />
                   )}
                   {isPending && (
@@ -150,7 +150,7 @@ export function ChangePlan({ plans, currentPlan, priceIds, pendingPlan }: Props)
                     fullWidth size="small" variant="contained" disableElevation
                     onClick={() => handleChange(plan, 'upgrade')} disabled={busy}
                     startIcon={isLoading ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <ArrowUp size={12} />}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
                   >
                     {isLoading ? 'Actualizando…' : 'Actualizar ahora'}
                   </Button>

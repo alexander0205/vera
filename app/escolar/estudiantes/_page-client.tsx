@@ -101,7 +101,7 @@ export default function EstudiantesClient() {
           <p className="text-sm text-gray-500 mt-1">Matrículas, tutores, pagos y deudas por estudiante</p>
         </div>
         {puedeGestionar && (
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={irANuevo}>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={irANuevo}>
             <Plus className="h-4 w-4 mr-2" />Nuevo estudiante
           </Button>
         )}
@@ -122,7 +122,7 @@ export default function EstudiantesClient() {
           <CardContent className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-gray-900">Directorio de estudiantes</h2>
-              <Badge variant="outline" className="text-teal-700 border-teal-200 bg-teal-50">
+              <Badge variant="outline" className="text-zero-700 border-zero-200 bg-zero-50">
                 {total} registro{total !== 1 ? 's' : ''}
               </Badge>
             </div>
@@ -134,7 +134,7 @@ export default function EstudiantesClient() {
                 <Input className="pl-8" placeholder="Buscar por nombre, código o tutor…"
                   value={query} onChange={(e) => setQuery(e.target.value)} />
                 {isLoading && (
-                  <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-teal-500" />
+                  <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-zero-500" />
                 )}
               </div>
               <Select value={filtroCurso} onValueChange={setFiltroCurso}>
@@ -155,7 +155,7 @@ export default function EstudiantesClient() {
 
             {/* Tabla */}
             {isLoading && !data ? (
-              <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>
+              <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>
             ) : total === 0 ? (
               <div className="text-center py-16">
                 <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -163,7 +163,7 @@ export default function EstudiantesClient() {
                   {filtrosActivos ? 'Sin resultados para los filtros' : 'Aún no hay estudiantes registrados'}
                 </p>
                 {!filtrosActivos && puedeGestionar && (
-                  <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={irANuevo}>
+                  <Button className="mt-4 bg-zero-600 hover:bg-zero-700" size="sm" onClick={irANuevo}>
                     <Plus className="h-4 w-4 mr-1" />Nuevo estudiante
                   </Button>
                 )}
@@ -186,11 +186,11 @@ export default function EstudiantesClient() {
                         <tr key={e.id}
                           onClick={() => setSelectedId(e.id)}
                           className={`border-t border-gray-100 cursor-pointer transition-colors ${
-                            e.id === selectedId ? 'bg-teal-50' : 'hover:bg-gray-50'
+                            e.id === selectedId ? 'bg-zero-50' : 'hover:bg-gray-50'
                           }`}>
                           <td className="px-3 py-2.5">
                             <div className="flex items-center gap-2.5">
-                              <div className="h-8 w-8 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold shrink-0">
+                              <div className="h-8 w-8 rounded-full bg-zero-100 text-zero-700 flex items-center justify-center text-xs font-semibold shrink-0">
                                 {iniciales(e.nombres, e.apellidos)}
                               </div>
                               <div className="min-w-0">
@@ -204,7 +204,7 @@ export default function EstudiantesClient() {
                           <td className="px-3 py-2.5 text-right">
                             {e.deudaCentavos > 0
                               ? <Badge className="bg-red-50 text-red-600 border-red-200">{fmtDOP(e.deudaCentavos)}</Badge>
-                              : <Badge className="bg-teal-50 text-teal-700 border-teal-200">Al día</Badge>}
+                              : <Badge className="bg-zero-50 text-zero-700 border-zero-200">Al día</Badge>}
                           </td>
                           <td className="px-3 py-2.5">
                             <span className="text-xs capitalize text-gray-600">{e.estado}</span>

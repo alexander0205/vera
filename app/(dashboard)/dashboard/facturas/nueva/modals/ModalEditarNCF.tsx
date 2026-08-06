@@ -69,7 +69,7 @@ export function ModalEditarNCF({
                 checked
                 readOnly
                 size="small"
-                sx={{ color: '#0d9488', '&.Mui-checked': { color: '#0d9488' } }}
+                sx={{ color: '#3658e1', '&.Mui-checked': { color: '#3658e1' } }}
               />
             }
             label={
@@ -140,7 +140,7 @@ export function ModalEditarNCF({
               sx={{
                 '& .MuiOutlinedInput-root': { borderRadius: '8px' },
                 '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                  borderColor: '#0d9488',
+                  borderColor: '#3658e1',
                 },
               }}
             />
@@ -174,9 +174,9 @@ export function ModalEditarNCF({
           onClick={onSave}
           sx={{
             textTransform: 'none',
-            bgcolor: '#0d9488',
-            '&:hover': { bgcolor: '#0f766e' },
-            '&.Mui-disabled': { bgcolor: '#0d948880' },
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
+            '&.Mui-disabled': { bgcolor: '#3658e180' },
           }}
         >
           {ncfSaving ? (

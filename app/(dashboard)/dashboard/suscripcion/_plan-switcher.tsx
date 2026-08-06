@@ -43,8 +43,8 @@ export function PlanSwitcher({ currentPlan }: { currentPlan: string }) {
               textTransform: 'none',
               fontSize: '0.8125rem',
               ...(key === currentKey
-                ? { bgcolor: '#0d9488', '&:hover': { bgcolor: '#0d9488' } }
-                : { borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#0d9488', color: '#0d9488' } }),
+                ? { bgcolor: '#3658e1', '&:hover': { bgcolor: '#3658e1' } }
+                : { borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#3658e1', color: '#3658e1' } }),
             }}
           >
             {label} <Box component="span" sx={{ fontSize: '0.6875rem', opacity: 0.7, ml: 0.5 }}>{price}/mes</Box>

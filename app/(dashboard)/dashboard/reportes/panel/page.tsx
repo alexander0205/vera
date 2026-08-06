@@ -80,11 +80,11 @@ function QuickLink({ href, children }: { href: string; children: React.ReactNode
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         px: 1.5, py: 1.25, borderRadius: '8px', border: '1px solid #e5e7eb',
         color: '#374151', textDecoration: 'none', transition: 'all 0.15s',
-        '&:hover': { borderColor: '#5eead4', bgcolor: 'rgba(240,253,250,0.4)' },
+        '&:hover': { borderColor: '#a5b4f9', bgcolor: 'rgba(240,253,250,0.4)' },
       }}
     >
       <Box component="span">{children}</Box>
-      <Box component="span" sx={{ color: '#0d9488' }}>→</Box>
+      <Box component="span" sx={{ color: '#3658e1' }}>→</Box>
     </Box>
   );
 }

@@ -166,8 +166,8 @@ export default function MaestrosProductoSection({ productId }: { productId: numb
                           minWidth: 0,
                           fontSize: '0.875rem',
                           ...(on
-                            ? { bgcolor: '#0d9488', color: '#fff', borderColor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }
-                            : { bgcolor: '#fff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#2dd4bf', bgcolor: '#fff' } }),
+                            ? { bgcolor: '#3658e1', color: '#fff', borderColor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }
+                            : { bgcolor: '#fff', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#8193f5', bgcolor: '#fff' } }),
                         }}
                       >
                         {v.valor}
@@ -200,12 +200,12 @@ export default function MaestrosProductoSection({ productId }: { productId: numb
               displayEmpty
               onChange={(e) => setExtra((p) => new Set(p).add(parseInt(e.target.value)))}
               renderValue={() => (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#0f766e' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#2a45c4' }}>
                   <Plus size={16} />
                   Agregar atributo
                 </Box>
               )}
-              sx={{ borderRadius: '8px', fontSize: '0.875rem', color: '#0f766e', '& .MuiOutlinedInput-notchedOutline': { borderStyle: 'dashed', borderColor: '#99f6e4' } }}
+              sx={{ borderRadius: '8px', fontSize: '0.875rem', color: '#2a45c4', '& .MuiOutlinedInput-notchedOutline': { borderStyle: 'dashed', borderColor: '#c7d2fc' } }}
             >
               {agregables.map((m) => <MenuItem key={m.id} value={String(m.id)}>{m.nombre}</MenuItem>)}
             </Select>

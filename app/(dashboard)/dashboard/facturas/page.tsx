@@ -217,7 +217,7 @@ export default function FacturasPage() {
               display: 'block',
               lineHeight: 1.25,
               fontVariantNumeric: 'tabular-nums',
-              '&:hover': { color: '#0f766e', textDecoration: 'underline' },
+              '&:hover': { color: '#2a45c4', textDecoration: 'underline' },
             }}
           >
             {doc.codigo ?? `#${doc.id}`}
@@ -572,8 +572,8 @@ export default function FacturasPage() {
                   alignItems: 'center',
                   gap: '4px',
                   fontSize: '0.875rem',
-                  color: '#0d9488',
-                  '&:hover': { textDecoration: 'underline', color: '#0f766e' },
+                  color: '#3658e1',
+                  '&:hover': { textDecoration: 'underline', color: '#2a45c4' },
                 }}
               >
                 <Plus style={{ width: 16, height: 16 }} /> Emitir primer comprobante
@@ -618,8 +618,8 @@ export default function FacturasPage() {
                     borderRadius: '8px',
                     textTransform: 'none',
                     fontWeight: 600,
-                    bgcolor: '#0d9488',
-                    '&:hover': { bgcolor: '#0f766e' },
+                    bgcolor: '#3658e1',
+                    '&:hover': { bgcolor: '#2a45c4' },
                   }}
                 >
                   Nueva Factura
@@ -687,8 +687,8 @@ export default function FacturasPage() {
               borderRadius: '8px',
               textTransform: 'none',
               fontWeight: 600,
-              bgcolor: '#0d9488',
-              '&:hover': { bgcolor: '#0f766e' },
+              bgcolor: '#3658e1',
+              '&:hover': { bgcolor: '#2a45c4' },
             }}
           >
             {emailLoading ? 'Enviando...' : 'Enviar'}

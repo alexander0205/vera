@@ -176,7 +176,7 @@ export default function ImpresorasPage() {
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3, gap: 2, flexWrap: 'wrap' }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Printer style={{ width: 22, height: 22, color: '#0d9488' }} />
+            <Printer style={{ width: 22, height: 22, color: '#3658e1' }} />
             Impresoras
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
@@ -197,29 +197,29 @@ export default function ImpresorasPage() {
 
       {/* Impresora predeterminada activa */}
       {defaultImp && (
-        <Card elevation={0} sx={{ border: '1px solid #99f6e4', bgcolor: '#f0fdfa', borderRadius: '12px', mb: 2 }}>
+        <Card elevation={0} sx={{ border: '1px solid #c7d2fc', bgcolor: '#eef2fe', borderRadius: '12px', mb: 2 }}>
           <CardContent sx={{ p: '16px 20px !important' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {(() => {
                   const Icon = TIPO_ICONS[defaultImp.tipo] ?? Printer;
-                  return <Icon style={{ width: 20, height: 20, color: '#0d9488' }} />;
+                  return <Icon style={{ width: 20, height: 20, color: '#3658e1' }} />;
                 })()}
               </Box>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#134e4a' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#24377d' }}>
                     {defaultImp.nombre}
                   </Typography>
-                  <Chip label="Predeterminada" size="small" sx={{ bgcolor: '#0d9488', color: '#fff', height: 20, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }} />
+                  <Chip label="Predeterminada" size="small" sx={{ bgcolor: '#3658e1', color: '#fff', height: 20, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }} />
                 </Box>
-                <Typography variant="caption" sx={{ color: '#0f766e' }}>
+                <Typography variant="caption" sx={{ color: '#2a45c4' }}>
                   {TIPO_LABELS[defaultImp.tipo] ?? defaultImp.tipo}
                   {defaultImp.ip && ` · ${defaultImp.ip}`}
                   {' · '}{BACKEND_LABELS[defaultImp.backend] ?? defaultImp.backend}
                 </Typography>
               </Box>
-              <CheckCircle style={{ width: 20, height: 20, color: '#0d9488', flexShrink: 0 }} />
+              <CheckCircle style={{ width: 20, height: 20, color: '#3658e1', flexShrink: 0 }} />
             </Box>
           </CardContent>
         </Card>
@@ -252,14 +252,14 @@ export default function ImpresorasPage() {
               <Box key={imp.id}>
                 {i > 0 && <Divider />}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2.5, py: 1.5, '&:hover': { bgcolor: 'grey.50' } }}>
-                  <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: imp.esDefault ? '#ccfbf1' : 'grey.100', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon style={{ width: 18, height: 18, color: imp.esDefault ? '#0d9488' : '#6b7280' }} />
+                  <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: imp.esDefault ? '#e0e7fd' : 'grey.100', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon style={{ width: 18, height: 18, color: imp.esDefault ? '#3658e1' : '#6b7280' }} />
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{imp.nombre}</Typography>
                       {imp.esDefault && (
-                        <Chip label="Predeterminada" size="small" sx={{ bgcolor: '#0d9488', color: '#fff', height: 20, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }} />
+                        <Chip label="Predeterminada" size="small" sx={{ bgcolor: '#3658e1', color: '#fff', height: 20, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }} />
                       )}
                     </Box>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -355,13 +355,13 @@ export default function ImpresorasPage() {
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                       p: 1.5, borderRadius: '10px', border: '2px solid', cursor: 'pointer', textAlign: 'center',
                       borderColor: selected ? 'primary.main' : '#e5e7eb',
-                      bgcolor: selected ? '#f0fdfa' : 'transparent',
+                      bgcolor: selected ? '#eef2fe' : 'transparent',
                       transition: 'all 0.15s',
                       '&:hover': { borderColor: selected ? 'primary.main' : '#d1d5db' },
                     }}
                   >
-                    <TIcon style={{ width: 20, height: 20, color: selected ? '#0d9488' : '#9ca3af' }} />
-                    <Typography variant="caption" sx={{ fontWeight: 600, color: selected ? '#0d9488' : 'text.secondary', lineHeight: 1.3 }}>
+                    <TIcon style={{ width: 20, height: 20, color: selected ? '#3658e1' : '#9ca3af' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: selected ? '#3658e1' : 'text.secondary', lineHeight: 1.3 }}>
                       {TIPO_LABELS[tipo]}
                     </Typography>
                   </Box>

@@ -42,7 +42,7 @@ export function RailModulos({ current }: { current: ModuleKey | null }) {
         sx={{
           px: 1.5, mb: 0.25, fontSize: '0.6875rem', fontWeight: 700,
           textTransform: 'uppercase', letterSpacing: '0.06em',
-          color: 'rgba(204,251,241,0.6)', whiteSpace: 'nowrap',
+          color: 'rgba(224,231,253,0.6)', whiteSpace: 'nowrap',
         }}
       >
         Módulos
@@ -58,7 +58,7 @@ export function RailModulos({ current }: { current: ModuleKey | null }) {
             sx={{
               display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
               borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
-              color: 'rgba(204,251,241,0.85)', transition: 'all 0.15s',
+              color: 'rgba(224,231,253,0.85)', transition: 'all 0.15s',
               '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
             }}
           >

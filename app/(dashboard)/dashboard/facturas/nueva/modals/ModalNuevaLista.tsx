@@ -152,9 +152,9 @@ export function ModalNuevaLista({ open, onClose, onCreated }: {
           onClick={handleSave}
           sx={{
             textTransform: 'none',
-            bgcolor: '#0d9488',
-            '&:hover': { bgcolor: '#0f766e' },
-            '&.Mui-disabled': { bgcolor: '#0d948880' },
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
+            '&.Mui-disabled': { bgcolor: '#3658e180' },
           }}
         >
           {saving ? (

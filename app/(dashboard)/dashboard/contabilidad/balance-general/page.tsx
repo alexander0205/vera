@@ -90,7 +90,7 @@ export default async function BalanceGeneralPage({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
-        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Balance general</Typography>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Balance general</Typography>
       </Box>
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
@@ -107,8 +107,8 @@ export default async function BalanceGeneralPage({
           <Box component="a" href={exportHref}
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.8125rem', fontWeight: 500,
               px: 1.75, py: 1, borderRadius: '8px', textDecoration: 'none',
-              color: '#0f766e', bgcolor: '#f0fdfa', border: '1px solid #99f6e4',
-              '&:hover': { bgcolor: '#ccfbf1' } }}
+              color: '#2a45c4', bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
+              '&:hover': { bgcolor: '#e0e7fd' } }}
           >
             Exportar a Excel
           </Box>

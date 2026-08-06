@@ -281,11 +281,11 @@ export function FacturaItems() {
             textTransform: 'none',
             fontSize: '0.875rem',
             fontWeight: 500,
-            color: '#0d9488',
+            color: '#3658e1',
             px: 1,
             py: 0.5,
             minWidth: 0,
-            '&:hover': { color: '#0f766e', bgcolor: 'transparent' },
+            '&:hover': { color: '#2a45c4', bgcolor: 'transparent' },
           }}
         >
           Agregar
@@ -522,9 +522,9 @@ export function FacturaFooter() {
           py: { xs: 1.5, sm: 1.25 },
           textTransform: 'none',
           fontWeight: 500,
-          bgcolor: '#0d9488',
-          '&:hover': { bgcolor: '#0f766e' },
-          '&.Mui-disabled': { bgcolor: '#0d948880', color: '#fff' },
+          bgcolor: '#3658e1',
+          '&:hover': { bgcolor: '#2a45c4' },
+          '&.Mui-disabled': { bgcolor: '#3658e180', color: '#fff' },
         }}
       >
         Revisar y emitir
@@ -741,9 +741,9 @@ export function FacturaPreview() {
             flex: { sm: 1 },
             textTransform: 'none',
             fontWeight: 500,
-            bgcolor: '#0d9488',
-            '&:hover': { bgcolor: '#0f766e' },
-            '&.Mui-disabled': { bgcolor: '#0d948880', color: '#fff' },
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
+            '&.Mui-disabled': { bgcolor: '#3658e180', color: '#fff' },
           }}
         >
           {enviando ? (

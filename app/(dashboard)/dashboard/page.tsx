@@ -126,8 +126,8 @@ export default async function DashboardPage() {
             icon:  TrendingUp,
             value: `RD$${(stats.montoMesCentavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
             sub:   `${stats.facturasMes} comprobante${stats.facturasMes !== 1 ? 's' : ''}`,
-            color: '#0d9488',
-            bg:    '#f0fdfa',
+            color: '#3658e1',
+            bg:    '#eef2fe',
           },
           {
             label: 'Total histórico',

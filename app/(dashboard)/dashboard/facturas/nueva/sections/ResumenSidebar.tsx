@@ -102,7 +102,7 @@ export function ResumenSidebar({
           aria-expanded={resumenOpen}
           sx={sectionHeaderSx}
         >
-          <FileText size={16} color="#0d9488" aria-hidden="true" style={{ flexShrink: 0 }} />
+          <FileText size={16} color="#3658e1" aria-hidden="true" style={{ flexShrink: 0 }} />
           <Typography
             sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}
           >
@@ -243,18 +243,18 @@ export function ResumenSidebar({
                   sx={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    bgcolor: '#f0fdfa',
-                    border: '1px solid #ccfbf1',
+                    bgcolor: '#eef2fe',
+                    border: '1px solid #e0e7fd',
                     borderRadius: '8px',
                     px: 1.5,
                     py: 1,
                     mt: 1,
                   }}
                 >
-                  <Typography sx={{ fontSize: '0.875rem', color: '#0f766e', fontWeight: 600 }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#2a45c4', fontWeight: 600 }}>
                     Saldo pendiente
                   </Typography>
-                  <Typography sx={{ fontSize: '0.875rem', color: '#134e4a', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                  <Typography sx={{ fontSize: '0.875rem', color: '#24377d', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     {fmt(saldoPendiente)}
                   </Typography>
                 </Box>
@@ -274,7 +274,7 @@ export function ResumenSidebar({
             aria-expanded={pagoOpen}
             sx={sectionHeaderSx}
           >
-            <CreditCard size={16} color="#0d9488" aria-hidden="true" style={{ flexShrink: 0 }} />
+            <CreditCard size={16} color="#3658e1" aria-hidden="true" style={{ flexShrink: 0 }} />
             <Typography
               sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}
             >
@@ -303,7 +303,7 @@ export function ResumenSidebar({
                     onChange={e => setPagoRecibido?.(e.target.checked)}
                     sx={{
                       color: '#d1d5db',
-                      '&.Mui-checked': { color: '#0d9488' },
+                      '&.Mui-checked': { color: '#3658e1' },
                       '&:hover': { bgcolor: 'rgba(13,148,136,0.08)' },
                     }}
                   />

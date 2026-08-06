@@ -215,7 +215,7 @@ function EstadoDgiiCard({
   return (
     <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
       <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 1, px: { xs: 2, md: 2.5 }, pt: 2, pb: 1.5 }}>
-        <CheckCircle size={16} color="#0d9488" style={{ flexShrink: 0 }} aria-hidden="true" />
+        <CheckCircle size={16} color="#3658e1" style={{ flexShrink: 0 }} aria-hidden="true" />
         <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}>Estado DGII</Typography>
         {factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO' && (
           <Button
@@ -223,7 +223,7 @@ function EstadoDgiiCard({
             onClick={onConsultar}
             disabled={consultarStatus === 'loading'}
             startIcon={<RefreshCw size={12} style={consultarStatus === 'loading' ? { animation: 'spin 1s linear infinite' } : undefined} />}
-            sx={{ fontSize: '0.75rem', textTransform: 'none', color: '#0d9488', minWidth: 0, p: 0.5, '&:hover': { color: '#115e59', bgcolor: 'transparent' } }}
+            sx={{ fontSize: '0.75rem', textTransform: 'none', color: '#3658e1', minWidth: 0, p: 0.5, '&:hover': { color: '#253a9e', bgcolor: 'transparent' } }}
           >
             Consultar
           </Button>
@@ -298,8 +298,8 @@ function EstadoDgiiCard({
             endIcon={<ArrowLeft size={14} style={{ transform: 'rotate(135deg)' }} />}
             sx={{
               width: '100%', fontSize: '0.875rem', fontWeight: 500, textTransform: 'none',
-              color: '#0f766e', borderColor: '#99f6e4', borderRadius: '8px', py: 1,
-              '&:hover': { color: '#115e59', bgcolor: '#f0fdfa', borderColor: '#99f6e4' },
+              color: '#2a45c4', borderColor: '#c7d2fc', borderRadius: '8px', py: 1,
+              '&:hover': { color: '#253a9e', bgcolor: '#eef2fe', borderColor: '#c7d2fc' },
             }}
           >
             Ver en DGII
@@ -772,7 +772,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <Loader2 size={32} color="#0d9488" style={{ animation: 'spin 1s linear infinite' }} />
+        <Loader2 size={32} color="#3658e1" style={{ animation: 'spin 1s linear infinite' }} />
       </Box>
     );
   }
@@ -942,7 +942,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               }}
               sx={{ gap: 1, alignItems: 'flex-start', py: 1 }}
             >
-              <Printer size={16} color="#0d9488" style={{ marginTop: 2 }} />
+              <Printer size={16} color="#3658e1" style={{ marginTop: 2 }} />
               <Box>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Imprimir (predeterminada)</Typography>
                 <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{printerLabel}</Typography>
@@ -970,7 +970,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               onClick={() => setPrintAnchor(null)}
               sx={{ gap: 1, alignItems: 'flex-start', py: 1 }}
             >
-              <Ticket size={16} color="#0d9488" style={{ marginTop: 2 }} />
+              <Ticket size={16} color="#3658e1" style={{ marginTop: 2 }} />
               <Box>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Factura pequeña (80mm)</Typography>
                 <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>PDF tirilla térmica</Typography>
@@ -1055,7 +1055,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 component={Link}
                 href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
                 onClick={() => setMoreAnchor(null)}
-                sx={{ gap: 1, color: '#0f766e' }}
+                sx={{ gap: 1, color: '#2a45c4' }}
               >
                 <Plus size={16} />
                 Crear nota de crédito
@@ -1065,7 +1065,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 component={Link}
                 href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}
                 onClick={() => setMoreAnchor(null)}
-                sx={{ gap: 1, color: '#0f766e' }}
+                sx={{ gap: 1, color: '#2a45c4' }}
               >
                 <Plus size={16} />
                 Crear nota de débito
@@ -1120,7 +1120,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           borderRadius: '12px', p: 1.5, fontSize: '0.875rem', display: 'flex', gap: 1, mb: 2,
           ...(pollingStatus === 'error'
             ? { bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }
-            : { bgcolor: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e' }),
+            : { bgcolor: '#eef2fe', border: '1px solid #c7d2fc', color: '#2a45c4' }),
         }}>
           {pollingStatus === 'error'
             ? <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -1142,8 +1142,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 sx={{
                   minHeight: 0,
                   '& .MuiTab-root': { textTransform: 'none', minHeight: 0, py: 1, fontSize: '0.875rem', fontWeight: 500 },
-                  '& .Mui-selected': { color: '#0d9488 !important' },
-                  '& .MuiTabs-indicator': { bgcolor: '#0d9488' },
+                  '& .Mui-selected': { color: '#3658e1 !important' },
+                  '& .MuiTabs-indicator': { bgcolor: '#3658e1' },
                 }}
               >
                 <Tab value="detalles" label="Detalles" />
@@ -1157,12 +1157,12 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Banner: si es NC/ND, link a la factura que modifica */}
           {factura.notaOrigen && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', px: 2, py: 1.5 }}>
-              <Typography sx={{ fontSize: '0.875rem', color: '#134e4a' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderRadius: '12px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe', px: 2, py: 1.5 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: '#24377d' }}>
                 {factura.tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
                 <Box component="span" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</Box>
                 {factura.codigoModificacion != null && (
-                  <Box component="span" sx={{ ml: 1, display: 'inline-flex', alignItems: 'center', px: 0.75, py: '2px', borderRadius: '9999px', fontSize: '10px', fontWeight: 500, bgcolor: '#fff', border: '1px solid #99f6e4', color: '#115e59' }}>
+                  <Box component="span" sx={{ ml: 1, display: 'inline-flex', alignItems: 'center', px: 0.75, py: '2px', borderRadius: '9999px', fontSize: '10px', fontWeight: 500, bgcolor: '#fff', border: '1px solid #c7d2fc', color: '#253a9e' }}>
                     {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
                   </Box>
                 )}
@@ -1170,7 +1170,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               <MuiLink
                 component={Link}
                 href={`/dashboard/facturas/${factura.notaOrigen.id}`}
-                sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#0f766e', whiteSpace: 'nowrap', textDecoration: 'none', '&:hover': { color: '#115e59' } }}
+                sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#2a45c4', whiteSpace: 'nowrap', textDecoration: 'none', '&:hover': { color: '#253a9e' } }}
               >
                 Ver factura →
               </MuiLink>
@@ -1302,7 +1302,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   variant="outlined"
                   size="small"
                   startIcon={<Plus size={16} />}
-                  sx={{ width: '100%', borderStyle: 'dashed', textTransform: 'none', color: '#0f766e', borderColor: '#5eead4', borderRadius: '8px', '&:hover': { bgcolor: '#f0fdfa', borderColor: '#5eead4', borderStyle: 'dashed' } }}
+                  sx={{ width: '100%', borderStyle: 'dashed', textTransform: 'none', color: '#2a45c4', borderColor: '#a5b4f9', borderRadius: '8px', '&:hover': { bgcolor: '#eef2fe', borderColor: '#a5b4f9', borderStyle: 'dashed' } }}
                 >
                   Agregar producto o servicio
                 </Button>
@@ -1433,7 +1433,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             {activeTab === 'notas' && (
               <Box sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', p: { xs: 2, md: 2.5 } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                  <StickyNote size={16} color="#0d9488" />
+                  <StickyNote size={16} color="#3658e1" />
                   <Typography component="h3" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Notas</Typography>
                 </Box>
                 <EntityNotes entityType="factura" entityId={factura.id} />
@@ -1443,7 +1443,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             {activeTab === 'historia' && (
               <Box sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', p: { xs: 2, md: 2.5 } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                  <HistoryIcon size={16} color="#0d9488" />
+                  <HistoryIcon size={16} color="#3658e1" />
                   <Typography component="h3" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Historia de la factura</Typography>
                 </Box>
                 <EntityHistory docId={factura.id} encf={factura.encf} />
@@ -1464,7 +1464,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               aria-expanded={resumenOpen}
               sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 1, px: { xs: 2, md: 2.5 }, pt: 2, pb: 1.5, background: 'none', border: 'none', cursor: 'pointer', transition: 'background 0.15s', '&:hover': { bgcolor: '#fafafa' } }}
             >
-              <FileText size={16} color="#0d9488" style={{ flexShrink: 0 }} aria-hidden="true" />
+              <FileText size={16} color="#3658e1" style={{ flexShrink: 0 }} aria-hidden="true" />
               <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1, textAlign: 'left' }}>Resumen</Typography>
               {resumenOpen
                 ? <ChevronUp size={16} color="#9ca3af" />
@@ -1517,7 +1517,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 </Box>
 
                 {ncAplicadoDOP > 0 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', mt: 1.5, color: '#0f766e' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', mt: 1.5, color: '#2a45c4' }}>
                     <Box component="span">Notas de crédito</Box>
                     <Box component="span" sx={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>−{fmtDOP(ncAplicadoDOP)}</Box>
                   </Box>
@@ -1569,7 +1569,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 <Button
                   onClick={() => handleResetEmision(false)}
                   disabled={reseteando}
-                  sx={{ width: '100%', bgcolor: '#0d9488', color: '#fff', height: 36, fontSize: '0.875rem', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#0f766e' }, '&.Mui-disabled': { bgcolor: '#0d9488', opacity: 0.5, color: '#fff' } }}
+                  sx={{ width: '100%', bgcolor: '#3658e1', color: '#fff', height: 36, fontSize: '0.875rem', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
                 >
                   Cancelar y reintentar con e-NCF nuevo
                 </Button>
@@ -1603,7 +1603,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                     type="button"
                     onClick={triggerEnviarDgii}
                     startIcon={<Send size={16} />}
-                    sx={{ bgcolor: '#0d9488', color: '#fff', height: 36, width: '100%', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#0f766e' } }}
+                    sx={{ bgcolor: '#3658e1', color: '#fff', height: 36, width: '100%', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' } }}
                   >
                     {sinLineas && canEdit ? 'Completar y generar e-CF' : 'Generar e-CF / Enviar a DGII'}
                   </Button>
@@ -1615,7 +1615,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                     nativeButton={false}
                     type="button"
                     variant="outlined"
-                    sx={{ height: 36, width: '100%', textTransform: 'none', color: '#0f766e', borderColor: '#5eead4', borderRadius: '8px', '&:hover': { bgcolor: '#f0fdfa', borderColor: '#5eead4' } }}
+                    sx={{ height: 36, width: '100%', textTransform: 'none', color: '#2a45c4', borderColor: '#a5b4f9', borderRadius: '8px', '&:hover': { bgcolor: '#eef2fe', borderColor: '#a5b4f9' } }}
                   >
                     Editar antes de emitir
                   </Button>
@@ -1641,7 +1641,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   nativeButton={false}
                   variant="outlined"
                   startIcon={<TrendingDown size={16} />}
-                  sx={{ width: '100%', height: 36, textTransform: 'none', color: '#0f766e', borderColor: '#99f6e4', borderRadius: '8px', justifyContent: 'flex-start', gap: 1, '&:hover': { bgcolor: '#f0fdfa', borderColor: '#99f6e4' } }}
+                  sx={{ width: '100%', height: 36, textTransform: 'none', color: '#2a45c4', borderColor: '#c7d2fc', borderRadius: '8px', justifyContent: 'flex-start', gap: 1, '&:hover': { bgcolor: '#eef2fe', borderColor: '#c7d2fc' } }}
                 >
                   <Box component="span" sx={{ flex: 1, textAlign: 'left', fontSize: '0.875rem' }}>Nota de crédito</Box>
                   <Box component="span" sx={{ fontSize: '10px', color: '#9ca3af' }}>Reduce el saldo</Box>
@@ -1671,11 +1671,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 {factura.ncsAsociadas.map(nc => (
                   <Box component="li" key={nc.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderBottom: '1px solid #f3f4f6', pb: 1, '&:last-of-type': { borderBottom: 0, pb: 0 } }}>
                     <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <MuiLink component={Link} href={`/dashboard/facturas/${nc.id}`} sx={{ fontFamily: 'monospace', color: '#0f766e', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', '&:hover': { textDecoration: 'underline' } }}>
+                      <MuiLink component={Link} href={`/dashboard/facturas/${nc.id}`} sx={{ fontFamily: 'monospace', color: '#2a45c4', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', '&:hover': { textDecoration: 'underline' } }}>
                         {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Borrador #${nc.id}`)}
                       </MuiLink>
                       <Box sx={{ fontSize: '10px', color: '#6b7280', mt: 0.25, display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <Box component="span" sx={{ color: nc.tipoEcf === '34' ? '#0f766e' : '#c2410c', fontWeight: 500 }}>
+                        <Box component="span" sx={{ color: nc.tipoEcf === '34' ? '#2a45c4' : '#c2410c', fontWeight: 500 }}>
                           {nc.tipoEcf === '34' ? 'Crédito' : 'Débito'}
                         </Box>
                         {(nc.razonModificacion || nc.codigoModificacion != null) && (
@@ -1690,7 +1690,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                         <Box component="span">{fmtDate(nc.fechaEmision)}</Box>
                       </Box>
                     </Box>
-                    <Box component="span" sx={{ fontFamily: 'monospace', flexShrink: 0, color: nc.tipoEcf === '34' ? '#0f766e' : '#1f2937' }}>
+                    <Box component="span" sx={{ fontFamily: 'monospace', flexShrink: 0, color: nc.tipoEcf === '34' ? '#2a45c4' : '#1f2937' }}>
                       {nc.tipoEcf === '34' ? '−' : ''}RD$ {nc.montoTotalDOP}
                     </Box>
                   </Box>
@@ -1717,7 +1717,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 {factura.codigoSeguridad && (
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
                     <Box component="dt" sx={{ color: '#6b7280' }}>Código seg.</Box>
-                    <Box component="dd" sx={{ m: 0, fontFamily: 'monospace', fontWeight: 700, color: '#0f766e', textAlign: 'right' }}>{factura.codigoSeguridad}</Box>
+                    <Box component="dd" sx={{ m: 0, fontFamily: 'monospace', fontWeight: 700, color: '#2a45c4', textAlign: 'right' }}>{factura.codigoSeguridad}</Box>
                   </Box>
                 )}
                 {factura.trackId && (
@@ -1842,7 +1842,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   nativeButton={false}
                   type="button"
                   variant="outlined"
-                  sx={{ color: '#0f766e', borderColor: '#5eead4', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#f0fdfa', borderColor: '#5eead4' } }}
+                  sx={{ color: '#2a45c4', borderColor: '#a5b4f9', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#eef2fe', borderColor: '#a5b4f9' } }}
                 >
                   {esBorrador ? 'Editar borrador' : 'Editar'}
                 </Button>
@@ -1857,7 +1857,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   type="button"
                   onClick={triggerEnviarDgii}
                   startIcon={<Send size={16} />}
-                  sx={{ bgcolor: '#0d9488', color: '#fff', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#0f766e' } }}
+                  sx={{ bgcolor: '#3658e1', color: '#fff', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' } }}
                 >
                   {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
                 </Button>
@@ -1870,7 +1870,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 onClick={(e) => setAccionesAnchor(e.currentTarget)}
                 disabled={esFinal && factura.estado === 'ANULADO'}
                 endIcon={<ChevronDown size={14} />}
-                sx={{ bgcolor: '#0d9488', color: '#fff', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#0f766e' }, '&.Mui-disabled': { bgcolor: '#0d9488', opacity: 0.5, color: '#fff' } }}
+                sx={{ bgcolor: '#3658e1', color: '#fff', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
               >
                 Acciones
               </Button>
@@ -2029,7 +2029,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             onClick={handleSendEmail}
             disabled={sendingEmail || !emailTo}
             startIcon={sendingEmail ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Mail size={16} />}
-            sx={{ bgcolor: '#0d9488', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#0f766e' }, '&.Mui-disabled': { bgcolor: '#0d9488', opacity: 0.5, color: '#fff' } }}
+            sx={{ bgcolor: '#3658e1', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
           >
             {sendingEmail ? 'Enviando…' : 'Enviar'}
           </Button>
@@ -2275,7 +2275,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             onClick={handleEnviarDgii}
             disabled={enviandoDgii || !dgiiValidacion.ok}
             startIcon={enviandoDgii ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />}
-            sx={{ bgcolor: '#0d9488', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#0f766e' }, '&.Mui-disabled': { bgcolor: '#0d9488', opacity: 0.5, color: '#fff' } }}
+            sx={{ bgcolor: '#3658e1', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
           >
             {enviandoDgii ? 'Enviando…' : 'Emitir a DGII'}
           </Button>
@@ -2305,7 +2305,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   setShowPagoMissingAlert(false);
                   document.querySelector('[data-pago-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }}
-                sx={{ bgcolor: '#0d9488', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#0f766e' } }}
+                sx={{ bgcolor: '#3658e1', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' } }}
               >
                 Registrar pago primero
               </Button>

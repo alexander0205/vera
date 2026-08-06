@@ -112,7 +112,7 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
                   value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
               {buscando ? (
-                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-teal-600" /></div>
+                <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
               ) : facturas.length > 0 ? (
                 <div className="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-64 overflow-y-auto">
                   {facturas.map((f) => (

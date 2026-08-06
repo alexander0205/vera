@@ -197,7 +197,7 @@ function DropdownMenuCheckboxItem({
       className={className}
     >
       <span className="flex h-4 w-4 items-center justify-center">
-        {checked && <Check className="h-3.5 w-3.5 text-teal-600" />}
+        {checked && <Check className="h-3.5 w-3.5 text-zero-600" />}
       </span>
       {children}
     </MuiMenuItem>
@@ -231,7 +231,7 @@ function DropdownMenuRadioItem({
       className={className}
     >
       <span className="flex h-4 w-4 items-center justify-center">
-        <Circle className="h-2 w-2 fill-teal-600 text-teal-600" />
+        <Circle className="h-2 w-2 fill-zero-600 text-zero-600" />
       </span>
       {children}
     </MuiMenuItem>

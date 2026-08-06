@@ -86,12 +86,12 @@ export default async function VentasGeneralesPage({
       {/* Breadcrumb */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
         <Link href="/dashboard/reportes" style={{ textDecoration: 'none' }}>
-          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#0d9488' } }}>Reportes</Typography>
+          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#3658e1' } }}>Reportes</Typography>
         </Link>
         <ChevronRight size={14} color="#9ca3af" />
         <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Ventas</Typography>
         <ChevronRight size={14} color="#9ca3af" />
-        <Typography sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Ventas generales</Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Ventas generales</Typography>
       </Box>
 
       {/* Header */}
@@ -108,7 +108,7 @@ export default async function VentasGeneralesPage({
           variant="contained"
           disableElevation
           startIcon={<Download size={16} />}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, whiteSpace: 'nowrap', flexShrink: 0 }}
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           Descargar
         </Button>
@@ -169,7 +169,7 @@ export default async function VentasGeneralesPage({
                 return (
                   <Box component="tr" key={d.id} sx={{ '&:hover': { bgcolor: '#f9fafb' }, borderBottom: '1px solid #f3f4f6' }}>
                     <Box component="td" sx={{ px: 2, py: 1.5 }}>
-                      <Link href={`/dashboard/facturas/${d.id}`} style={{ textDecoration: 'none', color: '#0d9488', fontWeight: 600 }}>
+                      <Link href={`/dashboard/facturas/${d.id}`} style={{ textDecoration: 'none', color: '#3658e1', fontWeight: 600 }}>
                         {d.encf}
                       </Link>
                       <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{TIPO_NOMBRE[d.tipoEcf] ?? `Tipo ${d.tipoEcf}`}</Typography>
@@ -256,11 +256,11 @@ function SimpleBarChart({
       {entries.map(([day, total]) => {
         const heightPct = (total / max) * 100;
         return (
-          <Box key={day} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, minWidth: 0, '&:hover .bar': { bgcolor: '#0f766e' } }}>
+          <Box key={day} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, minWidth: 0, '&:hover .bar': { bgcolor: '#2a45c4' } }}>
             <Box
               className="bar"
               title={`${day}: ${fmtDOP(total)}`}
-              sx={{ width: '100%', bgcolor: '#0d9488', borderRadius: '3px 3px 0 0', transition: 'background 0.15s', height: `${heightPct}%`, minHeight: 2 }}
+              sx={{ width: '100%', bgcolor: '#3658e1', borderRadius: '3px 3px 0 0', transition: 'background 0.15s', height: `${heightPct}%`, minHeight: 2 }}
             />
             <Typography sx={{ fontSize: '0.5625rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
               {day.slice(8, 10)}/{day.slice(5, 7)}

@@ -25,7 +25,7 @@ export function BottomActionBar({
   items, loading, onCancelar,
   primaryLabel = 'Guardar',
   loadingPrimaryLabel = 'Emitiendo…',
-  primaryBtnClass = 'bg-teal-600 hover:bg-teal-700 border-teal-700',
+  primaryBtnClass = 'bg-zero-600 hover:bg-zero-700 border-zero-700',
   loadingPreview, onVistaPrevia, onEmitir,
 }: Props) {
   const [showGuardarMenu, setShowGuardarMenu] = useState(false);
@@ -92,7 +92,7 @@ export function BottomActionBar({
                 disableElevation
                 disabled={loading}
                 startIcon={loading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
-                sx={{ textTransform: 'none', bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, borderRadius: '8px 0 0 8px', flex: { xs: 1, sm: 'none' }, minWidth: { sm: 140 }, height: { xs: 44, sm: 36 }, borderRight: '1px solid #0f766e', fontWeight: 500 }}
+                sx={{ textTransform: 'none', bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' }, borderRadius: '8px 0 0 8px', flex: { xs: 1, sm: 'none' }, minWidth: { sm: 140 }, height: { xs: 44, sm: 36 }, borderRight: '1px solid #2a45c4', fontWeight: 500 }}
               >
                 {loading ? loadingPrimaryLabel : primaryLabel}
               </Button>
@@ -102,7 +102,7 @@ export function BottomActionBar({
                 disabled={loading}
                 onClick={() => setShowGuardarMenu(v => !v)}
                 aria-label="Más opciones para guardar"
-                sx={{ bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.5 }, borderRadius: '0 8px 8px 0', px: { xs: 1.5, sm: 1.25 }, display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #0f766e', cursor: 'pointer', border: 'none', height: { xs: 44, sm: 36 } }}
+                sx={{ bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { opacity: 0.5 }, borderRadius: '0 8px 8px 0', px: { xs: 1.5, sm: 1.25 }, display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #2a45c4', cursor: 'pointer', border: 'none', height: { xs: 44, sm: 36 } }}
               >
                 <ChevronDown size={16} />
               </Box>
@@ -123,9 +123,9 @@ export function BottomActionBar({
                     component="button"
                     type="button"
                     onClick={() => { setShowGuardarMenu(false); onEmitir('emitir', { andThen: 'cobrar' }); }}
-                    sx={{ ...menuItemSx, color: '#0f766e', borderTop: '1px solid #f3f4f6', '&:hover': { bgcolor: '#f0fdfa' } }}
+                    sx={{ ...menuItemSx, color: '#2a45c4', borderTop: '1px solid #f3f4f6', '&:hover': { bgcolor: '#eef2fe' } }}
                   >
-                    <CreditCard size={16} color="#0d9488" />
+                    <CreditCard size={16} color="#3658e1" />
                     Guardar y generar link de pago
                   </Box>
                 </Box>
@@ -138,7 +138,7 @@ export function BottomActionBar({
             disableElevation
             disabled={loading}
             startIcon={loading ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ textTransform: 'none', bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, borderRadius: '8px', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 140 }, fontWeight: 500 }}
+            sx={{ textTransform: 'none', bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' }, borderRadius: '8px', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, minWidth: { sm: 140 }, fontWeight: 500 }}
           >
             {loading ? loadingPrimaryLabel : primaryLabel}
           </Button>

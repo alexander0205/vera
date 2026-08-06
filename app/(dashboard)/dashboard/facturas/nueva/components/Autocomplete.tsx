@@ -192,7 +192,7 @@ export function Autocomplete<T extends { id: number }>({
             px: 2,
             py: 1.25,
             fontSize: '0.875rem',
-            color: '#0f766e',
+            color: '#2a45c4',
             fontWeight: 500,
             bgcolor: 'transparent',
             border: 'none',
@@ -225,7 +225,7 @@ export function Autocomplete<T extends { id: number }>({
                 px: 2,
                 py: 1.25,
                 fontSize: '0.875rem',
-                color: '#0f766e',
+                color: '#2a45c4',
                 fontWeight: 500,
                 bgcolor: 'transparent',
                 border: 'none',
@@ -286,7 +286,7 @@ export function Autocomplete<T extends { id: number }>({
           bgcolor: 'white',
           height: 36,
           '&:hover': { borderColor: 'grey.400' },
-          '&:focus-within': { borderColor: '#0d9488', boxShadow: '0 0 0 2px rgba(13,148,136,0.2)' },
+          '&:focus-within': { borderColor: '#3658e1', boxShadow: '0 0 0 2px rgba(13,148,136,0.2)' },
         }}
       >
         <Box sx={{ position: 'absolute', left: 12, display: 'flex', alignItems: 'center', color: 'grey.500', pointerEvents: 'none' }}>

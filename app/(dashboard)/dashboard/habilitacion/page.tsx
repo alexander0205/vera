@@ -160,9 +160,9 @@ function CopyRow({ label, value }: { label: string; value: string }) {
       <IconButton
         size="small"
         onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
-        sx={{ ml: 1.5, borderRadius: '8px', color: '#9ca3af', '&:hover': { bgcolor: '#f3f4f6', color: '#0d9488' } }}
+        sx={{ ml: 1.5, borderRadius: '8px', color: '#9ca3af', '&:hover': { bgcolor: '#f3f4f6', color: '#3658e1' } }}
       >
-        {copied ? <Check style={{ width: 14, height: 14, color: '#14b8a6' }} /> : <Copy style={{ width: 14, height: 14 }}/>}
+        {copied ? <Check style={{ width: 14, height: 14, color: '#5b73ec' }} /> : <Copy style={{ width: 14, height: 14 }}/>}
       </IconButton>
     </Box>
   );
@@ -180,7 +180,7 @@ function DgiiField({ label, value, span, required = true, isUrl = false }: {
       <Typography component="label" sx={{ display: 'block', fontSize: '0.875rem', color: '#374151', mb: 0.5 }}>
         {label}{required && <Typography component="span" sx={{ color: 'error.main', ml: 0.25 }}>*</Typography>}
       </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: '6px', bgcolor: '#fff', overflow: 'hidden', '&:focus-within': { borderColor: '#2dd4bf', boxShadow: '0 0 0 2px rgba(13,148,136,0.15)' } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: '6px', bgcolor: '#fff', overflow: 'hidden', '&:focus-within': { borderColor: '#8193f5', boxShadow: '0 0 0 2px rgba(13,148,136,0.15)' } }}>
         {isUrl && (
           <Typography component="span" sx={{ flexShrink: 0, px: 1.5, py: 1, fontSize: '0.875rem', color: '#9ca3af', bgcolor: '#f9fafb', borderRight: '1px solid #e5e7eb', userSelect: 'none' }}>
             https://
@@ -191,9 +191,9 @@ function DgiiField({ label, value, span, required = true, isUrl = false }: {
           onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
           size="small"
           title="Copiar"
-          sx={{ flexShrink: 0, px: 1.5, py: 1, borderRadius: 0, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#f0fdfa', color: '#0d9488' } }}
+          sx={{ flexShrink: 0, px: 1.5, py: 1, borderRadius: 0, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#eef2fe', color: '#3658e1' } }}
         >
-          {copied ? <Check style={{ width: 16, height: 16, color: '#14b8a6' }} /> : <Copy style={{ width: 16, height: 16 }}/>}
+          {copied ? <Check style={{ width: 16, height: 16, color: '#5b73ec' }} /> : <Copy style={{ width: 16, height: 16 }}/>}
         </IconButton>
       </Box>
     </Box>
@@ -209,7 +209,7 @@ function InfoBox({ color, title, children }: { color: 'blue'|'amber'|'teal'|'red
   const colorMap = {
     blue:  { border: '#bfdbfe', bgcolor: '#eff6ff', color: '#1e40af' },
     amber: { border: '#fde68a', bgcolor: '#fffbeb', color: '#92400e' },
-    teal:  { border: '#99f6e4', bgcolor: '#f0fdfa', color: '#134e4a' },
+    teal:  { border: '#c7d2fc', bgcolor: '#eef2fe', color: '#24377d' },
     red:   { border: '#fecaca', bgcolor: '#fef2f2', color: '#991b1b' },
   }[color];
   return (
@@ -237,7 +237,7 @@ function NavFooter({
           disabled={nextDisabled || nextLoading}
           variant="contained"
           disableElevation
-          sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.4 }, px: 4, gap: 0.75 }}
+          sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { opacity: 0.4 }, px: 4, gap: 0.75 }}
         >
           {nextLoading && <CircularProgress size={16} sx={{ color: 'inherit', mr: 0.5 }} />}
           {nextLabel} {!nextLoading && <ChevronRight style={{ width: 16, height: 16 }}/>}
@@ -275,7 +275,7 @@ function HelpPopover({ content, link, linkText }: {
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-label="Más información"
-        sx={{ height: 20, width: 20, borderRadius: '50%', border: '1px solid #d1d5db', bgcolor: '#fff', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', '&:hover': { borderColor: '#2dd4bf', color: '#0d9488' }, transition: 'color 0.15s, border-color 0.15s' }}
+        sx={{ height: 20, width: 20, borderRadius: '50%', border: '1px solid #d1d5db', bgcolor: '#fff', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', '&:hover': { borderColor: '#8193f5', color: '#3658e1' }, transition: 'color 0.15s, border-color 0.15s' }}
       >
         ?
       </Box>
@@ -284,7 +284,7 @@ function HelpPopover({ content, link, linkText }: {
           <Typography sx={{ fontSize: '0.75rem', color: '#4b5563', lineHeight: 1.6 }}>{content}</Typography>
           {link && (
             <Box component="a" href={link} target="_blank" rel="noopener noreferrer"
-              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: '#0d9488', fontWeight: 600, '&:hover': { color: '#0f766e' }, mt: 1.25 }}>
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: '#3658e1', fontWeight: 600, '&:hover': { color: '#2a45c4' }, mt: 1.25 }}>
               <ExternalLink style={{ width: 12, height: 12 }}/>{linkText ?? 'Ver en DGII'}
             </Box>
           )}
@@ -334,7 +334,7 @@ function DgiiScreenshot({
         component="button"
         type="button"
         onClick={() => setOpen(true)}
-        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', fontWeight: 600, color: '#0d9488', cursor: 'pointer', background: 'none', border: 'none', '&:hover': { color: '#0f766e', textDecoration: 'underline' }, textUnderlineOffset: '2px' }}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', fontWeight: 600, color: '#3658e1', cursor: 'pointer', background: 'none', border: 'none', '&:hover': { color: '#2a45c4', textDecoration: 'underline' }, textUnderlineOffset: '2px' }}
       >
         <ImageIcon style={{ width: 14, height: 14 }}/>
         {label}
@@ -351,8 +351,8 @@ function DgiiScreenshot({
           >
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, borderBottom: '1px solid #e5e7eb' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ height: 28, width: 28, borderRadius: '8px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ImageIcon style={{ width: 16, height: 16, color: '#0d9488' }} />
+                <Box sx={{ height: 28, width: 28, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ImageIcon style={{ width: 16, height: 16, color: '#3658e1' }} />
                 </Box>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Portal DGII</Typography>
               </Box>
@@ -424,17 +424,17 @@ function WaitForDgii({
 
   if (done) {
     return (
-      <Box sx={{ borderRadius: '16px', border: '1px solid #99f6e4', bgcolor: 'rgba(240,253,250,0.6)', p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      <Box sx={{ borderRadius: '16px', border: '1px solid #c7d2fc', bgcolor: 'rgba(240,253,250,0.6)', p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-          <Box sx={{ height: 44, width: 44, borderRadius: '50%', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <CheckCircle style={{ width: 20, height: 20, color: '#0d9488' }} />
+          <Box sx={{ height: 44, width: 44, borderRadius: '50%', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <CheckCircle style={{ width: 20, height: 20, color: '#3658e1' }} />
           </Box>
           <Box>
             <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>{successTitle}</Typography>
             <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 0.5, lineHeight: 1.6 }}>{successDescription}</Typography>
           </Box>
         </Box>
-        <Button onClick={onComplete} variant="contained" disableElevation sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
+        <Button onClick={onComplete} variant="contained" disableElevation sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, width: '100%', gap: 1 }}>
           Continuar <ChevronRight style={{ width: 16, height: 16 }}/>
         </Button>
       </Box>
@@ -503,8 +503,8 @@ function EtapasHero() {
         sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, cursor: 'pointer', background: 'none', border: 'none', '&:hover': { bgcolor: '#f9fafb' }, transition: 'background-color 0.15s' }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <Box sx={{ height: 28, width: 28, borderRadius: '8px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ImageIcon style={{ width: 16, height: 16, color: '#0d9488' }} />
+          <Box sx={{ height: 28, width: 28, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ImageIcon style={{ width: 16, height: 16, color: '#3658e1' }} />
           </Box>
           <Box sx={{ textAlign: 'left' }}>
             <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Las 3 etapas oficiales de la DGII</Typography>
@@ -533,7 +533,7 @@ function StatusPill({ status }: { status: EcfSendStatus }) {
   if (status === 'idle') return null;
   const map: Partial<Record<EcfSendStatus, { bgcolor: string; color: string; label: string }>> = {
     sending:     { bgcolor: '#dbeafe', color: '#1d4ed8', label: 'Enviando…' },
-    aceptado:    { bgcolor: '#ccfbf1', color: '#0f766e', label: 'Aceptado' },
+    aceptado:    { bgcolor: '#e0e7fd', color: '#2a45c4', label: 'Aceptado' },
     rechazado:   { bgcolor: '#fee2e2', color: '#b91c1c', label: 'Rechazado' },
     condicional: { bgcolor: '#fef3c7', color: '#92400e', label: 'Acep. condicional' },
     proceso:     { bgcolor: '#f3f4f6', color: '#4b5563', label: 'En proceso' },
@@ -562,25 +562,25 @@ function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<n
         return (
           <Box key={p.id} sx={{ position: 'relative' }}>
             {i < PHASES.length - 1 && (
-              <Box sx={{ position: 'absolute', left: 15, top: 32, width: 2, height: 'calc(100% - 4px)', bgcolor: isDone ? '#2dd4bf' : '#e5e7eb' }} />
+              <Box sx={{ position: 'absolute', left: 15, top: 32, width: 2, height: 'calc(100% - 4px)', bgcolor: isDone ? '#8193f5' : '#e5e7eb' }} />
             )}
             <Box
               component="button"
               onClick={() => !isLocked && onJump(p.id)}
               disabled={isLocked}
-              sx={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 1.5, px: 1, py: 1, borderRadius: '12px', textAlign: 'left', cursor: isLocked ? 'not-allowed' : 'pointer', background: 'none', border: 'none', mb: 0.5, opacity: isLocked ? 0.4 : 1, bgcolor: isCurrent ? '#f0fdfa' : 'transparent', '&:hover': !isLocked ? { bgcolor: isCurrent ? '#f0fdfa' : '#f9fafb' } : {}, transition: 'background-color 0.15s' }}
+              sx={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 1.5, px: 1, py: 1, borderRadius: '12px', textAlign: 'left', cursor: isLocked ? 'not-allowed' : 'pointer', background: 'none', border: 'none', mb: 0.5, opacity: isLocked ? 0.4 : 1, bgcolor: isCurrent ? '#eef2fe' : 'transparent', '&:hover': !isLocked ? { bgcolor: isCurrent ? '#eef2fe' : '#f9fafb' } : {}, transition: 'background-color 0.15s' }}
             >
-              <Box sx={{ height: 30, width: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '2px solid', mt: 0.25, transition: 'all 0.15s', borderColor: isDone ? '#0d9488' : isCurrent ? '#0d9488' : '#e5e7eb', bgcolor: isDone ? '#0d9488' : '#fff', color: isDone ? '#fff' : isCurrent ? '#0d9488' : '#9ca3af' }}>
+              <Box sx={{ height: 30, width: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '2px solid', mt: 0.25, transition: 'all 0.15s', borderColor: isDone ? '#3658e1' : isCurrent ? '#3658e1' : '#e5e7eb', bgcolor: isDone ? '#3658e1' : '#fff', color: isDone ? '#fff' : isCurrent ? '#3658e1' : '#9ca3af' }}>
                 {isDone ? <Check style={{ width: 14, height: 14 }}/> : <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 700 }}>{p.id + 1}</Typography>}
               </Box>
               <Box sx={{ pt: 0.25, minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isCurrent ? 'text.primary' : isDone ? '#0f766e' : '#9ca3af' }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isCurrent ? 'text.primary' : isDone ? '#2a45c4' : '#9ca3af' }}>
                   {p.label}
                 </Typography>
                 {isCurrent && (
                   <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
                     {p.sub.map(s => (
-                      <Typography key={s} sx={{ fontSize: '0.75rem', color: '#0d9488', lineHeight: 1.4 }}>· {s}</Typography>
+                      <Typography key={s} sx={{ fontSize: '0.75rem', color: '#3658e1', lineHeight: 1.4 }}>· {s}</Typography>
                     ))}
                   </Box>
                 )}
@@ -683,7 +683,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
 
   if (loading) return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 288 }}>
-      <CircularProgress sx={{ color: '#14b8a6' }} />
+      <CircularProgress sx={{ color: '#5b73ec' }} />
     </Box>
   );
 
@@ -700,7 +700,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
               <TextField value={perfil.rnc ?? ''} disabled size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: '#f9fafb' }, '& .MuiInputBase-input': { color: '#6b7280', fontSize: '0.875rem' } }} />
               <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.5 }}>
                 Para cambiar el RNC ve a{' '}
-                <Link href="/dashboard/configuracion" style={{ color: '#0d9488' }}>Configuración</Link>
+                <Link href="/dashboard/configuracion" style={{ color: '#3658e1' }}>Configuración</Link>
               </Typography>
             </Box>
             <Box>
@@ -753,16 +753,16 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
             </Typography>
 
             {certListo ? (
-              <Box sx={{ borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ borderRadius: '12px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe', p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CheckCircle style={{ width: 16, height: 16, flexShrink: 0, color: '#14b8a6' }} />
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Certificado activo</Typography>
+                  <CheckCircle style={{ width: 16, height: 16, flexShrink: 0, color: '#5b73ec' }} />
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#24377d' }}>Certificado activo</Typography>
                 </Box>
-                {certInfo?.titular && <Typography sx={{ fontSize: '0.75rem', color: '#0f766e' }}>{certInfo.titular}</Typography>}
+                {certInfo?.titular && <Typography sx={{ fontSize: '0.75rem', color: '#2a45c4' }}>{certInfo.titular}</Typography>}
                 {certInfo?.vencimiento && (
-                  <Typography sx={{ fontSize: '0.75rem', color: '#0d9488' }}>Vence: {certInfo.vencimiento}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#3658e1' }}>Vence: {certInfo.vencimiento}</Typography>
                 )}
-                <Box component="button" sx={{ fontSize: '0.75rem', color: '#0d9488', textDecoration: 'underline', textUnderlineOffset: '2px', cursor: 'pointer', background: 'none', border: 'none', p: 0, textAlign: 'left' }}
+                <Box component="button" sx={{ fontSize: '0.75rem', color: '#3658e1', textDecoration: 'underline', textUnderlineOffset: '2px', cursor: 'pointer', background: 'none', border: 'none', p: 0, textAlign: 'left' }}
                   onClick={() => setCertInfo({ tieneCertificado: false })}>
                   Reemplazar certificado
                 </Box>
@@ -775,20 +775,20 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
                     onDragLeave={() => setDragging(false)}
                     onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                     onClick={() => fileInputRef.current?.click()}
-                    sx={{ borderRadius: '12px', border: `2px dashed ${dragging ? '#2dd4bf' : '#e5e7eb'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 4, px: 2, textAlign: 'center', bgcolor: dragging ? '#f0fdfa' : 'transparent', '&:hover': { borderColor: '#5eead4', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}
+                    sx={{ borderRadius: '12px', border: `2px dashed ${dragging ? '#8193f5' : '#e5e7eb'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 4, px: 2, textAlign: 'center', bgcolor: dragging ? '#eef2fe' : 'transparent', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}
                   >
-                    <CloudUpload style={{ width: 32, height: 32, color: dragging ? '#14b8a6' : '#9ca3af' }} />
+                    <CloudUpload style={{ width: 32, height: 32, color: dragging ? '#5b73ec' : '#9ca3af' }} />
                     <Box>
                       <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>Arrastra tu certificado aquí</Typography>
                       <Box component="button" type="button" onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                        sx={{ fontSize: '0.75rem', color: '#0d9488', cursor: 'pointer', background: 'none', border: 'none', mt: 0.25, '&:hover': { textDecoration: 'underline' } }}>
+                        sx={{ fontSize: '0.75rem', color: '#3658e1', cursor: 'pointer', background: 'none', border: 'none', mt: 0.25, '&:hover': { textDecoration: 'underline' } }}>
                         o selecciona el archivo .p12 / .pfx
                       </Box>
                     </Box>
                   </Box>
                 ) : (
                   <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <FileKey style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
+                    <FileKey style={{ width: 16, height: 16, flexShrink: 0, color: '#3658e1' }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</Typography>
                       <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{fmtSize(file.size)}</Typography>
@@ -830,7 +830,7 @@ function PhaseEmpresa({ onComplete }: { onComplete: () => void }) {
 
                 <Button onClick={handleUploadCert} disabled={!file || !password || uploadingCert}
                   variant="contained" disableElevation size="small"
-                  sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.4 }, width: '100%' }}>
+                  sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { opacity: 0.4 }, width: '100%' }}>
                   {uploadingCert
                     ? <><CircularProgress size={14} sx={{ color: 'inherit', mr: 1 }} />Guardando…</>
                     : <><KeyRound style={{ width: 14, height: 14, marginRight: 8 }} />Guardar certificado</>}
@@ -944,15 +944,15 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
         {STEPS.map((label, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#3658e1' : i === sub ? '#3658e1' : '#e5e7eb', bgcolor: i < sub ? '#3658e1' : '#fff', color: i < sub ? '#fff' : i === sub ? '#3658e1' : '#9ca3af' }}>
                 {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
               </Box>
-              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#2a45c4' : i < sub ? '#5b73ec' : '#9ca3af' }}>
                 {label.replace(/^\d+\.\s/, '')}
               </Typography>
             </Box>
             {i < STEPS.length - 1 && (
-              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#8193f5' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
           </Box>
         ))}
@@ -963,16 +963,16 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
           {/* 1 — CTA principal: abrir portal */}
-          <Box sx={{ borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', px: 2.5, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+          <Box sx={{ borderRadius: '12px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe', px: 2.5, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Abre el portal DGII y crea tu postulación</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#0f766e', mt: 0.25 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#24377d' }}>Abre el portal DGII y crea tu postulación</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#2a45c4', mt: 0.25 }}>
                 Sección <strong>Emisor Electrónico → CREAR POSTULACIÓN</strong>.
                 Copia los datos de abajo y haz clic en <strong>"Generar archivo"</strong>.
               </Typography>
             </Box>
             <Box component="a" href="https://ecf.dgii.gov.do/testecf/contribuyentes" target="_blank" rel="noopener noreferrer"
-              sx={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 2, py: 1, borderRadius: '8px', bgcolor: '#0d9488', color: '#fff', fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' }, transition: 'background-color 0.15s' }}>
+              sx={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 2, py: 1, borderRadius: '8px', bgcolor: '#3658e1', color: '#fff', fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: '#2a45c4' }, transition: 'background-color 0.15s' }}>
               Abrir portal <ExternalLink style={{ width: 14, height: 14 }}/>
             </Box>
           </Box>
@@ -1032,9 +1032,9 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           </InfoBox>
 
           {/* Paso 1: Cargar Formulario de Postulación */}
-          <Box sx={{ borderRadius: '12px', border: `1px solid ${xmlFile ? '#99f6e4' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, transition: 'all 0.15s' }}>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${xmlFile ? '#c7d2fc' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, transition: 'all 0.15s' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: xmlFile ? '#0d9488' : '#e5e7eb', color: xmlFile ? '#fff' : '#4b5563' }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: xmlFile ? '#3658e1' : '#e5e7eb', color: xmlFile ? '#fff' : '#4b5563' }}>
                 {xmlFile ? <Check style={{ width: 14, height: 14 }}/> : '1'}
               </Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Cargar el Formulario de Postulación</Typography>
@@ -1043,7 +1043,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             {!xmlFile ? (
               <Box
                 onClick={() => xmlInputRef.current?.click()}
-                sx={{ borderRadius: '12px', border: '2px dashed #e5e7eb', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 3.5, px: 2, textAlign: 'center', '&:hover': { borderColor: '#5eead4', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}
+                sx={{ borderRadius: '12px', border: '2px dashed #e5e7eb', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 3.5, px: 2, textAlign: 'center', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}
               >
                 <Upload style={{ width: 28, height: 28, color: '#9ca3af' }} />
                 <Box>
@@ -1053,7 +1053,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
               </Box>
             ) : (
               <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <FileText style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
+                <FileText style={{ width: 16, height: 16, flexShrink: 0, color: '#3658e1' }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{xmlFile.name}</Typography>
                   <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{fmtSize(xmlFile.size)}</Typography>
@@ -1070,9 +1070,9 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           </Box>
 
           {/* Paso 2: Aplicar Firma Digital */}
-          <Box sx={{ borderRadius: '12px', border: `1px solid ${signed ? '#99f6e4' : !xmlFile ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !signed && !xmlFile ? 0.4 : 1, transition: 'all 0.15s' }}>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${signed ? '#c7d2fc' : !xmlFile ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !signed && !xmlFile ? 0.4 : 1, transition: 'all 0.15s' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: signed ? '#0d9488' : '#e5e7eb', color: signed ? '#fff' : '#4b5563' }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: signed ? '#3658e1' : '#e5e7eb', color: signed ? '#fff' : '#4b5563' }}>
                 {signed ? <Check style={{ width: 14, height: 14 }}/> : '2'}
               </Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Aplicar Firma Digital</Typography>
@@ -1080,13 +1080,13 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
             {!signed ? (
               <Button onClick={handleFirmar} disabled={!xmlFile || signing}
                 variant="contained" disableElevation
-                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
+                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, width: '100%', gap: 1 }}>
                 {signing
                   ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Aplicando Firma Digital…</>
                   : <><FileSignature style={{ width: 16, height: 16 }}/>Aplicar Firma Digital</>}
               </Button>
             ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px', p: 1.5, color: '#134e4a' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#eef2fe', border: '1px solid #c7d2fc', borderRadius: '8px', p: 1.5, color: '#24377d' }}>
                 <CheckCircle style={{ width: 16, height: 16, flexShrink: 0 }}/>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Firma Digital aplicada correctamente</Typography>
               </Box>
@@ -1100,9 +1100,9 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           </Box>
 
           {/* Paso 3: Descargar Formulario firmado */}
-          <Box sx={{ borderRadius: '12px', border: `1px solid ${downloaded ? '#99f6e4' : !signed ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !downloaded && !signed ? 0.4 : 1, transition: 'all 0.15s' }}>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${downloaded ? '#c7d2fc' : !signed ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !downloaded && !signed ? 0.4 : 1, transition: 'all 0.15s' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: downloaded ? '#0d9488' : '#e5e7eb', color: downloaded ? '#fff' : '#4b5563' }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: downloaded ? '#3658e1' : '#e5e7eb', color: downloaded ? '#fff' : '#4b5563' }}>
                 {downloaded ? <Check style={{ width: 14, height: 14 }}/> : '3'}
               </Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Descargar Formulario firmado</Typography>
@@ -1151,7 +1151,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           </Box>
 
           <FormControlLabel
-            control={<Checkbox checked={uploadConfirmed} onChange={e => handleConfirmarSubida(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            control={<Checkbox checked={uploadConfirmed} onChange={e => handleConfirmarSubida(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#3658e1' }, mt: -0.25 }} />}
             label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Realicé el Envío de archivo de declaración jurada firmado en el portal DGII</Typography>}
             sx={{ alignItems: 'flex-start', mx: 0 }}
           />
@@ -1203,22 +1203,22 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
                 No cierres sesión en Zero — tu progreso ya está guardado.
               </Typography>
               <Box component="ul" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.875rem', color: '#4b5563', pl: 2, listStyleType: 'disc' }}>
-                <li>Si tu postulación es <strong style={{ color: '#0f766e' }}>aprobada</strong>, DGII habilita el Set de Pruebas en el Portal de Certificación.</li>
+                <li>Si tu postulación es <strong style={{ color: '#2a45c4' }}>aprobada</strong>, DGII habilita el Set de Pruebas en el Portal de Certificación.</li>
                 <li>Si es <strong style={{ color: '#dc2626' }}>rechazada</strong>, DGII te indica qué datos corregir.</li>
               </Box>
             </Box>
 
             <Box component="a" href="https://dgii.gov.do/ofv/" target="_blank" rel="noopener noreferrer"
-              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', fontWeight: 600, color: '#0f766e', '&:hover': { color: '#134e4a', textDecoration: 'underline' }, textUnderlineOffset: '2px' }}>
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.75rem', fontWeight: 600, color: '#2a45c4', '&:hover': { color: '#24377d', textDecoration: 'underline' }, textUnderlineOffset: '2px' }}>
               Abrir Oficina Virtual DGII
               <ExternalLink style={{ width: 12, height: 12 }}/>
             </Box>
           </Box>
 
           {/* Confirmación manual */}
-          <Box sx={{ borderRadius: '12px', border: '2px solid #99f6e4', bgcolor: 'rgba(240,253,250,0.5)', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ borderRadius: '12px', border: '2px solid #c7d2fc', bgcolor: 'rgba(240,253,250,0.5)', p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-              <CheckCircle style={{ width: 20, height: 20, marginTop: '2px', flexShrink: 0, color: '#0d9488' }} />
+              <CheckCircle style={{ width: 20, height: 20, marginTop: '2px', flexShrink: 0, color: '#3658e1' }} />
               <Box>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                   ¿Ya recibiste el correo de aprobación de DGII?
@@ -1232,7 +1232,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
               <Button
                 onClick={onComplete}
                 variant="contained" disableElevation
-                sx={{ flex: 1, textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, gap: 1 }}
+                sx={{ flex: 1, textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, gap: 1 }}
               >
                 <Check style={{ width: 16, height: 16 }}/>
                 DGII ya aprobó mi postulación
@@ -1725,15 +1725,15 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
         {STEPS.map((label, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#3658e1' : i === sub ? '#3658e1' : '#e5e7eb', bgcolor: i < sub ? '#3658e1' : '#fff', color: i < sub ? '#fff' : i === sub ? '#3658e1' : '#9ca3af' }}>
                 {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
               </Box>
-              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#2a45c4' : i < sub ? '#5b73ec' : '#9ca3af' }}>
                 {label}
               </Typography>
             </Box>
             {i < STEPS.length - 1 && (
-              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#8193f5' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
           </Box>
         ))}
@@ -1852,9 +1852,9 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
 
           {/* Banner cuando todo está aceptado (un instante antes de auto-avanzar) */}
           {gridDone && !polling && !fc250Done && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa' }}>
-              <CheckCircle style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Pruebas validadas exitosamente</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe' }}>
+              <CheckCircle style={{ width: 16, height: 16, flexShrink: 0, color: '#3658e1' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#24377d' }}>Pruebas validadas exitosamente</Typography>
             </Box>
           )}
 
@@ -1927,15 +1927,15 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
                                : t.tipo === '32r' ? '32 RFCE'
                                : t.tipo;
                   return (
-                    <Box key={t.tipo} sx={{ borderRadius: '8px', border: `1px solid ${done ? '#99f6e4' : active ? '#bfdbfe' : '#f3f4f6'}`, px: 1.5, py: 1, bgcolor: done ? '#f0fdfa' : active ? 'rgba(239,246,255,0.6)' : '#fff', transition: 'all 0.15s' }}>
+                    <Box key={t.tipo} sx={{ borderRadius: '8px', border: `1px solid ${done ? '#c7d2fc' : active ? '#bfdbfe' : '#f3f4f6'}`, px: 1.5, py: 1, bgcolor: done ? '#eef2fe' : active ? 'rgba(239,246,255,0.6)' : '#fff', transition: 'all 0.15s' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5, mb: 0.25 }}>
-                        <Typography component="span" sx={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1, color: done ? '#0d9488' : active ? '#2563eb' : '#d1d5db' }}>
+                        <Typography component="span" sx={{ fontSize: '1rem', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1, color: done ? '#3658e1' : active ? '#2563eb' : '#d1d5db' }}>
                           {count}/{req}
                         </Typography>
-                        {done   && <Check   style={{ width: 14, height: 14, flexShrink: 0, color: '#14b8a6' }} />}
+                        {done   && <Check   style={{ width: 14, height: 14, flexShrink: 0, color: '#5b73ec' }} />}
                         {active && <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite', flexShrink: 0, color: '#3b82f6' }} />}
                       </Box>
-                      <Typography sx={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.25, color: done ? '#0f766e' : active ? '#1d4ed8' : '#9ca3af' }}>
+                      <Typography sx={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.25, color: done ? '#2a45c4' : active ? '#1d4ed8' : '#9ca3af' }}>
                         Tipo {label}
                       </Typography>
                     </Box>
@@ -1981,10 +1981,10 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
                     disabled={!doc.documentoId}
                     sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25, textAlign: 'left', cursor: doc.documentoId ? 'pointer' : 'not-allowed', background: 'none', border: 'none', opacity: doc.documentoId ? 1 : 0.4, '&:hover': doc.documentoId ? { bgcolor: '#f9fafb' } : {}, transition: 'background-color 0.15s' }}
                   >
-                    <Download style={{ width: 14, height: 14, flexShrink: 0, color: '#0d9488' }} />
+                    <Download style={{ width: 14, height: 14, flexShrink: 0, color: '#3658e1' }} />
                     <Typography component="span" sx={{ flex: 1, fontSize: '0.75rem', fontFamily: 'monospace', color: '#1f2937' }}>{doc.encf}.xml</Typography>
                     <Typography component="span" sx={{ fontSize: '10px', color: '#9ca3af', flexShrink: 0 }}>Tipo {doc.tipo.replace(/[grb]/g, '')}</Typography>
-                    <Typography component="span" sx={{ fontSize: '10px', color: '#0d9488', fontWeight: 500, flexShrink: 0 }}>↓ Descargar</Typography>
+                    <Typography component="span" sx={{ fontSize: '10px', color: '#3658e1', fontWeight: 500, flexShrink: 0 }}>↓ Descargar</Typography>
                   </Box>
                 ))}
               </Box>
@@ -2060,7 +2060,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
           </Box>
 
           <FormControlLabel
-            control={<Checkbox checked={fc250Done} onChange={async e => { const v = e.target.checked; setFc250Done(v); const { guardarEstado } = await import('@/lib/habilitacion/client'); guardarEstado({ pruebas: { fc250Done: v } }).catch(() => {}); }} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            control={<Checkbox checked={fc250Done} onChange={async e => { const v = e.target.checked; setFc250Done(v); const { guardarEstado } = await import('@/lib/habilitacion/client'); guardarEstado({ pruebas: { fc250Done: v } }).catch(() => {}); }} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#3658e1' }, mt: -0.25 }} />}
             label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Subí con éxito la factura de consumo al portal DGII</Typography>}
             sx={{ alignItems: 'flex-start', mx: 0 }}
           />
@@ -2077,14 +2077,14 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
       {/* ── Sub 3: Confirmación ── */}
       {sub === 3 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Box sx={{ borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa', p: 2.5 }}>
+          <Box sx={{ borderRadius: '12px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe', p: 2.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box sx={{ height: 40, width: 40, borderRadius: '50%', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <CheckCircle style={{ width: 20, height: 20, color: '#0d9488' }} />
+              <Box sx={{ height: 40, width: 40, borderRadius: '50%', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <CheckCircle style={{ width: 20, height: 20, color: '#3658e1' }} />
               </Box>
               <Box>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#134e4a' }}>Pruebas de simulación completadas</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#0f766e', mt: 0.25 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#24377d' }}>Pruebas de simulación completadas</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#2a45c4', mt: 0.25 }}>
                   Todos los e-CF de prueba fueron aceptados por la DGII
                 </Typography>
               </Box>
@@ -2097,7 +2097,7 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
           </InfoBox>
 
           <FormControlLabel
-            control={<Checkbox checked={confirmed} onChange={async e => { const v = e.target.checked; setConfirmed(v); const { guardarEstado } = await import('@/lib/habilitacion/client'); guardarEstado({ pruebas: { confirmed: v } }).catch(() => {}); }} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            control={<Checkbox checked={confirmed} onChange={async e => { const v = e.target.checked; setConfirmed(v); const { guardarEstado } = await import('@/lib/habilitacion/client'); guardarEstado({ pruebas: { confirmed: v } }).catch(() => {}); }} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#3658e1' }, mt: -0.25 }} />}
             label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Confirmo que el Set de Pruebas fue aprobado en el portal DGII</Typography>}
             sx={{ alignItems: 'flex-start', mx: 0 }}
           />
@@ -2177,15 +2177,15 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
         {STEPS.map((label, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#3658e1' : i === sub ? '#3658e1' : '#e5e7eb', bgcolor: i < sub ? '#3658e1' : '#fff', color: i < sub ? '#fff' : i === sub ? '#3658e1' : '#9ca3af' }}>
                 {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
               </Box>
-              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#2a45c4' : i < sub ? '#5b73ec' : '#9ca3af' }}>
                 {label}
               </Typography>
             </Box>
             {i < STEPS.length - 1 && (
-              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#8193f5' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
           </Box>
         ))}
@@ -2205,7 +2205,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
               {downloadingAll
                 ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Descargando {downloaded.size + 1} de {PDFS.length}…</>
                 : allDone
-                ? <><CheckCircle style={{ width: 16, height: 16, color: '#14b8a6' }} />Todos descargados</>
+                ? <><CheckCircle style={{ width: 16, height: 16, color: '#5b73ec' }} />Todos descargados</>
                 : <><Download style={{ width: 16, height: 16 }}/>Descargar todos (uno a uno)</>}
             </Button>
             <Typography component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#6b7280' }}>
@@ -2231,8 +2231,8 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
               const done = downloaded.has(pdf.tipo);
               const busy = downloading === pdf.tipo;
               return (
-                <Box key={pdf.tipo} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: `1px solid ${done ? '#99f6e4' : '#e5e7eb'}`, bgcolor: done ? 'rgba(240,253,250,0.6)' : '#fff', transition: 'all 0.15s' }}>
-                  <Box sx={{ height: 28, width: 28, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.75rem', fontWeight: 700, bgcolor: done ? '#ccfbf1' : '#f3f4f6', color: done ? '#0f766e' : '#6b7280' }}>
+                <Box key={pdf.tipo} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: `1px solid ${done ? '#c7d2fc' : '#e5e7eb'}`, bgcolor: done ? 'rgba(240,253,250,0.6)' : '#fff', transition: 'all 0.15s' }}>
+                  <Box sx={{ height: 28, width: 28, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.75rem', fontWeight: 700, bgcolor: done ? '#e0e7fd' : '#f3f4f6', color: done ? '#2a45c4' : '#6b7280' }}>
                     {pdf.tipo.replace(/[ab]/g, '')}
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -2240,7 +2240,7 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
                     <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{pdf.tam}</Typography>
                   </Box>
                   <IconButton onClick={() => !done && !busy && handleDownloadOne(pdf.tipo)} disabled={done || busy}
-                    size="small" sx={{ flexShrink: 0, borderRadius: '8px', color: done ? '#14b8a6' : busy ? '#d1d5db' : '#9ca3af', cursor: done ? 'default' : 'pointer', '&:hover': !done && !busy ? { color: '#0d9488', bgcolor: '#f0fdfa' } : {} }}>
+                    size="small" sx={{ flexShrink: 0, borderRadius: '8px', color: done ? '#5b73ec' : busy ? '#d1d5db' : '#9ca3af', cursor: done ? 'default' : 'pointer', '&:hover': !done && !busy ? { color: '#3658e1', bgcolor: '#eef2fe' } : {} }}>
                     {busy ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }}/> : done ? <CheckCircle style={{ width: 16, height: 16 }}/> : <Download style={{ width: 16, height: 16 }}/>}
                   </IconButton>
                 </Box>
@@ -2274,9 +2274,9 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
           />
 
           <FormControlLabel
-            control={<Checkbox checked={uploadConfirmed} onChange={e => setUploadConfirmed(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+            control={<Checkbox checked={uploadConfirmed} onChange={e => setUploadConfirmed(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#3658e1' }, mt: -0.25 }} />}
             label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Subí los 11 PDFs al portal DGII y di clic en <strong>ENVIAR ARCHIVOS</strong></Typography>}
-            sx={{ alignItems: 'flex-start', mx: 0, p: 2, borderRadius: '12px', border: '1px solid #e5e7eb', '&:hover': { borderColor: '#5eead4' }, transition: 'border-color 0.15s' }}
+            sx={{ alignItems: 'flex-start', mx: 0, p: 2, borderRadius: '12px', border: '1px solid #e5e7eb', '&:hover': { borderColor: '#a5b4f9' }, transition: 'border-color 0.15s' }}
           />
 
           <NavFooter
@@ -2357,14 +2357,14 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, borderRadius: '12px', border: '1px solid #e5e7eb', p: 2 }}>
-        <Lock style={{ width: 16, height: 16, flexShrink: 0, color: '#14b8a6' }} />
+        <Lock style={{ width: 16, height: 16, flexShrink: 0, color: '#5b73ec' }} />
         <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
           Todos los endpoints usan <strong>HTTPS / TLS 1.2+</strong> con certificado SSL válido.
         </Typography>
       </Box>
 
       <FormControlLabel
-        control={<Checkbox checked={confirmed} onChange={e => setConfirmed(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+        control={<Checkbox checked={confirmed} onChange={e => setConfirmed(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#3658e1' }, mt: -0.25 }} />}
         label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Registré las 3 URLs en el portal DGII y di clic en CONFIRMAR URLs</Typography>}
         sx={{ alignItems: 'flex-start', mx: 0 }}
       />
@@ -2398,15 +2398,15 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
         {STEPS.map((label, i) => (
           <Box key={i} sx={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#0d9488' : i === sub ? '#0d9488' : '#e5e7eb', bgcolor: i < sub ? '#0d9488' : '#fff', color: i < sub ? '#fff' : i === sub ? '#0d9488' : '#9ca3af' }}>
+              <Box sx={{ height: 28, width: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '2px solid', transition: 'all 0.15s', borderColor: i < sub ? '#3658e1' : i === sub ? '#3658e1' : '#e5e7eb', bgcolor: i < sub ? '#3658e1' : '#fff', color: i < sub ? '#fff' : i === sub ? '#3658e1' : '#9ca3af' }}>
                 {i < sub ? <Check style={{ width: 12, height: 12 }}/> : i + 1}
               </Box>
-              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#0f766e' : i < sub ? '#14b8a6' : '#9ca3af' }}>
+              <Typography component="span" sx={{ fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', color: i === sub ? '#2a45c4' : i < sub ? '#5b73ec' : '#9ca3af' }}>
                 {label}
               </Typography>
             </Box>
             {i < STEPS.length - 1 && (
-              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#2dd4bf' : '#e5e7eb', transition: 'background-color 0.15s' }} />
+              <Box sx={{ flex: 1, height: 2, mb: 2, mx: 1, borderRadius: '9999px', bgcolor: i < sub ? '#8193f5' : '#e5e7eb', transition: 'background-color 0.15s' }} />
             )}
           </Box>
         ))}
@@ -2428,10 +2428,10 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           </InfoBox>
 
           {/* Step 1 */}
-          <Box sx={{ borderRadius: '12px', border: `1px solid ${xmlFile ? '#99f6e4' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${xmlFile ? '#c7d2fc' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: xmlFile ? '#0d9488' : '#e5e7eb', color: xmlFile ? '#fff' : '#4b5563' }}>
+                <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: xmlFile ? '#3658e1' : '#e5e7eb', color: xmlFile ? '#fff' : '#4b5563' }}>
                   {xmlFile ? <Check style={{ width: 14, height: 14 }}/> : '1'}
                 </Box>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Subir XML generado por la DGII</Typography>
@@ -2446,7 +2446,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
 
             {!xmlFile ? (
               <Box onClick={() => fileInputRef.current?.click()}
-                sx={{ borderRadius: '12px', border: '2px dashed #e5e7eb', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 3, px: 2, textAlign: 'center', '&:hover': { borderColor: '#5eead4', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}>
+                sx={{ borderRadius: '12px', border: '2px dashed #e5e7eb', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 3, px: 2, textAlign: 'center', '&:hover': { borderColor: '#a5b4f9', bgcolor: '#f9fafb' }, transition: 'all 0.15s' }}>
                 <Upload style={{ width: 28, height: 28, color: '#9ca3af' }} />
                 <Box>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>XML de declaración jurada</Typography>
@@ -2455,7 +2455,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
               </Box>
             ) : (
               <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <FileText style={{ width: 16, height: 16, flexShrink: 0, color: '#0d9488' }} />
+                <FileText style={{ width: 16, height: 16, flexShrink: 0, color: '#3658e1' }} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{xmlFile.name}</Typography>
                   <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{fmtSize(xmlFile.size)}</Typography>
@@ -2470,23 +2470,23 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           </Box>
 
           {/* Step 2 */}
-          <Box sx={{ borderRadius: '12px', border: `1px solid ${signed ? '#99f6e4' : !xmlFile ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !signed && !xmlFile ? 0.4 : 1, transition: 'all 0.15s' }}>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${signed ? '#c7d2fc' : !xmlFile ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !signed && !xmlFile ? 0.4 : 1, transition: 'all 0.15s' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: signed ? '#0d9488' : '#e5e7eb', color: signed ? '#fff' : '#4b5563' }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: signed ? '#3658e1' : '#e5e7eb', color: signed ? '#fff' : '#4b5563' }}>
                 {signed ? <Check style={{ width: 14, height: 14 }}/> : '2'}
               </Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Firmar con certificado P12</Typography>
             </Box>
             {!signed ? (
               <Button onClick={handleSign} disabled={!xmlFile || signing} variant="contained" disableElevation
-                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
+                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, width: '100%', gap: 1 }}>
                 {signing
                   ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Firmando declaración jurada…</>
                   : <><FileSignature style={{ width: 16, height: 16 }}/>Firmar declaración jurada</>}
               </Button>
             ) : (
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px', p: 1.5, color: '#134e4a' }}>
+                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#eef2fe', border: '1px solid #c7d2fc', borderRadius: '8px', p: 1.5, color: '#24377d' }}>
                   <CheckCircle style={{ width: 16, height: 16 }}/>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Firmado · RSA-SHA256</Typography>
                 </Box>
@@ -2498,22 +2498,22 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
           </Box>
 
           {/* Step 3 */}
-          <Box sx={{ borderRadius: '12px', border: `1px solid ${sent ? '#99f6e4' : !signed ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !sent && !signed ? 0.4 : 1, transition: 'all 0.15s' }}>
+          <Box sx={{ borderRadius: '12px', border: `1px solid ${sent ? '#c7d2fc' : !signed ? '#f3f4f6' : '#e5e7eb'}`, p: 2.5, display: 'flex', flexDirection: 'column', gap: 2, opacity: !sent && !signed ? 0.4 : 1, transition: 'all 0.15s' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: sent ? '#0d9488' : '#e5e7eb', color: sent ? '#fff' : '#4b5563' }}>
+              <Box sx={{ height: 24, width: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0, bgcolor: sent ? '#3658e1' : '#e5e7eb', color: sent ? '#fff' : '#4b5563' }}>
                 {sent ? <Check style={{ width: 14, height: 14 }}/> : '3'}
               </Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>Enviar al portal DGII</Typography>
             </Box>
             {!sent ? (
               <Button onClick={handleSend} disabled={!signed || sending} variant="contained" disableElevation
-                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, width: '100%', gap: 1 }}>
+                sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, width: '100%', gap: 1 }}>
                 {sending
                   ? <><CircularProgress size={16} sx={{ color: 'inherit' }} />Enviando a DGII…</>
                   : <><ExternalLink style={{ width: 16, height: 16 }}/>Enviar declaración jurada</>}
               </Button>
             ) : (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px', p: 1.5, color: '#134e4a' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#eef2fe', border: '1px solid #c7d2fc', borderRadius: '8px', p: 1.5, color: '#24377d' }}>
                 <CheckCircle style={{ width: 16, height: 16, flexShrink: 0 }}/>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Enviada y recibida por la DGII</Typography>
               </Box>
@@ -2566,13 +2566,13 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
-      <Box sx={{ borderRadius: '16px', border: '1px solid #99f6e4', background: 'linear-gradient(135deg, #f0fdfa, #fff)', p: 3 }}>
+      <Box sx={{ borderRadius: '16px', border: '1px solid #c7d2fc', background: 'linear-gradient(135deg, #eef2fe, #fff)', p: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-          <Box sx={{ height: 56, width: 56, borderRadius: '16px', bgcolor: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <Box sx={{ height: 56, width: 56, borderRadius: '16px', bgcolor: '#3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <PartyPopper style={{ width: 28, height: 28, color: '#fff' }} />
           </Box>
           <Box>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.1em', mb: 0.5 }}>Paso 15 · Finalizado</Typography>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#3658e1', textTransform: 'uppercase', letterSpacing: '0.1em', mb: 0.5 }}>Paso 15 · Finalizado</Typography>
             <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>¡Tu habilitación está completa!</Typography>
             <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 1, lineHeight: 1.6 }}>
               Has completado exitosamente el proceso de certificación como Facturador Electrónico.
@@ -2597,9 +2597,9 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
         <Box component="a" href="https://www.dgii.gov.do/ofv/login.aspx" target="_blank" rel="noopener noreferrer"
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #e5e7eb', textDecoration: 'none', '&:hover': { borderColor: '#5eead4', bgcolor: 'rgba(240,253,250,0.5)' }, transition: 'all 0.15s' }}>
-          <Box sx={{ height: 40, width: 40, borderRadius: '12px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <ExternalLink style={{ width: 16, height: 16, color: '#0d9488' }} />
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #e5e7eb', textDecoration: 'none', '&:hover': { borderColor: '#a5b4f9', bgcolor: 'rgba(240,253,250,0.5)' }, transition: 'all 0.15s' }}>
+          <Box sx={{ height: 40, width: 40, borderRadius: '12px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ExternalLink style={{ width: 16, height: 16, color: '#3658e1' }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Ir a la OFV</Typography>
@@ -2608,19 +2608,19 @@ function PhaseFinalizado({ onComplete, onBack }: { onComplete: () => void; onBac
           <ArrowRight style={{ width: 16, height: 16, flexShrink: 0, color: '#9ca3af' }} />
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #99f6e4', bgcolor: '#f0fdfa' }}>
-          <Box sx={{ height: 40, width: 40, borderRadius: '12px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Zap style={{ width: 16, height: 16, color: '#0d9488' }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, borderRadius: '12px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe' }}>
+          <Box sx={{ height: 40, width: 40, borderRadius: '12px', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Zap style={{ width: 16, height: 16, color: '#3658e1' }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Zero ya está en producción</Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: '#0f766e' }}>Cada factura que emitas será real ante DGII</Typography>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#24377d' }}>Zero ya está en producción</Typography>
+            <Typography sx={{ fontSize: '0.75rem', color: '#2a45c4' }}>Cada factura que emitas será real ante DGII</Typography>
           </Box>
         </Box>
       </Box>
 
       <FormControlLabel
-        control={<Checkbox checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#0d9488' }, mt: -0.25 }} />}
+        control={<Checkbox checked={acknowledged} onChange={e => setAcknowledged(e.target.checked)} size="small" sx={{ color: '#9ca3af', '&.Mui-checked': { color: '#3658e1' }, mt: -0.25 }} />}
         label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>Entiendo que desde ahora cada e-CF que emita en Zero es <strong>real</strong> y se envía directamente a producción DGII</Typography>}
         sx={{ alignItems: 'flex-start', mx: 0, p: 2, borderRadius: '12px', border: '1px solid #e5e7eb' }}
       />
@@ -2641,8 +2641,8 @@ function PhaseListo() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, py: 2 }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 2 }}>
-        <Box sx={{ height: 80, width: 80, borderRadius: '50%', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Rocket style={{ width: 40, height: 40, color: '#0d9488' }} />
+        <Box sx={{ height: 80, width: 80, borderRadius: '50%', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Rocket style={{ width: 40, height: 40, color: '#3658e1' }} />
         </Box>
         <Box>
           <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: 'text.primary' }}>¡Habilitación completada!</Typography>
@@ -2661,8 +2661,8 @@ function PhaseListo() {
           { icon: CheckCircle,  label: 'Producción',     desc: 'En línea' },
         ].map(item => (
           <Box key={item.label} sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', p: 2, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Box sx={{ height: 36, width: 36, borderRadius: '50%', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto' }}>
-              <item.icon style={{ width: 16, height: 16, color: '#0d9488' }} />
+            <Box sx={{ height: 36, width: 36, borderRadius: '50%', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto' }}>
+              <item.icon style={{ width: 16, height: 16, color: '#3658e1' }} />
             </Box>
             <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.primary' }}>{item.label}</Typography>
             <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{item.desc}</Typography>
@@ -2672,7 +2672,7 @@ function PhaseListo() {
 
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5 }}>
         <Link href="/dashboard/facturas/nueva" style={{ flex: 1 }}>
-          <Button variant="contained" disableElevation fullWidth sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, gap: 1 }}>
+          <Button variant="contained" disableElevation fullWidth sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, gap: 1 }}>
             <ArrowRight style={{ width: 16, height: 16 }}/> Emitir primera factura
           </Button>
         </Link>
@@ -2700,14 +2700,14 @@ function IntroModal({ onStart }: { onStart: () => void }) {
     <Box sx={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, bgcolor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
       <Box sx={{ bgcolor: '#fff', borderRadius: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', width: '100%', maxWidth: '48rem', overflow: 'hidden' }}>
 
-        <Box sx={{ background: 'linear-gradient(to right, #0d9488, #14b8a6)', px: 5, py: 4 }}>
-          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#ccfbf1', textTransform: 'uppercase', letterSpacing: '0.1em', mb: 1 }}>
+        <Box sx={{ background: 'linear-gradient(to right, #3658e1, #5b73ec)', px: 5, py: 4 }}>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#e0e7fd', textTransform: 'uppercase', letterSpacing: '0.1em', mb: 1 }}>
             Comprobantes Fiscales Electrónicos · DGII
           </Typography>
           <Typography sx={{ fontSize: '1.875rem', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
             Activa tu facturación electrónica
           </Typography>
-          <Typography sx={{ fontSize: '1rem', color: '#ccfbf1', mt: 1 }}>
+          <Typography sx={{ fontSize: '1rem', color: '#e0e7fd', mt: 1 }}>
             Zero te guía paso a paso por el proceso de habilitación ante la DGII.
           </Typography>
         </Box>
@@ -2736,8 +2736,8 @@ function IntroModal({ onStart }: { onStart: () => void }) {
                 },
               ].map(item => (
                 <Box key={item.n} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box sx={{ height: 28, width: 28, borderRadius: '50%', bgcolor: '#f0fdfa', border: '1px solid #99f6e4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#0d9488' }}>{item.n}</Typography>
+                  <Box sx={{ height: 28, width: 28, borderRadius: '50%', bgcolor: '#eef2fe', border: '1px solid #c7d2fc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#3658e1' }}>{item.n}</Typography>
                   </Box>
                   <Typography sx={{ fontSize: '1rem', color: '#374151', flex: 1 }}>{item.text}</Typography>
                   <HelpPopover content={item.help} link={item.link} linkText={item.linkText} />
@@ -2746,7 +2746,7 @@ function IntroModal({ onStart }: { onStart: () => void }) {
             </Box>
 
             <Button onClick={handleStart} variant="contained" disableElevation size="large"
-              sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, color: '#fff', fontWeight: 600, fontSize: '1rem', py: 1.5, width: '100%' }}>
+              sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, color: '#fff', fontWeight: 600, fontSize: '1rem', py: 1.5, width: '100%' }}>
               Comenzar →
             </Button>
           </Box>
@@ -2781,7 +2781,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
   return (
     <Box sx={{ maxWidth: '42rem', mx: 'auto' }}>
       <Box sx={{ mb: 4, textAlign: 'center' }}>
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 56, width: 56, borderRadius: '16px', bgcolor: '#0d9488', mb: 2 }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 56, width: 56, borderRadius: '16px', bgcolor: '#3658e1', mb: 2 }}>
           <CheckCircle style={{ width: 28, height: 28, color: '#fff' }} />
         </Box>
         <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: 'text.primary' }}>¡Datos listos!</Typography>
@@ -2794,16 +2794,16 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
         <Box
           component="button"
           onClick={() => setSelected('asistido')}
-          sx={{ width: '100%', textAlign: 'left', borderRadius: '16px', border: `2px solid ${selected === 'asistido' ? '#14b8a6' : '#e5e7eb'}`, p: 2.5, cursor: 'pointer', background: 'none', bgcolor: selected === 'asistido' ? '#f0fdfa' : 'transparent', '&:hover': selected !== 'asistido' ? { borderColor: '#5eead4', bgcolor: '#f9fafb' } : {}, transition: 'all 0.15s' }}
+          sx={{ width: '100%', textAlign: 'left', borderRadius: '16px', border: `2px solid ${selected === 'asistido' ? '#5b73ec' : '#e5e7eb'}`, p: 2.5, cursor: 'pointer', background: 'none', bgcolor: selected === 'asistido' ? '#eef2fe' : 'transparent', '&:hover': selected !== 'asistido' ? { borderColor: '#a5b4f9', bgcolor: '#f9fafb' } : {}, transition: 'all 0.15s' }}
         >
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-            <Box sx={{ height: 44, width: 44, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, bgcolor: selected === 'asistido' ? '#14b8a6' : '#ccfbf1', transition: 'background-color 0.15s' }}>
-              <Zap style={{ width: 20, height: 20, color: selected === 'asistido' ? '#fff' : '#0d9488' }} />
+            <Box sx={{ height: 44, width: 44, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, bgcolor: selected === 'asistido' ? '#5b73ec' : '#e0e7fd', transition: 'background-color 0.15s' }}>
+              <Zap style={{ width: 20, height: 20, color: selected === 'asistido' ? '#fff' : '#3658e1' }} />
             </Box>
             <Box sx={{ flex: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                 <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>Zero gestiona todo por mí</Typography>
-                <Typography component="span" sx={{ fontSize: '11px', fontWeight: 700, bgcolor: '#ccfbf1', color: '#0f766e', px: 1, py: 0.25, borderRadius: '9999px' }}>
+                <Typography component="span" sx={{ fontSize: '11px', fontWeight: 700, bgcolor: '#e0e7fd', color: '#2a45c4', px: 1, py: 0.25, borderRadius: '9999px' }}>
                   Recomendado
                 </Typography>
               </Box>
@@ -2812,7 +2812,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
                 Tú solo esperas la confirmación.
               </Typography>
             </Box>
-            <Box sx={{ height: 20, width: 20, borderRadius: '50%', border: `2px solid ${selected === 'asistido' ? '#14b8a6' : '#d1d5db'}`, bgcolor: selected === 'asistido' ? '#14b8a6' : 'transparent', flexShrink: 0, mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+            <Box sx={{ height: 20, width: 20, borderRadius: '50%', border: `2px solid ${selected === 'asistido' ? '#5b73ec' : '#d1d5db'}`, bgcolor: selected === 'asistido' ? '#5b73ec' : 'transparent', flexShrink: 0, mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
               {selected === 'asistido' && <Check style={{ width: 12, height: 12, color: '#fff' }} />}
             </Box>
           </Box>
@@ -2821,10 +2821,10 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
         <Box
           component="button"
           onClick={() => setSelected('manual')}
-          sx={{ width: '100%', textAlign: 'left', borderRadius: '16px', border: `2px solid ${selected === 'manual' ? '#14b8a6' : '#e5e7eb'}`, p: 2.5, cursor: 'pointer', background: 'none', bgcolor: selected === 'manual' ? '#f0fdfa' : 'transparent', '&:hover': selected !== 'manual' ? { borderColor: '#5eead4', bgcolor: '#f9fafb' } : {}, transition: 'all 0.15s' }}
+          sx={{ width: '100%', textAlign: 'left', borderRadius: '16px', border: `2px solid ${selected === 'manual' ? '#5b73ec' : '#e5e7eb'}`, p: 2.5, cursor: 'pointer', background: 'none', bgcolor: selected === 'manual' ? '#eef2fe' : 'transparent', '&:hover': selected !== 'manual' ? { borderColor: '#a5b4f9', bgcolor: '#f9fafb' } : {}, transition: 'all 0.15s' }}
         >
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-            <Box sx={{ height: 44, width: 44, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, bgcolor: selected === 'manual' ? '#14b8a6' : '#f3f4f6', transition: 'background-color 0.15s' }}>
+            <Box sx={{ height: 44, width: 44, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, bgcolor: selected === 'manual' ? '#5b73ec' : '#f3f4f6', transition: 'background-color 0.15s' }}>
               <FileText style={{ width: 20, height: 20, color: selected === 'manual' ? '#fff' : '#6b7280' }} />
             </Box>
             <Box sx={{ flex: 1 }}>
@@ -2834,7 +2834,7 @@ function StageEleccion({ onSelect, onBack }: { onSelect: (m: IntroMode) => void;
                 en el portal DGII a tu ritmo.
               </Typography>
             </Box>
-            <Box sx={{ height: 20, width: 20, borderRadius: '50%', border: `2px solid ${selected === 'manual' ? '#14b8a6' : '#d1d5db'}`, bgcolor: selected === 'manual' ? '#14b8a6' : 'transparent', flexShrink: 0, mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+            <Box sx={{ height: 20, width: 20, borderRadius: '50%', border: `2px solid ${selected === 'manual' ? '#5b73ec' : '#d1d5db'}`, bgcolor: selected === 'manual' ? '#5b73ec' : 'transparent', flexShrink: 0, mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
               {selected === 'manual' && <Check style={{ width: 12, height: 12, color: '#fff' }} />}
             </Box>
           </Box>
@@ -2880,7 +2880,7 @@ function StageCredencial({
   return (
     <Box sx={{ maxWidth: '28rem', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 56, width: 56, borderRadius: '16px', bgcolor: '#0d9488', mb: 1, mx: 'auto' }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 56, width: 56, borderRadius: '16px', bgcolor: '#3658e1', mb: 1, mx: 'auto' }}>
           <Zap style={{ width: 28, height: 28, color: '#fff' }} />
         </Box>
         <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: 'text.primary' }}>Acceso al portal DGII</Typography>
@@ -2954,7 +2954,7 @@ function StageCredencial({
         onClick={handleConfirm}
         disabled={!password || !telefono || loading}
         variant="contained" disableElevation size="large"
-        sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { opacity: 0.4 }, fontWeight: 600, width: '100%' }}
+        sx={{ textTransform: 'none', borderRadius: '8px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { opacity: 0.4 }, fontWeight: 600, width: '100%' }}
       >
         {loading
           ? <><CircularProgress size={16} sx={{ color: 'inherit', mr: 1 }} />Verificando acceso…</>
@@ -2962,7 +2962,7 @@ function StageCredencial({
       </Button>
 
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, bgcolor: '#f9fafb', borderRadius: '12px', p: 2, border: '1px solid #f3f4f6' }}>
-        <Shield style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px', color: '#14b8a6' }} />
+        <Shield style={{ width: 16, height: 16, flexShrink: 0, marginTop: '1px', color: '#5b73ec' }} />
         <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: 1.6 }}>
           Tus credenciales se usan <strong>una sola vez</strong> y se eliminan de nuestros
           sistemas de inmediato tras completar el proceso. Conexión cifrada TLS 1.3.
@@ -3153,7 +3153,7 @@ export default function HabilitacionPage() {
           {stage === 'requisito' && (
             <Box sx={{ maxWidth: '48rem', mx: 'auto' }}>
               <Box sx={{ mb: 3 }}>
-                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#0d9488', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#3658e1', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
                   Paso previo
                 </Typography>
                 <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>Tu empresa y certificado digital</Typography>
@@ -3202,14 +3202,14 @@ export default function HabilitacionPage() {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
                           <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', flexShrink: 0 }}>Fase {phase + 1} de {PHASES.length}</Typography>
                           <Box sx={{ flex: 1, bgcolor: '#f3f4f6', borderRadius: '999px', height: 6 }}>
-                            <Box sx={{ bgcolor: '#14b8a6', height: 6, borderRadius: '999px', transition: 'width 0.5s', width: `${(completed.size / PHASES.length) * 100}%` }} />
+                            <Box sx={{ bgcolor: '#5b73ec', height: 6, borderRadius: '999px', transition: 'width 0.5s', width: `${(completed.size / PHASES.length) * 100}%` }} />
                           </Box>
                           <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', flexShrink: 0 }}>{Math.round((completed.size / PHASES.length) * 100)}%</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>{PHASE_TITLES[phase]}</Typography>
                           {mode === 'asistido' && (
-                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 600, bgcolor: '#ccfbf1', color: '#0f766e', px: 1, py: 0.25, borderRadius: '999px' }}>
+                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 600, bgcolor: '#e0e7fd', color: '#2a45c4', px: 1, py: 0.25, borderRadius: '999px' }}>
                               <Zap style={{ width: 12, height: 12 }}/> Asistido
                             </Box>
                           )}

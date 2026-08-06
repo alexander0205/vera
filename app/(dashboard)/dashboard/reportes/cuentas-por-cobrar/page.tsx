@@ -16,7 +16,7 @@ import { ReportShell, KpiCard, Panel } from '@/components/reportes/report-shell'
 import { AgingChart } from '@/components/reportes/charts';
 
 const CUBETA_LABEL: Record<string, { label: string; bgcolor: string; color: string }> = {
-  porVencer: { label: 'Por vencer', bgcolor: '#ccfbf1', color: '#0f766e' },
+  porVencer: { label: 'Por vencer', bgcolor: '#e0e7fd', color: '#2a45c4' },
   '0-30':    { label: '0-30 días',  bgcolor: '#dcfce7', color: '#15803d' },
   '31-60':   { label: '31-60 días', bgcolor: '#fef9c3', color: '#a16207' },
   '61-90':   { label: '61-90 días', bgcolor: '#ffedd5', color: '#c2410c' },
@@ -92,7 +92,7 @@ export default async function CuentasPorCobrarPage() {
                 return (
                   <TableRow key={f.id} sx={{ '&:hover': { bgcolor: '#f9fafb' } }}>
                     <TableCell sx={bodyCellSx}>
-                      <Link href={`/dashboard/facturas/${f.id}`} style={{ color: '#0d9488', fontWeight: 500, textDecoration: 'none' }}>{f.encf}</Link>
+                      <Link href={`/dashboard/facturas/${f.id}`} style={{ color: '#3658e1', fontWeight: 500, textDecoration: 'none' }}>{f.encf}</Link>
                     </TableCell>
                     <TableCell sx={{ ...bodyCellSx, color: '#111827' }}>{f.cliente}</TableCell>
                     <TableCell sx={{ ...bodyCellSx, color: '#374151' }}>{fmtFechaCorta(f.fechaLimite)}</TableCell>

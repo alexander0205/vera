@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       subject: `Nueva solicitud de integración — ${empresa}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #0f766e;">Nueva solicitud de integración</h2>
+          <h2 style="color: #2a45c4;">Nueva solicitud de integración</h2>
           <table style="width:100%;border-collapse:collapse;margin-top:16px;">
             <tr><td style="padding:6px 0;color:#6b7280;width:120px;">Nombre:</td><td><strong>${safe.nombre}</strong></td></tr>
             <tr><td style="padding:6px 0;color:#6b7280;">Empresa:</td><td><strong>${safe.empresa}</strong></td></tr>
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
             <tr><td style="padding:6px 0;color:#6b7280;">Teléfono:</td><td>${safe.telefono || '—'}</td></tr>
           </table>
           <h3 style="color:#374151;margin-top:24px;">Mensaje:</h3>
-          <div style="background:#f9fafb;border-left:3px solid #0f766e;padding:12px 16px;border-radius:4px;white-space:pre-wrap;">${safe.mensaje}</div>
+          <div style="background:#f9fafb;border-left:3px solid #2a45c4;padding:12px 16px;border-radius:4px;white-space:pre-wrap;">${safe.mensaje}</div>
           <p style="color:#9ca3af;font-size:12px;margin-top:24px;">
             Enviado desde el formulario de contacto de Zero · IP: ${ip}
           </p>

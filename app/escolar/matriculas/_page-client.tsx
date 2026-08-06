@@ -41,7 +41,7 @@ const hoy = () => new Date().toISOString().split('T')[0];
 const EMPTY_FORM = { estudianteId: '', periodoId: '', cursoId: '', codigoMatricula: '', fechaInscripcion: hoy(), notas: '' };
 
 function estadoBadge(estado: string) {
-  if (estado === 'activa') return <Badge className="bg-teal-50 text-teal-700 border-teal-200">Activa</Badge>;
+  if (estado === 'activa') return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Activa</Badge>;
   if (estado === 'retirada') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Retirada</Badge>;
   if (estado === 'finalizada') return <Badge className="bg-blue-50 text-blue-700 border-blue-200">Finalizada</Badge>;
   if (estado === 'anulada') return <Badge className="bg-red-50 text-red-700 border-red-200">Anulada</Badge>;
@@ -169,7 +169,7 @@ export default function MatriculasClient() {
           <p className="text-sm text-gray-500 mt-1">Matrícula de estudiantes por período escolar y curso</p>
         </div>
         {puedeGestionar && (
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNueva} disabled={loading || sinCatalogos}>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNueva} disabled={loading || sinCatalogos}>
             <Plus className="h-4 w-4 mr-2" />Nueva matrícula
           </Button>
         )}
@@ -216,7 +216,7 @@ export default function MatriculasClient() {
               </Button>
             </div>
           ) : loading ? (
-            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>
+            <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>
           ) : filtradas.length === 0 ? (
             <div className="text-center py-16">
               <ClipboardList className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -224,16 +224,16 @@ export default function MatriculasClient() {
                 {matriculas.length === 0 ? 'Aún no hay matrículas registradas' : 'Sin resultados'}
               </p>
               {matriculas.length === 0 && puedeGestionar && !sinCatalogos && (
-                <Button className="mt-4 bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNueva}>
+                <Button className="mt-4 bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirNueva}>
                   <Plus className="h-4 w-4 mr-1" />Nueva matrícula
                 </Button>
               )}
               {sinCatalogos && (
                 <p className="text-sm text-gray-400 mt-2">
                   Primero crea estudiantes activos en{' '}
-                  <Link href="/escolar/estudiantes" className="text-teal-600 hover:underline">Estudiantes</Link>
+                  <Link href="/escolar/estudiantes" className="text-zero-600 hover:underline">Estudiantes</Link>
                   {' '}y períodos/cursos en{' '}
-                  <Link href="/escolar/configuracion" className="text-teal-600 hover:underline">Configuración</Link>.
+                  <Link href="/escolar/configuracion" className="text-zero-600 hover:underline">Configuración</Link>.
                 </p>
               )}
             </div>
@@ -255,7 +255,7 @@ export default function MatriculasClient() {
                     <tr key={m.id} className="border-t border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2.5">
                         <Link href={`/escolar/estudiantes/${m.estudianteId}`}
-                          className="font-medium text-gray-900 hover:text-teal-600">
+                          className="font-medium text-gray-900 hover:text-zero-600">
                           {m.estudiante} {m.estudianteApellidos}
                         </Link>
                       </td>
@@ -329,7 +329,7 @@ export default function MatriculasClient() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowForm(false)} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleCrear} disabled={saving}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleCrear} disabled={saving}>
               {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</> : 'Crear matrícula'}
             </Button>
           </DialogFooter>

@@ -45,7 +45,7 @@ export function EquipoCard() {
   return (
     <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
       <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Users size={16} color="#0d9488" />
+        <Users size={16} color="#3658e1" />
         <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Equipo y permisos</Typography>
       </Box>
       <Box sx={{ px: 3, py: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -80,7 +80,7 @@ export function EquipoCard() {
             onClick={handleInvite}
             disabled={loading}
             startIcon={loading ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <UserPlus size={16} />}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, height: 40, whiteSpace: 'nowrap' }}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, height: 40, whiteSpace: 'nowrap' }}
           >
             {loading ? 'Enviando…' : 'Invitar'}
           </Button>
@@ -97,7 +97,7 @@ export function EquipoCard() {
 
         <Box sx={{ pt: 1.5, borderTop: '1px solid #f3f4f6' }}>
           <Link href="/dashboard/equipo" style={{ textDecoration: 'none' }}>
-            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, color: '#0d9488', '&:hover': { color: '#0f766e', '& *': { textDecoration: 'underline' } } }}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, color: '#3658e1', '&:hover': { color: '#2a45c4', '& *': { textDecoration: 'underline' } } }}>
               <Typography variant="body2" sx={{ color: 'inherit' }}>Ver y gestionar todos los miembros del equipo</Typography>
               <ExternalLink size={14} />
             </Box>

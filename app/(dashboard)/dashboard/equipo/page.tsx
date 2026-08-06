@@ -126,8 +126,8 @@ const TW_COLOR_HEX: Record<string, string> = {
   'green-600': '#16a34a', 'green-700': '#15803d', 'green-800': '#166534',
   'emerald-50': '#ecfdf5', 'emerald-100': '#d1fae5', 'emerald-200': '#a7f3d0',
   'emerald-600': '#059669', 'emerald-700': '#047857', 'emerald-800': '#065f46',
-  'teal-50': '#f0fdfa', 'teal-100': '#ccfbf1', 'teal-200': '#99f6e4',
-  'teal-600': '#0d9488', 'teal-700': '#0f766e', 'teal-800': '#115e59',
+  'zero-50': '#eef2fe', 'zero-100': '#e0e7fd', 'zero-200': '#c7d2fc',
+  'zero-600': '#3658e1', 'zero-700': '#2a45c4', 'zero-800': '#253a9e',
   'blue-50': '#eff6ff', 'blue-100': '#dbeafe', 'blue-200': '#bfdbfe',
   'blue-600': '#2563eb', 'blue-700': '#1d4ed8', 'blue-800': '#1e40af',
   'indigo-50': '#eef2ff', 'indigo-100': '#e0e7ff', 'indigo-200': '#c7d2fe',
@@ -343,7 +343,7 @@ export default function EquipoPage() {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
       </Box>
     );
   }
@@ -403,7 +403,7 @@ export default function EquipoPage() {
               gap: 1,
             }}
           >
-            <Users style={{ width: 24, height: 24, color: '#0d9488' }} />
+            <Users style={{ width: 24, height: 24, color: '#3658e1' }} />
             Equipo
           </Typography>
           <Typography
@@ -442,11 +442,11 @@ export default function EquipoPage() {
               startIcon={<UserPlus style={{ width: 16, height: 16 }} />}
               sx={{
                 textTransform: 'none',
-                bgcolor: '#0d9488',
+                bgcolor: '#3658e1',
                 color: '#fff',
                 boxShadow: 'none',
-                '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
-                '&.Mui-disabled': { bgcolor: '#0d9488', color: '#fff', opacity: 0.5 },
+                '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' },
+                '&.Mui-disabled': { bgcolor: '#3658e1', color: '#fff', opacity: 0.5 },
               }}
             >
               Invitar usuario
@@ -519,8 +519,8 @@ export default function EquipoPage() {
                     height: 40,
                     width: 40,
                     borderRadius: '9999px',
-                    bgcolor: '#ccfbf1',
-                    color: '#0f766e',
+                    bgcolor: '#e0e7fd',
+                    color: '#2a45c4',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -596,8 +596,8 @@ export default function EquipoPage() {
                             component="span"
                             sx={{
                               fontSize: '0.6875rem', fontWeight: 600, px: 0.875, py: '2px',
-                              borderRadius: '6px', bgcolor: '#f0fdfa', color: '#0f766e',
-                              border: '1px solid #99f6e4',
+                              borderRadius: '6px', bgcolor: '#eef2fe', color: '#2a45c4',
+                              border: '1px solid #c7d2fc',
                             }}
                           >
                             {nombre}
@@ -763,7 +763,7 @@ export default function EquipoPage() {
         maxWidth="xs"
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <UserPlus style={{ width: 20, height: 20, color: '#0d9488' }} />
+          <UserPlus style={{ width: 20, height: 20, color: '#3658e1' }} />
           Invitar usuario
         </DialogTitle>
 
@@ -771,18 +771,18 @@ export default function EquipoPage() {
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Box
               sx={{
-                bgcolor: '#f0fdfa',
-                border: '1px solid #99f6e4',
+                bgcolor: '#eef2fe',
+                border: '1px solid #c7d2fc',
                 borderRadius: '12px',
                 p: 2,
                 textAlign: 'center',
               }}
             >
-              <CheckCheck style={{ width: 32, height: 32, color: '#0d9488', margin: '0 auto 8px' }} />
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#115e59' }}>
+              <CheckCheck style={{ width: 32, height: 32, color: '#3658e1', margin: '0 auto 8px' }} />
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#253a9e' }}>
                 ¡Invitación creada!
               </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#0d9488', mt: 0.5 }}>
+              <Typography sx={{ fontSize: '0.75rem', color: '#3658e1', mt: 0.5 }}>
                 Comparte este enlace con <strong>{invEmail}</strong>:
               </Typography>
             </Box>
@@ -805,9 +805,9 @@ export default function EquipoPage() {
                 sx={{
                   minWidth: 40,
                   textTransform: 'none',
-                  color: copied ? '#0d9488' : '#374151',
-                  borderColor: copied ? '#5eead4' : '#d1d5db',
-                  '&:hover': { borderColor: copied ? '#5eead4' : '#9ca3af' },
+                  color: copied ? '#3658e1' : '#374151',
+                  borderColor: copied ? '#a5b4f9' : '#d1d5db',
+                  '&:hover': { borderColor: copied ? '#a5b4f9' : '#9ca3af' },
                 }}
               >
                 {copied
@@ -901,7 +901,7 @@ export default function EquipoPage() {
                   if (!m) return null;
                   const chips = [
                     ...(m.facturacion ? [{ label: 'Facturación', bg: '#eff6ff', fg: '#1d4ed8' }] : []),
-                    ...(m.pos ? [{ label: 'Punto de Venta', bg: '#f0fdfa', fg: '#0f766e' }] : []),
+                    ...(m.pos ? [{ label: 'Punto de Venta', bg: '#eef2fe', fg: '#2a45c4' }] : []),
                   ];
                   return (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mt: 1 }}>
@@ -942,10 +942,10 @@ export default function EquipoPage() {
                 }
                 sx={{
                   textTransform: 'none',
-                  bgcolor: '#0d9488',
+                  bgcolor: '#3658e1',
                   color: '#fff',
                   boxShadow: 'none',
-                  '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+                  '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' },
                 }}
               >
                 {invitando ? 'Invitando…' : 'Enviar invitación'}

@@ -51,7 +51,7 @@ function planBadge(planName: string | null, status: string | null): { label: str
     return { label: `${planName} · Cancelado`, bgcolor: '#fef2f2', color: '#991b1b', border: '#fca5a5' };
   const plan = planName.toLowerCase();
   if (plan === 'pro')      return { label: planName, bgcolor: '#faf5ff', color: '#7c3aed', border: '#ddd6fe' };
-  if (plan === 'business') return { label: planName, bgcolor: '#f0fdfa', color: '#0f766e', border: '#99f6e4' };
+  if (plan === 'business') return { label: planName, bgcolor: '#eef2fe', color: '#2a45c4', border: '#c7d2fc' };
   return { label: planName, bgcolor: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
 }
 
@@ -129,7 +129,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Building2 size={22} color="#0d9488" />
+            <Building2 size={22} color="#3658e1" />
             <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Mis empresas</Typography>
           </Box>
           <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
@@ -137,7 +137,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
           </Typography>
         </Box>
         <Button variant="contained" disableElevation startIcon={<Plus size={18} />} onClick={() => setShowCrear(true)}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nueva empresa
         </Button>
       </Box>
@@ -154,9 +154,9 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
           return (
             <Box key={empresa.id} sx={{
               display: 'flex', alignItems: 'center', gap: 2, p: 2.5, borderRadius: '12px', border: '1px solid', transition: 'all 0.15s',
-              borderColor: isActive ? '#0d9488' : '#e5e7eb',
-              bgcolor: isActive ? '#f0fdfaCC' : '#fff',
-              '&:hover': { borderColor: isActive ? '#0d9488' : '#d1d5db' },
+              borderColor: isActive ? '#3658e1' : '#e5e7eb',
+              bgcolor: isActive ? '#eef2feCC' : '#fff',
+              '&:hover': { borderColor: isActive ? '#3658e1' : '#d1d5db' },
             }}>
               {/* Avatar */}
               {empresa.logo ? (
@@ -166,7 +166,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
                 <Box sx={{
                   height: 48, width: 48, borderRadius: '12px', display: 'flex', alignItems: 'center',
                   justifyContent: 'center', flexShrink: 0, fontWeight: 700, fontSize: '1.125rem',
-                  bgcolor: isActive ? '#0d9488' : '#f3f4f6', color: isActive ? '#fff' : '#6b7280',
+                  bgcolor: isActive ? '#3658e1' : '#f3f4f6', color: isActive ? '#fff' : '#6b7280',
                 }}>
                   {(empresa.razonSocial ?? empresa.name)?.[0]?.toUpperCase() ?? 'E'}
                 </Box>
@@ -179,7 +179,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
                     {empresa.razonSocial ?? empresa.name}
                   </Typography>
                   {isActive && (
-                    <Chip label="Activa" size="small" sx={{ bgcolor: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '0.6875rem', height: 20 }} />
+                    <Chip label="Activa" size="small" sx={{ bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fc', fontSize: '0.6875rem', height: 20 }} />
                   )}
                   {isOwner && (
                     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#d97706' }}>
@@ -210,7 +210,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
                       if (!isActive) await fetch('/api/empresa/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teamId: empresa.id }) });
                       router.push('/pricing?reason=no-plan');
                     }}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: '#99f6e4', color: '#0f766e', '&:hover': { bgcolor: '#f0fdfa', borderColor: '#0d9488' } }}>
+                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', borderColor: '#c7d2fc', color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe', borderColor: '#3658e1' } }}>
                     Elegir plan
                   </Button>
                 )}
@@ -229,14 +229,14 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
                   <Button variant="contained" disableElevation size="small"
                     onClick={() => handleSwitch(empresa.id)} disabled={isLoading}
                     endIcon={isLoading ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <ArrowRight size={14} />}
-                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                    sx={{ borderRadius: '8px', textTransform: 'none', fontSize: '0.75rem', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                     {isLoading ? '' : 'Cambiar'}
                   </Button>
                 )}
                 {isActive && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#0d9488', pr: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#3658e1', pr: 0.5 }}>
                     <Check size={16} />
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#0d9488' }}>Usando</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#3658e1' }}>Usando</Typography>
                   </Box>
                 )}
               </Box>
@@ -259,7 +259,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
       <Dialog open={showCrear} onClose={() => { if (!creando) resetCrear(); }}
         slotProps={{ paper: { sx: { borderRadius: '16px', minWidth: 440 } } as object }}>
         <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', pb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Building2 size={20} color="#0d9488" />
+          <Building2 size={20} color="#3658e1" />
           Nueva empresa
         </DialogTitle>
         <DialogContentText sx={{ px: 3, pb: 1, color: '#6b7280', fontSize: '0.875rem' }}>
@@ -291,7 +291,7 @@ export function EmpresasClient({ empresas, activeTeamId }: Props) {
             disabled={creando || !razonSocial.trim() || rnc.length < 9}
             startIcon={creando ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
             endIcon={!creando ? <ArrowRight size={16} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
             {creando ? 'Creando…' : 'Crear y elegir plan'}
           </Button>
         </DialogActions>

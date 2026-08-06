@@ -43,7 +43,7 @@ const columnsItems: DataTableColumn<CompraItem>[] = [
         href={`/dashboard/productos/${it.productoId}`}
         sx={{
           minWidth: 0, display: 'block', textDecoration: 'none',
-          '&:hover .MuiTypography-root:first-of-type': { color: '#0f766e', textDecoration: 'underline' },
+          '&:hover .MuiTypography-root:first-of-type': { color: '#2a45c4', textDecoration: 'underline' },
         }}
       >
         <Typography sx={{ fontSize: '0.875rem', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productoNombre}</Typography>
@@ -121,7 +121,7 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
         <Tarjeta icon={<FileText color="#0284c7" style={{ width: 18, height: 18 }} />} bg="#f0f9ff" label="e-NCF referencia">
           <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#111827' }}>{compra?.referenciaEncf ?? '—'}</Typography>
         </Tarjeta>
-        <Tarjeta icon={<User color="#0d9488" style={{ width: 18, height: 18 }} />} bg="#f0fdfa" label="Registrado por">
+        <Tarjeta icon={<User color="#3658e1" style={{ width: 18, height: 18 }} />} bg="#eef2fe" label="Registrado por">
           <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>{compra?.registradoPor ?? '—'}</Typography>
         </Tarjeta>
       </Box>

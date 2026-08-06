@@ -88,7 +88,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
       slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 520, width: '100%' } } as object }}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}>
-        <PackagePlus size={20} color="#0d9488" />
+        <PackagePlus size={20} color="#3658e1" />
         Nuevo producto/servicio
       </DialogTitle>
 
@@ -124,14 +124,14 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
                 sx={{
                   display: 'flex', alignItems: 'center', gap: 0.75,
                   px: 2, py: 0.75, borderRadius: '9999px',
-                  border: isSelected ? '1px solid #99f6e4' : '1px solid #e5e7eb',
-                  bgcolor: isSelected ? '#ccfbf1' : '#fff',
-                  color: isSelected ? '#134e4a' : '#4b5563',
+                  border: isSelected ? '1px solid #c7d2fc' : '1px solid #e5e7eb',
+                  bgcolor: isSelected ? '#e0e7fd' : '#fff',
+                  color: isSelected ? '#24377d' : '#4b5563',
                   fontSize: '0.875rem', fontWeight: 500,
                   cursor: 'pointer', transition: 'all 0.15s',
                   '&:hover': {
-                    borderColor: isSelected ? '#99f6e4' : '#d1d5db',
-                    bgcolor: isSelected ? '#ccfbf1' : '#f9fafb',
+                    borderColor: isSelected ? '#c7d2fc' : '#d1d5db',
+                    bgcolor: isSelected ? '#e0e7fd' : '#f9fafb',
                   },
                 }}
               >
@@ -229,8 +229,8 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
             sx={{
               display: 'flex', alignItems: 'center', gap: 0.75,
               background: 'none', border: 'none', cursor: 'pointer',
-              color: '#0f766e', fontSize: '0.875rem', fontWeight: 500, p: 0,
-              '&:hover': { color: '#134e4a' },
+              color: '#2a45c4', fontSize: '0.875rem', fontWeight: 500, p: 0,
+              '&:hover': { color: '#24377d' },
             }}
           >
             {showAvanzado ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -268,7 +268,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
           disabled={saving}
           disableElevation
           startIcon={saving ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
-          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+          sx={{ textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
         >
           {saving ? 'Guardando…' : 'Crear ítem'}
         </Button>

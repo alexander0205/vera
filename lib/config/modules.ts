@@ -22,11 +22,15 @@ export function isBaseModule(mod: ModuleKey): boolean {
   return (MODULES_BASE as readonly ModuleKey[]).includes(mod);
 }
 
+/**
+ * Cómo se llama cada línea de producto. Se leen siempre detrás de la marca
+ * ("Zero · Facturación"), así que aquí va solo la línea, sin repetir el nombre.
+ */
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   facturacion: 'Facturación',
   administracion: 'Administración',
   pos: 'Punto de Venta',
-  escolar: 'Administración Escolar',
+  escolar: 'Gobernanza de Colegios',
 };
 
 /**

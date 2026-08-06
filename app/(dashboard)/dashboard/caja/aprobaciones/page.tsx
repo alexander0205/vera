@@ -234,7 +234,7 @@ export default function AprobacionesPage() {
                           }}
                         />
                       }
-                      sx={{ textTransform: 'none', fontWeight: 500, color: '#0f766e', '&:hover': { color: '#115e59', bgcolor: 'transparent' } }}
+                      sx={{ textTransform: 'none', fontWeight: 500, color: '#2a45c4', '&:hover': { color: '#253a9e', bgcolor: 'transparent' } }}
                     >
                       {abierto[p.id] ? 'Ocultar detalle' : 'Ver qué se hizo en el turno'}
                     </MuiButton>

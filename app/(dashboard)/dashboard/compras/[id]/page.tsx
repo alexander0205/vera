@@ -131,7 +131,7 @@ export default function CompraDetallePage() {
   if (permLoading || isLoading) {
     return (
       <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
-        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
       </Box>
     );
   }

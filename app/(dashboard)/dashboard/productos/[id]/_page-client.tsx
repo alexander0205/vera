@@ -104,7 +104,7 @@ const columnsVentas: DataTableColumn<VentaProducto>[] = [
     header: 'e-NCF',
     render: v => (
       <MuiLink component={Link} href={`/dashboard/facturas/${v.ecfId}`}
-        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#0f766e', fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#2a45c4', fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
         {v.encf}
       </MuiLink>
     ),
@@ -175,7 +175,7 @@ const columnsCompras: DataTableColumn<CompraProducto>[] = [
     header: 'Compra',
     render: c => (
       <MuiLink component={Link} href={`/dashboard/compras/local/${c.compraId}`}
-        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#0f766e', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', '&:hover': { textDecoration: 'underline' } }}>
+        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#2a45c4', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', '&:hover': { textDecoration: 'underline' } }}>
         #{c.compraId}
       </MuiLink>
     ),
@@ -337,14 +337,14 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
         <Box component="label" title={producto?.imagen ? 'Cambiar imagen' : 'Agregar imagen'}
           sx={{
             position: 'relative', height: 56, width: 56, flexShrink: 0, cursor: 'pointer',
-            overflow: 'hidden', borderRadius: '12px', bgcolor: '#f0fdfa',
+            overflow: 'hidden', borderRadius: '12px', bgcolor: '#eef2fe',
             '&:hover [data-overlay]': { bgcolor: 'rgba(0,0,0,0.4)', opacity: 1 },
           }}>
           <input type="file" accept="image/*" disabled={subiendoImagen} style={{ display: 'none' }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImagenFile(f); e.target.value = ''; }} />
           {producto?.imagen
             ? <Box component="img" src={producto.imagen} alt={producto.nombre} sx={{ height: '100%', width: '100%', objectFit: 'cover' }} />
-            : <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center' }}><Package style={{ width: 24, height: 24, color: '#0d9488' }} /></Box>}
+            : <Box sx={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center' }}><Package style={{ width: 24, height: 24, color: '#3658e1' }} /></Box>}
           <Box data-overlay sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0)', color: '#fff', opacity: 0, transition: 'all 0.2s' }}>
             {subiendoImagen ? <Box component="span" sx={{ fontSize: '10px' }}>…</Box> : <Camera style={{ width: 16, height: 16 }} />}
           </Box>
@@ -373,8 +373,8 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
         <Tabs value={tab} onChange={(_, v) => setTab(v)}
           sx={{
             borderBottom: '1px solid #e5e7eb', minHeight: 40,
-            '& .MuiTabs-indicator': { backgroundColor: '#0d9488' },
-            '& .MuiTab-root': { textTransform: 'none', minHeight: 40, py: 1, fontSize: '0.875rem', fontWeight: 500, color: '#6b7280', '&.Mui-selected': { color: '#0f766e' } },
+            '& .MuiTabs-indicator': { backgroundColor: '#3658e1' },
+            '& .MuiTab-root': { textTransform: 'none', minHeight: 40, py: 1, fontSize: '0.875rem', fontWeight: 500, color: '#6b7280', '&.Mui-selected': { color: '#2a45c4' } },
           }}>
           <Tab value="detalle" label="Detalle" />
           <Tab value="ventas" label={

@@ -106,7 +106,7 @@ export function NavBar({
                     size="small"
                     checked={state}
                     onChange={(e) => { setter(e.target.checked); toggleOpcion(key, e.target.checked); }}
-                    sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' }, p: 0.5 }}
+                    sx={{ color: '#d1d5db', '&.Mui-checked': { color: '#3658e1' }, p: 0.5 }}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>{label}</Typography>}
@@ -152,7 +152,7 @@ export function TopBar({
               >
                 <MenuItem value="" disabled sx={{ fontSize: '0.875rem' }}>Seleccionar...</MenuItem>
                 {almacenes.map(a => <MenuItem key={a.id} value={a.id.toString()} sx={{ fontSize: '0.875rem' }}>{a.nombre}</MenuItem>)}
-                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>+ Nuevo almacén</MenuItem>
+                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>+ Nuevo almacén</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -180,7 +180,7 @@ export function TopBar({
                     {l.nombre}{l.tipo === 'porcentaje' && l.porcentaje > 0 ? ` (${(l.porcentaje / 100).toFixed(2)}%)` : ''}
                   </MenuItem>
                 ))}
-                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>+ Nueva lista</MenuItem>
+                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>+ Nueva lista</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -204,7 +204,7 @@ export function TopBar({
               >
                 <MenuItem value="" disabled sx={{ fontSize: '0.875rem' }}>Buscar...</MenuItem>
                 {vendedores.map(v => <MenuItem key={v.id} value={v.id.toString()} sx={{ fontSize: '0.875rem' }}>{v.nombre}</MenuItem>)}
-                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>+ Nuevo vendedor</MenuItem>
+                <MenuItem value="__nuevo" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>+ Nuevo vendedor</MenuItem>
               </Select>
             </FormControl>
           </Box>

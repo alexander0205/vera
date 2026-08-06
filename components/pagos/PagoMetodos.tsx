@@ -312,7 +312,7 @@ export function PagoMetodos({
                   sx={{
                     border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
                     fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
-                    '&:hover': { color: '#0f766e' },
+                    '&:hover': { color: '#2a45c4' },
                   }}
                 >
                   + Cuenta
@@ -326,7 +326,7 @@ export function PagoMetodos({
                   sx={{
                     border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer',
                     fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5, color: '#9ca3af',
-                    '&:hover': { color: '#0f766e' },
+                    '&:hover': { color: '#2a45c4' },
                   }}
                 >
                   + Referencia
@@ -346,8 +346,8 @@ export function PagoMetodos({
           sx={{
             display: 'inline-flex', alignItems: 'center', gap: 0.5,
             border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.75rem', fontWeight: 500, color: '#0f766e',
-            '&:hover': { color: '#115e59' },
+            fontSize: '0.75rem', fontWeight: 500, color: '#2a45c4',
+            '&:hover': { color: '#253a9e' },
             '&:disabled': { opacity: 0.4, cursor: 'default' },
           }}
         >
@@ -441,7 +441,7 @@ function NotaCreditoPicker({
                 width: '100%', textAlign: 'left', px: 1.5, py: 1, fontSize: '0.875rem',
                 display: 'flex', justifyContent: 'space-between', gap: 1,
                 border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
-                '&:hover': { bgcolor: '#f0fdfa' },
+                '&:hover': { bgcolor: '#eef2fe' },
               }}
             >
               <Box component="span" sx={{ minWidth: 0 }}>

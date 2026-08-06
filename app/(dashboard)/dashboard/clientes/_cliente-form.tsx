@@ -238,7 +238,7 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
       </Box>
     );
   }
@@ -369,7 +369,7 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
             disableElevation
             onClick={handleAgregarDependiente}
             disabled={savingDep}
-            sx={{ flexShrink: 0, bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, textTransform: 'none', borderRadius: '8px' }}
+            sx={{ flexShrink: 0, bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, textTransform: 'none', borderRadius: '8px' }}
           >
             {savingDep
               ? <CircularProgress size={16} sx={{ color: '#fff' }} />
@@ -432,7 +432,7 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
           onClick={handleGuardar}
           disabled={saving}
           startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : undefined}
-          sx={{ bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, textTransform: 'none', borderRadius: '8px' }}
+          sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, textTransform: 'none', borderRadius: '8px' }}
         >
           {saving ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Crear cliente')}
         </Button>

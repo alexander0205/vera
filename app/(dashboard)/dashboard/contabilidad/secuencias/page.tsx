@@ -83,7 +83,7 @@ export default async function SecuenciasPage({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
-        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Secuencias</Typography>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Secuencias</Typography>
       </Box>
 
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, gap: 1.5, mb: 3 }}>
@@ -232,7 +232,7 @@ export default async function SecuenciasPage({
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, justifyContent: 'flex-end' }}>
                         <Link href={`/dashboard/facturas/${f.id}`} style={{ textDecoration: 'none' }}>
-                          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#0d9488', '&:hover': { textDecoration: 'underline' } }}>
+                          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#3658e1', '&:hover': { textDecoration: 'underline' } }}>
                             Factura
                           </Typography>
                         </Link>
@@ -240,7 +240,7 @@ export default async function SecuenciasPage({
                           <Box
                             component="a" href={f.urlVerificacion} target="_blank" rel="noopener noreferrer"
                             title="Verificar en el portal de la DGII"
-                            sx={{ display: 'inline-flex', color: '#9ca3af', '&:hover': { color: '#0d9488' } }}
+                            sx={{ display: 'inline-flex', color: '#9ca3af', '&:hover': { color: '#3658e1' } }}
                           >
                             <ExternalLink style={{ width: 14, height: 14 }} />
                           </Box>

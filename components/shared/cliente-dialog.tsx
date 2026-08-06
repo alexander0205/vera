@@ -99,7 +99,7 @@ export function ClienteDialog({ open, onClose, onCreated, nombreInicial = '' }: 
       slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 520, width: '100%' } } as object }}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '1.125rem', fontWeight: 600 }}>
-        <UserPlus size={20} color="#0d9488" />
+        <UserPlus size={20} color="#3658e1" />
         Nuevo contacto
       </DialogTitle>
 
@@ -116,15 +116,15 @@ export function ClienteDialog({ open, onClose, onCreated, nombreInicial = '' }: 
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1,
                 py: 1, borderRadius: '8px', border: 'none', cursor: 'pointer',
                 fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.15s',
-                bgcolor: tipoContacto === t ? '#ccfbf1' : 'transparent',
-                color: tipoContacto === t ? '#134e4a' : '#6b7280',
+                bgcolor: tipoContacto === t ? '#e0e7fd' : 'transparent',
+                color: tipoContacto === t ? '#24377d' : '#6b7280',
                 boxShadow: tipoContacto === t ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-                '&:hover': { color: tipoContacto === t ? '#134e4a' : '#374151' },
+                '&:hover': { color: tipoContacto === t ? '#24377d' : '#374151' },
               }}
             >
               {tipoContacto === t && (
-                <Box sx={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Box sx={{ width: 8, height: 8, bgcolor: '#0d9488', borderRadius: '50%' }} />
+                <Box sx={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box sx={{ width: 8, height: 8, bgcolor: '#3658e1', borderRadius: '50%' }} />
                 </Box>
               )}
               {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -222,7 +222,7 @@ export function ClienteDialog({ open, onClose, onCreated, nombreInicial = '' }: 
           disabled={saving}
           disableElevation
           startIcon={saving ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
-          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+          sx={{ textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
         >
           {saving ? 'Guardando…' : 'Crear contacto'}
         </Button>

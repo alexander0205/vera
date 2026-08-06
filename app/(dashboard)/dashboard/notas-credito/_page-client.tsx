@@ -218,7 +218,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
     <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {docs.length > 0 && (
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, '@media (min-width: 1024px)': { gridTemplateColumns: 'repeat(4, 1fr)' } }}>
-          <StatCard label="Monto total"    value={fmtDOP(resumen.monto)}     sub="Notas activas"     Icon={TrendingDown}  bgcolor="#f0fdfa" iconColor="#0d9488" valueColor="#0f766e" />
+          <StatCard label="Monto total"    value={fmtDOP(resumen.monto)}     sub="Notas activas"     Icon={TrendingDown}  bgcolor="#eef2fe" iconColor="#3658e1" valueColor="#2a45c4" />
           <StatCard label="Total notas"    value={String(resumen.count)}      sub="No anuladas"       Icon={FileText}      bgcolor="#f9fafb" iconColor="#6b7280" valueColor="#374151" />
           <StatCard label="Enviadas DGII"  value={String(resumen.aceptadas)}  sub="Aceptadas"         Icon={CheckCircle}   bgcolor="#f0fdf4" iconColor="#16a34a" valueColor="#15803d" />
           <StatCard label="Pendiente DGII" value={String(resumen.pendientes)} sub="Borradores listos" Icon={Clock}         bgcolor="#fffbeb" iconColor="#d97706" valueColor="#92400e" />
@@ -248,7 +248,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
           cta: filtered.length === 0 && docs.length > 0 ? undefined : (
             <Link href="/dashboard/notas-credito/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Nueva Nota de Crédito
               </Button>
             </Link>
@@ -265,7 +265,7 @@ export default function NotasCreditoClient({ docs }: { docs: NotaCredito[] }) {
             )}
             <Link href="/dashboard/notas-credito/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation startIcon={<Plus size={18} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Nueva Nota de Crédito
               </Button>
             </Link>

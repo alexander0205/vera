@@ -391,8 +391,8 @@ export default function NuevaCotizacionPage() {
           sx={{
             borderRadius: '8px',
             textTransform: 'none',
-            bgcolor: '#0d9488',
-            '&:hover': { bgcolor: '#0f766e' },
+            bgcolor: '#3658e1',
+            '&:hover': { bgcolor: '#2a45c4' },
           }}
         >
           {saving ? 'Guardando…' : 'Guardar como borrador'}

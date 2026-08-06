@@ -16,12 +16,12 @@ export default async function ConsultaNcfPage() {
       {/* Breadcrumb */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
         <Link href="/dashboard/contabilidad/secuencias" style={{ textDecoration: 'none' }}>
-          <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#0d9488' } }}>
+          <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#3658e1' } }}>
             Contabilidad
           </Typography>
         </Link>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
-        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>
           Consulta de e-NCF
         </Typography>
       </Box>

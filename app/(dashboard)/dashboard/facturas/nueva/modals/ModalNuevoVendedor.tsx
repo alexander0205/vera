@@ -113,7 +113,7 @@ export function ModalNuevoVendedor({ open, onClose, onCreated }: {
           disabled={saving}
           disableElevation
           startIcon={saving ? <CircularProgress size={16} sx={{ color: 'inherit' }} /> : undefined}
-          sx={{ textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+          sx={{ textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
         >
           {saving ? 'Guardando…' : 'Crear vendedor'}
         </Button>

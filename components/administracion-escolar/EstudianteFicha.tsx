@@ -85,7 +85,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
     <div className="border border-gray-200 rounded-xl bg-white p-5 space-y-4 sticky top-4">
       {/* Encabezado */}
       <div className="flex items-center gap-3">
-        <div className="h-12 w-12 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-semibold shrink-0">
+        <div className="h-12 w-12 rounded-full bg-zero-100 text-zero-700 flex items-center justify-center font-semibold shrink-0">
           {iniciales(e.nombres, e.apellidos)}
         </div>
         <div className="min-w-0 flex-1">
@@ -121,7 +121,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
       {/* Totales generales */}
       <div className="border-t border-gray-100 pt-3">
         {loading ? (
-          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-teal-600" /></div>
+          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-zero-600" /></div>
         ) : (
           <div className="space-y-2">
             <TotalRow icon={Receipt} tone="gray" label="Deuda total" value={fmtDOP(totales.deuda)} />
@@ -134,7 +134,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
 
       {/* Acciones — el cobro se hace por-cargo en el perfil (va a la factura). */}
       <div className="border-t border-gray-100 pt-3 space-y-2">
-        <Button className="w-full bg-teal-600 hover:bg-teal-700"
+        <Button className="w-full bg-zero-600 hover:bg-zero-700"
           onClick={() => router.push(`/escolar/estudiantes/${e.id}`)}>
           Abrir perfil completo
         </Button>
@@ -154,7 +154,7 @@ function MiniCard({ label, value, accent, capitalize }: { label: string; value: 
 
 const TONES = {
   gray: { box: 'bg-gray-100 text-gray-600', val: 'text-gray-900' },
-  teal: { box: 'bg-teal-100 text-teal-700', val: 'text-teal-700' },
+  teal: { box: 'bg-zero-100 text-zero-700', val: 'text-zero-700' },
   red:  { box: 'bg-red-100 text-red-600', val: 'text-red-600' },
 } as const;
 

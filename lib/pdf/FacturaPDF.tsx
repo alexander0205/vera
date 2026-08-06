@@ -333,7 +333,7 @@ const S = StyleSheet.create({
   // COMPRADOR section
   compLabel: {
     fontSize:     8,
-    color:        '#0f766e',
+    color:        '#2a45c4',
     fontFamily:   'Helvetica-Bold',
     marginBottom: 2,
     textTransform: 'uppercase',
@@ -554,7 +554,7 @@ const S = StyleSheet.create({
   dgiiUrl: {
     fontSize:    8.5,
     fontFamily:  'Helvetica-Bold',
-    color:       '#0f766e',
+    color:       '#2a45c4',
     marginBottom: 4,
   },
   dgiiCodigoSeguridad: {

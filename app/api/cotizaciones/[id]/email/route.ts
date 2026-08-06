@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       subject: `Cotización ${cot.numero}`,
       html: `
         <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-          <h2 style="color: #0f766e;">Cotización ${cot.numero}</h2>
+          <h2 style="color: #2a45c4;">Cotización ${cot.numero}</h2>
           <p>Adjuntamos la cotización <strong>${cot.numero}</strong> por un monto de <strong>DOP ${monto}</strong>.</p>
           ${cot.fechaVencimiento
             ? `<p style="color:#6b7280;font-size:14px;">Válida hasta: ${new Date(cot.fechaVencimiento).toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' })}.</p>`

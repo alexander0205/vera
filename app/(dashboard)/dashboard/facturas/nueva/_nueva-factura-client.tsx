@@ -14,7 +14,7 @@ const NuevaFacturaForm = dynamic(() => import('./NuevaFacturaForm'), {
   ssr: false,
   loading: () => (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-      <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+      <CircularProgress size={32} sx={{ color: '#3658e1' }} />
     </Box>
   ),
 });

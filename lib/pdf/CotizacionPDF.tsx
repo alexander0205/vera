@@ -163,7 +163,7 @@ const S = StyleSheet.create({
   },
   cotVenc: {
     fontSize:  8,
-    color:     '#0f766e',
+    color:     '#2a45c4',
     textAlign: 'right',
     fontFamily: 'Helvetica-Bold',
   },

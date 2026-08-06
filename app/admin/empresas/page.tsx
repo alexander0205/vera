@@ -34,7 +34,7 @@ export default async function AdminEmpresasPage() {
         <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827' }}>Empresas ({allTeams.length})</Typography>
         <Link href="/admin/empresas/nueva" style={{ textDecoration: 'none' }}>
           <Button variant="contained" disableElevation startIcon={<Plus size={16} />}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
             Nueva empresa
           </Button>
         </Link>
@@ -47,7 +47,7 @@ export default async function AdminEmpresasPage() {
             <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mb: 2 }}>No hay empresas registradas</Typography>
             <Link href="/admin/empresas/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation startIcon={<Plus size={16} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Crear primera empresa
               </Button>
             </Link>
@@ -86,7 +86,7 @@ export default async function AdminEmpresasPage() {
                     <TableCell><Typography sx={{ fontSize: '0.875rem', color: '#4b5563' }}>{(docMap[t.id] ?? 0).toLocaleString('es-DO')}</Typography></TableCell>
                     <TableCell><Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>{new Date(t.createdAt).toLocaleDateString('es-DO', { timeZone: 'America/Santo_Domingo' })}</Typography></TableCell>
                     <TableCell>
-                      <Link href={`/admin/empresas/${t.id}`} style={{ textDecoration: 'none', color: '#0d9488', fontSize: '0.75rem', fontWeight: 500 }}>
+                      <Link href={`/admin/empresas/${t.id}`} style={{ textDecoration: 'none', color: '#3658e1', fontSize: '0.75rem', fontWeight: 500 }}>
                         Ver →
                       </Link>
                     </TableCell>

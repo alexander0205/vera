@@ -58,7 +58,7 @@ function TabsList({ children, className, variant = 'line' }: TabsListProps) {
       onChange={(_, v) => onChange(v as string)}
       className={className}
       slotProps={{
-        indicator: { style: { backgroundColor: '#0d9488' } },
+        indicator: { style: { backgroundColor: '#3658e1' } },
       }}
       sx={{
         borderBottom: '1px solid #e5e7eb',
@@ -69,7 +69,7 @@ function TabsList({ children, className, variant = 'line' }: TabsListProps) {
           fontSize: '0.875rem',
           minHeight: 44,
           color: '#6b7280',
-          '&.Mui-selected': { color: '#0d9488', fontWeight: 600 },
+          '&.Mui-selected': { color: '#3658e1', fontWeight: 600 },
         },
       }}
     >

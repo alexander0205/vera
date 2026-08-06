@@ -77,9 +77,9 @@ export default function ReporteMaestrosClient() {
     <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1024, mx: 'auto' }}>
       {/* Breadcrumb */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#6b7280', mb: 1 }}>
-        <MuiLink component={Link} href="/dashboard/reportes" underline="none" sx={{ color: 'inherit', '&:hover': { color: '#0d9488' } }}>Reportes</MuiLink>
+        <MuiLink component={Link} href="/dashboard/reportes" underline="none" sx={{ color: 'inherit', '&:hover': { color: '#3658e1' } }}>Reportes</MuiLink>
         <ChevronRight size={14} />
-        <Typography component="span" sx={{ color: '#0d9488', fontWeight: 500, fontSize: 'inherit' }}>Ventas por clasificación</Typography>
+        <Typography component="span" sx={{ color: '#3658e1', fontWeight: 500, fontSize: 'inherit' }}>Ventas por clasificación</Typography>
       </Box>
 
       <Box sx={{ mb: 3 }}>
@@ -131,7 +131,7 @@ export default function ReporteMaestrosClient() {
       <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
         <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#111827' }}>Desglose por valor</Typography>
-          {loading && <CircularProgress size={16} sx={{ color: '#0d9488' }} />}
+          {loading && <CircularProgress size={16} sx={{ color: '#3658e1' }} />}
         </Box>
         {filas.length === 0 ? (
           <Typography sx={{ px: 2, py: 5, textAlign: 'center', fontSize: '0.875rem', color: '#9ca3af' }}>
@@ -155,7 +155,7 @@ export default function ReporteMaestrosClient() {
                   <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 500, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(f.total)}</Typography></TableCell>
                   <TableCell>
                     <Box sx={{ height: 8, bgcolor: '#f3f4f6', borderRadius: '9999px', overflow: 'hidden' }}>
-                      <Box sx={{ height: '100%', bgcolor: '#14b8a6', borderRadius: '9999px', width: `${(f.total / maxTotal) * 100}%` }} />
+                      <Box sx={{ height: '100%', bgcolor: '#5b73ec', borderRadius: '9999px', width: `${(f.total / maxTotal) * 100}%` }} />
                     </Box>
                   </TableCell>
                 </TableRow>

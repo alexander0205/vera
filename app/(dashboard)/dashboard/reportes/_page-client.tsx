@@ -44,8 +44,8 @@ const REPORTES: ReporteCard[] = [
     titulo: 'Formato 607',
     descripcion: 'Ventas y retenciones del período. Incluye tipos e-CF 31, 32, 33, 34, 44, 45 y 46.',
     icon: BarChart3,
-    iconColor: '#0d9488',
-    iconBg: '#f0fdfa',
+    iconColor: '#3658e1',
+    iconBg: '#eef2fe',
     chipColor: 'success',
     badge: 'Ventas',
   },
@@ -77,7 +77,7 @@ const ANALISIS: { href: string; titulo: string; descripcion: string; icon: React
     titulo: 'Panel financiero',
     descripcion: 'KPIs del período: ingresos, ITBIS, cartera y aceptación DGII en una vista.',
     icon: LayoutDashboard,
-    color: 'bg-teal-50 text-teal-600',
+    color: 'bg-zero-50 text-zero-600',
   },
   {
     href: '/dashboard/reportes/tendencia',
@@ -181,7 +181,7 @@ export default function ReportesPage() {
         <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' } }}>
           {ANALISIS.map(a => {
             const [bg, fg] = ({
-              'bg-teal-50 text-teal-600':       ['#f0fdfa', '#0d9488'],
+              'bg-zero-50 text-zero-600':       ['#eef2fe', '#3658e1'],
               'bg-sky-50 text-sky-600':         ['#f0f9ff', '#0284c7'],
               'bg-indigo-50 text-indigo-600':   ['#eef2ff', '#4f46e5'],
               'bg-amber-50 text-amber-600':     ['#fffbeb', '#d97706'],
@@ -189,7 +189,7 @@ export default function ReportesPage() {
               'bg-violet-50 text-violet-600':   ['#f5f3ff', '#7c3aed'],
               'bg-rose-50 text-rose-600':       ['#fff1f2', '#e11d48'],
               'bg-emerald-50 text-emerald-600': ['#ecfdf5', '#059669'],
-            } as Record<string, [string, string]>)[a.color] ?? ['#f0fdfa', '#0d9488'];
+            } as Record<string, [string, string]>)[a.color] ?? ['#eef2fe', '#3658e1'];
             return (
               <Card
                 key={a.href}

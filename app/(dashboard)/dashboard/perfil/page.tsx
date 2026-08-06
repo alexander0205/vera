@@ -18,7 +18,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 const PLAN_BADGE: Record<string, { label: string; bgcolor: string; color: string }> = {
   starter:  { label: 'Starter',  bgcolor: '#eff6ff', color: '#1d4ed8' },
-  business: { label: 'Business', bgcolor: '#f0fdfa', color: '#0d9488' },
+  business: { label: 'Business', bgcolor: '#eef2fe', color: '#3658e1' },
   pro:      { label: 'Pro',      bgcolor: '#faf5ff', color: '#7c3aed' },
 };
 
@@ -124,7 +124,7 @@ export default function PerfilPage() {
                     <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary' }}>
                       {user?.name ?? 'Sin nombre'}
                     </Typography>
-                    <IconButton size="small" onClick={() => setEditing(true)} sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#f0fdfa' } }}>
+                    <IconButton size="small" onClick={() => setEditing(true)} sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main', bgcolor: '#eef2fe' } }}>
                       <Pencil style={{ width: 14, height: 14 }} />
                     </IconButton>
                   </Box>

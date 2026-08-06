@@ -103,11 +103,11 @@ export default async function AcceptInvitationPage({
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mb: 2 }}>
-            <Receipt size={28} color="#0d9488" />
+            <Receipt size={28} color="#3658e1" />
             <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>Zero</Typography>
           </Box>
           <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827', mb: 1 }}>
-            Te invitaron a <Box component="span" sx={{ color: '#0d9488' }}>{teamName}</Box>
+            Te invitaron a <Box component="span" sx={{ color: '#3658e1' }}>{teamName}</Box>
           </Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
             {hasAccount
@@ -173,7 +173,7 @@ export default async function AcceptInvitationPage({
             variant="contained"
             disableElevation
             fullWidth
-            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, py: 1.25 }}
+            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, py: 1.25 }}
           >
             {hasAccount ? 'Aceptar invitación' : 'Crear cuenta y entrar'}
           </Button>
@@ -181,7 +181,7 @@ export default async function AcceptInvitationPage({
 
         <Typography sx={{ textAlign: 'center', fontSize: '0.75rem', color: '#9ca3af', mt: 2 }}>
           ¿Problemas? Contáctanos en{' '}
-          <Box component="a" href="mailto:soporte@zero.com.do" sx={{ color: '#0d9488', '&:hover': { textDecoration: 'underline' } }}>
+          <Box component="a" href="mailto:soporte@zero.com.do" sx={{ color: '#3658e1', '&:hover': { textDecoration: 'underline' } }}>
             soporte@zero.com.do
           </Box>
         </Typography>
@@ -194,10 +194,10 @@ function InvalidInvite({ msg }: { msg: string }) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
       <Box sx={{ textAlign: 'center', maxWidth: 360 }}>
-        <Receipt size={40} color="#0d9488" style={{ margin: '0 auto 16px' }} />
+        <Receipt size={40} color="#3658e1" style={{ margin: '0 auto 16px' }} />
         <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 1 }}>Invitación inválida</Typography>
         <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mb: 3 }}>{msg}</Typography>
-        <Box component="a" href="/sign-in" sx={{ fontSize: '0.875rem', color: '#0d9488', '&:hover': { textDecoration: 'underline' } }}>
+        <Box component="a" href="/sign-in" sx={{ fontSize: '0.875rem', color: '#3658e1', '&:hover': { textDecoration: 'underline' } }}>
           Ir al inicio de sesión
         </Box>
       </Box>

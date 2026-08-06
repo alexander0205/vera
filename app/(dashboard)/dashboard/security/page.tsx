@@ -99,8 +99,8 @@ export default function SecurityPage() {
         <CardContent sx={{ p: '20px !important' }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-              <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Shield style={{ width: 18, height: 18, color: '#0d9488' }} />
+              <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Shield style={{ width: 18, height: 18, color: '#3658e1' }} />
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
@@ -133,8 +133,8 @@ export default function SecurityPage() {
         <CardContent sx={{ p: '20px !important' }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: setupMode || disableMode ? 2 : 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-              <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Smartphone style={{ width: 18, height: 18, color: '#0d9488' }} />
+              <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Smartphone style={{ width: 18, height: 18, color: '#3658e1' }} />
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
@@ -250,8 +250,8 @@ export default function SecurityPage() {
       <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px' }}>
         <CardContent sx={{ p: '20px !important' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Key style={{ width: 18, height: 18, color: '#0d9488' }} />
+            <Box sx={{ width: 36, height: 36, borderRadius: '8px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Key style={{ width: 18, height: 18, color: '#3658e1' }} />
             </Box>
             <Box sx={{ flex: 1 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>

@@ -123,7 +123,7 @@ export function EntityNotes({ entityType, entityId }: Props) {
       {/* Lista */}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-          <CircularProgress size={20} sx={{ color: '#14b8a6' }} />
+          <CircularProgress size={20} sx={{ color: '#5b73ec' }} />
         </Box>
       ) : notes.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 4, color: '#9ca3af', fontSize: '0.875rem' }}>

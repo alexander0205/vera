@@ -113,7 +113,7 @@ export function CierreEjercicioClient({
               >
                 {aniosDisponibles.map((a) => <MenuItem key={a} value={String(a)}>{a}</MenuItem>)}
               </TextField>
-              <Button variant="outlined" disabled={!anio || cargando} onClick={() => previsualizar(anio)} sx={{ color: '#0f766e', borderColor: '#99f6e4' }}>
+              <Button variant="outlined" disabled={!anio || cargando} onClick={() => previsualizar(anio)} sx={{ color: '#2a45c4', borderColor: '#c7d2fc' }}>
                 {cargando ? 'Calculando…' : 'Previsualizar'}
               </Button>
             </Box>
@@ -162,7 +162,7 @@ export function CierreEjercicioClient({
                 <Button
                   variant="contained" disabled={trabajando} onClick={cerrar}
                   startIcon={<Lock style={{ width: 16, height: 16 }} />}
-                  sx={{ alignSelf: 'flex-start', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+                  sx={{ alignSelf: 'flex-start', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
                 >
                   {trabajando ? 'Cerrando…' : `Confirmar cierre de ${preview.ejercicio}`}
                 </Button>

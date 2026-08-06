@@ -220,7 +220,7 @@ export default function CotizacionDetallePage() {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
-        <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+        <CircularProgress size={32} sx={{ color: '#3658e1' }} />
       </Box>
     );
   }
@@ -313,7 +313,7 @@ export default function CotizacionDetallePage() {
             <Typography variant="caption" sx={{ color: '#6b7280', mt: 0.25, display: 'block' }}>
               Emitida: {fmtDate(cot.fechaEmision)}
               {cot.fechaVencimiento && (
-                <> · Válida hasta: <Box component="span" sx={{ color: '#0f766e', fontWeight: 600 }}>{fmtDate(cot.fechaVencimiento)}</Box></>
+                <> · Válida hasta: <Box component="span" sx={{ color: '#2a45c4', fontWeight: 600 }}>{fmtDate(cot.fechaVencimiento)}</Box></>
               )}
             </Typography>
           </Box>
@@ -402,7 +402,7 @@ export default function CotizacionDetallePage() {
               </MenuItem>
               {cot.estado === 'aceptada' && (
                 <MenuItem onClick={handleConvertir} disabled={converting}>
-                  <FileCheck size={16} style={{ color: '#0d9488', marginRight: 8 }} />
+                  <FileCheck size={16} style={{ color: '#3658e1', marginRight: 8 }} />
                   {converting ? 'Convirtiendo…' : 'Convertir a factura'}
                 </MenuItem>
               )}
@@ -570,7 +570,7 @@ export default function CotizacionDetallePage() {
           {/* Resumen */}
           <Paper sx={{ ...cardSx, p: 2.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-              <FileText size={16} style={{ color: '#0d9488' }} />
+              <FileText size={16} style={{ color: '#3658e1' }} />
               <Typography variant="subtitle2" sx={{ color: '#374151', fontWeight: 600 }}>
                 Resumen
               </Typography>
@@ -609,7 +609,7 @@ export default function CotizacionDetallePage() {
               {cot.fechaVencimiento && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
                   <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Vencimiento</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#0f766e', fontWeight: 600 }}>{fmtDate(cot.fechaVencimiento)}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#2a45c4', fontWeight: 600 }}>{fmtDate(cot.fechaVencimiento)}</Typography>
                 </Box>
               )}
             </Box>
@@ -628,9 +628,9 @@ export default function CotizacionDetallePage() {
               sx={{
                 borderRadius: '8px',
                 textTransform: 'none',
-                color: '#0f766e',
-                borderColor: '#99f6e4',
-                '&:hover': { bgcolor: '#f0fdf4', borderColor: '#0d9488' },
+                color: '#2a45c4',
+                borderColor: '#c7d2fc',
+                '&:hover': { bgcolor: '#f0fdf4', borderColor: '#3658e1' },
               }}
             >
               Ver PDF
@@ -657,8 +657,8 @@ export default function CotizacionDetallePage() {
                 sx={{
                   borderRadius: '8px',
                   textTransform: 'none',
-                  bgcolor: '#0d9488',
-                  '&:hover': { bgcolor: '#0f766e' },
+                  bgcolor: '#3658e1',
+                  '&:hover': { bgcolor: '#2a45c4' },
                 }}
               >
                 {converting ? 'Convirtiendo…' : 'Convertir a factura'}
@@ -729,8 +729,8 @@ export default function CotizacionDetallePage() {
               sx={{
                 borderRadius: '8px',
                 textTransform: 'none',
-                bgcolor: '#0d9488',
-                '&:hover': { bgcolor: '#0f766e' },
+                bgcolor: '#3658e1',
+                '&:hover': { bgcolor: '#2a45c4' },
                 height: { xs: 44, sm: 36 },
                 flex: { xs: 1, sm: 'none' },
               }}
@@ -787,8 +787,8 @@ export default function CotizacionDetallePage() {
             sx={{
               borderRadius: '8px',
               textTransform: 'none',
-              bgcolor: '#0d9488',
-              '&:hover': { bgcolor: '#0f766e' },
+              bgcolor: '#3658e1',
+              '&:hover': { bgcolor: '#2a45c4' },
             }}
           >
             {sendingEmail ? 'Enviando…' : 'Enviar'}

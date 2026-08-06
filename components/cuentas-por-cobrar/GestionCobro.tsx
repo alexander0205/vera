@@ -183,7 +183,7 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
                   component="button"
                   onClick={() => setEditSeg(true)}
                   sx={{
-                    fontSize: '0.75rem', color: '#0d9488', flexShrink: 0, bgcolor: 'transparent',
+                    fontSize: '0.75rem', color: '#3658e1', flexShrink: 0, bgcolor: 'transparent',
                     border: 0, cursor: 'pointer', p: 0, '&:hover': { textDecoration: 'underline' },
                   }}
                 >
@@ -239,7 +239,7 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
                       gap: 0.5, px: 1, py: 0.75, fontSize: '0.75rem', borderRadius: '6px',
                       cursor: 'pointer', transition: 'border-color .15s',
                       ...(activo
-                        ? { border: '1px solid #14b8a6', bgcolor: '#f0fdfa', color: '#0f766e', fontWeight: 500 }
+                        ? { border: '1px solid #5b73ec', bgcolor: '#eef2fe', color: '#2a45c4', fontWeight: 500 }
                         : { border: '1px solid #e5e7eb', bgcolor: 'transparent', color: '#4b5563', '&:hover': { borderColor: '#d1d5db' } }),
                     }}
                   >

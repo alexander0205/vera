@@ -142,7 +142,7 @@ export const PLANS: PlanDef[] = [
     ],
     ui: {
       description:       'Para PyMEs en crecimiento',
-      badgeColor:        'bg-teal-50 text-teal-700 border-teal-200',
+      badgeColor:        'bg-zero-50 text-zero-700 border-zero-200',
       highlighted:       true,
       marketingFeatures: [
         '800 comprobantes/mes',

@@ -154,14 +154,14 @@ export function ActivosFijosClient({
           <Button
             variant="contained" onClick={() => setAbierto((v) => !v)}
             startIcon={<Plus style={{ width: 16, height: 16 }} />}
-            sx={{ bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+            sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
           >
             Registrar activo
           </Button>
           <Button
             variant="outlined" onClick={generar} disabled={generando}
             startIcon={<RefreshCw style={{ width: 16, height: 16 }} />}
-            sx={{ color: '#0f766e', borderColor: '#99f6e4' }}
+            sx={{ color: '#2a45c4', borderColor: '#c7d2fc' }}
           >
             {generando ? 'Generando…' : 'Generar depreciaciones'}
           </Button>
@@ -215,7 +215,7 @@ export function ActivosFijosClient({
           </Box>
 
           {cuotaMensual !== null && (
-            <Typography sx={{ fontSize: '0.8125rem', color: '#0f766e' }}>
+            <Typography sx={{ fontSize: '0.8125rem', color: '#2a45c4' }}>
               Depreciación mensual estimada: <strong>{fmtDOP(cuotaMensual)}</strong>
             </Typography>
           )}
@@ -227,7 +227,7 @@ export function ActivosFijosClient({
           <Box sx={{ display: 'flex', gap: 1.5 }}>
             <Button
               variant="contained" onClick={registrar} disabled={!puedeGuardar}
-              sx={{ bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+              sx={{ bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
             >
               {guardando ? 'Guardando…' : 'Guardar activo'}
             </Button>

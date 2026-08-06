@@ -143,7 +143,7 @@ export default async function NuevaFacturaRecurrentePage({ searchParams }: { sea
         <p className="text-sm text-gray-600">
           La matrícula requiere período con fechas, concepto activo de mensualidad y tutor responsable vinculado a un contacto.
         </p>
-        <Link href="/escolar/estudiantes" className="text-sm text-teal-700 hover:underline">
+        <Link href="/escolar/estudiantes" className="text-sm text-zero-700 hover:underline">
           Volver a estudiantes
         </Link>
       </section>
@@ -152,7 +152,7 @@ export default async function NuevaFacturaRecurrentePage({ searchParams }: { sea
   return (
     <Suspense fallback={
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <Loader2 style={{ width: 32, height: 32, color: '#0d9488', animation: 'spin 1s linear infinite' }} />
+        <Loader2 style={{ width: 32, height: 32, color: '#3658e1', animation: 'spin 1s linear infinite' }} />
       </div>
     }>
       <NuevaFacturaRecurrenteForm initialPerfil={perfil} contextoEscolar={contextoEscolar} />

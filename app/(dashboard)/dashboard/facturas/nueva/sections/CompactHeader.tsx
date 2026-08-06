@@ -95,14 +95,14 @@ export function CompactHeader({
               onChange={(e) => { if (e.target.value) onChangeTipo(e.target.value); }}
               variant="standard"
               disableUnderline
-              sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#0f766e', '& .MuiSelect-select': { py: 0, pr: '20px !important' } }}
+              sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#2a45c4', '& .MuiSelect-select': { py: 0, pr: '20px !important' } }}
             >
               {tiposCategoria.map(t => (
                 <MenuItem key={t.codigo} value={t.codigo} sx={{ fontSize: '0.75rem' }}>{t.etiqueta}</MenuItem>
               ))}
             </Select>
           ) : mostrarCodigoTipo ? (
-            <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#0f766e', px: 1 }}>{tiposCategoria[0]?.etiqueta}</Typography>
+            <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#2a45c4', px: 1 }}>{tiposCategoria[0]?.etiqueta}</Typography>
           ) : null}
         </Box>
 
@@ -158,7 +158,7 @@ export function CompactHeader({
                 borderRadius: '4px',
                 px: 0.75,
                 py: 0.25,
-                '&:focus': { outline: 'none', borderColor: '#0d9488', boxShadow: '0 0 0 1px #0d9488' },
+                '&:focus': { outline: 'none', borderColor: '#3658e1', boxShadow: '0 0 0 1px #3658e1' },
               }}
             />
           ) : (

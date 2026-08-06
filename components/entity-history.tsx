@@ -157,7 +157,7 @@ export function EntityHistory({ docId, encf }: Props) {
       if (log._operation === 'D') return { borderColor: '#fecaca', bgcolor: '#fef2f2' }; // red
       return { borderColor: '#e5e7eb', bgcolor: 'transparent' };
     }
-    if (log.action === 'ECF_SEND' || log.action === 'ECF_ACEPTADO') return { borderColor: '#5eead4', bgcolor: '#f0fdfa' }; // teal
+    if (log.action === 'ECF_SEND' || log.action === 'ECF_ACEPTADO') return { borderColor: '#a5b4f9', bgcolor: '#eef2fe' }; // teal
     if (log.action === 'ECF_RECHAZADO' || log.action === 'ECF_ANULADO') return { borderColor: '#fecaca', bgcolor: '#fef2f2' }; // red
     if (log.action === 'PAGO_REGISTRADO') return { borderColor: '#a7f3d0', bgcolor: '#ecfdf5' }; // emerald
     return { borderColor: '#e5e7eb', bgcolor: 'transparent' };
@@ -166,7 +166,7 @@ export function EntityHistory({ docId, encf }: Props) {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-        <CircularProgress size={20} sx={{ color: '#14b8a6' }} />
+        <CircularProgress size={20} sx={{ color: '#5b73ec' }} />
       </Box>
     );
   }

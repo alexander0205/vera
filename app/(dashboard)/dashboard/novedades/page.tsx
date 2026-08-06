@@ -28,7 +28,7 @@ interface Version {
 }
 
 const ESTILO: Record<TipoCambio, { label: string; clase: string; Icono: typeof Sparkles }> = {
-  nuevo:   { label: 'Nuevo',   clase: 'bg-teal-50 text-teal-700 ring-teal-200',   Icono: Sparkles },
+  nuevo:   { label: 'Nuevo',   clase: 'bg-zero-50 text-zero-700 ring-zero-200',   Icono: Sparkles },
   mejora:  { label: 'Mejora',  clase: 'bg-blue-50 text-blue-700 ring-blue-200',   Icono: ArrowUpCircle },
   arreglo: { label: 'Arreglo', clase: 'bg-amber-50 text-amber-700 ring-amber-200', Icono: Wrench },
 };

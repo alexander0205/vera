@@ -158,7 +158,7 @@ export function ConceptosPanel() {
     <div className="space-y-4">
       {/* Año escolar */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
-        <CalendarDays className="h-4 w-4 shrink-0 text-teal-600" />
+        <CalendarDays className="h-4 w-4 shrink-0 text-zero-600" />
         <span className="text-sm text-gray-600">Año escolar</span>
         <NativeSelect className="min-w-44" value={data.periodo?.id ?? ''} onChange={(e) => void cargar(Number(e.target.value))}>
           {data.periodos.map((p) => <option key={p.id} value={p.id}>{p.nombre}{p.activo ? ' (activo)' : ''}</option>)}
@@ -168,15 +168,15 @@ export function ConceptosPanel() {
 
       {/* Asistente: lo que ya factura y todavía no es concepto */}
       {data.sugerencias.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg bg-teal-50 px-4 py-3">
-          <Wand2 className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
-          <div className="flex-1 text-sm text-teal-800">
+        <div className="flex items-start gap-3 rounded-lg bg-zero-50 px-4 py-3">
+          <Wand2 className="mt-0.5 h-4 w-4 shrink-0 text-zero-700" />
+          <div className="flex-1 text-sm text-zero-800">
             Tienes {data.sugerencias.reduce((n, s) => n + s.productos, 0)} servicios de facturación sin usar aquí.
             Se agrupan en {data.sugerencias.length} concepto{data.sugerencias.length === 1 ? '' : 's'}:{' '}
             <span className="font-medium">{data.sugerencias.slice(0, 4).map((s) => s.nombre).join(', ')}</span>
             {data.sugerencias.length > 4 && '…'}
           </div>
-          <Button size="sm" variant="outline" className="h-7 shrink-0 border-teal-300 text-teal-700" onClick={traerSugerencias} disabled={ocupado}>
+          <Button size="sm" variant="outline" className="h-7 shrink-0 border-zero-300 text-zero-700" onClick={traerSugerencias} disabled={ocupado}>
             {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Traerlos'}
           </Button>
         </div>
@@ -192,7 +192,7 @@ export function ConceptosPanel() {
             return (
               <span key={c.id}
                 className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors ${
-                  on ? 'border-teal-500 bg-teal-50 font-medium text-teal-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                  on ? 'border-zero-500 bg-zero-50 font-medium text-zero-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                 <button onClick={() => setConceptoSel(c.id)}>{c.nombre}</button>
                 {c.recurrente && <Repeat className="h-3 w-3 opacity-60" aria-label="mensual" />}
                 <button onClick={() => borrarConcepto(c)} className="text-gray-300 hover:text-red-500" title="Eliminar concepto">
@@ -212,11 +212,11 @@ export function ConceptosPanel() {
 
           <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
             <button onClick={() => setNcMensual(true)}
-              className={`px-2.5 py-1 text-xs ${ncMensual ? 'bg-teal-50 font-medium text-teal-800' : 'text-gray-500 hover:bg-gray-50'}`}>
+              className={`px-2.5 py-1 text-xs ${ncMensual ? 'bg-zero-50 font-medium text-zero-800' : 'text-gray-500 hover:bg-gray-50'}`}>
               <Repeat className="mr-1 inline h-3 w-3" />Cada mes
             </button>
             <button onClick={() => setNcMensual(false)}
-              className={`border-l border-gray-200 px-2.5 py-1 text-xs ${!ncMensual ? 'bg-teal-50 font-medium text-teal-800' : 'text-gray-500 hover:bg-gray-50'}`}>
+              className={`border-l border-gray-200 px-2.5 py-1 text-xs ${!ncMensual ? 'bg-zero-50 font-medium text-zero-800' : 'text-gray-500 hover:bg-gray-50'}`}>
               Una sola vez
             </button>
           </div>
@@ -269,12 +269,12 @@ export function ConceptosPanel() {
                           {abierto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                         </button>
                         <span className={`text-sm font-medium ${falta ? 'text-amber-800' : 'text-gray-900'}`}>{sv.nombre}</span>
-                        {sv.tanda && <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-700">{sv.tanda}</span>}
+                        {sv.tanda && <span className="rounded-full bg-zero-100 px-2 py-0.5 text-xs font-medium text-zero-700">{sv.tanda}</span>}
                         <span className={`text-xs ${falta ? 'text-amber-700' : 'text-gray-400'}`}>{grados.length} grado{grados.length === 1 ? '' : 's'}</span>
                         <div className="flex-1" />
                         {pSv ? (
                           <span className="flex items-center gap-1.5">
-                            <span className="rounded-md border border-teal-200 bg-teal-50 px-2 py-0.5 text-sm font-semibold text-teal-800">{fmtDOP(pSv.montoCentavos)}</span>
+                            <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pSv.montoCentavos)}</span>
                             <button onClick={() => quitarPrecio(pSv.id)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
                           </span>
                         ) : (
@@ -310,14 +310,14 @@ export function ConceptosPanel() {
                                     <div className="flex-1" />
                                     {pG ? (
                                       <>
-                                        <span className="rounded-md border border-teal-200 bg-teal-50 px-2 py-0.5 text-sm font-semibold text-teal-800">{fmtDOP(pG.montoCentavos)}</span>
+                                        <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pG.montoCentavos)}</span>
                                         <button onClick={() => quitarPrecio(pG.id)} className="text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
                                       </>
                                     ) : (
                                       <>
                                         {pSv && <span className="text-sm text-gray-400">hereda {fmtDOP(pSv.montoCentavos)}</span>}
                                         <button onClick={() => setModal({ tipo: 'grado', id: g.id, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
-                                          className="rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-teal-400 hover:text-teal-600">
+                                          className="rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
                                           {pSv ? 'Excepción' : 'Precio'}
                                         </button>
                                       </>
@@ -343,14 +343,14 @@ export function ConceptosPanel() {
                                         <div className="flex-1" />
                                         {pS ? (
                                           <>
-                                            <span className="rounded-md border border-teal-200 bg-teal-50 px-2 py-0.5 text-sm font-semibold text-teal-800">{fmtDOP(pS.montoCentavos)}</span>
+                                            <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pS.montoCentavos)}</span>
                                             <button onClick={() => quitarPrecio(pS.id)} className="text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
                                           </>
                                         ) : (
                                           <>
                                             {heredaG && <span className="text-sm text-gray-400">hereda {fmtDOP(heredaG.montoCentavos)}</span>}
                                             <button onClick={() => setModal({ tipo: 'seccion', id: s.id, seccion: s.nombre, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
-                                              className="rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-400 hover:border-teal-400 hover:text-teal-600">
+                                              className="rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-400 hover:border-zero-400 hover:text-zero-600">
                                               {heredaG ? 'Excepción' : 'Precio'}
                                             </button>
                                           </>
@@ -477,8 +477,8 @@ function ModalTarifa({
       <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
 
         <div className="flex items-start gap-3 border-b border-gray-100 px-7 py-5">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50">
-            <Layers className="h-4.5 w-4.5 text-teal-600" />
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zero-50">
+            <Layers className="h-4.5 w-4.5 text-zero-600" />
           </span>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900">Precio de {concepto.nombre}</h3>
@@ -510,22 +510,22 @@ function ModalTarifa({
                   return (
                     <button key={p.id} disabled={yaUsado} onClick={() => setElegido(p)}
                       className={`flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left last:border-0 ${
-                        on ? 'bg-teal-50' : yaUsado ? 'opacity-40' : 'hover:bg-gray-50'}`}>
+                        on ? 'bg-zero-50' : yaUsado ? 'opacity-40' : 'hover:bg-gray-50'}`}>
                       {on
-                        ? <Check className="h-4 w-4 shrink-0 text-teal-600" />
+                        ? <Check className="h-4 w-4 shrink-0 text-zero-600" />
                         : <FileText className="h-4 w-4 shrink-0 text-gray-300" />}
                       <div className="min-w-0 flex-1">
-                        <p className={`text-sm ${on ? 'font-medium text-teal-800' : 'text-gray-800'}`}>{p.nombre}</p>
+                        <p className={`text-sm ${on ? 'font-medium text-zero-800' : 'text-gray-800'}`}>{p.nombre}</p>
                         <p className="mt-0.5 break-all font-mono text-xs text-gray-400">{p.referencia ?? '—'}</p>
                       </div>
                       {yaUsado && <span className="shrink-0 text-xs text-gray-400">ya usado</span>}
-                      <span className={`shrink-0 text-sm ${on ? 'font-semibold text-teal-800' : 'text-gray-500'}`}>{fmtDOP(p.precio)}</span>
+                      <span className={`shrink-0 text-sm ${on ? 'font-semibold text-zero-800' : 'text-gray-500'}`}>{fmtDOP(p.precio)}</span>
                     </button>
                   );
                 })}
                 <button onClick={() => setCreando(true)} className="flex w-full items-center gap-3 bg-gray-50 px-4 py-3 text-left hover:bg-gray-100">
-                  <Plus className="h-4 w-4 shrink-0 text-teal-600" />
-                  <span className="shrink-0 text-sm font-medium text-teal-700">Crear servicio nuevo</span>
+                  <Plus className="h-4 w-4 shrink-0 text-zero-600" />
+                  <span className="shrink-0 text-sm font-medium text-zero-700">Crear servicio nuevo</span>
                   <span className="min-w-0 flex-1 truncate text-right font-mono text-xs text-gray-400">{referenciaSugerida}</span>
                 </button>
               </div>
@@ -592,7 +592,7 @@ function ModalTarifa({
 
         <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50/60 px-7 py-4">
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-          <Button className="bg-teal-600 px-6 hover:bg-teal-700" onClick={guardar} disabled={ocupado || (!creando && !elegido) || (creando && precio === '')}>
+          <Button className="bg-zero-600 px-6 hover:bg-zero-700" onClick={guardar} disabled={ocupado || (!creando && !elegido) || (creando && precio === '')}>
             {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : creando ? 'Crear y atar' : 'Atar'}
           </Button>
         </div>

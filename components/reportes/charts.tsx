@@ -9,8 +9,8 @@ import {
   ComposedChart, Bar, Line, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 
-const TEAL = '#0d9488';
-const PALETTE = ['#0d9488', '#0ea5e9', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981', '#ec4899'];
+const TEAL = '#3658e1';
+const PALETTE = ['#3658e1', '#0ea5e9', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981', '#ec4899'];
 
 function fmtDOPshort(cents: number): string {
   const v = cents / 100;
@@ -100,7 +100,7 @@ export function AgingChart({ buckets }: { buckets: Record<string, number> }) {
     ['porVencer', 'Por vencer'], ['0-30', '0-30 días'], ['31-60', '31-60'], ['61-90', '61-90'], ['90+', '+90 días'],
   ];
   const data = orden.map(([k, label], i) => ({ label, valueCents: buckets[k] ?? 0, i }));
-  const colors = ['#0d9488', '#22c55e', '#eab308', '#f97316', '#ef4444'];
+  const colors = ['#3658e1', '#22c55e', '#eab308', '#f97316', '#ef4444'];
   if (data.every(d => d.valueCents === 0)) return <Vacio />;
   return (
     <ResponsiveContainer width="100%" height={220}>

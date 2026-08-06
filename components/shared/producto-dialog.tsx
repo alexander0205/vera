@@ -134,8 +134,8 @@ export function ProductoDialog({ open, onClose, onCreated, tipoInicial = 'bien' 
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75,
                 py: 0.875, borderRadius: '8px', border: 'none', cursor: 'pointer',
                 fontSize: '0.8125rem', fontWeight: 500, transition: 'all 0.15s',
-                bgcolor: tipo === val ? '#ccfbf1' : 'transparent',
-                color: tipo === val ? '#134e4a' : '#6b7280',
+                bgcolor: tipo === val ? '#e0e7fd' : 'transparent',
+                color: tipo === val ? '#24377d' : '#6b7280',
               }}
             >
               <Icon style={{ width: 14, height: 14 }} /> {label}

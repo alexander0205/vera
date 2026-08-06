@@ -138,7 +138,7 @@ export default async function SuscripcionPage() {
       <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
         <CardContent sx={{ p: '20px !important', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CreditCard style={{ width: 16, height: 16, color: '#0d9488' }} />
+            <CreditCard style={{ width: 16, height: 16, color: '#3658e1' }} />
             Plan actual
           </Typography>
 
@@ -184,7 +184,7 @@ export default async function SuscripcionPage() {
                 height: 8, borderRadius: 4, bgcolor: 'grey.100',
                 '& .MuiLinearProgress-bar': {
                   borderRadius: 4,
-                  bgcolor: isIlimitado ? '#0d9488' : usoPct >= 90 ? 'error.main' : usoPct >= 70 ? 'warning.main' : '#0d9488',
+                  bgcolor: isIlimitado ? '#3658e1' : usoPct >= 90 ? 'error.main' : usoPct >= 70 ? 'warning.main' : '#3658e1',
                   opacity: isIlimitado ? 0.4 : 1,
                 },
               }}
@@ -225,7 +225,7 @@ export default async function SuscripcionPage() {
         <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
           <CardContent sx={{ p: '20px !important' }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <TrendingUp style={{ width: 16, height: 16, color: '#0d9488' }} />
+              <TrendingUp style={{ width: 16, height: 16, color: '#3658e1' }} />
               Cambiar plan
             </Typography>
             <ChangePlan

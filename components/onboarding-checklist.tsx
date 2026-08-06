@@ -84,22 +84,22 @@ export function OnboardingChecklist() {
   const pct = Math.round((doneCount / items.length) * 100);
 
   return (
-    <Box sx={{ bgcolor: '#ffffff', border: '1px solid #99f6e4', borderRadius: '12px', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', overflow: 'hidden', mb: 3 }}>
+    <Box sx={{ bgcolor: '#ffffff', border: '1px solid #c7d2fc', borderRadius: '12px', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', overflow: 'hidden', mb: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, bgcolor: '#f0fdfa' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, bgcolor: '#eef2fe' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ flex: 1 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#134e4a' }}>Configuración inicial — {doneCount}/{items.length} completados</Typography>
-            <Box sx={{ mt: 0.5, height: 6, bgcolor: '#99f6e4', borderRadius: '9999px', width: 192 }}>
-              <Box sx={{ height: 6, bgcolor: '#0d9488', borderRadius: '9999px', transition: 'all 0.15s', width: `${pct}%` }} />
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#24377d' }}>Configuración inicial — {doneCount}/{items.length} completados</Typography>
+            <Box sx={{ mt: 0.5, height: 6, bgcolor: '#c7d2fc', borderRadius: '9999px', width: 192 }}>
+              <Box sx={{ height: 6, bgcolor: '#3658e1', borderRadius: '9999px', transition: 'all 0.15s', width: `${pct}%` }} />
             </Box>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton onClick={() => setCollapsed(c => !c)} size="small" sx={{ color: '#0d9488', '&:hover': { color: '#115e59', bgcolor: 'transparent' } }}>
+          <IconButton onClick={() => setCollapsed(c => !c)} size="small" sx={{ color: '#3658e1', '&:hover': { color: '#253a9e', bgcolor: 'transparent' } }}>
             {collapsed ? <ChevronDown style={{ width: 16, height: 16 }} /> : <ChevronUp style={{ width: 16, height: 16 }} />}
           </IconButton>
-          <IconButton onClick={dismiss} size="small" sx={{ color: '#2dd4bf', '&:hover': { color: '#0f766e', bgcolor: 'transparent' } }}>
+          <IconButton onClick={dismiss} size="small" sx={{ color: '#8193f5', '&:hover': { color: '#2a45c4', bgcolor: 'transparent' } }}>
             <X style={{ width: 16, height: 16 }} />
           </IconButton>
         </Box>
@@ -111,7 +111,7 @@ export function OnboardingChecklist() {
           {items.map(item => (
             <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2.5, py: 1.5, ...(item.done ? { opacity: 0.6 } : {}) }}>
               {item.done
-                ? <CheckCircle style={{ width: 20, height: 20, color: '#14b8a6', flexShrink: 0 }} />
+                ? <CheckCircle style={{ width: 20, height: 20, color: '#5b73ec', flexShrink: 0 }} />
                 : <Circle style={{ width: 20, height: 20, color: '#d1d5db', flexShrink: 0 }} />
               }
               <Box sx={{ flex: 1 }}>
@@ -127,13 +127,13 @@ export function OnboardingChecklist() {
                   sx={{
                     fontSize: '0.75rem',
                     fontWeight: 500,
-                    color: '#0d9488',
-                    border: '1px solid #99f6e4',
+                    color: '#3658e1',
+                    border: '1px solid #c7d2fc',
                     px: 1.5,
                     py: 0.5,
                     borderRadius: '8px',
                     textDecoration: 'none',
-                    '&:hover': { color: '#115e59', bgcolor: '#f0fdfa' },
+                    '&:hover': { color: '#253a9e', bgcolor: '#eef2fe' },
                   }}
                 >
                   Ir →

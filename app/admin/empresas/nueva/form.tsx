@@ -132,15 +132,15 @@ export function NuevaEmpresaForm({ provincias }: Props) {
         {rncSeleccionado ? (
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1.5,
-            bgcolor: '#f0fdfa', border: '1px solid #99f6e4',
+            bgcolor: '#eef2fe', border: '1px solid #c7d2fc',
             borderRadius: '8px', px: 2, py: 1.5,
           }}>
-            <Building2 style={{ width: 16, height: 16, color: '#0d9488', flexShrink: 0 }} />
+            <Building2 style={{ width: 16, height: 16, color: '#3658e1', flexShrink: 0 }} />
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 500, color: '#134e4a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Typography variant="body2" sx={{ fontWeight: 500, color: '#24377d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {razonSocial}
               </Typography>
-              <Typography variant="caption" sx={{ color: '#0d9488', fontFamily: 'monospace' }}>
+              <Typography variant="caption" sx={{ color: '#3658e1', fontFamily: 'monospace' }}>
                 RNC {rnc}
               </Typography>
             </Box>
@@ -148,7 +148,7 @@ export function NuevaEmpresaForm({ provincias }: Props) {
               component="button"
               type="button"
               onClick={limpiarBusqueda}
-              sx={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0d9488', '&:hover': { color: '#0f766e' }, flexShrink: 0, p: 0, display: 'flex' }}
+              sx={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3658e1', '&:hover': { color: '#2a45c4' }, flexShrink: 0, p: 0, display: 'flex' }}
             >
               <X style={{ width: 16, height: 16 }} />
             </Box>
@@ -166,7 +166,7 @@ export function NuevaEmpresaForm({ provincias }: Props) {
               slotProps={{
                 input: {
                   startAdornment: <Search style={{ width: 16, height: 16, color: '#9ca3af', marginRight: 8 }} />,
-                  endAdornment: loading ? <CircularProgress size={16} sx={{ color: '#0d9488' }} /> : null,
+                  endAdornment: loading ? <CircularProgress size={16} sx={{ color: '#3658e1' }} /> : null,
                 },
               }}
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
@@ -334,7 +334,7 @@ export function NuevaEmpresaForm({ provincias }: Props) {
           <Box>
             <Typography variant="caption" sx={{ fontWeight: 500, color: '#4b5563', mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
               Municipio
-              {loadingMunic && <CircularProgress size={12} sx={{ color: '#0d9488' }} />}
+              {loadingMunic && <CircularProgress size={12} sx={{ color: '#3658e1' }} />}
             </Typography>
             <FormControl size="small" fullWidth disabled={!provincia || loadingMunic}>
               <Select
@@ -446,9 +446,9 @@ export function NuevaEmpresaForm({ provincias }: Props) {
           sx={{
             textTransform: 'none',
             borderRadius: '8px',
-            bgcolor: '#0d9488',
+            bgcolor: '#3658e1',
             fontWeight: 500,
-            '&:hover': { bgcolor: '#0f766e' },
+            '&:hover': { bgcolor: '#2a45c4' },
           }}
         >
           Crear empresa
@@ -484,17 +484,17 @@ function PlanCard({
       onClick={onSelect}
       sx={{
         position: 'relative', textAlign: 'left', borderRadius: '8px',
-        border: `2px solid ${selected ? '#0d9488' : '#e5e7eb'}`,
-        bgcolor: selected ? '#f0fdfa' : '#fff',
+        border: `2px solid ${selected ? '#3658e1' : '#e5e7eb'}`,
+        bgcolor: selected ? '#eef2fe' : '#fff',
         px: 1.5, py: 1.25, cursor: 'pointer',
         transition: 'border-color 0.15s, background-color 0.15s',
-        '&:hover': { borderColor: selected ? '#0d9488' : '#d1d5db' },
+        '&:hover': { borderColor: selected ? '#3658e1' : '#d1d5db' },
       }}
     >
       {selected && (
         <Box sx={{
           position: 'absolute', top: 8, right: 8,
-          bgcolor: '#0d9488', borderRadius: '50%', p: '2px',
+          bgcolor: '#3658e1', borderRadius: '50%', p: '2px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <Check style={{ width: 12, height: 12, color: '#fff' }} />

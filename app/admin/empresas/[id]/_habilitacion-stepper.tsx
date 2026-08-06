@@ -340,8 +340,8 @@ export function HabilitacionStepper({
       {/* Header con progreso global */}
       <Box sx={{ px: 3, py: 2, borderBottom: '1px solid #f3f4f6', background: 'linear-gradient(135deg, rgba(240,253,250,0.4) 0%, #fff 100%)' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Rocket style={{ width: 20, height: 20, color: '#0f766e' }} />
+          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#e0e7fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Rocket style={{ width: 20, height: 20, color: '#2a45c4' }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontSize: '0.9375rem', fontWeight: 700, color: 'text.primary' }}>Habilitación DGII</Typography>
@@ -362,14 +362,14 @@ export function HabilitacionStepper({
             </Button>
           )}
           <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f766e', fontVariantNumeric: 'tabular-nums' }}>{pctComplete.toFixed(0)}%</Typography>
+            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#2a45c4', fontVariantNumeric: 'tabular-nums' }}>{pctComplete.toFixed(0)}%</Typography>
             <Typography sx={{ fontSize: '0.625rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>completado</Typography>
           </Box>
         </Box>
         {/* Progress bar */}
         <Box sx={{ height: 6, bgcolor: '#f3f4f6', borderRadius: '999px', overflow: 'hidden' }}>
           <Box
-            sx={{ height: '100%', background: 'linear-gradient(90deg, #14b8a6, #0d9488)', transition: 'width 0.3s ease' }}
+            sx={{ height: '100%', background: 'linear-gradient(90deg, #5b73ec, #3658e1)', transition: 'width 0.3s ease' }}
             style={{ width: `${pctComplete}%` }}
           />
         </Box>
@@ -553,7 +553,7 @@ function StepNavFooter({ stepId, status, isCurrent, onMarkDone }: {
         onClick={onMarkDone}
         endIcon={!isLast ? <ArrowRight style={{ width: 14, height: 14 }} /> : undefined}
         disableElevation
-        sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', flexShrink: 0, '&:hover': { bgcolor: '#0f766e' } }}
+        sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', flexShrink: 0, '&:hover': { bgcolor: '#2a45c4' } }}
       >
         {isLast ? 'Finalizar habilitación' : 'Marcar completado y continuar'}
       </Button>
@@ -735,7 +735,7 @@ function FirmarPostulacionPanel({
   return (
     <Paper variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', borderRadius: '8px', borderColor: '#e5e7eb' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        <FileSignature style={{ width: 16, height: 16, color: '#0d9488' }} />
+        <FileSignature style={{ width: 16, height: 16, color: '#3658e1' }} />
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1f2937' }}>{titulo}</Typography>
       </Box>
 
@@ -755,7 +755,7 @@ function FirmarPostulacionPanel({
 
         {/* Paso 2: subir XML */}
         <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
-          <Box component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', ...(displayFileName ? { bgcolor: '#0d9488', color: '#fff' } : { bgcolor: '#f3f4f6', color: '#4b5563' }) }}>
+          <Box component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', ...(displayFileName ? { bgcolor: '#3658e1', color: '#fff' } : { bgcolor: '#f3f4f6', color: '#4b5563' }) }}>
             {displayFileName ? <Check style={{ width: 12, height: 12 }} /> : '2'}
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -786,7 +786,7 @@ function FirmarPostulacionPanel({
 
         {/* Paso 3: firmar */}
         <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
-          <Box component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', ...(signed ? { bgcolor: '#0d9488', color: '#fff' } : { bgcolor: '#f3f4f6', color: '#4b5563' }) }}>
+          <Box component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', ...(signed ? { bgcolor: '#3658e1', color: '#fff' } : { bgcolor: '#f3f4f6', color: '#4b5563' }) }}>
             {signed ? <Check style={{ width: 12, height: 12 }} /> : '3'}
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -804,7 +804,7 @@ function FirmarPostulacionPanel({
                 disabled={!file || loading}
                 disableElevation
                 startIcon={loading ? <Spinner size={14} /> : <FileSignature style={{ width: 14, height: 14 }} />}
-                sx={{ mt: 1, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#e5e7eb', color: '#9ca3af' } }}
+                sx={{ mt: 1, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { bgcolor: '#e5e7eb', color: '#9ca3af' } }}
               >
                 {loading ? 'Firmando…' : 'Firmar XML'}
               </Button>
@@ -882,7 +882,7 @@ function DgiiCopyField({ label, value, isUrl = false, required = true, colSpan }
       <Typography component="label" sx={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#374151', mb: 0.5 }}>
         {label}{required && <Typography component="span" sx={{ color: 'error.main', ml: '2px' }}>*</Typography>}
       </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: '6px', bgcolor: '#fff', overflow: 'hidden', '&:focus-within': { outline: '2px solid rgba(13,148,136,0.2)', borderColor: '#2dd4bf' } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: '6px', bgcolor: '#fff', overflow: 'hidden', '&:focus-within': { outline: '2px solid rgba(13,148,136,0.2)', borderColor: '#8193f5' } }}>
         {isUrl && (
           <Typography component="span" sx={{ flexShrink: 0, px: 1.25, py: 0.75, fontSize: '0.75rem', color: '#9ca3af', bgcolor: '#f9fafb', borderRight: '1px solid #e5e7eb', userSelect: 'none', fontFamily: 'monospace' }}>
             https://
@@ -895,9 +895,9 @@ function DgiiCopyField({ label, value, isUrl = false, required = true, colSpan }
           size="small"
           onClick={handleCopy}
           title="Copiar"
-          sx={{ flexShrink: 0, borderRadius: 0, px: 1.25, py: 0.75, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#f0fdfa', color: '#0d9488' } }}
+          sx={{ flexShrink: 0, borderRadius: 0, px: 1.25, py: 0.75, borderLeft: '1px solid #e5e7eb', bgcolor: '#f9fafb', color: '#9ca3af', '&:hover': { bgcolor: '#eef2fe', color: '#3658e1' } }}
         >
-          {copied ? <Check style={{ width: 14, height: 14, color: '#0d9488' }} /> : <Copy style={{ width: 14, height: 14 }} />}
+          {copied ? <Check style={{ width: 14, height: 14, color: '#3658e1' }} /> : <Copy style={{ width: 14, height: 14 }} />}
         </IconButton>
       </Box>
     </Box>
@@ -1186,7 +1186,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
               disabled={!file || uploading}
               disableElevation
               startIcon={uploading ? <Spinner size={14} /> : <ArrowRight style={{ width: 14, height: 14 }} />}
-              sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
+              sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
             >
               {uploading ? 'Subiendo…' : 'Procesar Set de Pruebas'}
             </Button>
@@ -1213,7 +1213,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
                 startIcon={reemitting
                   ? <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
                   : <RotateCcw style={{ width: 12, height: 12 }} />}
-                sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: '#0d9488', borderColor: '#99f6e4', '&:hover': { bgcolor: '#f0fdfa' } }}
+                sx={{ flex: 1, fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: '#3658e1', borderColor: '#c7d2fc', '&:hover': { bgcolor: '#eef2fe' } }}
               >
                 {reemitting ? 'Re-emitiendo…' : 'Re-emitir'}
               </Button>
@@ -1252,7 +1252,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
                 type="button"
                 onClick={() => runId && fetchRun(runId)}
                 startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
-                sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#0d9488', textTransform: 'none', '&:hover': { color: '#0f766e' } }}
+                sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#3658e1', textTransform: 'none', '&:hover': { color: '#2a45c4' } }}
               >
                 Refrescar
               </Button>
@@ -1333,7 +1333,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
             <Box
               component="a"
               href={`${apiBase}/runs/${runId}/manual-upload/zip`}
-              sx={{ width: '100%', bgcolor: '#0d9488', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' } }}
+              sx={{ width: '100%', bgcolor: '#3658e1', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#2a45c4' } }}
             >
               <Download style={{ width: 14, height: 14 }} /> ZIP Facturas &lt; RD$250K
             </Box>
@@ -1370,7 +1370,7 @@ function Step2Body({ ctx, persisted, persistUpdate }: {
                   startIcon={reemitting
                     ? <Loader2 style={{ width: 12, height: 12, animation: 'spin 1s linear infinite' }} />
                     : <RotateCcw style={{ width: 12, height: 12 }} />}
-                  sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+                  sx={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
                 >
                   {reemitting ? 'Re-emitiendo…' : 'Re-emitir sin borrar'}
                 </Button>
@@ -1515,7 +1515,7 @@ function Step3Body({ ctx, persisted, persistUpdate }: {
             disabled={!file || uploading}
             disableElevation
             startIcon={uploading ? <Spinner size={14} /> : <ArrowRight style={{ width: 14, height: 14 }} />}
-            sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
+            sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
           >
             {uploading ? 'Procesando…' : 'Procesar Aprobaciones'}
           </Button>
@@ -1808,7 +1808,7 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
               disabled={starting}
               disableElevation
               startIcon={starting ? <Spinner size={14} /> : <FlaskConical style={{ width: 14, height: 14 }} />}
-              sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
+              sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', borderRadius: '6px', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, '&:disabled': { bgcolor: '#d1d5db', cursor: 'not-allowed' } }}
             >
               {starting ? 'Iniciando…' : 'Iniciar simulación (29 casos)'}
             </Button>
@@ -1831,7 +1831,7 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
                 onClick={handleRestart}
                 disabled={starting}
                 startIcon={starting ? <Spinner size={12} /> : <RotateCcw style={{ width: 12, height: 12 }} />}
-                sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: '#0f766e', borderColor: '#a7f3d0', '&:hover': { bgcolor: '#f0fdfa' }, '&:disabled': { opacity: 0.5 } }}
+                sx={{ fontSize: '0.6875rem', textTransform: 'none', borderRadius: '6px', color: '#2a45c4', borderColor: '#a7f3d0', '&:hover': { bgcolor: '#eef2fe' }, '&:disabled': { opacity: 0.5 } }}
               >
                 Re-iniciar (+100)
               </Button>
@@ -1860,7 +1860,7 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
                 type="button"
                 onClick={() => runId && fetchRun(runId)}
                 startIcon={<RotateCcw style={{ width: 12, height: 12 }} />}
-                sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#0d9488', textTransform: 'none', '&:hover': { color: '#0f766e' } }}
+                sx={{ ml: 'auto', fontSize: '0.6875rem', color: '#3658e1', textTransform: 'none', '&:hover': { color: '#2a45c4' } }}
               >
                 Refrescar
               </Button>
@@ -1920,7 +1920,7 @@ function Step4Body({ ctx, persisted, persistUpdate }: {
           <Box
             component="a"
             href={`${zipBase}/runs/${runId}/manual-upload/zip`}
-            sx={{ width: '100%', bgcolor: '#0d9488', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' } }}
+            sx={{ width: '100%', bgcolor: '#3658e1', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#2a45c4' } }}
           >
             <Download style={{ width: 14, height: 14 }} /> ZIP Facturas &lt; RD$250K
           </Box>
@@ -2024,7 +2024,7 @@ function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState
         <Box
           component="a"
           href={`${zipBase}/runs/${runId}/package`}
-          sx={{ width: '100%', bgcolor: '#0d9488', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#0f766e' } }}
+          sx={{ width: '100%', bgcolor: '#3658e1', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 2, py: 1, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, textDecoration: 'none', '&:hover': { bgcolor: '#2a45c4' } }}
         >
           <Download style={{ width: 14, height: 14 }} /> Paquete completo (PDF + XML por tipo)
         </Box>
@@ -2051,7 +2051,7 @@ function Step5Body({ ctx, persisted }: { ctx: StepCtx; persisted: PersistedState
                       component="a"
                       href={`${apiBase}/emisiones/${row.emisionId}/pdf`}
                       target="_blank" rel="noopener noreferrer"
-                      sx={{ fontSize: '0.6875rem', color: '#0d9488', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', '&:hover': { color: '#0f766e' } }}
+                      sx={{ fontSize: '0.6875rem', color: '#3658e1', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', '&:hover': { color: '#2a45c4' } }}
                     >
                       <Download style={{ width: 12, height: 12 }} /> PDF
                     </Box>
@@ -2228,7 +2228,7 @@ function PortalStepBody({ stepId, ctx }: { stepId: number; ctx: StepCtx }) {
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-          <Typography component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', bgcolor: '#ccfbf1', color: '#0f766e', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</Typography>
+          <Typography component="span" sx={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', bgcolor: '#e0e7fd', color: '#2a45c4', fontSize: '0.6875rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</Typography>
           <Typography sx={{ fontSize: '0.75rem', color: '#374151', flex: 1 }}>{info.accion}</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
@@ -2335,7 +2335,7 @@ function CardSection({ title, icon: Icon, children, color = 'teal' }: {
   children: React.ReactNode;
   color?: 'teal' | 'amber';
 }) {
-  const headerBg = color === 'teal' ? '#0d9488' : '#d97706';
+  const headerBg = color === 'teal' ? '#3658e1' : '#d97706';
   return (
     <Paper variant="outlined" sx={{ bgcolor: '#fff', borderRadius: '8px', overflow: 'hidden', borderColor: '#e5e7eb' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: headerBg }}>

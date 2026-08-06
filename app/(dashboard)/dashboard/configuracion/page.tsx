@@ -230,7 +230,7 @@ export default function ConfiguracionPage() {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <CircularProgress size={36} sx={{ color: '#0d9488' }} />
+        <CircularProgress size={36} sx={{ color: '#3658e1' }} />
       </Box>
     );
   }
@@ -247,7 +247,7 @@ export default function ConfiguracionPage() {
           </Box>
           <Button variant="contained" disableElevation onClick={handleSave} disabled={saving}
             startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : saved ? <CheckCircle size={16} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, minWidth: 140 }}>
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, minWidth: 140 }}>
             {saving ? 'Guardando…' : saved ? 'Guardado' : 'Guardar cambios'}
           </Button>
         </Box>
@@ -257,7 +257,7 @@ export default function ConfiguracionPage() {
         {/* 1. Datos fiscales */}
         <Box sx={cardSx}>
           <Box sx={cardHeaderSx}>
-            <Building2 size={16} color="#0d9488" />
+            <Building2 size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Datos fiscales</Typography>
           </Box>
           <Box sx={{ ...cardContentSx, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
@@ -298,7 +298,7 @@ export default function ConfiguracionPage() {
         {/* 2. Logo */}
         <Box sx={cardSx}>
           <Box sx={cardHeaderSx}>
-            <ImageIcon size={16} color="#0d9488" />
+            <ImageIcon size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Logo de la empresa</Typography>
           </Box>
           <Box sx={cardContentSx}>
@@ -311,7 +311,7 @@ export default function ConfiguracionPage() {
         {/* 4. Color de marca */}
         <Box sx={cardSx}>
           <Box sx={cardHeaderSx}>
-            <Palette size={16} color="#0d9488" />
+            <Palette size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Color de marca</Typography>
           </Box>
           <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -348,7 +348,7 @@ export default function ConfiguracionPage() {
         {/* Vista previa encabezado */}
         <Box sx={{ ...cardSx, border: '1px dashed #d1d5db' }}>
           <Box sx={cardHeaderSx}>
-            <Eye size={16} color="#0d9488" />
+            <Eye size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Previsualización del encabezado</Typography>
           </Box>
           <Box sx={cardContentSx}>
@@ -381,7 +381,7 @@ export default function ConfiguracionPage() {
         {/* 5. Plazo de pago */}
         <Box sx={cardSx}>
           <Box sx={cardHeaderSx}>
-            <AlertCircle size={16} color="#0d9488" />
+            <AlertCircle size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Plazo de pago</Typography>
           </Box>
           <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -411,7 +411,7 @@ export default function ConfiguracionPage() {
         {/* 6. Recargo por mora */}
         <Box sx={cardSx}>
           <Box sx={cardHeaderSx}>
-            <AlertCircle size={16} color="#0d9488" />
+            <AlertCircle size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Recargo por mora</Typography>
           </Box>
           <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -426,7 +426,7 @@ export default function ConfiguracionPage() {
                 </Typography>
               </Box>
               <Switch checked={recargoActivo} onChange={(_, v) => setRecargoActivo(v)} color="primary"
-                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
             </Box>
             <Box sx={{ opacity: recargoActivo ? 1 : 0.4, pointerEvents: recargoActivo ? 'auto' : 'none', transition: 'opacity 0.2s', maxWidth: 320 }}>
               <TextField label="Porcentaje de recargo (%)" size="small" fullWidth type="number"
@@ -449,7 +449,7 @@ export default function ConfiguracionPage() {
         {/* 7. Módulo de caja */}
         <Box sx={cardSx}>
           <Box sx={cardHeaderSx}>
-            <Wallet size={16} color="#0d9488" />
+            <Wallet size={16} color="#3658e1" />
             <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Cuadre de Caja</Typography>
           </Box>
           <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -464,7 +464,7 @@ export default function ConfiguracionPage() {
                 </Typography>
               </Box>
               <Switch checked={cajaHabilitada} onChange={(_, v) => setCajaHabilitada(v)} color="primary"
-                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
             </Box>
             {cajaHabilitada && (
               <>
@@ -572,7 +572,7 @@ export default function ConfiguracionPage() {
         {/* 8. Punto de venta (POS) */}
         <Box sx={cardSx}>
             <Box sx={cardHeaderSx}>
-              <Store style={{ width: 16, height: 16, color: '#0d9488' }} />
+              <Store style={{ width: 16, height: 16, color: '#3658e1' }} />
               <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Punto de venta (POS)</Typography>
             </Box>
             <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -587,7 +587,7 @@ export default function ConfiguracionPage() {
                   </Typography>
                 </Box>
                 <Switch checked={posHabilitado} onChange={(_, v) => setPosHabilitado(v)} color="primary"
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
                 <Box>
@@ -597,7 +597,7 @@ export default function ConfiguracionPage() {
                   </Typography>
                 </Box>
                 <Switch checked={posEscolarHabilitado} onChange={(_, v) => setPosEscolarHabilitado(v)} color="primary"
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
               </Box>
             </Box>
           </Box>
@@ -605,7 +605,7 @@ export default function ConfiguracionPage() {
         {/* 9. Métodos que obligan facturar a la DGII */}
         <Box sx={cardSx}>
             <Box sx={cardHeaderSx}>
-              <CreditCard size={16} color="#0d9488" />
+              <CreditCard size={16} color="#3658e1" />
               <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Métodos que obligan facturar a la DGII</Typography>
             </Box>
             <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -627,7 +627,7 @@ export default function ConfiguracionPage() {
                         v ? [...metodosObligaDgii, m.value] : metodosObligaDgii.filter(x => x !== m.value)
                       )}
                       color="primary"
-                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#0d9488' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#0d9488' } }} />
+                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
                   </Box>
                 ))}
               </Box>
@@ -652,7 +652,7 @@ export default function ConfiguracionPage() {
       }}>
         <Button variant="contained" disableElevation onClick={handleSave} disabled={saving}
           startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : saved ? <CheckCircle size={16} /> : <Loader2 size={16} style={{ opacity: 0 }} />}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' }, minWidth: 160 }}>
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, minWidth: 160 }}>
           {saving ? 'Guardando…' : saved ? '¡Guardado!' : 'Guardar cambios'}
         </Button>
       </Box>

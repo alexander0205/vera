@@ -17,7 +17,7 @@ export function NativeSelect({ className, ...props }: React.ComponentProps<'sele
     <select
       className={cn(
         'h-10 w-full cursor-pointer rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900',
-        'outline-none transition-colors hover:border-gray-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500',
+        'outline-none transition-colors hover:border-gray-400 focus:border-zero-500 focus:ring-1 focus:ring-zero-500',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}

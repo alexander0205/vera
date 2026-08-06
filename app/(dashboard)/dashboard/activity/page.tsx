@@ -74,10 +74,10 @@ export default async function ActivityPage() {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2.5, py: 1.5 }}>
                   <Box sx={{
                     width: 34, height: 34, borderRadius: '50%',
-                    bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center',
+                    bgcolor: '#eef2fe', display: 'flex', alignItems: 'center',
                     justifyContent: 'center', flexShrink: 0,
                   }}>
-                    <Activity style={{ width: 16, height: 16, color: '#0d9488' }} />
+                    <Activity style={{ width: 16, height: 16, color: '#3658e1' }} />
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ color: 'text.primary' }}>

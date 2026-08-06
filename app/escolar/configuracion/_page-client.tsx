@@ -36,7 +36,7 @@ export default function ConfiguracionEscolarClient() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                on ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-800'
+                on ? 'border-zero-600 text-zero-700' : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
               <t.icon className="h-4 w-4" /> {t.label}

@@ -46,14 +46,14 @@ export function RetencionesSection({
           }}
           sx={{
             fontSize: '0.875rem',
-            color: '#0d9488',
+            color: '#3658e1',
             fontWeight: 500,
             bgcolor: 'transparent',
             border: 'none',
             cursor: 'pointer',
             py: 1,
             my: -1,
-            '&:hover': { color: '#0f766e' },
+            '&:hover': { color: '#2a45c4' },
           }}
         >
           + Agregar Retención
@@ -194,7 +194,7 @@ export function RetencionesSection({
         sx={{
           mt: 1,
           fontSize: '0.875rem',
-          color: '#0d9488',
+          color: '#3658e1',
           fontWeight: 500,
           bgcolor: 'transparent',
           border: 'none',
@@ -204,7 +204,7 @@ export function RetencionesSection({
           gap: 0.5,
           py: 1,
           my: -0.5,
-          '&:hover': { color: '#0f766e' },
+          '&:hover': { color: '#2a45c4' },
         }}
       >
         + Agregar Retención

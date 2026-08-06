@@ -40,8 +40,8 @@ interface Terminal {
 
 const EMPTY = { nombre: '', almacenId: 0, impresoraId: 0, listaPreciosId: 0, tipoEcf: 'sin-ncf', mesas: false };
 
-const TEAL = '#0d9488';
-const TEAL_HOVER = '#0f766e';
+const TEAL = '#3658e1';
+const TEAL_HOVER = '#2a45c4';
 
 export default function TerminalesClient({
   terminalesIniciales, almacenes, impresoras, listas,

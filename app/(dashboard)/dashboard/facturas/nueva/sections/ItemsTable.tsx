@@ -407,7 +407,7 @@ export function ItemsTable({
                       fontSize: '0.875rem',
                       '& fieldset': { borderColor: '#e5e7eb' },
                       '&:hover fieldset': { borderColor: '#9ca3af' },
-                      '&.Mui-focused fieldset': { borderColor: '#0d9488' },
+                      '&.Mui-focused fieldset': { borderColor: '#3658e1' },
                     },
                   }}
                 />
@@ -688,7 +688,7 @@ export function ItemsTable({
                           alignItems: 'flex-start',
                           '& fieldset': { borderColor: '#e5e7eb' },
                           '&:hover fieldset': { borderColor: '#9ca3af' },
-                          '&.Mui-focused fieldset': { borderColor: '#0d9488' },
+                          '&.Mui-focused fieldset': { borderColor: '#3658e1' },
                         },
                         '& .MuiInputBase-inputMultiline': { resize: 'none' },
                       }}
@@ -768,12 +768,12 @@ export function ItemsTable({
           onClick={onAddItem}
           sx={{
             textTransform: 'none',
-            color: '#0d9488',
+            color: '#3658e1',
             fontSize: '0.875rem',
             fontWeight: 500,
             py: 1,
             my: -1,
-            '&:hover': { color: '#0f766e', bgcolor: 'transparent' },
+            '&:hover': { color: '#2a45c4', bgcolor: 'transparent' },
           }}
         >
           + Agregar línea
@@ -790,7 +790,7 @@ export function ItemsTable({
             fontWeight: 500,
             py: 1,
             my: -1,
-            '&:hover': { color: '#0f766e', bgcolor: 'transparent' },
+            '&:hover': { color: '#2a45c4', bgcolor: 'transparent' },
           }}
         >
           + Agregar Conduce

@@ -150,7 +150,7 @@ export function CrearCargoEstudianteDialog({
             : periodoNombre}</>} />
         <div className="space-y-4 px-6 py-4">
           {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-          {loading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-teal-600" /></div> : <>
+          {loading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-zero-600" /></div> : <>
             <div className="space-y-1.5">
               <Label>Concepto *</Label>
               <NativeSelect value={form.conceptoId} onChange={(e) => setForm((f) => ({ ...f, conceptoId: e.target.value }))}>
@@ -196,7 +196,7 @@ export function CrearCargoEstudianteDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={guardar} disabled={loading || saving || !matriculaId || !periodoId}>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={guardar} disabled={loading || saving || !matriculaId || !periodoId}>
             {saving ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Guardando…</> : 'Crear cargo'}
           </Button>
         </DialogFooter>

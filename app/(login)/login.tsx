@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Loader2, Receipt, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { LogoZero } from '@/components/marca-zero';
 import { signIn, signUp } from './actions';
 import { ActionState } from '@/lib/auth/middleware';
 
@@ -55,22 +56,7 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
               mb:             1.5,
             }}
           >
-            <Box
-              sx={{
-                width:          40,
-                height:         40,
-                bgcolor:        'primary.main',
-                borderRadius:   '10px',
-                display:        'flex',
-                alignItems:     'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Receipt style={{ width: 22, height: 22, color: '#fff' }} />
-            </Box>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary' }}>
-              Zero
-            </Typography>
+            <LogoZero alto={38} />
           </Box>
           <Typography variant="body2" color="text.secondary">
             {mode === 'signin'

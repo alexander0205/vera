@@ -230,7 +230,7 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
           cta: canOperate ? (
             <Link href="/dashboard/facturas-recurrentes/nueva" style={{ textDecoration: 'none' }}>
               <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
                 Nueva factura recurrente
               </Button>
             </Link>
@@ -239,7 +239,7 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
         headerActions={canOperate ? (
           <Link href="/dashboard/facturas-recurrentes/nueva" style={{ textDecoration: 'none' }}>
             <Button variant="contained" disableElevation startIcon={<Plus size={18} />}
-              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+              sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
               Nueva factura recurrente
             </Button>
           </Link>

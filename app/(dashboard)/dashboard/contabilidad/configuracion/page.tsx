@@ -61,7 +61,7 @@ export default async function ConfiguracionContablePage() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Contabilidad</Typography>
         <ChevronRight style={{ width: 14, height: 14, color: '#6b7280' }} />
-        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>Configuración contable</Typography>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>Configuración contable</Typography>
       </Box>
 
       <Box>

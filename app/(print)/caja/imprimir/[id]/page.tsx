@@ -155,7 +155,7 @@ export default function ImprimirCajaPage() {
             onClick={() => window.close()}
             sx={{
               fontSize: '0.875rem',
-              color: '#0d9488',
+              color: '#3658e1',
               background: 'none',
               border: 'none',
               cursor: 'pointer',
@@ -178,7 +178,7 @@ export default function ImprimirCajaPage() {
         minHeight: '100vh',
         bgcolor: '#f9fafb',
       }}>
-        <Loader2 style={{ width: 32, height: 32, color: '#0d9488', animation: 'spin 1s linear infinite' }} />
+        <Loader2 style={{ width: 32, height: 32, color: '#3658e1', animation: 'spin 1s linear infinite' }} />
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </Box>
     );
@@ -265,7 +265,7 @@ export default function ImprimirCajaPage() {
             alignItems: 'center',
             gap: 1,
             fontSize: '0.875rem',
-            bgcolor: '#0d9488',
+            bgcolor: '#3658e1',
             color: '#ffffff',
             px: 2,
             py: '6px',
@@ -273,7 +273,7 @@ export default function ImprimirCajaPage() {
             border: 'none',
             cursor: 'pointer',
             fontWeight: 500,
-            '&:hover': { bgcolor: '#0f766e' },
+            '&:hover': { bgcolor: '#2a45c4' },
           }}
         >
           <Printer style={{ width: 16, height: 16 }} /> Imprimir

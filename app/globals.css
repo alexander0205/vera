@@ -9,6 +9,29 @@
 @variant dark (&:is(.dark *));
 
 @theme {
+  /*
+    Marca Zero. El azul corporativo es el 600; el resto de la escala se deriva
+    de él para tener los tonos que pide una interfaz (fondos suaves, bordes,
+    estados hover) sin salirse de la identidad.
+
+    Se llama `zero` y no `primary` a propósito: `primary` ya existe arriba
+    atado a los tokens de shadcn, y mezclarlos haría imposible saber cuál manda.
+  */
+  --color-zero-50:  #eef2fe;
+  --color-zero-100: #e0e7fd;
+  --color-zero-200: #c7d2fc;
+  --color-zero-300: #a5b4f9;
+  --color-zero-400: #8193f5;
+  --color-zero-500: #5b73ec;
+  --color-zero-600: #3658e1;
+  --color-zero-700: #2a45c4;
+  --color-zero-800: #253a9e;
+  --color-zero-900: #24377d;
+  --color-zero-950: #1a2450;
+
+  /* Sora es la tipografía de marca; se pide con `font-display`. */
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
 
@@ -325,7 +348,7 @@
   top: -40px;
   left: 0;
   padding: 8px 16px;
-  background: #0f766e;
+  background: #2a45c4;
   color: white;
   z-index: 100;
   border-radius: 0 0 8px 0;

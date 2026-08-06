@@ -133,10 +133,10 @@ function RolesList({ roles, onSelect, onCreate }: {
           startIcon={<Plus style={{ width: 16, height: 16 }} />}
           sx={{
             textTransform: 'none',
-            bgcolor: '#0d9488',
+            bgcolor: '#3658e1',
             color: '#fff',
             boxShadow: 'none',
-            '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+            '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' },
           }}
         >
           Nuevo rol
@@ -196,7 +196,7 @@ function RolesList({ roles, onSelect, onCreate }: {
                         py: 0.25,
                         ...(r.isSystem
                           ? { bgcolor: '#f3f4f6', color: '#6b7280' }
-                          : { bgcolor: '#f0fdfa', color: '#0f766e' }),
+                          : { bgcolor: '#eef2fe', color: '#2a45c4' }),
                       }}
                     >
                       {r.isSystem ? 'sistema' : 'personalizado'}
@@ -397,11 +397,11 @@ function RoleEditor({ role, catalog, onBack, onSaved, onDeleted }: {
               sx={{
                 textTransform: 'none',
                 minWidth: 130,
-                bgcolor: '#0d9488',
+                bgcolor: '#3658e1',
                 color: '#fff',
                 boxShadow: 'none',
-                '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
-                '&.Mui-disabled': { bgcolor: '#0d9488', color: '#fff', opacity: 0.5 },
+                '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' },
+                '&.Mui-disabled': { bgcolor: '#3658e1', color: '#fff', opacity: 0.5 },
               }}
             >
               {saving ? '' : saved && !dirty ? 'Guardado' : 'Guardar cambios'}
@@ -529,7 +529,7 @@ function Toggle({ on, disabled, onClick }: { on: boolean; disabled?: boolean; on
           '&.Mui-checked': {
             transform: 'translateX(16px)',
             color: '#fff',
-            '& + .MuiSwitch-track': { backgroundColor: '#0d9488', borderColor: '#0d9488', opacity: 1 },
+            '& + .MuiSwitch-track': { backgroundColor: '#3658e1', borderColor: '#3658e1', opacity: 1 },
           },
           '&.Mui-disabled': { opacity: 0.6 },
           '&.Mui-disabled + .MuiSwitch-track': { opacity: 0.6 },
@@ -643,10 +643,10 @@ function CreateRoleDialog({ roles, onClose, onCreated }: {
           }
           sx={{
             textTransform: 'none',
-            bgcolor: '#0d9488',
+            bgcolor: '#3658e1',
             color: '#fff',
             boxShadow: 'none',
-            '&:hover': { bgcolor: '#0f766e', boxShadow: 'none' },
+            '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' },
           }}
         >
           Crear rol

@@ -33,7 +33,7 @@ const inputSx = {
     borderRadius: '8px',
     '& .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
     '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#d1d5db' },
-    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#0d9488', borderWidth: '2px' },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#3658e1', borderWidth: '2px' },
   },
   '& .MuiOutlinedInput-input': { fontSize: { xs: '1rem', md: '0.875rem' } },
 } as const;
@@ -230,13 +230,13 @@ export function EmpresaForm({ initial }: { initial: EmpresaData }) {
             width: { xs: '100%', sm: 'auto' },
             px: 3,
             py: { xs: 1.5, sm: 1.25 },
-            bgcolor: '#0d9488',
+            bgcolor: '#3658e1',
             color: '#fff',
             fontWeight: 500,
             borderRadius: '8px',
             textTransform: 'none',
-            '&:hover': { bgcolor: '#0f766e' },
-            '&.Mui-disabled': { opacity: 0.5, color: '#fff', bgcolor: '#0d9488' },
+            '&:hover': { bgcolor: '#2a45c4' },
+            '&.Mui-disabled': { opacity: 0.5, color: '#fff', bgcolor: '#3658e1' },
           }}
         >
           {saving ? 'Guardando...' : 'Guardar cambios'}

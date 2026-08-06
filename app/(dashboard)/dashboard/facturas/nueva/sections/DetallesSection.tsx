@@ -130,9 +130,9 @@ export function DetallesSection({
       </Box>
 
       {esCredito && fechaLimitePago && (
-        <Box sx={{ bgcolor: '#f0fdfa', border: '1px solid #ccfbf1', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <Info size={16} color="#0f766e" style={{ flexShrink: 0 }} />
-          <Typography sx={{ fontSize: '0.875rem', color: '#134e4a' }}>
+        <Box sx={{ bgcolor: '#eef2fe', border: '1px solid #e0e7fd', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Info size={16} color="#2a45c4" style={{ flexShrink: 0 }} />
+          <Typography sx={{ fontSize: '0.875rem', color: '#24377d' }}>
             Vence el <Box component="span" sx={{ fontWeight: 600 }}>{formatFechaCorta(fechaLimitePago)}</Box>.
           </Typography>
         </Box>

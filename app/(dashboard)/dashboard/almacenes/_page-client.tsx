@@ -129,7 +129,7 @@ export default function AlmacenesPage() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Warehouse size={22} color="#0d9488" />
+            <Warehouse size={22} color="#3658e1" />
             <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Almacenes</Typography>
           </Box>
           <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>
@@ -141,7 +141,7 @@ export default function AlmacenesPage() {
           disableElevation
           startIcon={<Plus size={18} />}
           onClick={abrirNuevo}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
         >
           Nuevo Almacén
         </Button>
@@ -158,7 +158,7 @@ export default function AlmacenesPage() {
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-            <CircularProgress size={36} sx={{ color: '#0d9488' }} />
+            <CircularProgress size={36} sx={{ color: '#3658e1' }} />
           </Box>
         ) : almacenes.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
@@ -171,7 +171,7 @@ export default function AlmacenesPage() {
               size="small"
               startIcon={<Plus size={16} />}
               onClick={abrirNuevo}
-              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
             >
               Nuevo Almacén
             </Button>
@@ -271,7 +271,7 @@ export default function AlmacenesPage() {
                 checked={form.esDefault}
                 onChange={(_, v) => setForm(f => ({ ...f, esDefault: v }))}
                 size="small"
-                sx={{ color: '#0d9488', '&.Mui-checked': { color: '#0d9488' } }}
+                sx={{ color: '#3658e1', '&.Mui-checked': { color: '#3658e1' } }}
               />
             }
             label={<Typography variant="body2" sx={{ color: '#374151' }}>Establecer como almacén por defecto</Typography>}
@@ -316,7 +316,7 @@ export default function AlmacenesPage() {
             onClick={handleGuardar}
             disabled={saving}
             startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}
           >
             {saving ? 'Guardando…' : editTarget ? 'Guardar cambios' : 'Crear almacén'}
           </Button>

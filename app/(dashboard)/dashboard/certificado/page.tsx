@@ -57,7 +57,7 @@ function VerifRow({ ok, label }: { ok: boolean; label: string }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       {ok
-        ? <CheckCircle style={{ width: 14, height: 14, color: '#0d9488', flexShrink: 0 }} />
+        ? <CheckCircle style={{ width: 14, height: 14, color: '#3658e1', flexShrink: 0 }} />
         : <AlertTriangle style={{ width: 14, height: 14, color: '#ef4444', flexShrink: 0 }} />
       }
       <Typography variant="caption" sx={{ color: 'text.primary' }}>{label}</Typography>
@@ -128,13 +128,13 @@ function CertStatusPanel({ certInfo, loading, onReload, onDelete, deleting }: {
   const status = getCertStatus(certInfo.vencimiento);
 
   const headerSx = {
-    ok:      { bgcolor: '#f0fdfa', borderColor: '#ccfbf1' },
+    ok:      { bgcolor: '#eef2fe', borderColor: '#e0e7fd' },
     warning: { bgcolor: '#fffbeb', borderColor: '#fde68a' },
     expired: { bgcolor: '#fef2f2', borderColor: '#fecaca' },
   }[status];
 
-  const iconColor = { ok: '#0d9488', warning: '#d97706', expired: '#dc2626' }[status];
-  const titleColor = { ok: '#134e4a', warning: '#92400e', expired: '#991b1b' }[status];
+  const iconColor = { ok: '#3658e1', warning: '#d97706', expired: '#dc2626' }[status];
+  const titleColor = { ok: '#24377d', warning: '#92400e', expired: '#991b1b' }[status];
   const statusLabel = { ok: 'Certificado activo', warning: 'Próximo a vencer', expired: 'Certificado vencido' }[status];
   const venceColor = { ok: 'text.primary', warning: '#d97706', expired: '#dc2626' }[status];
 
@@ -261,12 +261,12 @@ function UploadForm({ hasCert, onSuccess }: { hasCert: boolean; onSuccess: (info
               borderRadius: '12px', border: '2px dashed', cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, py: 5, px: 3, textAlign: 'center',
               borderColor: dragging ? 'primary.main' : '#e5e7eb',
-              bgcolor: dragging ? '#f0fdfa' : 'grey.50',
+              bgcolor: dragging ? '#eef2fe' : 'grey.50',
               transition: 'all 0.15s',
               '&:hover': { borderColor: 'primary.light', bgcolor: 'grey.50' },
             }}
           >
-            <CloudUpload style={{ width: 40, height: 40, color: dragging ? '#0d9488' : '#9ca3af' }} />
+            <CloudUpload style={{ width: 40, height: 40, color: dragging ? '#3658e1' : '#9ca3af' }} />
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>Arrastra el archivo aquí</Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>Formato PFX o P12</Typography>
@@ -278,7 +278,7 @@ function UploadForm({ hasCert, onSuccess }: { hasCert: boolean; onSuccess: (info
           </Box>
         ) : (
           <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: 'grey.50', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <FileKey style={{ width: 18, height: 18, color: '#0d9488', flexShrink: 0 }} />
+            <FileKey style={{ width: 18, height: 18, color: '#3658e1', flexShrink: 0 }} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fmtSize(file.size)}</Typography>
@@ -413,23 +413,23 @@ export default function CertificadoPage() {
             deleting={deleting}
           />
 
-          <Card elevation={0} sx={{ border: '1px solid #ccfbf1', bgcolor: '#f0fdfa', borderRadius: '12px' }}>
+          <Card elevation={0} sx={{ border: '1px solid #e0e7fd', bgcolor: '#eef2fe', borderRadius: '12px' }}>
             <CardContent sx={{ p: '16px !important', display: 'flex', gap: 1.5 }}>
-              <Shield style={{ width: 16, height: 16, color: '#0d9488', marginTop: 2, flexShrink: 0 }} />
+              <Shield style={{ width: 16, height: 16, color: '#3658e1', marginTop: 2, flexShrink: 0 }} />
               <Box>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#134e4a', mb: 0.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#24377d', mb: 0.5 }}>
                   ¿Cómo obtener el certificado P12?
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#0f766e', display: 'block', mb: 0.5 }}>
+                <Typography variant="caption" sx={{ color: '#2a45c4', display: 'block', mb: 0.5 }}>
                   Solicitado a entidades autorizadas por INDOTEL:
                 </Typography>
                 {['Viafirma', 'Cámara de Comercio RD', 'DigiCert'].map(e => (
-                  <Typography key={e} variant="caption" sx={{ color: '#0f766e', display: 'block' }}>· {e}</Typography>
+                  <Typography key={e} variant="caption" sx={{ color: '#2a45c4', display: 'block' }}>· {e}</Typography>
                 ))}
-                <Typography variant="caption" sx={{ color: '#0d9488', display: 'block', mt: 0.75 }}>
+                <Typography variant="caption" sx={{ color: '#3658e1', display: 'block', mt: 0.75 }}>
                   El archivo debe tener extensión{' '}
-                  <Box component="code" sx={{ bgcolor: '#ccfbf1', px: 0.75, borderRadius: 0.5, fontFamily: 'monospace' }}>.p12</Box> o{' '}
-                  <Box component="code" sx={{ bgcolor: '#ccfbf1', px: 0.75, borderRadius: 0.5, fontFamily: 'monospace' }}>.pfx</Box>
+                  <Box component="code" sx={{ bgcolor: '#e0e7fd', px: 0.75, borderRadius: 0.5, fontFamily: 'monospace' }}>.p12</Box> o{' '}
+                  <Box component="code" sx={{ bgcolor: '#e0e7fd', px: 0.75, borderRadius: 0.5, fontFamily: 'monospace' }}>.pfx</Box>
                 </Typography>
               </Box>
             </CardContent>

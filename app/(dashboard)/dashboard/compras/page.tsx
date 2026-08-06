@@ -72,7 +72,7 @@ const columns: DataTableColumn<RecepcionEcfDto>[] = [
     header: 'Emisor (RNC)',
     render: item => (
       <Link href={`/dashboard/compras/${item.id}`} style={{ textDecoration: 'none' }}>
-        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#0f766e', '&:hover': { textDecoration: 'underline' } }}>
+        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: '#2a45c4', '&:hover': { textDecoration: 'underline' } }}>
           {item.rncEmisor ?? item.rnc}
         </Typography>
       </Link>
@@ -222,8 +222,8 @@ export default function ComprasPage() {
       {/* Header tipo Alegra */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#f0fdfa', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <ShoppingCart color="#0d9488" style={{ width: 20, height: 20 }} />
+          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: '#eef2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ShoppingCart color="#3658e1" style={{ width: 20, height: 20 }} />
           </Box>
           <Box>
             <Typography component="h1" sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>Compras</Typography>

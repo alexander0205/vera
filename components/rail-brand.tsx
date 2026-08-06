@@ -27,18 +27,20 @@ export function RailBrand({ modulo }: { modulo: ModuleKey }) {
         flexShrink: 0,
       }}
     >
+      {/* El isotipo va sobre el azul del rail, así que se usa la versión blanca. */}
       <Box
-        sx={{
-          width: 28, height: 28, bgcolor: '#fff', borderRadius: '8px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}
-      >
-        <Typography sx={{ color: '#0f766e', fontWeight: 900, fontSize: '0.875rem', lineHeight: 1 }}>z</Typography>
-      </Box>
+        component="img"
+        src="/marca/zero-app-blanco.svg"
+        alt=""
+        aria-hidden
+        sx={{ width: 28, height: 28, borderRadius: '8px', flexShrink: 0 }}
+      />
       {/* nav-text: el rail lo oculta cuando está colapsado a solo iconos. */}
       <Box className="nav-text" sx={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
-        <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.875rem' }}>Zero</Typography>
-        <Typography sx={{ color: 'rgba(204,251,241,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.9375rem', fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
+          Zero
+        </Typography>
+        <Typography sx={{ color: 'rgba(224,231,253,0.85)', fontWeight: 600, fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           {MODULE_LABELS[modulo]}
         </Typography>
       </Box>

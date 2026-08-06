@@ -224,7 +224,7 @@ export default function MaestrosPage() {
           </Typography>
         </Box>
         <Button variant="contained" disableElevation startIcon={<Plus size={16} />} onClick={abrirNuevo}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
           Nuevo maestro
         </Button>
       </Box>
@@ -240,7 +240,7 @@ export default function MaestrosPage() {
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-            <CircularProgress size={32} sx={{ color: '#0d9488' }} />
+            <CircularProgress size={32} sx={{ color: '#3658e1' }} />
           </Box>
         ) : maestros.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
@@ -250,7 +250,7 @@ export default function MaestrosPage() {
               Crea un maestro (ej. Marca, Color) y agrégale valores
             </Typography>
             <Button variant="contained" disableElevation size="small" startIcon={<Plus size={16} />} onClick={abrirNuevo}
-              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+              sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
               Nuevo maestro
             </Button>
           </Box>
@@ -345,7 +345,7 @@ export default function MaestrosPage() {
                     size="small"
                     checked={form.targets.includes(t)}
                     onChange={() => toggleTarget(t)}
-                    sx={{ p: 0, color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' } }}
+                    sx={{ p: 0, color: '#d1d5db', '&.Mui-checked': { color: '#3658e1' } }}
                   />
                   <Typography variant="body2" sx={{ color: '#374151' }}>{TARGET_LABEL[t]}</Typography>
                 </Box>
@@ -380,7 +380,7 @@ export default function MaestrosPage() {
                   size="small"
                   checked={form.multiple}
                   onChange={(e) => setForm((f) => ({ ...f, multiple: e.target.checked }))}
-                  sx={{ p: 0, color: '#d1d5db', '&.Mui-checked': { color: '#0d9488' } }}
+                  sx={{ p: 0, color: '#d1d5db', '&.Mui-checked': { color: '#3658e1' } }}
                 />
                 <Typography variant="body2" sx={{ color: '#374151' }}>Permite varios valores</Typography>
               </Box>
@@ -441,7 +441,7 @@ export default function MaestrosPage() {
           </Button>
           <Button variant="contained" disableElevation onClick={handleGuardar} disabled={saving}
             startIcon={saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}>
+            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' } }}>
             {saving
               ? 'Guardando…'
               : (editTarget ? 'Guardar cambios' : 'Crear maestro')}

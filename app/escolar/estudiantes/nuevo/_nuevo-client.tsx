@@ -156,7 +156,7 @@ export default function NuevoEstudianteClient() {
   return (
     <section className="mx-auto max-w-4xl space-y-5 p-6">
       <Link href="/escolar/estudiantes"
-        className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-teal-600">
+        className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-zero-600">
         <ArrowLeft className="h-4 w-4" />Volver a estudiantes
       </Link>
 
@@ -169,7 +169,7 @@ export default function NuevoEstudianteClient() {
       </header>
 
       {loading ? (
-        <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-teal-600" /></div>
+        <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>
       ) : (
         <div className="space-y-5">
           {error && (
@@ -271,7 +271,7 @@ export default function NuevoEstudianteClient() {
           {/* ── Acciones ── */}
           <div className="flex items-center justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => router.back()} disabled={saving}>Cancelar</Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={guardar} disabled={saving}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={guardar} disabled={saving}>
               {saving ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Guardando…</> : 'Crear estudiante'}
             </Button>
           </div>
@@ -288,14 +288,14 @@ function Categoria({ icon: Icon, titulo, hint, requerido, children }: {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="mb-5 flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zero-50 text-zero-600">
           <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-gray-900">{titulo}</h2>
             {requerido
-              ? <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-700">Obligatorio</span>
+              ? <span className="rounded-full bg-zero-50 px-2 py-0.5 text-[10px] font-medium text-zero-700">Obligatorio</span>
               : <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Opcional</span>}
           </div>
           {hint && <p className="text-xs text-gray-400">{hint}</p>}
@@ -334,7 +334,7 @@ function InlineCrear({ value, onChange, onGuardar, onCancelar, saving, placehold
       <Input autoFocus placeholder={placeholder} value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onGuardar(); } }} />
-      <Button type="button" size="icon" className="bg-teal-600 hover:bg-teal-700" onClick={onGuardar} disabled={saving}>
+      <Button type="button" size="icon" className="bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={saving}>
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
       </Button>
       <Button type="button" variant="outline" size="icon" onClick={onCancelar} disabled={saving}>

@@ -79,7 +79,7 @@ export default async function EditarFacturaRecurrentePage({ params }: PageProps)
   return (
     <Suspense fallback={
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <Loader2 style={{ width: 32, height: 32, color: '#0d9488', animation: 'spin 1s linear infinite' }} />
+        <Loader2 style={{ width: 32, height: 32, color: '#3658e1', animation: 'spin 1s linear infinite' }} />
       </div>
     }>
       <NuevaFacturaRecurrenteForm initialPerfil={perfil} initialPlan={plan} />

@@ -1,6 +1,6 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Sora } from 'next/font/google';
 import { getUser, getTeamForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
 import { Toaster } from 'sonner';
@@ -23,13 +23,25 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0d9488',
+  themeColor: '#3658e1',
 };
 
+/**
+ * Inter para el cuerpo: es la que aguanta tablas densas y textos largos sin
+ * cansar. Sora queda para títulos y marca — le da el carácter de Zero, pero en
+ * párrafo larga se lee peor.
+ */
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-sans',
+});
+
+const sora = Sora({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-display',
 });
 
 export default function RootLayout({
@@ -40,7 +52,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`bg-white dark:bg-gray-950 text-black dark:text-white antialiased ${inter.variable} ${inter.className}`}
+      className={`bg-white dark:bg-gray-950 text-black dark:text-white antialiased ${inter.variable} ${sora.variable} ${inter.className}`}
     >
       <body className="min-h-[100dvh] bg-gray-50">
         <WebVitals />

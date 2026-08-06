@@ -29,12 +29,12 @@ export function ReportShell({
       {/* Breadcrumb */}
       <Box className="no-print" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, color: '#6b7280' }}>
         <Link href="/dashboard/reportes" style={{ textDecoration: 'none' }}>
-          <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#0d9488' } }}>
+          <Typography component="span" sx={{ fontSize: '0.875rem', color: '#6b7280', '&:hover': { color: '#3658e1' } }}>
             Reportes
           </Typography>
         </Link>
         <ChevronRight style={{ width: 14, height: 14 }} />
-        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#0d9488', fontWeight: 500 }}>{migaja}</Typography>
+        <Typography component="span" sx={{ fontSize: '0.875rem', color: '#3658e1', fontWeight: 500 }}>{migaja}</Typography>
       </Box>
 
       {/* Header + acciones. El título/descripción sí entran en el PDF; los botones no. */}
@@ -53,7 +53,7 @@ export function ReportShell({
               variant="contained"
               disableElevation
               startIcon={<Download style={{ width: 16, height: 16 }} />}
-              sx={{ px: 2, py: 1, borderRadius: '8px', textTransform: 'none', fontWeight: 500, bgcolor: '#0d9488', color: '#fff', '&:hover': { bgcolor: '#0f766e' }, whiteSpace: 'nowrap', flexShrink: 0 }}
+              sx={{ px: 2, py: 1, borderRadius: '8px', textTransform: 'none', fontWeight: 500, bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' }, whiteSpace: 'nowrap', flexShrink: 0 }}
             >
               Descargar Excel
             </Button>
@@ -82,7 +82,7 @@ export function KpiCard({
 }) {
   const toneColor = {
     default: '#111827',
-    teal: '#0f766e',
+    teal: '#2a45c4',
     amber: '#d97706',
     red: '#dc2626',
     emerald: '#059669',
