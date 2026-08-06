@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP } from '@/lib/utils/format';
 import { referenciaServicio } from '@/lib/administracion-escolar/referencia-servicio';
-import { CONCEPTOS_BASE, pareceMensual } from '@/lib/administracion-escolar/conceptos-base';
 import {
   Loader2, Plus, X, Layers, Tag, Repeat, CalendarDays, Wand2, ChevronRight, ChevronDown,
   FileText, DoorOpen, AlertTriangle, Eye, User, UserRound, GraduationCap, Check,
@@ -61,8 +60,6 @@ export function ConceptosPanel() {
 
   const [conceptoSel, setConceptoSel] = useState<number | null>(null);
   const [abiertos, setAbiertos] = useState<Set<number>>(new Set());
-  const [ncNombre, setNcNombre] = useState('');
-  const [ncMensual, setNcMensual] = useState(false);
   const [modal, setModal] = useState<Objetivo | null>(null);
 
   const cargar = useCallback(async (pid?: number | null) => {
@@ -91,32 +88,6 @@ export function ConceptosPanel() {
       });
       if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo traer.'); return; }
       await cargar(data.periodo?.id);
-    } finally { setOcupado(false); }
-  }
-
-  async function crearConcepto() {
-    if (!ncNombre.trim()) return;
-    setOcupado(true);
-    try {
-      const r = await jsonReq('/api/administracion-escolar/conceptos', 'POST', {
-        nombre: ncNombre.trim(),
-        tipo: ncMensual ? 'mensualidad' : 'otro',
-        recurrente: ncMensual,
-      });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo crear.'); return; }
-      setNcNombre(''); setNcMensual(false);
-      await cargar(data?.periodo?.id);
-    } finally { setOcupado(false); }
-  }
-
-  /** Siembra los conceptos con los que arranca cualquier colegio. */
-  async function sembrarBase() {
-    setOcupado(true);
-    try {
-      for (const c of CONCEPTOS_BASE) {
-        await jsonReq('/api/administracion-escolar/conceptos', 'POST', c);
-      }
-      await cargar(data?.periodo?.id);
     } finally { setOcupado(false); }
   }
 
@@ -203,38 +174,14 @@ export function ConceptosPanel() {
           })}
         </div>
 
-        {/* Alta: la recurrencia se elige, no se adivina — de ella depende que se
-            generen diez cuotas o una sola. */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
-          <Input className="h-8 w-52" placeholder="Nuevo concepto" value={ncNombre}
-            onChange={(e) => { setNcNombre(e.target.value); setNcMensual(pareceMensual(e.target.value)); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void crearConcepto(); } }} />
-
-          <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
-            <button onClick={() => setNcMensual(true)}
-              className={`px-2.5 py-1 text-xs ${ncMensual ? 'bg-zero-50 font-medium text-zero-800' : 'text-gray-500 hover:bg-gray-50'}`}>
-              <Repeat className="mr-1 inline h-3 w-3" />Cada mes
-            </button>
-            <button onClick={() => setNcMensual(false)}
-              className={`border-l border-gray-200 px-2.5 py-1 text-xs ${!ncMensual ? 'bg-zero-50 font-medium text-zero-800' : 'text-gray-500 hover:bg-gray-50'}`}>
-              Una sola vez
-            </button>
-          </div>
-
-          <Button size="sm" variant="outline" className="h-8" onClick={crearConcepto} disabled={ocupado || !ncNombre.trim()}>
-            <Plus className="mr-1 h-4 w-4" />Crear
-          </Button>
-
-          {data.conceptos.length === 0 && (
-            <Button size="sm" variant="outline" className="h-8" onClick={sembrarBase} disabled={ocupado}>
-              Usar los de siempre
-            </Button>
-          )}
-        </div>
-        <p className="mt-1.5 text-xs text-gray-400">
-          «Cada mes» genera una cuota por cada mes del año escolar y es lo único que admite beca.
-          Inscripción, materiales y uniformes van una sola vez.
-        </p>
+        {/* El alta y la configuración del concepto viven en la pestaña
+            Conceptos: aquí solo se le pone precio a lo que ya existe. Cuando
+            no hay ninguno, esta pantalla no tiene nada que hacer. */}
+        {data.conceptos.length === 0 && (
+          <p className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-500">
+            Todavía no hay conceptos. Créalos en la pestaña <b>Conceptos</b> y vuelve aquí a ponerles precio.
+          </p>
+        )}
       </div>
 
       {/* Tarifas del concepto elegido */}

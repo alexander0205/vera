@@ -6,6 +6,7 @@ import {
 } from '@/lib/db/schema';
 import { invalidarEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
+import { camposCiclo } from '@/lib/administracion-escolar/ciclo-cobro';
 import { eq, and } from 'drizzle-orm';
 
 const TIPOS = ['inscripcion', 'mensualidad', 'uniforme', 'actividad', 'otro'];
@@ -15,7 +16,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { nombre, tipo, recurrente, activo, productId } = await req.json();
+  const body = await req.json();
+  const { nombre, tipo, recurrente, activo, productId } = body;
 
   if (productId !== undefined && productId !== null) {
     const [p] = await db.select({ id: products.id }).from(products)
@@ -31,6 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(recurrente !== undefined ? { recurrente } : {}),
       ...(activo !== undefined ? { activo } : {}),
       ...(productId !== undefined ? { productId } : {}),
+      ...camposCiclo(body),
       updatedAt: new Date(),
     })
     .where(and(eq(adminEscolarConceptosPago.id, parseInt(id)), eq(adminEscolarConceptosPago.teamId, teamId)))
