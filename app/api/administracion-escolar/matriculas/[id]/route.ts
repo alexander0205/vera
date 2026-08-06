@@ -4,10 +4,12 @@ import {
   adminEscolarMatriculas,
   adminEscolarPeriodos,
   adminEscolarCursos,
+  adminEscolarCargos,
+  adminEscolarPagos,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
 
@@ -74,4 +76,62 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     throw err;
   }
+}
+
+/**
+ * Borra una matrícula, solo si nunca movió dinero.
+ *
+ * Existe para deshacer el error de dedo —matriculaste al alumno en la sección
+ * equivocada y quieres que no quede rastro—, no para dar de baja a nadie. Para
+ * eso está el estado: `retirada` si el alumno se fue, `anulada` si la matrícula
+ * no debió existir. Ambas conservan el historial, que es lo que un colegio
+ * necesita cuando alguien pide una certificación tres años después.
+ *
+ * Por eso se niega en cuanto hay cargos, pagos o un plan de mensualidad
+ * colgando: borrar ahí dejaría deuda y cobros apuntando a una matrícula que ya
+ * no existe, y el plan seguiría generando cargos huérfanos cada mes.
+ */
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
+  if (!auth.ok) return auth.response;
+  const { teamId } = auth;
+  const { id } = await params;
+  const matriculaId = parseInt(id, 10);
+  if (!Number.isFinite(matriculaId)) {
+    return NextResponse.json({ error: 'Matrícula no válida' }, { status: 400 });
+  }
+
+  const [actual] = await db
+    .select({ id: adminEscolarMatriculas.id, facturaRecurrenteId: adminEscolarMatriculas.facturaRecurrenteId })
+    .from(adminEscolarMatriculas)
+    .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)))
+    .limit(1);
+  if (!actual) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
+
+  const [[cargos], [pagos]] = await Promise.all([
+    db.select({ total: count() }).from(adminEscolarCargos)
+      .where(and(eq(adminEscolarCargos.matriculaId, matriculaId), eq(adminEscolarCargos.teamId, teamId))),
+    db.select({ total: count() }).from(adminEscolarPagos)
+      .where(and(eq(adminEscolarPagos.matriculaId, matriculaId), eq(adminEscolarPagos.teamId, teamId))),
+  ]);
+
+  if (pagos.total > 0) {
+    return NextResponse.json({
+      error: `No se puede borrar: tiene ${pagos.total} pago(s) registrado(s). Cámbiale el estado a "anulada" o "retirada".`,
+    }, { status: 409 });
+  }
+  if (cargos.total > 0) {
+    return NextResponse.json({
+      error: `No se puede borrar: tiene ${cargos.total} cargo(s) generado(s). Anula los cargos primero, o cámbiale el estado a "anulada".`,
+    }, { status: 409 });
+  }
+  if (actual.facturaRecurrenteId) {
+    return NextResponse.json({
+      error: 'No se puede borrar: tiene un plan de mensualidad activo. Quítale el plan primero.',
+    }, { status: 409 });
+  }
+
+  await db.delete(adminEscolarMatriculas)
+    .where(and(eq(adminEscolarMatriculas.id, matriculaId), eq(adminEscolarMatriculas.teamId, teamId)));
+  return NextResponse.json({ ok: true });
 }

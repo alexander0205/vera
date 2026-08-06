@@ -1861,6 +1861,65 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
   /** inscripcion | mensualidad | uniforme | actividad | otro */
   tipo:       varchar('tipo', { length: 20 }).notNull().default('otro'),
   recurrente: boolean('recurrente').notNull().default(false),
+  /**
+   * Si llega marcado al matricular. La inscripción y la colegiatura las paga
+   * todo el mundo; el uniforme no, y desmarcarlo 465 veces es peor que
+   * marcarlo cuando toca.
+   */
+  aplicaPorDefecto: boolean('aplica_por_defecto').notNull().default(false),
+  /**
+   * Si la beca lo descuenta. Sigue a `recurrente`: la beca escolar es sobre lo
+   * que se paga cada mes, y la inscripción, los uniformes y los materiales se
+   * cobran completos. No se pregunta en pantalla —se derivaba en una casilla
+   * que nadie sabía para qué era— pero se guarda aparte porque el motor de
+   * tarifas lo consulta y porque un colegio con transporte mensual sin beca
+   * podría necesitar separarlos más adelante.
+   */
+  admiteBeca: boolean('admite_beca').notNull().default(false),
+  /**
+   * Si se le cobra recargo por atraso. Columna propia y no `moraDiasGracia IS
+   * NULL` porque ese nulo ya significa "usa los días de gracia de la empresa".
+   */
+  cobraMora: boolean('cobra_mora').notNull().default(false),
+  /**
+   * Ciclo de cobro. Va en el concepto y no en un ajuste único del colegio
+   * porque no todo se cobra igual: la colegiatura puede vencer el día 5 y el
+   * transporte el 10. En los conceptos mensuales estos números se copian al
+   * plan de factura recurrente que se crea al matricular — el módulo escolar
+   * configura la facturación, no la reimplementa.
+   */
+  /** Día del mes en que se emite. Solo recurrentes; 0 = último día del mes. */
+  diaCobro:       smallint('dia_cobro'),
+  /** Días desde la emisión hasta el vencimiento. */
+  diasParaPago:   smallint('dias_para_pago'),
+  /** Gracia tras el vencimiento antes de la mora. */
+  moraDiasGracia: smallint('mora_dias_gracia'),
+  /**
+   * Interruptor maestro de los avisos. Apagado no sale nada aunque los días
+   * estén puestos: así se para el envío sin perder la configuración.
+   */
+  avisosActivos: boolean('avisos_activos').notNull().default(false),
+  /**
+   * Días antes de EMITIR en que se avisa. El colegio piensa "el 28 se genera
+   * la factura y cinco días antes le aviso": el ancla es el día en que sale la
+   * factura, no el vencimiento. NULL = no avisar.
+   */
+  avisoAntesEmisionDias: smallint('aviso_antes_emision_dias'),
+  /** Avisar el día que sale la factura: "ya se generó, tienes que pagar". */
+  avisoDiaEmision: boolean('aviso_dia_emision').notNull().default(false),
+  /** Días ANTES del vencimiento en que se avisa. NULL = no avisar antes. */
+  avisoPrevioDias: smallint('aviso_previo_dias'),
+  /** Avisar el mismo día que vence. */
+  avisoDiaCobro: boolean('aviso_dia_cobro').notNull().default(false),
+  /**
+   * Días antes de que entre la mora. Es el aviso que de verdad hace pagar:
+   * "si no pagas en 2 días te cobramos un recargo". NULL = no avisar por eso.
+   */
+  avisoAntesMoraDias: smallint('aviso_antes_mora_dias'),
+  /** A los cuántos días de vencido se insiste, en orden. Ej. [3,15]. */
+  avisoVencidoDias: jsonb('aviso_vencido_dias').$type<number[]>().notNull().default([]),
+  avisoCorreo:   boolean('aviso_correo').notNull().default(false),
+  avisoWhatsapp: boolean('aviso_whatsapp').notNull().default(false),
   /** Enlace opcional al catálogo de productos/servicios. Si viene, la factura
    *  generada desde el cargo hereda nombre/ITBIS del producto — evita duplicar
    *  catálogo. El monto sigue viniendo del cargo, no del producto. */
@@ -1910,6 +1969,68 @@ export const adminEscolarConceptoPrecios = pgTable('admin_escolar_concepto_preci
 
 /** Cargo/deuda escolar. La deuda vive AQUÍ, no depende de facturas.
  *  `saldoCentavos` = pendiente; el pago lo reduce. `mes` solo para mensualidad. */
+/**
+ * En cuántas partes se paga un concepto y cuándo vence cada una.
+ *
+ * Una fila por cuota. Inscripción de un solo pago = una fila. Inscripción en
+ * dos = dos filas al 50%. Colegiatura mensual = diez filas. Los tres casos que
+ * conviven en los colegios dominicanos salen del mismo mecanismo, sin código
+ * especial para ninguno.
+ *
+ * El calendario se configura UNA vez por concepto y año, no por estudiante: si
+ * viviera en la pantalla de matrícula, la secretaria contestaría la misma
+ * pregunta cientos de veces y cambiar de dos a tres cuotas en octubre obligaría
+ * a tocar todas las matrículas.
+ */
+export const adminEscolarConceptoCuotas = pgTable('admin_escolar_concepto_cuotas', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  conceptoId: integer('concepto_id').notNull().references(() => adminEscolarConceptosPago.id),
+  /** Año escolar: 2026-2027 puede repartirse distinto que 2027-2028. */
+  periodoId:  integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id),
+  numero:     smallint('numero').notNull(),
+  /** "1ra inscripción", "Agosto". Sin esto el padre ve líneas iguales. */
+  etiqueta:   varchar('etiqueta', { length: 60 }).notNull(),
+  /** Mes 1-12 si la cuota es de un mes concreto; alimenta `cargos.mes`. */
+  mes:        smallint('mes'),
+  fechaVencimiento: date('fecha_vencimiento').notNull(),
+  /**
+   * Qué parte del monto se cobra aquí, en milésimas de por ciento
+   * (100000 = 100%). En milésimas porque partir en tres da 33,333% y con
+   * enteros se pierde un peso por cuota.
+   */
+  porcentajeMilesimas: integer('porcentaje_milesimas').notNull().default(100000),
+  activo:     boolean('activo').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_concepto_cuotas_unica').on(t.conceptoId, t.periodoId, t.numero),
+  index('admin_escolar_concepto_cuotas_periodo').on(t.teamId, t.periodoId),
+]);
+
+/**
+ * Qué avisos de cobro ya se mandaron.
+ *
+ * El cron corre a diario y "venció hace 3 días" sigue siendo verdad mañana:
+ * sin esta tabla el mismo recordatorio le llegaría al padre toda la semana. El
+ * índice único por (cargo, tipo, día, canal) es lo que lo impide.
+ */
+export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  cargoId: integer('cargo_id').notNull().references(() => adminEscolarCargos.id),
+  /** previo | vencido */
+  tipo:    varchar('tipo', { length: 12 }).notNull(),
+  /** Días respecto al vencimiento: -5 = cinco antes, 3 = tres después. */
+  offsetDias: smallint('offset_dias').notNull(),
+  canal:   varchar('canal', { length: 12 }).notNull(),
+  destino: varchar('destino', { length: 200 }),
+  enviadoAt: timestamp('enviado_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_avisos_unico').on(t.cargoId, t.tipo, t.offsetDias, t.canal),
+  index('admin_escolar_avisos_team_fecha').on(t.teamId, t.enviadoAt),
+]);
+
 export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
   id:               serial('id').primaryKey(),
   teamId:           integer('team_id').notNull().references(() => teams.id),
@@ -1919,6 +2040,13 @@ export const adminEscolarCargos = pgTable('admin_escolar_cargos', {
   conceptoId:       integer('concepto_id').notNull().references(() => adminEscolarConceptosPago.id),
   /** Mes 1-12 solo si es mensualidad; null para inscripción/uniforme/etc. */
   mes:              smallint('mes'),
+  /**
+   * De qué cuota del calendario salió. Con el índice único
+   * `(matricula_id, cuota_id)` es lo que impide que dos clics en "Matricular"
+   * le cobren la inscripción dos veces al mismo padre. Nullable: los cargos
+   * hechos a mano no vienen de ningún calendario.
+   */
+  cuotaId:          integer('cuota_id').references(() => adminEscolarConceptoCuotas.id),
   anio:             smallint('anio').notNull(),
   montoCentavos:    integer('monto_centavos').notNull(),
   saldoCentavos:    integer('saldo_centavos').notNull(),

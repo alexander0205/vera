@@ -14,12 +14,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { NativeSelect } from '@/components/ui/native-select';
+import { BuscadorSelect, type OpcionBuscador } from '@/components/ui/buscador-select';
 import { Paginador } from '@/components/ui/paginador';
 import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
-import { AlertTriangle, CalendarDays, Loader2, Plus, Receipt, Search, Wallet } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CalendarDays, Loader2, Plus, Receipt, Search, Wallet } from 'lucide-react';
 
 interface Cargo {
   id: number;
@@ -38,7 +39,18 @@ interface Cargo {
   estado: string;
 }
 interface Periodo { id: number; nombre: string; fechaInicio: string | null; fechaFin: string | null; activo: boolean; }
-interface Curso { id: number; nombre: string; activo: boolean; }
+interface Curso {
+  id: number; nombre: string; activo: boolean;
+  gradoNombre: string; gradoActivo: boolean;
+  servicioNombre: string; servicioTanda: string | null; servicioActivo: boolean;
+  periodoId: number;
+}
+
+/** El grado y la tanda de una sección: sola se llama "A" y no dice nada. */
+function etiquetaGrado(c: Curso): string {
+  const tanda = c.servicioTanda ? ` · ${c.servicioTanda}` : '';
+  return `${c.gradoNombre} — ${c.servicioNombre}${tanda}`;
+}
 interface Concepto { id: number; nombre: string; tipo: string; recurrente: boolean; activo: boolean; }
 interface Matricula { id: number; estudianteId: number; periodoId: number; cursoId: number; estado: string; }
 interface Estudiante { id: number; nombres: string; apellidos: string; }
@@ -119,6 +131,35 @@ export default function CargosClient() {
   const [opError, setOpError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ creados: number; omitidos: number; total: number } | null>(null);
 
+  /**
+   * Devengo del mes: crea los cargos de las cuotas que ya entraron en vigor.
+   *
+   * Existe además del cron porque un colegio que acaba de configurar su
+   * calendario no puede esperar a mañana para ver la deuda, y porque cuando
+   * algo no cuadra lo primero que hace cualquiera es volver a darle.
+   * Repetirlo no cobra de más: el índice único descarta lo ya creado.
+   */
+  const [devengando, setDevengando] = useState(false);
+  const [avisoDevengo, setAvisoDevengo] = useState<string | null>(null);
+
+  async function handleDevengar() {
+    setDevengando(true);
+    setAvisoDevengo(null);
+    try {
+      const res = await fetch('/api/administracion-escolar/cargos/devengar', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'No se pudieron generar los cargos del mes');
+      setAvisoDevengo(data.cargosCreados === 0
+        ? 'Todo al día: no había cuotas nuevas que cargar.'
+        : `${data.cargosCreados} cargo(s) nuevos sobre ${data.matriculas} matrícula(s).`);
+      await cargar();
+    } catch (e: unknown) {
+      setAvisoDevengo(e instanceof Error ? e.message : 'No se pudieron generar los cargos del mes');
+    } finally {
+      setDevengando(false);
+    }
+  }
+
   // Cargo individual (un estudiante) — dialog aparte del masivo.
   const [openInd, setOpenInd] = useState(false);
   const [formInd, setFormInd] = useState({
@@ -183,7 +224,33 @@ export default function CargosClient() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const periodosById = useMemo(() => new Map(periodos.map((p) => [p.id, p.nombre])), [periodos]);
-  const cursosActivos = useMemo(() => cursos.filter((c) => c.activo !== false), [cursos]);
+  const cursosActivos = useMemo(
+    () => cursos.filter((c) =>
+      c.activo !== false && c.gradoActivo !== false && c.servicioActivo !== false),
+    [cursos],
+  );
+
+  /**
+   * Las secciones que se pueden elegir para un período, listas para el buscador.
+   *
+   * Se filtran por período porque cada servicio cuelga de un año escolar, y se
+   * etiquetan con el grado porque la sección sola se llama "A": sin eso el
+   * desplegable eran treinta opciones idénticas.
+   */
+  const opcionesCurso = useCallback((periodoId: string): OpcionBuscador[] => {
+    const periodo = Number(periodoId) || null;
+    return [
+      { valor: 'todos', etiqueta: 'Todos los cursos' },
+      ...cursosActivos
+        .filter((c) => !periodo || c.periodoId === periodo)
+        .map((c) => ({
+          valor: String(c.id),
+          etiqueta: `${etiquetaGrado(c)} — ${c.nombre}`,
+          etiquetaLista: c.nombre,
+          grupo: etiquetaGrado(c),
+        })),
+    ];
+  }, [cursosActivos]);
   const conceptosActivos = useMemo(() => conceptos.filter((c) => c.activo !== false), [conceptos]);
   const conceptoSeleccionado = conceptos.find((c) => String(c.id) === form.conceptoId) ?? null;
   const periodoForm = periodos.find((p) => String(p.id) === form.periodoId);
@@ -356,6 +423,11 @@ export default function CargosClient() {
         </div>
         {puedeGestionar && (
           <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" onClick={handleDevengar} disabled={loading || devengando}>
+              {devengando
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Devengando…</>
+                : <><CalendarClock className="h-4 w-4 mr-2" />Cargos del mes</>}
+            </Button>
             <Button variant="outline" onClick={abrirIndividual} disabled={loading || sinCatalogos}>
               <Plus className="h-4 w-4 mr-2" />Cargo individual
             </Button>
@@ -372,6 +444,12 @@ export default function CargosClient() {
         <StatCard icon={AlertTriangle} label="Vencidos" value={String(vencidos)} accent={vencidos > 0} />
         <StatCard icon={CalendarDays} label="Cobrado" value={fmtDOP(cobrado)} />
       </div>
+
+      {avisoDevengo && (
+        <div className="rounded-lg border border-zero-200 bg-zero-50 px-3 py-2.5 text-sm text-zero-800">
+          {avisoDevengo}
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-4 space-y-4">
@@ -494,10 +572,13 @@ export default function CargosClient() {
               </div>
               <div className="space-y-1.5">
                 <Label>Curso</Label>
-                <NativeSelect value={form.cursoId} onChange={(e) => setForm((f) => ({ ...f, cursoId: e.target.value }))}>
-                  <option value="todos">Todos los cursos</option>
-                  {cursosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
-                </NativeSelect>
+                <BuscadorSelect
+                  value={form.cursoId}
+                  onChange={(v) => setForm((f) => ({ ...f, cursoId: v || 'todos' }))}
+                  opciones={opcionesCurso(form.periodoId)}
+                  placeholder="Todos los cursos"
+                  vacio="Ninguna sección de este período coincide"
+                />
               </div>
             </div>
 
@@ -587,10 +668,13 @@ export default function CargosClient() {
               </div>
               <div className="space-y-1.5">
                 <Label>Curso</Label>
-                <NativeSelect value={formInd.cursoId} onChange={(e) => setFormInd((f) => ({ ...f, cursoId: e.target.value, estudianteId: '', matriculaId: '' }))}>
-                  <option value="todos">Todos los cursos</option>
-                  {cursosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
-                </NativeSelect>
+                <BuscadorSelect
+                  value={formInd.cursoId}
+                  onChange={(v) => setFormInd((f) => ({ ...f, cursoId: v || 'todos', estudianteId: '', matriculaId: '' }))}
+                  opciones={opcionesCurso(formInd.periodoId)}
+                  placeholder="Todos los cursos"
+                  vacio="Ninguna sección de este período coincide"
+                />
               </div>
             </div>
 

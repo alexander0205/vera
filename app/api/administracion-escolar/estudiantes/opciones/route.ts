@@ -26,6 +26,10 @@ export async function GET() {
       nombres: adminEscolarEstudiantes.nombres,
       apellidos: adminEscolarEstudiantes.apellidos,
       codigo: adminEscolarEstudiantes.codigo,
+      // Aunque aquí solo salen los activos, la pantalla que llena el
+      // desplegable vuelve a filtrar por estado. Sin esta columna el filtro
+      // dejaba la lista vacía y bloqueaba el botón de matricular.
+      estado: adminEscolarEstudiantes.estado,
     })
     .from(adminEscolarEstudiantes)
     .where(and(

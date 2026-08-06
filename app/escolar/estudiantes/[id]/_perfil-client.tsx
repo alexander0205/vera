@@ -1307,10 +1307,12 @@ function MesFila({ r, abierto, onToggle, puedePagos, puedeFacturar, puedeGestion
   );
 }
 
-// Panel del mes: historial de abonos (qué se pagó, cuándo, método) con el saldo
-// restante, y la única acción propia del panel: agregar un cargo a este mes.
-// Registrar pago / facturar / vincular viven SOLO en el menú ⋮ de la fila
-// (CargoActionsMenu) para no duplicar acciones.
+// Panel del mes: primero de QUÉ se compone el mes —la fila de arriba enseña un
+// total y nadie sabe si esos RD$330 son la mensualidad, la mensualidad más el
+// uniforme, o un cargo suelto que alguien añadió— y debajo el historial de
+// abonos con el saldo restante. La única acción propia del panel es agregar un
+// cargo al mes; registrar pago / facturar / vincular viven SOLO en el menú ⋮ de
+// la fila (CargoActionsMenu) para no duplicar acciones.
 function MesPanel({ r, puedeGestionar, onAgregarCargoMes }: {
   r: MesRow;
   puedeGestionar: boolean;
@@ -1322,6 +1324,55 @@ function MesPanel({ r, puedeGestionar, onAgregarCargoMes }: {
 
   return (
     <div className="my-2 rounded-lg border border-gray-200 bg-white">
+      {r.cargosMes.length > 0 && (
+        <div className="border-b border-gray-100">
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <span className="text-xs font-semibold text-gray-700">Conceptos del mes</span>
+            <span className="text-xs text-gray-500">
+              {r.cargosMes.length} concepto{r.cargosMes.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[11px] text-gray-400">
+                <th className="px-3 py-1.5 font-medium">Concepto</th>
+                <th className="px-3 py-1.5 font-medium">Vence</th>
+                <th className="px-3 py-1.5 font-medium">Estado</th>
+                <th className="px-3 py-1.5 text-right font-medium">Monto</th>
+                <th className="px-3 py-1.5 text-right font-medium">Pendiente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.cargosMes.map((c) => {
+                const anulado = c.estado === 'anulado';
+                return (
+                  <tr key={c.id} className="border-t border-gray-100">
+                    <td className={`px-3 py-1.5 ${anulado ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {c.concepto ?? 'Sin concepto'}
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-500">
+                      {c.fechaVencimiento ? fmtFechaCorta(c.fechaVencimiento) : '—'}
+                    </td>
+                    <td className="px-3 py-1.5"><EstadoCargoBadge estado={c.estado} /></td>
+                    <td className={`px-3 py-1.5 text-right ${anulado ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {fmtDOP(c.montoCentavos)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {anulado ? (
+                        <span className="text-gray-400">—</span>
+                      ) : c.saldoCentavos > 0 ? (
+                        <span className="font-medium text-red-600">{fmtDOP(c.saldoCentavos)}</span>
+                      ) : (
+                        <span className="text-zero-700">Pagado</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
         <span className="text-xs font-semibold text-gray-700">Historial de pagos</span>
         <span className="text-xs text-gray-500">
@@ -1569,6 +1620,22 @@ function estadoMes(cargos: Cargo[]): 'pagado' | 'adelantado' | 'vencido' | 'pend
   if (vivos.some((c) => c.estado === 'vencido' || (c.fechaVencimiento && c.fechaVencimiento < hoyIso))) return 'vencido';
   if (vivos.some((c) => c.estado === 'parcial')) return 'parcial';
   return 'pendiente';
+}
+
+/**
+ * El estado de UN cargo, no el del mes entero.
+ *
+ * Va aparte de `EstadoMesBadge` porque los valores no son los mismos: un mes
+ * puede estar "adelantado" o "sin cargo", que son conclusiones sacadas de mirar
+ * varios cargos a la vez, y un cargo suelto puede estar "anulado", que a nivel
+ * de mes no significa nada.
+ */
+function EstadoCargoBadge({ estado }: { estado: string }) {
+  if (estado === 'pagado')  return <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pagado</Badge>;
+  if (estado === 'vencido') return <Badge className="bg-red-50 text-red-600 border-red-200">Vencido</Badge>;
+  if (estado === 'parcial') return <Badge className="bg-amber-50 text-amber-700 border-amber-200">Parcial</Badge>;
+  if (estado === 'anulado') return <Badge variant="outline" className="text-gray-400">Anulado</Badge>;
+  return <Badge className="bg-gray-50 text-gray-600 border-gray-200">Pendiente</Badge>;
 }
 
 function EstadoMesBadge({ estado }: { estado: ReturnType<typeof estadoMes> }) {

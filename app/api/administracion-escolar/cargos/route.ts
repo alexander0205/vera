@@ -20,10 +20,14 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const periodoId = sp.get('periodoId');
   const estado = sp.get('estado');
+  // Los cargos de UNA matrícula: lo pide la pantalla de edición para enseñar
+  // qué se le está cobrando de verdad a ese alumno, no el plan teórico.
+  const matriculaId = sp.get('matriculaId');
 
   const where = [eq(adminEscolarCargos.teamId, teamId)];
   if (periodoId) where.push(eq(adminEscolarCargos.periodoId, parseInt(periodoId)));
   if (estado) where.push(eq(adminEscolarCargos.estado, estado));
+  if (matriculaId) where.push(eq(adminEscolarCargos.matriculaId, parseInt(matriculaId)));
 
   // Un colegio genera un cargo por alumno, mes y concepto: unos 5.100 al año
   // con 465 alumnos. Sin paginar, esta ruta devolvía todos de golpe.
