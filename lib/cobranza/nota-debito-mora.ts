@@ -137,9 +137,15 @@ export async function previsualizarMoraDeFactura(ecfDocumentId: number): Promise
     };
   }
 
-  // Aún no vencida (o dentro de la gracia): proyectar el primer período pendiente
-  // como si ya hubiera pasado la gracia, para anticipar cuándo y cuánto.
-  if (ahora.razon === 'no_vencida') {
+  // No hay cargo exigible hoy, pero puede haber uno futuro que anticipar:
+  //   - 'no_vencida'         → factura aún dentro del plazo o de la gracia.
+  //   - 'periodo_ya_cobrado' → factura vencida cuyo período en curso ya tiene su
+  //                            nota; el siguiente período cae más adelante.
+  // En ambos casos se proyecta el primer período pendiente empujando los días
+  // vencidos justo hasta el arranque de ese período (gracia + períodos ya
+  // cobrados × periodicidad), y `fechaPeriodo` devuelve cuándo caerá. La
+  // proyección es siempre a futuro, así que `yaVencida` es false.
+  if (ahora.razon === 'no_vencida' || ahora.razon === 'periodo_ya_cobrado') {
     const proyeccion = calcularMora({
       ...entradaBase,
       diasVencido: config.diasGracia + periodosCobrados * config.periodicidadDias,
