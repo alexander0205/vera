@@ -20,7 +20,6 @@ import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { IsotipoZero } from '@/components/marca-zero';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import { Menu as MenuIcon, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
@@ -137,16 +136,9 @@ export function ModuleHeader({
             </Tooltip>
           )}
 
-          {/* Logo SIEMPRE, en la misma posición en los 4 módulos. Antes
-              Facturación lo escondía con el sidebar abierto y los demás no, así
-              que la zona izquierda del header cambiaba de un módulo a otro. */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
-            <IsotipoZero lado={24} />
-            <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', color: 'text.primary', display: { xs: 'none', sm: 'block' } }}>
-              Zero
-            </Typography>
-          </Box>
-
+          {/* Sin logotipo aquí: el rail ya lleva la marca justo al lado, y
+              repetirla en la misma franja robaba sitio a lo que sí cambia —el
+              título, la empresa y el ambiente. */}
           {titulo && (
             <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: 'text.primary' }}>
               {titulo}

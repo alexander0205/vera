@@ -87,7 +87,7 @@ export function PosNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' }
         <RailBrand modulo="pos" />
 
         {/* Items */}
-        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.25, py: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {ITEMS.map(it => {
             const active = it.href === '/pos' ? pathname === '/pos' : pathname.startsWith(it.href);
             return (
@@ -96,16 +96,22 @@ export function PosNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' }
                 component={Link}
                 href={it.href}
                 sx={{
-                  display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
-                  borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
-                  fontWeight: active ? 600 : 400,
-                  color: active ? '#fff' : 'rgba(224,231,253,0.85)',
-                  bgcolor: active ? 'rgba(255,255,255,0.2)' : 'transparent',
-                  transition: 'all 0.15s',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#fff' },
+                  display: 'flex', alignItems: 'center', gap: 1.5, px: 1.75, py: 1.25,
+                  borderRadius: '10px', textDecoration: 'none',
+                  // 15px y no 14: en un menú de veinte entradas el texto se lee
+                  // de reojo, y medio punto se nota.
+                  fontSize: '0.9375rem', lineHeight: 1.3,
+                  fontWeight: active ? 600 : 500,
+                  // El activo va en blanco sólido sobre un fondo bien marcado;
+                  // antes el contraste entre activo e inactivo era tan corto que
+                  // había que buscar dónde estabas.
+                  color: active ? '#fff' : 'rgba(224,231,253,0.78)',
+                  bgcolor: active ? 'rgba(255,255,255,0.22)' : 'transparent',
+                  transition: 'background-color 0.15s, color 0.15s',
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' },
                 }}
               >
-                <it.icon style={{ width: 18, height: 18, flexShrink: 0 }} />
+                <it.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
                 <Box component="span" className="nav-text" sx={{ flex: 1 }}>{it.label}</Box>
                 {it.shared && (
                   <Box component="span" className="nav-text" sx={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', px: 0.625, py: '1px', borderRadius: '4px', bgcolor: 'rgba(255,255,255,0.16)', color: 'rgba(224,231,253,0.95)' }}>

@@ -456,20 +456,21 @@ function SidebarContent({
               sx={{
                 display:     'flex',
                 alignItems:  'center',
-                gap:         1,
-                px:          1.5,
-                py:          0.875,
-                borderRadius: '8px',
-                fontSize:    '0.875rem',
-                fontWeight:  active ? 600 : 400,
-                color:       active ? '#ffffff' : 'rgba(224,231,253,0.85)',
-                bgcolor:     active ? 'rgba(255,255,255,0.2)' : 'transparent',
+                gap:         1.5,
+                px:          1.75,
+                py:          1.25,
+                borderRadius: '10px',
+                fontSize:    '0.9375rem',
+                lineHeight:  1.3,
+                fontWeight:  active ? 600 : 500,
+                color:       active ? '#ffffff' : 'rgba(224,231,253,0.78)',
+                bgcolor:     active ? 'rgba(255,255,255,0.22)' : 'transparent',
                 textDecoration: 'none',
-                transition:  'all 0.15s',
-                '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+                transition:  'background-color 0.15s, color 0.15s',
+                '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: '#ffffff' },
               }}
             >
-              <item.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
+              <item.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
               <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>{item.label}</Box>
             </Box>
           );
@@ -492,20 +493,21 @@ function SidebarContent({
                   alignItems:  'center',
                   gap:         1,
                   width:       '100%',
-                  px:          1.5,
-                  py:          0.875,
-                  borderRadius: '8px',
-                  fontSize:    '0.875rem',
-                  fontWeight:  groupActive ? 600 : 400,
-                  color:       groupActive ? '#ffffff' : 'rgba(224,231,253,0.85)',
+                  px:          1.75,
+                  py:          1.25,
+                  borderRadius: '10px',
+                  fontSize:    '0.9375rem',
+                  lineHeight:  1.3,
+                  fontWeight:  groupActive ? 600 : 500,
+                  color:       groupActive ? '#ffffff' : 'rgba(224,231,253,0.78)',
                   bgcolor:     'transparent',
                   border:      'none',
                   cursor:      'pointer',
                   transition:  'all 0.15s',
-                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: '#ffffff' },
                 }}
               >
-                <group.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
+                <group.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
                 <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>{group.label}</Box>
                 <Box component="span" className="nav-text" sx={{ display: 'flex' }}>
                   {isOpen
@@ -531,13 +533,14 @@ function SidebarContent({
                           sx={{
                             flex:        1,
                             minWidth:    0,
-                            py:          0.75,
-                            px:          1.25,
-                            borderRadius: '6px',
-                            fontSize:    '0.8125rem',
-                            fontWeight:  active ? 600 : 400,
-                            color:       active ? '#ffffff' : 'rgba(224,231,253,0.8)',
-                            bgcolor:     active ? 'rgba(255,255,255,0.15)' : 'transparent',
+                            py:          1,
+                            px:          1.5,
+                            borderRadius: '8px',
+                            fontSize:    '0.875rem',
+                            lineHeight:  1.3,
+                            fontWeight:  active ? 600 : 500,
+                            color:       active ? '#ffffff' : 'rgba(224,231,253,0.72)',
+                            bgcolor:     active ? 'rgba(255,255,255,0.18)' : 'transparent',
                             textDecoration: 'none',
                             transition:  'all 0.15s',
                             whiteSpace:  'nowrap',
