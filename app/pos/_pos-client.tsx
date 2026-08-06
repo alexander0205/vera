@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import Link from 'next/link';
 import { ArrowLeft, LogOut, FileText, Star, Plus, Camera, X, Percent, PauseCircle, ListChecks, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
@@ -271,6 +272,11 @@ function Venta({
   alertaMetodoPago: boolean;
 }) {
   const router = useRouter();
+  // Sin `facturas:precio-editar` el cajero vende al precio del catálogo: el
+  // servidor rechaza la venta con precio manual, así que el atajo se apaga aquí
+  // en vez de dejar que el cobro falle al final.
+  const { can, isLoading: permLoading } = usePermissions();
+  const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
   const [productos, setProductos] = useState<ProductoPos[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -943,6 +949,7 @@ function Venta({
         {/* Carrito — panel fijo en escritorio, hoja deslizable en móvil */}
         <div className="hidden md:flex md:w-full">
           <CarritoPanel
+            bloquearPrecios={bloquearPrecios}
             carrito={carrito}
             totales={totales}
             cambiarQty={cambiarQty}
@@ -987,6 +994,7 @@ function Venta({
               <button onClick={() => setCarritoMovilAbierto(false)} className="p-2 text-gray-400">✕</button>
             </div>
             <CarritoPanel
+              bloquearPrecios={bloquearPrecios}
               carrito={carrito}
               totales={totales}
               cambiarQty={cambiarQty}
@@ -1045,6 +1053,7 @@ function CarritoPanel({
   carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, alertaMetodoPago, estudiante, onSelectEstudiante,
   listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, enProduccion, cliente, onSelectCliente,
   descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido,
+  bloquearPrecios = false,
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
@@ -1067,6 +1076,8 @@ function CarritoPanel({
   onSelectCliente: (c: ClienteView | null) => void;
   descuentoAplicado: DescuentoAplicado | null;
   onAplicarDescuento: (d: DescuentoAplicado | null) => void;
+  /** Sin `facturas:precio-editar`: precio de catálogo, sin retoques. */
+  bloquearPrecios?: boolean;
   cobroDirecto?: boolean;
   onCobroConsumido?: () => void;
 }) {
@@ -1150,8 +1161,8 @@ function CarritoPanel({
         <span className="text-xs font-medium text-gray-500">Carrito ({carrito.length})</span>
         <button
           onClick={() => setPanelDescuento(true)}
-          disabled={carrito.length === 0}
-          title="Descuentos globales"
+          disabled={carrito.length === 0 || bloquearPrecios}
+          title={bloquearPrecios ? 'Tu rol no puede aplicar descuentos' : 'Descuentos globales'}
           className="flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-40"
         >
           <Percent className="h-3.5 w-3.5" /> Descuento
@@ -1168,7 +1179,7 @@ function CarritoPanel({
                 <div className="min-w-0 leading-tight">
                   <div className="truncate text-base font-medium">{c.nombre}</div>
                   <div className="mt-0.5 flex items-center gap-1 text-sm text-gray-400">
-                    <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(c.id, cents)} />
+                    <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(c.id, cents)} bloqueado={bloquearPrecios} />
                     {desc > 0 && <span className="text-emerald-600">−{descuentoAplicado!.pct}%</span>}
                   </div>
                 </div>
@@ -1828,9 +1839,11 @@ function CobroModal({
 
 // ─── Precio editable en línea del carrito ────────────────────────────────────
 
-function PrecioEditable({ linea, onEditar }: {
+function PrecioEditable({ linea, onEditar, bloqueado }: {
   linea: LineaCarrito;
   onEditar: (centavos: number | null) => void;
+  /** Sin `facturas:precio-editar` el precio se muestra pero no se toca. */
+  bloqueado?: boolean;
 }) {
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState('');
@@ -1857,6 +1870,14 @@ function PrecioEditable({ linea, onEditar }: {
           onBlur={guardar}
           className="w-16 rounded border border-blue-300 px-1 py-0.5 text-xs outline-none"
         />
+      </span>
+    );
+  }
+
+  if (bloqueado) {
+    return (
+      <span className="text-gray-400" title="Tu rol no puede cambiar el precio">
+        {fmt(precioLinea(linea))} c/u
       </span>
     );
   }

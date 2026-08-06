@@ -58,6 +58,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
       const esViejo = it.descripcion !== undefined && it.nombreItem === undefined;
       return {
         id:                     idx + 1,
+        productoId:             typeof it.productoId === 'number' ? it.productoId : null,
         nombreItem:             String(esViejo ? it.descripcion : (it.nombreItem ?? '')),
         referencia:             String(it.referencia ?? ''),
         descripcionItem:        String(it.descripcionItem ?? ''),

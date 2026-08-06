@@ -16,6 +16,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import {
   AlertTriangle, User, Calendar, Package, FileText,
@@ -104,6 +105,10 @@ export default function NuevaCotizacionForm({
 }) {
   const router   = useRouter();
   const empresa  = initialPerfil;
+  // Misma regla que en factura: la cotización se convierte en una, así que el
+  // precio no puede ser libre aquí si no lo es allá.
+  const { can, isLoading: permLoading } = usePermissions();
+  const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
   const editId   = initialData?.id ?? null;
   const editando = editId != null;
 
@@ -326,6 +331,9 @@ export default function NuevaCotizacionForm({
       const itemsPayload = items
         .filter(it => it.nombreItem.trim())
         .map(it => ({
+          // Sin productoId la factura convertida pierde el enlace al catálogo
+          // (y con él el descuento de inventario y el control de precio).
+          productoId:             it.productoId ?? null,
           nombreItem:             it.nombreItem,
           referencia:             it.referencia,
           descripcionItem:        it.descripcionItem,
@@ -499,6 +507,7 @@ export default function NuevaCotizacionForm({
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
                   dependientes={dependientesCliente}
+                  bloquearPrecios={bloquearPrecios}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}
