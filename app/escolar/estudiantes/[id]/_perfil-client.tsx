@@ -19,6 +19,7 @@ import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { SEXOS, labelSexo, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
 import { CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
+import { CapturaFoto } from '@/components/fotos/CapturaFoto';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
 import dynamic from 'next/dynamic';
@@ -368,9 +369,15 @@ export default function PerfilEstudianteClient({ id }: { id: number }) {
               <div className="flex flex-col md:flex-row md:items-center gap-4">
                 {/* Identidad + chips */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="h-14 w-14 rounded-full bg-zero-100 text-zero-700 flex items-center justify-center text-lg font-semibold shrink-0">
-                    {`${estudiante.nombres[0] ?? ''}${estudiante.apellidos[0] ?? ''}`.toUpperCase()}
-                  </div>
+                  {/* La foto se toma con el teléfono desde aquí (QR): quien la
+                      hace está delante del alumno, no delante del ordenador. */}
+                  <CapturaFoto
+                    entidad="estudiante"
+                    entidadId={estudiante.id}
+                    nombre={`${estudiante.nombres} ${estudiante.apellidos}`}
+                    editable={puedeGestionar}
+                    tamano={56}
+                  />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-lg font-bold text-gray-900 truncate">{estudiante.nombres} {estudiante.apellidos}</p>

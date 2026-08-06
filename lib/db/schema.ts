@@ -2468,3 +2468,52 @@ export const whatsappMensajes = pgTable('whatsapp_mensajes', {
 
 export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
 export type WhatsappMensaje = typeof whatsappMensajes.$inferSelect;
+
+// ── Fotos — genéricas por entidad (ver lib/fotos/) ───────────────────────────
+// La foto no es una columna de cada tabla: (entidad, entidadId) permite que un
+// solo componente y un solo par de endpoints sirvan a estudiantes, personal,
+// productos y el logo de la empresa. Ver migración 0108_fotos.sql.
+
+export const fotos = pgTable('fotos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  /** Clave del registro de lib/fotos/entidades.ts ('estudiante', 'personal'…). */
+  entidad:       varchar('entidad', { length: 30 }).notNull(),
+  entidadId:     integer('entidad_id').notNull(),
+  /** Ref de storage: 's3:<key>' o 'data:image/jpeg;base64,…'. */
+  ref:           text('ref').notNull(),
+  refMiniatura:  text('ref_miniatura'),
+  bytes:         integer('bytes').notNull().default(0),
+  ancho:         integer('ancho'),
+  alto:          integer('alto'),
+  /** 'movil' (capturada por QR) | 'archivo' (subida desde el escritorio). */
+  origen:        varchar('origen', { length: 20 }).notNull().default('archivo'),
+  subidaPor:     integer('subida_por').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('fotos_entidad_uniq').on(t.teamId, t.entidad, t.entidadId),
+]);
+
+/** Sesión de captura: el permiso temporal que lleva el QR al teléfono. */
+export const fotosSesiones = pgTable('fotos_sesiones', {
+  id:         serial('id').primaryKey(),
+  teamId:     integer('team_id').notNull().references(() => teams.id),
+  entidad:    varchar('entidad', { length: 30 }).notNull(),
+  entidadId:  integer('entidad_id').notNull(),
+  /** SHA-256 del token. El token en claro solo vive en el QR y en la URL. */
+  tokenHash:  char('token_hash', { length: 64 }).notNull(),
+  expiraEn:   timestamp('expira_en').notNull(),
+  /** Sellada al subir la foto: un token sirve para una sola captura. */
+  usadaEn:    timestamp('usada_en'),
+  fotoId:     integer('foto_id').references(() => fotos.id, { onDelete: 'set null' }),
+  creadaPor:  integer('creada_por').references(() => users.id),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('fotos_sesiones_token_uniq').on(t.tokenHash),
+  index('fotos_sesiones_expira_idx').on(t.expiraEn),
+]);
+
+export type Foto        = typeof fotos.$inferSelect;
+export type NewFoto     = typeof fotos.$inferInsert;
+export type FotoSesion  = typeof fotosSesiones.$inferSelect;
