@@ -102,6 +102,11 @@
         "tipo": "arreglo",
         "titulo": "Los montos ya no se montan unos sobre otros en el PDF",
         "detalle": "En facturas con precios de seis dígitos, las columnas de precio, ITBIS y total se encimaban y el documento quedaba ilegible. Ahora cada columna tiene su propio espacio con una separación fija entre ellas, y la descripción baja de línea cuando es larga en vez de empujar a los montos."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Las secuencias de comprobantes ya no se inventan solas",
+        "detalle": "Al dar de alta una institución se le creaban diez rangos de numeración de oficio, con números que nadie había autorizado. Ahora se crea sin ninguno, y cada rango se carga a mano desde Configuración con los datos exactos de la autorización. Mientras tanto se puede facturar sin comprobante fiscal con normalidad."
       }
     ]
   },
