@@ -32,8 +32,12 @@ export function leerPaginacion(url: string | URL): Paginacion {
   const params = (url instanceof URL ? url : new URL(url)).searchParams;
 
   const pagina = Math.max(1, Math.floor(Number(params.get('pagina')) || 1));
-  const pedido = Math.floor(Number(params.get('porPagina')) || POR_PAGINA_DEFECTO);
-  const porPagina = Math.min(MAX_POR_PAGINA, Math.max(1, pedido));
+
+  // Un tamaño inválido cae al valor por defecto, no al mínimo: recortarlo a 1
+  // convertía `porPagina=-3` en una fila por página, que es peor que ignorarlo.
+  const crudo = Math.floor(Number(params.get('porPagina')));
+  const pedido = Number.isFinite(crudo) && crudo > 0 ? crudo : POR_PAGINA_DEFECTO;
+  const porPagina = Math.min(MAX_POR_PAGINA, pedido);
 
   return { pagina, porPagina, limit: porPagina, offset: (pagina - 1) * porPagina };
 }

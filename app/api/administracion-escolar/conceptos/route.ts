@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarConceptosPago, products } from '@/lib/db/schema';
+import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, asc, and } from 'drizzle-orm';
 
@@ -10,7 +11,10 @@ export async function GET() {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
-  const rows = await db
+  // Los conceptos de pago se definen al empezar el curso y se leen en cada
+  // pantalla de cargos: se sirven de caché hasta que alguien los cambie.
+  const rows = await cachearPorTag(
+    () => db
     .select({
       id: adminEscolarConceptosPago.id,
       teamId: adminEscolarConceptosPago.teamId,
@@ -24,7 +28,10 @@ export async function GET() {
     .from(adminEscolarConceptosPago)
     .leftJoin(products, eq(adminEscolarConceptosPago.productId, products.id))
     .where(eq(adminEscolarConceptosPago.teamId, teamId))
-    .orderBy(asc(adminEscolarConceptosPago.nombre));
+    .orderBy(asc(adminEscolarConceptosPago.nombre)),
+    ['escolar', 'conceptos', String(teamId)],
+    [tagEstructura(teamId)],
+  )();
   return NextResponse.json({ conceptos: rows });
 }
 
@@ -51,5 +58,6 @@ export async function POST(req: NextRequest) {
     productId: productId ?? null,
     activo: activo ?? true,
   }).returning();
+  invalidarEstructura(teamId);
   return NextResponse.json({ concepto: row });
 }

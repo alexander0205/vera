@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarPeriodos, adminEscolarMatriculas } from '@/lib/db/schema';
+import { invalidarEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { rangoPeriodoEsValido } from '@/lib/administracion-escolar/periodo-utils';
 import { eq, and, ne } from 'drizzle-orm';
@@ -60,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         .returning();
       return actualizado;
     });
+    invalidarEstructura(teamId);
     return NextResponse.json({ periodo: row });
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {
@@ -96,5 +98,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     .where(and(eq(adminEscolarPeriodos.id, periodoId), eq(adminEscolarPeriodos.teamId, teamId)))
     .returning({ id: adminEscolarPeriodos.id });
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  invalidarEstructura(teamId);
   return NextResponse.json({ ok: true });
 }

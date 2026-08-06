@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarCursos, adminEscolarGrados } from '@/lib/db/schema';
+import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and, asc } from 'drizzle-orm';
 
@@ -14,11 +15,15 @@ export async function GET(req: NextRequest) {
   const { teamId } = auth;
   const gradoId = Number(req.nextUrl.searchParams.get('gradoId')) || null;
 
-  const rows = await db.select().from(adminEscolarCursos)
-    .where(gradoId
-      ? and(eq(adminEscolarCursos.teamId, teamId), eq(adminEscolarCursos.gradoId, gradoId))
-      : eq(adminEscolarCursos.teamId, teamId))
-    .orderBy(asc(adminEscolarCursos.orden), asc(adminEscolarCursos.nombre));
+  const rows = await cachearPorTag(
+    () => db.select().from(adminEscolarCursos)
+      .where(gradoId
+        ? and(eq(adminEscolarCursos.teamId, teamId), eq(adminEscolarCursos.gradoId, gradoId))
+        : eq(adminEscolarCursos.teamId, teamId))
+      .orderBy(asc(adminEscolarCursos.orden), asc(adminEscolarCursos.nombre)),
+    ['escolar', 'cursos', String(teamId), String(gradoId ?? 'todos')],
+    [tagEstructura(teamId)],
+  )();
   return NextResponse.json({ cursos: rows });
 }
 
@@ -46,5 +51,6 @@ export async function POST(req: NextRequest) {
     orden: orden ?? 0,
     activo: activo ?? true,
   }).returning();
+  invalidarEstructura(teamId);
   return NextResponse.json({ curso: row });
 }

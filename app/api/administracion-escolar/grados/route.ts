@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarGrados, adminEscolarServicios } from '@/lib/db/schema';
+import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 
 /** Grados (Primero, Segundo…) de un servicio. `?servicioId=N` filtra. */
@@ -9,11 +10,17 @@ export async function GET(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
   if (!auth.ok) return auth.response;
   const servicioId = Number(req.nextUrl.searchParams.get('servicioId')) || null;
-  const rows = await db.select().from(adminEscolarGrados)
-    .where(servicioId
-      ? and(eq(adminEscolarGrados.teamId, auth.teamId), eq(adminEscolarGrados.servicioId, servicioId))
-      : eq(adminEscolarGrados.teamId, auth.teamId))
-    .orderBy(asc(adminEscolarGrados.orden), asc(adminEscolarGrados.nombre));
+  // Se cachean las filas, no la respuesta: un Response no se guarda en caché
+  // de forma útil. La entrada vive hasta que una escritura invalide la etiqueta.
+  const rows = await cachearPorTag(
+    () => db.select().from(adminEscolarGrados)
+      .where(servicioId
+        ? and(eq(adminEscolarGrados.teamId, auth.teamId), eq(adminEscolarGrados.servicioId, servicioId))
+        : eq(adminEscolarGrados.teamId, auth.teamId))
+      .orderBy(asc(adminEscolarGrados.orden), asc(adminEscolarGrados.nombre)),
+    ['escolar', 'grados', String(auth.teamId), String(servicioId ?? 'todos')],
+    [tagEstructura(auth.teamId)],
+  )();
   return NextResponse.json({ grados: rows });
 }
 
@@ -36,5 +43,6 @@ export async function POST(req: NextRequest) {
     nivel: nivel?.trim() || null,
     orden: orden ?? 0,
   }).returning();
+  invalidarEstructura(auth.teamId);
   return NextResponse.json({ grado: row });
 }

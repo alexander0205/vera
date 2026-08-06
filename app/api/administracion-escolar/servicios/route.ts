@@ -2,18 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarServicios, adminEscolarPeriodos } from '@/lib/db/schema';
+import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 
-/** Servicios (tandas) de un período. `?periodoId=N` filtra. */
+/**
+ * Servicios (tandas) de un período. `?periodoId=N` filtra.
+ *
+ * Se cachea lo que devuelve la base, no la respuesta: un `Response` no se puede
+ * guardar en caché de forma útil. La entrada vive hasta que una escritura
+ * invalide la etiqueta de estructura.
+ */
+function leerServicios(teamId: number, periodoId: number | null) {
+  return cachearPorTag(
+    () => db.select().from(adminEscolarServicios)
+      .where(periodoId
+        ? and(eq(adminEscolarServicios.teamId, teamId), eq(adminEscolarServicios.periodoId, periodoId))
+        : eq(adminEscolarServicios.teamId, teamId))
+      .orderBy(asc(adminEscolarServicios.orden), asc(adminEscolarServicios.nombre)),
+    ['escolar', 'servicios', String(teamId), String(periodoId ?? 'todos')],
+    [tagEstructura(teamId)],
+  )();
+}
+
 export async function GET(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
   if (!auth.ok) return auth.response;
   const periodoId = Number(req.nextUrl.searchParams.get('periodoId')) || null;
-  const rows = await db.select().from(adminEscolarServicios)
-    .where(periodoId
-      ? and(eq(adminEscolarServicios.teamId, auth.teamId), eq(adminEscolarServicios.periodoId, periodoId))
-      : eq(adminEscolarServicios.teamId, auth.teamId))
-    .orderBy(asc(adminEscolarServicios.orden), asc(adminEscolarServicios.nombre));
+  const rows = await leerServicios(auth.teamId, periodoId);
   return NextResponse.json({ servicios: rows });
 }
 
@@ -36,5 +51,6 @@ export async function POST(req: NextRequest) {
     tanda: tanda?.trim() || null,
     orden: orden ?? 0,
   }).returning();
+  invalidarEstructura(auth.teamId);
   return NextResponse.json({ servicio: row });
 }

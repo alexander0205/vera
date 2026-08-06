@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarCursos, adminEscolarMatriculas } from '@/lib/db/schema';
+import { invalidarEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
@@ -21,6 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .where(and(eq(adminEscolarCursos.id, parseInt(id)), eq(adminEscolarCursos.teamId, teamId)))
     .returning();
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  invalidarEstructura(teamId);
   return NextResponse.json({ curso: row });
 }
 
@@ -46,5 +48,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     .where(and(eq(adminEscolarCursos.id, cursoId), eq(adminEscolarCursos.teamId, teamId)))
     .returning();
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  invalidarEstructura(teamId);
   return NextResponse.json({ ok: true });
 }

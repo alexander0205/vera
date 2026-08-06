@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarPeriodos } from '@/lib/db/schema';
+import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { rangoPeriodoEsValido } from '@/lib/administracion-escolar/periodo-utils';
 import { eq, and, desc } from 'drizzle-orm';
@@ -9,9 +10,13 @@ export async function GET() {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
-  const rows = await db.select().from(adminEscolarPeriodos)
-    .where(eq(adminEscolarPeriodos.teamId, teamId))
-    .orderBy(desc(adminEscolarPeriodos.activo), desc(adminEscolarPeriodos.fechaInicio));
+  const rows = await cachearPorTag(
+    () => db.select().from(adminEscolarPeriodos)
+      .where(eq(adminEscolarPeriodos.teamId, teamId))
+      .orderBy(desc(adminEscolarPeriodos.activo), desc(adminEscolarPeriodos.fechaInicio)),
+    ['escolar', 'periodos', String(teamId)],
+    [tagEstructura(teamId)],
+  )();
   return NextResponse.json({ periodos: rows });
 }
 
@@ -40,6 +45,7 @@ export async function POST(req: NextRequest) {
       fechaFin: fechaFin || null,
       activo: activo ?? !yaHayActivo,
     }).returning();
+    invalidarEstructura(teamId);
     return NextResponse.json({ periodo: row });
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === '23505') {

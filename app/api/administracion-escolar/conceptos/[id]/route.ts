@@ -4,6 +4,7 @@ import {
   adminEscolarConceptosPago, adminEscolarConceptoPrecios, adminEscolarCargos,
   adminEscolarMatriculas, products,
 } from '@/lib/db/schema';
+import { invalidarEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .where(and(eq(adminEscolarConceptosPago.id, parseInt(id)), eq(adminEscolarConceptosPago.teamId, teamId)))
     .returning();
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  invalidarEstructura(teamId);
   return NextResponse.json({ concepto: row });
 }
 
@@ -81,5 +83,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     .where(and(eq(adminEscolarConceptosPago.id, conceptoId), eq(adminEscolarConceptosPago.teamId, teamId)))
     .returning({ id: adminEscolarConceptosPago.id });
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  invalidarEstructura(teamId);
   return NextResponse.json({ ok: true });
 }
