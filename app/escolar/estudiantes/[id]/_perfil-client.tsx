@@ -908,7 +908,15 @@ function ElegirCargosFacturarDialog({ open, onOpenChange, cargos, onConfirm, est
   onCargoCreado: () => void;
 }) {
   const [sel, setSel] = useState<Set<number>>(new Set());
-  useEffect(() => { if (open) setSel(new Set(cargos.map((c) => c.id))); }, [open, cargos]);
+  // Se depende de los ids y no del array: `cargos` sale de un filter en el
+  // render del padre, así que es un array nuevo cada vez y el efecto se
+  // redisparaba en cualquier re-render, borrando lo que el usuario acababa de
+  // desmarcar mientras el diálogo seguía abierto.
+  const idsCargos = cargos.map((c) => c.id).join(',');
+  useEffect(() => {
+    if (!open) return;
+    setSel(new Set(idsCargos ? idsCargos.split(',').map(Number) : []));
+  }, [open, idsCargos]);
 
   // ── Crear cargo para varios meses ──────────────────────────────────────────
   const [mostrarCrear, setMostrarCrear] = useState(false);

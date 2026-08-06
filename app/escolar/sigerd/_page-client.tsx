@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import useSWR from 'swr';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,17 @@ import {
   Loader2, LogOut, ShieldCheck, TriangleAlert, Link2, Search, ListTree, DownloadCloud,
   Database, CalendarClock, Trash2,
 } from 'lucide-react';
+
+/**
+ * Estado de la última descarga de Sigerd.
+ *
+ * Va por SWR y no por `fetch` suelto porque dos tarjetas distintas de esta
+ * pantalla lo necesitan: el resumen de lo ya guardado y el botón de sincronizar.
+ * Con `fetch` cada una pedía lo suyo y se montaban a la vez, así que la pantalla
+ * hacía dos peticiones idénticas en paralelo.
+ */
+const CLAVE_ESTADO_SIGERD = '/api/sigerd/obtener';
+const traerEstado = (url: string) => fetch(url).then((r) => r.json());
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -289,21 +301,17 @@ export default function SigerdPageClient() {
  * hace falta para VOLVER a sincronizar, no para ver lo guardado.
  */
 function ResumenDatos() {
-  const [estado, setEstado] = useState<EstadoObtener | null>(null);
+  const { data: estado, mutate } = useSWR<EstadoObtener>(CLAVE_ESTADO_SIGERD, traerEstado);
   const [borrando, setBorrando] = useState(false);
-  useEffect(() => {
-    fetch('/api/sigerd/obtener')
-      .then((r) => r.json())
-      .then((d: EstadoObtener) => setEstado(d))
-      .catch(() => {});
-  }, []);
 
   async function eliminar() {
     if (!confirm('¿Eliminar los datos guardados de SIGERD (estudiantes, secciones y personal)? Esta acción no se puede deshacer.')) return;
     setBorrando(true);
     try {
       const r = await fetch('/api/sigerd/obtener', { method: 'DELETE' });
-      if (r.ok) setEstado(null);
+      // Se revalida en vez de vaciar a mano: así la otra tarjeta que lee la
+      // misma clave también se entera de que ya no hay datos.
+      if (r.ok) await mutate();
       else alert('No se pudieron eliminar los datos.');
     } catch {
       alert('No se pudieron eliminar los datos.');
@@ -392,24 +400,24 @@ const ANIOS = [
  */
 function ObtenerInformacion() {
   const [anio, setAnio] = useState('24');
-  const [corriendo, setCorriendo] = useState(false);
-  const [estado, setEstado] = useState<EstadoObtener | null>(null);
+  const [lanzando, setLanzando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  const cargarEstado = useCallback(async () => {
-    try {
-      const d = (await (await fetch('/api/sigerd/obtener')).json()) as EstadoObtener;
-      setEstado(d);
-      if (d.estado === 'corriendo') setCorriendo(true);
-    } catch {
-      /* sin estado */
-    }
-  }, []);
+  // Misma clave que el resumen de arriba: SWR la comparte, así que la pantalla
+  // pide el estado una sola vez. Mientras el servidor está descargando se
+  // vuelve a preguntar cada cinco segundos; sin eso, quien recargaba la página
+  // con una sincronización en marcha se quedaba en «Sincronizando…» para
+  // siempre, aunque ya hubiese terminado.
+  const { data: estado, mutate: refrescarEstado } = useSWR<EstadoObtener>(
+    CLAVE_ESTADO_SIGERD,
+    traerEstado,
+    { refreshInterval: (d) => (d?.estado === 'corriendo' ? 5000 : 0) },
+  );
 
-  useEffect(() => {
-    void cargarEstado();
-  }, [cargarEstado]);
+  const cargarEstado = useCallback(() => refrescarEstado(), [refrescarEstado]);
+  const corriendo = lanzando || estado?.estado === 'corriendo';
+  const setCorriendo = setLanzando;
 
   async function obtener() {
     setCorriendo(true);

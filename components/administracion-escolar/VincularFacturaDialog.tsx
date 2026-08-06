@@ -55,18 +55,20 @@ export function VincularFacturaDialog({ cargoId, cargoLabel, clienteId, open, on
     }
   }, [clienteId]);
 
+  // Al abrir se limpia lo que quedó de la vez anterior.
   useEffect(() => {
-    if (!open || !clienteId) return;
+    if (!open) return;
     setQuery(''); setError(null);
-    buscar('');
-  }, [open, clienteId, buscar]);
+  }, [open]);
 
+  // Una sola búsqueda. Antes había dos efectos y ambos disparaban al abrir, así
+  // que el diálogo pedía la misma lista dos veces. La primera no espera al
+  // debounce: no hay nada que teclear todavía.
   useEffect(() => {
     if (!open || !clienteId) return;
-    const t = setTimeout(() => buscar(query), 300);
+    const t = setTimeout(() => buscar(query), query ? 300 : 0);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [open, clienteId, query, buscar]);
 
   async function vincular(ecfDocumentId: number) {
     setSaving(true);
