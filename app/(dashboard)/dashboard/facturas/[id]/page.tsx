@@ -17,7 +17,7 @@ import {
   Loader2, AlertTriangle, CheckCircle, Clock,
   Printer, Ticket, ChevronDown, Mail, Copy,
   Package, ChevronUp, Plus, MoreVertical, Send,
-  TrendingDown, TrendingUp,
+  TrendingUp,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -802,6 +802,17 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // Consultar/Estado DGII solo para e-CF real (ya emitido a DGII), no anulado.
   const puedePolling = esEcfReal && factura.estado !== 'ANULADO';
 
+  // ── Mora: valores derivados para las 2 tarjetas ──────────────────────────────
+  // (1) Info general (aplicada + próxima) → izquierda, bajo "Datos del comprador".
+  // (2) Lista de NDs por mora → sidebar, bajo "Notas asociadas" en su tarjeta.
+  const notasMoraActivas   = (factura.notasMora ?? []).filter(nd => nd.estado !== 'ANULADO');
+  const moraAplicadoCents  = notasMoraActivas.reduce((s, nd) => s + nd.montoTotal, 0);
+  const moraPendienteCents = notasMoraActivas.reduce((s, nd) => s + Math.max(0, nd.montoTotal - nd.pagado), 0);
+  const capitalPagado      = factura.pago?.recibido === true;
+  const hayMoraPendiente   = moraPendienteCents > 0;
+  const hayProximaMora     = moraPreview?.estado === 'pendiente';
+  const mostrarMoraInfo    = notasMoraActivas.length > 0 || hayProximaMora;
+
   // Trigger unificado para "Enviar a DGII" (footer + sidebar card). Si la factura
   // es de contado y no tiene pago registrado, abre el alert de confirmación.
   function triggerEnviarDgii() {
@@ -1378,6 +1389,71 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             )}
           </SectionCard>
 
+          {/* ── Mora (info general): aplicada + próxima automática ──────────────
+              Reubicada aquí (bajo Datos del comprador) para descargar el sidebar.
+              El detalle de las NDs por mora vive en su propia tarjeta (sidebar,
+              bajo "Notas asociadas"). */}
+          {mostrarMoraInfo && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 md:pt-5">
+                <TrendingUp className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-gray-900">Mora</h2>
+              </header>
+              <div className="px-4 pb-4 md:px-5 space-y-3">
+                {/* Aviso: capital pagado pero mora aún pendiente. */}
+                {capitalPagado && hayMoraPendiente && (
+                  <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
+                    <TrendingUp className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" aria-hidden="true" />
+                    <p className="text-xs text-gray-700">
+                      El pago de la factura está saldado, pero la mora sigue pendiente:
+                      {' '}<span className="font-semibold text-orange-700">{fmtDOP(moraPendienteCents / 100)}</span> por cobrar.
+                    </p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5">
+                    <p className="text-xs text-gray-500">Mora aplicada</p>
+                    <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                      {fmtDOP(moraAplicadoCents / 100)}
+                      {notasMoraActivas.length > 0 && (
+                        <span className="ml-1 text-xs font-normal text-gray-400">
+                          · {notasMoraActivas.length} nota{notasMoraActivas.length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </p>
+                    {hayMoraPendiente && (
+                      <p className="text-[11px] text-orange-600 mt-0.5">
+                        {fmtDOP(moraPendienteCents / 100)} pendiente
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2.5">
+                    <p className="text-xs text-gray-500">Próxima mora automática</p>
+                    {hayProximaMora ? (
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                        {fmtDOP(moraPreview!.montoCents / 100)}
+                        <span className="ml-1 text-xs font-normal text-gray-500">
+                          · {fmtFechaCorta(moraPreview!.fecha)}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-400 mt-0.5">Sin cargos programados</p>
+                    )}
+                  </div>
+                </div>
+
+                {hayProximaMora && (
+                  <p className="text-xs text-gray-500">
+                    {moraPreview!.yaVencida
+                      ? `Ya exigible desde el ${fmtFechaCorta(moraPreview!.fecha)}; se generará en la próxima corrida automática.`
+                      : `Si no se paga, el ${fmtFechaCorta(moraPreview!.fecha)} se cobrará ${fmtDOP(moraPreview!.montoCents / 100)}.`}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
             </TabsContent>
 
             <TabsContent value="notas">
@@ -1596,28 +1672,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </section>
           )}
 
-          {/* Crear nota de crédito / débito — CTA visible en sidebar */}
-          {puedeCrearNota && can('facturas:crear') && (
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
-              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-3">Crear nota</h3>
-              <div className="space-y-2">
-                <Button asChild variant="outline" className="w-full h-9 text-teal-700 border-teal-200 hover:bg-teal-50 justify-start gap-2">
-                  <Link href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}>
-                    <TrendingDown className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left text-sm">Nota de crédito</span>
-                    <span className="text-[10px] text-gray-400">Reduce el saldo</span>
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full h-9 text-orange-700 border-orange-200 hover:bg-orange-50 justify-start gap-2">
-                  <Link href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}>
-                    <TrendingUp className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left text-sm">Nota de débito</span>
-                    <span className="text-[10px] text-gray-400">Cargo adicional</span>
-                  </Link>
-                </Button>
-              </div>
-            </section>
-          )}
+          {/* Crear NC/ND: disponible desde el menú de acciones (3 puntos) del
+              encabezado — se quitó la tarjeta CTA duplicada del sidebar. */}
 
           {/* Notas de crédito/débito que modifican esta factura */}
           {factura.ncsAsociadas && factura.ncsAsociadas.length > 0 && (
@@ -1654,6 +1710,49 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {/* Notas de débito por mora — tarjeta aparte, justo bajo "Notas asociadas".
+              Documentos vinculados a esta factura (la info general de mora vive en
+              la tarjeta "Mora" bajo Datos del comprador). */}
+          {notasMoraActivas.length > 0 && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+                Notas de débito por mora ({notasMoraActivas.length})
+              </h3>
+              <div className="space-y-2">
+                {notasMoraActivas.map(nd => {
+                  const saldoNd = Math.max(0, nd.montoTotal - nd.pagado);
+                  const pagada  = saldoNd === 0;
+                  const parcial = !pagada && nd.pagado > 0;
+                  const badge = pagada
+                    ? { txt: 'Pagada',    cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                    : parcial
+                    ? { txt: 'Parcial',   cls: 'bg-amber-100 text-amber-700 border-amber-200' }
+                    : { txt: 'Pendiente', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
+                  return (
+                    <Link
+                      key={nd.id}
+                      href={`/dashboard/facturas/${nd.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-xs font-semibold text-orange-800 truncate">{nd.codigo ?? `#${nd.id}`}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${badge.cls}`}>
+                          {badge.txt}
+                        </span>
+                      </span>
+                      <span className="text-right whitespace-nowrap">
+                        <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(saldoNd / 100)}</span>
+                        {!pagada && saldoNd !== nd.montoTotal && (
+                          <span className="ml-1 text-[11px] text-gray-400">de {fmtDOP(nd.montoTotal / 100)}</span>
+                        )}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             </section>
           )}
 
@@ -1708,123 +1807,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </section>
           )}
 
-          {/* ── Sección Mora: cuánto se ha aplicado + próxima automática + notas ── */}
-          {(() => {
-            const notasActivas = (factura.notasMora ?? []).filter(nd => nd.estado !== 'ANULADO');
-            const aplicadoCents = notasActivas.reduce((s, nd) => s + nd.montoTotal, 0);
-            // Saldo de mora aún sin pagar (mora aplicada − lo ya abonado a las NDs).
-            const moraPendienteCents = notasActivas.reduce(
-              (s, nd) => s + Math.max(0, nd.montoTotal - nd.pagado), 0);
-            // Capital de la factura cubierto pero con mora aún pendiente: el caso
-            // que el usuario quiere ver claro (pago original OK, mora sigue viva).
-            const capitalPagado = factura.pago?.recibido === true;
-            const hayMoraPendiente = moraPendienteCents > 0;
-            const hayProxima = moraPreview?.estado === 'pendiente';
-            // Solo mostrar la sección si ya hay mora aplicada o viene una.
-            if (notasActivas.length === 0 && !hayProxima) return null;
-            return (
-              <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-                  <TrendingUp className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
-                  <h2 className="text-sm font-semibold text-gray-900">Mora</h2>
-                </div>
-                <div className="px-4 pb-4 md:px-5 space-y-3">
-                  {/* Aviso: capital pagado pero mora aún pendiente (pago original OK,
-                      mora sigue viva). Lo que el usuario pidió ver claro. */}
-                  {capitalPagado && hayMoraPendiente && (
-                    <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
-                      <TrendingUp className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" aria-hidden="true" />
-                      <p className="text-xs text-gray-700">
-                        El pago de la factura está saldado, pero la mora sigue pendiente:
-                        {' '}<span className="font-semibold text-orange-700">{fmtDOP(moraPendienteCents / 100)}</span> por cobrar.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Resumen: aplicado + próxima */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5">
-                      <p className="text-xs text-gray-500">Mora aplicada</p>
-                      <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
-                        {fmtDOP(aplicadoCents / 100)}
-                        {notasActivas.length > 0 && (
-                          <span className="ml-1 text-xs font-normal text-gray-400">
-                            · {notasActivas.length} nota{notasActivas.length === 1 ? '' : 's'}
-                          </span>
-                        )}
-                      </p>
-                      {hayMoraPendiente && (
-                        <p className="text-[11px] text-orange-600 mt-0.5">
-                          {fmtDOP(moraPendienteCents / 100)} pendiente
-                        </p>
-                      )}
-                    </div>
-                    <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2.5">
-                      <p className="text-xs text-gray-500">Próxima mora automática</p>
-                      {hayProxima ? (
-                        <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
-                          {fmtDOP(moraPreview!.montoCents / 100)}
-                          <span className="ml-1 text-xs font-normal text-gray-500">
-                            · {fmtFechaCorta(moraPreview!.fecha)}
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="text-sm text-gray-400 mt-0.5">Sin cargos programados</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Frase de contexto de la próxima mora */}
-                  {hayProxima && (
-                    <p className="text-xs text-gray-500">
-                      {moraPreview!.yaVencida
-                        ? `Ya exigible desde el ${fmtFechaCorta(moraPreview!.fecha)}; se generará en la próxima corrida automática.`
-                        : `Si no se paga, el ${fmtFechaCorta(moraPreview!.fecha)} se cobrará ${fmtDOP(moraPreview!.montoCents / 100)}.`}
-                    </p>
-                  )}
-
-                  {/* Detalle: notas de débito por mora emitidas */}
-                  {notasActivas.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Notas de débito por mora
-                      </p>
-                      {notasActivas.map(nd => {
-                        const saldoNd = Math.max(0, nd.montoTotal - nd.pagado);
-                        const pagada  = saldoNd === 0;
-                        const parcial = !pagada && nd.pagado > 0;
-                        const badge = pagada
-                          ? { txt: 'Pagada',    cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
-                          : parcial
-                          ? { txt: 'Parcial',   cls: 'bg-amber-100 text-amber-700 border-amber-200' }
-                          : { txt: 'Pendiente', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
-                        return (
-                          <Link
-                            key={nd.id}
-                            href={`/dashboard/facturas/${nd.id}`}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
-                          >
-                            <span className="flex items-center gap-2 min-w-0">
-                              <span className="font-mono text-xs font-semibold text-orange-800 truncate">{nd.codigo ?? `#${nd.id}`}</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${badge.cls}`}>
-                                {badge.txt}
-                              </span>
-                            </span>
-                            <span className="text-right whitespace-nowrap">
-                              <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(saldoNd / 100)}</span>
-                              {!pagada && saldoNd !== nd.montoTotal && (
-                                <span className="ml-1 text-[11px] text-gray-400">de {fmtDOP(nd.montoTotal / 100)}</span>
-                              )}
-                            </span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </section>
-            );
-          })()}
 
           {/* Pago — historial read-only (los pagos se gestionan en Cuentas por cobrar).
               No aplica a notas de crédito: acreditan, no se cobran. */}

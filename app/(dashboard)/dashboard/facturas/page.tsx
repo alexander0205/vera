@@ -84,6 +84,8 @@ interface Doc {
   fechaLimitePago: string | null;
   pagado: number;
   moraPendiente?: number;
+  moraAplicada?: number;
+  moraNotas?: { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA' }[];
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
@@ -432,6 +434,7 @@ export default function FacturasPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        renderExpanded={doc => <ResumenFactura doc={doc} />}
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
@@ -522,6 +525,82 @@ export default function FacturasPage() {
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Fila hija: resumen general de una factura (montos + cobro + mora) ────────
+
+function ResumenFactura({ doc }: { doc: Doc }) {
+  // Los subqueries SQL (pagado/moraPendiente) llegan como string desde postgres:
+  // coercer a número o el `+` concatena (bug: "1000000"+"35000").
+  const pagado        = Number(doc.pagado ?? 0);
+  const moraAplicada  = Number(doc.moraAplicada ?? 0);
+  const moraPendiente = Number(doc.moraPendiente ?? 0);
+  const saldoCapital  = Math.max(0, doc.montoTotal - pagado);
+  const notas         = doc.moraNotas ?? [];
+
+  const moraPagada = Math.max(0, moraAplicada - moraPendiente);
+  const cobrado    = pagado + moraPagada;
+
+  // "Pendientes": cada documento cobrable que aún tiene saldo — el capital de la
+  // propia factura (si no está saldado) y cada nota de débito por mora impaga.
+  // El total es la suma de esas filas (lo que realmente falta cobrar).
+  const pendientes: { key: string; id: number; label: string; monto: number }[] = [];
+  if (saldoCapital > 0) {
+    pendientes.push({ key: `f-${doc.id}`, id: doc.id, label: doc.codigo ?? `Factura #${doc.id}`, monto: saldoCapital });
+  }
+  for (const nd of notas) {
+    if (nd.estado !== 'PAGADA' && nd.saldo > 0) {
+      pendientes.push({ key: `nd-${nd.id}`, id: nd.id, label: nd.codigo ?? `ND #${nd.id}`, monto: nd.saldo });
+    }
+  }
+  const totalPendiente = pendientes.reduce((s, p) => s + p.monto, 0);
+
+  return (
+    <div className="py-1">
+      {/* Indentada para arrancar bajo la columna "Código" (no desde el borde),
+          y extendida hasta la derecha. */}
+      <div className="space-y-2 sm:ml-16">
+        {pendientes.length > 0 ? (
+          <div className="rounded-md border border-gray-300 overflow-hidden text-sm">
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-300 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+              Pendientes
+            </div>
+            <div className="divide-y divide-gray-200">
+              {pendientes.map(p => (
+                <div key={p.key} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <Link
+                    href={`/dashboard/facturas/${p.id}`}
+                    className="font-mono text-xs text-gray-700 hover:text-teal-700 hover:underline truncate"
+                  >
+                    {p.label}
+                  </Link>
+                  <span className="tabular-nums text-gray-900 whitespace-nowrap">{fmtDOP(p.monto)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50 border-t border-gray-300">
+              <span className="text-xs font-medium text-gray-600">Total pendiente</span>
+              <span className="tabular-nums font-bold text-red-600 whitespace-nowrap">{fmtDOP(totalPendiente)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-md border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-600">
+            <span className="font-medium text-emerald-700">Sin pendientes</span>
+            <span className="text-xs text-gray-500">· cobrado {fmtDOP(cobrado)}</span>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <Link
+            href={`/dashboard/facturas/${doc.id}`}
+            className="text-[11px] font-medium text-teal-600 hover:underline"
+          >
+            Ver factura completa →
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
