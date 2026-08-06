@@ -9,7 +9,7 @@ import { referenciaServicio } from '@/lib/administracion-escolar/referencia-serv
 import { CONCEPTOS_BASE, pareceMensual } from '@/lib/administracion-escolar/conceptos-base';
 import {
   Loader2, Plus, X, Layers, Tag, Repeat, CalendarDays, Wand2, ChevronRight, ChevronDown,
-  FileText, DoorOpen, AlertTriangle, Eye, User, GraduationCap, Check,
+  FileText, DoorOpen, AlertTriangle, Eye, User, UserRound, GraduationCap, Check,
 } from 'lucide-react';
 
 interface Periodo { id: number; nombre: string; activo: boolean }
@@ -415,6 +415,10 @@ function ModalTarifa({
   const [elegido, setElegido] = useState<Producto | null>(null);
   const [creando, setCreando] = useState(false);
   const [refNueva, setRefNueva] = useState('');
+  // El nombre del concepto sirve de punto de partida, no de jaula: es lo que
+  // acaba impreso en la factura, y ahí el colegio puede querer decirlo de otra
+  // manera.
+  const [nombreNuevo, setNombreNuevo] = useState(concepto.nombre);
   const [precio, setPrecio] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
@@ -428,6 +432,7 @@ function ModalTarifa({
   }), [concepto, objetivo, periodo]);
 
   useEffect(() => { setRefNueva(referenciaSugerida); }, [referenciaSugerida]);
+  useEffect(() => { setNombreNuevo(concepto.nombre); }, [concepto.nombre]);
 
   // Solo lo que puede ser este concepto: el resto del catálogo (camisetas,
   // materiales) no tiene nada que hacer en una tarifa de colegiatura.
@@ -455,7 +460,7 @@ function ModalTarifa({
       if (creando) {
         const p = Number(precio);
         if (!(p >= 0)) { alert('Pon un precio.'); return; }
-        body.nuevoProducto = { nombre: concepto.nombre, referencia: refNueva.trim(), precio: p };
+        body.nuevoProducto = { nombre: nombreNuevo.trim() || concepto.nombre, referencia: refNueva.trim(), precio: p };
       } else if (elegido) {
         body.productId = elegido.id;
       } else { alert('Elige un servicio de facturación o crea uno.'); return; }
@@ -542,10 +547,10 @@ function ModalTarifa({
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Nombre</label>
-                  <div className="flex h-10 items-center rounded-md border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
-                    {concepto.nombre}
-                  </div>
-                  <p className="mt-1.5 text-xs text-gray-400">Es el del concepto.</p>
+                  <Input className="h-10" value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} />
+                  <p className="mt-1.5 text-xs text-gray-400">
+                    Es lo que el padre lee en su factura. Empieza por el del concepto.
+                  </p>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700">Precio</label>
@@ -577,9 +582,21 @@ function ModalTarifa({
               <Eye className="h-4 w-4 text-gray-400" /> Así saldrá en la factura
             </p>
             <div className="rounded-xl border border-gray-200 bg-gray-50 px-5 py-4">
-              <div className="flex gap-4 border-b border-gray-200 pb-3">
+              {/* A quién se le cobra. La factura va a nombre del padre o tutor,
+                  que es el cliente; el estudiante aparece en la línea como
+                  beneficiario. Sin esta cabecera la vista previa daba a
+                  entender que se le factura al alumno. */}
+              <div className="flex items-center gap-2 border-b border-gray-200 pb-3 text-sm">
+                <span className="text-gray-500">Facturado a</span>
+                <span className="flex items-center gap-1.5 font-medium text-gray-900">
+                  <UserRound className="h-3.5 w-3.5 text-gray-400" />
+                  Nombre del padre o tutor
+                </span>
+              </div>
+
+              <div className="flex gap-4 border-b border-gray-200 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900">{concepto.nombre}</p>
+                  <p className="text-sm font-medium text-gray-900">{creando ? (nombreNuevo || concepto.nombre) : concepto.nombre}</p>
                   <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-500">
                     <User className="h-3.5 w-3.5" /> Nombre del estudiante · {lugar}
                   </p>
@@ -599,7 +616,7 @@ function ModalTarifa({
 
         <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50/60 px-7 py-4">
           <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
-          <Button className="bg-zero-600 px-6 hover:bg-zero-700" onClick={guardar} disabled={ocupado || (!creando && !elegido) || (creando && precio === '')}>
+          <Button className="bg-zero-600 px-6 hover:bg-zero-700" onClick={guardar} disabled={ocupado || (!creando && !elegido) || (creando && (precio === '' || !nombreNuevo.trim()))}>
             {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : creando ? 'Crear y atar' : 'Atar'}
           </Button>
         </div>
