@@ -89,8 +89,16 @@ export async function importarEstructuraSigerd(
     return r;
   }
 
-  const serviciosApp = await db.select().from(adminEscolarServicios)
-    .where(and(eq(adminEscolarServicios.teamId, teamId), eq(adminEscolarServicios.periodoId, periodoId)));
+  // Se baja de una vez lo que ya existe del colegio. Antes se consultaban los
+  // grados de cada servicio y las secciones de cada grado por separado, lo que
+  // con cuatro servicios y diecinueve grados eran más de veinte viajes a la
+  // base solo para leer.
+  const [serviciosApp, gradosApp, seccionesApp] = await Promise.all([
+    db.select().from(adminEscolarServicios)
+      .where(and(eq(adminEscolarServicios.teamId, teamId), eq(adminEscolarServicios.periodoId, periodoId))),
+    db.select().from(adminEscolarGrados).where(eq(adminEscolarGrados.teamId, teamId)),
+    db.select().from(adminEscolarCursos).where(eq(adminEscolarCursos.teamId, teamId)),
+  ]);
 
   for (const [i, sv] of serviciosSigerd.entries()) {
     const crudo = (sv.nombre ?? '').trim();
@@ -126,16 +134,15 @@ export async function importarEstructuraSigerd(
       r.detalle.push(`Servicio "${nombre}${tanda ? ` · ${tanda}` : ''}" creado.`);
     }
 
-    const gradosApp = await db.select().from(adminEscolarGrados)
-      .where(and(eq(adminEscolarGrados.teamId, teamId), eq(adminEscolarGrados.servicioId, servicioId)));
+    const gradosDelServicio = gradosApp.filter((x) => x.servicioId === servicioId);
 
     for (const [j, g] of (sv.grados ?? []).entries()) {
       const nombreGrado = (g.nombre ?? '').trim();
       if (!nombreGrado || !g.idGrado) continue;
 
       let gradoId: number;
-      const gExistente = gradosApp.find((x) => x.sigerdGradoId === g.idGrado)
-        ?? gradosApp.find((x) => x.sigerdGradoId == null && mismoNombre(x.nombre, nombreGrado));
+      const gExistente = gradosDelServicio.find((x) => x.sigerdGradoId === g.idGrado)
+        ?? gradosDelServicio.find((x) => x.sigerdGradoId == null && mismoNombre(x.nombre, nombreGrado));
 
       if (gExistente) {
         if (gExistente.sigerdGradoId == null) {
@@ -153,15 +160,14 @@ export async function importarEstructuraSigerd(
         r.grados.creados += 1;
       }
 
-      const seccionesApp = await db.select().from(adminEscolarCursos)
-        .where(and(eq(adminEscolarCursos.teamId, teamId), eq(adminEscolarCursos.gradoId, gradoId)));
+      const seccionesDelGrado = seccionesApp.filter((x) => x.gradoId === gradoId);
 
       for (const [k, s] of (g.secciones ?? []).entries()) {
         const nombreSeccion = (s.nombre ?? '').trim();
         if (!nombreSeccion || !s.idSeccion) continue;
 
-        const sExistente = seccionesApp.find((x) => x.sigerdSeccionId === s.idSeccion)
-          ?? seccionesApp.find((x) => x.sigerdSeccionId == null && mismoNombre(x.nombre, nombreSeccion));
+        const sExistente = seccionesDelGrado.find((x) => x.sigerdSeccionId === s.idSeccion)
+          ?? seccionesDelGrado.find((x) => x.sigerdSeccionId == null && mismoNombre(x.nombre, nombreSeccion));
 
         if (sExistente) {
           if (sExistente.sigerdSeccionId == null) {

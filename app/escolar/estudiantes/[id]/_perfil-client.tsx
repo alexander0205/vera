@@ -21,7 +21,19 @@ import { CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD } from '@/lib/administracion-es
 import { TutoresPanel } from '@/components/administracion-escolar/TutoresPanel';
 import { VincularFacturaDialog } from '@/components/administracion-escolar/VincularFacturaDialog';
 import { EditarMatriculaDialog } from '@/components/administracion-escolar/EditarMatriculaDialog';
-import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+import dynamic from 'next/dynamic';
+import type { Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
+
+/**
+ * El modal de cobro arrastra diecisiete componentes de MUI entre él y su
+ * selector de métodos de pago. Importado de forma normal, todo eso viajaba en
+ * el paquete inicial de la ficha del estudiante, que se abre muchas veces al
+ * día, para un diálogo que se abre pocas. Se carga cuando hace falta.
+ */
+const PagoModal = dynamic(
+  () => import('@/components/cuentas-por-cobrar/PagoModal').then((m) => m.PagoModal),
+  { ssr: false },
+);
 import { CrearCargoEstudianteDialog } from '@/components/administracion-escolar/CrearCargoEstudianteDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/lib/hooks/usePermissions';
