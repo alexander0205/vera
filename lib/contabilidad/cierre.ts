@@ -1,3 +1,4 @@
+import { cache } from 'react';
 /**
  * lib/contabilidad/cierre.ts — Cierre de ejercicio (cierre anual).
  *
@@ -96,14 +97,14 @@ export class CierreError extends Error {
   }
 }
 
-async function cuentaPorCodigo(teamId: number, codigo: string): Promise<number | null> {
+const cuentaPorCodigo = cache(async function cuentaPorCodigo(teamId: number, codigo: string): Promise<number | null> {
   const rows = await db.execute(sql`
     SELECT id FROM contabilidad_cuentas
     WHERE team_id = ${teamId} AND codigo = ${codigo} AND imputable AND activa
     LIMIT 1
   `);
   return (rows as unknown as { id: number }[])[0]?.id ?? null;
-}
+});
 
 /** Saldos de las cuentas de resultado (4/5/6) hasta el 31-dic del ejercicio. */
 async function saldosResultado(teamId: number, ejercicio: number): Promise<SaldoResultado[]> {

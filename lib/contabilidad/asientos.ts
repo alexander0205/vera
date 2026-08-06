@@ -1,3 +1,4 @@
+import { cache } from 'react';
 /**
  * lib/contabilidad/asientos.ts — Generación de asientos contables. Paso 4.
  *
@@ -690,14 +691,14 @@ export async function generarAsientoPago(
  * usando los códigos estándar (1105/2101/6101/1101), y personalizables si el
  * team los cambia en la config.
  */
-async function cuentaPorCodigo(teamId: number, codigo: string): Promise<number | null> {
+const cuentaPorCodigo = cache(async function cuentaPorCodigo(teamId: number, codigo: string): Promise<number | null> {
   const rows = await db.execute(sql`
     SELECT id FROM contabilidad_cuentas
     WHERE team_id = ${teamId} AND codigo = ${codigo} AND imputable AND activa
     LIMIT 1
   `);
   return (rows as unknown as { id: number }[])[0]?.id ?? null;
-}
+});
 
 /**
  * Asiento de una compra local (entrada de inventario). Nivel 3.2.

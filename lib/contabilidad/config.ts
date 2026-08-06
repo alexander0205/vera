@@ -11,6 +11,7 @@
  *   resolverCuentaCobro()   → a qué cuenta entra un pago recibido
  */
 
+import { cache } from 'react';
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 import {
@@ -67,8 +68,15 @@ const CONFIG_VACIA: ConfigContable = {
 
 // ─── Lectura ─────────────────────────────────────────────────────────────────
 
-/** La configuración general. Devuelve una vacía si el team nunca la tocó. */
-export async function getConfig(teamId: number): Promise<ConfigContable> {
+/**
+ * La configuración general. Devuelve una vacía si el team nunca la tocó.
+ *
+ * Va deduplicada por petición: cada generador de asiento la pide, y un barrido
+ * que crea ochocientos asientos la pedía ochocientas veces para leer siempre la
+ * misma fila. Con `cache` de React, la primera llamada consulta y el resto de
+ * la petición se sirve de memoria.
+ */
+export const getConfig = cache(async function getConfig(teamId: number): Promise<ConfigContable> {
   const rows = await db.execute(sql`
     SELECT activa,
            cuenta_por_cobrar_id  AS "cuentaPorCobrarId",
@@ -89,7 +97,7 @@ export async function getConfig(teamId: number): Promise<ConfigContable> {
     WHERE team_id = ${teamId}
   `);
   return (rows as unknown as ConfigContable[])[0] ?? CONFIG_VACIA;
-}
+});
 
 export interface MetodoConfigurado {
   clave:             ClaveMetodo;
@@ -396,7 +404,7 @@ export async function claveContableDePago(
  * A qué cuenta entra un cobro. `null` si esa clave no está configurada — quien
  * llame decide si eso es un error o un caso a saltar.
  */
-export async function resolverCuentaCobro(
+export const resolverCuentaCobro = cache(async function resolverCuentaCobro(
   teamId: number,
   clave: ClaveMetodo,
 ): Promise<number | null> {
@@ -406,7 +414,7 @@ export async function resolverCuentaCobro(
     WHERE team_id = ${teamId} AND clave = ${clave}
   `);
   return (rows as unknown as { cuentaId: number }[])[0]?.cuentaId ?? null;
-}
+});
 
 /**
  * A qué cuenta de ingreso va la venta de un producto.
@@ -426,7 +434,7 @@ export async function resolverCuentaCobro(
  * Todo en una consulta: esto se va a llamar una vez por línea de factura cuando
  * llegue el Paso 4, y no quiero 4 idas a la base por línea.
  */
-export async function resolverCuentaIngreso(
+export const resolverCuentaIngreso = cache(async function resolverCuentaIngreso(
   teamId: number,
   productoId: number | null,
 ): Promise<number | null> {
@@ -460,4 +468,4 @@ export async function resolverCuentaIngreso(
     ) AS "cuentaId"
   `);
   return (rows as unknown as { cuentaId: number | null }[])[0]?.cuentaId ?? null;
-}
+});
