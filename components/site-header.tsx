@@ -4,6 +4,7 @@ import { SiteHeaderClient } from './site-header-client';
 
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { LogoZero } from '@/components/marca-zero';
 
 const NAV_LINKS = [
   { href: '/#contacto', label: 'Contacto' },
@@ -109,12 +110,7 @@ export async function SiteHeader() {
             href="/"
             sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, textDecoration: 'none' }}
           >
-            <Box sx={{ height: 32, width: 32, borderRadius: '8px', bgcolor: '#3658e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Typography component="span" sx={{ color: '#ffffff', fontWeight: 700, fontSize: '0.875rem' }}>E</Typography>
-            </Box>
-            <Typography component="span" sx={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
-              Ze<Box component="span" sx={{ color: '#3658e1' }}>ro</Box>
-            </Typography>
+            <LogoZero alto={30} />
           </Box>
 
           {/* Links — desktop */}

@@ -3,6 +3,7 @@ import { ContactoForm } from '@/components/contacto-form';
 import { Receipt } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { LogoZero } from '@/components/marca-zero';
 
 export default function HomePage() {
   return (
@@ -13,8 +14,7 @@ export default function HomePage() {
         <Box sx={{ maxWidth: '48rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 } }}>
           <Box sx={{ textAlign: 'center', mb: 6 }}>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mb: 3 }}>
-              <Receipt size={32} color="#3658e1" />
-              <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>Zero</Typography>
+              <LogoZero alto={40} />
             </Box>
             <Typography variant="h3" sx={{ fontWeight: 700, color: '#111827', letterSpacing: '-0.02em', mb: 2, fontSize: { xs: '1.875rem', sm: '2.25rem' } }}>
               Facturación Electrónica DGII
