@@ -505,12 +505,15 @@ function ModalTarifa({
                   <p className="px-4 py-6 text-center text-sm text-gray-400">Nada que se parezca. Crea uno nuevo abajo.</p>
                 )}
                 {candidatos.map((p) => {
+                  // Informativo, no un impedimento: la inscripción que cuesta
+                  // lo mismo en todos los servicios debe poder ser UN producto
+                  // usado en los cuatro, no cuatro productos idénticos.
                   const yaUsado = usados.includes(p.id) && elegido?.id !== p.id;
                   const on = elegido?.id === p.id;
                   return (
-                    <button key={p.id} disabled={yaUsado} onClick={() => setElegido(p)}
+                    <button key={p.id} onClick={() => setElegido(p)}
                       className={`flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left last:border-0 ${
-                        on ? 'bg-zero-50' : yaUsado ? 'opacity-40' : 'hover:bg-gray-50'}`}>
+                        on ? 'bg-zero-50' : 'hover:bg-gray-50'}`}>
                       {on
                         ? <Check className="h-4 w-4 shrink-0 text-zero-600" />
                         : <FileText className="h-4 w-4 shrink-0 text-gray-300" />}
@@ -518,7 +521,11 @@ function ModalTarifa({
                         <p className={`text-sm ${on ? 'font-medium text-zero-800' : 'text-gray-800'}`}>{p.nombre}</p>
                         <p className="mt-0.5 break-all font-mono text-xs text-gray-400">{p.referencia ?? '—'}</p>
                       </div>
-                      {yaUsado && <span className="shrink-0 text-xs text-gray-400">ya usado</span>}
+                      {yaUsado && (
+                        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                          en uso
+                        </span>
+                      )}
                       <span className={`shrink-0 text-sm ${on ? 'font-semibold text-zero-800' : 'text-gray-500'}`}>{fmtDOP(p.precio)}</span>
                     </button>
                   );
