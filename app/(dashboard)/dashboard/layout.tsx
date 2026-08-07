@@ -92,6 +92,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
+      { href: '/dashboard/habilitacion',   label: 'Habilitación e-CF' },
       { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
       { href: '/dashboard/equipo/permisos', label: 'Roles y permisos' },
       { href: '/dashboard/api-keys',      label: 'API Keys' },
@@ -153,6 +154,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
+  '/dashboard/habilitacion':          'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
   '/dashboard/equipo/permisos':       'equipo:gestionar',
   '/dashboard/api-keys':              'configuracion:gestionar',
