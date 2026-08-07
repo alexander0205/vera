@@ -4,6 +4,14 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.18.1 — 2026-08-07
+
+### Arreglado
+
+- **comprobantes**: sharp tumbaba /api/pagos/adjuntos en producción
+  - sharp pasa a carga perezosa con fallo tolerado. Si el binario no está, el comprobante se guarda igual: se pierde la miniatura (la galería usa el original) y el borrado de EXIF. Un módulo nativo no debe poder tumbar un endpoint que no lo necesita.
+  - pnpm.supportedArchitectures instala también los binarios de linux-x64, que es lo que corre en Vercel.
+
 ## v1.18.0 — 2026-08-07
 
 ### Nuevo
