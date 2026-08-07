@@ -226,7 +226,16 @@ export default function NuevaFacturaForm({
 
   // Fecha de emisión editable — solo roles con este permiso (admin/owner) y
   // solo aplica a sin-ncf. Ver CompactHeader y app/api/ecf/emitir/route.ts.
-  const { can } = usePermissions();
+  const { can, isLoading: permLoading } = usePermissions();
+  /**
+   * Sin `facturas:precio-editar` el precio y el descuento de cada línea quedan
+   * en solo lectura.
+   *
+   * Mientras el permiso carga NO se bloquea nada: `can()` responde false por
+   * defecto y trancaría la pantalla al dueño durante un instante. El servidor
+   * revalida al guardar, así que esa ventana no abre nada.
+   */
+  const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
   const puedeEditarFecha = can('facturas:fecha-personalizada');
 
   // ── Condición de pago ──────────────────────────────────────────────────────
@@ -1716,6 +1725,8 @@ export default function NuevaFacturaForm({
                   diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
                   tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
+                  empresa={empresa}
+                  sinPagoRegistrado={!pagoRecibido || sumaPagos(pagoLineas) <= 0}
                 />
                 <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f3f4f6' }}>
                   <ClasificacionFactura
@@ -1753,6 +1764,7 @@ export default function NuevaFacturaForm({
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
                   dependientes={dependientesCliente}
+                  bloquearPrecios={bloquearPrecios}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}

@@ -205,6 +205,10 @@ export async function GET(
       montoTotal: ecfDocuments.montoTotal,
       estado:     ecfDocuments.estado,
       estadoPago: ecfDocuments.estadoPago,
+      pagado: sql<number>`coalesce((
+        SELECT SUM(monto_centavos) FROM pagos_recibidos
+        WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
+      ), 0)`,
     })
     .from(ecfDocuments)
     .where(and(
@@ -332,6 +336,7 @@ export async function GET(
       id:         n.id,
       codigo:     n.codigo,
       montoTotal: n.montoTotal,
+      pagado:     Number(n.pagado),
       estado:     n.estado,
       estadoPago: n.estadoPago,
     })),

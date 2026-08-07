@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "1.15.4",
+  "version": "1.17.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
@@ -31,6 +31,8 @@
     "db:reset": "npx tsx lib/db/reset.ts",
     "db:local:setup": "bash scripts/setup-local-db.sh",
     "branch:setup": "bash scripts/branch-setup.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:unit": "vitest run tests/unit"
   },
   "dependencies": {

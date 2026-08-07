@@ -2,26 +2,19 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { mutate } from 'swr';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Switch from '@mui/material/Switch';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import Alert from '@mui/material/Alert';
-import CircularProgress from '@mui/material/CircularProgress';
-import InputAdornment from '@mui/material/InputAdornment';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Building2, Palette, ImageIcon, FileText,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard, Store,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Building2, Palette, ImageIcon, PenLine, FileText,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
-import { WhatsAppCard } from './WhatsAppCard';
 import { formatTelefonoDO } from '@/lib/utils/format';
 import { roleHasPermission } from '@/lib/config/roles';
 import { METODOS_PAGO } from '@/lib/pagos/metodos';
@@ -37,30 +30,109 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-const COLORES = [
-  { label: 'Azul DGII',   value: '#1e40af' },
-  { label: 'Azul oscuro', value: '#1e3a5f' },
-  { label: 'Verde',       value: '#15803d' },
-  { label: 'Rojo',        value: '#b91c1c' },
-  { label: 'Morado',      value: '#7c3aed' },
-  { label: 'Naranja',     value: '#c2410c' },
-  { label: 'Gris oscuro', value: '#374151' },
-  { label: 'Negro',       value: '#111827' },
-];
+/** Formatea un monto DOP para los ejemplos (sin decimales si es entero). */
+function fmtEjemplo(dop: number): string {
+  return `RD$${dop.toLocaleString('es-DO', { maximumFractionDigits: 2 })}`;
+}
 
-const cardSx = { bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' };
-const cardHeaderSx = { px: 3, py: 2, borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 1 };
-const cardContentSx = { px: 3, py: 3 };
+/** Formatea una fecha para el ejemplo: "5 de agosto". */
+function fmtDiaMes(d: Date): string {
+  return d.toLocaleDateString('es-DO', { day: 'numeric', month: 'long' });
+}
+
+interface PasoEjemplo { fecha: string; titulo: string; detalle: string; monto?: string }
+
+/**
+ * Construye un ejemplo paso a paso de cómo se aplicaría la mora sobre una
+ * factura de RD$10,000, con la configuración actual. Solo para ilustrar en la UI.
+ */
+function construirEjemploMora(opts: {
+  modo: 'porcentaje' | 'fijo';
+  porcentaje: number;      // %
+  montoFijo: number;       // DOP
+  diasGracia: number;
+  periodicidad: number;    // días; 0 = una sola vez
+}): PasoEjemplo[] {
+  const base = 10_000;
+  const cargo = opts.modo === 'fijo'
+    ? opts.montoFijo
+    : Math.round(base * opts.porcentaje) / 100;
+  const hoy = new Date();
+  const masDias = (n: number) => { const d = new Date(hoy); d.setDate(d.getDate() + n); return d; };
+
+  const pasos: PasoEjemplo[] = [
+    {
+      fecha: fmtDiaMes(hoy),
+      titulo: 'Factura original',
+      detalle: `Monto ${fmtEjemplo(base)}. Vence este día.`,
+    },
+    {
+      fecha: fmtDiaMes(masDias(opts.diasGracia)),
+      titulo: 'Primer recargo',
+      detalle: opts.diasGracia > 0
+        ? `${opts.diasGracia} día${opts.diasGracia === 1 ? '' : 's'} después del vencimiento, si sigue sin pagarse.`
+        : 'Al día siguiente del vencimiento, si sigue sin pagarse.',
+      monto: fmtEjemplo(cargo),
+    },
+  ];
+
+  if (opts.periodicidad > 0) {
+    pasos.push({
+      fecha: fmtDiaMes(masDias(opts.diasGracia + opts.periodicidad)),
+      titulo: 'Segundo recargo',
+      detalle: `Si aún hay saldo, se cobra otra vez sobre el saldo pendiente.`,
+      monto: fmtEjemplo(cargo),
+    });
+    pasos.push({
+      fecha: `Cada ${opts.periodicidad} días`,
+      titulo: 'Se repite',
+      detalle: 'Hasta que se pague la factura o se alcance el límite (si tiene).',
+    });
+  } else {
+    pasos.push({
+      fecha: '—',
+      titulo: 'No se repite',
+      detalle: 'Se cobra una sola vez.',
+    });
+  }
+
+  return pasos;
+}
+
+/** Traduce la periodicidad en días a una frase clara para el usuario. */
+function etiquetaPeriodicidad(dias: number): string {
+  if (!dias || dias <= 0) return 'Se cobra una sola vez al vencer.';
+  const equivalente =
+    dias === 7  ? ' (semanal)' :
+    dias === 15 ? ' (quincenal)' :
+    dias === 30 ? ' (mensual)' :
+    dias === 60 ? ' (cada 2 meses)' :
+    dias === 90 ? ' (trimestral)' :
+    dias === 365 ? ' (anual)' : '';
+  return `Se repite cada ${dias} días${equivalente} mientras siga vencida.`;
+}
+
+const COLORES = [
+  { label: 'Azul DGII',    value: '#1e40af' },
+  { label: 'Azul oscuro',  value: '#1e3a5f' },
+  { label: 'Verde',        value: '#15803d' },
+  { label: 'Rojo',         value: '#b91c1c' },
+  { label: 'Morado',       value: '#7c3aed' },
+  { label: 'Naranja',      value: '#c2410c' },
+  { label: 'Gris oscuro',  value: '#374151' },
+  { label: 'Negro',        value: '#111827' },
+];
 
 // ─── Sub-componente: UploadImagen ─────────────────────────────────────────────
 
 function UploadImagen({
-  label, hint, value, onChange,
+  label, hint, value, onChange, disabled = false,
 }: {
   label: string;
   hint: string;
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -76,56 +148,69 @@ function UploadImagen({
   }
 
   return (
-    <Box>
-      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151', mb: 0.25 }}>{label}</Typography>
-      <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 1 }}>{hint}</Typography>
-      <Box
-        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">{label}</Label>
+      <p className="text-xs text-gray-500">{hint}</p>
+
+      <div
+        onDragOver={(e) => { if (disabled) return; e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={e => {
-          e.preventDefault(); setDragging(false);
-          const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+        onDrop={(e) => {
+          if (disabled) return;
+          e.preventDefault();
+          setDragging(false);
+          const f = e.dataTransfer.files[0];
+          if (f) handleFile(f);
         }}
-        onClick={() => inputRef.current?.click()}
-        sx={{
-          position: 'relative', border: '2px dashed', borderRadius: '12px', cursor: 'pointer',
-          minHeight: 100, transition: 'all 0.15s',
-          borderColor: dragging ? '#3b82f6' : '#e5e7eb',
-          bgcolor: dragging ? '#eff6ff' : '#f9fafb',
-          '&:hover': { borderColor: '#d1d5db' },
-        }}
+        className={`relative border-2 border-dashed rounded-xl transition-colors
+          ${disabled ? 'cursor-not-allowed opacity-60 bg-gray-50 border-gray-200' : `cursor-pointer ${dragging ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300 bg-gray-50'}`}`}
+        onClick={() => { if (!disabled) inputRef.current?.click(); }}
+        style={{ minHeight: 100 }}
       >
-        <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
+
         {value ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, gap: 2 }}>
-            <img src={value} alt={label} style={{ maxHeight: 80, maxWidth: 180, objectFit: 'contain', borderRadius: 6 }} />
-            <Box component="button" type="button"
-              onClick={e => { e.stopPropagation(); onChange(''); }}
-              sx={{ p: 0.75, borderRadius: '50%', bgcolor: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', '&:hover': { bgcolor: '#fecaca' }, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={16} />
-            </Box>
-          </Box>
+          <div className="flex items-center justify-center p-4 gap-4">
+            <img src={value} alt={label} className="max-h-20 max-w-[180px] object-contain rounded" />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onChange(''); }}
+              className="p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4, gap: 0.75, color: '#9ca3af' }}>
-            <Upload size={32} />
-            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>Arrastra o haz click para subir</Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>PNG, JPG, SVG · Máx 800 KB</Typography>
-          </Box>
+          <div className="flex flex-col items-center justify-center py-6 gap-2 text-gray-400">
+            <Upload className="h-8 w-8" />
+            <span className="text-sm">Arrastra o haz click para subir</span>
+            <span className="text-xs">PNG, JPG, SVG · Máx 800 KB</span>
+          </div>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function ConfiguracionPage() {
-  const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [saved, setSaved]       = useState(false);
-  const [error, setError]       = useState<string | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [saved, setSaved]         = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [role, setRole]           = useState<string | null>(null);
 
+  // Permisos derivados del rol
+  const canManage     = roleHasPermission(role, 'configuracion:gestionar');
+  const canManageTeam = roleHasPermission(role, 'equipo:gestionar');
+
+  // Campos
   const [razonSocial, setRazonSocial]           = useState('');
   const [nombreComercial, setNombreComercial]   = useState('');
   const [rnc, setRnc]                           = useState('');
@@ -135,21 +220,27 @@ export default function ConfiguracionPage() {
   const [emailFacturacion, setEmailFacturacion] = useState('');
   const [colorPrimario, setColorPrimario]       = useState('#1e40af');
   const [logo, setLogo]                         = useState('');
+  const [firma, setFirma]                       = useState('');
+  const [previewPDF, setPreviewPDF]             = useState(false);
   const [provincia, setProvincia]               = useState('');
   const [municipio, setMunicipio]               = useState('');
   // Recargo por mora
   const [recargoActivo, setRecargoActivo]               = useState(false);
-  // Doble confirmación del método de pago antes de cobrar.
-  const [alertaMetodoPagoActivo, setAlertaMetodoPagoActivo] = useState(false);
-  // Texto que se precarga en cada comprobante nuevo.
-  const [terminosDefault, setTerminosDefault]           = useState('');
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
+  const [recargoModo, setRecargoModo]                   = useState<'porcentaje' | 'fijo'>('porcentaje');
+  const [recargoMontoFijo, setRecargoMontoFijo]         = useState('500.00'); // mostrado en RD$
+  const [recargoDiasGracia, setRecargoDiasGracia]       = useState('0');      // días tras el vencimiento
+  const [recargoPeriodicidad, setRecargoPeriodicidad]   = useState('0');      // días; 0 = una sola vez
+  const [recargoTope, setRecargoTope]                   = useState('');       // % de mora acumulada; '' = sin tope
+  const [recargoMaxPeriodos, setRecargoMaxPeriodos]     = useState('');       // '' = sin límite
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
   // null = sin límite. Es el estado real por defecto: la función nace apagada.
   const [cajaLimiteHoras, setCajaLimiteHoras]           = useState<number | null>(null);
   const [cajaAvisoMinutos, setCajaAvisoMinutos]         = useState(60);
   const [cajaGraciaHoras, setCajaGraciaHoras]           = useState<number | null>(2);
+  // Alerta double-check del método de pago
+  const [alertaMetodoPagoActivo, setAlertaMetodoPagoActivo] = useState(false);
   // Módulo punto de venta (POS)
   const [posHabilitado, setPosHabilitado]               = useState(false);
   const [posEscolarHabilitado, setPosEscolarHabilitado] = useState(false);
@@ -157,12 +248,10 @@ export default function ConfiguracionPage() {
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
   const [metodosObligaDgii, setMetodosObligaDgii]      = useState<string[]>([]);
+  // Términos y condiciones que se precargan en cada comprobante nuevo
+  const [terminosDefault, setTerminosDefault]          = useState('');
 
-  // Rol del usuario activo → permisos de gestión (read-only para roles sin permiso)
-  const [role, setRole]           = useState<string | null>(null);
-  const canManage     = roleHasPermission(role, 'configuracion:gestionar');
-  const canManageTeam = roleHasPermission(role, 'equipo:gestionar');
-
+  // Cargar datos actuales
   useEffect(() => {
     fetch('/api/equipo/perfil')
       .then(r => r.json())
@@ -176,30 +265,44 @@ export default function ConfiguracionPage() {
         setEmailFacturacion(d.emailFacturacion ?? '');
         setColorPrimario(d.colorPrimario ?? '#1e40af');
         setLogo(d.logo ?? '');
+        setFirma(d.firma ?? '');
         setProvincia(d.provincia ?? '');
         setMunicipio(d.municipio ?? '');
+        // Recargo por mora — convertir bps → %
         setRecargoActivo(d.recargoMoraActivo ?? false);
-        setAlertaMetodoPagoActivo(d.alertaMetodoPagoActivo ?? false);
-        setTerminosDefault(d.terminosCondicionesDefault ?? '');
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
+        setRecargoModo(d.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje');
+        setRecargoMontoFijo(((d.recargoMoraMontoCents ?? 50000) / 100).toFixed(2));
+        setRecargoDiasGracia(String(d.recargoMoraDiasGracia ?? 0));
+        setRecargoPeriodicidad(String(d.recargoMoraPeriodicidadDias ?? 0));
+        setRecargoTope(d.recargoMoraTopeBps ? (d.recargoMoraTopeBps / 100).toFixed(0) : '');
+        setRecargoMaxPeriodos(d.recargoMoraMaxPeriodos ? String(d.recargoMoraMaxPeriodos) : '');
+        // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
         setCajaAvisoMinutos(d.cajaAvisoMinutos ?? 60);
         setCajaGraciaHoras(d.cajaGraciaHoras ?? null);
+        // Alerta método de pago
+        setAlertaMetodoPagoActivo(d.alertaMetodoPagoActivo ?? false);
         // Módulo POS
         setPosHabilitado(d.posHabilitado ?? false);
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
+        setTerminosDefault(d.terminosCondicionesDefault ?? '');
         setRole(d.role ?? null);
       })
       .finally(() => setLoading(false));
   }, []);
 
   async function handleSave() {
-    setSaving(true); setError(null); setSaved(false);
+    setSaving(true);
+    setError(null);
+    setSaved(false);
     try {
+      // Convertir % → bps para guardar (ej: "2.50" → 250)
       const pctBps = Math.round(parseFloat(recargoPorcentaje || '0') * 100);
+
       const res = await fetch('/api/equipo/perfil', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -207,23 +310,28 @@ export default function ConfiguracionPage() {
           razonSocial, nombreComercial, rnc, direccion,
           provincia, municipio,
           telefono, sitioWeb, emailFacturacion, colorPrimario,
-          logo,
+          logo, firma,
           recargoMoraActivo:     recargoActivo,
           recargoMoraPorcentaje: pctBps,
-          // La gracia NO se manda: esta pantalla no la edita, y mandarla en 0
-          // se la borraba a quien la tuviera puesta. El motor de mora la lee
-          // de la empresa (lib/cobranza/recargo.ts) y sin ella empezaba a
-          // recargar el día siguiente al vencimiento.
-          alertaMetodoPagoActivo,
-          terminosCondicionesDefault: terminosDefault,
+          recargoMoraModo:       recargoModo,
+          recargoMoraMontoCents: Math.round(parseFloat(recargoMontoFijo || '0') * 100),
+          recargoMoraDiasGracia: parseInt(recargoDiasGracia || '0', 10),
+          recargoMoraPeriodicidadDias: parseInt(recargoPeriodicidad || '0', 10),
+          // Mora sobre mora descartada: la mora siempre se calcula sobre el
+          // saldo de la factura (base simple). La columna queda en false.
+          recargoMoraCompuesta:  false,
+          recargoMoraTopeBps:    recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
+          recargoMoraMaxPeriodos: recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
           cajaHabilitada,
           cajaLimiteHoras,
           cajaAvisoMinutos,
           cajaGraciaHoras,
+          alertaMetodoPagoActivo,
           posHabilitado,
           posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
           metodosObligaDgii,
+          terminosCondicionesDefault: terminosDefault,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');
@@ -239,473 +347,922 @@ export default function ConfiguracionPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <CircularProgress size={36} sx={{ color: '#3658e1' }} />
-      </Box>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
     );
   }
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 3 }}>
-
-        {/* Header */}
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, justifyContent: 'space-between', gap: 2 }}>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: '#111827' }}>Configuración del negocio</Typography>
-            <Typography variant="body2" sx={{ color: '#6b7280', mt: 0.5 }}>Estos datos aparecen en todas tus facturas PDF</Typography>
-          </Box>
-          <Button variant="contained" disableElevation onClick={handleSave} disabled={saving}
-            startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : saved ? <CheckCircle size={16} /> : undefined}
-            sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, minWidth: 140 }}>
-            {saving ? 'Guardando…' : saved ? 'Guardado' : 'Guardar cambios'}
+    <div className="p-4 sm:p-6 min-h-full flex flex-col">
+      <div className="flex flex-col flex-1 gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Configuración del negocio</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Estos datos aparecen en todas tus facturas PDF
+          </p>
+        </div>
+        {canManage && (
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-teal-600 hover:bg-teal-700 sm:min-w-[130px] w-full sm:w-auto"
+          >
+            {saving ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
+            ) : saved ? (
+              <><CheckCircle className="h-4 w-4 mr-2" />Guardado</>
+            ) : (
+              'Guardar cambios'
+            )}
           </Button>
-        </Box>
+        )}
+      </div>
 
-        {error && <Alert severity="error" sx={{ borderRadius: '10px' }}>{error}</Alert>}
+      {!canManage && (
+        <div className="flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 text-sm text-sky-700">
+          <Lock className="h-4 w-4 shrink-0" />
+          Solo lectura — tu rol puede ver la configuración pero no modificarla.
+        </div>
+      )}
 
-        {/* 1. Datos fiscales */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <Building2 size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Datos fiscales</Typography>
-          </Box>
-          <Box sx={{ ...cardContentSx, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-            <TextField label="Razón Social" size="small" fullWidth placeholder="Empresa XYZ SRL"
-              value={razonSocial} onChange={e => setRazonSocial(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-            <TextField label="Nombre Comercial" size="small" fullWidth placeholder="MiTienda (opcional)"
-              value={nombreComercial} onChange={e => setNombreComercial(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-            <TextField label="RNC" size="small" fullWidth placeholder="130123456"
-              slotProps={{ htmlInput: { maxLength: 11 } }}
-              value={rnc} onChange={e => setRnc(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-            <TextField label="Teléfono" size="small" fullWidth placeholder="(809) 000-0000"
-              slotProps={{ htmlInput: { inputMode: 'tel' } }}
-              value={telefono} onChange={e => setTelefono(formatTelefonoDO(e.target.value))}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-            <TextField label="Dirección" size="small" fullWidth placeholder="Calle y número"
-              value={direccion} onChange={e => setDireccion(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' }, gridColumn: { md: 'span 2' } }} />
-            <Box sx={{ gridColumn: { md: 'span 2' } }}>
-              <ProvinciaMunicipioSelect
-                provincia={provincia}
-                municipio={municipio}
-                onProvinciaChange={setProvincia}
-                onMunicipioChange={setMunicipio}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4">
+          {error}
+        </div>
+      )}
+
+      {/* 1. Datos fiscales */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-teal-600" />
+            Datos fiscales
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Razón Social</Label>
+            <Input value={razonSocial} onChange={e => setRazonSocial(e.target.value)}
+              placeholder="Empresa XYZ SRL" disabled={!canManage} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Nombre Comercial</Label>
+            <Input value={nombreComercial} onChange={e => setNombreComercial(e.target.value)}
+              placeholder="MiTienda (opcional)" disabled={!canManage} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>RNC</Label>
+            <Input value={rnc} onChange={e => setRnc(e.target.value)}
+              placeholder="130123456" maxLength={11} disabled={!canManage} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Teléfono</Label>
+            <Input value={telefono} onChange={e => setTelefono(formatTelefonoDO(e.target.value))}
+              inputMode="tel"
+              placeholder="(809) 000-0000" disabled={!canManage} />
+          </div>
+          <div className="space-y-1.5 md:col-span-2">
+            <Label>Dirección</Label>
+            <Input value={direccion} onChange={e => setDireccion(e.target.value)}
+              placeholder="Calle y número" disabled={!canManage} />
+          </div>
+          {/* Provincia / Municipio en cascada */}
+          <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>
+            <ProvinciaMunicipioSelect
+              provincia={provincia}
+              municipio={municipio}
+              onProvinciaChange={setProvincia}
+              onMunicipioChange={setMunicipio}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email de facturación</Label>
+            <Input type="email" value={emailFacturacion}
+              onChange={e => setEmailFacturacion(e.target.value)}
+              placeholder="facturacion@empresa.com" disabled={!canManage} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Sitio web</Label>
+            <Input value={sitioWeb} onChange={e => setSitioWeb(e.target.value)}
+              placeholder="www.miempresa.com" disabled={!canManage} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 2. Logo */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ImageIcon className="h-4 w-4 text-teal-600" />
+            Logo de la empresa
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <UploadImagen
+            label="Logo"
+            hint="Aparece en la esquina superior izquierda de cada factura. Fondo transparente recomendado."
+            value={logo}
+            onChange={setLogo}
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
+
+      {/* 3. Firma */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <PenLine className="h-4 w-4 text-teal-600" />
+            Firma autorizada
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <UploadImagen
+            label="Imagen de firma"
+            hint="Aparece en el pie de cada factura. Usa fondo blanco o transparente."
+            value={firma}
+            onChange={setFirma}
+            disabled={!canManage}
+          />
+        </CardContent>
+      </Card>
+
+      {/* 4. Color */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Palette className="h-4 w-4 text-teal-600" />
+            Color de marca
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Se usa en el encabezado, tabla y totales del PDF de la factura.
+          </p>
+
+          {/* Paleta rápida */}
+          <div className={`flex flex-wrap gap-2 ${!canManage ? 'pointer-events-none opacity-60' : ''}`}>
+            {COLORES.map(c => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setColorPrimario(c.value)}
+                title={c.label}
+                disabled={!canManage}
+                className={`w-9 h-9 rounded-full border-2 transition-all ${
+                  colorPrimario === c.value
+                    ? 'border-gray-900 scale-110 shadow-md'
+                    : 'border-transparent hover:scale-105'
+                }`}
+                style={{ backgroundColor: c.value }}
               />
-            </Box>
-            <TextField label="Email de facturación" size="small" fullWidth type="email" placeholder="facturacion@empresa.com"
-              value={emailFacturacion} onChange={e => setEmailFacturacion(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-            <TextField label="Sitio web" size="small" fullWidth placeholder="www.miempresa.com"
-              value={sitioWeb} onChange={e => setSitioWeb(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-          </Box>
-        </Box>
+            ))}
+          </div>
 
-        {/* 2. Logo */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <ImageIcon size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Logo de la empresa</Typography>
-          </Box>
-          <Box sx={cardContentSx}>
-            <UploadImagen label="Logo"
-              hint="Aparece en la esquina superior izquierda de cada factura. Fondo transparente recomendado."
-              value={logo} onChange={setLogo} />
-          </Box>
-        </Box>
+          {/* Picker manual */}
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={colorPrimario}
+              onChange={e => setColorPrimario(e.target.value)}
+              disabled={!canManage}
+              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+            <Input
+              value={colorPrimario}
+              onChange={e => setColorPrimario(e.target.value)}
+              placeholder="#1e40af"
+              className="w-32 font-mono"
+              maxLength={7}
+              disabled={!canManage}
+            />
+            <div
+              className="flex-1 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-white text-sm font-medium"
+              style={{ backgroundColor: colorPrimario }}
+            >
+              Vista previa
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* 4. Color de marca */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <Palette size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Color de marca</Typography>
-          </Box>
-          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="body2" sx={{ color: '#6b7280' }}>
-              Se usa en el encabezado, tabla y totales del PDF de la factura.
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {COLORES.map(c => (
-                <Box key={c.value} component="button" type="button" title={c.label}
-                  onClick={() => setColorPrimario(c.value)}
-                  sx={{
-                    width: 36, height: 36, borderRadius: '50%', border: '2px solid', cursor: 'pointer',
-                    borderColor: colorPrimario === c.value ? '#111827' : 'transparent',
-                    bgcolor: c.value, transition: 'transform 0.15s',
-                    transform: colorPrimario === c.value ? 'scale(1.15)' : 'scale(1)',
-                    '&:hover': { transform: 'scale(1.1)' },
-                    boxShadow: colorPrimario === c.value ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
-                  }} />
-              ))}
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box component="input" type="color" value={colorPrimario} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setColorPrimario(e.target.value)}
-                sx={{ width: 40, height: 40, border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', p: 0.5 }} />
-              <TextField size="small" value={colorPrimario} onChange={e => setColorPrimario(e.target.value)}
-                placeholder="#1e40af" slotProps={{ htmlInput: { maxLength: 7 } }}
-                sx={{ width: 120, '& .MuiOutlinedInput-root': { borderRadius: '8px', fontFamily: 'monospace' } }} />
-              <Box sx={{ flex: 1, height: 40, borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: colorPrimario }}>
-                <Typography sx={{ color: '#fff', fontSize: '0.875rem', fontWeight: 500 }}>Vista previa</Typography>
-              </Box>
-            </Box>
-          </Box>
-        </Box>
+      {/* Preview visual del encabezado */}
+      <Card className="border-dashed">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Eye className="h-4 w-4 text-teal-600" />
+            Previsualización del encabezado
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-xl border overflow-hidden">
+            {/* Simula el header del PDF */}
+            <div
+              className="flex items-center justify-between p-4 text-white"
+              style={{ backgroundColor: colorPrimario }}
+            >
+              {logo ? (
+                <img src={logo} alt="Logo" className="h-12 object-contain bg-white rounded p-1" />
+              ) : (
+                <div className="bg-white/20 rounded px-3 py-2 text-sm font-bold">
+                  {(nombreComercial || razonSocial || 'LOGO').substring(0, 8).toUpperCase()}
+                </div>
+              )}
+              <div className="text-right">
+                <div className="text-xl font-bold tracking-widest">e-CF</div>
+                <div className="text-sm opacity-80 font-mono">E320000000001</div>
+                <div className="text-xs opacity-70">Factura de Consumo</div>
+              </div>
+            </div>
+            <div className="p-4 bg-white text-sm text-gray-700 space-y-0.5">
+              <p className="font-bold">{nombreComercial || razonSocial || 'Nombre de tu empresa'}</p>
+              <p className="text-gray-500">RNC: {rnc || '000-00000-0'}</p>
+              {direccion && <p className="text-gray-500">{direccion}</p>}
+              {telefono && <p className="text-gray-500">Tel: {telefono}</p>}
+              {emailFacturacion && <p className="text-gray-500">{emailFacturacion}</p>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Vista previa encabezado */}
-        <Box sx={{ ...cardSx, border: '1px dashed #d1d5db' }}>
-          <Box sx={cardHeaderSx}>
-            <Eye size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Previsualización del encabezado</Typography>
-          </Box>
-          <Box sx={cardContentSx}>
-            <Box sx={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, bgcolor: colorPrimario }}>
-                {logo ? (
-                  <img src={logo} alt="Logo" style={{ height: 48, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 4 }} />
-                ) : (
-                  <Box sx={{ bgcolor: 'rgba(255,255,255,0.2)', borderRadius: '6px', px: 1.5, py: 1, color: '#fff', fontWeight: 700, fontSize: '0.875rem' }}>
-                    {(nombreComercial || razonSocial || 'LOGO').substring(0, 8).toUpperCase()}
-                  </Box>
-                )}
-                <Box sx={{ textAlign: 'right', color: '#fff' }}>
-                  <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '0.1em' }}>e-CF</Typography>
-                  <Typography sx={{ fontSize: '0.8125rem', opacity: 0.8, fontFamily: 'monospace' }}>E320000000001</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.7 }}>Factura de Consumo</Typography>
-                </Box>
-              </Box>
-              <Box sx={{ p: 2, bgcolor: '#fff' }}>
-                <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{nombreComercial || razonSocial || 'Nombre de tu empresa'}</Typography>
-                <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>RNC: {rnc || '000-00000-0'}</Typography>
-                {direccion && <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{direccion}</Typography>}
-                {telefono && <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>Tel: {telefono}</Typography>}
-                {emailFacturacion && <Typography sx={{ fontSize: '0.8125rem', color: '#6b7280' }}>{emailFacturacion}</Typography>}
-              </Box>
-            </Box>
-          </Box>
-        </Box>
+      {/* Padrón DGII se sincroniza automáticamente vía cron diario — no UI expuesta */}
 
-        {/* 5. Plazo de pago */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <AlertCircle size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Plazo de pago</Typography>
-          </Box>
-          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="body2" sx={{ color: '#6b7280' }}>
-              Plazo de pago por defecto al crear una factura nueva o recurrente. Puedes cambiarlo en cada factura.
-            </Typography>
-            <Box sx={{ maxWidth: 320 }}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Plazo de pago por defecto</InputLabel>
-                <Select value={plazoDefaultDias || 'contado'} label="Plazo de pago por defecto"
-                  onChange={e => setPlazoDefaultDias(e.target.value === 'contado' ? '' : e.target.value)}
-                  sx={{ borderRadius: '8px' }}>
-                  <MenuItem value="contado">De contado</MenuItem>
-                  <MenuItem value="8">8 días</MenuItem>
-                  <MenuItem value="15">15 días</MenuItem>
-                  <MenuItem value="30">30 días</MenuItem>
-                  <MenuItem value="60">60 días</MenuItem>
-                </Select>
-              </FormControl>
-              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.75 }}>
-                «De contado» no genera fecha de vencimiento.
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
+      {/* 5. Plazo de pago por defecto — solo roles con configuracion:gestionar */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-teal-600" />
+            Plazo de pago
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Plazo de pago por defecto al crear una factura nueva o recurrente.
+            Puedes cambiarlo en cada factura.
+          </p>
+          <div className="space-y-1.5 md:max-w-xs">
+            <Label>Plazo de pago por defecto</Label>
+            <Select value={plazoDefaultDias || 'contado'} onValueChange={v => setPlazoDefaultDias(v === 'contado' ? '' : v)}>
+              <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contado">De contado</SelectItem>
+                <SelectItem value="8">8 días</SelectItem>
+                <SelectItem value="15">15 días</SelectItem>
+                <SelectItem value="30">30 días</SelectItem>
+                <SelectItem value="60">60 días</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-400">
+              «De contado» no genera fecha de vencimiento.
+            </p>
+          </div>
+        </CardContent>
+      </Card>}
 
-        {/* 5a. Términos y condiciones por defecto */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <FileText size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Términos y condiciones</Typography>
-          </Box>
-          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <Typography variant="body2" sx={{ color: '#6b7280' }}>
-              Este texto se escribe solo al crear una factura o cotización nueva, para no
-              reescribirlo cada vez. Es una plantilla: queda dentro del documento y ahí se
-              puede editar. Cambiarlo aquí no reescribe lo ya emitido.
-            </Typography>
-            <TextField multiline minRows={3} fullWidth size="small"
-              placeholder="Ej. Precios sujetos a cambio sin previo aviso. Válido por 30 días."
-              value={terminosDefault} onChange={e => setTerminosDefault(e.target.value)}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-          </Box>
-        </Box>
+      {/* 5a. Términos y condiciones por defecto */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4 text-teal-600" />
+            Términos y condiciones
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-500">
+            Este texto se escribe solo al crear una factura o cotización nueva, para
+            no repetirlo cada vez. En cada documento lo puedes editar o borrar.
+          </p>
+          <textarea
+            className="w-full min-h-[120px] text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300 disabled:bg-gray-50"
+            placeholder="Ej: Pago a 30 días. Transferencias a la cuenta 000000001 del Banco Popular."
+            value={terminosDefault}
+            onChange={e => setTerminosDefault(e.target.value.slice(0, 2000))}
+            disabled={!canManage}
+          />
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Cambiarlo aquí no modifica los comprobantes ya emitidos.</span>
+            <span>{terminosDefault.length}/2000</span>
+          </div>
+        </CardContent>
+      </Card>}
 
-        {/* 5b. Doble confirmación del método de pago */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <Wallet size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Confirmar el método de pago</Typography>
-          </Box>
-          <Box sx={{ ...cardContentSx, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-            <Box>
-              <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>
-                Preguntar antes de cobrar
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
-                Muestra el método elegido para que se confirme antes de emitir. Evita el
-                efectivo apuntado como tarjeta, que después no cuadra en el cierre de caja.
-              </Typography>
-            </Box>
-            <Switch checked={alertaMetodoPagoActivo} onChange={(_, v) => setAlertaMetodoPagoActivo(v)} color="primary"
-              sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
-          </Box>
-        </Box>
+      {/* 5b. Métodos que obligan emisión a la DGII — solo configuracion:gestionar */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-teal-600" />
+            Métodos que obligan facturar a la DGII
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Cuando una factura registra un cobro con alguno de estos métodos, no se
+            podrá guardar sin emitir: habrá que emitirla a la DGII. Útil, por
+            ejemplo, para que toda venta con tarjeta quede fiscalizada.
+          </p>
 
-        {/* 6. Recargo por mora */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <AlertCircle size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Recargo por mora</Typography>
-          </Box>
-          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="body2" sx={{ color: '#6b7280' }}>
-              Aplica automáticamente un recargo a facturas a crédito vencidas. El recargo se suma al saldo de cobranza — el documento fiscal original no se modifica.
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar recargo por mora</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
-                  El cron diario (09:00 UTC) aplicará el recargo una sola vez por factura.
-                </Typography>
-              </Box>
-              <Switch checked={recargoActivo} onChange={(_, v) => setRecargoActivo(v)} color="primary"
-                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
-            </Box>
-            <Box sx={{ opacity: recargoActivo ? 1 : 0.4, pointerEvents: recargoActivo ? 'auto' : 'none', transition: 'opacity 0.2s', maxWidth: 320 }}>
-              <TextField label="Porcentaje de recargo (%)" size="small" fullWidth type="number"
-                slotProps={{ htmlInput: { step: 0.01, min: 0.01, max: 100 }, input: { endAdornment: <InputAdornment position="end">%</InputAdornment> } }}
-                placeholder="2.00" value={recargoPorcentaje} onChange={e => setRecargoPorcentaje(e.target.value)}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
-              <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.75 }}>
-                Se aplica al vencer la factura. Default: 2.00% (200 basis points).
-              </Typography>
-            </Box>
-            {recargoActivo && (
-              <Alert severity="warning" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
-                <strong>Nota fiscal:</strong> El recargo NO modifica la factura electrónica emitida ante la DGII.
-                Solo se suma al saldo visible en Cuentas por cobrar y en tickets de cobranza.
-              </Alert>
-            )}
-          </Box>
-        </Box>
-
-        {/* 7. Módulo de caja */}
-        <Box sx={cardSx}>
-          <Box sx={cardHeaderSx}>
-            <Wallet size={16} color="#3658e1" />
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Cuadre de Caja</Typography>
-          </Box>
-          <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="body2" sx={{ color: '#6b7280' }}>
-              Habilita el módulo de apertura y cierre de turnos de caja. Los cajeros deberán abrir un turno antes de emitir facturas, y el sistema calculará automáticamente el efectivo esperado al cierre.
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar cuadre de caja</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
-                  Aparecerá el menú "Caja" en el panel y se requerirá turno abierto para facturar.
-                </Typography>
-              </Box>
-              <Switch checked={cajaHabilitada} onChange={(_, v) => setCajaHabilitada(v)} color="primary"
-                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
-            </Box>
-            {cajaHabilitada && (
-              <>
-                {/* Límite de duración del turno */}
-                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' } }}>
-                  <Box>
-                    <Typography variant="body2" component="label" htmlFor="caja-limite" sx={{ fontWeight: 500, color: '#1f2937' }}>
-                      Límite del turno (horas)
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25, mb: 0.75 }}>
-                      Vacío = sin límite ni avisos.
-                    </Typography>
-                    <TextField
-                      id="caja-limite"
-                      type="number"
-                      size="small"
-                      fullWidth
-                      placeholder="8"
-                      value={cajaLimiteHoras ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        setCajaLimiteHoras(v === '' ? null : parseInt(v, 10));
-                      }}
-                      slotProps={{ htmlInput: { min: 1, max: 24 } }}
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
-                    />
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" component="label" htmlFor="caja-aviso" sx={{ fontWeight: 500, color: '#1f2937' }}>
-                      Avisar desde (min antes)
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25, mb: 0.75 }}>
-                      Cuándo aparece el contador arriba.
-                    </Typography>
-                    <TextField
-                      id="caja-aviso"
-                      type="number"
-                      size="small"
-                      fullWidth
-                      placeholder="60"
-                      value={cajaAvisoMinutos}
-                      onChange={(e) => setCajaAvisoMinutos(parseInt(e.target.value, 10) || 60)}
-                      slotProps={{ htmlInput: { min: 5, max: 240 } }}
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
-                    />
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" component="label" htmlFor="caja-gracia" sx={{ fontWeight: 500, color: '#1f2937' }}>
-                      Gracia antes de bloquear (h)
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25, mb: 0.75 }}>
-                      Vacío o 0 = nunca bloquea, solo avisa.
-                    </Typography>
-                    <TextField
-                      id="caja-gracia"
-                      type="number"
-                      size="small"
-                      fullWidth
-                      placeholder="2"
-                      value={cajaGraciaHoras ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        setCajaGraciaHoras(v === '' ? null : parseInt(v, 10));
-                      }}
-                      slotProps={{ htmlInput: { min: 0, max: 12 } }}
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
-                    />
-                  </Box>
-                </Box>
-
-                <Alert severity="info" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
-                  <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
-                  debe abrir su turno antes de emitir o cobrar. Los cierres con descuadre requieren
-                  aprobación de un admin u owner.
-                </Alert>
-
-                {cajaLimiteHoras ? (
-                  <Alert severity={cajaGraciaHoras ? 'warning' : 'info'} sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
-                    {cajaGraciaHoras ? (
-                      <>
-                        <strong>Bloqueo activo:</strong> el contador aparece a las{' '}
-                        {cajaLimiteHoras}h menos {cajaAvisoMinutos} min. A las {cajaLimiteHoras}h el
-                        turno vence, y a las {cajaLimiteHoras + cajaGraciaHoras}h el cajero{' '}
-                        <strong>no podrá facturar ni cobrar</strong> hasta cerrar caja.
-                      </>
-                    ) : (
-                      <>
-                        <strong>Solo avisa:</strong> el contador aparece a las {cajaLimiteHoras}h menos{' '}
-                        {cajaAvisoMinutos} min y el turno vence a las {cajaLimiteHoras}h, pero el cajero
-                        puede seguir facturando indefinidamente.
-                      </>
+          <div className="space-y-2">
+            {METODOS_PAGO.map(m => {
+              const activo = metodosObligaDgii.includes(m.value);
+              return (
+                <div
+                  key={m.value}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3"
+                >
+                  <p className="text-sm font-medium text-gray-800">{m.label}</p>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={activo}
+                    aria-label={`Obligar DGII para ${m.label}`}
+                    onClick={() => setMetodosObligaDgii(prev =>
+                      prev.includes(m.value)
+                        ? prev.filter(v => v !== m.value)
+                        : [...prev, m.value],
                     )}
-                  </Alert>
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                      activo ? 'bg-teal-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        activo ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {metodosObligaDgii.length > 0 && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
+              <strong>Activo:</strong> las facturas cobradas con{' '}
+              {metodosObligaDgii.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
+              no se podrán guardar sin emitir — se deben emitir a la DGII.
+            </div>
+          )}
+        </CardContent>
+      </Card>}
+
+      {/* 6. Recargo por mora — solo roles con configuracion:gestionar */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-teal-600" />
+            Recargo por mora
+          </CardTitle>
+          <p className="text-sm text-gray-500 mt-1">Cobra un extra cuando la factura se paga tarde.</p>
+        </CardHeader>
+        <CardContent className="space-y-5">
+
+          {/* Toggle Activado */}
+          <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 transition-colors ${
+            recargoActivo ? 'border-teal-200 bg-teal-50/60' : 'border-gray-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={recargoActivo}
+                onClick={() => setRecargoActivo(v => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                  recargoActivo ? 'bg-teal-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  recargoActivo ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+              <div>
+                <p className={`text-sm font-semibold ${recargoActivo ? 'text-teal-700' : 'text-gray-500'}`}>
+                  {recargoActivo ? 'Activado' : 'Desactivado'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Se aplicarán recargos automáticamente a las facturas a crédito vencidas.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Layout: formulario (izq) + ejemplo (der) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+
+            {/* ── FORM ─────────────────────────────────────────────── */}
+            <div className={`space-y-6 ${recargoActivo ? '' : 'opacity-40 pointer-events-none'}`}>
+
+              {/* Sección 1: ¿Cuánto cobrar? */}
+              <section className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">1</span>
+                  ¿Cuánto cobrar?
+                </h3>
+                <div className="space-y-1.5 md:max-w-sm">
+                  <Label>Tipo de recargo</Label>
+                  <Select value={recargoModo} onValueChange={v => setRecargoModo(v as 'porcentaje' | 'fijo')}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="porcentaje">Porcentaje del saldo pendiente</SelectItem>
+                      <SelectItem value="fijo">Monto fijo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {recargoModo === 'porcentaje' ? (
+                  <div className="space-y-1.5 md:max-w-sm">
+                    <Label>Porcentaje de recargo</Label>
+                    <div className="relative">
+                      <Input
+                        type="number" step="0.01" min="0.01" max="100"
+                        value={recargoPorcentaje}
+                        onChange={e => setRecargoPorcentaje(e.target.value)}
+                        placeholder="2.00" className="pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Se cobrará el {parseFloat(recargoPorcentaje || '0').toFixed(2)}% del saldo pendiente.
+                    </p>
+                  </div>
                 ) : (
-                  <Alert severity="info" sx={{ borderRadius: '8px', fontSize: '0.75rem' }}>
-                    Sin límite de duración: los turnos pueden quedar abiertos indefinidamente y no se
-                    muestra contador.
-                  </Alert>
+                  <div className="space-y-1.5 md:max-w-sm">
+                    <Label>Monto fijo del recargo</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">RD$</span>
+                      <Input
+                        type="number" step="0.01" min="0.01"
+                        value={recargoMontoFijo}
+                        onChange={e => setRecargoMontoFijo(e.target.value)}
+                        placeholder="500.00" className="pl-11"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400">Se cobra este monto exacto en cada recargo.</p>
+                  </div>
                 )}
-              </>
-            )}
-          </Box>
-        </Box>
+              </section>
 
-        {/* 8. Punto de venta (POS) */}
-        <Box sx={cardSx}>
-            <Box sx={cardHeaderSx}>
-              <Store style={{ width: 16, height: 16, color: '#3658e1' }} />
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Punto de venta (POS)</Typography>
-            </Box>
-            <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                Habilita la pantalla de punto de venta para ventas rápidas de mostrador. Ideal para tiendas, colmados, cafeterías y cantinas escolares.
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Activar punto de venta</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
-                    Aparecerá el módulo «POS» en el panel para registrar ventas rápidas de mostrador.
-                  </Typography>
-                </Box>
-                <Switch checked={posHabilitado} onChange={(_, v) => setPosHabilitado(v)} color="primary"
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #e5e7eb', borderRadius: '12px', px: 2, py: 1.5 }}>
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1f2937' }}>Modo monedero escolar</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', mt: 0.25 }}>
-                    Habilita saldos por estudiante y consumo con monedero prepago en el punto de venta.
-                  </Typography>
-                </Box>
-                <Switch checked={posEscolarHabilitado} onChange={(_, v) => setPosEscolarHabilitado(v)} color="primary"
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
-              </Box>
-            </Box>
-          </Box>
+              {/* Sección 2: ¿Cuándo empezar? */}
+              <section className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">2</span>
+                  ¿Cuándo empezar?
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Días de gracia</Label>
+                    <div className="relative">
+                      <Input
+                        type="number" step="1" min="0" max="365"
+                        value={recargoDiasGracia}
+                        onChange={e => setRecargoDiasGracia(e.target.value)}
+                        placeholder="0" className="pr-16"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Días después del vencimiento antes de aplicar el primer recargo. 0 = al día siguiente.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>¿Cada cuánto se repite?</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { dias: 0,  label: 'Una sola vez' },
+                        { dias: 15, label: 'Cada 15 días' },
+                        { dias: 30, label: 'Cada 30 días' },
+                        { dias: 60, label: 'Cada 60 días' },
+                      ].map(opt => {
+                        const activo = parseInt(recargoPeriodicidad || '0', 10) === opt.dias;
+                        return (
+                          <button
+                            key={opt.dias}
+                            type="button"
+                            onClick={() => setRecargoPeriodicidad(String(opt.dias))}
+                            className={`rounded-lg border px-3 py-2 text-xs transition-colors ${
+                              activo
+                                ? 'border-teal-600 bg-teal-50 text-teal-700 font-medium'
+                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Días personalizados: para cualquier valor fuera de los presets. */}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-gray-400 shrink-0">o cada</span>
+                      <div className="relative w-24">
+                        <Input
+                          type="number" step="1" min="0" max="365"
+                          value={recargoPeriodicidad}
+                          onChange={e => setRecargoPeriodicidad(e.target.value)}
+                          placeholder="0"
+                          className="h-9 pr-10 text-sm"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {etiquetaPeriodicidad(parseInt(recargoPeriodicidad || '0', 10))}
+                    </p>
+                  </div>
+                </div>
+              </section>
 
-        {/* 9. Métodos que obligan facturar a la DGII */}
-        <Box sx={cardSx}>
-            <Box sx={cardHeaderSx}>
-              <CreditCard size={16} color="#3658e1" />
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#374151' }}>Métodos que obligan facturar a la DGII</Typography>
-            </Box>
-            <Box sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="body2" sx={{ color: '#6b7280' }}>
-                Cuando una factura registra un cobro con alguno de estos métodos, no se podrá guardar como borrador: habrá que emitirla a la DGII.
-              </Typography>
-              <Box sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
-                {METODOS_PAGO.map((m, i) => (
-                  <Box key={m.value}
-                    sx={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      px: 2, py: 1.25,
-                      borderTop: i === 0 ? 'none' : '1px solid #f3f4f6',
-                    }}>
-                    <Typography variant="body2" sx={{ color: '#1f2937' }}>{m.label}</Typography>
-                    <Switch
-                      checked={metodosObligaDgii.includes(m.value)}
-                      onChange={(_, v) => setMetodosObligaDgii(
-                        v ? [...metodosObligaDgii, m.value] : metodosObligaDgii.filter(x => x !== m.value)
+              {/* Sección 3: ¿Poner límites? (opcional) */}
+              <section className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">3</span>
+                  ¿Poner límites al recargo?
+                  <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Límite del monto total</Label>
+                    <Select
+                      value={recargoTope === '' ? 'sin' : recargoTope}
+                      onValueChange={v => setRecargoTope(v === 'sin' ? '' : v)}
+                    >
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sin">Sin límite</SelectItem>
+                        {recargoTope && !['25', '50', '100', '150', '200'].includes(recargoTope) && (
+                          <SelectItem value={recargoTope}>{recargoTope}% de la factura</SelectItem>
+                        )}
+                        <SelectItem value="25">25% de la factura</SelectItem>
+                        <SelectItem value="50">50% de la factura</SelectItem>
+                        <SelectItem value="100">100% de la factura</SelectItem>
+                        <SelectItem value="150">150% de la factura</SelectItem>
+                        <SelectItem value="200">200% de la factura</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-400">
+                      Máximo que se puede cobrar de recargos en esta factura.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Máximo de veces que se aplica</Label>
+                    <Select
+                      value={recargoMaxPeriodos === '' ? 'sin' : recargoMaxPeriodos}
+                      onValueChange={v => setRecargoMaxPeriodos(v === 'sin' ? '' : v)}
+                    >
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sin">Sin límite</SelectItem>
+                        {recargoMaxPeriodos && !['1', '3', '6', '12'].includes(recargoMaxPeriodos) && (
+                          <SelectItem value={recargoMaxPeriodos}>{recargoMaxPeriodos} veces</SelectItem>
+                        )}
+                        <SelectItem value="1">1 vez</SelectItem>
+                        <SelectItem value="3">3 veces</SelectItem>
+                        <SelectItem value="6">6 veces</SelectItem>
+                        <SelectItem value="12">12 veces</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-400">
+                      Número máximo de recargos que se aplicarán.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* ── ASÍ FUNCIONA (ejemplo dinámico) ──────────────────── */}
+            <aside className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 h-fit lg:sticky lg:top-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Así funciona (ejemplo)</h3>
+              <ol className="space-y-3">
+                {construirEjemploMora({
+                  modo: recargoModo,
+                  porcentaje: parseFloat(recargoPorcentaje || '0'),
+                  montoFijo: parseFloat(recargoMontoFijo || '0'),
+                  diasGracia: parseInt(recargoDiasGracia || '0', 10),
+                  periodicidad: parseInt(recargoPeriodicidad || '0', 10),
+                }).map((paso, i) => (
+                  <li key={i} className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <span className="mt-0.5 h-2 w-2 rounded-full bg-teal-500 shrink-0" />
+                      {i < 3 && <span className="flex-1 w-px bg-gray-200 my-1" />}
+                    </div>
+                    <div className="min-w-0 -mt-1">
+                      <p className="text-xs font-semibold text-gray-900">{paso.titulo}</p>
+                      <p className="text-[11px] text-gray-500">{paso.fecha}</p>
+                      <p className="text-xs text-gray-600 mt-0.5">{paso.detalle}</p>
+                      {paso.monto && (
+                        <p className="text-xs font-semibold text-teal-700 mt-0.5">= {paso.monto}</p>
                       )}
-                      color="primary"
-                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#3658e1' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3658e1' } }} />
-                  </Box>
+                    </div>
+                  </li>
                 ))}
-              </Box>
-            </Box>
-          </Box>
+              </ol>
+              <p className="mt-3 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-[11px] text-amber-800">
+                El recargo siempre se calcula sobre el saldo pendiente. Los recargos anteriores no
+                generan nuevos recargos.
+              </p>
+            </aside>
+          </div>
 
-        {/* Equipo y permisos */}
-        <EquipoCard />
+          {/* Resumen de tu configuración */}
+          <div className="rounded-xl border border-teal-100 bg-teal-50/50 px-4 py-3.5">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-3">
+              <CheckCircle className="h-4 w-4 text-teal-600" />
+              Resumen de tu configuración
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div>
+                <p className="text-gray-500">Recargo</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {recargoModo === 'fijo'
+                    ? `${fmtEjemplo(parseFloat(recargoMontoFijo || '0'))} fijo`
+                    : `${parseFloat(recargoPorcentaje || '0').toFixed(2)}% del saldo`}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Inicia</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {parseInt(recargoDiasGracia || '0', 10) > 0
+                    ? `${recargoDiasGracia} días después del vencimiento`
+                    : 'Al día siguiente del vencimiento'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Se repite</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {parseInt(recargoPeriodicidad || '0', 10) > 0
+                    ? `Cada ${recargoPeriodicidad} días`
+                    : 'Una sola vez'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Límites</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {recargoTope ? `Hasta ${recargoTope}% de la factura` : 'Sin límite de monto'}
+                  {recargoMaxPeriodos ? ` · máx. ${recargoMaxPeriodos} veces` : ' · sin límite de veces'}
+                </p>
+              </div>
+            </div>
+          </div>
 
-        {/* WhatsApp Business */}
-        <WhatsAppCard />
+          {recargoActivo && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
+              <strong>Nota fiscal:</strong> El recargo NO modifica la factura electrónica emitida ante la DGII.
+              Solo se suma al saldo visible en Cuentas por cobrar y en los tickets de cobranza.
+            </div>
+          )}
+        </CardContent>
+      </Card>}
 
-      </Box>
+      {/* 6. Módulo de caja — solo roles con configuracion:gestionar */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-teal-600" />
+            Cuadre de Caja
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Habilita el módulo de apertura y cierre de turnos de caja. Los cajeros deberán
+            abrir un turno antes de emitir facturas, y el sistema calculará automáticamente
+            el efectivo esperado al cierre.
+          </p>
 
-      {/* Sticky bottom bar */}
-      <Box sx={{
-        position: 'sticky', bottom: 0, zIndex: 30,
-        mx: { xs: -2, sm: -3 }, px: { xs: 2, sm: 3 }, mt: 'auto', py: 1.5,
-        bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)',
-        borderTop: '1px solid #e5e7eb', boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)',
-        display: 'flex', justifyContent: 'flex-end',
-      }}>
-        <Button variant="contained" disableElevation onClick={handleSave} disabled={saving}
-          startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : saved ? <CheckCircle size={16} /> : <Loader2 size={16} style={{ opacity: 0 }} />}
-          sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#3658e1', '&:hover': { bgcolor: '#2a45c4' }, minWidth: 160 }}>
-          {saving ? 'Guardando…' : saved ? '¡Guardado!' : 'Guardar cambios'}
-        </Button>
-      </Box>
-    </Box>
+          {/* Toggle activar */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Activar cuadre de caja</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Aparecerá el menú "Caja" en el panel y se requerirá turno abierto para facturar.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={cajaHabilitada}
+              onClick={() => setCajaHabilitada(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                cajaHabilitada ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  cajaHabilitada ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {cajaHabilitada && (
+            <>
+              {/* Límite de duración del turno */}
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="caja-limite" className="text-sm font-medium text-gray-800">
+                    Límite del turno (horas)
+                  </label>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-1.5">
+                    Vacío = sin límite ni avisos.
+                  </p>
+                  <Input
+                    id="caja-limite"
+                    type="number"
+                    min={1}
+                    max={24}
+                    className="h-9 text-sm"
+                    placeholder="8"
+                    value={cajaLimiteHoras ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      setCajaLimiteHoras(v === '' ? null : parseInt(v, 10));
+                    }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="caja-aviso" className="text-sm font-medium text-gray-800">
+                    Avisar desde (min antes)
+                  </label>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-1.5">
+                    Cuándo aparece el contador arriba.
+                  </p>
+                  <Input
+                    id="caja-aviso"
+                    type="number"
+                    min={5}
+                    max={240}
+                    className="h-9 text-sm"
+                    placeholder="60"
+                    value={cajaAvisoMinutos}
+                    onChange={(e) => setCajaAvisoMinutos(parseInt(e.target.value, 10) || 60)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="caja-gracia" className="text-sm font-medium text-gray-800">
+                    Gracia antes de bloquear (h)
+                  </label>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-1.5">
+                    Vacío o 0 = nunca bloquea, solo avisa.
+                  </p>
+                  <Input
+                    id="caja-gracia"
+                    type="number"
+                    min={0}
+                    max={12}
+                    className="h-9 text-sm"
+                    placeholder="2"
+                    value={cajaGraciaHoras ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      setCajaGraciaHoras(v === '' ? null : parseInt(v, 10));
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-700">
+                <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
+                debe abrir su turno antes de emitir o cobrar. Los cierres con descuadre requieren
+                aprobación de un admin u owner.
+              </div>
+
+              {cajaLimiteHoras ? (
+                <div className={`rounded-lg border px-4 py-3 text-xs ${
+                  cajaGraciaHoras
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-gray-50 border-gray-200 text-gray-600'
+                }`}>
+                  {cajaGraciaHoras ? (
+                    <>
+                      <strong>Bloqueo activo:</strong> el contador aparece a las{' '}
+                      {cajaLimiteHoras}h menos {cajaAvisoMinutos} min. A las {cajaLimiteHoras}h el
+                      turno vence, y a las {cajaLimiteHoras + cajaGraciaHoras}h el cajero{' '}
+                      <strong>no podrá facturar ni cobrar</strong> hasta cerrar caja.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Solo avisa:</strong> el contador aparece a las {cajaLimiteHoras}h menos{' '}
+                      {cajaAvisoMinutos} min y el turno vence a las {cajaLimiteHoras}h, pero el cajero
+                      puede seguir facturando indefinidamente.
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-xs text-gray-600">
+                  Sin límite de duración: los turnos pueden quedar abiertos indefinidamente y no se
+                  muestra contador.
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>}
+
+      {/* ── Alerta de método de pago ────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Alerta de método de pago</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Al cobrar una factura o venta en POS, pide reconfirmar el método de pago antes de
+            finalizar (evita registrar efectivo por transferencia, o viceversa). Aplica solo a los
+            roles que además tengan el permiso <code>Alerta double-check de método de pago</code>.
+          </p>
+
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Pedir confirmación del método de pago</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Aparece una alerta al cobrar para revisar el método antes de crear la factura.
+              </p>
+            </div>
+            <button
+              type="button" role="switch" aria-checked={alertaMetodoPagoActivo}
+              onClick={() => setAlertaMetodoPagoActivo(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                alertaMetodoPagoActivo ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${alertaMetodoPagoActivo ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Módulo Punto de Venta (POS) ─────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Punto de venta (POS)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Habilita la pantalla de venta rápida full-screen para cafeterías, tiendas o cualquier
+            negocio de mostrador. Cada caja se configura como una "terminal" con su almacén fijo.
+          </p>
+
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Activar punto de venta</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Habilita el acceso a <code>/pos</code> y la gestión de terminales.
+              </p>
+            </div>
+            <button
+              type="button" role="switch" aria-checked={posHabilitado}
+              onClick={() => setPosHabilitado(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                posHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          {posHabilitado && (
+            <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Capa escolar (monedero del estudiante)</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Solo para colegios: saldo prepago por estudiante con cargo al acudiente.
+                </p>
+              </div>
+              <button
+                type="button" role="switch" aria-checked={posEscolarHabilitado}
+                onClick={() => setPosEscolarHabilitado(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                  posEscolarHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posEscolarHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Equipo y permisos — solo roles con equipo:gestionar */}
+      {canManageTeam && <EquipoCard />}
+
+      </div>
+
+      {/* Botón guardar final — barra sticky inferior (solo si puede editar) */}
+      {canManage && (
+        <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex justify-end py-3">
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-teal-600 hover:bg-teal-700 min-w-[160px]"
+          >
+            {saving ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
+            ) : saved ? (
+              <><CheckCircle className="h-4 w-4 mr-2" />¡Guardado!</>
+            ) : (
+              'Guardar cambios'
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

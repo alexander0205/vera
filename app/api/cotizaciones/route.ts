@@ -8,6 +8,8 @@ import { db } from '@/lib/db/drizzle';
 import { cotizaciones } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { userCanForTeam } from '@/lib/auth/permissions';
+import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
 import { eq, desc, and, or, ilike } from 'drizzle-orm';
 
 // GET /api/cotizaciones?q=...
@@ -43,9 +45,20 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requirePermission('cotizaciones:gestionar');
   if (!auth.ok) return auth.response;
-  const { teamId } = auth;
+  const { teamId, user, teamRole } = auth;
 
   const body = await req.json();
+
+  // Mismo gate de precios que la factura: la cotización se convierte en una, y
+  // la conversión no vuelve a mirar los precios. Si el control no estuviera
+  // aquí, cotizar sería la puerta de atrás para facturar al precio que sea.
+  if (!await userCanForTeam(teamId, user.platformRole, teamRole, 'facturas:precio-editar')) {
+    const errPrecio = await validarPreciosDeCatalogo({
+      teamId,
+      lineas: Array.isArray(body.items) ? body.items : [],
+    });
+    if (errPrecio) return NextResponse.json({ error: errPrecio }, { status: 403 });
+  }
 
   // Generate numero: COT-NNNN
   const existing = await db

@@ -2,23 +2,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText, Upload, Eye, Printer,
+  Plus, Download, Mail, Ban, FileText, Upload, Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { NotasMoraTable } from '@/components/notas-mora-table';
 import { ImportModal } from '@/components/import-modal';
-import { fmtDOP, fmtFechaCorta, fmtFechaRD, fmtHora, diasVencido } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
-import MuiButton from '@mui/material/Button';
-import MuiDialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import MuiTextField from '@mui/material/TextField';
-import Chip from '@mui/material/Chip';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -59,15 +51,15 @@ function isECFReal(encf: string): boolean {
   return /^E\d{12}$/.test(encf);
 }
 
-// Color del TEXTO del comprobante según estado DGII (como sx color value)
-const ESTADO_COLOR: Record<string, { color: string; textDecoration?: string }> = {
-  ACEPTADO:             { color: '#065f46' },
-  ACEPTADO_CONDICIONAL: { color: '#92400e' },
-  EN_PROCESO:           { color: '#0369a1' },
-  RECHAZADO:            { color: '#991b1b' },
-  BORRADOR:             { color: '#9ca3af' },
-  ANULADO:              { color: '#9ca3af', textDecoration: 'line-through' },
-  HISTORICA:            { color: '#4f46e5' },
+// Color del TEXTO del comprobante según estado DGII (no badge, solo texto)
+const ESTADO_TEXT: Record<string, string> = {
+  ACEPTADO:             'text-emerald-700',
+  ACEPTADO_CONDICIONAL: 'text-amber-700',
+  EN_PROCESO:           'text-sky-700',
+  RECHAZADO:            'text-red-700',
+  BORRADOR:             'text-gray-400',
+  ANULADO:              'text-gray-400 line-through',
+  HISTORICA:            'text-indigo-600',
 };
 
 /**
@@ -92,6 +84,15 @@ interface Doc {
   fechaEmision: string;
   fechaLimitePago: string | null;
   pagado: number;
+  moraPendiente?: number;
+  /** Saldo vivo de notas de débito manuales (cargo adicional) de esta factura. */
+  ndPendiente?: number;
+  moraAplicada?: number;
+  moraNotas?: {
+    id: number; codigo: string | null; montoTotal: number; saldo: number;
+    estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA';
+    fechaEmision?: string | null; periodo?: string | null;
+  }[];
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
@@ -204,24 +205,10 @@ export default function FacturasPage() {
       render: doc => (
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          style={{ textDecoration: 'none' }}
+          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
           title={doc.codigo ?? `#${doc.id}`}
         >
-          <Typography
-            component="span"
-            sx={{
-              fontFamily: 'monospace',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#374151',
-              display: 'block',
-              lineHeight: 1.25,
-              fontVariantNumeric: 'tabular-nums',
-              '&:hover': { color: '#2a45c4', textDecoration: 'underline' },
-            }}
-          >
-            {doc.codigo ?? `#${doc.id}`}
-          </Typography>
+          {doc.codigo ?? `#${doc.id}`}
         </Link>
       ),
     },
@@ -230,52 +217,28 @@ export default function FacturasPage() {
       header: 'Cliente',
       sortable: true,
       sortAccessor: doc => doc.razonSocialComprador ?? '',
+      // Una línea por celda: el RNC vive en su propia columna y el beneficiario
+      // en el detalle. Apilar tres textos grises debajo del nombre convertía la
+      // tabla en un muro y no dejaba comparar filas de un vistazo.
       render: doc => (
-        <Box sx={{ maxWidth: 200, minWidth: 0 }}>
-          <Typography
-            title={doc.razonSocialComprador ?? 'Consumidor Final'}
-            sx={{
-              fontSize: '0.875rem',
-              color: doc.razonSocialComprador ? '#111827' : '#9ca3af',
-              fontWeight: doc.razonSocialComprador ? 500 : 400,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              lineHeight: 1.25,
-            }}
-          >
-            {doc.razonSocialComprador ?? 'Consumidor Final'}
-          </Typography>
-          {doc.rncComprador && (
-            <Typography
-              sx={{
-                fontSize: '0.6875rem',
-                color: '#9ca3af',
-                fontFamily: 'monospace',
-                mt: '2px',
-                lineHeight: 1.25,
-              }}
-            >
-              {doc.rncComprador}
-            </Typography>
-          )}
-          {doc.dependienteNombre && (
-            <Typography
-              title={`Beneficiario: ${doc.dependienteNombre}`}
-              sx={{
-                fontSize: '0.6875rem',
-                color: '#9ca3af',
-                mt: '2px',
-                lineHeight: 1.25,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Benef.: {doc.dependienteNombre}
-            </Typography>
-          )}
-        </Box>
+        <p
+          className="max-w-[220px] truncate text-sm font-medium leading-tight text-gray-900"
+          title={doc.razonSocialComprador ?? 'Consumidor Final'}
+        >
+          {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
+        </p>
+      ),
+    },
+    {
+      id: 'rnc',
+      header: 'RNC / Cédula',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: doc => doc.rncComprador ?? '',
+      render: doc => (
+        <span className="font-mono text-xs tabular-nums text-gray-600">
+          {doc.rncComprador ?? <span className="text-gray-300">—</span>}
+        </span>
       ),
     },
     {
@@ -285,12 +248,12 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.createdAt,
       render: doc => (
-        <Box component="span" sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', lineHeight: 1.15 }}>
-          <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', display: 'block' }}>{fmtFechaRD(doc.createdAt)}</Typography>
-          {doc.createdAt && (
-            <Typography component="span" sx={{ fontSize: '0.6875rem', color: '#9ca3af', display: 'block' }}>{fmtHora(doc.createdAt)}</Typography>
-          )}
-        </Box>
+        <div className="whitespace-nowrap tabular-nums leading-tight">
+          {/* Solo la fecha: la hora del alta no ayuda a ubicar una factura en
+              un listado y competía con el dato que sí importa. Sigue visible
+              en el detalle del documento. */}
+          <span className="text-xs text-gray-600">{fmtFechaRD(doc.createdAt)}</span>
+        </div>
       ),
     },
     {
@@ -302,39 +265,16 @@ export default function FacturasPage() {
         const dias = diasVencido(doc.fechaLimitePago);
         const saldo = doc.montoTotal - (doc.pagado ?? 0);
         const vencida = esCredito && saldo > 0 && dias > 0 && ['ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'].includes(doc.estado);
+        // De contado no tiene vencimiento; a crédito, la fecha ES el dato — la
+        // palabra "Crédito" sobra al lado de una fecha de vencimiento.
+        if (!esCredito || !doc.fechaLimitePago) {
+          return <span className="text-xs text-gray-500 whitespace-nowrap">{TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}</span>;
+        }
         return (
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                fontSize: '0.75rem',
-                fontWeight: 500,
-                lineHeight: 1.25,
-                color: esCredito ? '#92400e' : '#6b7280',
-              }}
-            >
-              {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
-            </Typography>
-            {esCredito && doc.fechaLimitePago && (
-              <Typography
-                sx={{
-                  fontSize: '0.6875rem',
-                  mt: '2px',
-                  fontVariantNumeric: 'tabular-nums',
-                  lineHeight: 1.25,
-                  whiteSpace: 'nowrap',
-                  color: vencida ? '#dc2626' : '#9ca3af',
-                  fontWeight: vencida ? 600 : 400,
-                }}
-              >
-                {fmtFechaCorta(doc.fechaLimitePago)}
-                {vencida && (
-                  <Typography component="span" sx={{ ml: '4px', color: '#ef4444', fontSize: '0.6875rem' }}>
-                    · {dias}d
-                  </Typography>
-                )}
-              </Typography>
-            )}
-          </Box>
+          <span className={`text-xs tabular-nums whitespace-nowrap ${vencida ? 'font-semibold text-red-600' : 'text-gray-600'}`}>
+            {fmtFechaCorta(doc.fechaLimitePago)}
+            {vencida && <span className="ml-1 font-normal text-red-500">· {dias}d</span>}
+          </span>
         );
       },
     },
@@ -346,36 +286,9 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.montoTotal - doc.totalItbis,
       render: doc => (
-        <Typography
-          component="span"
-          sx={{
-            fontSize: '0.75rem',
-            color: '#6b7280',
-            whiteSpace: 'nowrap',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
+        <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
           {fmtDOP(doc.montoTotal - doc.totalItbis)}
-        </Typography>
-      ),
-    },
-    {
-      id: 'itbis',
-      header: 'ITBIS',
-      visibleAt: 'xl',
-      align: 'right',
-      render: doc => (
-        <Typography
-          component="span"
-          sx={{
-            fontSize: '0.75rem',
-            color: doc.totalItbis > 0 ? '#6b7280' : '#d1d5db',
-            whiteSpace: 'nowrap',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : '—'}
-        </Typography>
+        </span>
       ),
     },
     {
@@ -385,18 +298,9 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.montoTotal,
       render: doc => (
-        <Typography
-          component="span"
-          sx={{
-            fontSize: '0.875rem',
-            fontWeight: 700,
-            color: '#111827',
-            whiteSpace: 'nowrap',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
+        <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">
           {fmtDOP(doc.montoTotal)}
-        </Typography>
+        </span>
       ),
     },
     {
@@ -416,8 +320,16 @@ export default function FacturasPage() {
         const saldo   = doc.montoTotal - pagado;
         const esCred  = doc.tipoPago === 2;
         const dias    = diasVencido(doc.fechaLimitePago);
+        // Cualquier nota de débito viva sobre esta factura —mora automática o
+        // cargo manual— es deuda de la misma cuenta.
+        const ndPend = Number(doc.moraPendiente ?? 0) + Number(doc.ndPendiente ?? 0);
         if (ep === 'GRATUITA') return <Badge color="gray">Gratuita</Badge>;
         if (ep === 'USO')      return <Badge color="gray">Uso</Badge>;
+        // Capital saldado pero con notas de débito sin pagar: la factura no
+        // está cobrada del todo, así que no puede anunciarse como Pagada.
+        if (ep === 'PAGADA' && ndPend > 0) {
+          return <Badge color="orange" title={`Capital pagado; falta ${fmtDOP(ndPend)} en notas de débito`}>Parcial</Badge>;
+        }
         if (ep === 'PAGADA')   return <Badge color="green">Pagada</Badge>;
         if (ep === 'PARCIAL')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
         if (ep === 'PENDIENTE' && esCred && dias > 0) {
@@ -433,21 +345,9 @@ export default function FacturasPage() {
       header: 'Creado por',
       visibleAt: 'xl',
       render: doc => (
-        <Typography
-          component="span"
-          title={doc.createdByName ?? undefined}
-          sx={{
-            fontSize: '0.75rem',
-            color: '#6b7280',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            maxWidth: 120,
-            display: 'block',
-          }}
-        >
+        <span className="text-xs text-gray-500 truncate max-w-[120px] block" title={doc.createdByName ?? undefined}>
           {doc.createdByName ?? '—'}
-        </Typography>
+        </span>
       ),
     },
     {
@@ -458,29 +358,15 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.encf,
       render: doc => {
-        const compacto  = fmtEncf(doc.encf);
-        const colorSx   = ESTADO_COLOR[doc.estado] ?? { color: '#9ca3af' };
+        const compacto = fmtEncf(doc.encf);
+        const color    = ESTADO_TEXT[doc.estado] ?? 'text-gray-400';
         return (
           <Link
             href={`/dashboard/facturas/${doc.id}`}
-            style={{ textDecoration: 'none' }}
+            className={`font-mono text-xs font-semibold hover:underline leading-tight block whitespace-nowrap ${color}`}
             title={`${doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : 'Sin comprobante'} · ${ESTADO_LABEL[doc.estado] ?? doc.estado}`}
           >
-            <Typography
-              component="span"
-              sx={{
-                fontFamily: 'monospace',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                lineHeight: 1.25,
-                display: 'block',
-                whiteSpace: 'nowrap',
-                '&:hover': { textDecoration: 'underline' },
-                ...colorSx,
-              }}
-            >
-              {compacto ?? (doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : '—')}
-            </Typography>
+            {compacto ?? (doc.encf && !doc.encf.startsWith('BOR-') ? doc.encf : '—')}
           </Link>
         );
       },
@@ -488,21 +374,19 @@ export default function FacturasPage() {
   ];
 
   const rowActions = (doc: Doc): RowAction[] => {
-    // "Ver" inline (👁) antes de los 3 puntos — abre el detalle.
-    const ver: RowAction = { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${doc.id}`, primary: true };
+    // Sin ojito: el código de la fila ya es el enlace al detalle y el botón
+    // repetía ese mismo destino ocupando una columna.
     // Recibo POS: solo para ventas sin-ncf (ticket de mostrador). Reabre el recibo 80mm.
     const recibo: RowAction[] = doc.tipoEcf === 'sin-ncf'
       ? [{ icon: Printer, title: 'Reimprimir recibo', onClick: () => window.open(`/pos-ticket/${doc.id}`, '_blank', 'width=420,height=680') }]
       : [];
     if (doc.estado === 'BORRADOR') {
       return [
-        ver,
         { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
         ...recibo,
       ];
     }
     return [
-      ver,
       { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.codigo ?? doc.id}` },
       { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
       ...recibo,
@@ -515,7 +399,7 @@ export default function FacturasPage() {
   const canCrear    = !permLoading && can('facturas:crear');
 
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <section className="p-4 sm:p-6 space-y-4">
       <DataTable<Doc>
         data={docs}
         loading={loading}
@@ -550,12 +434,15 @@ export default function FacturasPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        // La fila con notas de mora las despliega; la que no tiene nada que
+        // desplegar abre el detalle. Las dos responden al clic en cualquier
+        // punto: el ojo y el código son dianas chicas en una tabla ancha.
+        rowExpandable={doc => (doc.moraNotas?.length ?? 0) > 0}
+        renderExpanded={doc => <ResumenFactura doc={doc} />}
+        rowHref={doc => `/dashboard/facturas/${doc.id}`}
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
-        // Toda la fila abre el detalle: el ojo de la derecha y el código son
-        // dianas chicas en una tabla ancha, y se leían como decoración.
-        rowHref={doc => `/dashboard/facturas/${doc.id}`}
         rowActions={rowActions}
         pagination={{
           page,
@@ -567,66 +454,29 @@ export default function FacturasPage() {
           icon: FileText,
           title: 'No se encontraron comprobantes',
           cta: canCrear ? (
-            <Link href="/dashboard/facturas/nueva" style={{ textDecoration: 'none' }}>
-              <Box
-                component="span"
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '0.875rem',
-                  color: '#3658e1',
-                  '&:hover': { textDecoration: 'underline', color: '#2a45c4' },
-                }}
-              >
-                <Plus style={{ width: 16, height: 16 }} /> Emitir primer comprobante
-              </Box>
+            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-teal-600 hover:underline">
+              <Plus className="h-4 w-4" /> Emitir primer comprobante
             </Link>
           ) : undefined,
         }}
         headerActions={
           <>
             {canCrear && (
-              <MuiButton
-                variant="outlined"
-                size="small"
-                disableElevation
-                onClick={() => setShowImport(true)}
-                startIcon={<Upload style={{ width: 16, height: 16 }} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#e5e7eb', color: '#6b7280' }}
-              >
-                Importar de Alegra
-              </MuiButton>
+              <button onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
+                <Upload className="h-4 w-4" /> Importar de Alegra
+              </button>
             )}
             {canExportar && (
-              <MuiButton
-                variant="outlined"
-                size="small"
-                disableElevation
-                onClick={exportCsv}
-                startIcon={<Download style={{ width: 16, height: 16 }} />}
-                sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#e5e7eb', color: '#6b7280' }}
-              >
-                CSV
-              </MuiButton>
+              <button onClick={exportCsv}
+                className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
+                <Download className="h-4 w-4" /> CSV
+              </button>
             )}
             {canCrear && (
-              <Link href="/dashboard/facturas/nueva" style={{ textDecoration: 'none' }}>
-                <MuiButton
-                  variant="contained"
-                  size="small"
-                  disableElevation
-                  startIcon={<Plus style={{ width: 16, height: 16 }} />}
-                  sx={{
-                    borderRadius: '8px',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    bgcolor: '#3658e1',
-                    '&:hover': { bgcolor: '#2a45c4' },
-                  }}
-                >
-                  Nueva Factura
-                </MuiButton>
+              <Link href="/dashboard/facturas/nueva"
+                className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium transition-colors">
+                <Plus className="h-4 w-4" /> Nueva Factura
               </Link>
             )}
           </>
@@ -652,87 +502,70 @@ export default function FacturasPage() {
       />
 
       {/* Email modal */}
-      <MuiDialog
-        open={!!emailModal}
-        onClose={() => setEmailModal(null)}
-        maxWidth="xs"
-        fullWidth
-        slotProps={{ paper: { sx: { borderRadius: '16px' } } as object }}
-      >
-        <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Enviar factura por email</DialogTitle>
-        <DialogContent sx={{ pb: 1 }}>
-          <MuiTextField
-            type="email"
-            label="Email del destinatario"
-            value={emailModal?.email ?? ''}
-            onChange={e => setEmailModal(m => m ? { ...m, email: e.target.value } : m)}
-            placeholder="cliente@empresa.com"
-            fullWidth
-            size="small"
-            sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <MuiButton
-            variant="outlined"
-            disableElevation
-            onClick={() => setEmailModal(null)}
-            sx={{ borderRadius: '8px', textTransform: 'none' }}
-          >
-            Cancelar
-          </MuiButton>
-          <MuiButton
-            variant="contained"
-            disableElevation
-            onClick={sendEmail}
-            disabled={emailLoading || !emailModal?.email}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              fontWeight: 600,
-              bgcolor: '#3658e1',
-              '&:hover': { bgcolor: '#2a45c4' },
-            }}
-          >
-            {emailLoading ? 'Enviando...' : 'Enviar'}
-          </MuiButton>
-        </DialogActions>
-      </MuiDialog>
-    </Box>
+      {emailModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-base font-semibold text-gray-900">Enviar factura por email</h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email del destinatario</label>
+              <input
+                type="email"
+                value={emailModal.email}
+                onChange={e => setEmailModal(m => m ? { ...m, email: e.target.value } : m)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                placeholder="cliente@empresa.com"
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setEmailModal(null)}
+                className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button onClick={sendEmail} disabled={emailLoading || !emailModal.email}
+                className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50">
+                {emailLoading ? 'Enviando...' : 'Enviar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Fila hija: resumen general de una factura (montos + cobro + mora) ────────
+
+function ResumenFactura({ doc }: { doc: Doc }) {
+  return (
+    <NotasMoraTable notas={doc.moraNotas ?? []} />
   );
 }
 
 // ─── Badge helper (uso interno a esta página) ─────────────────────────────────
 
-const BADGE_SX: Record<string, object> = {
-  green: { bgcolor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0' },
-  amber: { bgcolor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' },
-  red:   { bgcolor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' },
-  gray:  { bgcolor: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' },
-};
+const BADGE_COLORS = {
+  green:  'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  amber:  'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  orange: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
+  red:    'bg-red-50 text-red-700 ring-1 ring-red-200',
+  gray:   'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
+} as const;
 
 function Badge({
   color,
   title,
   children,
 }: {
-  color: keyof typeof BADGE_SX;
+  color: keyof typeof BADGE_COLORS;
   title?: string;
   children: React.ReactNode;
 }) {
   return (
-    <Chip
-      label={children}
-      size="small"
+    <span
+      className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${BADGE_COLORS[color]}`}
       title={title}
-      sx={{
-        height: 20,
-        borderRadius: '10px',
-        fontSize: '0.6875rem',
-        fontWeight: 600,
-        '& .MuiChip-label': { px: 1, py: '1px' },
-        ...BADGE_SX[color],
-      }}
-    />
+    >
+      {children}
+    </span>
   );
 }

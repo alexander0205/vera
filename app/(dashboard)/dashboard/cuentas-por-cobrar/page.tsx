@@ -4,22 +4,39 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2, PanelRightOpen, Download, Mail,
+  X, Wallet, Loader2, Archive, Wallet2,
 } from 'lucide-react';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
-import Alert from '@mui/material/Alert';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import { DataTable, type DataTableColumn, type RowAction, type BulkAction } from '@/components/data-table';
-import { fmtDOP, fmtFechaCorta, hoyRD } from '@/lib/utils/format';
-import { PagoModal, type Cuenta } from '@/components/cuentas-por-cobrar/PagoModal';
-import { DetallePanel } from '@/components/cuentas-por-cobrar/DetallePanel';
-import { RecordatoriosModal, MAX_POR_LOTE } from '@/components/cuentas-por-cobrar/RecordatoriosModal';
+import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { NotasMoraTable } from '@/components/notas-mora-table';
+import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
+
+interface Cuenta {
+  id:                   number;
+  clientId:             number | null;
+  encf:                 string;
+  codigo:               string | null;
+  tipoEcf:              string;
+  fechaEmision:         string;
+  fechaLimitePago:      string | null;
+  rncComprador:         string | null;
+  razonSocialComprador: string | null;
+  emailComprador:       string | null;
+  estado:               string;
+  montoTotal:           number;
+  totalItbis:           number;
+  pagado:               number;
+  // saldo = saldoFactura + moraSaldo (TOTAL combinado a cobrar).
+  saldo:                number;
+  // Saldo SOLO de la factura (montoTotal − pagado).
+  saldoFactura:         number;
+  // Saldo combinado de las ND de mora atadas a esta factura.
+  moraSaldo:            number;
+  // Lista de ND de mora con saldo > 0 (para desglose).
+  moraNotas?:           { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL' }[];
+  vencida:              boolean;
+  diasVencido:          number;
+}
 
 const isHistorica = (c: Cuenta) => c.estado === 'HISTORICA' || c.tipoEcf === '00';
 
@@ -30,100 +47,24 @@ interface Totales {
   countVencidas: number;
 }
 
-type Cubeta = 'porVencer' | 'd1a30' | 'd31a60' | 'd61a90' | 'd90mas';
-type Antiguedad = Record<Cubeta, { saldo: number; count: number }>;
-
-/** Promesas de pago del team completo (no de la cartera filtrada). */
-interface Promesas {
-  pendientes:     number;
-  incumplidas:    number;
-  montoPendiente: number;
-}
-
-/** Cubetas en orden de urgencia creciente, con su etiqueta y color. */
-const CUBETAS: { id: Cubeta; label: string; hint: string; hover: string; activoBorder: string; activoBg: string }[] = [
-  { id: 'porVencer', label: 'Por vencer', hint: 'aún no vencen',
-    hover: '#a5b4f9', activoBorder: '#5b73ec', activoBg: '#eef2fe' },
-  { id: 'd1a30',     label: '1-30 días',  hint: 'de atraso',
-    hover: '#fcd34d', activoBorder: '#f59e0b', activoBg: '#fffbeb' },
-  { id: 'd31a60',    label: '31-60 días', hint: 'de atraso',
-    hover: '#fdba74', activoBorder: '#f97316', activoBg: '#fff7ed' },
-  { id: 'd61a90',    label: '61-90 días', hint: 'de atraso',
-    hover: '#fb923c', activoBorder: '#ea580c', activoBg: '#fff7ed' },
-  { id: 'd90mas',    label: '+90 días',   hint: 'de atraso',
-    hover: '#fca5a5', activoBorder: '#ef4444', activoBg: '#fef2f2' },
-];
-
-const ANTIGUEDAD_VACIA: Antiguedad = {
-  porVencer: { saldo: 0, count: 0 }, d1a30: { saldo: 0, count: 0 },
-  d31a60:    { saldo: 0, count: 0 }, d61a90: { saldo: 0, count: 0 },
-  d90mas:    { saldo: 0, count: 0 },
-};
-
 // ─── Componente principal ──────────────────────────────────────────────────────
 
-// Al agrupar por cliente se piden más filas de una vez: agrupar solo la página
-// visible daría grupos partidos. Igual hay techo — el aviso lo dice si se corta.
-const PAGE_SIZE          = 25;
-const PAGE_SIZE_AGRUPADO = 500;
-
 export default function CuentasPorCobrarPage() {
-  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales; antiguedad: Antiguedad; promesas?: Promesas } | null>(null);
+  const [data, setData]         = useState<{ cuentas: Cuenta[]; totales: Totales } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  // Filtros, orden y paginación son server-side: el saldo se calcula en SQL, así
-  // que filtrar en memoria mostraría totales de la página en vez de la cartera.
+  // Filtros 100% client-side sobre el dataset cargado (AR es acotado).
   const [filterValues, setFilterValues] = useState<Record<string, string>>({
-    cliente: '', tipoDoc: '', estado: '', agrupar: '', orden: '',
+    cliente: '', tipoDoc: '', estado: '', agrupar: '',
   });
-  const [page, setPage] = useState(1);
-  const [cubeta, setCubeta] = useState<Cubeta | null>(null);
-  const [detalle, setDetalle] = useState<Cuenta | null>(null);
   const [pagoModal, setPagoModal] = useState<Cuenta | null>(null);
   const [historicaModal, setHistoricaModal] = useState(false);
-  // Cuentas a las que se les va a mandar recordatorio. null = modal cerrado.
-  const [recordatorioDocs, setRecordatorioDocs] = useState<number[] | null>(null);
-  const [avisoLote, setAvisoLote] = useState<string | null>(null);
-
-  const agrupar  = filterValues.agrupar === 'cliente';
-  const pageSize = agrupar ? PAGE_SIZE_AGRUPADO : PAGE_SIZE;
-
-  // La búsqueda dispara un fetch por tecla; se espera a que el usuario pare.
-  const [busqueda, setBusqueda] = useState('');
-  useEffect(() => {
-    const t = setTimeout(() => setBusqueda(filterValues.cliente ?? ''), 300);
-    return () => clearTimeout(t);
-  }, [filterValues.cliente]);
-
-  // Cualquier cambio de filtro invalida la página actual. Se resetea en el mismo
-  // handler que cambia el filtro (no en un efecto aparte): si no, estando en la
-  // página 2 el cambio disparaba DOS consultas — una con el offset viejo y otra
-  // tras el reset. React agrupa ambos setState en un solo render.
-  const cambiarFiltros = useCallback((v: Record<string, string>) => {
-    setFilterValues(v);
-    setPage(1);
-  }, []);
-
-  // Clic en una tarjeta de antigüedad: alterna esa cubeta y vuelve a la página 1.
-  const alternarCubeta = useCallback((c: Cubeta) => {
-    setCubeta(prev => (prev === c ? null : c));
-    setPage(1);
-  }, []);
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const sp = new URLSearchParams({
-        limit:  String(pageSize),
-        offset: String((page - 1) * pageSize),
-        ...(busqueda.trim()        && { search:  busqueda.trim() }),
-        ...(filterValues.tipoDoc   && { tipoDoc: filterValues.tipoDoc }),
-        ...(filterValues.estado    && { estado:  filterValues.estado }),
-        ...(filterValues.orden     && { orden:   filterValues.orden }),
-        ...(cubeta                 && { cubeta }),
-      });
-      const res = await fetch(`/api/cuentas-por-cobrar?${sp}`);
+      const res = await fetch('/api/cuentas-por-cobrar');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Error cargando');
       setData(json);
@@ -132,345 +73,240 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, busqueda, cubeta, filterValues.tipoDoc, filterValues.estado, filterValues.orden]);
+  }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Exporta lo que se está viendo: mismos filtros, sin la paginación (el
-  // archivo trae toda la cartera filtrada, no la página).
-  const exportHref = (() => {
-    const sp = new URLSearchParams({
-      ...(busqueda.trim()      && { search:  busqueda.trim() }),
-      ...(filterValues.tipoDoc && { tipoDoc: filterValues.tipoDoc }),
-      ...(filterValues.estado  && { estado:  filterValues.estado }),
-      ...(filterValues.orden   && { orden:   filterValues.orden }),
-      ...(cubeta               && { cubeta }),
-    });
-    const q = sp.toString();
-    return `/api/cuentas-por-cobrar/export${q ? `?${q}` : ''}`;
-  })();
+  const agrupar = filterValues.agrupar === 'cliente';
 
-  // Deep-link `?pagar=<docId>`: al llegar desde otro módulo (p. ej. un cargo
-  // escolar) abre directo el modal de cobro de esa factura. Se pide por id — con
-  // la lista paginada la factura puede no estar en la página cargada.
-  const [pagarConsumido, setPagarConsumido] = useState(false);
-  useEffect(() => {
-    if (pagarConsumido) return;
-    const pagarId = new URLSearchParams(window.location.search).get('pagar');
-    if (!pagarId) return;
-    setPagarConsumido(true);
-    fetch(`/api/cuentas-por-cobrar/${pagarId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j?.cuenta) setPagoModal(j.cuenta); })
-      .catch(() => {});
-  }, [pagarConsumido]);
+  // ── Filtrado client-side: cliente (texto), tipo de documento, vencimiento ──
+  const cuentasFiltradas = useMemo(() => {
+    let rows = data?.cuentas ?? [];
+    const q = (filterValues.cliente ?? '').trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(c =>
+        (c.razonSocialComprador ?? 'consumidor final').toLowerCase().includes(q) ||
+        (c.rncComprador ?? '').toLowerCase().includes(q),
+      );
+    }
+    if (filterValues.tipoDoc === 'factura')      rows = rows.filter(c => c.saldoFactura > 0);
+    else if (filterValues.tipoDoc === 'nota-debito') rows = rows.filter(c => c.moraSaldo > 0);
 
-  const cuentas = data?.cuentas ?? [];
-  // Totales del servidor: cubren toda la cartera filtrada, no solo esta página.
-  const totales: Totales = data?.totales ?? { pendiente: 0, vencido: 0, count: 0, countVencidas: 0 };
-  const antiguedad = data?.antiguedad ?? ANTIGUEDAD_VACIA;
-  const promesas = data?.promesas;
-  // Solo se muestra si hay algo que mostrar: un team que nunca registró una
-  // promesa no gana nada con una tarjeta en cero permanente.
-  const hayPromesas = !!promesas && (promesas.pendientes > 0 || promesas.incumplidas > 0);
-  const truncadoAlAgrupar = agrupar && totales.count > cuentas.length;
+    if (filterValues.estado === 'vencidas')   rows = rows.filter(c => c.vencida);
+    else if (filterValues.estado === 'al-dia') rows = rows.filter(c => !c.vencida);
+
+    return rows;
+  }, [data, filterValues.cliente, filterValues.tipoDoc, filterValues.estado]);
+
+  // Totales reactivos al filtro (las tarjetas reflejan lo que se ve en la tabla).
+  const totales: Totales = useMemo(() => ({
+    pendiente:     cuentasFiltradas.reduce((s, c) => s + c.saldo, 0),
+    vencido:       cuentasFiltradas.filter(c => c.vencida).reduce((s, c) => s + c.saldo, 0),
+    count:         cuentasFiltradas.length,
+    countVencidas: cuentasFiltradas.filter(c => c.vencida).length,
+  }), [cuentasFiltradas]);
 
   const columns: DataTableColumn<Cuenta>[] = useMemo(() => [
     {
       id: 'codigo',
       header: 'Código',
       render: c => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-          <Box
-            component={Link}
-            href={`/dashboard/facturas/${c.id}`}
-            sx={{
-              color: '#3658e1', fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 500,
-              textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
-            }}
-          >
+        <div className="flex items-center gap-1.5">
+          {/* El código no parte en varias líneas: con más columnas la celda se
+              angosta y "FA-2026-YTSY-YH2WR-000038" se rompía en cuatro. */}
+          <Link href={`/dashboard/facturas/${c.id}`} className="whitespace-nowrap font-mono text-xs font-medium text-teal-600 hover:underline">
             {c.codigo ?? `Factura #${c.id}`}
-          </Box>
+          </Link>
           {isHistorica(c) && (
-            <Box component="span" sx={{
-              fontSize: '10px', px: 0.75, py: 0.25, borderRadius: '9999px',
-              bgcolor: '#fef3c7', color: '#b45309', border: '1px solid #fde68a',
-            }}>
+            <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
               histórica
-            </Box>
+            </span>
           )}
-        </Box>
+          {c.saldoFactura === 0 && c.moraSaldo > 0 && (
+            <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+              Mora pendiente
+            </span>
+          )}
+        </div>
       ),
     },
     {
       id: 'cliente',
       header: 'Cliente',
+      sortable: true,
+      sortAccessor: c => c.razonSocialComprador ?? '',
+      // Una línea por celda: el RNC tiene su propia columna. Apilarlo debajo en
+      // gris chico obliga a leer cada fila en vez de barrerlas con la vista.
       render: c => (
-        <Box sx={{ maxWidth: 220 }}>
-          <Typography noWrap sx={{ fontSize: '0.875rem', color: '#111827' }}>
-            {c.razonSocialComprador ?? 'Consumidor Final'}
-          </Typography>
-          {c.rncComprador && (
-            <Typography sx={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>{c.rncComprador}</Typography>
-          )}
-        </Box>
+        // "Consumidor Final" no es un cliente al que llamar: se escribe apagado
+        // para que los nombres reales —los que se cobran— destaquen solos.
+        c.razonSocialComprador
+          ? <p className="max-w-[220px] truncate text-sm text-gray-900" title={c.razonSocialComprador}>{c.razonSocialComprador}</p>
+          : <p className="text-sm italic text-gray-400">Consumidor final</p>
+      ),
+    },
+    {
+      id: 'rnc',
+      header: 'RNC / Cédula',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: c => c.rncComprador ?? '',
+      render: c => (
+        <span className="font-mono text-xs tabular-nums text-gray-600">
+          {c.rncComprador ?? ''}
+        </span>
       ),
     },
     {
       id: 'fechaEmision',
       header: 'Emisión',
       visibleAt: 'md',
-      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#4b5563' }}>{fmtFechaCorta(c.fechaEmision)}</Box>,
+      sortable: true,
+      sortAccessor: c => c.fechaEmision ?? '',
+      render: c => <span className="text-xs tabular-nums text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
     },
     {
       id: 'vence',
       header: 'Vence',
       visibleAt: 'lg',
-      render: c => c.fechaLimitePago ? (
-        <Box>
-          <Typography sx={{ fontSize: '0.75rem', ...(c.vencida ? { color: '#b91c1c', fontWeight: 500 } : { color: '#374151' }) }}>
-            {fmtFechaCorta(c.fechaLimitePago)}
-          </Typography>
-          {c.vencida && (
-            <Typography sx={{ fontSize: '11px', color: '#dc2626' }}>
-              {c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida
-            </Typography>
-          )}
-        </Box>
-      ) : <Box component="span" sx={{ color: '#9ca3af', fontSize: '0.75rem' }}>—</Box>,
+      sortable: true,
+      sortAccessor: c => c.fechaLimitePago ?? '',
+      render: c => c.fechaLimitePago
+        ? <span className={`text-xs tabular-nums ${c.vencida ? 'font-medium text-red-700' : 'text-gray-700'}`}>{fmtFechaCorta(c.fechaLimitePago)}</span>
+        : null,
+    },
+    {
+      id: 'atraso',
+      header: 'Atraso',
+      visibleAt: 'md',
+      sortable: true,
+      // Ordenar por atraso es la forma natural de trabajar la cartera: primero
+      // el que más días lleva. Por eso es columna propia y no un texto chico.
+      sortAccessor: c => (c.vencida ? c.diasVencido : -1),
+      // Un solo acento en toda la tabla: el rojo. La intensidad la da el peso
+      // de la tipografía, no otro color — con ámbar y verde a la vez la tabla
+      // se leía como un semáforo y ningún dato destacaba.
+      render: c => c.vencida
+        ? (
+          <span className={`whitespace-nowrap text-xs tabular-nums text-red-600 ${c.diasVencido > 30 ? 'font-semibold' : ''}`}>
+            {c.diasVencido} {c.diasVencido === 1 ? 'día' : 'días'}
+          </span>
+        )
+        : null,
     },
     {
       id: 'total',
-      header: 'Total',
+      // "Facturado" y no "Total": el otro total de la tabla es el saldo, y dos
+      // columnas llamadas Total con significados distintos se confunden solas.
+      header: 'Facturado',
       align: 'right',
-      visibleAt: 'md',
-      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', whiteSpace: 'nowrap' }}>{fmtDOP(c.montoTotal)}</Box>,
+      visibleAt: 'xl',
+      sortable: true,
+      sortAccessor: c => c.montoTotal,
+      render: c => <span className="whitespace-nowrap text-xs tabular-nums text-gray-400">{fmtDOP(c.montoTotal)}</span>,
     },
     {
       id: 'pagado',
       header: 'Pagado',
       align: 'right',
       visibleAt: 'lg',
-      render: c => <Box component="span" sx={{ fontSize: '0.75rem', color: '#047857', whiteSpace: 'nowrap' }}>{fmtDOP(c.pagado)}</Box>,
+      sortable: true,
+      sortAccessor: c => c.pagado,
+      render: c => (
+        <span className={`whitespace-nowrap text-xs tabular-nums ${c.pagado > 0 ? 'text-gray-600' : 'text-gray-300'}`}>
+          {fmtDOP(c.pagado)}
+        </span>
+      ),
+    },
+    {
+      id: 'mora',
+      // La mora NO es un monto aparte: ya va dentro del saldo. La columna
+      // existe para poder ver cuánto del saldo es recargo.
+      header: 'Mora incluida',
+      align: 'right',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: c => c.moraSaldo,
+      render: c => c.moraSaldo > 0
+        ? <span className="whitespace-nowrap text-xs tabular-nums text-red-600">{fmtDOP(c.moraSaldo)}</span>
+        : null,
     },
     {
       id: 'saldo',
-      header: 'Saldo',
+      header: 'Saldo total',
       align: 'right',
+      sortable: true,
+      sortAccessor: c => c.saldo,
       render: c => (
-        <Box sx={{ textAlign: 'right' }}>
-          <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>
-            {fmtDOP(c.saldo)}
-          </Box>
-          {c.moraSaldo > 0 && (
-            <Typography sx={{ fontSize: '11px', color: '#ea580c', whiteSpace: 'nowrap' }}>
-              incl. mora {fmtDOP(c.moraSaldo)}
-            </Typography>
-          )}
-        </Box>
+        <span className={`whitespace-nowrap text-[15px] font-bold tabular-nums ${c.vencida ? 'text-red-700' : 'text-gray-900'}`}>
+          {fmtDOP(c.saldo)}
+        </span>
       ),
     },
   ], []);
 
   const rowActions = (c: Cuenta): RowAction[] => [
-    { icon: PanelRightOpen, title: 'Ver detalle',    onClick: () => setDetalle(c),   primary: true },
-    { icon: Wallet2,        title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true },
-    // Sin `primary`: va en el menú de 3 puntos. Escribirle a un cliente no es
-    // una acción que convenga tener a un clic de distancia en cada fila.
-    { icon: Mail, title: 'Enviar recordatorio de pago', onClick: () => setRecordatorioDocs([c.id]) },
-  ];
-
-  // El endpoint tope 50 por lote, para que un clic no se convierta en cientos de
-  // correos. Se corta aquí también y se avisa, en vez de dejar que la API
-  // rechace el lote entero con un 400.
-  const bulkActions: BulkAction<Cuenta>[] = [
-    {
-      label: 'Enviar recordatorio',
-      icon:  Mail,
-      onClick: (ids) => {
-        const nums = ids.map(Number);
-        if (nums.length > MAX_POR_LOTE) {
-          setAvisoLote(
-            `Seleccionaste ${nums.length} cuentas y el máximo por envío es ${MAX_POR_LOTE}. ` +
-            `Se van a preparar las primeras ${MAX_POR_LOTE}.`,
-          );
-        }
-        setRecordatorioDocs(nums.slice(0, MAX_POR_LOTE));
-      },
-    },
+    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c) },
   ];
 
   return (
-    <Box component="section" sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1280, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+    <section className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
       {/* Header */}
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' }, justifyContent: { sm: 'space-between' }, gap: 1.5 }}>
-        <Box>
-          <Typography variant="h5" component="h1" sx={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827' }}>
-            Cuentas por cobrar
-          </Typography>
-          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.5 }}>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Cuentas por cobrar</h1>
+          <p className="text-sm text-gray-500 mt-1">
             Facturas a crédito pendientes de pago. Registra abonos y monitorea vencimientos.
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-          <Button
-            component="a" href={exportHref} nativeButton={false}
-            variant="outlined" color="inherit"
-            title="Descargar en Excel la cartera con los filtros activos"
-            startIcon={<Download style={{ width: 16, height: 16 }} />}
-            sx={{ color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff', whiteSpace: 'nowrap' }}
-          >
-            Exportar
-          </Button>
-          <Button
-            variant="outlined" color="inherit"
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
             onClick={() => setHistoricaModal(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
             title="Importar factura previa al uso de Zero (no va a DGII)"
-            startIcon={<Archive style={{ width: 16, height: 16 }} />}
-            sx={{ color: '#374151', borderColor: '#d1d5db', bgcolor: '#fff', whiteSpace: 'nowrap' }}
           >
+            <Archive className="h-4 w-4" />
             Agregar cuenta histórica
-          </Button>
-        </Box>
-      </Box>
+          </button>
+        </div>
+      </div>
 
       {/* Stats — reflejan el filtro activo */}
       {data && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
-            icon={<DollarSign style={{ width: 20, height: 20 }} />}
+            icon={<DollarSign className="h-5 w-5" />}
             label="Pendiente"
             value={fmtDOP(totales.pendiente)}
-            color="#111827"
+            color="text-gray-900"
           />
           <StatCard
-            icon={<AlertTriangle style={{ width: 20, height: 20 }} />}
+            icon={<AlertTriangle className="h-5 w-5" />}
             label="Vencido"
             value={fmtDOP(totales.vencido)}
-            color="#dc2626"
+            color="text-red-600"
           />
           <StatCard
-            icon={<Wallet style={{ width: 20, height: 20 }} />}
+            icon={<Wallet className="h-5 w-5" />}
             label="Cuentas"
             value={totales.count.toString()}
-            color="#111827"
+            color="text-gray-900"
           />
           <StatCard
-            icon={<Clock style={{ width: 20, height: 20 }} />}
+            icon={<Clock className="h-5 w-5" />}
             label="Vencidas"
             value={totales.countVencidas.toString()}
-            color={totales.countVencidas > 0 ? '#dc2626' : '#111827'}
+            color={totales.countVencidas > 0 ? 'text-red-600' : 'text-gray-900'}
           />
-        </Box>
-      )}
-
-      {/* Promesas de pago. A diferencia de los stats de arriba, estas NO siguen
-          el filtro activo: son del team completo. Una promesa incumplida no deja
-          de serlo porque el usuario esté mirando otra cubeta. */}
-      {hayPromesas && promesas && (
-        <Box sx={{
-          display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2.5, rowGap: 1,
-          border: '1px solid #e5e7eb', bgcolor: '#fff', borderRadius: '12px', px: 2, py: 1.25,
-        }}>
-          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Promesas de pago
-          </Typography>
-          <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
-            <Box component="span" sx={{ fontWeight: 600, color: '#111827' }}>{promesas.pendientes}</Box> pendiente
-            {promesas.pendientes !== 1 ? 's' : ''}
-            {promesas.montoPendiente > 0 && (
-              <Box component="span" sx={{ color: '#6b7280' }}> · {fmtDOP(promesas.montoPendiente)} comprometido</Box>
-            )}
-          </Typography>
-          {promesas.incumplidas > 0 && (
-            <Typography sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#dc2626' }}>
-              <AlertTriangle style={{ width: 14, height: 14 }} />
-              <Box component="span" sx={{ fontWeight: 600 }}>{promesas.incumplidas}</Box> incumplida
-              {promesas.incumplidas !== 1 ? 's' : ''}
-            </Typography>
-          )}
-        </Box>
-      )}
-
-      {/* Antigüedad de saldos — clic para filtrar por cubeta. Los montos NO
-          cambian al elegir una: siempre muestran la distribución completa, para
-          poder saltar entre cubetas sin perder la referencia. */}
-      {data && (
-        <Box>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1 }}>
-            <Typography component="h2" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Antigüedad de saldos
-            </Typography>
-            {cubeta && (
-              <Box
-                component="button"
-                onClick={() => { setCubeta(null); setPage(1); }}
-                sx={{
-                  fontSize: '0.75rem', color: '#3658e1', bgcolor: 'transparent', border: 0,
-                  cursor: 'pointer', p: 0, '&:hover': { color: '#2a45c4', textDecoration: 'underline' },
-                }}
-              >
-                Ver toda la cartera
-              </Box>
-            )}
-          </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' }, gap: 1 }}>
-            {CUBETAS.map(c => {
-              const d = antiguedad[c.id];
-              const activa = cubeta === c.id;
-              return (
-                <Box
-                  component="button"
-                  key={c.id}
-                  onClick={() => alternarCubeta(c.id)}
-                  aria-pressed={activa}
-                  sx={{
-                    textAlign: 'left', borderRadius: '12px', px: 1.5, py: 1.25,
-                    cursor: 'pointer', transition: 'border-color .15s, background-color .15s',
-                    ...(activa
-                      ? { border: `1px solid ${c.activoBorder}`, bgcolor: c.activoBg }
-                      : { border: '1px solid #e5e7eb', bgcolor: '#fff', '&:hover': { borderColor: c.hover } }),
-                  }}
-                >
-                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>{c.label}</Typography>
-                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: d.saldo > 0 ? '#111827' : '#d1d5db' }}>
-                    {fmtDOP(d.saldo)}
-                  </Typography>
-                  <Typography sx={{ fontSize: '11px', color: '#9ca3af' }}>
-                    {d.count} cuenta{d.count !== 1 ? 's' : ''} · {c.hint}
-                  </Typography>
-                </Box>
-              );
-            })}
-          </Box>
-        </Box>
-      )}
-
-      {avisoLote && (
-        <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
-          {avisoLote}
-        </Alert>
-      )}
-
-      {truncadoAlAgrupar && (
-        <Alert severity="warning" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
-          Agrupando las primeras {cuentas.length} de {totales.count} cuentas. Filtra para
-          reducir la cartera y ver los grupos completos.
-        </Alert>
+        </div>
       )}
 
       {/* Tabla reutilizable con filtros + agrupación */}
       <DataTable<Cuenta>
-        data={cuentas}
+        data={cuentasFiltradas}
         loading={loading}
         error={error}
         columns={columns}
-        pagination={agrupar ? undefined : {
-          page,
-          pageSize,
-          total: totales.count,
-          onPageChange: setPage,
-        }}
         filters={[
           { type: 'search', id: 'cliente', placeholder: 'Buscar cliente o RNC…' },
           {
@@ -495,17 +331,6 @@ export default function CuentasPorCobrarPage() {
           },
           {
             type: 'select',
-            id: 'orden',
-            label: 'Ordenar',
-            placeholder: 'Más recientes',
-            options: [
-              { value: 'vencimiento', label: 'Vencidas primero' },
-              { value: 'monto',       label: 'Mayor saldo' },
-              { value: 'antiguo',     label: 'Más antiguas' },
-            ],
-          },
-          {
-            type: 'select',
             id: 'agrupar',
             label: 'Agrupar',
             placeholder: 'Sin agrupar',
@@ -515,26 +340,29 @@ export default function CuentasPorCobrarPage() {
           },
         ]}
         filterValues={filterValues}
-        onFilterChange={cambiarFiltros}
+        onFilterChange={setFilterValues}
+        // Abre por lo más atrasado: es el orden en que se trabaja la cartera.
+        // Sin franjas ni fondos de color — la urgencia la comunica el dato en
+        // rojo, no rayar la fila entera.
+        defaultSort={{ columnId: 'atraso', dir: 'desc' }}
         rowActions={rowActions}
-        bulkActions={bulkActions}
+        rowExpandable={c => (c.moraNotas?.length ?? 0) > 0}
+        renderExpanded={c => <MoraHijas cuenta={c} />}
         groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
           const venc = rows.filter(c => c.vencida).length;
           return (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1f2937' }}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-800">
                 {key}
-                <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}> · {rows.length} cuenta{rows.length !== 1 ? 's' : ''}</Box>
+                <span className="text-gray-400 font-normal"> · {rows.length} cuenta{rows.length !== 1 ? 's' : ''}</span>
                 {venc > 0 && (
-                  <Box component="span" sx={{ color: '#dc2626', fontWeight: 400 }}> · {venc} vencida{venc !== 1 ? 's' : ''}</Box>
+                  <span className="text-red-600 font-normal"> · {venc} vencida{venc !== 1 ? 's' : ''}</span>
                 )}
-              </Typography>
-              <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>
-                {fmtDOP(tot)}
-              </Typography>
-            </Box>
+              </span>
+              <span className="text-xs font-bold text-gray-900 whitespace-nowrap">{fmtDOP(tot)}</span>
+            </div>
           );
         }) : undefined}
         emptyState={{
@@ -545,16 +373,6 @@ export default function CuentasPorCobrarPage() {
             : 'Todas las facturas a crédito están saldadas.',
         }}
       />
-
-      {/* Panel lateral de detalle — se cierra al abrir el cobro para no apilar
-          dos capas encima de la lista. */}
-      {detalle && (
-        <DetallePanel
-          cuenta={detalle}
-          onClose={() => setDetalle(null)}
-          onCobrar={(c) => { setDetalle(null); setPagoModal(c); }}
-        />
-      )}
 
       {/* Modal registrar pago */}
       {pagoModal && (
@@ -572,18 +390,7 @@ export default function CuentasPorCobrarPage() {
           onSuccess={() => { setHistoricaModal(false); cargar(); }}
         />
       )}
-
-      {/* Modal de recordatorios (previsualiza y, con confirmación, envía) */}
-      {recordatorioDocs && (
-        <RecordatoriosModal
-          docIds={recordatorioDocs}
-          onClose={() => { setRecordatorioDocs(null); setAvisoLote(null); }}
-          // El envío deja un evento de contacto en cada cuenta: se recarga para
-          // que el panel de detalle muestre el historial al día.
-          onEnviado={cargar}
-        />
-      )}
-    </Box>
+    </section>
   );
 }
 
@@ -593,13 +400,284 @@ function StatCard({ icon, label, value, color }: {
   icon: React.ReactNode; label: string; value: string; color: string;
 }) {
   return (
-    <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#9ca3af', mb: 1 }}>
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center gap-2 text-gray-400 mb-2">
         {icon}
-        <Typography sx={{ fontSize: '0.75rem', fontWeight: 500 }}>{label}</Typography>
-      </Box>
-      <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, color }}>{value}</Typography>
-    </Box>
+        <p className="text-xs font-medium">{label}</p>
+      </div>
+      <p className={`text-xl font-bold ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+// ─── Filas hijas: notas de débito por mora de una factura ────────────────────
+
+function MoraHijas({ cuenta }: { cuenta: Cuenta }) {
+  return (
+    <NotasMoraTable notas={cuenta.moraNotas ?? []} conEstado={false} />
+  );
+}
+
+// ─── Modal: registrar pago ───────────────────────────────────────────────────
+
+function PagoModal({
+  cuenta, onClose, onSuccess,
+}: {
+  cuenta: Cuenta;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  // saldo = saldoFactura + moraSaldo (combinado). Montos en DOP.
+  const saldoDOP        = cuenta.saldo / 100;        // combinado, disponible a abonar
+  // El repeater valida contra (total − yaPagado). Con yaPagado=0, el cap es el
+  // saldo combinado factura + mora.
+  const totalDOP  = saldoDOP;
+  const pagadoDOP = 0;
+  const [fecha, setFecha]         = useState(today);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  // Resultado del pago recién registrado → resumen claro (recibido / a factura /
+  // a mora / queda pendiente) antes de cerrar. null = aún en el formulario.
+  const [resultado, setResultado] = useState<{
+    recibidoCents: number;
+    facturaCents:  number;
+    moraCents:     number;
+    saldoNuevo:    number;
+    saldado:       boolean;
+  } | null>(null);
+  // Cuando el pago se bloquea por método que obliga DGII sobre factura no emitida,
+  // el backend devuelve el link al detalle para emitirla primero.
+  const [emitirUrl, setEmitirUrl] = useState<string | null>(null);
+
+  // Notas de crédito del cliente usables como pago (voucher por código, uso parcial).
+  const [notasCredito, setNotasCredito] = useState<NotaCreditoDisponible[]>([]);
+
+  useEffect(() => {
+    if (!cuenta.clientId) { setNotasCredito([]); return; }
+    let vivo = true;
+    fetch(`/api/clientes/${cuenta.clientId}/notas-credito-disponibles`)
+      .then(r => r.json())
+      .then(j => { if (vivo) setNotasCredito(Array.isArray(j.notas) ? j.notas : []); })
+      .catch(() => { if (vivo) setNotasCredito([]); });
+    return () => { vivo = false; };
+  }, [cuenta.clientId]);
+
+  // Una o varias líneas (1 línea = pago normal). AR usa referencia.
+  const [lineas, setLineas] = useState<PagoLinea[]>([
+    { metodo: 'transferencia', valor: '', referencia: '' },
+  ]);
+
+  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!valido) return;
+    setGuardando(true);
+    setError(null);
+    setEmitirUrl(null);
+    try {
+      const pagos = lineas
+        .filter(l => (parseFloat(l.valor || '0') || 0) > 0)
+        .map(l => ({
+          montoDOP:      parseFloat(l.valor),
+          metodo:        l.metodo,
+          referencia:    l.referencia?.trim() || undefined,
+          notaCreditoId: l.notaCreditoId ?? undefined,
+        }));
+
+      const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fechaPago: fecha, pagos }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setEmitirUrl(typeof json.emitirUrl === 'string' ? json.emitirUrl : null);
+        throw new Error(json.error ?? 'Error al registrar pago');
+      }
+      const recibidoCents = pagos.reduce((s, p) => s + Math.round(p.montoDOP * 100), 0);
+      setResultado({
+        recibidoCents,
+        facturaCents: json.repartido?.facturaCents ?? 0,
+        moraCents:    json.repartido?.moraCents ?? 0,
+        saldoNuevo:   json.saldoNuevo ?? 0,
+        saldado:      !!json.saldado,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error desconocido');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">
+              {resultado ? 'Pago registrado' : 'Registrar pago'}
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">{cuenta.codigo ?? `Factura #${cuenta.id}`}</p>
+          </div>
+          <button
+            onClick={() => (resultado ? onSuccess() : onClose())}
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-400"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {resultado ? (
+          <ResumenPago resultado={resultado} onListo={onSuccess} />
+        ) : (
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Saldo factura</span>
+              <span className="text-gray-700">{fmtDOP(cuenta.saldoFactura)}</span>
+            </div>
+            {cuenta.moraSaldo > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Mora</span>
+                <span className="text-orange-600">{fmtDOP(cuenta.moraSaldo)}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t border-gray-200 pt-1 mt-1 font-medium">
+              <span className="text-gray-700">Total a cobrar</span>
+              <span className="text-gray-900">{fmtDOP(cuenta.saldo)}</span>
+            </div>
+            {cuenta.moraSaldo > 0 && (
+              <p className="text-[11px] text-gray-400 pt-0.5">
+                El pago cubre primero la factura; el resto se aplica a la mora.
+              </p>
+            )}
+          </div>
+
+          {/* Fecha (compartida) */}
+          <div>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha *</label>
+            <input
+              type="date"
+              value={fecha}
+              onChange={e => setFecha(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          <PagoMetodos
+            lineas={lineas}
+            onChange={setLineas}
+            total={totalDOP}
+            yaPagado={pagadoDOP}
+            disabled={guardando}
+            showReferencia
+            notasCredito={notasCredito}
+          />
+
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <div className="text-xs text-red-700 space-y-1.5">
+                <p>{error}</p>
+                {emitirUrl && (
+                  <Link
+                    href={emitirUrl}
+                    className="inline-flex items-center gap-1 font-semibold text-red-800 underline underline-offset-2 hover:text-red-900"
+                  >
+                    Ir a emitir la factura →
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando || !valido}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+            >
+              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
+              Registrar pago
+            </button>
+          </div>
+        </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Resumen del pago registrado (recibido / a factura / a mora / pendiente) ──
+
+function ResumenPago({
+  resultado, onListo,
+}: {
+  resultado: { recibidoCents: number; facturaCents: number; moraCents: number; saldoNuevo: number; saldado: boolean };
+  onListo: () => void;
+}) {
+  const { recibidoCents, facturaCents, moraCents, saldoNuevo, saldado } = resultado;
+  return (
+    <div className="p-5 space-y-4">
+      <div className={`flex items-start gap-2 p-3 rounded-lg border ${
+        saldado ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+      }`}>
+        <CheckCircle className={`h-5 w-5 mt-0.5 shrink-0 ${saldado ? 'text-emerald-600' : 'text-amber-600'}`} />
+        <p className="text-sm text-gray-800">
+          {saldado
+            ? 'Pago registrado. La cuenta quedó saldada por completo (factura y mora).'
+            : 'Pago registrado. Quedó un saldo pendiente — revisa el desglose.'}
+        </p>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1.5">
+        <div className="flex justify-between">
+          <span className="text-gray-500">Recibido</span>
+          <span className="text-gray-900 font-medium tabular-nums">{fmtDOP(recibidoCents)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Aplicado a la factura</span>
+          <span className="text-gray-700 tabular-nums">{fmtDOP(facturaCents)}</span>
+        </div>
+        {moraCents > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Aplicado a la mora</span>
+            <span className="text-orange-600 tabular-nums">{fmtDOP(moraCents)}</span>
+          </div>
+        )}
+        <div className="flex justify-between border-t border-gray-200 pt-1.5 mt-1.5 font-medium">
+          <span className="text-gray-700">Queda pendiente</span>
+          <span className={`tabular-nums ${saldoNuevo > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+            {fmtDOP(saldoNuevo)}
+          </span>
+        </div>
+        {saldoNuevo > 0 && (
+          <p className="text-[11px] text-gray-400 pt-0.5">
+            El pago cubre primero la factura; el resto se aplica a la mora. Lo que reste queda como saldo pendiente.
+          </p>
+        )}
+      </div>
+
+      <div className="flex justify-end pt-1">
+        <button
+          type="button"
+          onClick={onListo}
+          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg"
+        >
+          Listo
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -611,13 +689,11 @@ function HistoricaModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const today = hoyRD();
-  // Vencimiento sugerido: 15 días desde hoy (RD). Se opera en UTC sobre la
-  // fecha calendario RD para que sumar días no arrastre desfase de zona.
+  const today = new Date().toISOString().slice(0, 10);
   const vencDefault = (() => {
-    const [y, m, d] = today.split('-').map(Number);
-    const dt = new Date(Date.UTC(y, m - 1, d + 15));
-    return dt.toISOString().slice(0, 10);
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().slice(0, 10);
   })();
 
   const [encf, setEncf]               = useState('');
@@ -661,124 +737,153 @@ function HistoricaModal({
   }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, pb: 1.5 }}>
-        <Box>
-          <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
-            Agregar cuenta histórica
-          </Typography>
-          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25 }}>
-            Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
-          </Typography>
-        </Box>
-        <IconButton size="small" onClick={onClose} sx={{ color: '#9ca3af' }}>
-          <X style={{ width: 16, height: 16 }} />
-        </IconButton>
-      </DialogTitle>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Agregar cuenta histórica</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Factura previa al uso de Zero — solo tracking de cobranza. No se envía a DGII.
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-      <DialogContent>
-        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* NCF + Razón social */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-            <Box>
-              <TextField
-                label="NCF / Referencia" fullWidth
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">NCF / Referencia</label>
+              <input
+                type="text"
                 value={encf}
                 onChange={e => setEncf(e.target.value.toUpperCase())}
                 placeholder="B01000000001 (opcional)"
-                slotProps={{
-                  htmlInput: { maxLength: 40 },
-                  input: { sx: { fontFamily: 'monospace' } },
-                }}
+                maxLength={40}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
               />
-              <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
-                Si lo dejas vacío se genera automáticamente.
-              </Typography>
-            </Box>
-            <TextField
-              label="RNC / Cédula" fullWidth
-              value={rnc}
-              onChange={e => setRnc(e.target.value)}
-              placeholder="131988032"
-              slotProps={{ htmlInput: { maxLength: 20 } }}
-            />
-          </Box>
+              <p className="text-[10px] text-gray-400 mt-1">Si lo dejas vacío se genera automáticamente.</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">RNC / Cédula</label>
+              <input
+                type="text"
+                value={rnc}
+                onChange={e => setRnc(e.target.value)}
+                placeholder="131988032"
+                maxLength={20}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+          </div>
 
-          <TextField
-            label="Cliente" required fullWidth
-            value={razonSocial}
-            onChange={e => setRazonSocial(e.target.value)}
-            placeholder="Razón social del cliente"
-            slotProps={{ htmlInput: { maxLength: 255 } }}
-          />
+          <div>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Cliente *</label>
+            <input
+              type="text"
+              value={razonSocial}
+              onChange={e => setRazonSocial(e.target.value)}
+              required
+              placeholder="Razón social del cliente"
+              maxLength={255}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
 
           {/* Fechas */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <TextField
-              label="Fecha emisión" type="date" required fullWidth
-              value={fechaEmision}
-              onChange={e => setFechaEmision(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              label="Vencimiento" type="date" required fullWidth
-              value={fechaLimite}
-              onChange={e => setFechaLimite(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-          </Box>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Fecha emisión *</label>
+              <input
+                type="date"
+                value={fechaEmision}
+                onChange={e => setFechaEmision(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Vencimiento *</label>
+              <input
+                type="date"
+                value={fechaLimite}
+                onChange={e => setFechaLimite(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+          </div>
 
           {/* Montos */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <TextField
-              label="Monto total RD$" type="number" required fullWidth
-              value={montoDOP}
-              onChange={e => setMontoDOP(e.target.value)}
-              placeholder="0.00"
-              slotProps={{ htmlInput: { step: 0.01, min: 0.01 } }}
-            />
-            <Box>
-              <TextField
-                label="Ya pagado RD$" type="number" fullWidth
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Monto total RD$ *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={montoDOP}
+                onChange={e => setMontoDOP(e.target.value)}
+                required
+                placeholder="0.00"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Ya pagado RD$</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
                 value={yaPagadoDOP}
                 onChange={e => setYaPagadoDOP(e.target.value)}
                 placeholder="0.00"
-                slotProps={{ htmlInput: { step: 0.01, min: 0 } }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
-              <Typography sx={{ fontSize: '10px', color: '#9ca3af', mt: 0.5 }}>
-                Abonos previos al sistema.
-              </Typography>
-            </Box>
-          </Box>
+              <p className="text-[10px] text-gray-400 mt-1">Abonos previos al sistema.</p>
+            </div>
+          </div>
 
-          <TextField
-            label="Notas (opcional)" fullWidth multiline rows={2}
-            value={notas}
-            onChange={e => setNotas(e.target.value)}
-            placeholder="Factura preimpresa serie B01 julio 2025, etc."
-            slotProps={{ htmlInput: { maxLength: 1000 } }}
-          />
+          <div>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Notas (opcional)</label>
+            <textarea
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              rows={2}
+              maxLength={1000}
+              placeholder="Factura preimpresa serie B01 julio 2025, etc."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
 
           {error && (
-            <Alert severity="error" icon={<AlertTriangle style={{ width: 16, height: 16 }} />}>
-              {error}
-            </Alert>
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-700">{error}</p>
+            </div>
           )}
 
-          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', pt: 1 }}>
-            <Button color="inherit" onClick={onClose} sx={{ color: '#4b5563' }}>
-              Cancelar
-            </Button>
-            <Button
-              type="submit" variant="contained"
-              disabled={guardando}
-              startIcon={guardando ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> : undefined}
+          <div className="flex gap-2 justify-end pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
             >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+            >
+              {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
               Agregar cuenta
-            </Button>
-          </Box>
-        </Box>
-      </DialogContent>
-    </Dialog>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

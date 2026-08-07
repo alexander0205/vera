@@ -2,6 +2,8 @@
 
 import { Info } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
+import type { EmpresaPerfil } from '../utils/types';
+import { describirMora } from '@/lib/cobranza/mora-calculo';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
@@ -44,13 +46,6 @@ const TIPOS_INGRESO = [
 const SIN_TIPO_INGRESO = ['41', '43', '47'];
 
 /** Formatea YYYY-MM-DD → DD/MM/YYYY */
-function formatFechaCorta(iso: string): string {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  if (!y || !m || !d) return '';
-  return `${d}/${m}/${y}`;
-}
-
 interface Props {
   regla: TipoEcfRegla | undefined;
   tipoEcf: string;
@@ -60,8 +55,12 @@ interface Props {
   setDiasParaPago: (v: string) => void;
   tipoIngresos: string;
   setTipoIngresos: (v: string) => void;
-  /** Vencimiento derivado (YYYY-MM-DD) — solo para mostrar el info pill. */
+  /** Vencimiento derivado (YYYY-MM-DD) — se muestra solo lectura y en el aviso. */
   fechaLimitePago: string;
+  /** Config de mora de la empresa, para avisar los términos al elegir crédito. */
+  empresa?: EmpresaPerfil | null;
+  /** true = el usuario no ha registrado ningún pago en esta factura. */
+  sinPagoRegistrado?: boolean;
 }
 
 export function DetallesSection({
@@ -71,13 +70,33 @@ export function DetallesSection({
   diasParaPago, setDiasParaPago,
   tipoIngresos, setTipoIngresos,
   fechaLimitePago,
+  empresa,
+  sinPagoRegistrado = false,
 }: Props) {
   const esCredito = condicionPago === '2';
   const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf);
 
+  // Qué mora aplicaría si la factura vence sin pagarse. null si la empresa no
+  // la tiene activa — entonces no hay nada que advertir.
+  const textoMora = empresa?.recargoMoraActivo
+    ? describirMora(
+        {
+          modo:             empresa.recargoMoraModo ?? 'porcentaje',
+          porcentajeBps:    empresa.recargoMoraPorcentaje ?? 0,
+          montoCents:       empresa.recargoMoraMontoCents ?? 0,
+          diasGracia:       empresa.recargoMoraDiasGracia ?? 0,
+          periodicidadDias: empresa.recargoMoraPeriodicidadDias ?? 0,
+          compuesta:        empresa.recargoMoraCompuesta ?? false,
+          topeBps:          empresa.recargoMoraTopeBps ?? 0,
+          maxPeriodos:      empresa.recargoMoraMaxPeriodos ?? 0,
+        },
+        (cents) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
+      )
+    : null;
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
         <FormControl size="small" fullWidth>
           <InputLabel sx={{ fontSize: '0.75rem' }}>Condición de pago</InputLabel>
           <Select
@@ -112,6 +131,19 @@ export function DetallesSection({
           </Box>
         </Box>
 
+        <Box>
+          <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: esCredito ? '#4b5563' : '#d1d5db', mb: 0.5 }}>
+            Vence el
+          </Typography>
+          {/* Solo lectura: se recalcula solo cuando cambia el plazo. */}
+          <TextField
+            type="date" size="small" fullWidth disabled
+            value={esCredito ? fechaLimitePago : ''}
+            slotProps={{ htmlInput: { readOnly: true, tabIndex: -1 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', fontSize: '0.875rem' } }}
+          />
+        </Box>
+
         {muestraTipoIngresos && (
           <FormControl size="small" fullWidth>
             <InputLabel sx={{ fontSize: '0.75rem' }}>Tipo de ingresos</InputLabel>
@@ -129,12 +161,39 @@ export function DetallesSection({
         )}
       </Box>
 
-      {esCredito && fechaLimitePago && (
-        <Box sx={{ bgcolor: '#eef2fe', border: '1px solid #e0e7fd', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <Info size={16} color="#2a45c4" style={{ flexShrink: 0 }} />
+      {/* Qué mora aplicará si vence sin pagarse. La fecha ya se ve arriba, así
+          que aquí lo que aporta es el recargo. */}
+      {esCredito && fechaLimitePago && textoMora && (
+        <Box sx={{ bgcolor: '#eef2fe', border: '1px solid #e0e7fd', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+          <Info size={16} color="#2a45c4" style={{ flexShrink: 0, marginTop: 2 }} />
           <Typography sx={{ fontSize: '0.875rem', color: '#24377d' }}>
-            Vence el <Box component="span" sx={{ fontWeight: 600 }}>{formatFechaCorta(fechaLimitePago)}</Box>.
+            Si no se paga tras el vencimiento, se aplicará una mora de{' '}
+            <Box component="span" sx={{ fontWeight: 600 }}>{textoMora}</Box>
           </Typography>
+        </Box>
+      )}
+
+      {/* De contado sin pago: la factura queda por cobrar, sin vencimiento y sin
+          mora. No se cambia sola —la condición de pago se le reporta a la DGII,
+          así que la decisión es del usuario—; aquí solo se hace visible. */}
+      {!esCredito && condicionPago === '1' && sinPagoRegistrado && (
+        <Box sx={{ bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', px: 1.5, py: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+          <Info size={16} color="#b45309" style={{ flexShrink: 0, marginTop: 2 }} />
+          <Box>
+            <Typography sx={{ fontSize: '0.875rem', color: '#78350f' }}>
+              Marcada <Box component="span" sx={{ fontWeight: 600 }}>de contado</Box> pero sin pago
+              registrado. Queda por cobrar, sin fecha de vencimiento y sin generar mora.
+            </Typography>
+            <Box component="button" type="button" onClick={() => setCondicionPago('2')}
+              sx={{
+                mt: 0.75, background: 'none', border: 'none', p: 0, cursor: 'pointer',
+                fontSize: '0.875rem', fontWeight: 600, color: '#78350f',
+                textDecoration: 'underline', textUnderlineOffset: '2px',
+                '&:hover': { color: '#451a03' },
+              }}>
+              Cambiarla a crédito
+            </Box>
+          </Box>
         </Box>
       )}
 

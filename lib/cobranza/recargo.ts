@@ -85,8 +85,6 @@ export async function aplicarRecargosMoraVencidos(
         encf:            ecfDocuments.encf,
         montoTotal:      ecfDocuments.montoTotal,
         fechaLimitePago: ecfDocuments.fechaLimitePago,
-        // Override por factura — días de gracia (null = usar default del team).
-        moraDiasGracia:  ecfDocuments.moraDiasGracia,
         // Saldo = montoTotal - pagos recibidos
         pagado: sql<number>`coalesce((
           SELECT SUM(monto_centavos) FROM pagos_recibidos
@@ -110,19 +108,17 @@ export async function aplicarRecargosMoraVencidos(
       const pagado = Number(factura.pagado);
       const saldo  = factura.montoTotal - pagado;
 
-      // Solo si saldo > 0 (aún sin pagar)
+      // Descarte barato antes de ir a la DB: sin saldo no hay nada que recargar.
+      // El resto de la elegibilidad (gracia, períodos ya cobrados, topes) la
+      // decide `calcularMora` dentro del generador — antes estaba duplicada
+      // aquí y las dos copias podían divergir.
       if (saldo <= 0) continue;
 
-      // Calcular días vencido
       const diasVencido = factura.fechaLimitePago
         ? Math.floor(
             (new Date(hoy).getTime() - new Date(factura.fechaLimitePago).getTime()) / 86400000,
           )
         : 0;
-
-      // Aplicar solo si supera el período de gracia (override por factura → default team)
-      const gracia = factura.moraDiasGracia ?? equipo.recargoMoraDiasGracia;
-      if (diasVencido < gracia) continue;
 
       result.procesados++;
 

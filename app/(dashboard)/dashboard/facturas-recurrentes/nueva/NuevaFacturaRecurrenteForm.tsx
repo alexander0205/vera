@@ -22,6 +22,7 @@ import {
   CreditCard, ChevronRight, Info, Receipt, RefreshCw,
 } from 'lucide-react';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
+import { describirMora } from '@/lib/cobranza/mora-calculo';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
@@ -376,6 +377,19 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
   );
   const [notas, setNotas]                  = useState(initialPlan?.notas ?? '');
   const [pieFactura, setPieFactura]        = useState('');
+
+  // La mora de este plan sale SOLO de la configuración central de la empresa;
+  // ya no se personaliza por plan. Aquí solo se describe para avisar.
+  const configMoraEmpresa = useMemo(() => ({
+    modo: (empresa?.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje') as 'porcentaje' | 'fijo',
+    porcentajeBps:    empresa?.recargoMoraPorcentaje ?? 0,
+    montoCents:       empresa?.recargoMoraMontoCents ?? 0,
+    diasGracia:       empresa?.recargoMoraDiasGracia ?? 0,
+    periodicidadDias: empresa?.recargoMoraPeriodicidadDias ?? 0,
+    compuesta:        empresa?.recargoMoraCompuesta ?? false,
+    topeBps:          empresa?.recargoMoraTopeBps ?? 0,
+    maxPeriodos:      empresa?.recargoMoraMaxPeriodos ?? 0,
+  }), [empresa]);
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
@@ -896,7 +910,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                         px: 1.5,
                         py: 1.25,
                         display: 'flex',
-                        alignItems: 'center',
+                        alignItems: 'flex-start',
                         gap: 1.25,
                       }}>
                         <Info size={16} style={{ color: '#2a45c4', flexShrink: 0 }} />
@@ -1003,10 +1017,21 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                         alignItems: 'center',
                         gap: 1.25,
                       }}>
-                        <Info size={16} style={{ color: '#2a45c4', flexShrink: 0 }} />
-                        <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
-                          Vence <Box component="span" sx={{ fontWeight: 600 }}>{diasParaPago} días</Box> después de cada emisión.
-                        </Typography>
+                        <Info size={16} style={{ color: '#2a45c4', flexShrink: 0, marginTop: 2 }} />
+                        <Box>
+                          <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
+                            Vence <Box component="span" sx={{ fontWeight: 600 }}>{diasParaPago} días</Box> después de cada emisión.
+                          </Typography>
+                          {empresa?.recargoMoraActivo && (
+                            <Typography sx={{ fontSize: '14px', color: '#24377d' }}>
+                              <Box component="span" sx={{ fontWeight: 600 }}>Mora:</Box>{' '}
+                              {describirMora(
+                                configMoraEmpresa,
+                                (cents: number) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                              )}
+                            </Typography>
+                          )}
+                        </Box>
                       </Box>
                     )}
 

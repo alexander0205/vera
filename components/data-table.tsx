@@ -98,6 +98,19 @@ export interface DataTableProps<T> {
   bulkActions?:   BulkAction<T>[];
   rowActions?:    (row: T) => RowAction[];
   rowHref?:       (row: T) => string;
+  /**
+   * Contenido desplegable de la fila. Cuando se pasa, cada fila gana un
+   * chevron al inicio y esto se pinta en una fila extra debajo.
+   */
+  renderExpanded?: (row: T) => React.ReactNode;
+  /** Si devuelve false, esa fila no despliega ni muestra chevron. */
+  rowExpandable?: (row: T) => boolean;
+  /** Estilos extra por fila — para marcar urgencia sin tener que leer la celda. */
+  rowSx?:         (row: T) => object;
+  /** Clases extra por fila. Mismo fin que `rowSx`, para quien use Tailwind. */
+  rowClassName?:  (row: T) => string;
+  /** Orden inicial. Sin esto la tabla sale en el orden en que llegan los datos. */
+  defaultSort?:   { columnId: string; dir: 'asc' | 'desc' };
   pagination?:    PaginationConfig;
   emptyState?:    EmptyStateConfig;
   /** Acciones extra en el header (export, "Nuevo X", etc.) */
@@ -143,6 +156,11 @@ export function DataTable<T>({
   bulkActions = [],
   rowActions,
   rowHref,
+  renderExpanded,
+  rowExpandable,
+  rowSx,
+  rowClassName,
+  defaultSort,
   pagination,
   emptyState,
   headerActions,
@@ -162,7 +180,9 @@ export function DataTable<T>({
   };
 
   // Sort state
-  const [sortBy, setSortBy] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
+  const [sortBy, setSortBy] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(
+    defaultSort ? { id: defaultSort.columnId, dir: defaultSort.dir } : null,
+  );
   const sortedData = useMemo(() => {
     if (!sortBy) return data;
     const col = columns.find(c => c.id === sortBy.id);
@@ -219,7 +239,17 @@ export function DataTable<T>({
 
   const hasFilters = filters.length > 0;
   const hasBulk    = bulkActions.length > 0;
-  const cols       = (hasBulk ? 1 : 0) + columns.length + (rowActions ? 1 : 0);
+  const hasExpand  = !!renderExpanded;
+  const cols       = (hasBulk ? 1 : 0) + (hasExpand ? 1 : 0) + columns.length + (rowActions ? 1 : 0);
+
+  const [abiertas, setAbiertas] = useState<Set<string | number>>(new Set());
+  const alternarFila = (id: string | number) => {
+    setAbiertas(prev => {
+      const sig = new Set(prev);
+      if (sig.has(id)) sig.delete(id); else sig.add(id);
+      return sig;
+    });
+  };
 
   // Agrupación opcional: parte el dataset (ya ordenado) en grupos por clave,
   // preservando el orden de primera aparición. Cada clave aparece una sola vez
@@ -240,26 +270,47 @@ export function DataTable<T>({
     const id         = rowId(row);
     const isSelected = selectedIds.has(id);
     const href       = rowHref?.(row);
+    const puedeAbrir = hasExpand && (rowExpandable ? rowExpandable(row) : true);
+    const abierta    = abiertas.has(id);
     return (
+      <React.Fragment key={String(id)}>
       <TableRow
-        key={String(id)}
         hover={!isSelected}
         selected={isSelected}
-        onClick={href ? (e) => {
-          // No navegar si click vino de checkbox/botón/link interno
+        // La fila entera responde: si tiene contenido debajo lo despliega, y
+        // si no, navega. El chevron sigue ahí como señal de que hay algo, pero
+        // acertarle a un botón de 20px era pedir puntería.
+        onClick={href || puedeAbrir ? (e) => {
+          // Los clics que nacen en un checkbox, botón o enlace son suyos.
           const target = e.target as HTMLElement;
           if (target.closest('input,button,a,[role="menuitem"]')) return;
+          // Desplegar gana sobre navegar: si hay hijas, el clic las abre.
+          if (puedeAbrir) { alternarFila(id); return; }
           // Navegación del cliente: `window.location` recargaba la app entera
           // y perdía el estado de filtros y los datos ya cargados.
-          router.push(href);
+          if (href) router.push(href);
         } : undefined}
         sx={{
-          cursor:  href ? 'pointer' : 'default',
+          cursor:  href || puedeAbrir ? 'pointer' : 'default',
           bgcolor: isSelected ? '#eef2fe' : undefined,
           '&.MuiTableRow-hover:hover': { bgcolor: '#fafafa' },
           '& .MuiTableCell-root': { borderBottom: '1px solid #f3f4f6' },
+          ...(rowSx?.(row) ?? {}),
         }}
+        className={rowClassName?.(row)}
       >
+        {hasExpand && (
+          <TableCell sx={{ width: 32, px: 0.5 }} onClick={e => e.stopPropagation()}>
+            {puedeAbrir && (
+              <IconButton size="small" onClick={() => alternarFila(id)}
+                aria-label={abierta ? 'Colapsar' : 'Expandir'} aria-expanded={abierta}
+                sx={{ color: '#9ca3af' }}>
+                {abierta ? <ChevronDown style={{ width: 16, height: 16 }} />
+                         : <ChevronRight style={{ width: 16, height: 16 }} />}
+              </IconButton>
+            )}
+          </TableCell>
+        )}
         {hasBulk && (
           <TableCell padding="checkbox" sx={{ pl: 2 }} onClick={e => e.stopPropagation()}>
             <Checkbox
@@ -303,6 +354,15 @@ export function DataTable<T>({
           );
         })()}
       </TableRow>
+
+      {puedeAbrir && abierta && (
+        <TableRow sx={{ bgcolor: '#fafafa' }}>
+          <TableCell colSpan={cols} sx={{ px: 1.5, pt: 0, pb: 1.5, borderBottom: '1px solid #f3f4f6' }}>
+            {renderExpanded!(row)}
+          </TableCell>
+        </TableRow>
+      )}
+      </React.Fragment>
     );
   };
 
@@ -535,6 +595,7 @@ export function DataTable<T>({
             <MuiTable size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                  {hasExpand && <TableCell sx={{ width: 32, px: 0.5 }} />}
                   {hasBulk && (
                     <TableCell padding="checkbox" sx={{ pl: 2 }}>
                       <Checkbox

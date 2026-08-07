@@ -83,13 +83,20 @@ interface Props {
   showDescripcion: boolean;
   /** Lista de dependientes del cliente seleccionado. Vacía = no mostrar columna. */
   dependientes: DependienteOpt[];
+  /**
+   * Sin el permiso `facturas:precio-editar`, el precio y el descuento quedan en
+   * solo lectura y no se pueden abrir líneas libres: se factura con lo que trae
+   * el producto del catálogo. El servidor lo vuelve a validar al guardar — esto
+   * es la mitad visible, no el candado.
+   */
+  bloquearPrecios?: boolean;
 }
 
 
 export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
-  showReferencia, showDescripcion, dependientes,
+  showReferencia, showDescripcion, dependientes, bloquearPrecios = false,
 }: Props) {
   const { openProximamente, dialog } = useProximamenteDialog();
   const hasDeps = dependientes.length > 0;
@@ -216,7 +223,7 @@ export function ItemsTable({
                 onSearch={buscarProductos}
                 onSelect={(p) => onSelectProducto(idx, p)}
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
-                onCreate={() => onOpenNuevoProducto(idx)}
+                onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
                 createLabel="Nuevo producto"
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
@@ -273,9 +280,10 @@ export function ItemsTable({
                   type="number"
                   placeholder="0.00"
                   value={item.precioUnitarioItem || ''}
+                  title={bloquearPrecios ? 'Tu rol no puede cambiar el precio del producto' : undefined}
                   onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
                   sx={inputNumeroSx}
-                  slotProps={{ htmlInput: { min: 0, step: 0.01, inputMode: 'decimal', style: { textAlign: 'right' } } }}
+                  slotProps={{ htmlInput: { min: 0, step: 0.01, inputMode: 'decimal', style: { textAlign: 'right' } , readOnly: bloquearPrecios } }}
                 />
               </Box>
               <Box>
@@ -330,9 +338,10 @@ export function ItemsTable({
                     type="number"
                     placeholder="0"
                     value={item.descuentoPct || ''}
+                      title={bloquearPrecios ? 'Tu rol no puede aplicar descuentos' : undefined}
                     onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
                     sx={inputNumeroSx}
-                    slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, inputMode: 'decimal', style: { textAlign: 'center', paddingRight: '1.5rem' } } }}
+                    slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, inputMode: 'decimal', style: { textAlign: 'center', paddingRight: '1.5rem' }, readOnly: bloquearPrecios } }}
                   />
                   <Typography
                     sx={{
@@ -589,7 +598,7 @@ export function ItemsTable({
                     onSearch={buscarProductos}
                     onSelect={(p) => onSelectProducto(idx, p)}
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
-                    onCreate={() => onOpenNuevoProducto(idx)}
+                    onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
                     createLabel="Nuevo producto"
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
@@ -621,7 +630,7 @@ export function ItemsTable({
                     value={item.precioUnitarioItem || ''}
                     onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
                     sx={inputNumeroSx}
-                    slotProps={{ htmlInput: { min: 0, step: 0.01, style: { textAlign: 'right' } } }}
+                    slotProps={{ htmlInput: { min: 0, step: 0.01, style: { textAlign: 'right' }, readOnly: bloquearPrecios } }}
                   />
                 </TableCell>
 
@@ -636,7 +645,7 @@ export function ItemsTable({
                       value={item.descuentoPct || ''}
                       onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
                       sx={inputNumeroSx}
-                      slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, style: { textAlign: 'center', paddingRight: '1.25rem' } } }}
+                      slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1, style: { textAlign: 'center', paddingRight: '1.25rem' }, readOnly: bloquearPrecios } }}
                     />
                     <Typography
                       sx={{

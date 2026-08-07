@@ -4,41 +4,38 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import MenuItem from '@mui/material/MenuItem';
-import Menu from '@mui/material/Menu';
-import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import MuiLink from '@mui/material/Link';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   ArrowLeft, Download, FileText, RefreshCw, XCircle,
   Loader2, AlertTriangle, CheckCircle, Clock,
   Printer, Ticket, ChevronDown, Mail, Copy,
   Package, ChevronUp, Plus, MoreVertical, Send,
-  TrendingDown, TrendingUp,
+  TrendingUp,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
 import { CobrarLinkButton } from '@/components/pagos/CobrarLinkButton';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
 import { StickyNote, History as HistoryIcon } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
@@ -124,7 +121,7 @@ interface FacturaDetalle {
   comentario: string | null;
   lineas: Linea[];
   ncsAsociadas?: NcAsociada[];
-  notasMora?: { id: number; codigo: string | null; montoTotal: number; estado: string; estadoPago: string }[];
+  notasMora?: { id: number; codigo: string | null; montoTotal: number; pagado: number; estado: string; estadoPago: string }[];
   moraOrigen?: { id: number; codigo: string | null; encf: string } | null;
   notaOrigen?: { id: number; codigo: string | null; encf: string; estado: string } | null;
   emisor: {
@@ -163,14 +160,14 @@ interface FacturaDetalle {
 
 const ESTADO_CONFIG: Record<
   string,
-  { label: string; color: string; bg: string; icon: React.ElementType }
+  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ElementType }
 > = {
-  ACEPTADO:             { label: 'Emitida',          color: '#047857', bg: '#d1fae5', icon: CheckCircle },
-  ACEPTADO_CONDICIONAL: { label: 'Condicional',      color: '#475569', bg: '#f1f5f9', icon: CheckCircle },
-  EN_PROCESO:           { label: 'En Proceso',       color: '#374151', bg: '#f3f4f6', icon: Clock },
-  RECHAZADO:            { label: 'Rechazado',        color: '#b91c1c', bg: '#fee2e2', icon: XCircle },
-  BORRADOR:             { label: 'Sin comprobante',  color: '#374151', bg: '#f3f4f6', icon: Clock },
-  ANULADO:              { label: 'Anulado',          color: '#475569', bg: '#f1f5f9', icon: XCircle },
+  ACEPTADO:             { label: 'Emitida',     variant: 'default',     icon: CheckCircle },
+  ACEPTADO_CONDICIONAL: { label: 'Condicional', variant: 'secondary',   icon: CheckCircle },
+  EN_PROCESO:           { label: 'En Proceso',  variant: 'outline',     icon: Clock },
+  RECHAZADO:            { label: 'Rechazado',   variant: 'destructive', icon: XCircle },
+  BORRADOR:             { label: 'Sin comprobante', variant: 'outline', icon: Clock },
+  ANULADO:              { label: 'Anulado',     variant: 'secondary',   icon: XCircle },
 };
 
 // ─── Estado DGII card (sidebar) ───────────────────────────────────────────────
@@ -198,132 +195,110 @@ function EstadoDgiiCard({
   onConsultar: () => void;
   consultarStatus: 'idle' | 'loading' | 'done' | 'error';
 }) {
-  const cfg = ESTADO_CONFIG[factura.estado] ?? { label: factura.estado, color: '#374151', bg: '#f3f4f6', icon: Clock };
+  const cfg = ESTADO_CONFIG[factura.estado] ?? { label: factura.estado, variant: 'outline' as const, icon: Clock };
   const Icon = cfg.icon;
   const isAceptado = factura.estado === 'ACEPTADO' || factura.estado === 'ACEPTADO_CONDICIONAL';
   const isRechazado = factura.estado === 'RECHAZADO';
-  const badgeBg = isAceptado ? '#d1fae5' : isRechazado ? '#fee2e2' : '#fef3c7';
-  const badgeColor = isAceptado ? '#047857' : isRechazado ? '#b91c1c' : '#b45309';
+  const badgeColor = isAceptado ? 'bg-emerald-100 text-emerald-700' : isRechazado ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700';
 
   // URL portal DGII — usa la URL canónica devuelta por ecf-api (sin reconstruir client-side)
   const verUrl = factura.urlVerificacion;
   // Mensajes/errores devueltos por la DGII (motivo de rechazo, advertencias).
   const dgiiMensajes = mensajesDgiiList(factura.mensajesDgii);
 
-  const rowSx = { display: 'flex', justifyContent: 'space-between', gap: 1 } as const;
-  const labelSx = { color: '#6b7280', fontSize: '0.75rem' } as const;
-
   return (
-    <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-      <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 1, px: { xs: 2, md: 2.5 }, pt: 2, pb: 1.5 }}>
-        <CheckCircle size={16} color="#3658e1" style={{ flexShrink: 0 }} aria-hidden="true" />
-        <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1 }}>Estado DGII</Typography>
+    <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
+        <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
+        <h2 className="text-sm font-semibold text-gray-900 flex-1">Estado DGII</h2>
         {factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO' && (
-          <Button
+          <button
             type="button"
             onClick={onConsultar}
             disabled={consultarStatus === 'loading'}
-            startIcon={<RefreshCw size={12} style={consultarStatus === 'loading' ? { animation: 'spin 1s linear infinite' } : undefined} />}
-            sx={{ fontSize: '0.75rem', textTransform: 'none', color: '#3658e1', minWidth: 0, p: 0.5, '&:hover': { color: '#253a9e', bgcolor: 'transparent' } }}
+            className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1 disabled:opacity-50"
           >
+            <RefreshCw className={`h-3 w-3 ${consultarStatus === 'loading' ? 'animate-spin' : ''}`} />
             Consultar
-          </Button>
+          </button>
         )}
-      </Box>
-      <Box sx={{ px: { xs: 2, md: 2.5 }, pb: 2, display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+      </header>
+      <div className="px-4 pb-4 md:px-5 flex items-start gap-4">
         {/* Badge circular */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: badgeBg, color: badgeColor, px: 1.5, py: 1.5, flexShrink: 0, minWidth: 88 }}>
-          <Icon size={28} />
-          <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, mt: 0.5, textAlign: 'center', lineHeight: 1.2 }}>{cfg.label}</Typography>
-        </Box>
+        <div className={`flex flex-col items-center justify-center rounded-lg ${badgeColor} px-3 py-3 shrink-0 min-w-[88px]`}>
+          <Icon className="h-7 w-7" />
+          <span className="text-xs font-semibold mt-1 text-center leading-tight">{cfg.label}</span>
+        </div>
         {/* Detalle fields */}
-        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-          <Box sx={rowSx}>
-            <Typography component="span" sx={labelSx}>Estado:</Typography>
-            <Typography component="span" sx={{ color: '#111827', fontSize: '0.75rem', fontWeight: 500 }}>{cfg.label}</Typography>
-          </Box>
-          <Box sx={rowSx}>
-            <Typography component="span" sx={labelSx}>e-NCF:</Typography>
-            <Typography component="span" sx={{ color: '#111827', fontSize: '0.75rem', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{factura.encf}</Typography>
-          </Box>
+        <div className="flex-1 space-y-1.5 text-xs min-w-0">
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500">Estado:</span>
+            <span className="text-gray-900 font-medium">{cfg.label}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500">e-NCF:</span>
+            <span className="text-gray-900 font-mono truncate">{factura.encf}</span>
+          </div>
           {factura.codigoSeguridad && (
-            <Box sx={rowSx}>
-              <Typography component="span" sx={labelSx}>Código de seguridad:</Typography>
-              <Typography component="span" sx={{ color: '#111827', fontSize: '0.75rem', fontFamily: 'monospace' }}>{factura.codigoSeguridad}</Typography>
-            </Box>
+            <div className="flex justify-between gap-2">
+              <span className="text-gray-500">Código de seguridad:</span>
+              <span className="text-gray-900 font-mono">{factura.codigoSeguridad}</span>
+            </div>
           )}
-          <Box sx={rowSx}>
-            <Typography component="span" sx={labelSx}>Fecha emisión:</Typography>
-            <Typography component="span" sx={{ color: '#111827', fontSize: '0.75rem' }}>
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500">Fecha emisión:</span>
+            <span className="text-gray-900">
               {factura.createdAt ? fmtFechaHora(factura.createdAt) : fmtFechaCorta(factura.fechaEmision)}
-            </Typography>
-          </Box>
+            </span>
+          </div>
           {factura.fechaFirma && (
-            <Box sx={rowSx}>
-              <Typography component="span" sx={labelSx}>Fecha firma:</Typography>
-              <Typography component="span" sx={{ color: '#111827', fontSize: '0.75rem' }}>{factura.fechaFirma}</Typography>
-            </Box>
+            <div className="flex justify-between gap-2">
+              <span className="text-gray-500">Fecha firma:</span>
+              <span className="text-gray-900">{factura.fechaFirma}</span>
+            </div>
           )}
           {factura.trackId && (
-            <Box sx={rowSx}>
-              <Typography component="span" sx={labelSx}>Track ID:</Typography>
-              <Typography component="span" title={factura.trackId} sx={{ color: '#111827', fontSize: '0.75rem', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{factura.trackId}</Typography>
-            </Box>
+            <div className="flex justify-between gap-2">
+              <span className="text-gray-500">Track ID:</span>
+              <span className="text-gray-900 font-mono truncate" title={factura.trackId}>{factura.trackId}</span>
+            </div>
           )}
-        </Box>
-      </Box>
+        </div>
+      </div>
       {dgiiMensajes.length > 0 && (
-        <Box sx={{ px: { xs: 2, md: 2.5 }, pb: 2 }}>
-          <Box sx={{
-            borderRadius: '8px', border: '1px solid', p: 1.5, fontSize: '0.75rem',
-            ...(isRechazado
-              ? { bgcolor: '#fef2f2', borderColor: '#fecaca', color: '#991b1b' }
-              : { bgcolor: '#fffbeb', borderColor: '#fde68a', color: '#92400e' }),
-          }}>
-            <Typography component="p" sx={{ fontWeight: 500, mb: 0.5, fontSize: '0.75rem' }}>{isRechazado ? 'Motivo del rechazo (DGII)' : 'Mensajes de la DGII'}</Typography>
-            <Box component="ul" sx={{ listStyle: 'disc', listStylePosition: 'inside', m: 0, p: 0, wordBreak: 'break-word', '& li': { mb: 0.25 } }}>
+        <div className="px-4 pb-4 md:px-5">
+          <div className={`rounded-lg border p-3 text-xs ${isRechazado ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+            <p className="font-medium mb-1">{isRechazado ? 'Motivo del rechazo (DGII)' : 'Mensajes de la DGII'}</p>
+            <ul className="list-disc list-inside space-y-0.5 break-words">
               {dgiiMensajes.map((m, i) => <li key={i}>{m}</li>)}
-            </Box>
-          </Box>
-        </Box>
+            </ul>
+          </div>
+        </div>
       )}
       {verUrl && (
-        <Box sx={{ px: { xs: 2, md: 2.5 }, pb: 2 }}>
-          <Button
-            component="a"
+        <div className="px-4 pb-4 md:px-5">
+          <a
             href={verUrl}
             target="_blank"
             rel="noreferrer"
-            nativeButton={false}
-            variant="outlined"
-            endIcon={<ArrowLeft size={14} style={{ transform: 'rotate(135deg)' }} />}
-            sx={{
-              width: '100%', fontSize: '0.875rem', fontWeight: 500, textTransform: 'none',
-              color: '#2a45c4', borderColor: '#c7d2fc', borderRadius: '8px', py: 1,
-              '&:hover': { color: '#253a9e', bgcolor: '#eef2fe', borderColor: '#c7d2fc' },
-            }}
+            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
           >
-            Ver en DGII
-          </Button>
-        </Box>
+            Ver en DGII <ArrowLeft className="h-3.5 w-3.5 rotate-[135deg]" />
+          </a>
+        </div>
       )}
-    </Box>
+    </section>
   );
 }
 
 function EstadoBadge({ estado }: { estado: string }) {
-  const cfg = ESTADO_CONFIG[estado] ?? { label: estado, color: '#374151', bg: '#f3f4f6', icon: Clock };
+  const cfg = ESTADO_CONFIG[estado] ?? { label: estado, variant: 'outline' as const, icon: Clock };
   const Icon = cfg.icon;
   return (
-    <Chip
-      icon={<Icon size={14} />}
-      label={cfg.label}
-      size="small"
-      sx={{
-        bgcolor: cfg.bg, color: cfg.color, fontWeight: 500, fontSize: '0.875rem',
-        height: 28, px: 0.5, '& .MuiChip-icon': { color: cfg.color, ml: 0.75 },
-      }}
-    />
+    <Badge variant={cfg.variant} className="flex items-center gap-1 text-sm px-3 py-1">
+      <Icon className="h-3.5 w-3.5" />
+      {cfg.label}
+    </Badge>
   );
 }
 
@@ -341,6 +316,36 @@ function fmtDate(iso: string | null): string {
   } catch {
     return iso;
   }
+}
+
+/** Fecha + hora — para el detalle, donde sí interesa a qué hora se emitió. */
+function fmtDateHora(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return `${fmtDate(iso)} ${d.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit' })}`;
+  } catch {
+    return iso;
+  }
+}
+
+/** Tarjeta de cifra del encabezado del documento. */
+function CifraCard({
+  label, valor, tono = 'neutro', pie,
+}: {
+  label: string;
+  valor: string;
+  tono?: 'neutro' | 'ok' | 'alerta';
+  pie?: string;
+}) {
+  const color = tono === 'alerta' ? 'text-red-600' : tono === 'ok' ? 'text-emerald-700' : 'text-gray-900';
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`mt-1 text-lg font-bold tabular-nums ${color}`}>{valor}</p>
+      {pie && <p className={`mt-0.5 text-[11px] ${tono === 'alerta' ? 'text-red-500' : 'text-gray-400'}`}>{pie}</p>}
+    </div>
+  );
 }
 
 function calcTotalLinea(l: Linea): number {
@@ -387,19 +392,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const [anularForce, setAnularForce] = useState(false);
   const [anularMotivo, setAnularMotivo] = useState('');
 
-  const [resumenOpen, setResumenOpen] = useState(true);
 
   const [showEmail, setShowEmail]     = useState(false);
   const [emailTo, setEmailTo]         = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
-
-  // Tab activo del panel principal (Detalles / Notas / Historia).
-  const [activeTab, setActiveTab] = useState('detalles');
-
-  // Anchors de los menús (dropdowns) del header y la barra inferior.
-  const [printAnchor, setPrintAnchor] = useState<null | HTMLElement>(null);
-  const [moreAnchor, setMoreAnchor]   = useState<null | HTMLElement>(null);
-  const [accionesAnchor, setAccionesAnchor] = useState<null | HTMLElement>(null);
 
   // ─── Enviar a DGII (para facturas sin eCF) ──────────────────────────────────
   const [showEnviarDgii, setShowEnviarDgii]   = useState(false);
@@ -729,8 +725,26 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   }
 
   // ─── Generar Nota de Débito por mora (borrador interno, no DGII) ────────────
-  const [showConfirmMora, setShowConfirmMora] = useState(false);
   const [generandoMora, setGenerandoMora] = useState(false);
+  const [showConfirmMora, setShowConfirmMora] = useState(false);
+
+  // Preview de la próxima mora automática (cuándo + cuánto), sin generar nada.
+  const [moraPreview, setMoraPreview] = useState<
+    | { estado: 'inactiva' }
+    | { estado: 'no_aplica'; razon: string }
+    | { estado: 'pendiente'; fecha: string; montoCents: number; yaVencida: boolean }
+    | null
+  >(null);
+
+  useEffect(() => {
+    if (!factura || factura.moraOrigenId != null) { setMoraPreview(null); return; }
+    let cancelled = false;
+    fetch(`/api/facturas/${docId}/nota-debito-mora`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled && d?.preview) setMoraPreview(d.preview); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [factura, docId]);
 
   async function handleGenerarNotaDebitoMora() {
     if (!factura) return;
@@ -769,27 +783,36 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const saldo     = Math.max(0, totales.total - pagadoDOP - ncAplicadoDOP);
   const facturaPagada = saldo === 0 && (pagadoDOP > 0 || ncAplicadoDOP > 0) && totales.total > 0;
 
+  /** Estado del vencimiento para la tarjeta de arriba. Null si no aplica. */
+  const vencimiento = useMemo(() => {
+    if (!factura?.fechaLimitePago || saldo <= 0) return null;
+    const dias = Math.floor((Date.now() - Date.parse(`${factura.fechaLimitePago}T00:00:00`)) / 86_400_000);
+    if (dias > 0)  return { texto: `Vencida hace ${dias} día${dias === 1 ? '' : 's'}`, tono: 'alerta' as const };
+    if (dias === 0) return { texto: 'Vence hoy', tono: 'alerta' as const };
+    return { texto: `En ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`, tono: 'neutro' as const };
+  }, [factura?.fechaLimitePago, saldo]);
+
   // ─── Render guards ──────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <Loader2 size={32} color="#3658e1" style={{ animation: 'spin 1s linear infinite' }} />
-      </Box>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
     );
   }
 
   if (error || !factura) {
     return (
-      <Box component="section" sx={{ p: 3 }}>
-        <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '12px', p: 3, textAlign: 'center' }}>
-          <XCircle size={48} color="#f87171" style={{ display: 'block', margin: '0 auto 12px' }} />
-          <Typography component="p" sx={{ fontWeight: 500 }}>{error ?? 'Documento no encontrado'}</Typography>
-          <Button variant="outlined" sx={{ mt: 2, textTransform: 'none', borderRadius: '8px' }} onClick={() => router.push(ui.backHref)}>
+      <section className="p-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
+          <XCircle className="h-12 w-12 mx-auto mb-3 text-red-400" />
+          <p className="font-medium">{error ?? 'Documento no encontrado'}</p>
+          <Button variant="outline" className="mt-4" onClick={() => router.push(ui.backHref)}>
             Volver a {ui.backLabel.toLowerCase()}
           </Button>
-        </Box>
-      </Box>
+        </div>
+      </section>
     );
   }
 
@@ -817,6 +840,17 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const esFinal     = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO', 'ANULADO'].includes(factura.estado);
   // Consultar/Estado DGII solo para e-CF real (ya emitido a DGII), no anulado.
   const puedePolling = esEcfReal && factura.estado !== 'ANULADO';
+
+  // ── Mora: valores derivados para las 2 tarjetas ──────────────────────────────
+  // (1) Info general (aplicada + próxima) → izquierda, bajo "Datos del comprador".
+  // (2) Lista de NDs por mora → sidebar, bajo "Notas asociadas" en su tarjeta.
+  const notasMoraActivas   = (factura.notasMora ?? []).filter(nd => nd.estado !== 'ANULADO');
+  const moraAplicadoCents  = notasMoraActivas.reduce((s, nd) => s + nd.montoTotal, 0);
+  const moraPendienteCents = notasMoraActivas.reduce((s, nd) => s + Math.max(0, nd.montoTotal - nd.pagado), 0);
+  const capitalPagado      = factura.pago?.recibido === true;
+  const hayMoraPendiente   = moraPendienteCents > 0;
+  const hayProximaMora     = moraPreview?.estado === 'pendiente';
+  const mostrarMoraInfo    = notasMoraActivas.length > 0 || hayProximaMora;
 
   // Trigger unificado para "Enviar a DGII" (footer + sidebar card). Si la factura
   // es de contado y no tiene pago registrado, abre el alert de confirmación.
@@ -853,472 +887,508 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
     setShowEnviarDgii(true);
   }
 
-  // sx compartido de las tarjetas-sección del sidebar.
-  const cardSx = { bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' } as const;
-  // sx compartido para los <option> nativos → MenuItem dentro de TextField select.
-  const selectFieldSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const;
-  // Etiqueta de campo pequeña reutilizada en los modales.
-  const fieldLabelSx = { display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#4b5563', mb: 0.75 } as const;
-
   return (
-    <Box component="section" sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 2, sm: 3 }, pb: 2 }}>
+    <section className="p-4 sm:p-6 min-h-full flex flex-col">
 
       {/* ─── Header ────────────────────────────────────────────────────────── */}
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, alignItems: { lg: 'flex-start' }, justifyContent: { lg: 'space-between' }, gap: 1.5, mb: 2.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Button
-            component={Link}
-            href={ui.backHref}
-            nativeButton={false}
-            variant="text"
-            size="small"
-            startIcon={<ArrowLeft size={16} />}
-            sx={{ textTransform: 'none', color: '#374151', minWidth: 0 }}
-          >
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{ui.backLabel}</Box>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={ui.backHref}>
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">{ui.backLabel}</span>
+            </Link>
           </Button>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Typography component="h1" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' }, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-mono">
                 {factura.encf && !factura.encf.startsWith('BOR-')
                   ? factura.encf
                   : (factura.codigo ?? `${ui.noun} #${factura.id}`)}
-              </Typography>
+              </h1>
               <EstadoBadge estado={factura.estado} />
               {/* Estado de COBRO (independiente del estado DGII) */}
               {facturaPagada ? (
-                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: '2px', borderRadius: '9999px', fontSize: '11px', fontWeight: 500, bgcolor: '#ecfdf5', color: '#047857', boxShadow: 'inset 0 0 0 1px #a7f3d0' }}>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
                   Pagada
-                </Box>
+                </span>
               ) : saldo > 0 && pagadoDOP > 0 ? (
-                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: '2px', borderRadius: '9999px', fontSize: '11px', fontWeight: 500, bgcolor: '#fffbeb', color: '#b45309', boxShadow: 'inset 0 0 0 1px #fde68a' }}>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200">
                   Pago parcial
-                </Box>
+                </span>
               ) : null}
-            </Box>
-            <Typography component="p" sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25 }}>
-              {/* Solo mostrar el nombre fiscal del comprobante si fue emitido a DGII.
-                  Borrador/sin-ncf/histórica → genérico, NO el tipo fiscal. */}
-              <Box component="span" sx={{ fontWeight: 500, color: '#4b5563' }}>
-                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Sin comprobante fiscal' : 'Documento sin comprobante fiscal')}
-              </Box>
-              <Box component="span" sx={{ mx: 0.75 }}>·</Box>
-              Fecha: {fmtDate(factura.fechaEmision)}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {/* El tipo solo se escribe cuando aporta algo: si el documento no
+                  fue a la DGII, el badge de arriba ya dice "Sin comprobante" y
+                  repetirlo aquí era decir dos veces lo mismo en la misma línea. */}
+              {esEcfReal && (
+                <>
+                  <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
+                  <span className="mx-1.5">·</span>
+                </>
+              )}
+              Fecha: {fmtDateHora(factura.fechaEmision)}
               {factura.fechaLimitePago && (
                 <>
-                  <Box component="span" sx={{ mx: 0.75 }}>·</Box>
+                  <span className="mx-1.5">·</span>
                   Vencimiento: {fmtDate(factura.fechaLimitePago)}
                 </>
               )}
-            </Typography>
-          </Box>
-        </Box>
+            </p>
+          </div>
+        </div>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {puedePolling && (
             <Button
-              variant="outlined" size="small"
+              variant="outline" size="sm"
               onClick={consultarEstado}
               disabled={pollingStatus === 'loading'}
-              startIcon={<RefreshCw size={16} style={pollingStatus === 'loading' ? { animation: 'spin 1s linear infinite' } : undefined} />}
-              sx={{ borderRadius: '8px', textTransform: 'none' }}
             >
+              <RefreshCw className={`h-4 w-4 mr-1 ${pollingStatus === 'loading' ? 'animate-spin' : ''}`} />
               Consultar DGII
             </Button>
           )}
 
-          <Button
-            variant="outlined" size="small"
-            onClick={(e) => setPrintAnchor(e.currentTarget)}
-            startIcon={<Printer size={16} />}
-            endIcon={<ChevronDown size={14} style={{ opacity: 0.6 }} />}
-            sx={{ borderRadius: '8px', textTransform: 'none' }}
-          >
-            Imprimir
-          </Button>
-          <Menu
-            anchorEl={printAnchor}
-            open={Boolean(printAnchor)}
-            onClose={() => setPrintAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            slotProps={{ paper: { sx: { width: 256 } } as object }}
-          >
-            {/* Imprimir con impresora predeterminada */}
-            <MenuItem
-              onClick={() => {
-                setPrintAnchor(null);
-                window.open(printUrl(factura.id), '_blank', 'noreferrer');
-                toast.info(`Abriendo con: ${printerLabel}`);
-              }}
-              sx={{ gap: 1, alignItems: 'flex-start', py: 1 }}
+          {/* Acción principal del documento, junto al resto de acciones. Antes
+              vivía en una tarjeta del sidebar: el usuario tenía que buscar a la
+              derecha lo que iba a hacer en el 90% de los casos, y esa tarjeta
+              se comía el alto de la columna. */}
+          {!esEcfReal && puedeEmitir && canEmitir && (
+            <Button
+              size="sm"
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              onClick={triggerEnviarDgii}
             >
-              <Printer size={16} color="#3658e1" style={{ marginTop: 2 }} />
-              <Box>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Imprimir (predeterminada)</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{printerLabel}</Typography>
-              </Box>
-            </MenuItem>
-            <MenuItem
-              component="a"
-              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setPrintAnchor(null)}
-              sx={{ gap: 1, alignItems: 'flex-start', py: 1 }}
-            >
-              <FileText size={16} color="#6b7280" style={{ marginTop: 2 }} />
-              <Box>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Factura grande (A4)</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>PDF tamaño carta / A4</Typography>
-              </Box>
-            </MenuItem>
-            <MenuItem
-              component="a"
-              href={`/api/pdf/factura/${factura.codigo ?? factura.id}?formato=tirilla`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setPrintAnchor(null)}
-              sx={{ gap: 1, alignItems: 'flex-start', py: 1 }}
-            >
-              <Ticket size={16} color="#3658e1" style={{ marginTop: 2 }} />
-              <Box>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Factura pequeña (80mm)</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>PDF tirilla térmica</Typography>
-              </Box>
-            </MenuItem>
-            <MenuItem
-              component="a"
-              href={`/api/pdf/factura/${factura.codigo ?? factura.id}/ticket`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setPrintAnchor(null)}
-              sx={{ gap: 1, alignItems: 'flex-start', py: 1 }}
-            >
-              <Printer size={16} color="#6b7280" style={{ marginTop: 2 }} />
-              <Box>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>Ticket HTML (web)</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af' }}>Vista web para imprimir</Typography>
-              </Box>
-            </MenuItem>
-          </Menu>
+              <Send className="h-4 w-4 mr-1" />
+              {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
+            </Button>
+          )}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Printer className="h-4 w-4 mr-1" />
+                Imprimir
+                <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {/* Imprimir con impresora predeterminada */}
+              <DropdownMenuItem
+                onSelect={() => {
+                  window.open(printUrl(factura.id), '_blank', 'noreferrer');
+                  toast.info(`Abriendo con: ${printerLabel}`);
+                }}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Printer className="h-4 w-4 text-teal-600" />
+                <div>
+                  <p className="text-sm font-medium">Imprimir (predeterminada)</p>
+                  <p className="text-xs text-gray-400 truncate max-w-[180px]">{printerLabel}</p>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <FileText className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm font-medium">Factura grande (A4)</p>
+                    <p className="text-xs text-gray-400">PDF tamaño carta / A4</p>
+                  </div>
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}?formato=tirilla`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Ticket className="h-4 w-4 text-teal-600" />
+                  <div>
+                    <p className="text-sm font-medium">Factura pequeña (80mm)</p>
+                    <p className="text-xs text-gray-400">PDF tirilla térmica</p>
+                  </div>
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}/ticket`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Printer className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm font-medium">Ticket HTML (web)</p>
+                    <p className="text-xs text-gray-400">Vista web para imprimir</p>
+                  </div>
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Más acciones — agrupadas en dropdown */}
-          <Button
-            variant="outlined" size="small"
-            onClick={(e) => setMoreAnchor(e.currentTarget)}
-            sx={{ borderRadius: '8px', textTransform: 'none', minWidth: 0, px: 1 }}
-          >
-            <MoreVertical size={16} />
-          </Button>
-          <Menu
-            anchorEl={moreAnchor}
-            open={Boolean(moreAnchor)}
-            onClose={() => setMoreAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            slotProps={{ paper: { sx: { width: 224 } } as object }}
-          >
-            <MenuItem
-              component="a"
-              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setMoreAnchor(null)}
-              sx={{ gap: 1 }}
-            >
-              <Download size={16} color="#6b7280" />
-              Descargar PDF
-            </MenuItem>
-            {factura.archivos.xmlUrl && (
-              <MenuItem
-                component="a"
-                href={factura.archivos.xmlUrl}
-                download
-                onClick={() => setMoreAnchor(null)}
-                sx={{ gap: 1 }}
-              >
-                <FileText size={16} color="#6b7280" />
-                Descargar XML
-              </MenuItem>
-            )}
-            {canCreate && (
-              <MenuItem
-                onClick={() => { setMoreAnchor(null); setShowEmail(true); }}
-                sx={{ gap: 1 }}
-              >
-                <Mail size={16} color="#6b7280" />
-                Enviar por correo
-              </MenuItem>
-            )}
-            {canCreate && (
-              <MenuItem
-                onClick={() => { setMoreAnchor(null); openProximamente('Duplicar factura'); }}
-                sx={{ gap: 1 }}
-              >
-                <Copy size={16} color="#6b7280" />
-                Duplicar
-              </MenuItem>
-            )}
-            {canCreate && puedeCrearNota && [
-              <MenuItem
-                key="crear-nc"
-                component={Link}
-                href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
-                onClick={() => setMoreAnchor(null)}
-                sx={{ gap: 1, color: '#2a45c4' }}
-              >
-                <Plus size={16} />
-                Crear nota de crédito
-              </MenuItem>,
-              <MenuItem
-                key="crear-nd"
-                component={Link}
-                href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}
-                onClick={() => setMoreAnchor(null)}
-                sx={{ gap: 1, color: '#2a45c4' }}
-              >
-                <Plus size={16} />
-                Crear nota de débito
-              </MenuItem>,
-            ]}
-            {puedeGenerarMora && (
-              <MenuItem
-                onClick={() => { setMoreAnchor(null); setTimeout(() => setShowConfirmMora(true), 0); }}
-                disabled={generandoMora}
-                sx={{ gap: 1, color: '#c2410c' }}
-              >
-                {generandoMora
-                  ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  : <Plus size={16} />}
-                Generar nota de débito por mora
-              </MenuItem>
-            )}
-            {esBorrador && canEdit && (
-              <MenuItem
-                component={Link}
-                href={`/dashboard/facturas/${factura.id}/editar`}
-                onClick={() => setMoreAnchor(null)}
-                sx={{ gap: 1 }}
-              >
-                <FileText size={16} color="#6b7280" />
-                Editar borrador
-              </MenuItem>
-            )}
-            {esAnulable && canAnular && (
-              <MenuItem
-                onClick={() => { setMoreAnchor(null); setShowAnular(true); setAnularError(null); }}
-                sx={{ gap: 1, color: '#dc2626' }}
-              >
-                <XCircle size={16} />
-                Anular comprobante
-              </MenuItem>
-            )}
-          </Menu>
-        </Box>
-      </Box>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4 text-gray-500" />
+                  Descargar PDF
+                </a>
+              </DropdownMenuItem>
+              {factura.archivos.xmlUrl && (
+                <DropdownMenuItem asChild>
+                  <a
+                    href={factura.archivos.xmlUrl}
+                    download
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="h-4 w-4 text-gray-500" />
+                    Descargar XML
+                  </a>
+                </DropdownMenuItem>
+              )}
+              {canCreate && (
+                <DropdownMenuItem
+                  onSelect={() => setShowEmail(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Mail className="h-4 w-4 text-gray-500" />
+                  Enviar por correo
+                </DropdownMenuItem>
+              )}
+              {canCreate && (
+                <DropdownMenuItem
+                  onSelect={() => openProximamente('Duplicar factura')}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Copy className="h-4 w-4 text-gray-500" />
+                  Duplicar
+                </DropdownMenuItem>
+              )}
+              {canCreate && puedeCrearNota && (
+                <>
+                  {/* Separadores por intención: arriba lo que hace con ESTE
+                      documento, en medio lo que CREA otro, abajo lo que lo
+                      destruye. Siete acciones seguidas se leen como una lista
+                      de la compra. */}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
+                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Crear nota de crédito
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}
+                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Crear nota de débito
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              )}
+              {puedeGenerarMora && (
+                <DropdownMenuItem
+                  onSelect={() => { setTimeout(() => setShowConfirmMora(true), 0); }}
+                  disabled={generandoMora}
+                  className="flex items-center gap-2 cursor-pointer text-orange-700"
+                >
+                  {generandoMora
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Plus className="h-4 w-4" />}
+                  Generar nota de débito por mora
+                </DropdownMenuItem>
+              )}
+              {esBorrador && canEdit && (
+                <DropdownMenuItem asChild>
+                  <Link
+                    href={`/dashboard/facturas/${factura.id}/editar`}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="h-4 w-4 text-gray-500" />
+                    Editar
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {esAnulable && canAnular && (
+                <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => { setShowAnular(true); setAnularError(null); }}
+                  className="flex items-center gap-2 cursor-pointer text-red-600"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Anular comprobante
+                </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
 
       {/* ─── Banners ──────────────────────────────────────────────────────── */}
       {anularNota && (
-        <Box sx={{ bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', p: 2, display: 'flex', gap: 1.5, mb: 2 }}>
-          <AlertTriangle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
-          <Typography sx={{ fontSize: '0.875rem', color: '#92400e' }}>{anularNota}</Typography>
-        </Box>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 mb-4">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800">{anularNota}</p>
+        </div>
       )}
 
       {pollMsg && (
-        <Box sx={{
-          borderRadius: '12px', p: 1.5, fontSize: '0.875rem', display: 'flex', gap: 1, mb: 2,
-          ...(pollingStatus === 'error'
-            ? { bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }
-            : { bgcolor: '#eef2fe', border: '1px solid #c7d2fc', color: '#2a45c4' }),
-        }}>
+        <div className={`rounded-xl p-3 text-sm flex gap-2 mb-4 ${
+          pollingStatus === 'error'
+            ? 'bg-red-50 border border-red-200 text-red-700'
+            : 'bg-teal-50 border border-teal-200 text-teal-700'
+        }`}>
           {pollingStatus === 'error'
-            ? <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
-            : <CheckCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />}
+            ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            : <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />}
           {pollMsg}
-        </Box>
+        </div>
+      )}
+
+      {/* ─── Cifras del documento, arriba ────────────────────────────────────
+          Antes vivían en una tarjeta "Resumen" del sidebar que repetía línea por
+          línea lo que ya muestra "Productos y servicios". Lo que se busca al
+          abrir una factura es cuánto es, cuánto pagaron y cuánto falta: eso va
+          arriba y se lee sin desplazar. */}
+      {!esNc && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <CifraCard label={esNc ? 'Total acreditado' : 'Total'} valor={fmtDOP(totales.total)} />
+          <CifraCard label="Pagado" valor={fmtDOP(pagadoDOP)} tono={pagadoDOP > 0 ? 'ok' : 'neutro'} />
+          <CifraCard
+            label="Saldo pendiente"
+            valor={fmtDOP(saldo)}
+            tono={saldo > 0 ? 'alerta' : 'ok'}
+            pie={saldo === 0 ? 'Pagada en su totalidad' : undefined}
+          />
+          <CifraCard
+            label={factura.fechaLimitePago ? 'Vence' : 'Condición'}
+            valor={factura.fechaLimitePago ? fmtDate(factura.fechaLimitePago) : 'De contado'}
+            tono={vencimiento?.tono ?? 'neutro'}
+            pie={vencimiento?.texto}
+          />
+        </div>
       )}
 
       {/* ─── Split layout: main + sticky sidebar ─────────────────────────── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 360px' }, gap: 2.5 }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
 
         {/* ━━━ LEFT: contenido principal (tabbed) ━━━ */}
-        <Box sx={{ minWidth: 0 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ borderBottom: '1px solid #e5e7eb' }}>
-              <Tabs
-                value={activeTab}
-                onChange={(_, v) => setActiveTab(v)}
-                sx={{
-                  minHeight: 0,
-                  '& .MuiTab-root': { textTransform: 'none', minHeight: 0, py: 1, fontSize: '0.875rem', fontWeight: 500 },
-                  '& .Mui-selected': { color: '#3658e1 !important' },
-                  '& .MuiTabs-indicator': { bgcolor: '#3658e1' },
-                }}
-              >
-                <Tab value="detalles" label="Detalles" />
-                <Tab value="notas" label="Notas" />
-                <Tab value="historia" label="Historia" />
-              </Tabs>
-            </Box>
+        <div className="min-w-0">
+          <Tabs defaultValue="detalles" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="detalles">Detalles</TabsTrigger>
+              <TabsTrigger value="notas">Notas</TabsTrigger>
+              <TabsTrigger value="historia">Historia</TabsTrigger>
+            </TabsList>
 
-            {activeTab === 'detalles' && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TabsContent value="detalles" className="space-y-4">
 
           {/* Banner: si es NC/ND, link a la factura que modifica */}
           {factura.notaOrigen && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderRadius: '12px', border: '1px solid #c7d2fc', bgcolor: '#eef2fe', px: 2, py: 1.5 }}>
-              <Typography sx={{ fontSize: '0.875rem', color: '#24377d' }}>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
+              <p className="text-sm text-teal-900">
                 {factura.tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
-                <Box component="span" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</Box>
+                <span className="font-semibold font-mono">{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</span>
                 {factura.codigoModificacion != null && (
-                  <Box component="span" sx={{ ml: 1, display: 'inline-flex', alignItems: 'center', px: 0.75, py: '2px', borderRadius: '9999px', fontSize: '10px', fontWeight: 500, bgcolor: '#fff', border: '1px solid #c7d2fc', color: '#253a9e' }}>
+                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-teal-200 text-teal-800">
                     {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
-                  </Box>
+                  </span>
                 )}
-              </Typography>
-              <MuiLink
-                component={Link}
+              </p>
+              <Link
                 href={`/dashboard/facturas/${factura.notaOrigen.id}`}
-                sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#2a45c4', whiteSpace: 'nowrap', textDecoration: 'none', '&:hover': { color: '#253a9e' } }}
+                className="text-sm font-medium text-teal-700 hover:text-teal-800 whitespace-nowrap"
               >
                 Ver factura →
-              </MuiLink>
-            </Box>
+              </Link>
+            </div>
           )}
 
           {/* Banner: NC del modelo nuevo → generó saldo a favor (no descontó la factura) */}
           {factura.tipoEcf === '34' && factura.creditoGeneradoCents != null && (
-            <Box sx={{ borderRadius: '12px', border: '1px solid #ddd6fe', bgcolor: '#f5f3ff', px: 2, py: 1.5 }}>
+            <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
               {factura.creditoGeneradoCents > 0 ? (
-                <Typography sx={{ fontSize: '0.875rem', color: '#4c1d95' }}>
-                  Esta nota generó <Box component="span" sx={{ fontWeight: 600 }}>{fmtDOP(factura.creditoGeneradoCents / 100)}</Box> de
-                  saldo a favor del cliente — <Box component="span" sx={{ fontWeight: 500 }}>no descontó la factura original</Box>.
+                <p className="text-sm text-violet-900">
+                  Esta nota generó <span className="font-semibold">{fmtDOP(factura.creditoGeneradoCents / 100)}</span> de
+                  saldo a favor del cliente — <span className="font-medium">no descontó la factura original</span>.
                   El cliente puede usarlo para pagar otras facturas.
-                </Typography>
+                </p>
               ) : (
-                <Typography sx={{ fontSize: '0.875rem', color: '#4c1d95' }}>
+                <p className="text-sm text-violet-900">
                   Esta nota no generó saldo a favor: la factura original no tenía pagos registrados
                   (solo se acredita lo que el cliente ya pagó).
-                </Typography>
+                </p>
               )}
-            </Box>
+            </div>
           )}
 
           {/* Banner: nota borrador cuyo padre YA está emitido → recordar emisión */}
           {esNota && esBorrador && factura.notaOrigen &&
             ['ACEPTADO', 'ACEPTADO_CONDICIONAL'].includes(factura.notaOrigen.estado) && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderRadius: '12px', border: '1px solid #fde68a', bgcolor: '#fffbeb', px: 2, py: 1.5 }}>
-              <Typography sx={{ fontSize: '0.875rem', color: '#78350f' }}>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm text-amber-900">
                 La factura original ya fue emitida a la DGII. Esta nota sigue como
-                borrador — puedes enviarla cuando quieras (no es obligatorio).
-              </Typography>
+                sin emitir — puedes enviarla cuando quieras (no es obligatorio).
+              </p>
               {canEmitir && (
-                <Box
-                  component="button"
+                <button
                   type="button"
                   onClick={triggerEnviarDgii}
-                  sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#92400e', textDecoration: 'underline', whiteSpace: 'nowrap', background: 'none', border: 'none', cursor: 'pointer', p: 0, '&:hover': { color: '#78350f' } }}
+                  className="text-sm font-medium text-amber-800 hover:text-amber-900 underline whitespace-nowrap"
                 >
                   Enviar a DGII →
-                </Box>
+                </button>
               )}
-            </Box>
+            </div>
           )}
 
           {/* Banner: si es ND de mora, link a la factura padre */}
           {factura.moraOrigen && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderRadius: '12px', border: '1px solid #fed7aa', bgcolor: '#fff7ed', px: 2, py: 1.5 }}>
-              <Typography sx={{ fontSize: '0.875rem', color: '#7c2d12' }}>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+              <p className="text-sm text-orange-900">
                 Nota de débito por mora de la factura{' '}
-                <Box component="span" sx={{ fontWeight: 600 }}>{factura.moraOrigen.codigo ?? factura.moraOrigen.encf}</Box>
-              </Typography>
-              <MuiLink
-                component={Link}
+                <span className="font-semibold">{factura.moraOrigen.codigo ?? factura.moraOrigen.encf}</span>
+              </p>
+              <Link
                 href={`/dashboard/facturas/${factura.moraOrigen.id}`}
-                sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#c2410c', whiteSpace: 'nowrap', textDecoration: 'none', '&:hover': { color: '#9a3412' } }}
+                className="text-sm font-medium text-orange-700 hover:text-orange-800 whitespace-nowrap"
               >
                 Ver factura →
-              </MuiLink>
-            </Box>
+              </Link>
+            </div>
           )}
 
           {/* Productos y servicios */}
           <SectionCard number={1} title="Productos y servicios" icon={Package}>
             {factura.lineas.length === 0 ? (
-              <Box sx={{ fontSize: '0.875rem', color: '#6b7280', fontStyle: 'italic', py: 3, textAlign: 'center', border: '1px dashed #e5e7eb', borderRadius: '8px' }}>
+              <div className="text-sm text-gray-500 italic py-6 text-center border border-dashed border-gray-200 rounded-lg">
                 Sin ítems registrados — esta factura usa el formato anterior sin detalle de líneas.
-              </Box>
+              </div>
             ) : (
-              <Box sx={{ overflowX: 'auto', mx: -0.5 }}>
-                <Box component="table" sx={{ minWidth: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
-                  <Box component="thead">
-                    <Box component="tr" sx={{ '& th': { fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280', borderBottom: '1px solid #e5e7eb', fontWeight: 500, py: 1 } }}>
-                      <Box component="th" sx={{ textAlign: 'left', px: 1 }}>Producto/servicio</Box>
-                      <Box component="th" sx={{ textAlign: 'right', px: 1, whiteSpace: 'nowrap' }}>Precio</Box>
-                      <Box component="th" sx={{ textAlign: 'right', px: 1, whiteSpace: 'nowrap' }}>Desc%</Box>
-                      <Box component="th" sx={{ textAlign: 'right', px: 1, whiteSpace: 'nowrap' }}>Impuesto</Box>
-                      <Box component="th" sx={{ textAlign: 'right', px: 1, whiteSpace: 'nowrap' }}>Cant.</Box>
-                      <Box component="th" sx={{ textAlign: 'right', px: 1, whiteSpace: 'nowrap' }}>Total</Box>
-                      <Box component="th" sx={{ width: 32 }}></Box>
-                    </Box>
-                  </Box>
-                  <Box component="tbody" sx={{ '& tr': { borderTop: '1px solid #f3f4f6' } }}>
+              <div className="overflow-x-auto -mx-1">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
+                      <th className="text-left font-medium py-2 px-2">Producto/servicio</th>
+                      <th className="text-right font-medium py-2 px-2 whitespace-nowrap">Precio</th>
+                      <th className="text-right font-medium py-2 px-2 whitespace-nowrap">Desc%</th>
+                      <th className="text-right font-medium py-2 px-2 whitespace-nowrap">Impuesto</th>
+                      <th className="text-right font-medium py-2 px-2 whitespace-nowrap">Cant.</th>
+                      <th className="text-right font-medium py-2 px-2 whitespace-nowrap">Total</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
                     {factura.lineas.map((l, idx) => {
                       const tasa = !l.tasaItbis || l.tasaItbis === 'exento'
                         ? 'Exento'
                         : `${(Number(l.tasaItbis) * 100).toFixed(0)}%`;
                       return (
-                        <Box component="tr" key={l.id ?? idx} sx={{ '&:hover': { bgcolor: 'rgba(249,250,251,0.6)' } }}>
-                          <Box component="td" sx={{ py: 1.25, px: 1, verticalAlign: 'top' }}>
-                            <Typography sx={{ fontWeight: 500, color: '#111827', fontSize: '0.875rem' }}>
+                        <tr key={l.id ?? idx} className="hover:bg-gray-50/60">
+                          <td className="py-2.5 px-2 align-top">
+                            <p className="font-medium text-gray-900">
                               {l.dependienteNombre ? `${l.dependienteNombre} - ${l.nombreItem || '—'}` : (l.nombreItem || '—')}
-                            </Typography>
+                            </p>
                             {l.descripcionItem && (
-                              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mt: 0.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.descripcionItem}</Typography>
+                              <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{l.descripcionItem}</p>
                             )}
-                          </Box>
-                          <Box component="td" sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#374151', px: 1 }}>
+                          </td>
+                          <td className="text-right tabular-nums text-gray-700 px-2">
                             {fmtDOP(Number(l.precioUnitarioItem) || 0)}
-                          </Box>
-                          <Box component="td" sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#4b5563', px: 1 }}>
+                          </td>
+                          <td className="text-right tabular-nums text-gray-600 px-2">
                             {(Number(l.descuentoPct) || 0).toFixed(0)}%
-                          </Box>
-                          <Box component="td" sx={{ textAlign: 'right', color: '#4b5563', px: 1, whiteSpace: 'nowrap' }}>{tasa}</Box>
-                          <Box component="td" sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#374151', px: 1 }}>
+                          </td>
+                          <td className="text-right text-gray-600 px-2 whitespace-nowrap">{tasa}</td>
+                          <td className="text-right tabular-nums text-gray-700 px-2">
                             {Number(l.cantidadItem) || 0}
-                          </Box>
-                          <Box component="td" sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: '#111827', px: 1, whiteSpace: 'nowrap' }}>
+                          </td>
+                          <td className="text-right tabular-nums font-medium text-gray-900 px-2 whitespace-nowrap">
                             {fmtDOP(calcTotalLinea(l))}
-                          </Box>
-                          <Box component="td" sx={{ px: 0.5, color: '#d1d5db' }}>
-                            <MoreVertical size={14} />
-                          </Box>
-                        </Box>
+                          </td>
+                          <td className="px-1 text-gray-300">
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </td>
+                        </tr>
                       );
                     })}
-                  </Box>
-                </Box>
-              </Box>
+                  </tbody>
+                  {/* La suma vive donde están las líneas que la producen. */}
+                  <tfoot>
+                    <tr className="border-t border-gray-200">
+                      <td colSpan={4} />
+                      <td className="py-2 px-2 text-right text-xs text-gray-500">Subtotal</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtDOP(totales.subtotal)}</td>
+                      <td />
+                    </tr>
+                    {totales.itbis > 0 && (
+                      <tr>
+                        <td colSpan={4} />
+                        <td className="py-1 px-2 text-right text-xs text-gray-500">ITBIS</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtDOP(totales.itbis)}</td>
+                        <td />
+                      </tr>
+                    )}
+                    {ncAplicadoDOP > 0 && (
+                      <tr>
+                        <td colSpan={4} />
+                        <td className="py-1 px-2 text-right text-xs text-teal-700">Notas de crédito</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-teal-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
+                        <td />
+                      </tr>
+                    )}
+                    <tr className="border-t-2 border-gray-200">
+                      <td colSpan={4} />
+                      <td className="py-2 px-2 text-right text-sm font-bold text-gray-900">{esNc ? 'Total acreditado' : 'Total'}</td>
+                      <td className="py-2 px-2 text-right text-sm font-bold tabular-nums text-gray-900 whitespace-nowrap">{fmtDOP(totales.total)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             )}
 
             {esBorrador && canEdit && (
-              <Box sx={{ mt: 1.5 }}>
+              <div className="mt-3">
                 <Button
-                  component={Link}
-                  href={`/dashboard/facturas/${factura.id}/editar`}
-                  nativeButton={false}
                   type="button"
-                  variant="outlined"
-                  size="small"
-                  startIcon={<Plus size={16} />}
-                  sx={{ width: '100%', borderStyle: 'dashed', textTransform: 'none', color: '#2a45c4', borderColor: '#a5b4f9', borderRadius: '8px', '&:hover': { bgcolor: '#eef2fe', borderColor: '#a5b4f9', borderStyle: 'dashed' } }}
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-dashed text-teal-700 border-teal-300 hover:bg-teal-50"
+                  asChild
                 >
-                  Agregar producto o servicio
+                  <Link href={`/dashboard/facturas/${factura.id}/editar`}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Agregar producto o servicio
+                  </Link>
                 </Button>
-              </Box>
+              </div>
             )}
           </SectionCard>
 
@@ -1329,11 +1399,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             defaultOpen={Boolean(factura.terminosCondiciones)}
           >
             {factura.terminosCondiciones ? (
-              <Typography sx={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">
                 {factura.terminosCondiciones}
-              </Typography>
+              </p>
             ) : (
-              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>Sin términos y condiciones.</Typography>
+              <p className="text-sm text-gray-400 italic">Sin términos y condiciones.</p>
             )}
           </AccordionSection>
 
@@ -1344,9 +1414,9 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             defaultOpen={Boolean(factura.notas)}
           >
             {factura.notas ? (
-              <Typography sx={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>{factura.notas}</Typography>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{factura.notas}</p>
             ) : (
-              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>Sin notas adicionales.</Typography>
+              <p className="text-sm text-gray-400 italic">Sin notas adicionales.</p>
             )}
           </AccordionSection>
 
@@ -1357,9 +1427,9 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             defaultOpen={Boolean(factura.pieFactura)}
           >
             {factura.pieFactura ? (
-              <Typography sx={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>{factura.pieFactura}</Typography>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{factura.pieFactura}</p>
             ) : (
-              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>Sin pie de factura.</Typography>
+              <p className="text-sm text-gray-400 italic">Sin pie de factura.</p>
             )}
           </AccordionSection>
 
@@ -1370,199 +1440,166 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             defaultOpen={Boolean(factura.comentario)}
           >
             {factura.comentario ? (
-              <Typography sx={{ fontSize: '0.875rem', color: '#374151', whiteSpace: 'pre-wrap' }}>{factura.comentario}</Typography>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{factura.comentario}</p>
             ) : (
-              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>Sin comentarios.</Typography>
+              <p className="text-sm text-gray-400 italic">Sin comentarios.</p>
             )}
           </AccordionSection>
 
           {/* Metadatos del documento */}
           {(factura.createdByName || factura.updatedByName) && (
             <SectionCard number={6} title="Información del documento">
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 3, rowGap: 1, fontSize: '0.875rem' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 {factura.createdByName && (
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280' }}>Creado por</Typography>
-                    <Typography sx={{ fontWeight: 500, color: '#111827' }}>{factura.createdByName}</Typography>
-                  </Box>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Creado por</p>
+                    <p className="font-medium text-gray-900">{factura.createdByName}</p>
+                  </div>
                 )}
                 {factura.updatedByName && (
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280' }}>Última edición</Typography>
-                    <Typography sx={{ fontWeight: 500, color: '#111827' }}>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Última edición</p>
+                    <p className="font-medium text-gray-900">
                       {factura.updatedByName}
-                      <Box component="span" sx={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 400, ml: 0.75 }}>{fmtDate(factura.updatedAt)}</Box>
-                    </Typography>
-                  </Box>
+                      <span className="text-xs text-gray-500 font-normal ml-1.5">{fmtDate(factura.updatedAt)}</span>
+                    </p>
+                  </div>
                 )}
-              </Box>
+              </div>
             </SectionCard>
           )}
 
           {/* Cliente compacto */}
           <SectionCard number={(factura.createdByName || factura.updatedByName) ? 7 : 6} title="Datos del comprador">
             {factura.comprador.razonSocial ? (
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 3, rowGap: 1, fontSize: '0.875rem' }}>
-                <Box>
-                  <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280' }}>Razón social</Typography>
-                  <Typography sx={{ fontWeight: 500, color: '#111827' }}>{factura.comprador.razonSocial}</Typography>
-                </Box>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-gray-500">Razón social</p>
+                  <p className="font-medium text-gray-900">{factura.comprador.razonSocial}</p>
+                </div>
                 {factura.comprador.rnc && (
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280' }}>RNC</Typography>
-                    <Typography sx={{ color: '#1f2937', fontFamily: 'monospace' }}>{factura.comprador.rnc}</Typography>
-                  </Box>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">RNC</p>
+                    <p className="text-gray-800 font-mono">{factura.comprador.rnc}</p>
+                  </div>
                 )}
                 {factura.comprador.email && (
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280' }}>Email</Typography>
-                    <Typography sx={{ color: '#1f2937', wordBreak: 'break-all' }}>{factura.comprador.email}</Typography>
-                  </Box>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Email</p>
+                    <p className="text-gray-800 break-all">{factura.comprador.email}</p>
+                  </div>
                 )}
                 {factura.comprador.telefono && (
-                  <Box>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280' }}>Teléfono</Typography>
-                    <Typography sx={{ color: '#1f2937' }}>{factura.comprador.telefono}</Typography>
-                  </Box>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Teléfono</p>
+                    <p className="text-gray-800">{factura.comprador.telefono}</p>
+                  </div>
                 )}
                 {factura.comprador.direccion && (
-                  <Box sx={{ gridColumn: { sm: '1 / -1' } }}>
-                    <Typography sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280' }}>Dirección</Typography>
-                    <Typography sx={{ color: '#1f2937' }}>{factura.comprador.direccion}</Typography>
-                  </Box>
+                  <div className="sm:col-span-2">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Dirección</p>
+                    <p className="text-gray-800">{factura.comprador.direccion}</p>
+                  </div>
                 )}
-              </Box>
+              </div>
             ) : (
-              <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>
+              <p className="text-sm text-gray-400 italic">
                 {esEcfReal ? 'Consumidor final' : 'Sin cliente especificado'}
-              </Typography>
+              </p>
             )}
           </SectionCard>
 
-              </Box>
-            )}
+          {/* ── Mora (info general): aplicada + próxima automática ──────────────
+              Reubicada aquí (bajo Datos del comprador) para descargar el sidebar.
+              El detalle de las NDs por mora vive en su propia tarjeta (sidebar,
+              bajo "Notas asociadas"). */}
+          {mostrarMoraInfo && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 md:pt-5">
+                <TrendingUp className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-gray-900">Mora</h2>
+              </header>
+              <div className="px-4 pb-4 md:px-5 space-y-3">
+                {/* Aviso: capital pagado pero mora aún pendiente. */}
+                {capitalPagado && hayMoraPendiente && (
+                  <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
+                    <TrendingUp className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" aria-hidden="true" />
+                    <p className="text-xs text-gray-700">
+                      El pago de la factura está saldado, pero la mora sigue pendiente:
+                      {' '}<span className="font-semibold text-orange-700">{fmtDOP(moraPendienteCents / 100)}</span> por cobrar.
+                    </p>
+                  </div>
+                )}
 
-            {activeTab === 'notas' && (
-              <Box sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', p: { xs: 2, md: 2.5 } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                  <StickyNote size={16} color="#3658e1" />
-                  <Typography component="h3" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Notas</Typography>
-                </Box>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5">
+                    <p className="text-xs text-gray-500">Mora aplicada</p>
+                    <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                      {fmtDOP(moraAplicadoCents / 100)}
+                      {notasMoraActivas.length > 0 && (
+                        <span className="ml-1 text-xs font-normal text-gray-400">
+                          · {notasMoraActivas.length} nota{notasMoraActivas.length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </p>
+                    {hayMoraPendiente && (
+                      <p className="text-[11px] text-orange-600 mt-0.5">
+                        {fmtDOP(moraPendienteCents / 100)} pendiente
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2.5">
+                    <p className="text-xs text-gray-500">Próxima mora automática</p>
+                    {hayProximaMora ? (
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                        {fmtDOP(moraPreview!.montoCents / 100)}
+                        <span className="ml-1 text-xs font-normal text-gray-500">
+                          · {fmtFechaCorta(moraPreview!.fecha)}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-400 mt-0.5">Sin cargos programados</p>
+                    )}
+                  </div>
+                </div>
+
+                {hayProximaMora && (
+                  <p className="text-xs text-gray-500">
+                    {moraPreview!.yaVencida
+                      ? `Ya exigible desde el ${fmtFechaCorta(moraPreview!.fecha)}; se generará en la próxima corrida automática.`
+                      : `Si no se paga, el ${fmtFechaCorta(moraPreview!.fecha)} se cobrará ${fmtDOP(moraPreview!.montoCents / 100)}.`}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
+            </TabsContent>
+
+            <TabsContent value="notas">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <StickyNote className="h-4 w-4 text-teal-600" />
+                  <h3 className="text-sm font-semibold text-gray-900">Notas</h3>
+                </div>
                 <EntityNotes entityType="factura" entityId={factura.id} />
-              </Box>
-            )}
+              </div>
+            </TabsContent>
 
-            {activeTab === 'historia' && (
-              <Box sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', p: { xs: 2, md: 2.5 } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                  <HistoryIcon size={16} color="#3658e1" />
-                  <Typography component="h3" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Historia de la factura</Typography>
-                </Box>
+            <TabsContent value="historia">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <HistoryIcon className="h-4 w-4 text-teal-600" />
+                  <h3 className="text-sm font-semibold text-gray-900">Historia de la factura</h3>
+                </div>
                 <EntityHistory docId={factura.id} encf={factura.encf} />
-              </Box>
-            )}
-          </Box>
-        </Box>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
 
         {/* ━━━ RIGHT: sticky sidebar ━━━ */}
-        <Box component="aside" sx={{ display: 'flex', flexDirection: 'column', gap: 2, position: { lg: 'sticky' }, top: { lg: 16 }, alignSelf: { lg: 'flex-start' }, minWidth: 0 }}>
-
-          {/* Resumen */}
-          <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-            <Box
-              component="button"
-              type="button"
-              onClick={() => setResumenOpen(v => !v)}
-              aria-expanded={resumenOpen}
-              sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 1, px: { xs: 2, md: 2.5 }, pt: 2, pb: 1.5, background: 'none', border: 'none', cursor: 'pointer', transition: 'background 0.15s', '&:hover': { bgcolor: '#fafafa' } }}
-            >
-              <FileText size={16} color="#3658e1" style={{ flexShrink: 0 }} aria-hidden="true" />
-              <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', flex: 1, textAlign: 'left' }}>Resumen</Typography>
-              {resumenOpen
-                ? <ChevronUp size={16} color="#9ca3af" />
-                : <ChevronDown size={16} color="#9ca3af" />}
-            </Box>
-
-            {resumenOpen && (
-              <Box sx={{ px: { xs: 2, md: 2.5 }, pb: 2 }}>
-                {factura.lineas.length > 0 && (
-                  <>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 1.5, fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.025em', pb: 1, borderBottom: '1px solid #f3f4f6' }}>
-                      <Box component="span">Descripción</Box>
-                      <Box component="span" sx={{ textAlign: 'right' }}>Cant.</Box>
-                      <Box component="span" sx={{ textAlign: 'right' }}>Total</Box>
-                    </Box>
-                    <Box sx={{ '& > div + div': { borderTop: '1px solid #f9fafb' } }}>
-                      {factura.lineas.map((l, idx) => (
-                        <Box key={l.id ?? idx} sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 1.5, py: 1, fontSize: '0.875rem' }}>
-                          <Box component="span" title={l.nombreItem} sx={{ color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {l.nombreItem || '—'}
-                          </Box>
-                          <Box component="span" sx={{ color: '#4b5563', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                            {Number(l.cantidadItem) || 0}
-                          </Box>
-                          <Box component="span" sx={{ color: '#111827', fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                            {fmtDOP(calcTotalLinea(l))}
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
-                  </>
-                )}
-
-                <Box sx={{ pt: 1.5, mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.75, borderTop: '1px solid #f3f4f6' }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#4b5563' }}>
-                    <Box component="span">Subtotal</Box>
-                    <Box component="span" sx={{ fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(totales.subtotal)}</Box>
-                  </Box>
-                  {totales.itbis > 0 && (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#4b5563' }}>
-                      <Box component="span">ITBIS (18%)</Box>
-                      <Box component="span" sx={{ fontWeight: 500, color: '#1f2937', fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(totales.itbis)}</Box>
-                    </Box>
-                  )}
-                </Box>
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 700, color: '#111827', borderTop: '2px solid #e5e7eb', pt: 1.5, mt: 1.5 }}>
-                  <Box component="span">{esNc ? 'Total acreditado' : 'Total'}</Box>
-                  <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(totales.total)}</Box>
-                </Box>
-
-                {ncAplicadoDOP > 0 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', mt: 1.5, color: '#2a45c4' }}>
-                    <Box component="span">Notas de crédito</Box>
-                    <Box component="span" sx={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>−{fmtDOP(ncAplicadoDOP)}</Box>
-                  </Box>
-                )}
-
-                {!esNc && (
-                  <>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', mt: ncAplicadoDOP > 0 ? 0.75 : 1.5, color: pagadoDOP > 0 ? '#047857' : '#dc2626' }}>
-                      <Box component="span">Pagado</Box>
-                      <Box component="span" sx={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(pagadoDOP)}</Box>
-                    </Box>
-
-                    <Box sx={{
-                      display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', borderRadius: '8px', px: 1.5, py: 1, mt: 1, border: '1px solid',
-                      ...(saldo === 0
-                        ? { bgcolor: '#ecfdf5', borderColor: '#d1fae5', color: '#065f46' }
-                        : { bgcolor: '#fef2f2', borderColor: '#fee2e2', color: '#991b1b' }),
-                    }}>
-                      <Box component="span" sx={{ fontWeight: 600 }}>Saldo pendiente</Box>
-                      <Box component="span" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(saldo)}</Box>
-                    </Box>
-
-                    {facturaPagada && (
-                      <Typography sx={{ fontSize: '11px', color: '#047857', mt: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <CheckCircle size={12} />
-                        Factura pagada en su totalidad
-                      </Typography>
-                    )}
-                  </>
-                )}
-              </Box>
-            )}
-          </Box>
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start min-w-0">
 
           {/* Estado DGII card — solo cuando hay e-CF real emitido a DGII.
               HISTORICA (ALG-), borrador (BOR-) y sin-ncf no fueron a DGII. */}
@@ -1572,218 +1609,189 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Rechazado por DGII → admin cancela el envío y reintenta. */}
           {esEcfReal && factura.estado === 'RECHAZADO' && can('facturas:anular') && (
-            <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #fecaca', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 2.5 }, py: 2 }}>
-              <Typography component="h3" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', mb: 0.5 }}>Reintentar envío</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 1.5 }}>
+            <section className="bg-white rounded-xl border border-red-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Reintentar envío</h3>
+              <p className="text-xs text-gray-500 mb-3">
                 La DGII rechazó este comprobante. Corrige el motivo (ver arriba), luego cancela el envío y reenvíalo.
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              </p>
+              <div className="space-y-2">
                 <Button
                   onClick={() => handleResetEmision(false)}
                   disabled={reseteando}
-                  sx={{ width: '100%', bgcolor: '#3658e1', color: '#fff', height: 36, fontSize: '0.875rem', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
+                  className="w-full bg-teal-600 hover:bg-teal-700 text-white h-9 text-sm disabled:opacity-50"
                 >
                   Cancelar y reintentar con e-NCF nuevo
                 </Button>
-                <Box
-                  component="button"
+                <button
                   type="button"
                   onClick={() => handleResetEmision(true)}
                   disabled={reseteando}
-                  sx={{ width: '100%', fontSize: '0.75rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', p: 0, '&:hover': { color: '#374151' }, '&:disabled': { opacity: 0.5, cursor: 'default' } }}
+                  className="w-full text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
                 >
                   o reintentar con el mismo e-NCF
-                </Box>
-              </Box>
-            </Box>
+                </button>
+              </div>
+            </section>
           )}
 
           {/* No emitida a DGII (histórica/borrador/sin-ncf) → CTA para generar e-CF. */}
           {!esEcfReal && puedeEmitir && (
-            <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 2.5 }, py: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <CheckCircle size={16} color="#f59e0b" style={{ flexShrink: 0 }} aria-hidden="true" />
-                <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Estado DGII</Typography>
-              </Box>
-              <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: 1.5, lineHeight: 1.4 }}>
-                No emitida a la DGII. Es un registro {esBorrador ? 'borrador' : 'histórico'} sin e-CF.
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-gray-900">Estado DGII</h2>
+              </div>
+              <p className="text-xs text-gray-500 mb-3 leading-snug">
+                No emitida a la DGII. Es un registro {esBorrador ? 'sin comprobante' : 'histórico'} sin e-CF.
                 Genera un e-CF para enviarla a la DGII.
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {canEmitir && (
-                  <Button
-                    type="button"
-                    onClick={triggerEnviarDgii}
-                    startIcon={<Send size={16} />}
-                    sx={{ bgcolor: '#3658e1', color: '#fff', height: 36, width: '100%', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' } }}
-                  >
-                    {sinLineas && canEdit ? 'Completar y generar e-CF' : 'Generar e-CF / Enviar a DGII'}
-                  </Button>
-                )}
-                {canEdit && (
-                  <Button
-                    component={Link}
-                    href={`/dashboard/facturas/${factura.id}/editar`}
-                    nativeButton={false}
-                    type="button"
-                    variant="outlined"
-                    sx={{ height: 36, width: '100%', textTransform: 'none', color: '#2a45c4', borderColor: '#a5b4f9', borderRadius: '8px', '&:hover': { bgcolor: '#eef2fe', borderColor: '#a5b4f9' } }}
-                  >
-                    Editar antes de emitir
-                  </Button>
-                )}
-                {!canEdit && (
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: '8px', bgcolor: '#fffbeb', border: '1px solid #fde68a', px: 1.5, py: 1, fontSize: '0.75rem', color: '#92400e' }}>
-                    <AlertTriangle size={14} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
-                    <Box component="span">Para editar esta factura, pídele al administrador.</Box>
-                  </Box>
-                )}
-              </Box>
-            </Box>
+              </p>
+              {/* Sin botones: emitir y editar viven en el encabezado y en la
+                  barra inferior. Esta tarjeta solo informa en qué estado está
+                  el documento frente a la DGII. */}
+              {!canEdit && !canEmitir && (
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  <span>Para emitir o editar esta factura, pídele al administrador.</span>
+                </div>
+              )}
+            </section>
           )}
 
-          {/* Crear nota de crédito / débito — CTA visible en sidebar */}
-          {puedeCrearNota && can('facturas:crear') && (
-            <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 2.5 }, py: 2 }}>
-              <Typography component="h3" sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280', mb: 1.5 }}>Crear nota</Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Button
-                  component={Link}
-                  href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
-                  nativeButton={false}
-                  variant="outlined"
-                  startIcon={<TrendingDown size={16} />}
-                  sx={{ width: '100%', height: 36, textTransform: 'none', color: '#2a45c4', borderColor: '#c7d2fc', borderRadius: '8px', justifyContent: 'flex-start', gap: 1, '&:hover': { bgcolor: '#eef2fe', borderColor: '#c7d2fc' } }}
-                >
-                  <Box component="span" sx={{ flex: 1, textAlign: 'left', fontSize: '0.875rem' }}>Nota de crédito</Box>
-                  <Box component="span" sx={{ fontSize: '10px', color: '#9ca3af' }}>Reduce el saldo</Box>
-                </Button>
-                <Button
-                  component={Link}
-                  href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}
-                  nativeButton={false}
-                  variant="outlined"
-                  startIcon={<TrendingUp size={16} />}
-                  sx={{ width: '100%', height: 36, textTransform: 'none', color: '#c2410c', borderColor: '#fed7aa', borderRadius: '8px', justifyContent: 'flex-start', gap: 1, '&:hover': { bgcolor: '#fff7ed', borderColor: '#fed7aa' } }}
-                >
-                  <Box component="span" sx={{ flex: 1, textAlign: 'left', fontSize: '0.875rem' }}>Nota de débito</Box>
-                  <Box component="span" sx={{ fontSize: '10px', color: '#9ca3af' }}>Cargo adicional</Box>
-                </Button>
-              </Box>
-            </Box>
-          )}
+          {/* Crear NC/ND: disponible desde el menú de acciones (3 puntos) del
+              encabezado — se quitó la tarjeta CTA duplicada del sidebar. */}
 
           {/* Notas de crédito/débito que modifican esta factura */}
           {factura.ncsAsociadas && factura.ncsAsociadas.length > 0 && (
-            <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 2.5 }, py: 2 }}>
-              <Typography component="h3" sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280', mb: 1 }}>
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
                 Notas asociadas ({factura.ncsAsociadas.length})
-              </Typography>
-              <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.75rem' }}>
+              </h3>
+              <ul className="space-y-2 text-xs">
                 {factura.ncsAsociadas.map(nc => (
-                  <Box component="li" key={nc.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderBottom: '1px solid #f3f4f6', pb: 1, '&:last-of-type': { borderBottom: 0, pb: 0 } }}>
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <MuiLink component={Link} href={`/dashboard/facturas/${nc.id}`} sx={{ fontFamily: 'monospace', color: '#2a45c4', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', '&:hover': { textDecoration: 'underline' } }}>
-                        {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Borrador #${nc.id}`)}
-                      </MuiLink>
-                      <Box sx={{ fontSize: '10px', color: '#6b7280', mt: 0.25, display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <Box component="span" sx={{ color: nc.tipoEcf === '34' ? '#2a45c4' : '#c2410c', fontWeight: 500 }}>
+                  <li key={nc.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 pb-2 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-teal-700 hover:underline truncate block">
+                        {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Sin comprobante #${nc.id}`)}
+                      </Link>
+                      <div className="text-[10px] text-gray-500 mt-0.5 flex gap-1.5 flex-wrap items-center">
+                        <span className={nc.tipoEcf === '34' ? 'text-teal-700 font-medium' : 'text-orange-700 font-medium'}>
                           {nc.tipoEcf === '34' ? 'Crédito' : 'Débito'}
-                        </Box>
+                        </span>
                         {(nc.razonModificacion || nc.codigoModificacion != null) && (
                           <>
-                            <Box component="span">·</Box>
-                            <Box component="span">{nc.razonModificacion?.trim() || (nc.codigoModificacion != null ? COD_MODIFICACION_LABEL[nc.codigoModificacion] ?? `Cód. ${nc.codigoModificacion}` : '')}</Box>
+                            <span>·</span>
+                            <span>{nc.razonModificacion?.trim() || (nc.codigoModificacion != null ? COD_MODIFICACION_LABEL[nc.codigoModificacion] ?? `Cód. ${nc.codigoModificacion}` : '')}</span>
                           </>
                         )}
-                        <Box component="span">·</Box>
-                        <Box component="span">{nc.estado === 'BORRADOR' ? 'Sin emitir a DGII' : nc.estado}</Box>
-                        <Box component="span">·</Box>
-                        <Box component="span">{fmtDate(nc.fechaEmision)}</Box>
-                      </Box>
-                    </Box>
-                    <Box component="span" sx={{ fontFamily: 'monospace', flexShrink: 0, color: nc.tipoEcf === '34' ? '#2a45c4' : '#1f2937' }}>
+                        <span>·</span>
+                        <span>{nc.estado === 'BORRADOR' ? 'Sin emitir a DGII' : nc.estado}</span>
+                        <span>·</span>
+                        <span>{fmtDate(nc.fechaEmision)}</span>
+                      </div>
+                    </div>
+                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-teal-700' : 'text-gray-800'}`}>
                       {nc.tipoEcf === '34' ? '−' : ''}RD$ {nc.montoTotalDOP}
-                    </Box>
-                  </Box>
+                    </span>
+                  </li>
                 ))}
-              </Box>
-            </Box>
+              </ul>
+            </section>
+          )}
+
+          {/* Notas de débito por mora — tarjeta aparte, justo bajo "Notas asociadas".
+              Documentos vinculados a esta factura (la info general de mora vive en
+              la tarjeta "Mora" bajo Datos del comprador). */}
+          {notasMoraActivas.length > 0 && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+                Notas de débito por mora ({notasMoraActivas.length})
+              </h3>
+              <div className="space-y-2">
+                {notasMoraActivas.map(nd => {
+                  const saldoNd = Math.max(0, nd.montoTotal - nd.pagado);
+                  const pagada  = saldoNd === 0;
+                  const parcial = !pagada && nd.pagado > 0;
+                  const badge = pagada
+                    ? { txt: 'Pagada',    cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                    : parcial
+                    ? { txt: 'Parcial',   cls: 'bg-amber-100 text-amber-700 border-amber-200' }
+                    : { txt: 'Pendiente', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
+                  return (
+                    <Link
+                      key={nd.id}
+                      href={`/dashboard/facturas/${nd.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-xs font-semibold text-orange-800 truncate">{nd.codigo ?? `#${nd.id}`}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${badge.cls}`}>
+                          {badge.txt}
+                        </span>
+                      </span>
+                      <span className="text-right whitespace-nowrap">
+                        <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(saldoNd / 100)}</span>
+                        {!pagada && saldoNd !== nd.montoTotal && (
+                          <span className="ml-1 text-[11px] text-gray-400">de {fmtDOP(nd.montoTotal / 100)}</span>
+                        )}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
           )}
 
           {/* Info del comprobante — solo cuando hay e-CF real emitido a DGII */}
           {esEcfReal && (
-            <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', px: { xs: 2, md: 2.5 }, py: 2 }}>
-              <Typography component="h3" sx={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#6b7280', mb: 1 }}>
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
                 Información del comprobante
-              </Typography>
-              <Box component="dl" sx={{ m: 0, display: 'flex', flexDirection: 'column', gap: 1, fontSize: '0.75rem' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                  <Box component="dt" sx={{ color: '#6b7280' }}>e-NCF</Box>
-                  <Box component="dd" sx={{ m: 0, fontFamily: 'monospace', fontWeight: 600, color: '#111827', textAlign: 'right', wordBreak: 'break-all' }}>{factura.encf}</Box>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                  <Box component="dt" sx={{ color: '#6b7280' }}>Tipo</Box>
-                  <Box component="dd" sx={{ m: 0, color: '#1f2937', textAlign: 'right' }}>e-{factura.tipoEcf}</Box>
-                </Box>
+              </h3>
+              <dl className="space-y-2 text-xs">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">e-NCF</dt>
+                  <dd className="font-mono font-semibold text-gray-900 text-right break-all">{factura.encf}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-gray-500">Tipo</dt>
+                  <dd className="text-gray-800 text-right">e-{factura.tipoEcf}</dd>
+                </div>
                 {factura.codigoSeguridad && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                    <Box component="dt" sx={{ color: '#6b7280' }}>Código seg.</Box>
-                    <Box component="dd" sx={{ m: 0, fontFamily: 'monospace', fontWeight: 700, color: '#2a45c4', textAlign: 'right' }}>{factura.codigoSeguridad}</Box>
-                  </Box>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Código seg.</dt>
+                    <dd className="font-mono font-bold text-teal-700 text-right">{factura.codigoSeguridad}</dd>
+                  </div>
                 )}
                 {factura.trackId && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                    <Box component="dt" sx={{ color: '#6b7280' }}>Track ID</Box>
-                    <Box component="dd" sx={{ m: 0, fontFamily: 'monospace', color: '#374151', fontSize: '10px', textAlign: 'right', wordBreak: 'break-all' }}>{factura.trackId}</Box>
-                  </Box>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Track ID</dt>
+                    <dd className="font-mono text-gray-700 text-[10px] text-right break-all">{factura.trackId}</dd>
+                  </div>
                 )}
                 {factura.ncfModificado && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                    <Box component="dt" sx={{ color: '#6b7280' }}>NCF modificado</Box>
-                    <Box component="dd" sx={{ m: 0, fontFamily: 'monospace', color: '#1f2937', textAlign: 'right' }}>{factura.ncfModificado}</Box>
-                  </Box>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">NCF modificado</dt>
+                    <dd className="font-mono text-gray-800 text-right">{factura.ncfModificado}</dd>
+                  </div>
                 )}
                 {factura.codigoModificacion != null && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                    <Box component="dt" sx={{ color: '#6b7280' }}>Motivo</Box>
-                    <Box component="dd" sx={{ m: 0, color: '#1f2937', textAlign: 'right' }}>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Motivo</dt>
+                    <dd className="text-gray-800 text-right">
                       {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
-                    </Box>
-                  </Box>
+                    </dd>
+                  </div>
                 )}
                 {factura.razonModificacion && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-                    <Box component="dt" sx={{ color: '#6b7280' }}>Razón</Box>
-                    <Box component="dd" sx={{ m: 0, color: '#1f2937', textAlign: 'right' }}>{factura.razonModificacion}</Box>
-                  </Box>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-gray-500">Razón</dt>
+                    <dd className="text-gray-800 text-right">{factura.razonModificacion}</dd>
+                  </div>
                 )}
-              </Box>
-            </Box>
+              </dl>
+            </section>
           )}
 
-          {/* Notas de débito por mora atadas a esta factura */}
-          {factura.notasMora && factura.notasMora.length > 0 && (
-            <Box component="section" sx={{ bgcolor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: { xs: 2, md: 2.5 }, pt: 2, pb: 1.5 }}>
-                <Plus size={16} color="#ea580c" style={{ flexShrink: 0 }} aria-hidden="true" />
-                <Typography component="h2" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Notas de débito por mora</Typography>
-              </Box>
-              <Box sx={{ px: { xs: 2, md: 2.5 }, pb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {factura.notasMora.map(nd => (
-                  <Box
-                    key={nd.id}
-                    component={Link}
-                    href={`/dashboard/facturas/${nd.id}`}
-                    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, borderRadius: '8px', border: '1px solid #ffedd5', bgcolor: 'rgba(255,247,237,0.4)', px: 1.5, py: 1, textDecoration: 'none', '&:hover': { bgcolor: '#fff7ed' } }}
-                  >
-                    <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 600, color: '#9a3412' }}>{nd.codigo ?? `#${nd.id}`}</Box>
-                    <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{fmtDOP(nd.montoTotal / 100)}</Box>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          )}
 
           {/* Pago — historial read-only (los pagos se gestionan en Cuentas por cobrar).
               No aplica a notas de crédito: acreditan, no se cobran. */}
@@ -1797,7 +1805,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           {/* Cobro en línea: link de pago (CardNet/Azul/Simulador). Disponible en
               cualquier factura (borrador o emitida) que no sea NC y no esté pagada. */}
           {!esNc && !factura.pago?.recibido && (
-            <Box sx={{ mt: 1.5 }}>
+            <div className="mt-3">
               <CobrarLinkButton
                 ecfDocumentId={factura.id}
                 telefonoCliente={factura.comprador?.telefono ?? null}
@@ -1805,341 +1813,321 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 autoOpen={autoCobrar}
                 onPagado={() => window.location.reload()}
               />
-            </Box>
+            </div>
           )}
-        </Box>
-      </Box>
-      </Box>
+        </aside>
+      </div>
 
       {/* ─── Bottom action bar ────────────────────────────────────────────── */}
       {/* Vista detalle = read-only. Solo borrador habilita acciones de edición.
           Para facturas emitidas: Volver + Ver PDF + Acciones (imprimir/email). */}
-      <Box sx={{
-        flexShrink: 0, zIndex: 30,
-        bgcolor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)', borderTop: '1px solid #e5e7eb',
-        boxShadow: '0 -4px 12px -2px rgba(0,0,0,0.08)',
-        display: 'flex', flexDirection: { xs: 'column-reverse', sm: 'row' }, alignItems: { sm: 'center' },
-        justifyContent: { sm: 'space-between' }, gap: 1.5, px: { xs: 2, sm: 3 }, py: 1.5,
-      }}>
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           type="button"
-          variant="outlined"
+          variant="outline"
+          className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
           onClick={() => router.push(ui.backHref)}
-          sx={{ color: '#4b5563', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px' }}
         >
           {esBorrador ? 'Cancelar' : 'Volver'}
         </Button>
 
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, gap: 1.5, width: { xs: '100%', sm: 'auto' } }}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           <Button
-            component="a"
-            href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
-            target="_blank"
-            rel="noreferrer"
-            nativeButton={false}
             type="button"
-            variant="outlined"
-            startIcon={<FileText size={16} />}
-            sx={{ color: '#4b5563', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px' }}
+            variant="outline"
+            className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
+            asChild
           >
-            Ver PDF
+            <a
+              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <FileText className="h-4 w-4 mr-1.5" />
+              Ver PDF
+            </a>
           </Button>
 
           {puedeEmitir ? (
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, width: { xs: '100%', sm: 'auto' }, alignItems: { sm: 'center' } }}>
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto sm:items-center">
               {canEdit ? (
                 <Button
-                  component={Link}
-                  href={`/dashboard/facturas/${factura.id}/editar`}
-                  nativeButton={false}
                   type="button"
-                  variant="outlined"
-                  sx={{ color: '#2a45c4', borderColor: '#a5b4f9', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#eef2fe', borderColor: '#a5b4f9' } }}
+                  variant="outline"
+                  className="text-teal-700 border-teal-300 hover:bg-teal-50 h-11 sm:h-9 w-full sm:w-auto"
+                  asChild
                 >
-                  {esBorrador ? 'Editar borrador' : 'Editar'}
+                  <Link href={`/dashboard/facturas/${factura.id}/editar`}>
+                    {'Editar'}
+                  </Link>
                 </Button>
               ) : (
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: '8px', bgcolor: '#fffbeb', border: '1px solid #fde68a', px: 1.5, py: 1, fontSize: '0.75rem', color: '#92400e', width: { xs: '100%', sm: 'auto' }, maxWidth: { sm: 260 } }}>
-                  <AlertTriangle size={14} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
-                  <Box component="span">Para editar esta factura, pídele al administrador.</Box>
-                </Box>
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 w-full sm:w-auto sm:max-w-[260px]">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  <span>Para editar esta factura, pídele al administrador.</span>
+                </div>
               )}
               {canEmitir && (
                 <Button
                   type="button"
+                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   onClick={triggerEnviarDgii}
-                  startIcon={<Send size={16} />}
-                  sx={{ bgcolor: '#3658e1', color: '#fff', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' } }}
                 >
+                  <Send className="h-4 w-4 mr-1.5" />
                   {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
                 </Button>
               )}
-            </Box>
+            </div>
           ) : (
-            <>
-              <Button
-                type="button"
-                onClick={(e) => setAccionesAnchor(e.currentTarget)}
-                disabled={esFinal && factura.estado === 'ANULADO'}
-                endIcon={<ChevronDown size={14} />}
-                sx={{ bgcolor: '#3658e1', color: '#fff', height: { xs: 44, sm: 36 }, width: { xs: '100%', sm: 'auto' }, textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
-              >
-                Acciones
-              </Button>
-              <Menu
-                anchorEl={accionesAnchor}
-                open={Boolean(accionesAnchor)}
-                onClose={() => setAccionesAnchor(null)}
-                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                slotProps={{ paper: { sx: { width: 224 } } as object }}
-              >
-                <MenuItem
-                  component="a"
-                  href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setAccionesAnchor(null)}
-                  sx={{ gap: 1 }}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  disabled={esFinal && factura.estado === 'ANULADO'}
                 >
-                  <Printer size={16} color="#6b7280" />
-                  Imprimir
-                </MenuItem>
-                <MenuItem
-                  onClick={() => { setAccionesAnchor(null); setShowEmail(true); }}
-                  sx={{ gap: 1 }}
+                  Acciones
+                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem asChild>
+                  <a
+                    href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="h-4 w-4 text-gray-500" />
+                    Imprimir
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setShowEmail(true)}
+                  className="flex items-center gap-2 cursor-pointer"
                 >
-                  <Mail size={16} color="#6b7280" />
+                  <Mail className="h-4 w-4 text-gray-500" />
                   Enviar por correo
-                </MenuItem>
-              </Menu>
-            </>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
-        </Box>
-      </Box>
+        </div>
+      </div>
 
       {/* ─── Modals ───────────────────────────────────────────────────────── */}
 
+      {/* Confirmar generación de nota de débito por mora */}
+      <ConfirmDialog
+        open={showConfirmMora}
+        onOpenChange={setShowConfirmMora}
+        title="Generar nota de débito por mora"
+        description="Se creará una nota de débito interna (borrador, no se envía a la DGII) con el recargo por mora sobre el saldo vencido de esta factura."
+        confirmLabel="Generar mora"
+        confirmClassName="bg-orange-600 hover:bg-orange-700 text-white"
+        icon={<AlertTriangle className="h-5 w-5 text-orange-600" />}
+        loading={generandoMora}
+        onConfirm={() => { setShowConfirmMora(false); handleGenerarNotaDebitoMora(); }}
+      />
+
       {/* Confirmar anulación */}
-      <Dialog
-        open={showAnular}
-        onClose={() => setShowAnular(false)}
-        slotProps={{ paper: { sx: { borderRadius: '12px', maxWidth: 384, width: '100%' } } as object }}
-      >
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.125rem' }}>¿Anular comprobante?</DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Dialog open={showAnular} onOpenChange={setShowAnular}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>¿Anular comprobante?</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
             {anularError && (
-              <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.875rem', borderRadius: '8px', p: 1.5 }}>
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
                 {anularError}
-              </Box>
+              </div>
             )}
-            <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
+            <p className="text-sm text-gray-700">
               Vas a anular el comprobante{' '}
-              <Box component="strong" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{factura.encf}</Box>.
-            </Typography>
+              <strong className="font-mono">{factura.encf}</strong>.
+            </p>
 
             {/* NCA-05/06: tipo de anulación (motivo DGII) */}
-            <Box>
-              <Typography component="label" sx={fieldLabelSx}>Tipo de anulación</Typography>
-              <TextField
-                select
-                size="small"
-                fullWidth
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-600">Tipo de anulación</label>
+              <select
                 value={anularTipo}
                 onChange={e => setAnularTipo(e.target.value as typeof anularTipo)}
-                sx={selectFieldSx}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
               >
-                <MenuItem value="01">01 — Deterioro de Factura Pre-impresa</MenuItem>
-                <MenuItem value="02">02 — Errores de Impresión</MenuItem>
-                <MenuItem value="03">03 — Impresión Defectuosa</MenuItem>
-                <MenuItem value="04">04 — Cesación de Operaciones</MenuItem>
-                <MenuItem value="05">05 — Pérdida o Hurto de Talonarios</MenuItem>
-              </TextField>
-            </Box>
+                <option value="01">01 — Deterioro de Factura Pre-impresa</option>
+                <option value="02">02 — Errores de Impresión</option>
+                <option value="03">03 — Impresión Defectuosa</option>
+                <option value="04">04 — Cesación de Operaciones</option>
+                <option value="05">05 — Pérdida o Hurto de Talonarios</option>
+              </select>
+            </div>
 
-            <Box>
-              <Typography component="label" sx={fieldLabelSx}>Motivo interno (opcional)</Typography>
-              <TextField
-                multiline
-                minRows={2}
-                size="small"
-                fullWidth
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-600">Motivo interno (opcional)</label>
+              <textarea
                 value={anularMotivo}
                 onChange={e => setAnularMotivo(e.target.value)}
+                rows={2}
+                maxLength={500}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                 placeholder="Notas internas sobre la anulación"
-                slotProps={{ htmlInput: { maxLength: 500 } }}
-                sx={selectFieldSx}
               />
-            </Box>
+            </div>
 
             {/* NCA-03: si hay pagos, requiere force */}
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={anularForce}
-                  onChange={e => setAnularForce(e.target.checked)}
-                  size="small"
-                  sx={{ pt: 0.25, alignSelf: 'flex-start' }}
-                />
-              }
-              label={
-                <Box component="span" sx={{ fontSize: '0.75rem', color: '#374151' }}>
-                  Forzar anulación aunque haya pagos registrados (revertirá los pagos asociados).
-                </Box>
-              }
-              sx={{ alignItems: 'flex-start', m: 0, gap: 0.5 }}
-            />
+            <label className="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={anularForce}
+                onChange={e => setAnularForce(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Forzar anulación aunque haya pagos registrados (revertirá los pagos asociados).
+              </span>
+            </label>
 
             {(factura.estado === 'ACEPTADO' || factura.estado === 'ACEPTADO_CONDICIONAL') && (
-              <Box sx={{ bgcolor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', p: 1.5, fontSize: '0.75rem', color: '#92400e', display: 'flex', gap: 1 }}>
-                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
-                <Box component="span">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
                   Este comprobante ya fue aceptado por la DGII. La anulación formal
-                  requiere emitir una <Box component="strong" sx={{ fontWeight: 700 }}>Nota de Crédito (e-34)</Box> referenciando este e-NCF.
-                </Box>
-              </Box>
+                  requiere emitir una <strong>Nota de Crédito (e-34)</strong> referenciando este e-NCF.
+                </span>
+              </div>
             )}
-          </Box>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAnular(false)} disabled={anulando}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleAnular} disabled={anulando}>
+              {anulando
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Anulando…</>
+                : 'Sí, anular'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button variant="outlined" onClick={() => setShowAnular(false)} disabled={anulando} sx={{ textTransform: 'none', borderRadius: '8px' }}>
-            Cancelar
-          </Button>
-          <Button variant="contained" color="error" onClick={handleAnular} disabled={anulando} startIcon={anulando ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : undefined} sx={{ textTransform: 'none', borderRadius: '8px' }}>
-            {anulando ? 'Anulando…' : 'Sí, anular'}
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* Enviar por correo */}
-      <Dialog
-        open={showEmail}
-        onClose={() => setShowEmail(false)}
-        slotProps={{ paper: { sx: { borderRadius: '12px', maxWidth: 384, width: '100%' } } as object }}
-      >
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.125rem' }}>Enviar factura por correo</DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Box>
-            <Typography component="span" sx={{ fontSize: '0.75rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.025em' }}>Destinatario</Typography>
-            <TextField
-              type="email"
-              size="small"
-              fullWidth
-              value={emailTo}
-              onChange={(e) => setEmailTo(e.target.value)}
-              placeholder="cliente@dominio.com"
-              sx={{ mt: 0.5, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-            />
-          </Box>
+      <Dialog open={showEmail} onOpenChange={setShowEmail}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enviar factura por correo</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <label className="block">
+              <span className="text-xs text-gray-600 uppercase tracking-wide">Destinatario</span>
+              <input
+                type="email"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="cliente@dominio.com"
+                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmail(false)} disabled={sendingEmail}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={sendingEmail || !emailTo}
+              className="bg-teal-600 hover:bg-teal-700"
+            >
+              {sendingEmail
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
+                : <><Mail className="h-4 w-4 mr-1" />Enviar</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button variant="outlined" onClick={() => setShowEmail(false)} disabled={sendingEmail} sx={{ textTransform: 'none', borderRadius: '8px' }}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleSendEmail}
-            disabled={sendingEmail || !emailTo}
-            startIcon={sendingEmail ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Mail size={16} />}
-            sx={{ bgcolor: '#3658e1', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
-          >
-            {sendingEmail ? 'Enviando…' : 'Enviar'}
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* Enviar a DGII */}
-      <Dialog
-        open={showEnviarDgii}
-        onClose={() => setShowEnviarDgii(false)}
-        slotProps={{ paper: { sx: { borderRadius: '12px', maxWidth: 448, width: '100%' } } as object }}
-      >
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.125rem' }}>Enviar a la DGII</DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Dialog open={showEnviarDgii} onOpenChange={setShowEnviarDgii}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar a la DGII</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
             {enviandoDgiiError && (
-              <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.875rem', borderRadius: '8px', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
-                  <Box component="span">{enviandoDgiiError}</Box>
-                </Box>
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 space-y-2">
+                <div className="flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{enviandoDgiiError}</span>
+                </div>
                 {enviandoDgiiAction === 'edit-factura' && (
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <div className="flex justify-end">
                     {canEdit ? (
-                      <MuiLink
-                        component={Link}
+                      <Link
                         href={`/dashboard/facturas/${factura.id}/editar`}
-                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 500, color: '#b91c1c', textDecoration: 'underline', '&:hover': { color: '#7f1d1d' } }}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-red-700 underline hover:text-red-900"
                       >
                         Editar factura para completarla →
-                      </MuiLink>
+                      </Link>
                     ) : (
-                      <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#b91c1c' }}>
+                      <span className="text-xs font-medium text-red-700">
                         Pídele al administrador que edite la factura.
-                      </Box>
+                      </span>
                     )}
-                  </Box>
+                  </div>
                 )}
-              </Box>
+              </div>
             )}
-            <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
+            <p className="text-sm text-gray-700">
               Selecciona el tipo de comprobante fiscal para emitir esta factura a la DGII.
               Se asignará un e-NCF de tu secuencia activa.
-            </Typography>
-            <Box>
-              <Typography component="label" sx={fieldLabelSx}>Tipo de comprobante (e-CF)</Typography>
+            </p>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-gray-600">Tipo de comprobante (e-CF)</label>
               {esNota ? (
                 // El tipo de una nota es intrínseco al documento (e33 débito / e34
                 // crédito): no se puede cambiar al emitir. Se muestra fijo.
-                <Box sx={{ width: '100%', borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', px: 1.5, py: 1, fontSize: '0.875rem', color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box component="span">{TIPOS_EMIT_DGII.find(t => t.value === factura.tipoEcf)?.label ?? `e${factura.tipoEcf}`}</Box>
-                  <Box component="span" sx={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.025em', color: '#9ca3af' }}>fijo</Box>
-                </Box>
+                <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 flex items-center justify-between">
+                  <span>{TIPOS_EMIT_DGII.find(t => t.value === factura.tipoEcf)?.label ?? `e${factura.tipoEcf}`}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-gray-400">fijo</span>
+                </div>
               ) : (
-                <TextField
-                  select
-                  size="small"
-                  fullWidth
+                <select
                   value={dgiiTipoEcf}
                   onChange={e => setDgiiTipoEcf(e.target.value)}
-                  sx={selectFieldSx}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
                   {/* El tipo propio del documento siempre visible: aunque aún no exista
                       secuencia (el server devuelve un error claro indicando crearla). */}
                   {TIPOS_EMIT_DGII.filter(t => tipoVisible(t.value) || t.value === factura.tipoEcf).map(t => (
-                    <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                    <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
-                </TextField>
+                </select>
               )}
               {dgiiRegla && (
-                <Typography sx={{ fontSize: '11px', color: '#6b7280', lineHeight: 1.4, mt: 0.5 }}>{dgiiRegla.descripcion}</Typography>
+                <p className="text-[11px] text-gray-500 leading-snug">{dgiiRegla.descripcion}</p>
               )}
-            </Box>
+            </div>
 
             {/* ─── Código de modificación (notas 33/34) ───────────────────── */}
             {(dgiiTipoEcf === '33' || dgiiTipoEcf === '34') && (
-              <Box>
-                <Typography component="label" sx={fieldLabelSx}>
-                  Código de modificación<Box component="span" sx={{ color: '#ef4444', ml: 0.25 }}>*</Box>
-                </Typography>
-                <TextField
-                  select
-                  size="small"
-                  fullWidth
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-gray-600">
+                  Código de modificación<span className="text-red-500 ml-0.5">*</span>
+                </label>
+                <select
                   value={dgiiCodMod}
                   onChange={e => setDgiiCodMod(e.target.value)}
-                  slotProps={{ select: { displayEmpty: true } }}
-                  sx={selectFieldSx}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
-                  <MenuItem value="">Selecciona el motivo…</MenuItem>
+                  <option value="">Selecciona el motivo…</option>
                   {Object.entries(COD_MODIFICACION_LABEL).map(([code, label]) => (
-                    <MenuItem key={code} value={code}>{code} — {label}</MenuItem>
+                    <option key={code} value={code}>{code} — {label}</option>
                   ))}
-                </TextField>
-                <Typography sx={{ fontSize: '11px', color: '#6b7280', lineHeight: 1.4, mt: 0.5 }}>
+                </select>
+                <p className="text-[11px] text-gray-500 leading-snug">
                   Por qué esta nota modifica el comprobante original — lo exige la DGII.
-                </Typography>
-              </Box>
+                </p>
+              </div>
             )}
 
             {/* ─── Comprador (RNC + razón social) ─────────────────────────── */}
@@ -2150,211 +2138,195 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               dgiiRegla.requiereRazonSocial ||
               (dgiiTipoEcf === '32' && (parseFloat(factura.montos.montoTotalDOP) || 0) >= 250000)
             ) && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, borderRadius: '8px', border: '1px solid #e5e7eb', bgcolor: '#f9fafb', p: 1.5 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Typography component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151' }}>
+              <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-gray-700">
                     {dgiiRegla.compradorLabel}
                     {(dgiiRegla.requiereRncComprador || dgiiRegla.requiereRazonSocial) && (
-                      <Box component="span" sx={{ color: '#ef4444', ml: 0.25 }}>*</Box>
+                      <span className="text-red-500 ml-0.5">*</span>
                     )}
-                  </Typography>
+                  </label>
                   {factura.comprador.rnc && (
-                    <Box component="span" sx={{ fontSize: '10px', color: '#9ca3af' }}>guardado en factura</Box>
+                    <span className="text-[10px] text-gray-400">guardado en factura</span>
                   )}
-                </Box>
-                <Box>
-                  <Typography component="label" sx={{ display: 'block', fontSize: '11px', color: '#4b5563', mb: 0.75 }}>{dgiiRegla.rncLabel}</Typography>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] text-gray-600">{dgiiRegla.rncLabel}</label>
                   <RncSearch
                     value={tempRnc ? `${tempRnc}${tempRazon ? ` · ${tempRazon}` : ''}` : ''}
                     onSelect={(r) => { setTempRnc(r.rnc); setTempRazon(r.nombre); }}
                     onClear={() => { setTempRnc(''); setTempRazon(''); }}
                     placeholder="Buscar RNC, Cédula o razón social…"
                   />
-                </Box>
-                <Box>
-                  <Typography component="label" sx={{ display: 'block', fontSize: '11px', color: '#4b5563', mb: 0.75 }}>Razón social / nombre</Typography>
-                  <TextField
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] text-gray-600">Razón social / nombre</label>
+                  <input
                     type="text"
-                    size="small"
-                    fullWidth
                     value={tempRazon}
                     onChange={e => setTempRazon(e.target.value)}
                     placeholder="Nombre o razón social"
-                    sx={selectFieldSx}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
-                </Box>
-              </Box>
+                </div>
+              </div>
             )}
 
             {/* ─── Validaciones pre-flight ──────────────────────────────── */}
             {!dgiiValidacion.ok && (
-              <Box sx={{
-                borderRadius: '8px', border: '1px solid', p: 1.5, fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: 1,
-                ...(dgiiValidacion.requiereEditar
-                  ? { bgcolor: '#fef2f2', borderColor: '#fecaca', color: '#991b1b' }
-                  : { bgcolor: '#fffbeb', borderColor: '#fde68a', color: '#78350f' }),
-              }}>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    <Typography sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
+              <div className={`rounded-lg border p-3 text-xs space-y-2 ${
+                dgiiValidacion.requiereEditar
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}>
+                <div className="flex gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-medium">
                       {dgiiValidacion.requiereEditar
                         ? 'No se puede emitir desde aquí'
                         : 'Faltan datos requeridos por la DGII'}
-                    </Typography>
-                    <Box component="ul" sx={{ listStyle: 'disc', listStylePosition: 'inside', m: 0, p: 0, '& li': { mb: 0.25 } }}>
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5">
                       {dgiiValidacion.errores.map((e, i) => (
                         <li key={i}>{e.mensaje}</li>
                       ))}
-                    </Box>
-                  </Box>
-                </Box>
+                    </ul>
+                  </div>
+                </div>
                 {dgiiValidacion.requiereEditar && (
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <div className="flex justify-end">
                     {canEdit ? (
-                      <MuiLink
-                        component={Link}
+                      <Link
                         href={`/dashboard/facturas/${factura.id}/editar`}
-                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 500, color: 'inherit', textDecoration: 'underline', '&:hover': { opacity: 0.8 } }}
+                        className="inline-flex items-center gap-1 text-xs font-medium underline hover:opacity-80"
                       >
                         Editar factura para completarla →
-                      </MuiLink>
+                      </Link>
                     ) : (
-                      <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 500 }}>
+                      <span className="text-xs font-medium">
                         Pídele al administrador que edite la factura.
-                      </Box>
+                      </span>
                     )}
-                  </Box>
+                  </div>
                 )}
-              </Box>
+              </div>
             )}
 
             {/* Numeración — próximo e-NCF, editable para resolver colisiones de secuencia */}
             {dgiiTipoEcf !== 'sin-ncf' && (
-              <Box>
-                <Typography component="label" sx={fieldLabelSx}>Próximo e-NCF</Typography>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-gray-600">Próximo e-NCF</label>
                 {seqInfo == null ? (
-                  <Typography sx={{ fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Cargando numeración…
-                  </Typography>
+                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Cargando numeración…
+                  </p>
                 ) : seqInfo.sinSecuencia ? (
-                  <Typography sx={{ fontSize: '0.75rem', color: '#dc2626' }}>
+                  <p className="text-xs text-red-600">
                     No hay secuencia activa para e{dgiiTipoEcf}.{' '}
-                    <MuiLink component={Link} href="/dashboard/secuencias" sx={{ textDecoration: 'underline', fontWeight: 500, color: 'inherit' }}>Crea una</MuiLink>.
-                  </Typography>
+                    <Link href="/dashboard/secuencias" className="underline font-medium">Crea una</Link>.
+                  </p>
                 ) : (
                   <>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-semibold text-gray-900">
                         E{dgiiTipoEcf}{(ncfNum || '0').padStart(10, '0')}
-                      </Box>
+                      </span>
                       {seqInfo.disponibles >= 0 && (
-                        <Box component="span" sx={{ fontSize: '11px', color: '#9ca3af' }}>{seqInfo.disponibles} disponibles</Box>
+                        <span className="text-[11px] text-gray-400">{seqInfo.disponibles} disponibles</span>
                       )}
-                    </Box>
-                    <TextField
+                    </div>
+                    <input
                       type="number"
-                      size="small"
-                      fullWidth
+                      min={1}
+                      step={1}
                       value={ncfNum}
                       onChange={e => setNcfNum(e.target.value)}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                       aria-label="Siguiente número de e-NCF"
-                      slotProps={{ htmlInput: { min: 1, step: 1 } }}
-                      sx={{ mt: 0.75, ...selectFieldSx }}
                     />
-                    <Typography sx={{ fontSize: '11px', color: '#9ca3af', mt: 0.5 }}>
+                    <p className="text-[11px] text-gray-400">
                       Si la DGII reporta el e-NCF como ya emitido, sube el siguiente número. No puede ser menor al actual.
-                    </Typography>
+                    </p>
                   </>
                 )}
-              </Box>
+              </div>
             )}
 
-            <Box sx={{ bgcolor: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '8px', p: 1.5, fontSize: '0.75rem', color: '#92400e', display: 'flex', gap: 1 }}>
-              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-              <Box component="span">
+            <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
                 Esta acción consume un número de la secuencia activa para el tipo seleccionado
                 y envía el comprobante a la DGII. No se puede deshacer.
-              </Box>
-            </Box>
-          </Box>
+              </span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEnviarDgii(false)} disabled={enviandoDgii}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleEnviarDgii}
+              disabled={enviandoDgii || !dgiiValidacion.ok}
+              className="bg-teal-600 hover:bg-teal-700"
+            >
+              {enviandoDgii
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
+                : <><Send className="h-4 w-4 mr-1" />Emitir a DGII</>}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button variant="outlined" onClick={() => setShowEnviarDgii(false)} disabled={enviandoDgii} sx={{ textTransform: 'none', borderRadius: '8px' }}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleEnviarDgii}
-            disabled={enviandoDgii || !dgiiValidacion.ok}
-            startIcon={enviandoDgii ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />}
-            sx={{ bgcolor: '#3658e1', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}
-          >
-            {enviandoDgii ? 'Enviando…' : 'Emitir a DGII'}
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {proximamenteDialog}
 
       {/* Alert: factura contado sin pago registrado → confirmar antes de emitir */}
       {showPagoMissingAlert && (
-        <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
-          <Box sx={{ bgcolor: '#fff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)', width: '100%', maxWidth: 448, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-              <AlertTriangle size={20} color="#f59e0b" style={{ marginTop: 2, flexShrink: 0 }} />
-              <Box>
-                <Typography component="h2" sx={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
                   Esta factura aún no tiene pago registrado
-                </Typography>
-                <Typography sx={{ fontSize: '0.875rem', color: '#4b5563', mt: 0.5 }}>
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
                   Es de contado pero no marcaste el cobro. ¿Cómo continúas?
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 1 }}>
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 pt-2">
               <Button
+                className="bg-teal-600 hover:bg-teal-700 text-white"
                 onClick={() => {
                   setShowPagoMissingAlert(false);
                   document.querySelector('[data-pago-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }}
-                sx={{ bgcolor: '#3658e1', color: '#fff', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#2a45c4' } }}
               >
                 Registrar pago primero
               </Button>
               <Button
-                variant="outlined"
+                variant="outline"
+                className="text-amber-700 border-amber-300 hover:bg-amber-50"
                 onClick={() => {
                   setShowPagoMissingAlert(false);
                   setEnviandoDgiiError(null);
                   setShowEnviarDgii(true);
                 }}
-                sx={{ color: '#b45309', borderColor: '#fcd34d', textTransform: 'none', borderRadius: '8px', '&:hover': { bgcolor: '#fffbeb', borderColor: '#fcd34d' } }}
               >
                 Emitir sin registrar pago
               </Button>
               <Button
-                variant="text"
+                variant="ghost"
                 onClick={() => setShowPagoMissingAlert(false)}
-                sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '8px' }}
               >
                 Cancelar
               </Button>
-            </Box>
-          </Box>
-        </Box>
+            </div>
+          </div>
+        </div>
       )}
-
-      {/* La nota de débito por mora crea un documento nuevo: se confirma antes,
-          y no al soltar el menú, para que no salga de un clic despistado. */}
-      <ConfirmDialog
-        open={showConfirmMora}
-        onOpenChange={setShowConfirmMora}
-        title="Generar nota de débito por mora"
-        description="Se creará una nota de débito interna (borrador, no se envía a la DGII) con el recargo por mora sobre el saldo vencido de esta factura."
-        confirmLabel="Generar"
-        onConfirm={() => { if (!generandoMora) void handleGenerarNotaDebitoMora(); }}
-      />
-    </Box>
+    </section>
   );
 }
 

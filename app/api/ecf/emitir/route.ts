@@ -19,6 +19,7 @@ import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarP
 import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -277,6 +278,19 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // ── Gate: facturas:precio-editar ──────────────────────────────────────────
+    // Sin el permiso, cada línea tiene que venir del catálogo y al precio del
+    // catálogo. El formulario ya deja los campos en solo lectura; esto es lo que
+    // sostiene la regla cuando el POST no viene del formulario.
+    if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:precio-editar')) {
+      const errPrecio = await validarPreciosDeCatalogo({
+        teamId,
+        lineas: data.items,
+        listaPreciosId: data.listaPreciosId,
+      });
+      if (errPrecio) return NextResponse.json({ error: errPrecio }, { status: 403 });
+    }
 
     // Cross-field: sin-ncf solo permitido en modo borrador
     if (data.tipoEcf === 'sin-ncf' && data.modo !== 'borrador') {
