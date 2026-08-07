@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2,
+  X, Wallet, Loader2, Archive, Wallet2, Eye,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, fmtCodigoCorto } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
+import ComprobantesUploader, { type AdjuntoSubido } from '@/components/pagos/ComprobantesUploader';
 
 interface Cuenta {
   id:                   number;
@@ -112,10 +113,15 @@ export default function CuentasPorCobrarPage() {
       header: 'Código',
       render: c => (
         <div className="flex items-center gap-1.5">
-          {/* El código no parte en varias líneas: con más columnas la celda se
-              angosta y "FA-2026-YTSY-YH2WR-000038" se rompía en cuatro. */}
-          <Link href={`/dashboard/facturas/${c.id}`} className="whitespace-nowrap font-mono text-xs font-medium text-teal-600 hover:underline">
-            {c.codigo ?? `Factura #${c.id}`}
+          {/* Solo la cola del código: el prefijo (tipo-año-empresa) se repite en
+              todas las filas y "FA-2026-YTSY-YH2WR-000038" se comía la columna.
+              El completo va en el tooltip. */}
+          <Link
+            href={`/dashboard/facturas/${c.id}`}
+            title={c.codigo ?? `Factura #${c.id}`}
+            className="whitespace-nowrap font-mono text-xs font-medium text-teal-600 hover:underline"
+          >
+            {c.codigo ? fmtCodigoCorto(c.codigo) : `#${c.id}`}
           </Link>
           {isHistorica(c) && (
             <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
@@ -141,8 +147,8 @@ export default function CuentasPorCobrarPage() {
         // "Consumidor Final" no es un cliente al que llamar: se escribe apagado
         // para que los nombres reales —los que se cobran— destaquen solos.
         c.razonSocialComprador
-          ? <p className="max-w-[220px] truncate text-sm text-gray-900" title={c.razonSocialComprador}>{c.razonSocialComprador}</p>
-          : <p className="text-sm italic text-gray-400">Consumidor final</p>
+          ? <p className="max-w-[150px] truncate text-xs text-gray-900" title={c.razonSocialComprador}>{c.razonSocialComprador}</p>
+          : <p className="text-xs italic text-gray-400">Consumidor final</p>
       ),
     },
     {
@@ -245,8 +251,12 @@ export default function CuentasPorCobrarPage() {
     },
   ], []);
 
+  // Ambas inline y siempre visibles: sin menú de tres puntos. Cobrar es la
+  // acción del día a día; el ojito entra al detalle sin tener que apuntarle
+  // al código.
   const rowActions = (c: Cuenta): RowAction[] => [
-    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c) },
+    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true },
+    { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${c.id}`, primary: true },
   ];
 
   return (
@@ -467,8 +477,27 @@ function PagoModal({
   const [lineas, setLineas] = useState<PagoLinea[]>([
     { metodo: 'transferencia', valor: '', referencia: '' },
   ]);
+  const [adjuntos, setAdjuntos] = useState<AdjuntoSubido[]>([]);
 
-  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
+  // Métodos que la empresa marcó como "exige comprobante". Si el usuario elige
+  // uno, el bloque de comprobantes se marca como requerido y el submit se frena
+  // acá mismo — el servidor lo revalida igual.
+  const [metodosExige, setMetodosExige] = useState<string[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/equipo/perfil')
+      .then(r => r.json())
+      .then(j => { if (vivo) setMetodosExige(Array.isArray(j.metodosExigeComprobante) ? j.metodosExigeComprobante : []); })
+      .catch(() => { if (vivo) setMetodosExige([]); });
+    return () => { vivo = false; };
+  }, []);
+
+  const exigeComprobante = lineas.some(
+    l => (parseFloat(l.valor || '0') || 0) > 0 && metodosExige.includes(l.metodo),
+  );
+  const faltaComprobante = exigeComprobante && adjuntos.length === 0;
+
+  const valido = pagosValidos(lineas, totalDOP, pagadoDOP) && !faltaComprobante;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -489,7 +518,11 @@ function PagoModal({
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaPago: fecha, pagos }),
+        body: JSON.stringify({
+          fechaPago: fecha,
+          pagos,
+          adjuntoIds: adjuntos.map(a => a.id),
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -575,6 +608,14 @@ function PagoModal({
             disabled={guardando}
             showReferencia
             notasCredito={notasCredito}
+          />
+
+          <ComprobantesUploader
+            docId={cuenta.id}
+            adjuntos={adjuntos}
+            onChange={setAdjuntos}
+            disabled={guardando}
+            obligatorio={exigeComprobante}
           />
 
           {error && (

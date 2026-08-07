@@ -316,7 +316,10 @@ export function DataTable<T>({
     return (
       <React.Fragment key={String(id)}>
       <tr
-        className={`transition-colors ${isSelected ? 'bg-teal-50/50' : 'hover:bg-gray-50'} ${href || canExpand ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+        // `bg-white` explícito (no transparente) porque la celda de acciones va
+        // fija al borde derecho con `bg-inherit`: sin un color concreto en la
+        // fila, el contenido se vería pasar por debajo al desplazar.
+        className={`transition-colors ${isSelected ? 'bg-teal-50' : 'bg-white hover:bg-gray-50'} ${href || canExpand ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
         // La fila entera responde: si tiene hijas, las despliega; si no, navega.
         // El chevron sigue estando —es la señal de que hay algo debajo—, pero
         // acertarle a un botón de 20px para ver el detalle era pedir puntería.
@@ -374,7 +377,13 @@ export function DataTable<T>({
           const primary = acts.filter(a => a.primary);
           const rest    = acts.filter(a => !a.primary);
           return (
-            <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+            // Fija al borde derecho: en pantallas angostas la tabla se desplaza
+            // en horizontal y las acciones, que son la última columna, quedaban
+            // fuera de vista. Ahí es donde más falta hacen.
+            <td
+              className="sticky right-0 z-10 bg-inherit px-3 py-3 border-l border-gray-100"
+              onClick={e => e.stopPropagation()}
+            >
               <div className="flex items-center justify-end gap-0.5">
                 {primary.map((a, i) => <RowActionInline key={i} action={a} />)}
                 <RowActionsMenu actions={rest} />
@@ -560,7 +569,9 @@ export function DataTable<T>({
                       </th>
                     );
                   })}
-                  {rowActions && <th className="w-12 px-3 py-2.5" />}
+                  {rowActions && (
+                    <th className="sticky right-0 z-20 w-12 bg-gray-50 px-3 py-2.5 border-l border-gray-100" />
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -692,6 +703,7 @@ function RowActionsMenu({ actions }: { actions: RowAction[] }) {
           type="button"
           onClick={e => e.stopPropagation()}
           aria-label="Acciones"
+          title="Más acciones"
           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors data-[state=open]:bg-gray-100 data-[state=open]:text-gray-700"
         >
           <MoreVertical className="h-4 w-4" />

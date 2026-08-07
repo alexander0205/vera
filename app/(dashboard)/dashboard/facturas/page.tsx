@@ -2,13 +2,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText, Upload, Printer,
+  Plus, Download, Ban, FileText, Upload, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
 import { ImportModal } from '@/components/import-modal';
-import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
@@ -108,8 +108,6 @@ export default function FacturasPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage]       = useState(1);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [emailModal, setEmailModal] = useState<{ id: number; email: string } | null>(null);
-  const [emailLoading, setEmailLoading] = useState(false);
   const [showImport, setShowImport] = useState(false);
   // Maestros de factura (Plan A) → filtros dinámicos por valor.
   const [facturaMaestros, setFacturaMaestros] = useState<
@@ -176,24 +174,6 @@ export default function FacturasPage() {
     window.location.href = `/api/facturas/export?${sp}`;
   }
 
-  async function sendEmail() {
-    if (!emailModal) return;
-    setEmailLoading(true);
-    const res = await fetch(`/api/facturas/${emailModal.id}/email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: emailModal.email }),
-    });
-    if (res.ok) {
-      toast.success('Factura enviada por email');
-      setEmailModal(null);
-    } else {
-      const d = await res.json();
-      toast.error(d.error ?? 'Error enviando email');
-    }
-    setEmailLoading(false);
-  }
-
   // ─── Columns ────────────────────────────────────────────────────────────────
 
   const columns: DataTableColumn<Doc>[] = [
@@ -203,12 +183,14 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.codigo ?? '',
       render: doc => (
+        // Solo la cola del código: el prefijo (tipo-año-empresa) es idéntico en
+        // todas las filas y se comía media columna. El completo, en el tooltip.
         <Link
           href={`/dashboard/facturas/${doc.id}`}
           className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
           title={doc.codigo ?? `#${doc.id}`}
         >
-          {doc.codigo ?? `#${doc.id}`}
+          {doc.codigo ? fmtCodigoCorto(doc.codigo) : `#${doc.id}`}
         </Link>
       ),
     },
@@ -222,7 +204,7 @@ export default function FacturasPage() {
       // tabla en un muro y no dejaba comparar filas de un vistazo.
       render: doc => (
         <p
-          className="max-w-[220px] truncate text-sm font-medium leading-tight text-gray-900"
+          className="max-w-[150px] truncate text-xs font-medium leading-tight text-gray-900"
           title={doc.razonSocialComprador ?? 'Consumidor Final'}
         >
           {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
@@ -353,7 +335,7 @@ export default function FacturasPage() {
     {
       // Comprobante al final. Texto coloreado según estado DGII. Formato E31-252.
       id: 'encf',
-      header: 'Comprobante',
+      header: 'e-NCF',
       align: 'right',
       sortable: true,
       sortAccessor: doc => doc.encf,
@@ -373,25 +355,17 @@ export default function FacturasPage() {
     },
   ];
 
-  const rowActions = (doc: Doc): RowAction[] => {
-    // Sin ojito: el código de la fila ya es el enlace al detalle y el botón
-    // repetía ese mismo destino ocupando una columna.
-    // Recibo POS: solo para ventas sin-ncf (ticket de mostrador). Reabre el recibo 80mm.
-    const recibo: RowAction[] = doc.tipoEcf === 'sin-ncf'
-      ? [{ icon: Printer, title: 'Reimprimir recibo', onClick: () => window.open(`/pos-ticket/${doc.id}`, '_blank', 'width=420,height=680') }]
-      : [];
-    if (doc.estado === 'BORRADOR') {
-      return [
-        { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
-        ...recibo,
-      ];
-    }
-    return [
-      { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.codigo ?? doc.id}` },
-      { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
-      ...recibo,
-    ];
-  };
+  // Una sola acción, siempre visible: entrar al detalle. El menú de tres puntos
+  // escondía PDF / email / recibo detrás de dos clics, y esas tres acciones ya
+  // están en el detalle. Un ojito fijo se entiende sin abrir nada.
+  const rowActions = (doc: Doc): RowAction[] => [
+    {
+      icon:    Eye,
+      title:   doc.estado === 'BORRADOR' ? 'Continuar edición' : 'Ver detalle',
+      href:    doc.estado === 'BORRADOR' ? `/dashboard/facturas/${doc.id}/editar` : `/dashboard/facturas/${doc.id}`,
+      primary: true,
+    },
+  ];
 
   // Derivar bulk/header actions según permisos (default-deny mientras carga)
   const canAnular   = !permLoading && can('facturas:anular');
@@ -501,34 +475,6 @@ export default function FacturasPage() {
         onDone={() => fetchDocs()}
       />
 
-      {/* Email modal */}
-      {emailModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Enviar factura por email</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email del destinatario</label>
-              <input
-                type="email"
-                value={emailModal.email}
-                onChange={e => setEmailModal(m => m ? { ...m, email: e.target.value } : m)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                placeholder="cliente@empresa.com"
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setEmailModal(null)}
-                className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-                Cancelar
-              </button>
-              <button onClick={sendEmail} disabled={emailLoading || !emailModal.email}
-                className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50">
-                {emailLoading ? 'Enviando...' : 'Enviar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

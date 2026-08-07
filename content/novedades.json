@@ -112,6 +112,21 @@
         "tipo": "nuevo",
         "titulo": "Decide quién puede cambiar los precios al facturar",
         "detalle": "En Equipo → Permisos hay un permiso nuevo: «Cambiar precio y descuento al facturar». Nace apagado para todos menos Propietario y Administrador. Sin él, el vendedor factura con el precio del catálogo: no puede cambiar el precio, ni aplicar descuentos, ni inventar líneas sueltas, tampoco desde el punto de venta. Habilítaselo a quien quieras y podrá hacerlo."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Guarda el comprobante de cada pago",
+        "detalle": "Al registrar un cobro puedes adjuntar la imagen o el PDF del comprobante: arrástralo, pégalo con Ctrl+V o tómale una foto desde el celular. Queda guardado en la factura y lo puedes ver cuando quieras, sin tener que buscarlo en WhatsApp."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Exige comprobante según el método de pago",
+        "detalle": "En Configuración puedes marcar qué métodos —transferencia, cheque— obligan a adjuntar el comprobante. Sin él no se puede registrar el cobro, así ninguna transferencia entra sin respaldo. En el listado de pagos se ve en rojo cuál quedó sin comprobante."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Listados más fáciles de leer",
+        "detalle": "En Facturas y Cuentas por cobrar el código sale corto (el completo aparece al pasar el mouse) y el botón para entrar al detalle está siempre a la vista, también en el celular."
       }
     ]
   },

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Palette, ImageIcon, PenLine, FileText,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard, Paperclip,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
@@ -249,6 +249,7 @@ export default function ConfiguracionPage() {
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
   const [metodosObligaDgii, setMetodosObligaDgii]      = useState<string[]>([]);
+  const [metodosExigeComprobante, setMetodosExigeComprobante] = useState<string[]>([]);
   // Términos y condiciones que se precargan en cada comprobante nuevo
   const [terminosDefault, setTerminosDefault]          = useState('');
 
@@ -290,6 +291,7 @@ export default function ConfiguracionPage() {
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
+        setMetodosExigeComprobante(Array.isArray(d.metodosExigeComprobante) ? d.metodosExigeComprobante : []);
         setTerminosDefault(d.terminosCondicionesDefault ?? '');
         setRole(d.role ?? null);
       })
@@ -332,6 +334,7 @@ export default function ConfiguracionPage() {
           posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
           metodosObligaDgii,
+          metodosExigeComprobante,
           terminosCondicionesDefault: terminosDefault,
         }),
       });
@@ -705,6 +708,66 @@ export default function ConfiguracionPage() {
               <strong>Activo:</strong> las facturas cobradas con{' '}
               {metodosObligaDgii.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
               no se podrán guardar sin emitir — se deben emitir a la DGII.
+            </div>
+          )}
+        </CardContent>
+      </Card>}
+
+      {/* 5c. Métodos que exigen comprobante adjunto — solo configuracion:gestionar */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Paperclip className="h-4 w-4 text-teal-600" />
+            Métodos que exigen comprobante
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Al registrar un cobro con alguno de estos métodos habrá que adjuntar la
+            imagen o el archivo del comprobante. Sirve para que ninguna
+            transferencia entre sin su respaldo. No aplica al punto de venta:
+            una venta de mostrador se cobra sin pedir archivos.
+          </p>
+
+          <div className="space-y-2">
+            {METODOS_PAGO.map(m => {
+              const activo = metodosExigeComprobante.includes(m.value);
+              return (
+                <div
+                  key={m.value}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3"
+                >
+                  <p className="text-sm font-medium text-gray-800">{m.label}</p>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={activo}
+                    aria-label={`Exigir comprobante para ${m.label}`}
+                    onClick={() => setMetodosExigeComprobante(prev =>
+                      prev.includes(m.value)
+                        ? prev.filter(v => v !== m.value)
+                        : [...prev, m.value],
+                    )}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                      activo ? 'bg-teal-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        activo ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {metodosExigeComprobante.length > 0 && (
+            <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-800">
+              <strong>Activo:</strong> los cobros con{' '}
+              {metodosExigeComprobante.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
+              no se podrán registrar sin adjuntar el comprobante.
             </div>
           )}
         </CardContent>

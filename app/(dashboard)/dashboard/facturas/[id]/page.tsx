@@ -30,6 +30,7 @@ import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
 import { CobrarLinkButton } from '@/components/pagos/CobrarLinkButton';
+import { ComprobantesCard } from '@/components/pagos/ComprobantesCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
@@ -1801,6 +1802,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               totalDOP={factura.montos.montoTotalDOP}
             />
           )}
+
+          {/* Comprobantes del cobro: cuelgan del documento, así que siguen aquí
+              aunque el pago se reescriba o se reparta entre factura y mora. */}
+          {!esNc && <ComprobantesCard docId={factura.id} />}
 
           {/* Cobro en línea: link de pago (CardNet/Azul/Simulador). Disponible en
               cualquier factura (borrador o emitida) que no sea NC y no esté pagada. */}
