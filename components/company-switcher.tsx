@@ -48,6 +48,9 @@ function planColor(planName: string | null): 'default' | 'primary' | 'secondary'
   return 'default';
 }
 
+/** Lo que el loader se queda puesto DESPUÉS de que la navegación termine. */
+const ESPERA_TRAS_CARGAR_MS = 1000;
+
 export function CompanySwitcher({
   teams,
   activeTeamId,
@@ -83,12 +86,21 @@ export function CompanySwitcher({
     t.rnc?.includes(search)
   );
 
+  /**
+   * Al terminar la transición se espera un segundo antes de destapar.
+   *
+   * Que los Server Components hayan vuelto no quiere decir que la pantalla
+   * esté lista: los listados, los totales y las tarjetas los pide el cliente
+   * después, por SWR. Quitar el loader justo ahí dejaba ver la pantalla
+   * montándose a pedazos, que se lee como un fallo. Un segundo cubre ese
+   * hueco.
+   */
   useEffect(() => {
     if (isPending) { transicionArranco.current = true; return; }
-    if (transicionArranco.current) {
-      transicionArranco.current = false;
-      setCambiandoA(null);
-    }
+    if (!transicionArranco.current) return;
+    transicionArranco.current = false;
+    const t = setTimeout(() => setCambiandoA(null), ESPERA_TRAS_CARGAR_MS);
+    return () => clearTimeout(t);
   }, [isPending]);
 
   // Red de seguridad: si algo se cuelga, el loader no se queda pegado para

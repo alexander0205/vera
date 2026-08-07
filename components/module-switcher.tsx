@@ -26,6 +26,7 @@ import Button from '@mui/material/Button';
 import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { ZeroLoader } from '@/components/zero-loader';
+import { anunciarCambioDeModulo } from '@/components/loader-llegada';
 import {
   MODULE_LABELS, MODULE_DESCRIPTIONS, moduleUrl, type ModuleKey,
 } from '@/lib/config/modules';
@@ -98,7 +99,13 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
                 setAnchor(null);
                 // Sin preventDefault: el enlace navega igual, el loader solo
                 // cubre el hueco hasta que el módulo nuevo pinte.
-                if (!active) setYendoA(mod);
+                if (!active) {
+                  setYendoA(mod);
+                  // El documento actual muere con la navegación y se lleva el
+                  // loader; se deja anotado para que el módulo de destino lo
+                  // retome mientras termina de montarse.
+                  anunciarCambioDeModulo(MODULE_LABELS[mod]);
+                }
               }}
               selected={active}
               sx={{ gap: 1.5, py: 1.25, mx: 0.75, borderRadius: '8px' }}

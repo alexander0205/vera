@@ -25,6 +25,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { Menu as MenuIcon, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleSwitcher } from '@/components/module-switcher';
+import { LoaderLlegada } from '@/components/loader-llegada';
 import { CompanySwitcher } from '@/components/company-switcher';
 import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import { ProfileDropdown, type UserInfo } from '@/components/profile-dropdown';
@@ -88,6 +89,9 @@ export function ModuleHeader({
 
   return (
     <>
+      {/* Sostiene el loader un momento tras aterrizar de otro módulo, para que
+          no se vea la pantalla montarse a pedazos. */}
+      <LoaderLlegada />
       <GlobalSearch />
       <AppBar
         position="static"
