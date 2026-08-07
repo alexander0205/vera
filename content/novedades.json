@@ -102,6 +102,11 @@
         "tipo": "arreglo",
         "titulo": "Los montos ya no se montan unos sobre otros en el PDF",
         "detalle": "En facturas con precios de seis dígitos, las columnas de precio, ITBIS y total se encimaban y el documento quedaba ilegible. Ahora cada columna tiene su propio espacio con una separación fija entre ellas, y la descripción baja de línea cuando es larga en vez de empujar a los montos."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Las facturas largas ya no salen con el texto encima del código QR",
+        "detalle": "En facturas con muchas líneas, las últimas quedaban debajo del recuadro del QR y no se podían leer. Y en el formato de tirilla, el QR y el código de seguridad se iban a una segunda hoja que la impresora térmica no saca. Las dos cosas quedaron arregladas."
       }
     ]
   },
