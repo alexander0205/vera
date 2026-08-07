@@ -11,7 +11,6 @@ import { and, eq, desc, sql, inArray } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import { db } from '@/lib/db/drizzle';
 import { pagoAdjuntos, teams } from '@/lib/db/schema';
-import sharp from 'sharp';
 import {
   s3Disponible, construirKey, construirThumbKey,
   subirComprobante, leerComprobante, borrarComprobante,
@@ -69,6 +68,32 @@ export interface AdjuntoMeta {
   tieneThumb:   boolean;
 }
 
+/**
+ * sharp se carga a demanda y su fallo no rompe nada.
+ *
+ * Es un módulo nativo: si el binario de la plataforma no viajó en el deploy, un
+ * `import` arriba del archivo revienta al CARGAR el módulo, y con él se caen
+ * todas las rutas que lo importan —incluidas las que solo listan o leen y no
+ * necesitan redimensionar nada—. Pasó en producción: `ERR_DLOPEN_FAILED` sobre
+ * libvips dejaba /api/pagos/adjuntos en 500.
+ *
+ * Sin sharp el comprobante se guarda igual: se pierde la miniatura (la galería
+ * cae al original) y el borrado de EXIF. Degradar vale más que caerse.
+ */
+type SharpFn = (typeof import('sharp'))['default'];
+let sharpCache: SharpFn | null | undefined;
+
+async function cargarSharp(): Promise<SharpFn | null> {
+  if (sharpCache !== undefined) return sharpCache;
+  try {
+    sharpCache = (await import('sharp')).default;
+  } catch (e) {
+    console.error('[comprobantes] sharp no disponible; sin miniatura ni borrado de EXIF', e);
+    sharpCache = null;
+  }
+  return sharpCache;
+}
+
 /** Lado mayor de la miniatura. 300px cubre el thumb de 70px a 2x y el hover. */
 const THUMB_LADO = 300;
 
@@ -80,6 +105,8 @@ const THUMB_LADO = 300;
  */
 async function generarThumb(buffer: Buffer, mime: string): Promise<Buffer | null> {
   if (mime === 'application/pdf') return null;
+  const sharp = await cargarSharp();
+  if (!sharp) return null;
   try {
     return await sharp(buffer)
       .rotate()                       // respeta la orientación EXIF antes de perderla
@@ -99,6 +126,8 @@ async function generarThumb(buffer: Buffer, mime: string): Promise<Buffer | null
  */
 async function limpiarMetadatos(buffer: Buffer, mime: string): Promise<Buffer> {
   if (mime === 'application/pdf') return buffer;
+  const sharp = await cargarSharp();
+  if (!sharp) return buffer;
   try {
     const img = sharp(buffer).rotate();
     const limpio = mime === 'image/png'  ? await img.png().toBuffer()
