@@ -9,7 +9,7 @@
  * se podía cambiar de empresa ni llegar al perfil desde ahí. Ahora los cuatro
  * módulos montan esta misma.
  *
- * Se alimenta sola (SWR a /api/user, /api/empresa/list y /api/sistema/ambiente)
+ * Se alimenta sola (SWR a /api/user y /api/empresa/list)
  * en vez de recibir todo por props: SWR deduplica por clave, así que aunque el
  * layout de Facturación pida los mismos datos para su sidebar, la red se toca
  * una sola vez. Cada módulo solo dice cuál es.
@@ -26,7 +26,6 @@ import { Menu as MenuIcon, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleSwitcher } from '@/components/module-switcher';
 import { CompanySwitcher } from '@/components/company-switcher';
-import { AmbienteBadge } from '@/components/ambiente-badge';
 import { TurnoCountdown } from '@/components/caja/TurnoCountdown';
 import { ProfileDropdown, type UserInfo } from '@/components/profile-dropdown';
 import type { ModuleKey } from '@/lib/config/modules';
@@ -75,9 +74,6 @@ export function ModuleHeader({
   const { data: empresaData, mutate: mutateEmpresa } = useSWR<{
     teams?: Team[]; activeTeamId?: number | null;
   }>('/api/empresa/list', fetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
-  const { data: ambienteData, mutate: mutateAmbiente } = useSWR<{ ambiente: string | null } | null>(
-    '/api/sistema/ambiente', fetcher, { revalidateOnFocus: false, revalidateOnReconnect: false },
-  );
 
   const user = userProp ?? userSwr ?? null;
   const teams = empresaData?.teams ?? [];
@@ -87,7 +83,6 @@ export function ModuleHeader({
 
   function handleSwitch(teamId: number) {
     mutateEmpresa();
-    mutateAmbiente();
     onSwitchEmpresa?.(teamId);
   }
 
@@ -138,7 +133,7 @@ export function ModuleHeader({
 
           {/* Sin logotipo aquí: el rail ya lleva la marca justo al lado, y
               repetirla en la misma franja robaba sitio a lo que sí cambia —el
-              título, la empresa y el ambiente. */}
+              título y la empresa. */}
           {titulo && (
             <Typography sx={{ fontWeight: 600, fontSize: '0.9375rem', color: 'text.primary' }}>
               {titulo}
@@ -148,8 +143,6 @@ export function ModuleHeader({
           <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={handleSwitch} />
 
           <ModuleSwitcher current={current} />
-
-          <AmbienteBadge ambiente={ambienteData?.ambiente ?? null} />
 
           {/* Turno de caja — solo cuando queda poco para el límite */}
           {cajaHabilitada && <TurnoCountdown />}

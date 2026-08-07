@@ -651,9 +651,7 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
 
   const { data: user }          = useSWR<UserInfo | null>('/api/user', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
   const { data: empresaData, mutate: mutateEmpresa } = useSWR<EmpresaListResponse>('/api/empresa/list', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
-  const { data: ambienteData, mutate: mutateAmbiente } = useSWR<{ ambiente: string | null } | null>('/api/sistema/ambiente', layoutFetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
 
-  const dgiiAmbiente = ambienteData?.ambiente ?? null;
   const teams: Team[] = empresaData?.teams ?? [];
   const activeTeamId  = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
   // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
@@ -662,7 +660,6 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
   function handleSwitch(teamId: number) {
     setActiveTeamOverride(teamId);
     mutateEmpresa();
-    mutateAmbiente();
   }
 
   return (
