@@ -364,3 +364,24 @@
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+
+/*
+ * Tapado entre módulos.
+ *
+ * Lo pone un script que corre antes del primer pintado y lo quita React
+ * cuando su propia pantalla de carga termina. Cubre el hueco en el que el
+ * documento nuevo ya pintó pero React todavía no hidrató: sin esto se veía
+ * la pantalla pelada un instante y el loader parecía irse y volver.
+ *
+ * Solo un fondo del color de la app; el logo y la frase los pone el loader de
+ * React encima. Por eso 1400: por encima del armazón (AppBar 1100, Drawer
+ * 1200, Modal 1300) y por debajo del loader, que va en 1510.
+ */
+html[data-abriendo-modulo] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: #f9fafb;
+  z-index: 1400;
+  pointer-events: none;
+}

@@ -14,6 +14,13 @@
  * sessionStorage y no en una query en la URL porque no tiene por qué ensuciar
  * la dirección ni sobrevivir a un marcador — es de esta pestaña y de este
  * salto.
+ *
+ * El React de este componente no llega a tiempo solo: entre que el documento
+ * nuevo pinta y que la hidratación corre el efecto hay un hueco en el que se
+ * veía la pantalla pelada, y el loader parecía irse y volver. Por eso el
+ * primer tapado NO lo hace React sino `ScriptTapaLlegada`, que corre antes de
+ * pintar y deja el fondo puesto; cuando React monta, su loader aparece encima
+ * y el tapado se retira. Así la cobertura es continua.
  */
 
 import { useEffect, useState } from 'react';
@@ -29,6 +36,27 @@ export function anunciarCambioDeModulo(nombre: string) {
     // Safari en privado tira al tocar sessionStorage: se pierde el aviso y el
     // destino simplemente no muestra loader. No es crítico.
   }
+}
+
+/** Marca que el tapado inicial pone en el <html> y este componente retira. */
+const ATRIBUTO = 'data-abriendo-modulo';
+
+/**
+ * Tapado instantáneo, antes de que React exista.
+ *
+ * Va como script en línea con `dangerouslySetInnerHTML` porque tiene que
+ * ejecutarse ANTES del primer pintado: cualquier cosa que dependa de React
+ * llega tarde y deja ver el fondo pelado. Solo pinta un fondo del color del
+ * loader — el logo y la frase los pone React medio segundo después, encima.
+ */
+export function ScriptTapaLlegada() {
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `try{if(sessionStorage.getItem('${CLAVE}'))document.documentElement.setAttribute('${ATRIBUTO}','');}catch(e){}`,
+      }}
+    />
+  );
 }
 
 export function LoaderLlegada({ esperaMs = 1000 }: { esperaMs?: number }) {
@@ -47,9 +75,20 @@ export function LoaderLlegada({ esperaMs = 1000 }: { esperaMs?: number }) {
     if (!anotado) return;
 
     setNombre(anotado);
-    const t = setTimeout(() => setNombre(null), esperaMs);
+    const t = setTimeout(() => {
+      setNombre(null);
+      // El tapado se retira A LA VEZ que el loader, no antes: si se quitara al
+      // montar, volvería a asomar la pantalla a medio hacer.
+      document.documentElement.removeAttribute(ATRIBUTO);
+    }, esperaMs);
     return () => clearTimeout(t);
   }, [esperaMs]);
+
+  // Si no había nada anotado, el tapado no debe quedarse puesto —por ejemplo
+  // si el script lo dejó y este componente se montó sin recoger nada.
+  useEffect(() => {
+    if (!nombre) document.documentElement.removeAttribute(ATRIBUTO);
+  }, [nombre]);
 
   return (
     <ZeroLoader

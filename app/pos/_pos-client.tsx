@@ -190,6 +190,28 @@ const iconActionSx = {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
+/**
+ * `fetch` + JSON que no revienta cuando no hay JSON.
+ *
+ * `r.json()` sobre un cuerpo vacío tira «Unexpected end of JSON input», y eso
+ * pasa de verdad: al navegar —cambiar de módulo o de empresa— el navegador
+ * aborta las peticiones en vuelo, la promesa resuelve igual y el cuerpo llega
+ * vacío. El POS carga varias cosas al montar, así que es fácil pillarlo a
+ * medias. También cubre el 401/403 con cuerpo vacío.
+ *
+ * Devuelve `null` en vez de lanzar: quien llama decide con qué se queda.
+ */
+async function traerJson<T>(url: string): Promise<T | null> {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const texto = await r.text();
+    return texto ? (JSON.parse(texto) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function PosClient({
   terminales, turnoInicial, terminalInicial, escolarHabilitado, alertaMetodoPago,
 }: {
@@ -381,7 +403,8 @@ function Venta({
   const [dispNuevo, setDispNuevo] = useState<'pill' | 'compacto' | 'abajo'>('pill');
 
   useEffect(() => {
-    fetch('/api/listas-precios').then((r) => r.json()).then((d) => setListas(d.listasPrecios ?? []));
+    void traerJson<{ listasPrecios?: ListaPrecio[] }>('/api/listas-precios')
+      .then((d) => setListas(d?.listasPrecios ?? []));
   }, []);
 
   const refrescarEstudiante = useCallback(async (dependienteId: number) => {
@@ -1484,7 +1507,8 @@ function ClientePicker({ cliente, onSelect }: {
   // Carga inicial acotada (primeros 100) para poder abrir el dropdown y ojear
   // sin escribir. Antes traía la tabla COMPLETA de clientes en cada apertura.
   const cargarIniciales = useCallback(() => {
-    fetch('/api/clientes?limit=100').then((r) => r.json()).then((d) => setIniciales(d.clientes ?? []));
+    void traerJson<{ clientes?: ClienteView[] }>('/api/clientes?limit=100')
+      .then((d) => setIniciales(d?.clientes ?? []));
   }, []);
 
   useEffect(() => { cargarIniciales(); }, [cargarIniciales]);
@@ -1495,10 +1519,8 @@ function ClientePicker({ cliente, onSelect }: {
     const qq = q.trim();
     if (qq.length < 2) { setResultados([]); return; }
     const t = setTimeout(() => {
-      fetch(`/api/clientes?q=${encodeURIComponent(qq)}&limit=50`)
-        .then((r) => r.json())
-        .then((d) => setResultados(d.clientes ?? []))
-        .catch(() => setResultados([]));
+      void traerJson<{ clientes?: ClienteView[] }>(`/api/clientes?q=${encodeURIComponent(qq)}&limit=50`)
+        .then((d) => setResultados(d?.clientes ?? []));
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
@@ -2091,10 +2113,10 @@ function CierreModal({ turnoId, onClose, onCerrado }: {
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    fetch('/api/caja/turnos').then((r) => r.json()).then((d) => {
-      setEstado((s) => ({ ...s, esperado: d.desglose?.esperado ?? 0 }));
+    void traerJson<{ desglose?: { esperado?: number } }>('/api/caja/turnos').then((d) => {
+      setEstado((s) => ({ ...s, esperado: d?.desglose?.esperado ?? 0 }));
       setCargando(false);
-    }).catch(() => setCargando(false));
+    });
   }, []);
 
   const contadoCentavos = Math.round((Number(estado.contado) || 0) * 100);

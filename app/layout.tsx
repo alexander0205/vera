@@ -7,6 +7,7 @@ import { Toaster } from 'sonner';
 import { WebVitals } from './(dashboard)/dashboard/_web-vitals';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { MuiProviders } from '@/components/mui-providers';
+import { ScriptTapaLlegada } from '@/components/loader-llegada';
 
 export const metadata: Metadata = {
   title: 'Zero — Facturación Electrónica República Dominicana',
@@ -55,6 +56,9 @@ export default function RootLayout({
       className={`bg-white dark:bg-gray-950 text-black dark:text-white antialiased ${inter.variable} ${sora.variable} ${inter.className}`}
     >
       <body className="min-h-[100dvh] bg-gray-50">
+        {/* Antes que nada: si se viene de otro módulo, tapa la pantalla ya,
+            sin esperar a que React hidrate. */}
+        <ScriptTapaLlegada />
         <WebVitals />
         <AppRouterCacheProvider>
           <MuiProviders>

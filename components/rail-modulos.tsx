@@ -19,6 +19,7 @@ import Typography from '@mui/material/Typography';
 import { FileText, Store, GraduationCap, Building2 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { MODULE_LABELS, moduleUrl, type ModuleKey } from '@/lib/config/modules';
+import { anunciarCambioDeModulo } from '@/components/loader-llegada';
 
 const ICONS: Record<ModuleKey, typeof FileText> = {
   facturacion:    FileText,
@@ -55,6 +56,10 @@ export function RailModulos({ current }: { current: ModuleKey | null }) {
             key={m}
             component={Link}
             href={moduleUrl(m)}
+            // Desde aquí también se cambia de módulo, así que también hay que
+            // avisar: si no, el módulo de destino se monta a pedazos y a la
+            // vista parece que la pantalla de carga va y viene.
+            onClick={() => anunciarCambioDeModulo(MODULE_LABELS[m])}
             sx={{
               display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
               borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
