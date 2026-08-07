@@ -768,6 +768,12 @@ export async function getPagosListado(
       // Usuario que registró el pago.
       registradoPor: users.name,
       registradoPorEmail: users.email,
+      // Comprobantes de la factura. Solo el conteo — el binario jamás sale en
+      // un listado (el de una sola factura ya pesaría más que toda la página).
+      comprobantes: sql<number>`(
+        SELECT count(*)::int FROM pago_adjuntos
+        WHERE pago_adjuntos.ecf_document_id = ecf_documents.id
+      )`,
     })
     .from(pagosRecibidos)
     .leftJoin(ecfDocuments, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
@@ -1177,8 +1183,9 @@ export async function registrarPagoFacturaConMora(input: {
     }
   }
 
+  let filasInsertadas: { id: number }[] = [];
   if (inserts.length > 0) {
-    await db.insert(pagosRecibidos).values(
+    filasInsertadas = await db.insert(pagosRecibidos).values(
       inserts.map(i => ({
         teamId:        input.teamId,
         ecfDocumentId: i.ecfDocumentId,
@@ -1192,7 +1199,7 @@ export async function registrarPagoFacturaConMora(input: {
         turnoCajaId:   input.turnoCajaId ?? null,
         createdBy:     input.createdBy ?? null,
       })),
-    );
+    ).returning({ id: pagosRecibidos.id });
   }
 
   // Sincronizar espejo/estado_pago de la factura y de cada ND tocada
@@ -1205,6 +1212,8 @@ export async function registrarPagoFacturaConMora(input: {
     saldoNuevo: capacidad - totalLineas,
     saldado:    capacidad - totalLineas === 0,
     repartido:  { facturaCents, moraCents },
+    /** Filas creadas, en el orden en que se insertaron (factura primero). */
+    pagos:      filasInsertadas,
   };
 }
 

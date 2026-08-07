@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   DollarSign, Wallet, TrendingUp, Calculator, X, Loader2,
-  AlertTriangle, Trash2, FileText, Download, Banknote, Send,
+  AlertTriangle, Trash2, FileText, Download, Banknote, Send, Paperclip,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { fmtDOP, fmtFechaCorta, fmtFechaHora } from '@/lib/utils/format';
@@ -31,6 +31,7 @@ interface Pago {
   docMontoTotal: number | null;
   enviadoDgii:   boolean;
   pagosDelDoc:   number;
+  comprobantes:  number;
   clientId:      number | null;
   cliente:       string | null;
   rncComprador:  string | null;
@@ -78,6 +79,9 @@ export default function PagosPage() {
   const puedeEliminar = can('facturas:anular');
 
   const [pagos, setPagos]   = useState<Pago[]>([]);
+  // Métodos que esta empresa marcó como "exige comprobante": sin eso, un cobro
+  // sin adjunto no es una falta y no se debe señalar.
+  const [metodosExige, setMetodosExige] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
   const [rango, setRango]   = useState<RangoKey>('30d');
@@ -86,6 +90,15 @@ export default function PagosPage() {
     q: '', metodo: '', dgii: '', agrupar: '',
   });
   const [pagoEliminar, setPagoEliminar] = useState<Pago | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/equipo/perfil')
+      .then(r => r.json())
+      .then(j => { if (vivo) setMetodosExige(Array.isArray(j.metodosExigeComprobante) ? j.metodosExigeComprobante : []); })
+      .catch(() => { if (vivo) setMetodosExige([]); });
+    return () => { vivo = false; };
+  }, []);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -275,6 +288,39 @@ export default function PagosPage() {
       render: p => <span className="text-xs text-gray-500">{p.registradoPor ?? p.registradoPorEmail ?? '—'}</span>,
     },
     {
+      id: 'comprobante',
+      header: 'Comp.',
+      align: 'center',
+      render: p => {
+        if (p.comprobantes > 0) {
+          return (
+            <Link
+              href={`/dashboard/facturas/${p.docId}`}
+              title={`${p.comprobantes} comprobante${p.comprobantes > 1 ? 's' : ''}`}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-teal-50 text-teal-700 text-[11px] font-medium hover:bg-teal-100"
+            >
+              <Paperclip className="h-3 w-3" />
+              {p.comprobantes}
+            </Link>
+          );
+        }
+        // Solo se marca en rojo si la empresa configuró que ese método lo exige.
+        // Sin esa configuración, no adjuntar nada es lo normal, no una falta.
+        if (metodosExige.includes(p.metodo)) {
+          return (
+            <span
+              title="Este método exige comprobante y el cobro no tiene ninguno"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-red-50 text-red-700 text-[11px] font-medium"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              falta
+            </span>
+          );
+        }
+        return <span className="text-gray-300 text-xs">—</span>;
+      },
+    },
+    {
       id: 'monto',
       header: 'Monto',
       align: 'right',
@@ -282,7 +328,7 @@ export default function PagosPage() {
       sortAccessor: p => p.monto,
       render: p => <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(p.monto)}</span>,
     },
-  ], []);
+  ], [metodosExige]);
 
   const rowActions = (p: Pago): RowAction[] => {
     const actions: RowAction[] = [];
