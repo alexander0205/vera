@@ -4,6 +4,95 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.16.0 — 2026-08-07
+
+### Nuevo
+
+- **cobranza**: unificar la tabla de mora y limpiar los listados
+- **cobranza**: simplificar tarjeta expandible de factura y reubicar mora en el detalle
+  - Se elimina el titulo redundante, la barra de progreso y los tiles Subtotal/ITBIS/Total (ya son columnas del listado).
+  - Tabla "Pendientes" cuadrada, con bordes definidos y predominio de grises (como pidio Alex): una fila por documento cobrable (capital de la factura si no esta saldado + cada nota de debito por mora impaga) y "Total pendiente". Indentada para arrancar bajo la columna "Codigo", con padding comodo.
+  - Estado "Sin pendientes" cuando no falta nada por cobrar.
+  - La info general de mora (aviso "capital saldado, mora pendiente" + mora aplicada + proxima mora automatica) se mueve a una tarjeta "Mora" bajo "Datos del comprador", descargando el sidebar.
+  - Las notas de debito por mora pasan a su propia tarjeta en el sidebar, justo debajo de "Notas asociadas".
+  - Se elimina la seccion Mora recargada del sidebar (fusionaba ambas cosas).
+  - Se quita la tarjeta CTA duplicada "Crear nota" del sidebar; crear NC/ND queda solo en el menu de acciones (3 puntos) del encabezado.
+- **cobranza**: mora en PDF (factura<->ND) + facturas generadas expandibles
+  - PDF: caja "Recargo por mora" con referencia a la factura de origen (en la ND) y seccion "Recargos por mora" (tabla + pendiente) en la factura padre.
+  - API pdf/factura/[id]: query moraOrigen (ND -> factura padre) / moras (factura -> NDs).
+  - API facturas: devuelve moraNotas[], moraAplicada, moraPendiente, pagado (Number).
+  - Recurrentes: expandir plan carga sus facturas generadas via nuevo endpoint api/facturas-recurrentes/[id]/generadas (esencial + mora por factura).
+- **cobranza**: jerarquia factura-mora, estado "Mora pendiente" y resumen de pago
+  - Cuentas por cobrar: la factura ya no desaparece cuando su capital esta pagado pero le queda una ND de mora sin saldar (getCuentasPorCobrar amplia el WHERE con OR EXISTS mora pendiente). Antes esa factura y su nota quedaban invisibles.
+  - DataTable: soporte generico de filas hijas expandibles (renderExpanded / rowExpandable) con chevron.
+  - AR: cada factura expande sus ND de mora (codigo, estado, saldo, link); badge "Mora pendiente" cuando el capital esta pago; resumen del pago recien registrado (recibido / a factura / a mora / queda pendiente).
+  - Detalle de factura: cada ND de mora muestra estado (Pendiente/Parcial/ Pagada) y saldo; banner "capital pago, mora sigue pendiente".
+  - Listado de facturas: badge "Mora pendiente" en vez de "Pagada" cuando el capital esta saldado pero hay mora impaga (nuevo campo moraPendiente).
+- **mora**: seed demo con perfil fijo (gracia, tope, max periodos)
+- **config**: dias personalizados en la periodicidad de la mora
+- **config**: rediseno intuitivo de "Recargo por mora" (mockup de Alex)
+  - Toggle "Activado" con estado visible.
+  - Secciones numeradas: 1 Cuanto cobrar, 2 Cuando empezar, 3 Poner limites (opcional).
+  - Panel "Asi funciona (ejemplo)" dinamico: arma un ejemplo paso a paso sobre una factura de RD$10,000 con la config actual (fechas, montos).
+  - Franja "Resumen de tu configuracion" (recargo, inicia, se repite, limites).
+  - Limites: los campos tope y maximo pasan a dropdowns con presets y opcion "Sin limite" (reemplaza el toggle de limites anterior, siguiendo el mockup).
+- **factura**: mostrar el vencimiento en el detalle (Resumen)
+- **factura**: restaurar Plazo de vencimiento + campo de fecha read-only
+  - DetallesSection: reintroduce el input de dias (setDiasParaPago) y agrega el input date read-only atado a fechaLimitePago; el pill de abajo queda solo con la nota de mora (la fecha ya se ve en el campo).
+  - NuevaFacturaForm: vuelve a pasar setDiasParaPago y restaura el mensaje de validacion de credito.
+- **mora**: checkbox "No volver a mostrar" en el aviso de contado sin pago
+- **mora**: seccion "Mora" en el detalle con lo aplicado y la proxima
+  - Mora aplicada hasta ahora: total + cantidad de notas.
+  - Proxima mora automatica: fecha e importe, o "Sin cargos programados" cuando no hay periodicidad o ya se cobro el unico periodo.
+  - Lista de las notas de debito por mora emitidas.
+- **mora**: mora siempre sobre el saldo de la factura (quitar mora sobre mora)
+  - Config: se quita el toggle "Mora sobre mora (base compuesta)". La periodicidad se mantiene (cada cuanto se cobra). recargo_mora_compuesta se guarda siempre en false; la columna queda dormida por si el caso compuesto se revalida a futuro con contabilidad.
+  - El motor ya calculaba simple con compuesta=false; sin cambios de logica.
+- **mora**: limites de mora (tope + max cobros) detras de un toggle
+- **mora**: interfaz de recargo por mora mas clara e intuitiva
+  - Periodicidad: chips de acceso rapido (Una sola vez, Cada 15/30/60 dias) ademas del campo en dias, con una etiqueta viva que traduce el valor ("Se repite cada 30 dias (mensual) mientras siga vencida").
+  - Menos jerga: se quita "cron/UTC" y "basis points" de los textos de ayuda.
+- **mora**: mostrar la proxima mora automatica en el detalle de la factura
+  - nota-debito-mora.ts: nueva `previsualizarMoraDeFactura` (read-only) que reusa `calcularMora`, asi que el monto coincide con lo que cobraria el cron. Distingue: inactiva, no_aplica (sin saldo/vencimiento/tope/etc.) y pendiente (fecha + monto). Para facturas aun no vencidas proyecta el primer periodo tras la gracia.
+  - GET /api/facturas/[id]/nota-debito-mora: devuelve ese preview.
+  - Detalle: tarjeta "Proxima mora automatica" con fecha e importe, junto a la accion manual y las notas de mora existentes.
+- **mora**: plazo desde config central + aviso al guardar contado sin pago
+  - Se quita el campo editable "Plazo de vencimiento" de Nueva factura y de Factura recurrente. El vencimiento se toma del plazo de pago por defecto de la empresa (Configuracion). Al elegir credito se muestra de forma informativa el plazo ("Credito a N dias · vence el DD/MM/YYYY") y la mora.
+  - El mensaje de validacion de credito ahora apunta a la configuracion en vez de a un campo que ya no existe.
+  - Al guardar una factura de venta marcada "de contado" que queda sin pago, con mora configurada, se muestra un pop-up: permite cambiar a credito o continuar de contado. Mismo aviso en Factura recurrente (plan de contado).
+- **mora**: eliminar personalizacion de mora por factura y por plan
+  - schema.ts: quita las 8 columnas override (mora_porcentaje, mora_dias_gracia, mora_modo, mora_monto_cents) de ecf_documents y facturas_recurrentes. Se conservan mora_periodo, los indices del cobro periodico y las columnas de mora del team.
+  - migracion 0078: deja de crear mora_modo/mora_monto_cents (no estaba desplegada aun); mantiene mora_periodo + indices + columnas de team.
+  - migracion 0079 (nueva): DROP ... IF EXISTS de las 8 columnas override, idempotente en prod (solo tenia porcentaje/gracia) y en ramas donde 0078 alcanzo a crear modo/monto.
+  - nota-debito-mora.ts: la config de mora viene solo del team.
+  - recurrente.ts: deja de propagar los 4 campos de override a la factura.
+  - recargo.ts: quita el select de moraDiasGracia (nunca se usaba; la gracia la decide calcularMora).
+  - API POST/PUT de facturas-recurrentes: sin validacion ni escritura de los overrides.
+  - Form recurrente + editar: elimina la seccion "Personalizar mora para este plan"; el resumen de mora usa solo la config de la empresa.
+- **mora**: overrides de recargo por plan recurrente
+  - API POST/PUT /api/facturas-recurrentes: aceptan y validan moraModo/moraMontoCents/moraPorcentaje/moraDiasGracia.
+  - recurrente.ts: propaga moraModo y moraMontoCents a la factura generada (antes solo porcentaje y gracia); nota-debito-mora.ts ya los lee como override por factura, con prioridad sobre el team.
+  - Form recurrente: seccion "Personalizar mora para este plan" (solo credito + empresa con mora activa), con toggle + modo + monto/% + gracia, y la pildora refleja la config efectiva via describirMora.
+  - editar/page.tsx: carga los 6 campos de mora de la empresa (con narrowing de recargoMoraModo) y los 4 overrides del plan.
+- **mora**: config completa, aviso en recurrentes y fix base compuesta
+  - Config: selector modo fijo/porcentaje, monto fijo, periodicidad, base compuesta, tope y máx períodos, gracia revivida (ya no se hardcodea a 0) y vista previa en vivo con describirMora.
+  - Aviso de mora en el form de facturas recurrentes; el page ahora carga los 6 campos nuevos y estrecha recargoMoraModo a la unión.
+  - Fix: el subquery de `pagado` en nota-debito-mora.ts interpolaba ${ecfDocuments.id}, que Drizzle rinde sin calificar ("id"); como pagos_recibidos tambien tiene columna id, casaba pr.ecf_document_id = pr.id -> SUM siempre 0 -> toda mora contaba impaga y la base compuesta sobrecobraba moras ya pagadas. Ahora LEFT JOIN + GROUP BY.
+  - scripts: apply-migration-0078 (aplica+verifica en information_schema) y test-mora-engine (6 escenarios contra DB, 15/15).
+- **mora**: monto fijo, cobro periódico, base compuesta y topes
+  - Modo: porcentaje (bps) o monto fijo en centavos. Un colegio cobra "RD$500 por pago tardío" y una empresa de servicios cobra un %; forzar a uno al lenguaje del otro produce configuraciones absurdas.
+  - Periodicidad en días: 0 = una sola vez (lo de hoy), 30 = mensual.
+  - Base compuesta: el cargo del período N incluye las moras impagas anteriores. Es la "mora sobre mora" del caso del colegio. Si pagó la mora previa, no se capitaliza.
+  - Topes: % máximo de mora acumulada sobre el documento y máximo de períodos. Sin ellos una deuda al 10% mensual compuesto se vuelve impagable en un año.
+
+### Arreglado
+
+- **migraciones**: renumerar las de mora a 0080/0081
+- **mora**: proyectar la proxima mora en facturas ya vencidas
+- **factura**: evitar desborde del control de condicion de pago
+
+_1 commit(s) de mantenimiento no listados._
+
 ## v1.15.5 — 2026-08-07
 
 ### Arreglado
