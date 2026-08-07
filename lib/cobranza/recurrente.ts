@@ -97,8 +97,6 @@ export async function generarFacturaDeRecurrente(
     notas: string | null;
     nombre: string;
     facturasEmitidas: number;
-    moraPorcentaje: number | null;
-    moraDiasGracia: number | null;
   },
   opts?: { periodo?: string },
 ): Promise<GenerarFacturaResult | GenerarFacturaError> {
@@ -182,8 +180,6 @@ export async function generarFacturaDeRecurrente(
       notas: fr.notas ?? `Factura recurrente: ${fr.nombre}`,
       origenRecurrenteId: fr.id,
       periodoRecurrente: periodo,
-      moraPorcentaje: fr.moraPorcentaje ?? null,
-      moraDiasGracia: fr.moraDiasGracia ?? null,
       fechaEmision,
     })
     .returning({ id: ecfDocuments.id });

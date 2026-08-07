@@ -114,6 +114,18 @@ export const teams = pgTable('teams', {
   recargoMoraActivo:      boolean('recargo_mora_activo').notNull().default(false),
   recargoMoraPorcentaje:  integer('recargo_mora_porcentaje').notNull().default(200),  // basis points; 200 = 2.00%
   recargoMoraDiasGracia:  integer('recargo_mora_dias_gracia').notNull().default(5),
+  /** 'porcentaje' → usa recargoMoraPorcentaje; 'fijo' → usa recargoMoraMontoCents. */
+  recargoMoraModo:        varchar('recargo_mora_modo', { length: 12 }).notNull().default('porcentaje'),
+  /** Cargo en centavos cuando el modo es 'fijo'. */
+  recargoMoraMontoCents:  integer('recargo_mora_monto_cents').notNull().default(0),
+  /** Cada cuántos días se recobra mientras siga vencida. 0 = una sola vez. */
+  recargoMoraPeriodicidadDias: integer('recargo_mora_periodicidad_dias').notNull().default(0),
+  /** true = la base incluye las moras anteriores impagas (mora sobre mora). */
+  recargoMoraCompuesta:   boolean('recargo_mora_compuesta').notNull().default(false),
+  /** Tope de mora ACUMULADA como % del documento, en bps. 0 = sin tope. */
+  recargoMoraTopeBps:     integer('recargo_mora_tope_bps').notNull().default(0),
+  /** Máximo de períodos a cobrar. 0 = sin límite. */
+  recargoMoraMaxPeriodos: integer('recargo_mora_max_periodos').notNull().default(0),
 
   // ── Alerta double-check del método de pago ────────────────────────────────
   // Toggle por empresa. Si está activo (Y el rol tiene el permiso
@@ -489,10 +501,8 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // sin .references() para evitar import circular (FK declarada en la migración).
   moraOrigenId: integer('mora_origen_id'),
 
-  // Override por factura del recargo por mora (crédito + recargo activo).
-  // NULL = usar el default del team (recargoMoraPorcentaje / recargoMoraDiasGracia).
-  moraPorcentaje: integer('mora_porcentaje'),  // basis points (200 = 2%)
-  moraDiasGracia: integer('mora_dias_gracia'), // días de gracia
+  /** Período que cubre esta nota de mora (inicio del período). Solo en las notas. */
+  moraPeriodo:    date('mora_periodo'),
 
   // Metadatos de venta: almacén, vendedor y lista de precios usada al emitir
   almacenId:      integer('almacen_id').references(() => almacenes.id),
@@ -762,10 +772,6 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   items:            text('items').notNull().default('[]'),
   notas:            text('notas'),
   totalEstimado:    integer('total_estimado').notNull().default(0),
-  /** Override de mora por plan (bps; 200=2%). null → usa config global del team. */
-  moraPorcentaje:   integer('mora_porcentaje'),
-  /** Override de días de gracia por plan. null → usa config global del team. */
-  moraDiasGracia:   integer('mora_dias_gracia'),
   facturasEmitidas: integer('facturas_emitidas').notNull().default(0),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),

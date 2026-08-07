@@ -24,12 +24,20 @@ async function getEmpresaPerfil(): Promise<EmpresaPerfil | null> {
       recargoMoraActivo:     teams.recargoMoraActivo,
       recargoMoraPorcentaje: teams.recargoMoraPorcentaje,
       recargoMoraDiasGracia: teams.recargoMoraDiasGracia,
+      recargoMoraModo:       teams.recargoMoraModo,
+      recargoMoraMontoCents: teams.recargoMoraMontoCents,
+      recargoMoraPeriodicidadDias: teams.recargoMoraPeriodicidadDias,
+      recargoMoraCompuesta:  teams.recargoMoraCompuesta,
+      recargoMoraTopeBps:    teams.recargoMoraTopeBps,
+      recargoMoraMaxPeriodos: teams.recargoMoraMaxPeriodos,
       plazoPagoDefaultDias:  teams.plazoPagoDefaultDias,
     })
     .from(teams)
     .where(eq(teams.id, teamId))
     .limit(1);
-  return team ?? null;
+  if (!team) return null;
+  // El schema tipa recargo_mora_modo como string; se estrecha a la unión.
+  return { ...team, recargoMoraModo: team.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje' };
 }
 
 export default async function NuevaFacturaRecurrentePage() {

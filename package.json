@@ -27,7 +27,9 @@
     "db:studio": "drizzle-kit studio",
     "db:reset": "npx tsx lib/db/reset.ts",
     "db:local:setup": "bash scripts/setup-local-db.sh",
-    "branch:setup": "bash scripts/branch-setup.sh"
+    "branch:setup": "bash scripts/branch-setup.sh",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.4.0",
@@ -77,6 +79,7 @@
     "@playwright/test": "^1.59.1",
     "@types/papaparse": "^5.5.2",
     "@types/pdf-parse": "^1.1.5",
-    "@types/qrcode": "^1.5.6"
+    "@types/qrcode": "^1.5.6",
+    "vitest": "^4.1.10"
   }
 }

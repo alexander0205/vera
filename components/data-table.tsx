@@ -131,6 +131,17 @@ export interface DataTableProps<T> {
   groupBy?:       (row: T) => string;
   /** Render del encabezado de cada grupo (clave, sus filas y el colSpan total). */
   renderGroupHeader?: (groupKey: string, rows: T[], colSpan: number) => React.ReactNode;
+  /**
+   * Contenido expandible por fila (filas hijas). Cuando se pasa, cada fila gana
+   * un chevron al inicio que muestra/oculta este contenido en una fila extra.
+   */
+  renderExpanded?: (row: T) => React.ReactNode;
+  /** Si false, la fila no muestra chevron ni se puede expandir. Default: true. */
+  rowExpandable?: (row: T) => boolean;
+  /** Clases extra por fila — para marcar urgencia sin leer la celda. */
+  rowClassName?: (row: T) => string;
+  /** Orden inicial de la tabla. Sin esto se muestra en el orden que llega. */
+  defaultSort?: { columnId: string; dir: 'asc' | 'desc' };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -169,6 +180,10 @@ export function DataTable<T>({
   description,
   groupBy,
   renderGroupHeader,
+  renderExpanded,
+  rowExpandable,
+  rowClassName,
+  defaultSort,
 }: DataTableProps<T>) {
   const router = useRouter();
   // Estado interno de filtros si no se controla externamente.
@@ -181,7 +196,9 @@ export function DataTable<T>({
   };
 
   // Sort interno (no soporta server-side sort por ahora — fácil de agregar).
-  const [sortBy, setSortBy] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
+  const [sortBy, setSortBy] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(
+    defaultSort ? { id: defaultSort.columnId, dir: defaultSort.dir } : null,
+  );
   const sortedData = useMemo(() => {
     if (!sortBy) return data;
     const col = columns.find(c => c.id === sortBy.id);
@@ -262,7 +279,18 @@ export function DataTable<T>({
 
   const hasFilters = filters.length > 0;
   const hasBulk    = bulkActions.length > 0;
-  const cols = columns.length + (hasBulk ? 1 : 0) + (rowActions ? 1 : 0);
+  const hasExpand  = !!renderExpanded;
+  const cols = columns.length + (hasBulk ? 1 : 0) + (rowActions ? 1 : 0) + (hasExpand ? 1 : 0);
+
+  // Filas expandidas (filas hijas). Set de rowId.
+  const [expandedIds, setExpandedIds] = useState<Set<string | number>>(new Set());
+  const toggleExpand = (id: string | number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   // Agrupación opcional: parte el dataset (ya ordenado) en grupos por clave,
   // preservando el orden de primera aparición. Cada clave aparece una sola vez
@@ -283,19 +311,42 @@ export function DataTable<T>({
     const id = rowId(row);
     const isSelected = selectedIds.has(id);
     const href = rowHref?.(row);
+    const canExpand = hasExpand && (rowExpandable ? rowExpandable(row) : true);
+    const isExpanded = expandedIds.has(id);
     return (
+      <React.Fragment key={String(id)}>
       <tr
-        key={String(id)}
-        className={`transition-colors ${isSelected ? 'bg-teal-50/50' : 'hover:bg-gray-50'} ${href ? 'cursor-pointer' : ''}`}
-        onClick={href ? (e) => {
-          // No navegar si click vino de checkbox/botón/link interno
+        className={`transition-colors ${isSelected ? 'bg-teal-50/50' : 'hover:bg-gray-50'} ${href || canExpand ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+        // La fila entera responde: si tiene hijas, las despliega; si no, navega.
+        // El chevron sigue estando —es la señal de que hay algo debajo—, pero
+        // acertarle a un botón de 20px para ver el detalle era pedir puntería.
+        // Los clics que nacen en un checkbox, botón o enlace siguen siendo suyos.
+        onClick={href || canExpand ? (e) => {
           const target = e.target as HTMLElement;
           if (target.closest('input,button,a,[role="menuitem"]')) return;
+          // Desplegar gana sobre navegar: si la fila tiene hijas, el clic las
+          // abre; si no, lleva al detalle.
+          if (canExpand) { toggleExpand(id); return; }
           // Navegación del cliente: `window.location` recargaba la app entera
           // y perdía el estado de filtros y la sesión de datos ya cargada.
-          router.push(href);
+          if (href) router.push(href);
         } : undefined}
       >
+        {hasExpand && (
+          <td className="px-2 py-3 w-8" onClick={e => e.stopPropagation()}>
+            {canExpand && (
+              <button
+                type="button"
+                onClick={() => toggleExpand(id)}
+                aria-label={isExpanded ? 'Colapsar' : 'Expandir'}
+                aria-expanded={isExpanded}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400"
+              >
+                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+            )}
+          </td>
+        )}
         {hasBulk && (
           <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
             <input
@@ -332,6 +383,14 @@ export function DataTable<T>({
           );
         })()}
       </tr>
+      {canExpand && isExpanded && (
+        <tr className="bg-gray-50/50">
+          <td colSpan={cols} className="px-3 pb-3 pt-0">
+            {renderExpanded!(row)}
+          </td>
+        </tr>
+      )}
+      </React.Fragment>
     );
   };
 
@@ -463,6 +522,7 @@ export function DataTable<T>({
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
+                  {hasExpand && <th className="w-8 px-2 py-2.5" />}
                   {hasBulk && (
                     <th className="w-10 px-3 py-2.5">
                       <input
