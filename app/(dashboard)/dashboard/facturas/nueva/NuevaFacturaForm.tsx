@@ -456,7 +456,11 @@ export default function NuevaFacturaForm({
   const [ncfError,  setNcfError]              = useState<string | null>(null);
 
   const [notas, setNotas]                  = useState(initialData?.notas ?? '');
-  const [terminosCondiciones, setTerminos] = useState(initialData?.terminosCondiciones ?? '');
+  // En una factura nueva se precargan los términos por defecto de la empresa.
+  // Al editar una existente NO: si el usuario los borró, borrados se quedan.
+  const [terminosCondiciones, setTerminos] = useState(
+    initialData ? (initialData.terminosCondiciones ?? '') : (empresa?.terminosCondicionesDefault ?? ''),
+  );
   const [pieFactura, setPieFactura]        = useState(initialData?.pieFactura ?? '');
 
   // ── Pago recibido ──────────────────────────────────────────────────────────

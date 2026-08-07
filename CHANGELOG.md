@@ -4,6 +4,69 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.15.5 — 2026-08-07
+
+### Arreglado
+
+- **pdf**: el pie de la DGII tapaba las líneas y partía la tirilla
+
+## v1.15.4 — 2026-08-05
+
+### Arreglado
+
+- **pdf**: las columnas de montos se encimaban en la factura
+
+## v1.15.3 — 2026-08-05
+
+### Arreglado
+
+- **listados**: abrir el detalle desde cualquier punto de la fila
+
+## v1.15.2 — 2026-08-05
+
+### Arreglado
+
+- **cotizaciones**: quitar la marca de agua BORRADOR del PDF
+
+## v1.15.1 — 2026-08-05
+
+### Arreglado
+
+- **cotizaciones**: beneficiarios por línea + convertir siempre visible
+
+## v1.15.0 — 2026-08-05
+
+### Nuevo
+
+- **configuracion**: términos y condiciones por defecto
+- **cotizaciones**: enviar por correo desde la lista
+  - El e-NCF solo se muestra cuando existe. Las facturas sin comprobante fiscal guardan un placeholder (BOR-XXXXXXXX) en esa misma columna, y se estaba imprimiendo como si fuera un número fiscal real.
+  - El encabezado y el asunto dicen qué es el documento según su código: una nota de crédito no es una factura.
+
+### Arreglado
+
+- **cotizaciones**: borrar términos o notas no se guardaba
+
+## v1.14.0 — 2026-08-05
+
+### Nuevo
+
+- **email**: los comprobantes salen a nombre de la institución
+
+## v1.13.2 — 2026-08-05
+
+### Arreglado
+
+- **email**: generar el PDF en proceso en vez de pedirlo por HTTP
+
+## v1.13.1 — 2026-08-05
+
+### Arreglado
+
+- **cotizaciones**: renumerar migración 0075 duplicada y no tragarse el error
+  - Renumera la migración a 0078 (y su script) para que la colisión no vuelva a esconderla. El journal de drizzle solo llega a 0004; de ahí en adelante las migraciones se corren a mano, así que nada avisa de un archivo que se saltó.
+  - El formulario lee el body con `res.text()` y parsea dentro de un try, cayendo al status HTTP cuando no hay JSON que parsear.
+
 ## v1.13.0 — 2026-08-04
 
 ### Nuevo

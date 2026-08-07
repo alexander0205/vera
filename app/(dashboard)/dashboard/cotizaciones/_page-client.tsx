@@ -8,9 +8,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil,
+  FileText, Plus, Trash2, Loader2, AlertTriangle, Pencil, Mail, Eye,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { Input } from '@/components/ui/input';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 
 interface Cotizacion {
@@ -18,6 +20,7 @@ interface Cotizacion {
   numero: string;
   estado: string;
   razonSocialComprador: string | null;
+  emailComprador: string | null;
   montoTotal: number;
   fechaEmision: string;
   fechaVencimiento: string | null;
@@ -47,6 +50,8 @@ export default function CotizacionesPage() {
   const [deleteTarget, setDeleteTarget]   = useState<Cotizacion | null>(null);
   const [deleting, setDeleting]           = useState(false);
   const [opError, setOpError]             = useState<string | null>(null);
+  const [emailTarget, setEmailTarget]     = useState<{ cot: Cotizacion; email: string } | null>(null);
+  const [sendingEmail, setSendingEmail]   = useState(false);
 
   const search = filterValues.q ?? '';
 
@@ -84,12 +89,53 @@ export default function CotizacionesPage() {
     }
   }
 
+  /**
+   * Envía la cotización por correo. Igual que en el detalle: si seguía en
+   * borrador, pasa a "enviada" — se acaba de mandar, ya no es un borrador.
+   */
+  async function handleEnviarEmail() {
+    if (!emailTarget) return;
+    setSendingEmail(true);
+    try {
+      const res  = await fetch(`/api/cotizaciones/${emailTarget.cot.id}/email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: emailTarget.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error enviando email');
+
+      if (emailTarget.cot.estado === 'borrador') {
+        await fetch(`/api/cotizaciones/${emailTarget.cot.id}`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ estado: 'enviada' }),
+        });
+      }
+
+      toast.success('Cotización enviada por correo');
+      setEmailTarget(null);
+      cargar(search);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Error enviando email');
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
   const columns: DataTableColumn<Cotizacion>[] = useMemo(() => [
     {
       id: 'numero',
       header: 'Número',
       sortable: true,
-      render: c => <span className="font-mono font-medium text-sm">{c.numero}</span>,
+      render: c => (
+        <Link
+          href={`/dashboard/cotizaciones/${c.id}`}
+          className="font-mono font-medium text-sm text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
+        >
+          {c.numero}
+        </Link>
+      ),
     },
     {
       id: 'cliente',
@@ -123,6 +169,10 @@ export default function CotizacionesPage() {
   ], []);
 
   const rowActions = (c: Cotizacion): RowAction[] => [
+    // El detalle es donde vive "Convertir a factura"; sin esta puerta había que
+    // adivinar que el número era un enlace.
+    { icon: Eye,    title: 'Ver detalle', href: `/dashboard/cotizaciones/${c.id}`, primary: true },
+    { icon: Mail,   title: 'Enviar por correo', onClick: () => setEmailTarget({ cot: c, email: c.emailComprador ?? '' }) },
     { icon: Pencil, title: 'Editar',   href: `/dashboard/cotizaciones/${c.id}/editar` },
     { icon: Trash2, title: 'Eliminar', variant: 'danger', onClick: () => { setDeleteTarget(c); setOpError(null); } },
   ];
@@ -140,6 +190,7 @@ export default function CotizacionesPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        rowHref={c => `/dashboard/cotizaciones/${c.id}`}
         rowActions={rowActions}
         emptyState={{
           icon: FileText,
@@ -162,6 +213,41 @@ export default function CotizacionesPage() {
           </Link>
         }
       />
+
+      {/* ── Modal: Enviar por correo ──────────────────────────────────────────── */}
+      <Dialog open={!!emailTarget} onOpenChange={(o: boolean) => { if (!o) setEmailTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Enviar cotización por correo</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-gray-600">
+              Se enviará la cotización <strong>{emailTarget?.cot.numero}</strong> con el PDF adjunto.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Correo del cliente</label>
+              <Input
+                type="email"
+                value={emailTarget?.email ?? ''}
+                onChange={e => setEmailTarget(t => t && { ...t, email: e.target.value })}
+                placeholder="cliente@empresa.com"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailTarget(null)} disabled={sendingEmail}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-teal-600 hover:bg-teal-700"
+              onClick={handleEnviarEmail}
+              disabled={sendingEmail || !emailTarget?.email}
+            >
+              {sendingEmail
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
+                : <><Mail className="h-4 w-4 mr-1" />Enviar</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}
       <Dialog open={!!deleteTarget} onOpenChange={(o: boolean) => { if (!o) setDeleteTarget(null); }}>

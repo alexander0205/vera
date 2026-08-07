@@ -47,6 +47,10 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
   // Las cotizaciones nuevas guardan el shape rico de ItemLinea (mismo que factura);
   // las viejas guardaban { descripcion, precio, cantidad }. Se soportan ambos.
   let lineasJson: string | null = null;
+  // Resumen del beneficiario a nivel documento (lo que sale bajo los datos del
+  // comprador en el PDF): el nombre si todas las líneas son del mismo, o
+  // "Varios (N)" si son de distintos. Mismo criterio que el form de factura.
+  let dependienteNombreResumen: string | null = null;
   try {
     const rawItems: Array<Record<string, unknown>> = cot.items ? JSON.parse(cot.items) : [];
 
@@ -63,10 +67,20 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
         tasaItbis:              String(it.tasaItbis ?? 'exento'),
         indicadorBienoServicio: String(it.indicadorBienoServicio ?? '2'),
         unidadMedida:           String(it.unidadMedida ?? ''),
+        // El beneficiario de cada línea pasa a la factura; volver a elegirlo
+        // uno por uno en un colegio con 30 líneas no tiene sentido.
+        dependienteId:          typeof it.dependienteId === 'number' ? it.dependienteId : null,
+        dependienteNombre:      String(it.dependienteNombre ?? ''),
       };
     });
 
     lineasJson = JSON.stringify(lineas);
+
+    const nombres = [...new Set(
+      lineas.filter(l => l.dependienteId).map(l => l.dependienteNombre).filter(Boolean),
+    )];
+    if (nombres.length === 1) dependienteNombreResumen = nombres[0];
+    else if (nombres.length > 1) dependienteNombreResumen = `Varios (${nombres.length})`;
   } catch { /* sin ítems */ }
 
   const codigo     = await generarCodigoFactura(db, { teamId, userId: null, tipoEcf: tipoDestino });
@@ -96,6 +110,7 @@ export async function POST(_req: NextRequest, { params }: Ctx) {
       comentario:           cot.comentario ?? null,
       pieFactura:           cot.pieFactura ?? null,
       lineasJson,
+      dependienteNombre:    dependienteNombreResumen,
       tipoPago:             1,
     })
     .returning({ id: ecfDocuments.id });

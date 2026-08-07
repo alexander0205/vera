@@ -205,7 +205,7 @@ export default function FacturasPage() {
       render: doc => (
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-gray-700 hover:text-teal-700 hover:underline"
+          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
           title={doc.codigo ?? `#${doc.id}`}
         >
           {doc.codigo ?? `#${doc.id}`}
@@ -434,11 +434,12 @@ export default function FacturasPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
-        // Solo se despliega la factura que tiene notas de mora colgando: sin
-        // ellas el panel repetía la propia factura y su saldo, que ya están en
-        // la fila. Una flecha que no aporta nada al abrirse educa a no abrirla.
+        // La fila con notas de mora las despliega; la que no tiene nada que
+        // desplegar abre el detalle. Las dos responden al clic en cualquier
+        // punto: el ojo y el código son dianas chicas en una tabla ancha.
         rowExpandable={doc => (doc.moraNotas?.length ?? 0) > 0}
         renderExpanded={doc => <ResumenFactura doc={doc} />}
+        rowHref={doc => `/dashboard/facturas/${doc.id}`}
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}

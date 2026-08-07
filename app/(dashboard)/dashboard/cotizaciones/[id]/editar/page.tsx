@@ -49,6 +49,7 @@ export default async function EditarCotizacionPage({
     id:                   cot.id,
     numero:               cot.numero,
     estado:               cot.estado,
+    clientId:             cot.clientId ?? null,
     razonSocialComprador: cot.razonSocialComprador ?? '',
     rncComprador:         cot.rncComprador ?? '',
     emailComprador:       cot.emailComprador ?? '',

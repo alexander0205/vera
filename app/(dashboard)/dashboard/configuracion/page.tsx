@@ -10,7 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Building2, Palette, ImageIcon, PenLine,
+  Building2, Palette, ImageIcon, PenLine, FileText,
   CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
@@ -249,6 +249,8 @@ export default function ConfiguracionPage() {
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
   const [metodosObligaDgii, setMetodosObligaDgii]      = useState<string[]>([]);
+  // Términos y condiciones que se precargan en cada comprobante nuevo
+  const [terminosDefault, setTerminosDefault]          = useState('');
 
   // Cargar datos actuales
   useEffect(() => {
@@ -288,6 +290,7 @@ export default function ConfiguracionPage() {
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
+        setTerminosDefault(d.terminosCondicionesDefault ?? '');
         setRole(d.role ?? null);
       })
       .finally(() => setLoading(false));
@@ -329,6 +332,7 @@ export default function ConfiguracionPage() {
           posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
           metodosObligaDgii,
+          terminosCondicionesDefault: terminosDefault,
         }),
       });
       if (!res.ok) throw new Error('Error guardando');
@@ -616,6 +620,33 @@ export default function ConfiguracionPage() {
             <p className="text-xs text-gray-400">
               «De contado» no genera fecha de vencimiento.
             </p>
+          </div>
+        </CardContent>
+      </Card>}
+
+      {/* 5a. Términos y condiciones por defecto */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4 text-teal-600" />
+            Términos y condiciones
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-500">
+            Este texto se escribe solo al crear una factura o cotización nueva, para
+            no repetirlo cada vez. En cada documento lo puedes editar o borrar.
+          </p>
+          <textarea
+            className="w-full min-h-[120px] text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300 disabled:bg-gray-50"
+            placeholder="Ej: Pago a 30 días. Transferencias a la cuenta 000000001 del Banco Popular."
+            value={terminosDefault}
+            onChange={e => setTerminosDefault(e.target.value.slice(0, 2000))}
+            disabled={!canManage}
+          />
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Cambiarlo aquí no modifica los comprobantes ya emitidos.</span>
+            <span>{terminosDefault.length}/2000</span>
           </div>
         </CardContent>
       </Card>}

@@ -189,7 +189,7 @@ export function FacturaTirillaPDF({ data }: { data: FacturaPDFData }) {
       subject="Comprobante Fiscal Electrónico — Tirilla"
     >
       <Page
-        size={{ width: 226.77, height: estimateHeight(items.length, !!data.qrDataUrl) }}
+        size={{ width: 226.77, height: estimateHeight(items, data) }}
         style={S.page}
       >
         {/* ── Logo opcional ── */}
@@ -348,15 +348,35 @@ function ItemLine({ item }: { item: ItemPDF }) {
 }
 
 // ─── Estimación de altura (necesaria para react-pdf si no quieres multipage) ──
-// La tirilla térmica es "papel continuo": preferimos que TODO entre en una sola página.
-// Por eso sobre-estimamos un poco la altura para evitar saltos de página.
-// Cada ítem ~ 26pt (descripción + línea de cálculo); encabezado ~140pt;
-// totales + QR + códigos + estado + pie ~ 280pt.
-function estimateHeight(itemCount: number, hasQr: boolean): number {
-  const header = 160;
-  const items = Math.max(itemCount, 1) * 26;
-  const totals = 90;
-  const qr = hasQr ? 120 : 0;
-  const footer = 140;
-  return Math.max(560, header + items + totals + qr + footer);
+// La tirilla térmica es papel continuo: TODO tiene que caber en una sola página.
+// Si la altura se queda corta, react-pdf parte el recibo y el QR con el código
+// de seguridad termina en una segunda hoja que nadie imprime.
+//
+// Por eso se mide ítem por ítem en vez de usar un promedio: una línea con
+// referencia ocupa tres renglones (nombre + Ref + cantidad × precio) y una sin
+// ella, dos. Con 30 ítems, equivocarse por 7pt en cada uno son 210pt — media
+// hoja de más que se convierte en un salto de página.
+function estimateHeight(items: ItemPDF[], data: FacturaPDFData): number {
+  const LINEA_NOMBRE = 12;   // 9pt × 1.25 + holgura
+  const LINEA_CHICA  = 10;   // 8pt × 1.25
+  const MARGEN_ITEM  = 2;
+
+  const alturaItems = (items.length ? items : [null]).reduce<number>((alto, item) => {
+    if (!item) return alto + LINEA_NOMBRE + LINEA_CHICA + MARGEN_ITEM;
+    return alto
+      + LINEA_NOMBRE                          // nombre del producto
+      + (item.referencia ? LINEA_CHICA : 0)   // "Ref: ..."
+      + LINEA_CHICA                           // "cant x precio      total"
+      + MARGEN_ITEM;
+  }, 0);
+
+  const header  = 170;                                  // logo, emisor, cliente, encabezado
+  const totales = 90;                                   // subtotal, ITBIS, total, conteo
+  const qr      = data.qrDataUrl ? 130 : 0;             // QR + url + código + firma + estado
+  const pie     = data.pieFactura ? 30 : 0;
+  const cierre  = 60;                                   // "Verifique en dgii" + "Generado en zero"
+
+  const alto = header + alturaItems + totales + qr + pie + cierre;
+  // 8% de holgura: los nombres largos wrapean y el cálculo por renglón no lo ve.
+  return Math.max(560, Math.ceil(alto * 1.08));
 }

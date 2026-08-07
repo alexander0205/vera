@@ -1,4 +1,4 @@
-import { Resend } from 'resend';
+import { Resend, type Attachment } from 'resend';
 
 export const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -7,7 +7,7 @@ export const resend = new Resend(process.env.RESEND_API_KEY);
  * esta comprobación un 401 (key inválida), 403 (dominio sin verificar) o 422
  * (remitente mal formado) se resuelven como éxito y el fallo queda mudo.
  */
-function assertSent(
+export function assertSent(
   result: { data: unknown; error: unknown },
   contexto: string,
 ): void {
@@ -54,7 +54,7 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {
   const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
     to: email,
     subject: 'Verificar tu email — Zero',
@@ -72,6 +72,7 @@ export async function sendEmailVerificationEmail(email: string, token: string, n
       </div>
     `,
   });
+  assertSent(res, 'sendEmailVerificationEmail');
 }
 
 export async function sendInvitationEmail(
@@ -83,7 +84,7 @@ export async function sendInvitationEmail(
   const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invitations/accept?token=${encodeURIComponent(token)}`;
   const safeInvitedBy = escapeHtml(invitedByName) || 'Alguien';
   const safeTeam = escapeHtml(teamName);
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
     to: email,
     subject: `Invitación a ${teamName} en Zero`,
@@ -100,6 +101,7 @@ export async function sendInvitationEmail(
       </div>
     `,
   });
+  assertSent(res, 'sendInvitationEmail');
 }
 
 // ─── Cuadre de caja ───────────────────────────────────────────────────────────
@@ -205,6 +207,10 @@ export async function sendCajaCierreAprobacionEmail(opts: {
         to:      email,
         subject: `⚠️ Cierre de caja pendiente — ${numeroCierre} · ${teamName}`,
         html,
+      }).then(res => {
+        // Un error de API de Resend llega en el cuerpo, no como excepción:
+        // sin este assert el fallo por destinatario quedaba mudo.
+        assertSent(res, `sendCajaCierreAprobacionEmail(${email})`);
       }).catch(err => {
         console.error(`[caja-email] Error enviando a ${email}:`, err);
       }),
@@ -242,7 +248,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
       <td style="padding:10px 14px;text-align:right;font-weight:700;color:#d97706;">DOP ${escapeHtml(diferenciaDOP)}</td>
     </tr>`;
 
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from:    'Zero <noreply@zero.com.do>',
     to:      cajeroEmail,
     subject: `✓ Cuadre aprobado — ${numeroCierre} · ${teamName}`,
@@ -285,6 +291,7 @@ export async function sendCajaCierreAprobadoEmail(opts: {
         </div>
       </div>`,
   });
+  assertSent(res, 'sendCajaCierreAprobadoEmail');
 }
 
 /** Notifica al cajero que su cuadre fue rechazado y debe recontar. */
@@ -303,7 +310,7 @@ export async function sendCajaCierreRechazadoEmail(opts: {
   const safeMot  = escapeHtml(motivo);
   const safeUrl  = escapeHtml(appUrl);
 
-  await resend.emails.send({
+  const res = await resend.emails.send({
     from:    'Zero <noreply@zero.com.do>',
     to:      cajeroEmail,
     subject: `✗ Cuadre rechazado — ${numeroCierre} · ${teamName}`,
@@ -337,34 +344,231 @@ export async function sendCajaCierreRechazadoEmail(opts: {
         </div>
       </div>`,
   });
+  assertSent(res, 'sendCajaCierreRechazadoEmail');
 }
 
-export async function sendInvoiceEmail(
-  email: string,
-  encf: string,
-  razonSocial: string,
-  montoTotal: number,
-  pdfBuffer: Buffer,
-) {
-  const safeEncf = escapeHtml(encf);
-  const safeRazon = escapeHtml(razonSocial);
-  const safeMonto = escapeHtml((montoTotal / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 }));
-  await resend.emails.send({
-    from: 'Zero <noreply@zero.com.do>',
-    to: email,
-    subject: `Factura ${encf}`,
-    html: `
-      <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto;">
-        <h2 style="color: #0f766e;">Factura ${safeEncf}</h2>
-        <p>Adjuntamos la factura <strong>${safeEncf}</strong> por un monto de <strong>DOP ${safeMonto}</strong>.</p>
-        <p style="color:#6b7280;font-size:14px;">Emitida por ${safeRazon}.</p>
+// ─── Comprobantes al cliente — con la marca de quien emite ───────────────────
+//
+// Estos dos correos los recibe el cliente final (un padre de familia, un
+// paciente, un comprador). Quien factura es el colegio o la empresa, no Zero:
+// el remitente, el encabezado y el pie llevan sus datos, y responder al correo
+// le escribe a ellos. El dominio de envío sí sigue siendo zero.com.do — es el
+// único verificado ante el proveedor de correo.
+
+/** Datos del emisor que se muestran en los correos al cliente. */
+export type EmisorEmail = {
+  razonSocial:      string;
+  nombreComercial:  string | null;
+  rnc:              string | null;
+  direccion:        string | null;
+  telefono:         string | null;
+  sitioWeb:         string | null;
+  emailFacturacion: string | null;
+  /** data URL base64 — se adjunta inline y se referencia con cid: */
+  logo:             string | null;
+  colorPrimario:    string;
+};
+
+const CID_LOGO = 'logo-emisor';
+/** Tope defensivo: el cliente ya limita el logo a ~800KB al subirlo. */
+const LOGO_MAX_BYTES = 1_000_000;
+
+/** Nombre visible del emisor: el comercial si lo tiene, si no la razón social. */
+function nombreEmisor(emisor: EmisorEmail): string {
+  return (emisor.nombreComercial?.trim() || emisor.razonSocial?.trim() || 'Facturación');
+}
+
+/**
+ * Construye el `from`. El nombre va entre comillas y sin caracteres que puedan
+ * partir la cabecera — un salto de línea en el nombre de una empresa permitiría
+ * inyectar headers arbitrarios en el correo.
+ */
+function remitente(emisor: EmisorEmail): string {
+  const limpio = nombreEmisor(emisor)
+    .replace(/[\r\n"\\<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+  return `"${limpio || 'Facturación'}" <noreply@zero.com.do>`;
+}
+
+/** Convierte el data URL del logo en un adjunto inline. Null si no sirve. */
+function logoInline(logo: string | null): { attachment: Attachment; img: string } | null {
+  if (!logo) return null;
+  const m = /^data:image\/(png|jpe?g|gif|webp);base64,(.+)$/i.exec(logo.trim());
+  if (!m) return null;
+  const ext = m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase();
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length === 0 || buf.length > LOGO_MAX_BYTES) return null;
+  return {
+    attachment: {
+      filename:    `logo.${ext}`,
+      content:     buf,
+      contentType: `image/${ext}`,
+      contentId:   CID_LOGO,
+    },
+    img: `<img src="cid:${CID_LOGO}" alt="" style="max-height:56px;max-width:200px;display:block;margin:0 auto 10px;">`,
+  };
+}
+
+function montoDOP(centavos: number): string {
+  return escapeHtml((centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 }));
+}
+
+/** Encabezado con el color, el logo y el nombre de la institución. */
+function cabeceraEmisor(emisor: EmisorEmail, logoImg: string | null, etiqueta: string): string {
+  const color = /^#[0-9a-f]{6}$/i.test(emisor.colorPrimario) ? emisor.colorPrimario : '#1e40af';
+  return `
+    <div style="background:${color};padding:24px 28px;text-align:center;">
+      ${logoImg ?? ''}
+      <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">${escapeHtml(nombreEmisor(emisor))}</p>
+      <p style="margin:6px 0 0;color:rgba(255,255,255,.75);font-size:12px;text-transform:uppercase;letter-spacing:.08em;">${escapeHtml(etiqueta)}</p>
+    </div>`;
+}
+
+/** Pie con los datos fiscales y de contacto de la institución. */
+function pieEmisor(emisor: EmisorEmail, motivo: string): string {
+  const lineas = [
+    emisor.razonSocial && emisor.nombreComercial ? escapeHtml(emisor.razonSocial) : null,
+    emisor.rnc ? `RNC: ${escapeHtml(emisor.rnc)}` : null,
+    emisor.direccion ? escapeHtml(emisor.direccion) : null,
+    [
+      emisor.telefono ? `Tel.: ${escapeHtml(emisor.telefono)}` : null,
+      emisor.emailFacturacion ? escapeHtml(emisor.emailFacturacion) : null,
+      emisor.sitioWeb ? escapeHtml(emisor.sitioWeb) : null,
+    ].filter(Boolean).join(' · ') || null,
+  ].filter(Boolean);
+
+  return `
+    <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:18px 28px;">
+      ${lineas.map(l => `<p style="margin:0 0 3px;font-size:12px;color:#6b7280;">${l}</p>`).join('')}
+      <p style="margin:10px 0 0;font-size:11px;color:#9ca3af;">
+        ${escapeHtml(motivo)} Si tienes alguna duda, responde a este mensaje.
+      </p>
+    </div>`;
+}
+
+/** Fila de la tabla de detalle. */
+function fila(etiqueta: string, valor: string, destacada = false): string {
+  const peso = destacada ? '700' : '600';
+  const fondo = destacada ? 'background:#f9fafb;' : '';
+  return `
+    <tr style="${fondo}">
+      <td style="padding:9px 14px;color:#6b7280;font-size:13px;border-bottom:1px solid #f3f4f6;">${etiqueta}</td>
+      <td style="padding:9px 14px;text-align:right;font-size:13px;font-weight:${peso};color:#111827;border-bottom:1px solid #f3f4f6;">${valor}</td>
+    </tr>`;
+}
+
+/** Envía la factura como PDF adjunto, con la marca de quien la emite. */
+export async function sendInvoiceEmail(opts: {
+  email:          string;
+  encf:           string;
+  codigo:         string | null;
+  fechaEmision:   string;          // ya formateada para leer
+  clienteNombre:  string | null;
+  montoTotalCts:  number;
+  saldoCts:       number;
+  emisor:         EmisorEmail;
+  pdfBuffer:      Buffer;
+}) {
+  const {
+    email, encf, codigo, fechaEmision,
+    clienteNombre, montoTotalCts, saldoCts, emisor, pdfBuffer,
+  } = opts;
+
+  const referencia = codigo ?? encf;
+  const logo = logoInline(emisor.logo);
+  const saldado = saldoCts <= 0;
+  // Las facturas sin comprobante fiscal guardan un placeholder (BOR-XXXXXXXX)
+  // en la misma columna. Solo se muestra el e-NCF cuando es uno de verdad.
+  const encfReal = /^E\d{12}$/.test(encf) && encf !== referencia;
+  // Una nota de crédito no es una factura; el código lo dice (NC-, ND-, FA-).
+  const tipoTexto = /^NC-/i.test(referencia) ? 'Nota de crédito'
+    : /^ND-/i.test(referencia) ? 'Nota de débito'
+    : 'Factura';
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      ${cabeceraEmisor(emisor, logo?.img ?? null, tipoTexto)}
+      <div style="padding:28px;">
+        <p style="margin:0 0 18px;color:#374151;font-size:15px;">
+          ${clienteNombre ? `Estimado/a <strong>${escapeHtml(clienteNombre)}</strong>,` : 'Estimado/a cliente,'}
+          adjuntamos el comprobante <strong>${escapeHtml(referencia)}</strong> en formato PDF.
+        </p>
+        <table style="width:100%;border-collapse:collapse;">
+          ${fila('Comprobante', escapeHtml(referencia))}
+          ${encfReal ? fila('e-NCF', escapeHtml(encf)) : ''}
+          ${fila('Fecha', escapeHtml(fechaEmision))}
+          ${fila('Total', `DOP ${montoDOP(montoTotalCts)}`, true)}
+          ${saldado
+            ? fila('Estado', '<span style="color:#15803d;">Pagada</span>')
+            : fila('Pendiente', `<span style="color:#b45309;">DOP ${montoDOP(saldoCts)}</span>`)}
+        </table>
       </div>
-    `,
-    attachments: [
-      {
-        filename: `${encf}.pdf`,
-        content: pdfBuffer,
-      },
-    ],
+      ${pieEmisor(emisor, `Recibes este correo porque se emitió este documento a tu nombre.`)}
+    </div>`;
+
+  const attachments: Attachment[] = [{ filename: `${referencia}.pdf`, content: pdfBuffer }];
+  if (logo) attachments.push(logo.attachment);
+
+  const res = await resend.emails.send({
+    from:    remitente(emisor),
+    to:      email,
+    replyTo: emisor.emailFacturacion ?? undefined,
+    subject: `${tipoTexto} ${referencia} — ${nombreEmisor(emisor)}`,
+    html,
+    attachments,
   });
+  assertSent(res, 'sendInvoiceEmail');
+}
+
+/** Envía la cotización como PDF adjunto, con la marca de quien la emite. */
+export async function sendCotizacionEmail(opts: {
+  email:            string;
+  numero:           string;
+  clienteNombre:    string | null;
+  montoTotalCts:    number;
+  fechaEmision:     string;
+  fechaVencimiento: string | null;
+  emisor:           EmisorEmail;
+  pdfBuffer:        Buffer;
+}) {
+  const {
+    email, numero, clienteNombre, montoTotalCts,
+    fechaEmision, fechaVencimiento, emisor, pdfBuffer,
+  } = opts;
+
+  const logo = logoInline(emisor.logo);
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      ${cabeceraEmisor(emisor, logo?.img ?? null, 'Cotización')}
+      <div style="padding:28px;">
+        <p style="margin:0 0 18px;color:#374151;font-size:15px;">
+          ${clienteNombre ? `Estimado/a <strong>${escapeHtml(clienteNombre)}</strong>,` : 'Estimado/a cliente,'}
+          adjuntamos la cotización <strong>${escapeHtml(numero)}</strong> en formato PDF.
+        </p>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+          ${fila('Cotización', escapeHtml(numero))}
+          ${fila('Fecha', escapeHtml(fechaEmision))}
+          ${fechaVencimiento ? fila('Válida hasta', escapeHtml(fechaVencimiento)) : ''}
+          ${fila('Total', `DOP ${montoDOP(montoTotalCts)}`, true)}
+        </table>
+        <p style="margin:0;color:#6b7280;font-size:13px;">Gracias por su preferencia. Quedamos atentos a cualquier consulta.</p>
+      </div>
+      ${pieEmisor(emisor, `Recibes este correo porque se preparó esta cotización a tu nombre.`)}
+    </div>`;
+
+  const attachments: Attachment[] = [{ filename: `cotizacion-${numero}.pdf`, content: pdfBuffer }];
+  if (logo) attachments.push(logo.attachment);
+
+  const res = await resend.emails.send({
+    from:    remitente(emisor),
+    to:      email,
+    replyTo: emisor.emailFacturacion ?? undefined,
+    subject: `Cotización ${numero} — ${nombreEmisor(emisor)}`,
+    html,
+    attachments,
+  });
+  assertSent(res, 'sendCotizacionEmail');
 }

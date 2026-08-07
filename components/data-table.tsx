@@ -38,6 +38,7 @@ import * as React from 'react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Loader2, X, MoreVertical } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
@@ -184,6 +185,7 @@ export function DataTable<T>({
   rowClassName,
   defaultSort,
 }: DataTableProps<T>) {
+  const router = useRouter();
   // Estado interno de filtros si no se controla externamente.
   const [internalFilters, setInternalFilters] = useState<Record<string, string>>({});
   const filterValues = filterValuesProp ?? internalFilters;
@@ -322,8 +324,12 @@ export function DataTable<T>({
         onClick={href || canExpand ? (e) => {
           const target = e.target as HTMLElement;
           if (target.closest('input,button,a,[role="menuitem"]')) return;
+          // Desplegar gana sobre navegar: si la fila tiene hijas, el clic las
+          // abre; si no, lleva al detalle.
           if (canExpand) { toggleExpand(id); return; }
-          if (href) window.location.href = href;
+          // Navegación del cliente: `window.location` recargaba la app entera
+          // y perdía el estado de filtros y la sesión de datos ya cargada.
+          if (href) router.push(href);
         } : undefined}
       >
         {hasExpand && (
@@ -653,10 +659,11 @@ function EmptyState({ config }: { config?: EmptyStateConfig }) {
 function RowActionInline({ action }: { action: RowAction }) {
   const Icon = action.icon;
   const danger = action.variant === 'danger';
+  // gray-400 sobre blanco se leía como icono desactivado y la gente no lo veía.
   const cls = `p-1.5 rounded-lg transition-colors ${
     danger
-      ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
-      : 'text-gray-400 hover:text-teal-700 hover:bg-teal-50'
+      ? 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+      : 'text-gray-500 hover:text-teal-700 hover:bg-teal-50'
   }`;
   if (action.href) {
     const external = action.href.startsWith('http') || action.href.startsWith('/api/');
