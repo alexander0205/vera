@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 
 // Shape canónico del estado — todo opcional para permitir merges parciales
 export const HabilitacionStateSchema = z.object({
-  fase:     z.number().int().min(0).max(5).optional(),
+  fase:     z.number().int().min(0).max(15).optional(),
   subPaso:  z.number().int().min(0).max(10).optional(),
 
   // Datos específicos de cada fase
@@ -37,6 +37,14 @@ export const HabilitacionStateSchema = z.object({
     itemPrecio: z.string().optional(),
     itemTarifa: z.string().optional(),
     itemTipo:   z.string().optional(),
+    // Set de Pruebas (Excel) — corrida en curso, para retomar tras recargar.
+    setPruebasRunId:  z.string().optional(),
+    setPruebasStatus: z.string().optional(),
+  }).partial().optional(),
+
+  simulacion: z.object({
+    runId:  z.string().optional(),
+    status: z.string().optional(),
   }).partial().optional(),
 
   representaciones: z.object({
