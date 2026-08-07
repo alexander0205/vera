@@ -6,7 +6,21 @@
       "@tailwindcss/oxide",
       "esbuild",
       "sharp"
-    ]
+    ],
+    "supportedArchitectures": {
+      "os": [
+        "current",
+        "linux"
+      ],
+      "cpu": [
+        "current",
+        "x64"
+      ],
+      "libc": [
+        "current",
+        "glibc"
+      ]
+    }
   },
   "scripts": {
     "release:patch": "npm version patch -m \"chore(release): v%s\"",
