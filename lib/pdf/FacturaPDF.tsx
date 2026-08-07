@@ -659,7 +659,11 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
       author={data.emisor.razonSocial}
       subject="Comprobante Fiscal Electrónico"
     >
-      <Page size="A4" style={S.page}>
+      {/* El pie fijo de la DGII (QR 68pt + código de seguridad + fecha de firma)
+          mide ~110pt, pero la página solo reservaba 72pt abajo: en facturas
+          largas las últimas líneas quedaban DEBAJO del QR, ilegibles. El espacio
+          reservado ahora se ajusta a si ese bloque existe. */}
+      <Page size="A4" style={[S.page, (data.codigoSeguridad || data.qrDataUrl) ? { paddingBottom: 140 } : {}]}>
 
         {/* ── Header (fixed → se repite en cada página) ── */}
         <View style={S.header} fixed>
