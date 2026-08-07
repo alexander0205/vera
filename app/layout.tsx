@@ -54,6 +54,13 @@ export default function RootLayout({
     <html
       lang="es"
       className={`bg-white dark:bg-gray-950 text-black dark:text-white antialiased ${inter.variable} ${sora.variable} ${inter.className}`}
+      /* `ScriptTapaLlegada` escribe `data-abriendo-modulo` aquí ANTES de que
+         React hidrate —ese es justo su propósito: tapar la pantalla sin
+         esperar a React—. El servidor no lo pone, así que React ve un atributo
+         que no esperaba y avisa. Es el caso para el que existe esto, el mismo
+         patrón que usan los temas claro/oscuro. Solo afecta a este elemento;
+         no silencia nada de dentro. */
+      suppressHydrationWarning
     >
       <body className="min-h-[100dvh] bg-gray-50">
         {/* Antes que nada: si se viene de otro módulo, tapa la pantalla ya,
