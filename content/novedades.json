@@ -107,6 +107,11 @@
         "tipo": "arreglo",
         "titulo": "Las facturas largas ya no salen con el texto encima del código QR",
         "detalle": "En facturas con muchas líneas, las últimas quedaban debajo del recuadro del QR y no se podían leer. Y en el formato de tirilla, el QR y el código de seguridad se iban a una segunda hoja que la impresora térmica no saca. Las dos cosas quedaron arregladas."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Decide quién puede cambiar los precios al facturar",
+        "detalle": "En Equipo → Permisos hay un permiso nuevo: «Cambiar precio y descuento al facturar». Nace apagado para todos menos Propietario y Administrador. Sin él, el vendedor factura con el precio del catálogo: no puede cambiar el precio, ni aplicar descuentos, ni inventar líneas sueltas, tampoco desde el punto de venta. Habilítaselo a quien quieras y podrá hacerlo."
       }
     ]
   },

@@ -84,7 +84,12 @@ export default function NuevaFacturaForm({
 }) {
   const router  = useRouter();
   const empresa = initialPerfil;
-  const { can } = usePermissions();
+  const { can, isLoading: permLoading } = usePermissions();
+  // Sin `facturas:precio-editar` el precio, el descuento y el ITBIS de cada
+  // línea quedan en solo lectura. Mientras el permiso carga no se bloquea nada:
+  // `can()` responde false por defecto y trancaría la pantalla al owner por un
+  // instante. El servidor revalida al guardar, así que la ventana no abre nada.
+  const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
   // Alerta double-check del método: solo si el rol del usuario tiene el permiso.
   // Combina el toggle por-empresa con el permiso por-rol: la alerta sale solo si
   // la empresa la tiene activa Y el rol del usuario tiene el permiso.
@@ -1436,6 +1441,7 @@ export default function NuevaFacturaForm({
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
                   dependientes={dependientesCliente}
+                  bloquearPrecios={bloquearPrecios}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}

@@ -31,6 +31,10 @@ export type Permission =
   // Elegir manualmente la fecha de emisión (facturas sin-ncf / borrador) —
   // para registrar cobros de fechas pasadas. Solo admin/owner.
   | 'facturas:fecha-personalizada'
+  // Cambiar el precio y el descuento que trae el producto del catálogo al
+  // facturar. Sin este permiso el vendedor factura al precio de lista y no
+  // puede abrir líneas libres. Nace apagado para todos salvo owner/admin.
+  | 'facturas:precio-editar'
   // Pagos recibidos (módulo de cobros)
   | 'pagos:ver'
   // Alerta double-check del método de pago: tener el permiso = la alerta se pide
@@ -113,7 +117,7 @@ export const ROLES: RoleDef[] = [
     description: 'Control total de la cuenta y el equipo',
     invitable:   false,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada',
+      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
       'pagos:ver',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
@@ -135,7 +139,7 @@ export const ROLES: RoleDef[] = [
     description: 'Acceso total excepto gestionar la suscripción',
     invitable:   true,
     permissions: [
-      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada',
+      'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
       'pagos:ver',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
@@ -212,6 +216,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'facturas:exportar',    label: 'Exportar (PDF/CSV/XML)' },
     { key: 'facturas:emitir-dgii', label: 'Emitir a DGII (e-CF)' },
     { key: 'facturas:fecha-personalizada', label: 'Elegir fecha de emisión (sin NCF)' },
+    { key: 'facturas:precio-editar', label: 'Cambiar precio y descuento al facturar' },
   ]},
   { module: 'Pagos', icon: 'Wallet', permissions: [
     { key: 'pagos:ver', label: 'Ver pagos recibidos' },

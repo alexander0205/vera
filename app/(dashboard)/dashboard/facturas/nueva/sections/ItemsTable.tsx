@@ -64,14 +64,23 @@ interface Props {
   showDescripcion: boolean;
   /** Lista de dependientes del cliente seleccionado. Vacía = no mostrar columna. */
   dependientes: DependienteOpt[];
+  /**
+   * Sin el permiso `facturas:precio-editar` el precio y el descuento quedan en
+   * solo lectura y no se pueden abrir líneas libres: se factura con lo que trae
+   * el producto del catálogo. El servidor lo vuelve a validar al guardar.
+   */
+  bloquearPrecios?: boolean;
 }
 
 
 export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
-  showReferencia, showDescripcion, dependientes,
+  showReferencia, showDescripcion, dependientes, bloquearPrecios = false,
 }: Props) {
+  // Clases del input bloqueado: gris y sin cursor de texto, para que se lea
+  // como "no te toca" y no como "está roto".
+  const bloqueado = bloquearPrecios ? ' bg-gray-50 text-gray-500 cursor-not-allowed' : '';
   const { openProximamente, dialog } = useProximamenteDialog();
   const hasDeps = dependientes.length > 0;
   return (
@@ -134,7 +143,7 @@ export function ItemsTable({
                 onSearch={buscarProductos}
                 onSelect={(p) => onSelectProducto(idx, p)}
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
-                onCreate={() => onOpenNuevoProducto(idx)}
+                onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
                 createLabel="Nuevo producto"
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
@@ -165,8 +174,10 @@ export function ItemsTable({
                   type="number" inputMode="decimal" min={0} step={0.01}
                   value={item.precioUnitarioItem || ''}
                   placeholder="0.00"
+                  readOnly={bloquearPrecios}
+                  title={bloquearPrecios ? 'Tu rol no puede cambiar el precio del producto' : undefined}
                   onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                  className="h-11 text-sm text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className={"h-11 text-sm text-right" + bloqueado + "  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
                 />
               </div>
               <div>
@@ -195,8 +206,9 @@ export function ItemsTable({
                     type="number" inputMode="decimal" min={0} max={100} step={0.1}
                     value={item.descuentoPct || ''}
                     placeholder="0"
+                    readOnly={bloquearPrecios}
                     onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                    className="h-11 text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className={"h-11" + bloqueado + "  text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
                   />
                   <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
                 </div>
@@ -208,7 +220,7 @@ export function ItemsTable({
                 <Select
                   value={item.tasaItbis}
                   onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
-                  disabled={regla !== undefined && !regla.permiteItbis}
+                  disabled={bloquearPrecios || (regla !== undefined && !regla.permiteItbis)}
                 >
                   <SelectTrigger className="h-11 text-sm">
                     <SelectValue />
@@ -377,7 +389,7 @@ export function ItemsTable({
                     onSearch={buscarProductos}
                     onSelect={(p) => onSelectProducto(idx, p)}
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
-                    onCreate={() => onOpenNuevoProducto(idx)}
+                    onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
                     createLabel="Nuevo producto"
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
@@ -399,8 +411,10 @@ export function ItemsTable({
                     type="number" min={0} step={0.01}
                     value={item.precioUnitarioItem || ''}
                     placeholder="0.00"
+                    readOnly={bloquearPrecios}
+                    title={bloquearPrecios ? 'Tu rol no puede cambiar el precio del producto' : undefined}
                     onChange={(e) => onUpdateItem(item.id, 'precioUnitarioItem', parseFloat(e.target.value) || 0)}
-                    className="h-9 text-sm text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className={"h-9 text-sm text-right" + bloqueado + "  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
                   />
                 </td>
                 <td className="px-2 py-2">
@@ -409,8 +423,9 @@ export function ItemsTable({
                       type="number" min={0} max={100} step={0.1}
                       value={item.descuentoPct || ''}
                       placeholder="0"
+                      readOnly={bloquearPrecios}
                       onChange={(e) => onUpdateItem(item.id, 'descuentoPct', parseFloat(e.target.value) || 0)}
-                      className="h-9 text-sm text-center pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className={"h-9 text-sm text-center pr-6" + bloqueado + "  [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
                     />
                     <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
                   </div>
@@ -419,7 +434,7 @@ export function ItemsTable({
                   <Select
                     value={item.tasaItbis}
                     onValueChange={(v) => onUpdateItem(item.id, 'tasaItbis', v)}
-                    disabled={regla !== undefined && !regla.permiteItbis}
+                    disabled={bloquearPrecios || (regla !== undefined && !regla.permiteItbis)}
                   >
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue />

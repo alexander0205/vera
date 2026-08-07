@@ -9,6 +9,8 @@ import { db } from '@/lib/db/drizzle';
 import { cotizaciones } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
+import { userCanForTeam } from '@/lib/auth/permissions';
+import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
 import { eq, and } from 'drizzle-orm';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -29,12 +31,20 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 export async function PUT(req: NextRequest, { params }: Ctx) {
   const auth = await requirePermission('cotizaciones:gestionar');
   if (!auth.ok) return auth.response;
-  const { teamId } = auth;
+  const { teamId, user, teamRole } = auth;
   const { id } = await params;
   const numId = parseInt(id);
   if (isNaN(numId)) return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
 
   const body = await req.json();
+
+  // Mismo gate de precios que al crear: editar no puede ser la vía para
+  // cambiar un precio que no se podía poner de entrada.
+  if (Array.isArray(body.items)
+    && !await userCanForTeam(teamId, user.platformRole, teamRole, 'facturas:precio-editar')) {
+    const errPrecio = await validarPreciosDeCatalogo({ teamId, lineas: body.items });
+    if (errPrecio) return NextResponse.json({ error: errPrecio }, { status: 403 });
+  }
 
   const [row] = await db.update(cotizaciones)
     .set({
