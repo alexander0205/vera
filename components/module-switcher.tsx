@@ -9,9 +9,15 @@
  *
  * En prod cada módulo vive en su subdominio (moduleUrl); la sesión es
  * compartida por cookie de dominio, así que el cambio es un link normal.
+ *
+ * Justo por eso lleva pantalla de carga: al ser una navegación completa del
+ * navegador —no del router— la app se queda muda mientras el otro módulo
+ * arranca, y sin nada en pantalla el clic parece no haber hecho nada. El mismo
+ * `ZeroLoader` que ya usa el cambio de empresa, que solo aparece si la espera
+ * pasa de 400 ms.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -19,6 +25,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { LayoutGrid, FileText, Store, GraduationCap, Check, Building2 } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { ZeroLoader } from '@/components/zero-loader';
 import {
   MODULE_LABELS, MODULE_DESCRIPTIONS, moduleUrl, type ModuleKey,
 } from '@/lib/config/modules';
@@ -37,6 +44,16 @@ const ICONS: Record<ModuleKey, typeof FileText> = {
 export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
   const { modules } = usePermissions();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
+  const [yendoA, setYendoA] = useState<ModuleKey | null>(null);
+
+  // Si la navegación no llega a ocurrir —el usuario cancela, o vuelve atrás y
+  // la página sale de la caché del navegador— el loader se quedaría tapando
+  // todo. Se rinde solo a los 15 s, igual que el cambio de empresa.
+  useEffect(() => {
+    if (!yendoA) return;
+    const t = setTimeout(() => setYendoA(null), 15000);
+    return () => clearTimeout(t);
+  }, [yendoA]);
 
   // Con un solo módulo igual se muestra: desde aquí se entra a Administración.
   // Sin ninguno (o cargando) no hay nada que ofrecer.
@@ -77,7 +94,12 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
               key={mod}
               component="a"
               href={active ? undefined : moduleUrl(mod)}
-              onClick={() => setAnchor(null)}
+              onClick={() => {
+                setAnchor(null);
+                // Sin preventDefault: el enlace navega igual, el loader solo
+                // cubre el hueco hasta que el módulo nuevo pinte.
+                if (!active) setYendoA(mod);
+              }}
               selected={active}
               sx={{ gap: 1.5, py: 1.25, mx: 0.75, borderRadius: '8px' }}
             >
@@ -97,6 +119,11 @@ export function ModuleSwitcher({ current }: { current: ModuleKey | null }) {
           );
         })}
       </Menu>
+
+      <ZeroLoader
+        open={!!yendoA}
+        subtitulo={yendoA ? `Abriendo ${MODULE_LABELS[yendoA]}` : undefined}
+      />
     </>
   );
 }
