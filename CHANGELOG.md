@@ -4,6 +4,15 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.17.0 — 2026-08-07
+
+### Nuevo
+
+- **permisos**: controlar quién puede cambiar precios al facturar
+  - precio, descuento e ITBIS de cada línea quedan en solo lectura;
+  - no se pueden abrir líneas libres — hay que elegir del catálogo, porque si no la restricción se esquiva creando un producto al vuelo;
+  - en el punto de venta se apagan el precio manual y el descuento global.
+
 ## v1.16.0 — 2026-08-07
 
 ### Nuevo
