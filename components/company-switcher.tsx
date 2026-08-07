@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { mutate as mutarSwr } from 'swr';
 import Box from '@mui/material/Box';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -129,6 +130,23 @@ export function CompanySwitcher({
       setCambiandoA(null);   // no dejar el loader tapando la app si falla
       return;
     }
+
+    /**
+     * Se tira TODO el caché de SWR, no solo la lista de empresas.
+     *
+     * Lo que hay guardado —permisos, módulos, productos, clientes, listados—
+     * es de la empresa anterior. El síntoma era que los módulos del nav
+     * seguían siendo los de antes y había que recargar a mano; y "a veces"
+     * funcionaba porque el `dedupingInterval` global es de 30 s, así que
+     * pasado ese rato revalidaba solo.
+     *
+     * Se revalida, no solo se vacía: el cambio de empresa ya está hecho en la
+     * sesión —el `await` de arriba terminó—, así que lo que se vuelva a pedir
+     * llega con la empresa nueva. Vaciar sin revalidar dejaba el nav sin
+     * módulos de forma permanente: quien los lee no se remonta al navegar a la
+     * misma ruta, así que nadie los volvía a pedir.
+     */
+    void mutarSwr(() => true);
 
     onSwitch?.(teamId);
     startTransition(() => {
