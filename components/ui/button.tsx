@@ -57,12 +57,19 @@ function Button({
     const muiColor    = getMuiColor(variant);
     const muiSize     = getMuiSize(size);
 
+    // `asChild` casi siempre envuelve un <Link>, que sale como <a>. MUI avisa
+    // por consola si el root resuelto no es un <button> nativo y nadie se lo
+    // dijo: sin esto, cada pantalla con un botón-enlace llenaba la consola.
+    // Se mira el hijo por si alguna vez sí es un <button> de verdad.
+    const esBotonNativo = child.type === 'button';
+
     return (
       <MuiButton
         variant={muiVariant}
         color={muiColor}
         size={muiSize}
         disabled={disabled}
+        nativeButton={esBotonNativo}
         sx={getLinkSx(variant)}
         component={React.forwardRef<HTMLElement, Record<string, unknown>>((p, ref) =>
           React.cloneElement(child, { ...p, ref })
