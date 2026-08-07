@@ -4,6 +4,12 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.15.5 — 2026-08-07
+
+### Arreglado
+
+- **pdf**: el pie de la DGII tapaba las líneas y partía la tirilla
+
 ## v1.15.4 — 2026-08-05
 
 ### Arreglado
