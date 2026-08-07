@@ -5,7 +5,7 @@
 -- override por factura y por plan; el motor ya no lee estas columnas.
 --
 -- IF EXISTS en todas: idempotente sin importar si la empresa venía de prod
--- (solo tenía mora_porcentaje / mora_dias_gracia) o de una rama donde 0078
+-- (solo tenía mora_porcentaje / mora_dias_gracia) o de una rama donde 0080
 -- alcanzó a crear mora_modo / mora_monto_cents antes de este cambio.
 --
 -- NO se toca "mora_periodo" ni "mora_origen_id" (soporte del cobro periódico),
