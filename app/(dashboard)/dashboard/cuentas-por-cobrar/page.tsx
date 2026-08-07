@@ -7,6 +7,7 @@ import {
   X, Wallet, Loader2, Archive, Wallet2,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { NotasMoraTable } from '@/components/notas-mora-table';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
 
@@ -110,8 +111,10 @@ export default function CuentasPorCobrarPage() {
       id: 'codigo',
       header: 'Código',
       render: c => (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
+        <div className="flex items-center gap-1.5">
+          {/* El código no parte en varias líneas: con más columnas la celda se
+              angosta y "FA-2026-YTSY-YH2WR-000038" se rompía en cuatro. */}
+          <Link href={`/dashboard/facturas/${c.id}`} className="whitespace-nowrap font-mono text-xs font-medium text-teal-600 hover:underline">
             {c.codigo ?? `Factura #${c.id}`}
           </Link>
           {isHistorica(c) && (
@@ -130,59 +133,114 @@ export default function CuentasPorCobrarPage() {
     {
       id: 'cliente',
       header: 'Cliente',
+      sortable: true,
+      sortAccessor: c => c.razonSocialComprador ?? '',
+      // Una línea por celda: el RNC tiene su propia columna. Apilarlo debajo en
+      // gris chico obliga a leer cada fila en vez de barrerlas con la vista.
       render: c => (
-        <div className="max-w-[220px]">
-          <p className="text-sm text-gray-900 truncate">{c.razonSocialComprador ?? 'Consumidor Final'}</p>
-          {c.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{c.rncComprador}</p>}
-        </div>
+        // "Consumidor Final" no es un cliente al que llamar: se escribe apagado
+        // para que los nombres reales —los que se cobran— destaquen solos.
+        c.razonSocialComprador
+          ? <p className="max-w-[220px] truncate text-sm text-gray-900" title={c.razonSocialComprador}>{c.razonSocialComprador}</p>
+          : <p className="text-sm italic text-gray-400">Consumidor final</p>
+      ),
+    },
+    {
+      id: 'rnc',
+      header: 'RNC / Cédula',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: c => c.rncComprador ?? '',
+      render: c => (
+        <span className="font-mono text-xs tabular-nums text-gray-600">
+          {c.rncComprador ?? ''}
+        </span>
       ),
     },
     {
       id: 'fechaEmision',
       header: 'Emisión',
       visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
+      sortable: true,
+      sortAccessor: c => c.fechaEmision ?? '',
+      render: c => <span className="text-xs tabular-nums text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
     },
     {
       id: 'vence',
       header: 'Vence',
       visibleAt: 'lg',
-      render: c => c.fechaLimitePago ? (
-        <div>
-          <p className={`text-xs ${c.vencida ? 'text-red-700 font-medium' : 'text-gray-700'}`}>
-            {fmtFechaCorta(c.fechaLimitePago)}
-          </p>
-          {c.vencida && (
-            <p className="text-[11px] text-red-600">{c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida</p>
-          )}
-        </div>
-      ) : <span className="text-gray-400 text-xs">—</span>,
+      sortable: true,
+      sortAccessor: c => c.fechaLimitePago ?? '',
+      render: c => c.fechaLimitePago
+        ? <span className={`text-xs tabular-nums ${c.vencida ? 'font-medium text-red-700' : 'text-gray-700'}`}>{fmtFechaCorta(c.fechaLimitePago)}</span>
+        : null,
+    },
+    {
+      id: 'atraso',
+      header: 'Atraso',
+      visibleAt: 'md',
+      sortable: true,
+      // Ordenar por atraso es la forma natural de trabajar la cartera: primero
+      // el que más días lleva. Por eso es columna propia y no un texto chico.
+      sortAccessor: c => (c.vencida ? c.diasVencido : -1),
+      // Un solo acento en toda la tabla: el rojo. La intensidad la da el peso
+      // de la tipografía, no otro color — con ámbar y verde a la vez la tabla
+      // se leía como un semáforo y ningún dato destacaba.
+      render: c => c.vencida
+        ? (
+          <span className={`whitespace-nowrap text-xs tabular-nums text-red-600 ${c.diasVencido > 30 ? 'font-semibold' : ''}`}>
+            {c.diasVencido} {c.diasVencido === 1 ? 'día' : 'días'}
+          </span>
+        )
+        : null,
     },
     {
       id: 'total',
-      header: 'Total',
+      // "Facturado" y no "Total": el otro total de la tabla es el saldo, y dos
+      // columnas llamadas Total con significados distintos se confunden solas.
+      header: 'Facturado',
       align: 'right',
-      visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600 whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
+      visibleAt: 'xl',
+      sortable: true,
+      sortAccessor: c => c.montoTotal,
+      render: c => <span className="whitespace-nowrap text-xs tabular-nums text-gray-400">{fmtDOP(c.montoTotal)}</span>,
     },
     {
       id: 'pagado',
       header: 'Pagado',
       align: 'right',
       visibleAt: 'lg',
-      render: c => <span className="text-xs text-emerald-700 whitespace-nowrap">{fmtDOP(c.pagado)}</span>,
+      sortable: true,
+      sortAccessor: c => c.pagado,
+      render: c => (
+        <span className={`whitespace-nowrap text-xs tabular-nums ${c.pagado > 0 ? 'text-gray-600' : 'text-gray-300'}`}>
+          {fmtDOP(c.pagado)}
+        </span>
+      ),
+    },
+    {
+      id: 'mora',
+      // La mora NO es un monto aparte: ya va dentro del saldo. La columna
+      // existe para poder ver cuánto del saldo es recargo.
+      header: 'Mora incluida',
+      align: 'right',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: c => c.moraSaldo,
+      render: c => c.moraSaldo > 0
+        ? <span className="whitespace-nowrap text-xs tabular-nums text-red-600">{fmtDOP(c.moraSaldo)}</span>
+        : null,
     },
     {
       id: 'saldo',
-      header: 'Saldo',
+      header: 'Saldo total',
       align: 'right',
+      sortable: true,
+      sortAccessor: c => c.saldo,
       render: c => (
-        <div className="text-right">
-          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>
-          {c.moraSaldo > 0 && (
-            <p className="text-[11px] text-orange-600 whitespace-nowrap">incl. mora {fmtDOP(c.moraSaldo)}</p>
-          )}
-        </div>
+        <span className={`whitespace-nowrap text-[15px] font-bold tabular-nums ${c.vencida ? 'text-red-700' : 'text-gray-900'}`}>
+          {fmtDOP(c.saldo)}
+        </span>
       ),
     },
   ], []);
@@ -283,6 +341,10 @@ export default function CuentasPorCobrarPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        // Abre por lo más atrasado: es el orden en que se trabaja la cartera.
+        // Sin franjas ni fondos de color — la urgencia la comunica el dato en
+        // rojo, no rayar la fila entera.
+        defaultSort={{ columnId: 'atraso', dir: 'desc' }}
         rowActions={rowActions}
         rowExpandable={c => (c.moraNotas?.length ?? 0) > 0}
         renderExpanded={c => <MoraHijas cuenta={c} />}
@@ -351,45 +413,8 @@ function StatCard({ icon, label, value, color }: {
 // ─── Filas hijas: notas de débito por mora de una factura ────────────────────
 
 function MoraHijas({ cuenta }: { cuenta: Cuenta }) {
-  const notas = cuenta.moraNotas ?? [];
-  if (notas.length === 0) return null;
   return (
-    <div className="ml-6 border-l-2 border-orange-100 pl-3 py-1 space-y-1.5">
-      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-        Notas de débito por mora
-      </p>
-      {notas.map(nd => (
-        <div key={nd.id} className="flex items-center justify-between gap-3 bg-orange-50/40 border border-orange-100 rounded-lg px-3 py-1.5">
-          <div className="flex items-center gap-2 min-w-0">
-            <Link
-              href={`/dashboard/facturas/${nd.id}`}
-              className="font-mono text-xs font-semibold text-orange-800 hover:underline truncate"
-            >
-              {nd.codigo ?? `ND #${nd.id}`}
-            </Link>
-            <EstadoMoraBadge estado={nd.estado} />
-          </div>
-          <div className="text-right whitespace-nowrap">
-            <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(nd.saldo)}</span>
-            {nd.saldo !== nd.montoTotal && (
-              <span className="ml-1 text-[11px] text-gray-400">de {fmtDOP(nd.montoTotal)}</span>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EstadoMoraBadge({ estado }: { estado: 'PENDIENTE' | 'PARCIAL' }) {
-  const cls = estado === 'PARCIAL'
-    ? 'bg-amber-100 text-amber-700 border-amber-200'
-    : 'bg-orange-100 text-orange-700 border-orange-200';
-  const label = estado === 'PARCIAL' ? 'Parcial' : 'Pendiente';
-  return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${cls}`}>
-      {label}
-    </span>
+    <NotasMoraTable notas={cuenta.moraNotas ?? []} conEstado={false} />
   );
 }
 

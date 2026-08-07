@@ -137,6 +137,10 @@ export interface DataTableProps<T> {
   renderExpanded?: (row: T) => React.ReactNode;
   /** Si false, la fila no muestra chevron ni se puede expandir. Default: true. */
   rowExpandable?: (row: T) => boolean;
+  /** Clases extra por fila — para marcar urgencia sin leer la celda. */
+  rowClassName?: (row: T) => string;
+  /** Orden inicial de la tabla. Sin esto se muestra en el orden que llega. */
+  defaultSort?: { columnId: string; dir: 'asc' | 'desc' };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -177,6 +181,8 @@ export function DataTable<T>({
   renderGroupHeader,
   renderExpanded,
   rowExpandable,
+  rowClassName,
+  defaultSort,
 }: DataTableProps<T>) {
   // Estado interno de filtros si no se controla externamente.
   const [internalFilters, setInternalFilters] = useState<Record<string, string>>({});
@@ -188,7 +194,9 @@ export function DataTable<T>({
   };
 
   // Sort interno (no soporta server-side sort por ahora — fácil de agregar).
-  const [sortBy, setSortBy] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
+  const [sortBy, setSortBy] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(
+    defaultSort ? { id: defaultSort.columnId, dir: defaultSort.dir } : null,
+  );
   const sortedData = useMemo(() => {
     if (!sortBy) return data;
     const col = columns.find(c => c.id === sortBy.id);
@@ -306,12 +314,16 @@ export function DataTable<T>({
     return (
       <React.Fragment key={String(id)}>
       <tr
-        className={`transition-colors ${isSelected ? 'bg-teal-50/50' : 'hover:bg-gray-50'} ${href ? 'cursor-pointer' : ''}`}
-        onClick={href ? (e) => {
-          // No navegar si click vino de checkbox/botón/link interno
+        className={`transition-colors ${isSelected ? 'bg-teal-50/50' : 'hover:bg-gray-50'} ${href || canExpand ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+        // La fila entera responde: si tiene hijas, las despliega; si no, navega.
+        // El chevron sigue estando —es la señal de que hay algo debajo—, pero
+        // acertarle a un botón de 20px para ver el detalle era pedir puntería.
+        // Los clics que nacen en un checkbox, botón o enlace siguen siendo suyos.
+        onClick={href || canExpand ? (e) => {
           const target = e.target as HTMLElement;
-          if (target.closest('input,button,a')) return;
-          window.location.href = href;
+          if (target.closest('input,button,a,[role="menuitem"]')) return;
+          if (canExpand) { toggleExpand(id); return; }
+          if (href) window.location.href = href;
         } : undefined}
       >
         {hasExpand && (

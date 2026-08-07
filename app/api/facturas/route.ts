@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, users } from '@/lib/db/schema';
-import { and, eq, gte, lte, desc, like, count, or, sql, inArray, ne } from 'drizzle-orm';
+import { and, eq, gte, lte, desc, like, count, or, sql, inArray, ne, isNull } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   const user = await getUser();
@@ -142,8 +142,14 @@ export async function GET(req: NextRequest) {
   const moraNotasPorFactura = new Map<number, {
     id: number; codigo: string | null; montoTotal: number; saldo: number;
     estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA';
+    fechaEmision: string | Date | null; periodo: string | Date | null;
   }[]>();
   const moraAplicadaPorFactura = new Map<number, number>();
+  // Notas de débito MANUALES (flete, ajuste, cargo extra) ligadas a la factura
+  // por origen_documento_id. No son mora, pero son deuda de la misma factura:
+  // sin contarlas, una factura con su capital saldado se muestra "Pagada"
+  // aunque el cliente siga debiendo el cargo.
+  const ndManualPorFactura = new Map<number, number>();
   if (docIds.length > 0) {
     const moraRows = await db
       .select({
@@ -151,6 +157,8 @@ export async function GET(req: NextRequest) {
         codigo:       ecfDocuments.codigo,
         moraOrigenId: ecfDocuments.moraOrigenId,
         montoTotal:   ecfDocuments.montoTotal,
+        fechaEmision: ecfDocuments.fechaEmision,
+        periodo:      ecfDocuments.moraPeriodo,
         pagado: sql<number>`coalesce((
           SELECT SUM(monto_centavos) FROM pagos_recibidos
           WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
@@ -171,9 +179,38 @@ export async function GET(req: NextRequest) {
       const estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA' =
         saldoNd <= 0 ? 'PAGADA' : pagadoNd > 0 ? 'PARCIAL' : 'PENDIENTE';
       const arr = moraNotasPorFactura.get(m.moraOrigenId) ?? [];
-      arr.push({ id: m.id, codigo: m.codigo, montoTotal: m.montoTotal, saldo: Math.max(0, saldoNd), estado });
+      arr.push({
+        id: m.id, codigo: m.codigo, montoTotal: m.montoTotal, saldo: Math.max(0, saldoNd), estado,
+        fechaEmision: m.fechaEmision, periodo: m.periodo,
+      });
       moraNotasPorFactura.set(m.moraOrigenId, arr);
       moraAplicadaPorFactura.set(m.moraOrigenId, (moraAplicadaPorFactura.get(m.moraOrigenId) ?? 0) + m.montoTotal);
+    }
+  }
+
+  if (docIds.length > 0) {
+    const ndRows = await db
+      .select({
+        origen:     ecfDocuments.origenDocumentoId,
+        montoTotal: ecfDocuments.montoTotal,
+        pagado: sql<number>`coalesce((
+          SELECT SUM(monto_centavos) FROM pagos_recibidos
+          WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
+        ), 0)`,
+      })
+      .from(ecfDocuments)
+      .where(and(
+        eq(ecfDocuments.teamId, teamId),
+        inArray(ecfDocuments.origenDocumentoId, docIds),
+        eq(ecfDocuments.tipoEcf, '33'),
+        isNull(ecfDocuments.moraOrigenId),   // las de mora ya se contaron arriba
+        ne(ecfDocuments.estado, 'ANULADO'),
+      ));
+    for (const nd of ndRows) {
+      if (nd.origen == null) continue;
+      const saldoNd = nd.montoTotal - Number(nd.pagado);
+      if (saldoNd <= 0) continue;
+      ndManualPorFactura.set(nd.origen, (ndManualPorFactura.get(nd.origen) ?? 0) + saldoNd);
     }
   }
 
@@ -185,6 +222,7 @@ export async function GET(req: NextRequest) {
     moraPendiente: Number(d.moraPendiente),
     moraNotas:     moraNotasPorFactura.get(d.id) ?? [],
     moraAplicada:  moraAplicadaPorFactura.get(d.id) ?? 0,
+    ndPendiente:   ndManualPorFactura.get(d.id) ?? 0,
   }));
 
   return NextResponse.json({ docs, total: totalRows[0]?.total ?? 0 });

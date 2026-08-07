@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText, Upload, Eye, Printer,
+  Plus, Download, Mail, Ban, FileText, Upload, Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { NotasMoraTable } from '@/components/notas-mora-table';
 import { ImportModal } from '@/components/import-modal';
-import { fmtDOP, fmtFechaCorta, fmtFechaRD, fmtHora, diasVencido } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
@@ -84,8 +85,14 @@ interface Doc {
   fechaLimitePago: string | null;
   pagado: number;
   moraPendiente?: number;
+  /** Saldo vivo de notas de débito manuales (cargo adicional) de esta factura. */
+  ndPendiente?: number;
   moraAplicada?: number;
-  moraNotas?: { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA' }[];
+  moraNotas?: {
+    id: number; codigo: string | null; montoTotal: number; saldo: number;
+    estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA';
+    fechaEmision?: string | null; periodo?: string | null;
+  }[];
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
@@ -198,7 +205,7 @@ export default function FacturasPage() {
       render: doc => (
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          className="font-mono text-xs font-semibold text-gray-700 hover:text-teal-700 hover:underline tabular-nums leading-tight block"
+          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-gray-700 hover:text-teal-700 hover:underline"
           title={doc.codigo ?? `#${doc.id}`}
         >
           {doc.codigo ?? `#${doc.id}`}
@@ -210,23 +217,28 @@ export default function FacturasPage() {
       header: 'Cliente',
       sortable: true,
       sortAccessor: doc => doc.razonSocialComprador ?? '',
+      // Una línea por celda: el RNC vive en su propia columna y el beneficiario
+      // en el detalle. Apilar tres textos grises debajo del nombre convertía la
+      // tabla en un muro y no dejaba comparar filas de un vistazo.
       render: doc => (
-        <div className="max-w-[200px] min-w-0">
-          <p
-            className="text-sm text-gray-900 truncate font-medium leading-tight"
-            title={doc.razonSocialComprador ?? 'Consumidor Final'}
-          >
-            {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
-          </p>
-          {doc.rncComprador && (
-            <p className="text-[11px] text-gray-400 font-mono mt-0.5 leading-tight">{doc.rncComprador}</p>
-          )}
-          {doc.dependienteNombre && (
-            <p className="text-[11px] text-gray-400 mt-0.5 leading-tight truncate" title={`Beneficiario: ${doc.dependienteNombre}`}>
-              Benef.: {doc.dependienteNombre}
-            </p>
-          )}
-        </div>
+        <p
+          className="max-w-[220px] truncate text-sm font-medium leading-tight text-gray-900"
+          title={doc.razonSocialComprador ?? 'Consumidor Final'}
+        >
+          {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
+        </p>
+      ),
+    },
+    {
+      id: 'rnc',
+      header: 'RNC / Cédula',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: doc => doc.rncComprador ?? '',
+      render: doc => (
+        <span className="font-mono text-xs tabular-nums text-gray-600">
+          {doc.rncComprador ?? <span className="text-gray-300">—</span>}
+        </span>
       ),
     },
     {
@@ -237,10 +249,10 @@ export default function FacturasPage() {
       sortAccessor: doc => doc.createdAt,
       render: doc => (
         <div className="whitespace-nowrap tabular-nums leading-tight">
+          {/* Solo la fecha: la hora del alta no ayuda a ubicar una factura en
+              un listado y competía con el dato que sí importa. Sigue visible
+              en el detalle del documento. */}
           <span className="text-xs text-gray-600">{fmtFechaRD(doc.createdAt)}</span>
-          {doc.createdAt && (
-            <span className="block text-[11px] text-gray-400">{fmtHora(doc.createdAt)}</span>
-          )}
         </div>
       ),
     },
@@ -253,18 +265,16 @@ export default function FacturasPage() {
         const dias = diasVencido(doc.fechaLimitePago);
         const saldo = doc.montoTotal - (doc.pagado ?? 0);
         const vencida = esCredito && saldo > 0 && dias > 0 && ['ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'].includes(doc.estado);
+        // De contado no tiene vencimiento; a crédito, la fecha ES el dato — la
+        // palabra "Crédito" sobra al lado de una fecha de vencimiento.
+        if (!esCredito || !doc.fechaLimitePago) {
+          return <span className="text-xs text-gray-500 whitespace-nowrap">{TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}</span>;
+        }
         return (
-          <div className="min-w-0">
-            <p className={`text-xs font-medium leading-tight ${esCredito ? 'text-amber-700' : 'text-gray-500'}`}>
-              {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
-            </p>
-            {esCredito && doc.fechaLimitePago && (
-              <p className={`text-[11px] mt-0.5 tabular-nums leading-tight whitespace-nowrap ${vencida ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
-                {fmtFechaCorta(doc.fechaLimitePago)}
-                {vencida && <span className="ml-1 text-red-500">· {dias}d</span>}
-              </p>
-            )}
-          </div>
+          <span className={`text-xs tabular-nums whitespace-nowrap ${vencida ? 'font-semibold text-red-600' : 'text-gray-600'}`}>
+            {fmtFechaCorta(doc.fechaLimitePago)}
+            {vencida && <span className="ml-1 font-normal text-red-500">· {dias}d</span>}
+          </span>
         );
       },
     },
@@ -278,17 +288,6 @@ export default function FacturasPage() {
       render: doc => (
         <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
           {fmtDOP(doc.montoTotal - doc.totalItbis)}
-        </span>
-      ),
-    },
-    {
-      id: 'itbis',
-      header: 'ITBIS',
-      visibleAt: 'xl',
-      align: 'right',
-      render: doc => (
-        <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
-          {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : <span className="text-gray-300">—</span>}
         </span>
       ),
     },
@@ -321,12 +320,15 @@ export default function FacturasPage() {
         const saldo   = doc.montoTotal - pagado;
         const esCred  = doc.tipoPago === 2;
         const dias    = diasVencido(doc.fechaLimitePago);
-        const moraPend = doc.moraPendiente ?? 0;
+        // Cualquier nota de débito viva sobre esta factura —mora automática o
+        // cargo manual— es deuda de la misma cuenta.
+        const ndPend = Number(doc.moraPendiente ?? 0) + Number(doc.ndPendiente ?? 0);
         if (ep === 'GRATUITA') return <Badge color="gray">Gratuita</Badge>;
         if (ep === 'USO')      return <Badge color="gray">Uso</Badge>;
-        // Capital saldado pero con mora sin pagar: no es "Pagada" del todo.
-        if (ep === 'PAGADA' && moraPend > 0) {
-          return <Badge color="orange" title={`Capital pagado; falta mora ${fmtDOP(moraPend)}`}>Mora pendiente</Badge>;
+        // Capital saldado pero con notas de débito sin pagar: la factura no
+        // está cobrada del todo, así que no puede anunciarse como Pagada.
+        if (ep === 'PAGADA' && ndPend > 0) {
+          return <Badge color="orange" title={`Capital pagado; falta ${fmtDOP(ndPend)} en notas de débito`}>Parcial</Badge>;
         }
         if (ep === 'PAGADA')   return <Badge color="green">Pagada</Badge>;
         if (ep === 'PARCIAL')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
@@ -372,21 +374,19 @@ export default function FacturasPage() {
   ];
 
   const rowActions = (doc: Doc): RowAction[] => {
-    // "Ver" inline (👁) antes de los 3 puntos — abre el detalle.
-    const ver: RowAction = { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${doc.id}`, primary: true };
+    // Sin ojito: el código de la fila ya es el enlace al detalle y el botón
+    // repetía ese mismo destino ocupando una columna.
     // Recibo POS: solo para ventas sin-ncf (ticket de mostrador). Reabre el recibo 80mm.
     const recibo: RowAction[] = doc.tipoEcf === 'sin-ncf'
       ? [{ icon: Printer, title: 'Reimprimir recibo', onClick: () => window.open(`/pos-ticket/${doc.id}`, '_blank', 'width=420,height=680') }]
       : [];
     if (doc.estado === 'BORRADOR') {
       return [
-        ver,
         { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
         ...recibo,
       ];
     }
     return [
-      ver,
       { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.codigo ?? doc.id}` },
       { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
       ...recibo,
@@ -434,6 +434,10 @@ export default function FacturasPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        // Solo se despliega la factura que tiene notas de mora colgando: sin
+        // ellas el panel repetía la propia factura y su saldo, que ya están en
+        // la fila. Una flecha que no aporta nada al abrirse educa a no abrirla.
+        rowExpandable={doc => (doc.moraNotas?.length ?? 0) > 0}
         renderExpanded={doc => <ResumenFactura doc={doc} />}
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
@@ -531,76 +535,8 @@ export default function FacturasPage() {
 // ─── Fila hija: resumen general de una factura (montos + cobro + mora) ────────
 
 function ResumenFactura({ doc }: { doc: Doc }) {
-  // Los subqueries SQL (pagado/moraPendiente) llegan como string desde postgres:
-  // coercer a número o el `+` concatena (bug: "1000000"+"35000").
-  const pagado        = Number(doc.pagado ?? 0);
-  const moraAplicada  = Number(doc.moraAplicada ?? 0);
-  const moraPendiente = Number(doc.moraPendiente ?? 0);
-  const saldoCapital  = Math.max(0, doc.montoTotal - pagado);
-  const notas         = doc.moraNotas ?? [];
-
-  const moraPagada = Math.max(0, moraAplicada - moraPendiente);
-  const cobrado    = pagado + moraPagada;
-
-  // "Pendientes": cada documento cobrable que aún tiene saldo — el capital de la
-  // propia factura (si no está saldado) y cada nota de débito por mora impaga.
-  // El total es la suma de esas filas (lo que realmente falta cobrar).
-  const pendientes: { key: string; id: number; label: string; monto: number }[] = [];
-  if (saldoCapital > 0) {
-    pendientes.push({ key: `f-${doc.id}`, id: doc.id, label: doc.codigo ?? `Factura #${doc.id}`, monto: saldoCapital });
-  }
-  for (const nd of notas) {
-    if (nd.estado !== 'PAGADA' && nd.saldo > 0) {
-      pendientes.push({ key: `nd-${nd.id}`, id: nd.id, label: nd.codigo ?? `ND #${nd.id}`, monto: nd.saldo });
-    }
-  }
-  const totalPendiente = pendientes.reduce((s, p) => s + p.monto, 0);
-
   return (
-    <div className="py-1">
-      {/* Indentada para arrancar bajo la columna "Código" (no desde el borde),
-          y extendida hasta la derecha. */}
-      <div className="space-y-2 sm:ml-16">
-        {pendientes.length > 0 ? (
-          <div className="rounded-md border border-gray-300 overflow-hidden text-sm">
-            <div className="px-4 py-2 bg-gray-50 border-b border-gray-300 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-              Pendientes
-            </div>
-            <div className="divide-y divide-gray-200">
-              {pendientes.map(p => (
-                <div key={p.key} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <Link
-                    href={`/dashboard/facturas/${p.id}`}
-                    className="font-mono text-xs text-gray-700 hover:text-teal-700 hover:underline truncate"
-                  >
-                    {p.label}
-                  </Link>
-                  <span className="tabular-nums text-gray-900 whitespace-nowrap">{fmtDOP(p.monto)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50 border-t border-gray-300">
-              <span className="text-xs font-medium text-gray-600">Total pendiente</span>
-              <span className="tabular-nums font-bold text-red-600 whitespace-nowrap">{fmtDOP(totalPendiente)}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 rounded-md border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-600">
-            <span className="font-medium text-emerald-700">Sin pendientes</span>
-            <span className="text-xs text-gray-500">· cobrado {fmtDOP(cobrado)}</span>
-          </div>
-        )}
-
-        <div className="flex justify-end">
-          <Link
-            href={`/dashboard/facturas/${doc.id}`}
-            className="text-[11px] font-medium text-teal-600 hover:underline"
-          >
-            Ver factura completa →
-          </Link>
-        </div>
-      </div>
-    </div>
+    <NotasMoraTable notas={doc.moraNotas ?? []} />
   );
 }
 

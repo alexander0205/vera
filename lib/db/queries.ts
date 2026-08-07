@@ -630,6 +630,7 @@ export async function getCuentasPorCobrar(
   const moraNotasPorFactura = new Map<number, {
     id: number; codigo: string | null; montoTotal: number; saldo: number;
     estado: 'PENDIENTE' | 'PARCIAL';
+    fechaEmision: string | Date | null; periodo: string | Date | null;
   }[]>();
   if (facturaIds.length > 0) {
     const moraRows = await db
@@ -638,6 +639,8 @@ export async function getCuentasPorCobrar(
         codigo:       ecfDocuments.codigo,
         moraOrigenId: ecfDocuments.moraOrigenId,
         montoTotal:   ecfDocuments.montoTotal,
+        fechaEmision: ecfDocuments.fechaEmision,
+        periodo:      ecfDocuments.moraPeriodo,
         pagado: sql<number>`coalesce((
           SELECT SUM(monto_centavos) FROM pagos_recibidos
           WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
@@ -660,6 +663,7 @@ export async function getCuentasPorCobrar(
       arr.push({
         id: m.id, codigo: m.codigo, montoTotal: m.montoTotal, saldo: saldoNd,
         estado: pagadoNd > 0 ? 'PARCIAL' : 'PENDIENTE',
+        fechaEmision: m.fechaEmision, periodo: m.periodo,
       });
       moraNotasPorFactura.set(m.moraOrigenId, arr);
     }

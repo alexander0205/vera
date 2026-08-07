@@ -23,6 +23,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SectionCard } from '../nueva/sections/SectionCard';
@@ -317,6 +318,36 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+/** Fecha + hora — para el detalle, donde sí interesa a qué hora se emitió. */
+function fmtDateHora(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return `${fmtDate(iso)} ${d.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit' })}`;
+  } catch {
+    return iso;
+  }
+}
+
+/** Tarjeta de cifra del encabezado del documento. */
+function CifraCard({
+  label, valor, tono = 'neutro', pie,
+}: {
+  label: string;
+  valor: string;
+  tono?: 'neutro' | 'ok' | 'alerta';
+  pie?: string;
+}) {
+  const color = tono === 'alerta' ? 'text-red-600' : tono === 'ok' ? 'text-emerald-700' : 'text-gray-900';
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`mt-1 text-lg font-bold tabular-nums ${color}`}>{valor}</p>
+      {pie && <p className={`mt-0.5 text-[11px] ${tono === 'alerta' ? 'text-red-500' : 'text-gray-400'}`}>{pie}</p>}
+    </div>
+  );
+}
+
 function calcTotalLinea(l: Linea): number {
   const cant  = Number(l.cantidadItem) || 0;
   const prec  = Number(l.precioUnitarioItem) || 0;
@@ -361,7 +392,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const [anularForce, setAnularForce] = useState(false);
   const [anularMotivo, setAnularMotivo] = useState('');
 
-  const [resumenOpen, setResumenOpen] = useState(true);
 
   const [showEmail, setShowEmail]     = useState(false);
   const [emailTo, setEmailTo]         = useState('');
@@ -753,6 +783,15 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const saldo     = Math.max(0, totales.total - pagadoDOP - ncAplicadoDOP);
   const facturaPagada = saldo === 0 && (pagadoDOP > 0 || ncAplicadoDOP > 0) && totales.total > 0;
 
+  /** Estado del vencimiento para la tarjeta de arriba. Null si no aplica. */
+  const vencimiento = useMemo(() => {
+    if (!factura?.fechaLimitePago || saldo <= 0) return null;
+    const dias = Math.floor((Date.now() - Date.parse(`${factura.fechaLimitePago}T00:00:00`)) / 86_400_000);
+    if (dias > 0)  return { texto: `Vencida hace ${dias} día${dias === 1 ? '' : 's'}`, tono: 'alerta' as const };
+    if (dias === 0) return { texto: 'Vence hoy', tono: 'alerta' as const };
+    return { texto: `En ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`, tono: 'neutro' as const };
+  }, [factura?.fechaLimitePago, saldo]);
+
   // ─── Render guards ──────────────────────────────────────────────────────────
 
   if (loading) {
@@ -880,13 +919,16 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               ) : null}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              {/* Solo mostrar el nombre fiscal del comprobante si fue emitido a DGII.
-                  Borrador/sin-ncf/histórica → genérico, NO el tipo fiscal. */}
-              <span className="font-medium text-gray-600">
-                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Sin comprobante' : 'Documento sin comprobante fiscal')}
-              </span>
-              <span className="mx-1.5">·</span>
-              Fecha: {fmtDate(factura.fechaEmision)}
+              {/* El tipo solo se escribe cuando aporta algo: si el documento no
+                  fue a la DGII, el badge de arriba ya dice "Sin comprobante" y
+                  repetirlo aquí era decir dos veces lo mismo en la misma línea. */}
+              {esEcfReal && (
+                <>
+                  <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
+                  <span className="mx-1.5">·</span>
+                </>
+              )}
+              Fecha: {fmtDateHora(factura.fechaEmision)}
               {factura.fechaLimitePago && (
                 <>
                   <span className="mx-1.5">·</span>
@@ -906,6 +948,21 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             >
               <RefreshCw className={`h-4 w-4 mr-1 ${pollingStatus === 'loading' ? 'animate-spin' : ''}`} />
               Consultar DGII
+            </Button>
+          )}
+
+          {/* Acción principal del documento, junto al resto de acciones. Antes
+              vivía en una tarjeta del sidebar: el usuario tenía que buscar a la
+              derecha lo que iba a hacer en el 90% de los casos, y esa tarjeta
+              se comía el alto de la columna. */}
+          {!esEcfReal && puedeEmitir && canEmitir && (
+            <Button
+              size="sm"
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              onClick={triggerEnviarDgii}
+            >
+              <Send className="h-4 w-4 mr-1" />
+              {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
             </Button>
           )}
 
@@ -1028,6 +1085,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               )}
               {canCreate && puedeCrearNota && (
                 <>
+                  {/* Separadores por intención: arriba lo que hace con ESTE
+                      documento, en medio lo que CREA otro, abajo lo que lo
+                      destruye. Siete acciones seguidas se leen como una lista
+                      de la compra. */}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
@@ -1072,6 +1134,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 </DropdownMenuItem>
               )}
               {esAnulable && canAnular && (
+                <>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={() => { setShowAnular(true); setAnularError(null); }}
                   className="flex items-center gap-2 cursor-pointer text-red-600"
@@ -1079,6 +1143,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <XCircle className="h-4 w-4" />
                   Anular comprobante
                 </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1103,6 +1168,30 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
             : <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />}
           {pollMsg}
+        </div>
+      )}
+
+      {/* ─── Cifras del documento, arriba ────────────────────────────────────
+          Antes vivían en una tarjeta "Resumen" del sidebar que repetía línea por
+          línea lo que ya muestra "Productos y servicios". Lo que se busca al
+          abrir una factura es cuánto es, cuánto pagaron y cuánto falta: eso va
+          arriba y se lee sin desplazar. */}
+      {!esNc && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <CifraCard label={esNc ? 'Total acreditado' : 'Total'} valor={fmtDOP(totales.total)} />
+          <CifraCard label="Pagado" valor={fmtDOP(pagadoDOP)} tono={pagadoDOP > 0 ? 'ok' : 'neutro'} />
+          <CifraCard
+            label="Saldo pendiente"
+            valor={fmtDOP(saldo)}
+            tono={saldo > 0 ? 'alerta' : 'ok'}
+            pie={saldo === 0 ? 'Pagada en su totalidad' : undefined}
+          />
+          <CifraCard
+            label={factura.fechaLimitePago ? 'Vence' : 'Condición'}
+            valor={factura.fechaLimitePago ? fmtDate(factura.fechaLimitePago) : 'De contado'}
+            tono={vencimiento?.tono ?? 'neutro'}
+            pie={vencimiento?.texto}
+          />
         </div>
       )}
 
@@ -1250,6 +1339,37 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                       );
                     })}
                   </tbody>
+                  {/* La suma vive donde están las líneas que la producen. */}
+                  <tfoot>
+                    <tr className="border-t border-gray-200">
+                      <td colSpan={4} />
+                      <td className="py-2 px-2 text-right text-xs text-gray-500">Subtotal</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtDOP(totales.subtotal)}</td>
+                      <td />
+                    </tr>
+                    {totales.itbis > 0 && (
+                      <tr>
+                        <td colSpan={4} />
+                        <td className="py-1 px-2 text-right text-xs text-gray-500">ITBIS</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtDOP(totales.itbis)}</td>
+                        <td />
+                      </tr>
+                    )}
+                    {ncAplicadoDOP > 0 && (
+                      <tr>
+                        <td colSpan={4} />
+                        <td className="py-1 px-2 text-right text-xs text-teal-700">Notas de crédito</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-teal-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
+                        <td />
+                      </tr>
+                    )}
+                    <tr className="border-t-2 border-gray-200">
+                      <td colSpan={4} />
+                      <td className="py-2 px-2 text-right text-sm font-bold text-gray-900">{esNc ? 'Total acreditado' : 'Total'}</td>
+                      <td className="py-2 px-2 text-right text-sm font-bold tabular-nums text-gray-900 whitespace-nowrap">{fmtDOP(totales.total)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
@@ -1481,122 +1601,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
         {/* ━━━ RIGHT: sticky sidebar ━━━ */}
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start min-w-0">
 
-          {/* Resumen */}
-          <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setResumenOpen(v => !v)}
-              className="w-full flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 hover:bg-gray-50 transition-colors"
-              aria-expanded={resumenOpen}
-            >
-              <FileText className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
-              <h2 className="text-sm font-semibold text-gray-900 flex-1 text-left">Resumen</h2>
-              {resumenOpen
-                ? <ChevronUp className="h-4 w-4 text-gray-400" />
-                : <ChevronDown className="h-4 w-4 text-gray-400" />}
-            </button>
-
-            {resumenOpen && (
-              <div className="px-4 pb-4 md:px-5">
-                {factura.lineas.length > 0 && (
-                  <>
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-3 text-[11px] text-gray-500 uppercase tracking-wide pb-2 border-b border-gray-100">
-                      <span>Descripción</span>
-                      <span className="text-right">Cant.</span>
-                      <span className="text-right">Total</span>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                      {factura.lineas.map((l, idx) => (
-                        <div key={l.id ?? idx} className="grid grid-cols-[1fr_auto_auto] gap-3 py-2 text-sm">
-                          <span className="text-gray-700 truncate" title={l.nombreItem}>
-                            {l.nombreItem || '—'}
-                          </span>
-                          <span className="text-gray-600 text-right tabular-nums">
-                            {Number(l.cantidadItem) || 0}
-                          </span>
-                          <span className="text-gray-900 font-medium text-right tabular-nums whitespace-nowrap">
-                            {fmtDOP(calcTotalLinea(l))}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                <div className="pt-3 mt-1 space-y-1.5 border-t border-gray-100">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Subtotal</span>
-                    <span className="font-medium text-gray-800 tabular-nums">{fmtDOP(totales.subtotal)}</span>
-                  </div>
-                  {totales.itbis > 0 && (
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>ITBIS (18%)</span>
-                      <span className="font-medium text-gray-800 tabular-nums">{fmtDOP(totales.itbis)}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-between text-base font-bold text-gray-900 border-t-2 border-gray-200 pt-3 mt-3">
-                  <span>{esNc ? 'Total acreditado' : 'Total'}</span>
-                  <span className="tabular-nums">{fmtDOP(totales.total)}</span>
-                </div>
-
-                {ncAplicadoDOP > 0 && (
-                  <div className="flex justify-between text-sm mt-3 text-teal-700">
-                    <span>Notas de crédito</span>
-                    <span className="font-medium tabular-nums">−{fmtDOP(ncAplicadoDOP)}</span>
-                  </div>
-                )}
-
-                {!esNc && (
-                  <>
-                    <div className={`flex justify-between text-sm ${ncAplicadoDOP > 0 ? 'mt-1.5' : 'mt-3'} ${pagadoDOP > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                      <span>Pagado</span>
-                      <span className="font-medium tabular-nums">{fmtDOP(pagadoDOP)}</span>
-                    </div>
-
-                    <div className={`flex justify-between text-sm rounded-lg px-3 py-2 mt-2 border ${
-                      saldo === 0
-                        ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
-                        : 'bg-red-50 border-red-100 text-red-800'
-                    }`}>
-                      <span className="font-semibold">Saldo pendiente</span>
-                      <span className="font-bold tabular-nums">{fmtDOP(saldo)}</span>
-                    </div>
-
-                    {/* Vencimiento: cuándo se vence la factura y su estado. */}
-                    {factura.fechaLimitePago && saldo > 0 && (() => {
-                      const dias = Math.floor(
-                        (Date.now() - Date.parse(`${factura.fechaLimitePago}T00:00:00`)) / 86_400_000,
-                      );
-                      const estado = dias > 0
-                        ? { texto: `vencida hace ${dias} día${dias === 1 ? '' : 's'}`, clase: 'text-red-600' }
-                        : dias === 0
-                          ? { texto: 'vence hoy', clase: 'text-amber-600' }
-                          : { texto: `en ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`, clase: 'text-gray-400' };
-                      return (
-                        <div className="flex justify-between items-center text-sm mt-2">
-                          <span className="text-gray-600">Vence el</span>
-                          <span className="tabular-nums text-right">
-                            <span className="font-medium text-gray-900">{fmtDate(factura.fechaLimitePago)}</span>
-                            <span className={`ml-1.5 text-xs font-medium ${estado.clase}`}>· {estado.texto}</span>
-                          </span>
-                        </div>
-                      );
-                    })()}
-
-                    {facturaPagada && (
-                      <p className="text-[11px] text-emerald-700 mt-2 flex items-center gap-1">
-                        <CheckCircle className="h-3 w-3" />
-                        Factura pagada en su totalidad
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </section>
-
           {/* Estado DGII card — solo cuando hay e-CF real emitido a DGII.
               HISTORICA (ALG-), borrador (BOR-) y sin-ncf no fueron a DGII. */}
           {esEcfReal && (
@@ -1641,34 +1645,15 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 No emitida a la DGII. Es un registro {esBorrador ? 'sin comprobante' : 'histórico'} sin e-CF.
                 Genera un e-CF para enviarla a la DGII.
               </p>
-              <div className="flex flex-col gap-2">
-                {canEmitir && (
-                  <Button
-                    type="button"
-                    className="bg-teal-600 hover:bg-teal-700 text-white h-9 w-full"
-                    onClick={triggerEnviarDgii}
-                  >
-                    <Send className="h-4 w-4 mr-1.5" />
-                    {sinLineas && canEdit ? 'Completar y generar e-CF' : 'Generar e-CF / Enviar a DGII'}
-                  </Button>
-                )}
-                {canEdit && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 w-full text-teal-700 border-teal-300 hover:bg-teal-50"
-                    asChild
-                  >
-                    <Link href={`/dashboard/facturas/${factura.id}/editar`}>Editar antes de emitir</Link>
-                  </Button>
-                )}
-                {!canEdit && (
-                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
-                    <span>Para editar esta factura, pídele al administrador.</span>
-                  </div>
-                )}
-              </div>
+              {/* Sin botones: emitir y editar viven en el encabezado y en la
+                  barra inferior. Esta tarjeta solo informa en qué estado está
+                  el documento frente a la DGII. */}
+              {!canEdit && !canEmitir && (
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  <span>Para emitir o editar esta factura, pídele al administrador.</span>
+                </div>
+              )}
             </section>
           )}
 
