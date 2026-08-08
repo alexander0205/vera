@@ -177,6 +177,13 @@ export const teams = pgTable('teams', {
   // posHabilitado (arriba) queda como columna legacy hasta retirar su lectura.
   modulosHabilitados:     jsonb('modulos_habilitados').notNull().default(['facturacion', 'administracion']),
   modulosOverride:        jsonb('modulos_override'),
+
+  // ── Métodos de pago que EXIGEN comprobante adjunto ────────────────────────
+  // Mismo patrón que metodosObligaDgii. Al registrar un cobro con alguno de
+  // estos métodos hay que adjuntar la imagen o el archivo del comprobante.
+  // Vacío = sin restricción, que es como nacen todas las empresas.
+  metodosExigeComprobante: jsonb('metodos_exige_comprobante').notNull().default([]),
+
   // ── Textos por defecto de los comprobantes ────────────────────────────────
   // Se copian al crear una factura o cotización nueva para no reescribirlos
   // cada vez. Es una plantilla, no una atadura: el texto queda en el documento
@@ -825,6 +832,45 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   index('pagos_turno_idx').on(t.turnoCajaId),
 ]);
 
+// ─── Comprobantes de pago (imagen / PDF que respalda un cobro) ────────────────
+/**
+ * El adjunto cuelga del DOCUMENTO, no de la fila del ledger: las filas de
+ * `pagosRecibidos` no son estables. `/api/facturas/[id]/pago` borra y reinserta
+ * el pago completo en cada guardado, y `registrarPagoFacturaConMora` parte un
+ * pago en varias filas (factura + cada ND de mora). `pagoRecibidoId` queda como
+ * referencia fina con ON DELETE SET NULL, para que el archivo sobreviva.
+ *
+ * El binario vive en S3 (bucket privado). `contenido` es el fallback base64
+ * para desarrollo local sin credenciales de AWS.
+ */
+export const pagoAdjuntos = pgTable('pago_adjuntos', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  ecfDocumentId:  integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
+  /** Abono concreto que respalda. Null si su fila del ledger fue reescrita. */
+  pagoRecibidoId: integer('pago_recibido_id').references(() => pagosRecibidos.id, { onDelete: 'set null' }),
+  nombre:         varchar('nombre', { length: 255 }).notNull(),
+  mime:           varchar('mime', { length: 100 }).notNull(),
+  tamanoBytes:    integer('tamano_bytes').notNull(),
+  /** Hash del binario: evita guardar dos veces el mismo comprobante. */
+  sha256:         char('sha256', { length: 64 }).notNull(),
+  /** 's3' → el binario está en s3Key. 'db' → está en contenido (base64). */
+  storage:        varchar('storage', { length: 10 }).notNull().default('s3'),
+  /** prod/team_12/pago/<uuid>.jpg — UUID, nunca el id, para que no se enumere. */
+  s3Key:          text('s3_key'),
+  /** Miniatura ~300px derivada del binario guardado. NULL en PDF. */
+  thumbS3Key:     text('thumb_s3_key'),
+  contenido:      text('contenido'),
+  subidoPor:      integer('subido_por').references(() => users.id),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('pago_adjuntos_doc_idx').on(t.teamId, t.ecfDocumentId),
+  index('pago_adjuntos_pago_idx').on(t.pagoRecibidoId),
+  // Un archivo, una fila por factura. La garantía vive en la DB porque dos
+  // subidas simultáneas del mismo comprobante ven ambas la tabla vacía.
+  uniqueIndex('pago_adjuntos_sha_uq').on(t.teamId, t.ecfDocumentId, t.sha256),
+]);
+
 // ─── Pasarelas de pago (links de pago — CardNet / Azul) ───────────────────────
 
 /**
@@ -1064,6 +1110,13 @@ export const pagosRecibidosRelations = relations(pagosRecibidos, ({ one }) => ({
   team:        one(teams,        { fields: [pagosRecibidos.teamId],        references: [teams.id] }),
   ecfDocument: one(ecfDocuments, { fields: [pagosRecibidos.ecfDocumentId], references: [ecfDocuments.id] }),
   createdByUser: one(users,      { fields: [pagosRecibidos.createdBy],     references: [users.id] }),
+}));
+
+export const pagoAdjuntosRelations = relations(pagoAdjuntos, ({ one }) => ({
+  team:         one(teams,          { fields: [pagoAdjuntos.teamId],         references: [teams.id] }),
+  ecfDocument:  one(ecfDocuments,   { fields: [pagoAdjuntos.ecfDocumentId],  references: [ecfDocuments.id] }),
+  pagoRecibido: one(pagosRecibidos, { fields: [pagoAdjuntos.pagoRecibidoId], references: [pagosRecibidos.id] }),
+  subidoPorUser: one(users,         { fields: [pagoAdjuntos.subidoPor],      references: [users.id] }),
 }));
 
 // ─── EmiteDO — System Logs ───────────────────────────────────────────────────
@@ -2170,6 +2223,8 @@ export type NewCotizacion = typeof cotizaciones.$inferInsert;
 export type Categoria = typeof categorias.$inferSelect;
 export type PagoRecibido    = typeof pagosRecibidos.$inferSelect;
 export type NewPagoRecibido = typeof pagosRecibidos.$inferInsert;
+export type PagoAdjunto     = typeof pagoAdjuntos.$inferSelect;
+export type NewPagoAdjunto  = typeof pagoAdjuntos.$inferInsert;
 export type FacturaRecurrente = typeof facturasRecurrentes.$inferSelect;
 export type NewFacturaRecurrente = typeof facturasRecurrentes.$inferInsert;
 export type Almacen = typeof almacenes.$inferSelect;

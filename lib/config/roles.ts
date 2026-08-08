@@ -42,6 +42,7 @@ export type Permission =
   // Alerta double-check del método de pago: tener el permiso = la alerta se pide
   // al cobrar. El admin la activa asignándolo a un rol (Equipo → Permisos).
   | 'pagos:alerta-metodo'
+  | 'pagos:adjunto-eliminar'
   // Clientes
   | 'clientes:ver'
   | 'clientes:gestionar'
@@ -137,7 +138,7 @@ export const ROLES: RoleDef[] = [
     invitable:   false,
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
-      'pagos:ver',
+      'pagos:ver', 'pagos:adjunto-eliminar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -162,7 +163,7 @@ export const ROLES: RoleDef[] = [
     invitable:   true,
     permissions: [
       'facturas:ver', 'facturas:crear', 'facturas:editar', 'facturas:anular', 'facturas:exportar', 'facturas:emitir-dgii', 'facturas:fecha-personalizada', 'facturas:precio-editar',
-      'pagos:ver',
+      'pagos:ver', 'pagos:adjunto-eliminar',
       'clientes:ver', 'clientes:gestionar',
       'productos:ver', 'productos:gestionar',
       'cotizaciones:ver', 'cotizaciones:gestionar',
@@ -285,6 +286,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   { module: 'Pagos', icon: 'Wallet', permissions: [
     { key: 'pagos:ver', label: 'Ver pagos recibidos' },
     { key: 'pagos:alerta-metodo', label: 'Alerta double-check de método de pago' },
+    { key: 'pagos:adjunto-eliminar', label: 'Eliminar comprobantes de pago' },
   ]},
   { module: 'Clientes', icon: 'Users', permissions: [
     { key: 'clientes:ver',       label: 'Ver clientes' },

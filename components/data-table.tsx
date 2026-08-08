@@ -292,7 +292,10 @@ export function DataTable<T>({
         } : undefined}
         sx={{
           cursor:  href || puedeAbrir ? 'pointer' : 'default',
-          bgcolor: isSelected ? '#eef2fe' : undefined,
+          // Opaco a propósito, no `undefined`: la celda de acciones va fija
+          // al borde derecho heredando este color, y con la fila transparente
+          // el contenido se vería pasar por debajo al desplazar.
+          bgcolor: isSelected ? '#eef2fe' : '#fff',
           '&.MuiTableRow-hover:hover': { bgcolor: '#fafafa' },
           '& .MuiTableCell-root': { borderBottom: '1px solid #f3f4f6' },
           ...(rowSx?.(row) ?? {}),
@@ -345,7 +348,16 @@ export function DataTable<T>({
           const primary = acts.filter(a => a.primary);
           const rest    = acts.filter(a => !a.primary);
           return (
-            <TableCell sx={{ py: 0.75 }} onClick={e => e.stopPropagation()}>
+            // Fija al borde derecho: en pantallas angostas la tabla se
+            // desplaza en horizontal y las acciones, que son la última
+            // columna, quedaban fuera de vista. Ahí es donde más falta hacen.
+            <TableCell
+              onClick={e => e.stopPropagation()}
+              sx={{
+                py: 0.75, position: 'sticky', right: 0, zIndex: 1,
+                bgcolor: 'inherit', borderLeft: 1, borderColor: 'divider',
+              }}
+            >
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.25 }}>
                 {primary.map((a, i) => <RowActionInline key={i} action={a} />)}
                 <RowActionsMenu actions={rest} />
@@ -646,7 +658,17 @@ export function DataTable<T>({
                       </TableCell>
                     );
                   })}
-                  {rowActions && <TableCell sx={{ width: 48, borderBottom: '1px solid #e5e7eb' }} />}
+                  {/* Encabezado de la columna fija: mismo `sticky` que sus
+                      celdas, con más z-index para quedar por encima al
+                      desplazar, y fondo propio porque el de la cabecera no se
+                      hereda. */}
+                  {rowActions && (
+                    <TableCell sx={{
+                      width: 48, borderBottom: '1px solid #e5e7eb',
+                      position: 'sticky', right: 0, zIndex: 2,
+                      bgcolor: 'grey.50', borderLeft: 1, borderColor: 'divider',
+                    }} />
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -829,6 +851,7 @@ function RowActionsMenu({ actions }: { actions: RowAction[] }) {
           '&:hover': { bgcolor: 'grey.100' },
         }}
         aria-label="Acciones"
+        title="Más acciones"
       >
         <MoreVertical style={{ width: 16, height: 16 }} />
       </IconButton>

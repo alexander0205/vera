@@ -11,7 +11,8 @@ import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser, registrarPago, registrarPagosSplit, syncPagoMirror } from '@/lib/db/queries';
 import { requireTurnoAbierto } from '@/lib/caja/guard';
-import { METODOS_PAGO_SET } from '@/lib/pagos/metodos';
+import { METODOS_PAGO_SET, labelMetodo } from '@/lib/pagos/metodos';
+import { faltaComprobanteExigido } from '@/lib/pagos/adjuntos';
 import { eq, and } from 'drizzle-orm';
 
 // Fuente única: lib/pagos/metodos.
@@ -85,6 +86,25 @@ export async function POST(
     return NextResponse.json({ error: guardCaja.error, code: guardCaja.code }, { status: 409 });
   }
   const turnoCajaId = guardCaja.turno?.id ?? null;
+
+  // Método que exige comprobante. Misma regla que en Cuentas por cobrar: sin
+  // esto el gate se saltaba registrando el cobro desde el detalle.
+  const metodosDelCobro = Array.isArray(body.pagos)
+    ? body.pagos.map(p => (p.metodo ?? 'efectivo').toString())
+    : body.recibido ? [(body.metodo ?? 'efectivo').toString()] : [];
+  if (metodosDelCobro.length > 0) {
+    const sinRespaldo = await faltaComprobanteExigido(teamId, docId, metodosDelCobro);
+    if (sinRespaldo) {
+      return NextResponse.json(
+        {
+          error: `Un cobro con «${labelMetodo(sinRespaldo)}» necesita el comprobante adjunto. Súbelo en la factura y vuelve a intentar.`,
+          requiereComprobante: true,
+          metodoExigeComprobante: sinRespaldo,
+        },
+        { status: 422 },
+      );
+    }
+  }
 
   // ── SPLIT: varias líneas de método en una sola operación ─────────────────────
   if (Array.isArray(body.pagos)) {

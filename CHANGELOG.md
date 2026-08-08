@@ -4,6 +4,29 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.18.1 — 2026-08-07
+
+### Arreglado
+
+- **comprobantes**: sharp tumbaba /api/pagos/adjuntos en producción
+  - sharp pasa a carga perezosa con fallo tolerado. Si el binario no está, el comprobante se guarda igual: se pierde la miniatura (la galería usa el original) y el borrado de EXIF. Un módulo nativo no debe poder tumbar un endpoint que no lo necesita.
+  - pnpm.supportedArchitectures instala también los binarios de linux-x64, que es lo que corre en Vercel.
+
+## v1.18.0 — 2026-08-07
+
+### Nuevo
+
+- **pagos**: adjuntar comprobantes de pago (S3 privado)
+  - Bucket S3 privado (BPA total, SSE-AES256, ACLs desactivadas, solo TLS), un usuario IAM por entorno scopeado a su prefijo y sin ListBucket.
+  - El binario NUNCA sale por una URL de S3: se sirve por /api/pagos/adjuntos/[id], que valida sesión y empresa antes de leer. Sin presigned URLs (son un token bearer en el query string) y sin presigned PUT (se saltaría la validación de tipo y tamaño).
+  - Miniatura de 300px generada del binario ya guardado: la galería baja 5 KB en vez del original. ETag + 304 resueltos contra Postgres, sin tocar S3.
+  - Las imágenes se reescriben sin EXIF: una foto de comprobante trae el GPS de la casa del cliente.
+  - pago_adjuntos cuelga del DOCUMENTO, no de la fila del ledger: el detalle de factura borra y reinserta el pago completo, y el cobro con mora se parte en varias filas. pago_recibido_id queda ON DELETE SET NULL.
+  - Índice único (team, doc, sha256) + advisory lock por documento: sin eso, subidas simultáneas duplicaban filas y se saltaban el tope de 5.
+  - teams.metodos_exige_comprobante: métodos que obligan a adjuntar. Se valida en las tres puertas de registro manual de cobros. No aplica al POS ni al cobro al emitir: trabaría la caja de mostrador.
+  - Permiso nuevo pagos:adjunto-eliminar, solo owner y admin.
+  - Facturas y Cuentas por cobrar: código corto con el completo en el tooltip, cliente más angosto, y la columna de acciones fija al borde derecho para que no se pierda al desplazar en pantallas chicas.
+
 ## v1.17.0 — 2026-08-07
 
 ### Nuevo

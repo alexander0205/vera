@@ -37,6 +37,8 @@ export type AuditAction =
   | 'HABILITACION_SIGN'
   | 'PAGO_REGISTRADO'
   | 'PAGO_ELIMINADO'
+  | 'COMPROBANTE_SUBIDO'
+  | 'COMPROBANTE_ELIMINADO'
   // Cuadre de caja
   | 'CAJA_APERTURA'
   | 'CAJA_MOVIMIENTO'

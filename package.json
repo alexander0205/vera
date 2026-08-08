@@ -1,12 +1,26 @@
 {
   "private": true,
-  "version": "1.17.0",
+  "version": "1.18.1",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
       "esbuild",
       "sharp"
-    ]
+    ],
+    "supportedArchitectures": {
+      "os": [
+        "current",
+        "linux"
+      ],
+      "cpu": [
+        "current",
+        "x64"
+      ],
+      "libc": [
+        "current",
+        "glibc"
+      ]
+    }
   },
   "scripts": {
     "release:patch": "npm version patch -m \"chore(release): v%s\"",
@@ -36,8 +50,8 @@
     "test:unit": "vitest run tests/unit"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1103.0",
-    "@aws-sdk/s3-request-presigner": "^3.1103.0",
+    "@aws-sdk/client-s3": "^3.1105.0",
+    "@aws-sdk/s3-request-presigner": "^3.1105.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.1.1",
