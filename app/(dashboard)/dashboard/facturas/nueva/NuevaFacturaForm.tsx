@@ -1667,6 +1667,7 @@ export default function NuevaFacturaForm({
             open
             productoId={variantePickFor.producto.id}
             productoNombre={variantePickFor.producto.nombre}
+            almacenId={almacenId}
             onClose={() => setVariantePickFor(null)}
             onPick={(v) => {
               aplicarVarianteEnLinea(variantePickFor.idx, variantePickFor.producto, v);

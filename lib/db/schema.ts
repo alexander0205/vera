@@ -1224,6 +1224,20 @@ export const productVariantsRelations = relations(productVariants, ({ one }) => 
 export type ProductVariant = typeof productVariants.$inferSelect;
 export type NewProductVariant = typeof productVariants.$inferInsert;
 
+// Stock de variante por almacén (Opción B) — fuente de verdad del stock de
+// variantes. product_variants.stock_actual = suma por todos los almacenes.
+export const productVariantAlmacenStock = pgTable('product_variant_almacen_stock', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  variantId:   integer('variant_id').notNull().references(() => productVariants.id),
+  almacenId:   integer('almacen_id').notNull().references(() => almacenes.id),
+  stockActual: integer('stock_actual').notNull().default(0),
+}, (t) => [
+  uniqueIndex('pvas_variant_almacen_uniq').on(t.variantId, t.almacenId),
+  index('pvas_team_idx').on(t.teamId),
+  index('pvas_almacen_idx').on(t.almacenId),
+]);
+
 // ─── EmiteDO — Compras locales ────────────────────────────────────────────────
 
 export const comprasLocales = pgTable('compras_locales', {

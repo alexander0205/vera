@@ -6,10 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { products, productVariants } from '@/lib/db/schema';
+import { products, productVariants, productVariantAlmacenStock, almacenes } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
-import { eq, ilike, or, and, sql, getTableColumns } from 'drizzle-orm';
+import { eq, ilike, or, and, sql, getTableColumns, desc, asc } from 'drizzle-orm';
 
 // Ejes de variante definidos por el usuario (MVP "por producto"):
 // [{ nombre: "Talla", valores: ["M","L","XL"] }]
@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
     }).returning();
 
     if (conVariantes) {
-      await tx.insert(productVariants).values(
+      const creadas = await tx.insert(productVariants).values(
         variants!.map((v) => ({
           teamId,
           productId:    prod.id,
@@ -170,7 +170,28 @@ export async function POST(req: NextRequest) {
           stockActual:  v.stockActual ?? 0,
           stockMinimo:  v.stockMinimo ?? 0,
         })),
-      );
+      ).returning({ id: productVariants.id, stockActual: productVariants.stockActual });
+
+      // Opción B: sembrar el stock inicial de cada variante en el almacén por
+      // defecto (o el primero si no hay uno marcado). Así el conteo fino vive por
+      // almacén desde el inicio y el producto aparece en el POS de ese almacén.
+      // La gestión por-almacén más fina (repartir entre almacenes) queda para
+      // la pantalla de detalle del producto.
+      const [almacenDefault] = await tx
+        .select({ id: almacenes.id })
+        .from(almacenes)
+        .where(eq(almacenes.teamId, teamId))
+        .orderBy(desc(almacenes.esDefault), asc(almacenes.id))
+        .limit(1);
+
+      if (almacenDefault) {
+        const filas = creadas
+          .filter((c) => (c.stockActual ?? 0) > 0)
+          .map((c) => ({ teamId, variantId: c.id, almacenId: almacenDefault.id, stockActual: c.stockActual }));
+        if (filas.length > 0) {
+          await tx.insert(productVariantAlmacenStock).values(filas);
+        }
+      }
     }
     return prod;
   });

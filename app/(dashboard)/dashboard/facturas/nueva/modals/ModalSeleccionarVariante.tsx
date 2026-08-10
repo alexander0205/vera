@@ -13,9 +13,11 @@ import type { VariantePick } from '../utils/types';
  * elección depende a qué stock pega el descuento. Muestra stock y precio de cada
  * una; las agotadas se marcan pero no se bloquean (el backend valida stock).
  */
-export function ModalSeleccionarVariante({ productoId, productoNombre, open, onClose, onPick }: {
+export function ModalSeleccionarVariante({ productoId, productoNombre, almacenId, open, onClose, onPick }: {
   productoId: number;
   productoNombre: string;
+  /** Almacén para resolver el stock por bodega (Opción B). Sin él, stock global. */
+  almacenId?: number | null;
   open: boolean;
   onClose: () => void;
   onPick: (v: VariantePick) => void;
@@ -27,12 +29,13 @@ export function ModalSeleccionarVariante({ productoId, productoNombre, open, onC
   useEffect(() => {
     if (!open) return;
     setCargando(true); setError(null); setVariants([]);
-    fetch(`/api/productos/${productoId}/variants`)
+    const qs = almacenId ? `?almacenId=${almacenId}` : '';
+    fetch(`/api/productos/${productoId}/variants${qs}`)
       .then(r => r.ok ? r.json() : Promise.reject(new Error('No se pudieron cargar las variantes')))
       .then((data) => setVariants(data.variants ?? []))
       .catch((e) => setError(e.message))
       .finally(() => setCargando(false));
-  }, [open, productoId]);
+  }, [open, productoId, almacenId]);
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) onClose(); }}>

@@ -95,17 +95,32 @@ export async function restaurarInventario(
         });
 
         if (almacenId) {
-          await tx.execute(sql`
-            INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
-            VALUES (${teamId}, ${productoId}, ${almacenId},
-              COALESCE((
-                SELECT stock_actual FROM product_almacen_stock
-                WHERE product_id = ${productoId} AND almacen_id = ${almacenId}
-              ), 0) + ${cantidadInt}
-            )
-            ON CONFLICT (product_id, almacen_id)
-            DO UPDATE SET stock_actual = product_almacen_stock.stock_actual + ${cantidadInt}
-          `);
+          if (variantId) {
+            // Opción B: restaurar el stock de la variante por almacén.
+            await tx.execute(sql`
+              INSERT INTO product_variant_almacen_stock (team_id, variant_id, almacen_id, stock_actual)
+              VALUES (${teamId}, ${variantId}, ${almacenId},
+                COALESCE((
+                  SELECT stock_actual FROM product_variant_almacen_stock
+                  WHERE variant_id = ${variantId} AND almacen_id = ${almacenId}
+                ), 0) + ${cantidadInt}
+              )
+              ON CONFLICT (variant_id, almacen_id)
+              DO UPDATE SET stock_actual = product_variant_almacen_stock.stock_actual + ${cantidadInt}
+            `);
+          } else {
+            await tx.execute(sql`
+              INSERT INTO product_almacen_stock (team_id, product_id, almacen_id, stock_actual)
+              VALUES (${teamId}, ${productoId}, ${almacenId},
+                COALESCE((
+                  SELECT stock_actual FROM product_almacen_stock
+                  WHERE product_id = ${productoId} AND almacen_id = ${almacenId}
+                ), 0) + ${cantidadInt}
+              )
+              ON CONFLICT (product_id, almacen_id)
+              DO UPDATE SET stock_actual = product_almacen_stock.stock_actual + ${cantidadInt}
+            `);
+          }
         }
       });
     } catch (e) {
