@@ -92,7 +92,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
-      { href: '/dashboard/habilitacion',   label: 'Habilitación e-CF' },
+      { href: '/dashboard/habilitacion',   label: 'Activar facturación electrónica' },
       { href: '/dashboard/equipo',        label: 'Usuarios y equipo' },
       { href: '/dashboard/equipo/permisos', label: 'Roles y permisos' },
       { href: '/dashboard/api-keys',      label: 'API Keys' },
@@ -180,7 +180,7 @@ function canAccessHref(
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; }
+interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; habilitacionCompletadoAt: string | Date | null; }
 interface UserInfo { name: string | null; email: string; platformRole?: string | null; }
 
 function getInitials(name: string | null, email: string) {
@@ -532,10 +532,12 @@ function DashboardTopBar({
 function Sidebar({
   teams,
   activeTeamId,
+  dgiiHabilitado,
   onClose,
 }: {
   teams: Team[];
   activeTeamId: number | null;
+  dgiiHabilitado: boolean;
   onClose?: () => void;
 }) {
   const pathname = usePathname();
@@ -592,9 +594,27 @@ function Sidebar({
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
-  const topItemsVisibles  = TOP_ITEMS.filter(item => can(item.href));
+  //
+  // "Activar facturación electrónica" vive arriba (fuera de Configuración)
+  // mientras el ambiente DGII del team no sea Producción; una vez ahí se
+  // mueve a Configuración, su ubicación permanente. Nunca aparece en los dos
+  // lugares a la vez. dgiiHabilitado viene de /api/habilitacion/ambiente-actual
+  // (lectura en vivo del ambiente en ecf-api) — ver DashboardLayout.
+  const habilitacionTopItem: NavItem = { href: '/dashboard/habilitacion', icon: Zap, label: 'Activar facturación electrónica' };
+
+  const topItemsVisibles  = [
+    ...TOP_ITEMS,
+    ...(!dgiiHabilitado ? [habilitacionTopItem] : []),
+  ].filter(item => can(item.href));
   const staticGroupsVis   = GROUPS
-    .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
+    .map(g => ({
+      ...g,
+      children: g.children
+        .filter(c => can(c.href) && (dgiiHabilitado || c.href !== '/dashboard/habilitacion'))
+        // Dentro de Configuración, ya habilitado, es un ítem permanente — vuelve
+        // a su nombre original, distinto del CTA de arriba mientras está pendiente.
+        .map(c => c.href === '/dashboard/habilitacion' ? { ...c, label: 'Habilitación e-CF' } : c),
+    }))
     .filter(g => g.children.length > 0);
   const groupsVisibles    = [posGroup, cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
 
@@ -819,9 +839,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       revalidateOnReconnect: false,
     },
   );
-
   const teams: Team[] = empresaData?.teams ?? [];
   const activeTeamId = activeTeamOverride ?? empresaData?.activeTeamId ?? teams[0]?.id ?? null;
+  const activeTeamNav = teams.find(t => t.id === activeTeamId) ?? teams[0];
+
+  // Dónde vive el link de habilitación en el nav: el flag local
+  // (habilitacionCompletadoAt) llega gratis en el mismo /api/empresa/list de
+  // arriba — decide sin round-trip extra ni parpadeo. La lectura en vivo del
+  // ambiente en ecf-api (abajo) corre en paralelo solo para auto-sanar teams
+  // que llegaron a Producción antes de que este flag existiera; su GET ya
+  // deja el flag escrito (ver ambiente-actual/route.ts), así que solo hace
+  // falta revalidar la lista de empresas una vez si detecta un desfase.
+  const dgiiHabilitado = !!activeTeamNav?.habilitacionCompletadoAt;
+  const { data: ambienteActual } = useSWR<{ ambiente: string | null }>(
+    '/api/habilitacion/ambiente-actual',
+    layoutFetcher,
+    { revalidateOnFocus: false, revalidateOnReconnect: false },
+  );
+  useEffect(() => {
+    if (ambienteActual?.ambiente === 'Produccion' && !dgiiHabilitado) mutateEmpresa();
+  }, [ambienteActual, dgiiHabilitado, mutateEmpresa]);
 
   // Cuando el usuario cambia de empresa: actualizar activeTeamId optimistamente
   // y revalidar la lista de empresas (trae plan/logo nuevos).
@@ -841,7 +878,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar — desktop (oculto cuando collapsed) */}
       {!sidebarCollapsed && (
         <aside className="hidden lg:flex w-56 flex-col shrink-0">
-          <Sidebar teams={teams} activeTeamId={activeTeamId} />
+          <Sidebar teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} />
         </aside>
       )}
 
@@ -849,7 +886,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="w-56 flex flex-col">
-            <Sidebar teams={teams} activeTeamId={activeTeamId} onClose={() => setSidebarOpen(false)} />
+            <Sidebar teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} onClose={() => setSidebarOpen(false)} />
           </div>
           <div className="flex-1 bg-black/50" onClick={() => setSidebarOpen(false)} />
         </div>

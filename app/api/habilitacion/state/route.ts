@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 // Shape canónico del estado — todo opcional para permitir merges parciales
 export const HabilitacionStateSchema = z.object({
@@ -145,8 +145,22 @@ export async function PUT(request: NextRequest) {
     }
   }
 
+  // Cuando el wizard llega a la última fase, el cliente manda
+  // finalizado.acknowledged=true (ver page.tsx, completePhase). Ese es el
+  // único punto donde marcamos habilitacionCompletadoAt — antes esta columna
+  // nunca se seteaba desde la app (solo por SQL manual, ver docs), por lo que
+  // el nav nunca detectaba la habilitación como completada. COALESCE evita
+  // pisar la fecha original si el cliente reenvía el mismo PUT.
+  const completoAhora = merged.finalizado?.acknowledged === true;
+
   await db.update(teams)
-    .set({ habilitacionState: JSON.stringify(merged), updatedAt: new Date() })
+    .set({
+      habilitacionState: JSON.stringify(merged),
+      updatedAt: new Date(),
+      ...(completoAhora
+        ? { habilitacionCompletadoAt: sql`coalesce(${teams.habilitacionCompletadoAt}, now())` }
+        : {}),
+    })
     .where(eq(teams.id, teamId));
 
   return NextResponse.json({ ok: true, state: merged });

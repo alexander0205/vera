@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { enviarAlertaSlack } from '@/lib/slack';
+import { enviarAlertaEmail } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   const user = await getUser();
@@ -21,9 +22,13 @@ export async function POST(request: NextRequest) {
   const runId = typeof body.runId === 'string' ? body.runId : 'desconocido';
   const detalle = typeof body.detalle === 'string' ? body.detalle : 'sin detalle';
 
-  await enviarAlertaSlack(
-    `⚠️ Set de Pruebas con errores — team ${teamId}, corrida ${runId}\n${detalle}`,
-  );
+  const mensaje = `⚠️ Set de Pruebas con errores — team ${teamId}, corrida ${runId}\n${detalle}`;
+
+  // Slack y email son independientes — si uno falla, el otro igual se intenta.
+  await Promise.allSettled([
+    enviarAlertaSlack(mensaje),
+    enviarAlertaEmail('⚠️ Set de Pruebas con errores — Habilitación e-CF', mensaje),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

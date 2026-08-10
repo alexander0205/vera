@@ -10,9 +10,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { db } from '@/lib/db/drizzle';
+import { teams } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { contribuyentes, EcfApiError } from '@/lib/ecf-api/client';
 import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ecf-api/contribuyente';
+import { eq, sql } from 'drizzle-orm';
 
 const schema = z.object({
   ambiente: z.enum(['TesteCF', 'CerteCF', 'Produccion']),
@@ -34,6 +37,18 @@ export async function POST(request: NextRequest) {
     console.log(`[habilitacion/ambiente] team ${teamId} (${cp}) → ${parsed.data.ambiente}`);
     const contrib = await contribuyentes.update(cp, { ambiente: parsed.data.ambiente });
     console.log(`[habilitacion/ambiente] team ${teamId} ambiente confirmado: ${contrib.ambiente}`);
+
+    // El ambiente sigue viviendo solo en ecf-api (no se duplica su valor acá).
+    // Pero cuando pasa a Produccion marcamos localmente habilitacionCompletadoAt
+    // — es la señal barata que el sidebar usa para mover el link del wizard
+    // a Configuración sin tener que consultar ecf-api en cada render del nav.
+    // COALESCE: no pisa la fecha si el team ya estaba marcado.
+    if (contrib.ambiente === 'Produccion') {
+      await db.update(teams)
+        .set({ habilitacionCompletadoAt: sql`coalesce(${teams.habilitacionCompletadoAt}, now())` })
+        .where(eq(teams.id, teamId));
+    }
+
     return NextResponse.json({ ok: true, ambiente: contrib.ambiente });
   } catch (err) {
     if (err instanceof ContribuyenteCamposFaltantesError) {

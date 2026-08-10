@@ -51,6 +51,34 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
   assertSent(res, 'sendPasswordResetEmail');
 }
 
+/**
+ * Alerta de errores por email a devs — complemento de enviarAlertaSlack
+ * (lib/slack.ts). Fire-and-forget: nunca lanza, solo loguea si falla, para
+ * no romper el flujo que la dispara (ver alertar-error/route.ts).
+ */
+const DEFAULT_ALERT_EMAILS = [
+  'jhalddry.gonzalez@yisraeltech.com',
+  'darian@yisraeltech.com',
+  'alexander.ferreras@yisraeltech.com',
+];
+
+export async function enviarAlertaEmail(asunto: string, mensaje: string): Promise<void> {
+  const destinatarios = process.env.HABILITACION_ALERT_EMAIL
+    ? process.env.HABILITACION_ALERT_EMAIL.split(',').map(s => s.trim()).filter(Boolean)
+    : DEFAULT_ALERT_EMAILS;
+  try {
+    const res = await resend.emails.send({
+      from: 'Zero Alertas <noreply@zero.com.do>',
+      to: destinatarios,
+      subject: asunto,
+      html: `<div style="font-family: sans-serif; white-space: pre-wrap;">${escapeHtml(mensaje)}</div>`,
+    });
+    assertSent(res, 'enviarAlertaEmail');
+  } catch (err) {
+    console.error('[email] error enviando alerta', err);
+  }
+}
+
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {
   const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);

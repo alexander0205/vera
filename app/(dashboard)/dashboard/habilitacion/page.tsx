@@ -527,10 +527,15 @@ function StatusPill({ status }: { status: EcfSendStatus }) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<number>; onJump: (p: number) => void }) {
+// Filas de fases (círculo + línea conectora + label) — compartidas entre el
+// nav de desktop (Sidebar) y el panel expandible de mobile, para que se vean
+// exactamente igual en ambos y la línea quede alineada en los dos lugares.
+function PhaseListItems({ phase, completed, onJump, onSelect }: {
+  phase: number; completed: Set<number>; onJump: (p: number) => void; onSelect?: () => void;
+}) {
   const maxReached = Math.max(phase, ...Array.from(completed), 0);
   return (
-    <nav className="hidden md:flex flex-col w-56 shrink-0 pt-2 select-none">
+    <>
       {PHASES.map((p, i) => {
         const isDone    = completed.has(p.id);
         const isCurrent = p.id === phase;
@@ -538,11 +543,14 @@ function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<n
         return (
           <div key={p.id} className="relative">
             {i < PHASES.length - 1 && (
-              <div className={`absolute left-[15px] top-8 w-0.5 h-[calc(100%-4px)]
+              // left = padding del botón (px-2 = 8px) + mitad del círculo (30px / 2 = 15px).
+              // top = borde inferior real del círculo (py-2 8px + mt-0.5 2px + 30px alto = 40px);
+              // con un valor menor la línea queda dibujada por encima, cruzando el círculo.
+              <div className={`absolute left-[23px] top-10 w-0.5 h-[calc(100%-4px)]
                 ${isDone ? 'bg-teal-400' : 'bg-gray-200'}`} />
             )}
             <button
-              onClick={() => !isLocked && onJump(p.id)}
+              onClick={() => { if (isLocked) return; onJump(p.id); onSelect?.(); }}
               disabled={isLocked}
               className={`w-full flex items-start gap-3 px-2 py-2 rounded-xl text-left transition-colors mb-1
                 ${isCurrent ? 'bg-teal-50' : isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
@@ -554,7 +562,7 @@ function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<n
                 {isDone ? <Check className="h-3.5 w-3.5" /> : <span className="text-xs font-bold">{p.id + 1}</span>}
               </div>
               <div className="pt-0.5 min-w-0">
-                <p className={`text-sm font-semibold leading-tight truncate
+                <p className={`text-sm font-semibold leading-tight
                   ${isCurrent ? 'text-gray-900' : isDone ? 'text-teal-700' : 'text-gray-400'}`}>
                   {p.label}
                 </p>
@@ -570,6 +578,14 @@ function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<n
           </div>
         );
       })}
+    </>
+  );
+}
+
+function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<number>; onJump: (p: number) => void }) {
+  return (
+    <nav className="hidden md:flex flex-col w-64 shrink-0 pt-2 select-none">
+      <PhaseListItems phase={phase} completed={completed} onJump={onJump} />
     </nav>
   );
 }
@@ -3170,22 +3186,24 @@ export default function HabilitacionPage() {
   const [rnc,                setRnc]                = useState('');
   const [showCancelConfirm,  setShowCancelConfirm]  = useState(false);
   const [canceling,          setCanceling]          = useState(false);
-
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem(INTRO_KEY)) setShowIntro(true);
-    } catch { setShowIntro(true); }
-  }, []);
+  const [showMobileNav,      setShowMobileNav]      = useState(false);
 
   useEffect(() => {
     fetch('/api/equipo/perfil').then(r => r.json()).then(d => setRnc(d.rnc ?? ''));
   }, []);
 
-  // Cargar fase + completado desde servidor (persistencia cross-session)
+  // Cargar fase + completado desde servidor (persistencia cross-session).
+  // El modal de intro (showIntro) se decide DENTRO de este load, no en un
+  // efecto aparte basado solo en localStorage — si ya hay progreso o el
+  // proceso está completo, nunca debe aparecer, sin importar si este
+  // navegador/dispositivo ya vio el intro antes.
   useEffect(() => {
     import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
       cargarEstado().then(({ state, completado }) => {
-        if (typeof state.fase === 'number') setPhase(Math.min(state.fase, PHASES.length - 1));
+        // fase puede llegar a PHASES.length (15): es el centinela de "wizard
+        // terminado, mostrar resumen" — no se recorta a 14, o clickear un
+        // paso anterior desde el resumen nunca podría volver a mostrarlo.
+        if (typeof state.fase === 'number') setPhase(state.fase);
         const done = new Set<number>();
         // Reconstruir: cualquier fase < state.fase se considera completada
         if (typeof state.fase === 'number') {
@@ -3193,13 +3211,31 @@ export default function HabilitacionPage() {
         }
         if (completado) for (let i = 0; i < PHASES.length; i++) done.add(i);
         setCompleted(done);
+        const tieneProgreso = completado || typeof state.fase === 'number';
         // Si hay progreso guardado (fase ≥ 1) o proceso completado → saltar PASO PREVIO
-        if (completado || typeof state.fase === 'number') setStage('wizard');
-      }).catch(() => { /* silent */ });
+        if (tieneProgreso) {
+          setStage('wizard');
+        } else {
+          try { if (!localStorage.getItem(INTRO_KEY)) setShowIntro(true); }
+          catch { setShowIntro(true); }
+        }
+      }).catch(() => {
+        // Si falla la carga del estado, no podemos saber si hay progreso —
+        // fallback al criterio anterior (solo localStorage) para no dejar al
+        // usuario sin intro para siempre por un error de red pasajero.
+        try { if (!localStorage.getItem(INTRO_KEY)) setShowIntro(true); }
+        catch { setShowIntro(true); }
+      });
     });
   }, []);
 
   const isDone = completed.size === PHASES.length;
+  // Distinto de isDone (que una vez true queda true para siempre, usado para
+  // ocultar el CTA de cancelar/el hero). viewingSummary es solo si estamos
+  // parados en el resumen final (fase 15) vs. revisando una fase pasada
+  // (0-14) desde el sidebar tras terminar — así el click en un paso anterior
+  // sí puede volver a mostrar su contenido en vez de quedar pegado al resumen.
+  const viewingSummary = phase >= PHASES.length;
 
   function handleModeSelected(m: IntroMode) {
     setMode(m);
@@ -3209,7 +3245,7 @@ export default function HabilitacionPage() {
   function completePhase(id: number) {
     setCompleted(prev => new Set([...prev, id]));
     const nextPhase = id + 1;
-    setPhase(Math.min(nextPhase, PHASES.length - 1));
+    setPhase(nextPhase);
     // Persistir fase alcanzada + resetear el sub-paso (la fase nueva arranca
     // desde su primer sub-paso, no debe heredar el de la fase anterior).
     import('@/lib/habilitacion/client').then(({ guardarEstado }) => {
@@ -3265,7 +3301,7 @@ export default function HabilitacionPage() {
     requisito: 'Configura tu empresa y certificado primero',
     eleccion:  'Elige cómo quieres completar la habilitación',
     credencial:'Ingresa tus credenciales del portal DGII',
-    wizard:    'Proceso de certificación ante la DGII · 6 fases',
+    wizard:    `Proceso de certificación ante la DGII · ${PHASES.length} fases`,
   };
 
   return (
@@ -3278,7 +3314,7 @@ export default function HabilitacionPage() {
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Habilitación e-CF</h1>
+              <h1 className="text-lg font-bold text-gray-900">Activar facturación electrónica</h1>
               <p className="text-xs text-gray-400 mt-0.5">{subtitles[stage]}</p>
             </div>
 
@@ -3382,25 +3418,51 @@ export default function HabilitacionPage() {
             />
           )}
 
-          {/* ── Wizard 6 fases ── */}
+          {/* ── Wizard 15 fases ── */}
           {stage === 'wizard' && (
             <div className="space-y-4">
               {!isDone && <EtapasHero />}
 
               <div className="flex gap-8">
-                <Sidebar phase={isDone ? PHASES.length : phase} completed={completed} onJump={handleJump} />
+                <Sidebar phase={phase} completed={completed} onJump={handleJump} />
                 <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-6 min-h-[540px]">
-                  {!isDone ? (
+                  {!viewingSummary ? (
                     <>
                       <div className="mb-6">
+                        {isDone && (
+                          <button
+                            type="button"
+                            onClick={() => setPhase(PHASES.length)}
+                            className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 mb-3"
+                          >
+                            <ChevronRight className="h-3 w-3 rotate-180" /> Volver al resumen
+                          </button>
+                        )}
                         <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
-                          <span className="shrink-0">Fase {phase + 1} de {PHASES.length}</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowMobileNav(v => !v)}
+                            className="md:pointer-events-none shrink-0 flex items-center gap-1 text-gray-400"
+                          >
+                            Fase {phase + 1} de {PHASES.length}
+                            <ChevronRight className={`md:hidden h-3 w-3 transition-transform ${showMobileNav ? 'rotate-90' : ''}`} />
+                          </button>
                           <div className="flex-1 bg-gray-100 rounded-full h-1.5">
                             <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500"
                               style={{ width: `${(completed.size / PHASES.length) * 100}%` }} />
                           </div>
                           <span className="shrink-0">{Math.round((completed.size / PHASES.length) * 100)}%</span>
                         </div>
+                        {showMobileNav && (
+                          <div className="md:hidden mb-4 rounded-xl border border-gray-200 p-2 select-none">
+                            <PhaseListItems
+                              phase={phase}
+                              completed={completed}
+                              onJump={handleJump}
+                              onSelect={() => setShowMobileNav(false)}
+                            />
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
                           <h2 className="text-xl font-bold text-gray-900">{PHASE_TITLES[phase]}</h2>
                           {mode === 'asistido' && (
