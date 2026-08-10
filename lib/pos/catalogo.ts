@@ -22,11 +22,15 @@ export interface ProductoPos {
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
   favorito:             boolean;
-  /** Stock en el almacén de la terminal. null si el producto no controla inventario. */
+  /** Stock en el almacén de la terminal. null si el producto no controla inventario.
+   *  Para productos con variantes es el stock GLOBAL (suma de variantes), no el
+   *  del almacén — las variantes usan stock global en este MVP. */
   stockAlmacen:         number | null;
   categoriaId:          number | null;
   categoriaNombre:      string | null;
   imagen:               string | null;
+  /** Ejes de variante del producto. Vacío = sin variantes. */
+  variantAtributos:     { nombre: string; valores: string[] }[];
 }
 
 export async function getCatalogoPos(
@@ -48,6 +52,8 @@ export async function getCatalogoPos(
       permiteVentaSinStock: products.permiteVentaSinStock,
       favorito:             products.posFavorito,
       stockAlmacen:         productAlmacenStock.stockActual,
+      stockGlobal:          products.stockActual,
+      variantAtributos:     products.variantAtributos,
       categoriaId:          products.categoriaId,
       categoriaNombre:      categorias.nombre,
       imagen:               products.imagen,
@@ -74,24 +80,34 @@ export async function getCatalogoPos(
       eq(products.teamId, teamId),
       eq(products.activo, 'true'),
       eq(products.visiblePos, true),
-      sql`(${products.controlaInventario} = false OR ${productAlmacenStock.id} IS NOT NULL)`,
+      // Aparece si: no controla inventario, tiene stock en este almacén, o tiene
+      // variantes (stock global — no vive en product_almacen_stock).
+      sql`(${products.controlaInventario} = false OR ${productAlmacenStock.id} IS NOT NULL OR jsonb_array_length(${products.variantAtributos}) > 0)`,
     ))
     .orderBy(desc(products.posFavorito), asc(products.nombre));
 
-  return rows.map((r) => ({
-    id: r.id,
-    nombre: r.nombre,
-    referencia: r.referencia,
-    codigoBarras: r.codigoBarras,
-    precio: r.precioLista ?? r.precio,
-    tasaItbis: r.tasaItbis,
-    tipo: r.tipo,
-    controlaInventario: r.controlaInventario,
-    permiteVentaSinStock: r.permiteVentaSinStock,
-    favorito: r.favorito,
-    stockAlmacen: r.controlaInventario ? Number(r.stockAlmacen ?? 0) : null,
-    categoriaId: r.categoriaId,
-    categoriaNombre: r.categoriaNombre,
-    imagen: r.imagen,
-  }));
+  return rows.map((r) => {
+    const variantAtributos = (r.variantAtributos as { nombre: string; valores: string[] }[] | null) ?? [];
+    const tieneVariantes = variantAtributos.length > 0;
+    return {
+      id: r.id,
+      nombre: r.nombre,
+      referencia: r.referencia,
+      codigoBarras: r.codigoBarras,
+      precio: r.precioLista ?? r.precio,
+      tasaItbis: r.tasaItbis,
+      tipo: r.tipo,
+      controlaInventario: r.controlaInventario,
+      permiteVentaSinStock: r.permiteVentaSinStock,
+      favorito: r.favorito,
+      // Con variantes: stock global (suma). Sin variantes: el del almacén.
+      stockAlmacen: tieneVariantes
+        ? Number(r.stockGlobal ?? 0)
+        : (r.controlaInventario ? Number(r.stockAlmacen ?? 0) : null),
+      categoriaId: r.categoriaId,
+      categoriaNombre: r.categoriaNombre,
+      imagen: r.imagen,
+      variantAtributos,
+    };
+  });
 }
