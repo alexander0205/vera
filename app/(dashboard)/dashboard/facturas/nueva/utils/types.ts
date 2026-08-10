@@ -23,6 +23,20 @@ export interface Producto {
   stockMinimo:          number;
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
+  // Ejes de variante del producto. Vacío/undefined = producto sin variantes.
+  variantAtributos?:    { nombre: string; valores: string[] }[];
+}
+
+/** Variante concreta de un producto (talla, color…), con su stock y precio. */
+export interface VariantePick {
+  id:           number;
+  nombre:       string;                    // display: "M" ó "Rojo · M"
+  atributos:    Record<string, string>;
+  referencia:   string | null;
+  codigoBarras: string | null;
+  stockActual:  number;
+  stockMinimo:  number;
+  precioDOP:    number;                     // override o precio del padre
 }
 
 /** Datos de un borrador guardado para pre-rellenar el form */
@@ -60,6 +74,9 @@ export interface BorradorInicial {
 export interface ItemLinea {
   id: number;
   productoId?: number;
+  /** Variante vendida (talla/color…). Presente solo si el producto tiene variantes. */
+  variantId?: number;
+  variantNombre?: string;
   nombreItem: string;
   referencia: string;
   descripcionItem: string;

@@ -7,11 +7,15 @@
  */
 
 import { db } from '@/lib/db/drizzle';
-import { products, inventoryMovements } from '@/lib/db/schema';
+import { products, productVariants, inventoryMovements } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 
 export interface ItemParaDescuento {
   productoId?:             number | null;
+  // Variante vendida (opcional). Si viene, el descuento pega al stock de la
+  // variante; el stock global del producto se ajusta en paralelo para que la
+  // suma siga cuadrando en listados y alertas.
+  variantId?:              number | null;
   cantidadItem:            number;
   indicadorBienoServicio?: 1 | 2;
 }
@@ -31,6 +35,7 @@ export async function descontarInventario(
 
   for (const item of bienesConId) {
     const productoId = item.productoId!;
+    const variantId  = item.variantId ?? null;
     try {
       await db.transaction(async (tx) => {
         const [prod] = await tx.execute<{ stock_actual: number; controla_inventario: boolean }>(sql`
@@ -43,16 +48,44 @@ export async function descontarInventario(
         if (!prod || !prod.controla_inventario) return;
 
         const cantidadInt  = Math.ceil(item.cantidadItem);
-        const stockAntes   = prod.stock_actual;
-        const stockDespues = Math.max(0, stockAntes - cantidadInt);
 
-        await tx.update(products)
-          .set({ stockActual: stockDespues, updatedAt: new Date() })
-          .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
+        // Con variante: el conteo real es el de la variante. Se baja su stock y,
+        // en paralelo, el stock global del producto (que guarda la suma) para que
+        // los listados y alertas sigan cuadrando.
+        let stockAntes:   number;
+        let stockDespues: number;
+        if (variantId) {
+          const [variante] = await tx.execute<{ stock_actual: number }>(sql`
+            SELECT stock_actual
+            FROM product_variants
+            WHERE id = ${variantId} AND product_id = ${productoId} AND team_id = ${teamId}
+            FOR UPDATE
+          `);
+          if (!variante) return; // variante inexistente → no tocar nada
+          stockAntes   = variante.stock_actual;
+          stockDespues = Math.max(0, stockAntes - cantidadInt);
+
+          await tx.update(productVariants)
+            .set({ stockActual: stockDespues, updatedAt: new Date() })
+            .where(and(eq(productVariants.id, variantId), eq(productVariants.teamId, teamId)));
+
+          // Stock global del producto = suma de variantes; bajarlo en paralelo.
+          await tx.update(products)
+            .set({ stockActual: Math.max(0, prod.stock_actual - cantidadInt), updatedAt: new Date() })
+            .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
+        } else {
+          stockAntes   = prod.stock_actual;
+          stockDespues = Math.max(0, stockAntes - cantidadInt);
+
+          await tx.update(products)
+            .set({ stockActual: stockDespues, updatedAt: new Date() })
+            .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
+        }
 
         await tx.insert(inventoryMovements).values({
           teamId,
           productoId,
+          variantId,
           tipo:           'VENTA',
           cantidad:       cantidadInt,
           esEntrada:      false,

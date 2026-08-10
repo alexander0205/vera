@@ -127,6 +127,8 @@ export function buildPayload(input: BuildPayloadInput) {
           // Control de inventario — sin esto el backend no puede descontar stock
           // (ver lib/inventario/descuento.ts: filtra por productoId > 0).
           productoId:             item.productoId ?? undefined,
+          // Variante vendida — el descuento pega a la variante (no al producto plano).
+          variantId:              item.variantId ?? undefined,
           // Beneficiario por línea — el backend valida items[].dependienteId.
           dependienteId:          item.dependienteId ?? undefined,
           dependienteNombre:      item.dependienteNombre || undefined,
@@ -169,6 +171,8 @@ export function buildPayload(input: BuildPayloadInput) {
         unidadMedida:           i.unidadMedida,
         referencia:             i.referencia,
         productoId:             i.productoId,
+        variantId:              i.variantId ?? null,
+        variantNombre:          i.variantNombre ?? null,
         dependienteId:          i.dependienteId ?? null,
         dependienteNombre:      i.dependienteNombre ?? '',
       }))

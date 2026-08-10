@@ -8,11 +8,14 @@
  */
 
 import { db } from '@/lib/db/drizzle';
-import { products, inventoryMovements } from '@/lib/db/schema';
+import { products, productVariants, inventoryMovements } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 
 export interface ItemParaDevolucion {
   productoId?:             number | null;
+  // Variante devuelta (opcional). Espejo del descuento: si viene, restaura el
+  // stock de la variante y el global del producto en paralelo.
+  variantId?:              number | null;
   cantidadItem:            number;
   indicadorBienoServicio?: 1 | 2;
 }
@@ -32,6 +35,7 @@ export async function restaurarInventario(
 
   for (const item of bienesConId) {
     const productoId = item.productoId!;
+    const variantId  = item.variantId ?? null;
     try {
       await db.transaction(async (tx) => {
         const [prod] = await tx.execute<{ stock_actual: number; controla_inventario: boolean }>(sql`
@@ -44,16 +48,42 @@ export async function restaurarInventario(
         if (!prod || !prod.controla_inventario) return;
 
         const cantidadInt  = Math.ceil(item.cantidadItem);
-        const stockAntes   = prod.stock_actual;
-        const stockDespues = stockAntes + cantidadInt;
 
-        await tx.update(products)
-          .set({ stockActual: stockDespues, updatedAt: new Date() })
-          .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
+        // Con variante: se restaura el stock de la variante y, en paralelo, el
+        // stock global del producto (que guarda la suma).
+        let stockAntes:   number;
+        let stockDespues: number;
+        if (variantId) {
+          const [variante] = await tx.execute<{ stock_actual: number }>(sql`
+            SELECT stock_actual
+            FROM product_variants
+            WHERE id = ${variantId} AND product_id = ${productoId} AND team_id = ${teamId}
+            FOR UPDATE
+          `);
+          if (!variante) return; // variante inexistente → no tocar nada
+          stockAntes   = variante.stock_actual;
+          stockDespues = stockAntes + cantidadInt;
+
+          await tx.update(productVariants)
+            .set({ stockActual: stockDespues, updatedAt: new Date() })
+            .where(and(eq(productVariants.id, variantId), eq(productVariants.teamId, teamId)));
+
+          await tx.update(products)
+            .set({ stockActual: prod.stock_actual + cantidadInt, updatedAt: new Date() })
+            .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
+        } else {
+          stockAntes   = prod.stock_actual;
+          stockDespues = stockAntes + cantidadInt;
+
+          await tx.update(products)
+            .set({ stockActual: stockDespues, updatedAt: new Date() })
+            .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
+        }
 
         await tx.insert(inventoryMovements).values({
           teamId,
           productoId,
+          variantId,
           tipo:           'DEVOLUCION',
           cantidad:       cantidadInt,
           esEntrada:      true,

@@ -51,6 +51,8 @@ const itemSchema = z.object({
   dependienteNombre:      z.string().max(255).optional(),
   // Control de inventario — metadato, no va al XML DGII
   productoId:             z.number().int().positive().optional().nullable(),
+  // Variante vendida — el descuento de stock pega a esta variante (lib/inventario/descuento.ts).
+  variantId:              z.number().int().positive().optional().nullable(),
 });
 
 const retencionSchema = z.object({
@@ -640,6 +642,7 @@ export async function POST(request: NextRequest) {
             const lineasViejas = JSON.parse(existing.lineasJson) as Array<Record<string, unknown>>;
             const itemsViejos = lineasViejas.map(i => ({
               productoId:             i.productoId ? Number(i.productoId) : null,
+              variantId:              i.variantId ? Number(i.variantId) : null,
               cantidadItem:           Number(i.cantidadItem) || 0,
               indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 as const : 2 as const,
             }));
@@ -1208,6 +1211,7 @@ export async function POST(request: NextRequest) {
     const lineasJsonParaGuardar = data.lineasJson
       ?? JSON.stringify(data.items.map(item => ({
           productoId:         item.productoId ?? null,
+          variantId:          item.variantId ?? null,
           nombreItem:         item.nombreItem,
           descripcionItem:    item.descripcionItem,
           cantidadItem:       item.cantidadItem,

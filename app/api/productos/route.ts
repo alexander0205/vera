@@ -6,10 +6,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { products } from '@/lib/db/schema';
+import { products, productVariants } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { eq, ilike, or, and, sql, getTableColumns } from 'drizzle-orm';
+
+// Ejes de variante definidos por el usuario (MVP "por producto"):
+// [{ nombre: "Talla", valores: ["M","L","XL"] }]
+const variantAtributoSchema = z.object({
+  nombre:  z.string().min(1).max(50),
+  valores: z.array(z.string().min(1).max(50)).min(1),
+});
+
+// Una combinación concreta con su stock (MVP "global": una sola cifra).
+const variantSchema = z.object({
+  atributos:    z.record(z.string(), z.string()),   // { "Talla": "M" }
+  nombre:       z.string().min(1).max(255),          // display: "M" ó "Rojo · M"
+  referencia:   z.string().max(100).optional().nullable(),
+  codigoBarras: z.string().max(64).optional().nullable(),
+  precio:       z.number().min(0).optional().nullable(), // null = hereda del padre
+  costo:        z.number().min(0).optional(),
+  stockActual:  z.number().int().min(0).optional(),
+  stockMinimo:  z.number().int().min(0).optional(),
+});
 
 const productoSchema = z.object({
   nombre:               z.string().min(1, 'El nombre es obligatorio').max(255),
@@ -27,6 +46,10 @@ const productoSchema = z.object({
   permiteVentaSinStock: z.boolean().optional(),
   categoriaId:          z.number().int().positive().optional().nullable(),
   imagen:               z.string().max(1_500_000).optional().nullable(),
+  // Variantes (opcional). Si `variants` viene con filas, el producto se marca
+  // como bien con control de inventario y su stock global es la suma de variantes.
+  variantAtributos:     z.array(variantAtributoSchema).max(5).optional(),
+  variants:             z.array(variantSchema).max(200).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -99,29 +122,58 @@ export async function POST(req: NextRequest) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
-    categoriaId, imagen,
+    categoriaId, imagen, variantAtributos, variants,
   } = parsed.data;
 
-  const [created] = await db.insert(products).values({
-    teamId,
-    nombre,
-    descripcion:          descripcion  || null,
-    referencia:           referencia   || null,
-    codigoBarras:         codigoBarras || null,
-    precio:               Math.round(precio * 100),
-    tasaItbis,
-    tipo,
-    activo:               'true',
-    createdBy:            user.id,
-    unidadMedida:         unidadMedida ?? 'Unidad',
-    costo:                Math.round((costo ?? 0) * 100),
-    stockActual:          stockActual ?? 0,
-    stockMinimo:          stockMinimo ?? 0,
-    categoriaId:          categoriaId ?? null,
-    imagen:               imagen ?? null,
-    controlaInventario:   tipo === 'bien' ? (controlaInventario ?? false) : false,
-    permiteVentaSinStock: permiteVentaSinStock ?? true,
-  }).returning();
+  // Solo un bien puede llevar variantes; en servicios se ignoran.
+  const conVariantes = tipo === 'bien' && !!variants && variants.length > 0;
+  // Con variantes el conteo real vive por variante; el stock global del producto
+  // se guarda como la SUMA (para listados/alertas) y siempre controla inventario.
+  const stockGlobalVariantes = conVariantes
+    ? variants!.reduce((s, v) => s + (v.stockActual ?? 0), 0)
+    : null;
+
+  const created = await db.transaction(async (tx) => {
+    const [prod] = await tx.insert(products).values({
+      teamId,
+      nombre,
+      descripcion:          descripcion  || null,
+      referencia:           referencia   || null,
+      codigoBarras:         codigoBarras || null,
+      precio:               Math.round(precio * 100),
+      tasaItbis,
+      tipo,
+      activo:               'true',
+      createdBy:            user.id,
+      unidadMedida:         unidadMedida ?? 'Unidad',
+      costo:                Math.round((costo ?? 0) * 100),
+      stockActual:          conVariantes ? stockGlobalVariantes! : (stockActual ?? 0),
+      stockMinimo:          stockMinimo ?? 0,
+      categoriaId:          categoriaId ?? null,
+      imagen:               imagen ?? null,
+      controlaInventario:   tipo === 'bien' ? (conVariantes || (controlaInventario ?? false)) : false,
+      permiteVentaSinStock: permiteVentaSinStock ?? true,
+      variantAtributos:     conVariantes ? (variantAtributos ?? []) : [],
+    }).returning();
+
+    if (conVariantes) {
+      await tx.insert(productVariants).values(
+        variants!.map((v) => ({
+          teamId,
+          productId:    prod.id,
+          atributos:    v.atributos,
+          nombre:       v.nombre,
+          referencia:   v.referencia   || null,
+          codigoBarras: v.codigoBarras || null,
+          precio:       v.precio != null ? Math.round(v.precio * 100) : null,
+          costo:        Math.round((v.costo ?? 0) * 100),
+          stockActual:  v.stockActual ?? 0,
+          stockMinimo:  v.stockMinimo ?? 0,
+        })),
+      );
+    }
+    return prod;
+  });
 
   return NextResponse.json({ ok: true, producto: { ...created, precioDOP: created.precio / 100, costoDOP: created.costo / 100 } }, { status: 201 });
 }
