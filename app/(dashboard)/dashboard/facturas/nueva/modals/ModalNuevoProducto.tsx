@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import { Check, ChevronDown, ChevronUp, Loader2, PackagePlus, Plus, X, Layers } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Loader2, PackagePlus } from 'lucide-react';
+import { VariantesEditor, type VariantesPayload } from '@/components/productos/VariantesEditor';
 import type { Producto } from '../utils/types';
 
 const TASA_ITBIS_MODAL = [
@@ -28,26 +29,7 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
   { value: 'combo',    label: 'Combo', disabled: true },
 ];
 
-// ─── Variantes ────────────────────────────────────────────────────────────────
-// Eje = un atributo definido por el usuario (Talla, Color, Sabor…) con sus
-// valores. Las combinaciones (producto cartesiano de los ejes) son las variantes.
-
-interface Eje { nombre: string; valores: string[]; }
-
-/** Producto cartesiano de los valores de cada eje → lista de combinaciones.
- *  Cada combinación es un arreglo de pares [ejeNombre, valor]. */
-function combinaciones(ejes: Eje[]): [string, string][][] {
-  const activos = ejes.filter(e => e.nombre.trim() && e.valores.length > 0);
-  if (activos.length === 0) return [];
-  return activos.reduce<[string, string][][]>(
-    (acc, eje) =>
-      acc.flatMap(combo => eje.valores.map(v => [...combo, [eje.nombre.trim(), v] as [string, string]])),
-    [[]],
-  );
-}
-
-/** Clave estable de una combinación, para indexar stock/precio. */
-const comboKey = (combo: [string, string][]) => combo.map(([, v]) => v).join(' · ');
+const SIN_VARIANTES: VariantesPayload = { activo: false, variantAtributos: [], variants: [] };
 
 export function ModalNuevoProducto({ open, onClose, onCreated }: {
   open: boolean; onClose: () => void; onCreated: (p: Producto) => void;
@@ -56,64 +38,27 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
   const [saving, setSaving]             = useState(false);
   const [error, setError]               = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
+  const [variantes, setVariantes]       = useState<VariantesPayload>(SIN_VARIANTES);
+  const [resetVariantes, setResetVariantes] = useState(0);
 
-  // Variantes
-  const [variantesOn, setVariantesOn] = useState(false);
-  const [ejes, setEjes]               = useState<Eje[]>([{ nombre: '', valores: [] }]);
-  const [valorInput, setValorInput]   = useState<Record<number, string>>({});
-  // Stock y precio (override) por combinación, indexado por comboKey.
-  const [stockCombo, setStockCombo]   = useState<Record<string, string>>({});
-  const [precioCombo, setPrecioCombo] = useState<Record<string, string>>({});
-
-  const combos = useMemo(() => (variantesOn ? combinaciones(ejes) : []), [variantesOn, ejes]);
-  const usaVariantes = form.tipo === 'bien' && variantesOn && combos.length > 0;
+  const usaVariantes = form.tipo === 'bien' && variantes.activo;
 
   function resetAll() {
     setForm({ nombre: '', precio: '', tasaItbis: 'exento', tipo: 'servicio', descripcion: '', unidad: 'Unidad', cantidadInicial: '' });
     setShowAvanzado(false);
-    setVariantesOn(false);
-    setEjes([{ nombre: '', valores: [] }]);
-    setValorInput({});
-    setStockCombo({});
-    setPrecioCombo({});
-  }
-
-  // ── Manejo de ejes ──────────────────────────────────────────────────────────
-  function setEjeNombre(idx: number, nombre: string) {
-    setEjes(prev => prev.map((e, i) => (i === idx ? { ...e, nombre } : e)));
-  }
-  function addValor(idx: number) {
-    const raw = (valorInput[idx] ?? '').trim();
-    if (!raw) return;
-    setEjes(prev => prev.map((e, i) => (i === idx && !e.valores.includes(raw) ? { ...e, valores: [...e.valores, raw] } : e)));
-    setValorInput(prev => ({ ...prev, [idx]: '' }));
-  }
-  function removeValor(idx: number, valor: string) {
-    setEjes(prev => prev.map((e, i) => (i === idx ? { ...e, valores: e.valores.filter(v => v !== valor) } : e)));
-  }
-  function addEje() {
-    if (ejes.length >= 3) return; // MVP: hasta 3 ejes
-    setEjes(prev => [...prev, { nombre: '', valores: [] }]);
-  }
-  function removeEje(idx: number) {
-    setEjes(prev => prev.filter((_, i) => i !== idx));
+    setVariantes(SIN_VARIANTES);
+    setResetVariantes(n => n + 1);
   }
 
   async function handleSave() {
     if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
-
-    if (usaVariantes) {
-      const ejesValidos = ejes.filter(e => e.nombre.trim() && e.valores.length > 0);
-      if (ejesValidos.length === 0) { setError('Define al menos un eje de variante con sus valores'); return; }
-    }
-
     setSaving(true); setError(null);
     try {
       const cantidadInicial = parseInt(form.cantidadInicial, 10);
       const tieneStockInicial =
         form.tipo === 'bien' && !usaVariantes && form.cantidadInicial.trim() !== '' && !isNaN(cantidadInicial);
 
-      const payload: Record<string, unknown> = {
+      const payload = {
         nombre:       form.nombre,
         precio:       parseFloat(form.precio) || 0,
         tasaItbis:    form.tasaItbis,
@@ -124,24 +69,11 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
           controlaInventario: true,
           stockActual:        Math.max(0, cantidadInicial),
         }),
+        ...(usaVariantes && {
+          variantAtributos: variantes.variantAtributos,
+          variants:         variantes.variants,
+        }),
       };
-
-      if (usaVariantes) {
-        const ejesValidos = ejes.filter(e => e.nombre.trim() && e.valores.length > 0);
-        payload.variantAtributos = ejesValidos.map(e => ({ nombre: e.nombre.trim(), valores: e.valores }));
-        payload.variants = combos.map(combo => {
-          const key = comboKey(combo);
-          const stock = parseInt(stockCombo[key] ?? '', 10);
-          const precioOverride = parseFloat(precioCombo[key] ?? '');
-          return {
-            atributos: Object.fromEntries(combo),
-            nombre:    key,
-            stockActual: isNaN(stock) ? 0 : Math.max(0, stock),
-            ...(isNaN(precioOverride) ? {} : { precio: Math.max(0, precioOverride) }),
-          };
-        });
-      }
-
       const res  = await fetch('/api/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -232,7 +164,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
           </div>
 
           {/* Cantidad inicial — solo si es bien SIN variantes (con variantes el stock va por variante) */}
-          {form.tipo === 'bien' && !variantesOn && (
+          {form.tipo === 'bien' && !usaVariantes && (
             <div className="space-y-1.5">
               <Label>Cantidad inicial en inventario</Label>
               <Input type="number" min={0} step={1} placeholder="0"
@@ -242,113 +174,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
 
           {/* Variantes — solo para bienes */}
           {form.tipo === 'bien' && (
-            <div className="rounded-lg border border-gray-200 p-4 space-y-3">
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input type="checkbox" className="h-4 w-4 accent-teal-600"
-                  checked={variantesOn} onChange={(e) => setVariantesOn(e.target.checked)} />
-                <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
-                  <Layers className="h-4 w-4 text-teal-600" />
-                  Este producto tiene variantes (tallas, colores…)
-                </span>
-              </label>
-
-              {variantesOn && (
-                <div className="space-y-4 pt-1">
-                  {/* Ejes */}
-                  <div className="space-y-3">
-                    {ejes.map((eje, idx) => (
-                      <div key={idx} className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Input
-                            className="bg-white"
-                            placeholder="Nombre del eje (ej. Talla)"
-                            value={eje.nombre}
-                            onChange={(e) => setEjeNombre(idx, e.target.value)}
-                          />
-                          {ejes.length > 1 && (
-                            <button type="button" onClick={() => removeEje(idx)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" title="Quitar eje">
-                              <X className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Chips de valores */}
-                        {eje.valores.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {eje.valores.map(v => (
-                              <span key={v} className="inline-flex items-center gap-1 bg-teal-100 text-teal-800 text-xs font-medium px-2 py-1 rounded-full">
-                                {v}
-                                <button type="button" onClick={() => removeValor(idx, v)} className="hover:text-teal-950">
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-2">
-                          <Input
-                            className="bg-white"
-                            placeholder="Agregar valor (ej. M) y Enter"
-                            value={valorInput[idx] ?? ''}
-                            onChange={(e) => setValorInput(prev => ({ ...prev, [idx]: e.target.value }))}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addValor(idx); } }}
-                          />
-                          <Button type="button" variant="outline" size="sm" onClick={() => addValor(idx)}>
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-
-                    {ejes.length < 3 && (
-                      <button type="button" onClick={addEje}
-                        className="flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900 font-medium">
-                        <Plus className="h-4 w-4" /> Agregar otro eje
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Combinaciones generadas */}
-                  {combos.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        {combos.length} {combos.length === 1 ? 'variante' : 'variantes'}
-                      </p>
-                      <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-                        <div className="grid grid-cols-[1fr_5rem_6rem] gap-2 px-3 py-2 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase">
-                          <span>Variante</span>
-                          <span className="text-right">Stock</span>
-                          <span className="text-right">Precio</span>
-                        </div>
-                        {combos.map(combo => {
-                          const key = comboKey(combo);
-                          return (
-                            <div key={key} className="grid grid-cols-[1fr_5rem_6rem] gap-2 px-3 py-2 items-center">
-                              <span className="text-sm text-gray-800">{key}</span>
-                              <Input
-                                type="number" min={0} step={1} placeholder="0"
-                                className="h-8 text-right"
-                                value={stockCombo[key] ?? ''}
-                                onChange={(e) => setStockCombo(prev => ({ ...prev, [key]: e.target.value }))}
-                              />
-                              <Input
-                                type="number" min={0} step={0.01} placeholder="base"
-                                className="h-8 text-right"
-                                value={precioCombo[key] ?? ''}
-                                onChange={(e) => setPrecioCombo(prev => ({ ...prev, [key]: e.target.value }))}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <p className="text-[11px] text-gray-400">Precio vacío = usa el precio base del producto.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <VariantesEditor onChange={setVariantes} resetSignal={resetVariantes} />
           )}
 
           <div>

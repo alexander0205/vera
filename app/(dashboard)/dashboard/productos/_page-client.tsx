@@ -18,6 +18,7 @@ import {
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { ImportModal } from '@/components/import-modal';
 import MaestrosProductoSection from './MaestrosProductoSection';
+import { VariantesEditor, type VariantesPayload } from '@/components/productos/VariantesEditor';
 
 interface Producto {
   id:                   number;
@@ -101,6 +102,11 @@ export default function ProductosPage() {
   const [opError, setOpError]           = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
   const [categorias, setCategorias]     = useState<Categoria[]>([]);
+  // Variantes — solo al crear un bien (gestionar variantes existentes al editar
+  // requiere UI aparte, fuera de este MVP).
+  const [variantes, setVariantes]           = useState<VariantesPayload>({ activo: false, variantAtributos: [], variants: [] });
+  const [resetVariantes, setResetVariantes] = useState(0);
+  const usaVariantes = !editTarget && form.tipo === 'bien' && variantes.activo;
 
   useEffect(() => {
     fetch('/api/categorias').then((r) => r.json()).then((d) => setCategorias(d.categorias ?? []));
@@ -134,6 +140,8 @@ export default function ProductosPage() {
     setForm(EMPTY_FORM);
     setOpError(null);
     setShowAvanzado(false);
+    setVariantes({ activo: false, variantAtributos: [], variants: [] });
+    setResetVariantes(n => n + 1);
     setShowForm(true);
   }
 
@@ -199,11 +207,17 @@ export default function ProductosPage() {
           permiteVentaSinStock: form.permiteVentaSinStock,
           categoriaId:          form.categoriaId ? Number(form.categoriaId) : null,
           imagen:               form.imagen || null,
+          // Variantes: el backend fuerza controlaInventario y stock = suma.
+          ...(usaVariantes && {
+            variantAtributos: variantes.variantAtributos,
+            variants:         variantes.variants,
+          }),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error guardando');
       setShowForm(false);
+      setResetVariantes(n => n + 1);
       cargar(search, tipoFilter);
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error guardando');
@@ -485,8 +499,14 @@ export default function ProductosPage() {
                 </div>
               )}
 
-              {/* Control de inventario — solo para bienes */}
-              {form.tipo === 'bien' && (
+              {/* Variantes — solo al crear un bien */}
+              {!editTarget && form.tipo === 'bien' && (
+                <VariantesEditor onChange={setVariantes} resetSignal={resetVariantes} />
+              )}
+
+              {/* Control de inventario — solo para bienes sin variantes
+                  (con variantes el stock se define por variante en el editor). */}
+              {form.tipo === 'bien' && !usaVariantes && (
                 <div className="space-y-3 border border-dashed border-teal-200 rounded-lg p-4 bg-teal-50/30">
                   <div className="flex items-center justify-between">
                     <div>
