@@ -10,8 +10,6 @@ import { RncSearch } from '@/components/RncSearch';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 import { ConfirmarMetodoPagoDialog, type ResumenMetodo } from '@/components/pagos/ConfirmarMetodoPagoDialog';
-import { ModalSeleccionarVariante } from '@/app/(dashboard)/dashboard/facturas/nueva/modals/ModalSeleccionarVariante';
-import type { VariantePick } from '@/app/(dashboard)/dashboard/facturas/nueva/utils/types';
 
 // ─── Tipos (subset de las props del server) ──────────────────────────────────
 
@@ -52,26 +50,12 @@ interface ProductoPos {
   categoriaId:          number | null;
   categoriaNombre:      string | null;
   imagen:               string | null;
-  variantAtributos?:    { nombre: string; valores: string[] }[];
 }
-interface LineaCarrito extends ProductoPos {
-  qty: number;
-  precioOverride?: number;
-  /** Variante vendida (talla/color…). Presente solo en productos con variantes. */
-  variantId?: number;
-  variantNombre?: string;
-}
+interface LineaCarrito extends ProductoPos { qty: number; precioOverride?: number; }
 
 /** Precio efectivo de una línea: el editado manualmente o el de catálogo. */
 function precioLinea(it: LineaCarrito): number {
   return it.precioOverride ?? it.precio;
-}
-
-/** Clave estable de una línea del carrito. Con variante, dos líneas del mismo
- *  producto (tallas distintas) son líneas separadas, así que la clave combina
- *  producto + variante. Sin variante es solo el id del producto. */
-function lineKey(c: { id: number; variantId?: number }): string {
-  return c.variantId ? `${c.id}:${c.variantId}` : String(c.id);
 }
 
 interface ListaPrecio { id: number; nombre: string; }
@@ -141,13 +125,11 @@ function iniciales(nombre: string): string {
 function fmt(centavos: number): string {
   return 'RD$ ' + (centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-// `ids` son claves de línea (lineKey), no ids de producto — así el descuento se
-// aplica a la línea exacta aunque haya varias variantes del mismo producto.
-interface DescuentoAplicado { pct: number; ids: Set<string>; }
+interface DescuentoAplicado { pct: number; ids: Set<number>; }
 
 /** Descuento (centavos) que aplica a una línea del carrito, 0 si no está seleccionada. */
 function descuentoLinea(it: LineaCarrito, descuento: DescuentoAplicado | null): number {
-  if (!descuento || !descuento.ids.has(lineKey(it))) return 0;
+  if (!descuento || !descuento.ids.has(it.id)) return 0;
   return Math.round(precioLinea(it) * it.qty * descuento.pct / 100);
 }
 
@@ -300,8 +282,6 @@ function Venta({
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState<number | 'todas'>('todas');
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
-  // Producto con variantes tocado en la grilla: abre el selector de variante.
-  const [variantePickPos, setVariantePickPos] = useState<ProductoPos | null>(null);
   const [cobrando, setCobrando] = useState(false);
   /**
    * Cuando el envío a DGII falla, el backend deja el e-NCF reservado en un
@@ -410,15 +390,12 @@ function Venta({
 
   const totales = useMemo(() => totalesCarrito(carrito, descuentoAplicado), [carrito, descuentoAplicado]);
 
-  function qtyEnLinea(key: string) {
-    return carrito.find((c) => lineKey(c) === key)?.qty ?? 0;
+  function qtyEnCarrito(id: number) {
+    return carrito.find((c) => c.id === id)?.qty ?? 0;
   }
 
   function agregar(p: ProductoPos) {
-    // Producto con variantes: hay que elegir cuál (talla/color) antes de sumar.
-    if ((p.variantAtributos?.length ?? 0) > 0) { setVariantePickPos(p); return; }
-    const key = lineKey(p);
-    const yaEnCarrito = qtyEnLinea(key);
+    const yaEnCarrito = qtyEnCarrito(p.id);
     if (p.controlaInventario && !p.permiteVentaSinStock) {
       const disp = p.stockAlmacen ?? 0;
       if (yaEnCarrito + 1 > disp) {
@@ -427,37 +404,9 @@ function Venta({
       }
     }
     setCarrito((prev) => {
-      const ex = prev.find((c) => lineKey(c) === key);
-      if (ex) return prev.map((c) => (lineKey(c) === key ? { ...c, qty: c.qty + 1 } : c));
+      const ex = prev.find((c) => c.id === p.id);
+      if (ex) return prev.map((c) => (c.id === p.id ? { ...c, qty: c.qty + 1 } : c));
       return [...prev, { ...p, qty: 1 }];
-    });
-  }
-
-  /** Agrega una variante concreta al carrito como su propia línea. */
-  function agregarVariante(p: ProductoPos, v: VariantePick) {
-    const linea: LineaCarrito = {
-      ...p,
-      qty:           1,
-      variantId:     v.id,
-      variantNombre: v.nombre,
-      nombre:        `${p.nombre} · ${v.nombre}`,
-      precio:        Math.round(v.precioDOP * 100),
-      referencia:    v.referencia ?? p.referencia,
-      // El chequeo de stock por línea usa el stock de ESTA variante.
-      stockAlmacen:  v.stockActual,
-    };
-    const key = lineKey(linea);
-    if (p.controlaInventario && !p.permiteVentaSinStock) {
-      const disp = v.stockActual ?? 0;
-      if (qtyEnLinea(key) + 1 > disp) {
-        toast.error(`Sin stock suficiente de "${linea.nombre}" (${disp} disp.)`);
-        return;
-      }
-    }
-    setCarrito((prev) => {
-      const ex = prev.find((c) => lineKey(c) === key);
-      if (ex) return prev.map((c) => (lineKey(c) === key ? { ...c, qty: c.qty + 1 } : c));
-      return [...prev, linea];
     });
   }
 
@@ -485,18 +434,18 @@ function Venta({
     if (!res.ok) { toast.error('No se pudo cambiar favorito'); cargarCatalogo(); }
   }
 
-  function cambiarQty(key: string, delta: number) {
+  function cambiarQty(id: number, delta: number) {
     setCarrito((prev) =>
       prev
-        .map((c) => (lineKey(c) === key ? { ...c, qty: c.qty + delta } : c))
+        .map((c) => (c.id === id ? { ...c, qty: c.qty + delta } : c))
         .filter((c) => c.qty > 0),
     );
   }
 
   /** Fija un precio manual (centavos) a la línea; null restaura el de catálogo. */
-  function editarPrecio(key: string, centavos: number | null) {
+  function editarPrecio(id: number, centavos: number | null) {
     setCarrito((prev) =>
-      prev.map((c) => (lineKey(c) === key
+      prev.map((c) => (c.id === id
         ? { ...c, precioOverride: centavos == null ? undefined : Math.max(0, centavos) }
         : c)),
     );
@@ -610,7 +559,7 @@ function Venta({
       productoId: c.id > 0 ? c.id : null,
       nombre: c.nombre, precioCentavos: precioLinea(c), qty: c.qty,
       tasaItbis: c.tasaItbis, tipo: c.tipo,
-      descuentoPct: descuentoAplicado?.ids.has(lineKey(c)) ? descuentoAplicado.pct : 0,
+      descuentoPct: descuentoAplicado?.ids.has(c.id) ? descuentoAplicado.pct : 0,
     }));
     const res = await fetch(`/api/pos/comandas/${comandaId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -669,8 +618,6 @@ function Venta({
         tasaItbis:              tasaFloat(c.tasaItbis) as 0 | 0.16 | 0.18,
         indicadorBienoServicio: (c.tipo === 'bien' ? 1 : 2) as 1 | 2,
         productoId:             c.id,
-        // Variante vendida → el descuento de stock pega a la variante.
-        variantId:              c.variantId ?? undefined,
       };
     });
 
@@ -685,22 +632,19 @@ function Venta({
         tasaItbis:              0,
         indicadorBienoServicio: 2,
         productoId:             undefined as unknown as number,
-        variantId:              undefined,
       });
     }
 
     // Persistir las líneas (detalle de venta + ticket). Forma compatible con ItemLinea[].
     const lineasBase = carrito.map((c, i) => ({
-      id: i + 1, productoId: c.id, variantId: c.variantId ?? null, variantNombre: c.variantNombre ?? null,
-      nombreItem: c.nombre, referencia: c.referencia ?? '',
+      id: i + 1, productoId: c.id, nombreItem: c.nombre, referencia: c.referencia ?? '',
       descripcionItem: '', cantidadItem: c.qty, precioUnitarioItem: precioLinea(c) / 100,
-      descuentoPct: (descuentoAplicado?.ids.has(lineKey(c)) ? descuentoAplicado.pct : 0),
+      descuentoPct: (descuentoAplicado?.ids.has(c.id) ? descuentoAplicado.pct : 0),
       tasaItbis: c.tasaItbis, indicadorBienoServicio: c.tipo === 'bien' ? '1' : '2',
     }));
     if (propinaCentavos > 0) {
       lineasBase.push({
-        id: lineasBase.length + 1, productoId: 0, variantId: null, variantNombre: null,
-        nombreItem: 'Propina', referencia: '',
+        id: lineasBase.length + 1, productoId: 0, nombreItem: 'Propina', referencia: '',
         descripcionItem: '', cantidadItem: 1, precioUnitarioItem: propinaCentavos / 100,
         descuentoPct: 0, tasaItbis: 'exento', indicadorBienoServicio: '2',
       });
@@ -948,8 +892,7 @@ function Venta({
             <div className="grid flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-auto pb-24 sm:grid-cols-3 md:pb-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtrados.map((p) => {
                 const agotado = p.controlaInventario && !p.permiteVentaSinStock && (p.stockAlmacen ?? 0) <= 0;
-                // Suma de todas las líneas de este producto (incluye sus variantes).
-                const qty = carrito.filter((c) => c.id === p.id).reduce((s, c) => s + c.qty, 0);
+                const qty = qtyEnCarrito(p.id);
                 return (
                   <button
                     key={p.id}
@@ -1100,19 +1043,6 @@ function Venta({
           onCerrado={() => { setCierreAbierto(false); router.refresh(); }}
         />
       )}
-
-      {variantePickPos && (
-        <ModalSeleccionarVariante
-          open
-          productoId={variantePickPos.id}
-          productoNombre={variantePickPos.nombre}
-          onClose={() => setVariantePickPos(null)}
-          onPick={(v) => {
-            agregarVariante(variantePickPos, v);
-            setVariantePickPos(null);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -1127,8 +1057,8 @@ function CarritoPanel({
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
-  cambiarQty: (key: string, delta: number) => void;
-  editarPrecio: (key: string, centavos: number | null) => void;
+  cambiarQty: (id: number, delta: number) => void;
+  editarPrecio: (id: number, centavos: number | null) => void;
   cobrando: boolean;
   onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
   escolar: boolean;
@@ -1245,18 +1175,18 @@ function CarritoPanel({
           carrito.map((c) => {
             const desc = descuentoLinea(c, descuentoAplicado);
             return (
-              <div key={lineKey(c)} className="flex items-center justify-between gap-2 border-b border-gray-100 py-3">
+              <div key={c.id} className="flex items-center justify-between gap-2 border-b border-gray-100 py-3">
                 <div className="min-w-0 leading-tight">
                   <div className="truncate text-base font-medium">{c.nombre}</div>
                   <div className="mt-0.5 flex items-center gap-1 text-sm text-gray-400">
-                    <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(lineKey(c), cents)} bloqueado={bloquearPrecios} />
+                    <PrecioEditable linea={c} onEditar={(cents) => editarPrecio(c.id, cents)} bloqueado={bloquearPrecios} />
                     {desc > 0 && <span className="text-emerald-600">−{descuentoAplicado!.pct}%</span>}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <button onClick={() => cambiarQty(lineKey(c), -1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">−</button>
+                  <button onClick={() => cambiarQty(c.id, -1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">−</button>
                   <span className="w-7 text-center text-lg font-semibold">{c.qty}</span>
-                  <button onClick={() => cambiarQty(lineKey(c), 1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">+</button>
+                  <button onClick={() => cambiarQty(c.id, 1)} className="flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-2xl text-gray-600 active:bg-gray-50">+</button>
                 </div>
               </div>
             );
@@ -1312,18 +1242,18 @@ function DescuentosPanel({ carrito, aplicado, onAplicar, onClose }: {
   onClose: () => void;
 }) {
   const [pct, setPct] = useState(aplicado ? String(aplicado.pct) : '');
-  const [seleccion, setSeleccion] = useState<Set<string>>(aplicado?.ids ?? new Set(carrito.map((c) => lineKey(c))));
+  const [seleccion, setSeleccion] = useState<Set<number>>(aplicado?.ids ?? new Set(carrito.map((c) => c.id)));
 
-  function toggle(key: string) {
+  function toggle(id: number) {
     setSeleccion((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
 
   function toggleTodos() {
-    setSeleccion((prev) => (prev.size === carrito.length ? new Set() : new Set(carrito.map((c) => lineKey(c)))));
+    setSeleccion((prev) => (prev.size === carrito.length ? new Set() : new Set(carrito.map((c) => c.id))));
   }
 
   const pctNum = Number(pct);
@@ -1358,15 +1288,15 @@ function DescuentosPanel({ carrito, aplicado, onAplicar, onClose }: {
 
       <div className="flex-1 overflow-auto">
         {carrito.map((c) => (
-          <label key={lineKey(c)} className="flex cursor-pointer items-center justify-between border-b border-gray-50 py-2">
+          <label key={c.id} className="flex cursor-pointer items-center justify-between border-b border-gray-50 py-2">
             <span className="flex items-center gap-2">
-              <input type="checkbox" checked={seleccion.has(lineKey(c))} onChange={() => toggle(lineKey(c))} />
+              <input type="checkbox" checked={seleccion.has(c.id)} onChange={() => toggle(c.id)} />
               <span className="text-sm">{c.nombre}</span>
             </span>
             <span className="text-right text-xs text-gray-500">
               <div>{fmt(c.precio * c.qty)}</div>
               <div className="text-emerald-600">
-                {seleccion.has(lineKey(c)) && pctNum > 0 ? `−${fmt(Math.round(c.precio * c.qty * pctNum / 100))}` : '--'}
+                {seleccion.has(c.id) && pctNum > 0 ? `−${fmt(Math.round(c.precio * c.qty * pctNum / 100))}` : '--'}
               </div>
             </span>
           </label>

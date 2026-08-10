@@ -27,10 +27,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     .from(teamMembers)
     .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
     .limit(1);
-  // productos:ver (dashboard/factura) o pos:vender (cajero del POS, que puede no
-  // tener productos:ver pero sí necesita el selector de variante para vender).
-  if (!userCan(user.platformRole, m?.role, 'productos:ver')
-      && !userCan(user.platformRole, m?.role, 'pos:vender')) {
+  if (!userCan(user.platformRole, m?.role, 'productos:ver')) {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
   }
 
