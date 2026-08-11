@@ -4,6 +4,51 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.20.0 — 2026-08-11
+
+### Nuevo
+
+- **caja**: metodo y direccion en movimientos de caja
+- **productos**: editar variantes y form compartido crear/editar
+- **pos**: vender variantes en el POS (Opcion B, por almacen)
+  - El catalogo POS muestra productos con variantes usando la SUMA del stock de sus variantes EN EL ALMACEN de la terminal (product_variant_almacen_stock), y aparecen solo si tienen stock de variante asignado en ese almacen.
+  - Al tocar un producto con variantes se abre el selector, que consulta el stock por el almacen de la terminal; cada variante es su propia linea (clave compuesta). El cobro manda variantId -> el descuento baja el stock de la variante en ese almacen.
+  - Carrito, descuentos y ediciones operan por linea (lineKey).
+- **inventario**: Opcion B — stock de variante por almacen
+  - Nueva tabla product_variant_almacen_stock (variante x almacen) = fuente de verdad del stock de variantes; product_variants.stock_actual y products.stock_actual quedan como sumas denormalizadas. Migracion 0086.
+  - Al crear un producto con variantes se siembra el stock inicial de cada una en el almacen por defecto del equipo.
+  - descontarInventario/restaurarInventario: para ventas de variante el stock por-almacen se ajusta en product_variant_almacen_stock (no en product_almacen_stock, que es solo para productos sin variantes).
+  - GET /api/productos/[id]/variants acepta ?almacenId= y devuelve el stock de la variante en ese almacen (sin el, stock global). Acepta pos:vender ademas de productos:ver.
+  - El selector de variante en la factura pasa el almacen seleccionado.
+- **productos**: variantes tambien en el popup de Productos y servicios
+  - Se extrae la UI de variantes a un componente compartido VariantesEditor (components/productos) para no duplicar logica.
+  - ModalNuevoProducto (Nueva factura) ahora usa el componente compartido.
+  - El popup de Productos y servicios muestra el editor de variantes al CREAR un bien (al editar no, gestionar variantes existentes necesita UI aparte). Con variantes activas se oculta el bloque de stock manual y el backend fuerza controlaInventario y stock = suma de variantes.
+- **pos**: vender variantes de producto en el punto de venta
+  - Catalogo POS incluye productos con variantes (antes se excluian por no tener fila en product_almacen_stock). Su stock en la grilla es el GLOBAL (suma de variantes), no el del almacen: las variantes usan stock global en este MVP.
+  - Al tocar un producto con variantes se abre el selector de variante; cada variante es su propia linea del carrito (clave compuesta producto+variante).
+  - El cobro manda variantId por linea -> el descuento pega al stock de la variante.
+  - Descuentos globales y ediciones de qty/precio ahora operan por linea (lineKey) en vez de por id de producto, para soportar varias variantes del mismo producto.
+  - El endpoint de variantes acepta pos:vender ademas de productos:ver.
+- **facturacion**: abrir caja desde factura + variantes de producto
+  - Al guardar/emitir sin turno de caja abierto, el backend ya respondia 409 CAJA_SIN_TURNO (solo si la empresa usa el modulo de caja). El form ahora intercepta ese codigo y abre ModalAbrirCaja para abrir el turno sin salir de la factura; al abrir con exito reintenta el guardado. CAJA_TURNO_VENCIDO no entra al modal (hay que cerrar, no abrir).
+  - Schema: products.variant_atributos (ejes por producto), tabla product_variants (una fila por combinacion, stock global propio) e inventory_movements.variant_id. Migracion 0085.
+  - Crear producto: ModalNuevoProducto permite definir ejes (Talla/Color...) y generar combinaciones con stock/precio por variante.
+  - Vender en factura: al elegir un producto con variantes se abre ModalSeleccionarVariante; la linea guarda variantId y el descuento pega al stock de la variante (con ajuste paralelo del stock global del producto).
+  - descontarInventario y restaurarInventario ahora son variant-aware y simetricos.
+  - Nuevo endpoint GET /api/productos/[id]/variants para el selector.
+
+### Arreglado
+
+- **inventario**: variante inexistente, guard server-side y stock que no deriva
+- **dashboard**: usar 100dvh en el layout para evitar hueco al final en movil
+
+### Otros
+
+- Revert "feat(pos): vender variantes de producto en el punto de venta"
+
+_1 commit(s) de mantenimiento no listados._
+
 ## v1.19.1 — 2026-08-11
 
 ### Arreglado
