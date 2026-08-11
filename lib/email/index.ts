@@ -56,16 +56,18 @@ export async function sendPasswordResetEmail(email: string, token: string, name:
  * (lib/slack.ts). Fire-and-forget: nunca lanza, solo loguea si falla, para
  * no romper el flujo que la dispara (ver alertar-error/route.ts).
  */
-const DEFAULT_ALERT_EMAILS = [
-  'jhalddry.gonzalez@yisraeltech.com',
-  'darian@yisraeltech.com',
-  'alexander.ferreras@yisraeltech.com',
-];
-
 export async function enviarAlertaEmail(asunto: string, mensaje: string): Promise<void> {
-  const destinatarios = process.env.HABILITACION_ALERT_EMAIL
-    ? process.env.HABILITACION_ALERT_EMAIL.split(',').map(s => s.trim()).filter(Boolean)
-    : DEFAULT_ALERT_EMAILS;
+  // Los destinatarios salen de configuración, no del código: antes venían de una
+  // lista hardcodeada, así que los correos del equipo viajaban en el repo y una
+  // env var mal puesta seguía enviando a los de siempre sin avisar. Sin la
+  // variable no se manda nada y queda dicho en el log — mejor mudo y evidente
+  // que enviando a una lista que nadie recuerda haber escrito.
+  const destinatarios = (process.env.HABILITACION_ALERT_EMAIL ?? '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  if (destinatarios.length === 0) {
+    console.warn('[email] HABILITACION_ALERT_EMAIL no configurado, alerta no enviada:', asunto);
+    return;
+  }
   try {
     const res = await resend.emails.send({
       from: 'Zero Alertas <noreply@zero.com.do>',

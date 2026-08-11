@@ -9,10 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, and, inArray } from 'drizzle-orm';
 import { emision, EcfApiError } from '@/lib/ecf-api/client';
 
@@ -33,11 +33,12 @@ const MAPA_ESTADOS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla, y el mismo que usan el resto de
+  // las rutas de habilitación.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   const body = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(body);
