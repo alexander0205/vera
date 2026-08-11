@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import {
   Building2, Palette, ImageIcon, PenLine, FileText,
-  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard,
+  CheckCircle, Loader2, Upload, X, Eye, AlertCircle, Wallet, Lock, CreditCard, Paperclip,
 } from 'lucide-react';
 import { ProvinciaMunicipioSelect } from '@/components/provincia-municipio-select';
 import { EquipoCard } from './EquipoCard';
@@ -28,6 +28,88 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/** Formatea un monto DOP para los ejemplos (sin decimales si es entero). */
+function fmtEjemplo(dop: number): string {
+  return `RD$${dop.toLocaleString('es-DO', { maximumFractionDigits: 2 })}`;
+}
+
+/** Formatea una fecha para el ejemplo: "5 de agosto". */
+function fmtDiaMes(d: Date): string {
+  return d.toLocaleDateString('es-DO', { day: 'numeric', month: 'long' });
+}
+
+interface PasoEjemplo { fecha: string; titulo: string; detalle: string; monto?: string }
+
+/**
+ * Construye un ejemplo paso a paso de cómo se aplicaría la mora sobre una
+ * factura de RD$10,000, con la configuración actual. Solo para ilustrar en la UI.
+ */
+function construirEjemploMora(opts: {
+  modo: 'porcentaje' | 'fijo';
+  porcentaje: number;      // %
+  montoFijo: number;       // DOP
+  diasGracia: number;
+  periodicidad: number;    // días; 0 = una sola vez
+}): PasoEjemplo[] {
+  const base = 10_000;
+  const cargo = opts.modo === 'fijo'
+    ? opts.montoFijo
+    : Math.round(base * opts.porcentaje) / 100;
+  const hoy = new Date();
+  const masDias = (n: number) => { const d = new Date(hoy); d.setDate(d.getDate() + n); return d; };
+
+  const pasos: PasoEjemplo[] = [
+    {
+      fecha: fmtDiaMes(hoy),
+      titulo: 'Factura original',
+      detalle: `Monto ${fmtEjemplo(base)}. Vence este día.`,
+    },
+    {
+      fecha: fmtDiaMes(masDias(opts.diasGracia)),
+      titulo: 'Primer recargo',
+      detalle: opts.diasGracia > 0
+        ? `${opts.diasGracia} día${opts.diasGracia === 1 ? '' : 's'} después del vencimiento, si sigue sin pagarse.`
+        : 'Al día siguiente del vencimiento, si sigue sin pagarse.',
+      monto: fmtEjemplo(cargo),
+    },
+  ];
+
+  if (opts.periodicidad > 0) {
+    pasos.push({
+      fecha: fmtDiaMes(masDias(opts.diasGracia + opts.periodicidad)),
+      titulo: 'Segundo recargo',
+      detalle: `Si aún hay saldo, se cobra otra vez sobre el saldo pendiente.`,
+      monto: fmtEjemplo(cargo),
+    });
+    pasos.push({
+      fecha: `Cada ${opts.periodicidad} días`,
+      titulo: 'Se repite',
+      detalle: 'Hasta que se pague la factura o se alcance el límite (si tiene).',
+    });
+  } else {
+    pasos.push({
+      fecha: '—',
+      titulo: 'No se repite',
+      detalle: 'Se cobra una sola vez.',
+    });
+  }
+
+  return pasos;
+}
+
+/** Traduce la periodicidad en días a una frase clara para el usuario. */
+function etiquetaPeriodicidad(dias: number): string {
+  if (!dias || dias <= 0) return 'Se cobra una sola vez al vencer.';
+  const equivalente =
+    dias === 7  ? ' (semanal)' :
+    dias === 15 ? ' (quincenal)' :
+    dias === 30 ? ' (mensual)' :
+    dias === 60 ? ' (cada 2 meses)' :
+    dias === 90 ? ' (trimestral)' :
+    dias === 365 ? ' (anual)' : '';
+  return `Se repite cada ${dias} días${equivalente} mientras siga vencida.`;
 }
 
 const COLORES = [
@@ -146,6 +228,12 @@ export default function ConfiguracionPage() {
   // Recargo por mora
   const [recargoActivo, setRecargoActivo]               = useState(false);
   const [recargoPorcentaje, setRecargoPorcentaje]       = useState('2.00');   // mostrado como %
+  const [recargoModo, setRecargoModo]                   = useState<'porcentaje' | 'fijo'>('porcentaje');
+  const [recargoMontoFijo, setRecargoMontoFijo]         = useState('500.00'); // mostrado en RD$
+  const [recargoDiasGracia, setRecargoDiasGracia]       = useState('0');      // días tras el vencimiento
+  const [recargoPeriodicidad, setRecargoPeriodicidad]   = useState('0');      // días; 0 = una sola vez
+  const [recargoTope, setRecargoTope]                   = useState('');       // % de mora acumulada; '' = sin tope
+  const [recargoMaxPeriodos, setRecargoMaxPeriodos]     = useState('');       // '' = sin límite
   // Módulo cuadre de caja
   const [cajaHabilitada, setCajaHabilitada]             = useState(false);
   // null = sin límite. Es el estado real por defecto: la función nace apagada.
@@ -161,6 +249,7 @@ export default function ConfiguracionPage() {
   const [plazoDefaultDias, setPlazoDefaultDias]         = useState('');
   // Métodos de pago que obligan emisión a la DGII (bloquean guardar como borrador)
   const [metodosObligaDgii, setMetodosObligaDgii]      = useState<string[]>([]);
+  const [metodosExigeComprobante, setMetodosExigeComprobante] = useState<string[]>([]);
   // Términos y condiciones que se precargan en cada comprobante nuevo
   const [terminosDefault, setTerminosDefault]          = useState('');
 
@@ -184,6 +273,12 @@ export default function ConfiguracionPage() {
         // Recargo por mora — convertir bps → %
         setRecargoActivo(d.recargoMoraActivo ?? false);
         setRecargoPorcentaje(((d.recargoMoraPorcentaje ?? 200) / 100).toFixed(2));
+        setRecargoModo(d.recargoMoraModo === 'fijo' ? 'fijo' : 'porcentaje');
+        setRecargoMontoFijo(((d.recargoMoraMontoCents ?? 50000) / 100).toFixed(2));
+        setRecargoDiasGracia(String(d.recargoMoraDiasGracia ?? 0));
+        setRecargoPeriodicidad(String(d.recargoMoraPeriodicidadDias ?? 0));
+        setRecargoTope(d.recargoMoraTopeBps ? (d.recargoMoraTopeBps / 100).toFixed(0) : '');
+        setRecargoMaxPeriodos(d.recargoMoraMaxPeriodos ? String(d.recargoMoraMaxPeriodos) : '');
         // Módulo caja
         setCajaHabilitada(d.cajaHabilitada ?? false);
         setCajaLimiteHoras(d.cajaLimiteHoras ?? null);
@@ -196,6 +291,7 @@ export default function ConfiguracionPage() {
         setPosEscolarHabilitado(d.posEscolarHabilitado ?? false);
         setPlazoDefaultDias(d.plazoPagoDefaultDias != null ? String(d.plazoPagoDefaultDias) : '');
         setMetodosObligaDgii(Array.isArray(d.metodosObligaDgii) ? d.metodosObligaDgii : []);
+        setMetodosExigeComprobante(Array.isArray(d.metodosExigeComprobante) ? d.metodosExigeComprobante : []);
         setTerminosDefault(d.terminosCondicionesDefault ?? '');
         setRole(d.role ?? null);
       })
@@ -220,8 +316,15 @@ export default function ConfiguracionPage() {
           logo, firma,
           recargoMoraActivo:     recargoActivo,
           recargoMoraPorcentaje: pctBps,
-          // Gracia eliminada del config: la mora aplica al vencer.
-          recargoMoraDiasGracia: 0,
+          recargoMoraModo:       recargoModo,
+          recargoMoraMontoCents: Math.round(parseFloat(recargoMontoFijo || '0') * 100),
+          recargoMoraDiasGracia: parseInt(recargoDiasGracia || '0', 10),
+          recargoMoraPeriodicidadDias: parseInt(recargoPeriodicidad || '0', 10),
+          // Mora sobre mora descartada: la mora siempre se calcula sobre el
+          // saldo de la factura (base simple). La columna queda en false.
+          recargoMoraCompuesta:  false,
+          recargoMoraTopeBps:    recargoTope ? Math.round(parseFloat(recargoTope) * 100) : 0,
+          recargoMoraMaxPeriodos: recargoMaxPeriodos ? parseInt(recargoMaxPeriodos, 10) : 0,
           cajaHabilitada,
           cajaLimiteHoras,
           cajaAvisoMinutos,
@@ -231,6 +334,7 @@ export default function ConfiguracionPage() {
           posEscolarHabilitado,
           plazoPagoDefaultDias:  plazoDefaultDias ? parseInt(plazoDefaultDias, 10) : null,
           metodosObligaDgii,
+          metodosExigeComprobante,
           terminosCondicionesDefault: terminosDefault,
         }),
       });
@@ -609,6 +713,66 @@ export default function ConfiguracionPage() {
         </CardContent>
       </Card>}
 
+      {/* 5c. Métodos que exigen comprobante adjunto — solo configuracion:gestionar */}
+      {canManage && <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Paperclip className="h-4 w-4 text-teal-600" />
+            Métodos que exigen comprobante
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Al registrar un cobro con alguno de estos métodos habrá que adjuntar la
+            imagen o el archivo del comprobante. Sirve para que ninguna
+            transferencia entre sin su respaldo. No aplica al punto de venta:
+            una venta de mostrador se cobra sin pedir archivos.
+          </p>
+
+          <div className="space-y-2">
+            {METODOS_PAGO.map(m => {
+              const activo = metodosExigeComprobante.includes(m.value);
+              return (
+                <div
+                  key={m.value}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3"
+                >
+                  <p className="text-sm font-medium text-gray-800">{m.label}</p>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={activo}
+                    aria-label={`Exigir comprobante para ${m.label}`}
+                    onClick={() => setMetodosExigeComprobante(prev =>
+                      prev.includes(m.value)
+                        ? prev.filter(v => v !== m.value)
+                        : [...prev, m.value],
+                    )}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                      activo ? 'bg-teal-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        activo ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {metodosExigeComprobante.length > 0 && (
+            <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-800">
+              <strong>Activo:</strong> los cobros con{' '}
+              {metodosExigeComprobante.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
+              no se podrán registrar sin adjuntar el comprobante.
+            </div>
+          )}
+        </CardContent>
+      </Card>}
+
       {/* 6. Recargo por mora — solo roles con configuracion:gestionar */}
       {canManage && <Card>
         <CardHeader className="pb-2">
@@ -616,65 +780,299 @@ export default function ConfiguracionPage() {
             <AlertCircle className="h-4 w-4 text-teal-600" />
             Recargo por mora
           </CardTitle>
+          <p className="text-sm text-gray-500 mt-1">Cobra un extra cuando la factura se paga tarde.</p>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Aplica automáticamente un recargo a facturas a crédito vencidas.
-            El recargo se suma al saldo de cobranza — el documento fiscal original no se modifica.
-          </p>
+        <CardContent className="space-y-5">
 
-          {/* Toggle activar */}
-          <div className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-gray-800">Activar recargo por mora</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                El cron diario (09:00 UTC) aplicará el recargo una sola vez por factura.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={recargoActivo}
-              onClick={() => setRecargoActivo(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                recargoActivo ? 'bg-teal-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  recargoActivo ? 'translate-x-6' : 'translate-x-1'
+          {/* Toggle Activado */}
+          <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 transition-colors ${
+            recargoActivo ? 'border-teal-200 bg-teal-50/60' : 'border-gray-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={recargoActivo}
+                onClick={() => setRecargoActivo(v => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
+                  recargoActivo ? 'bg-teal-600' : 'bg-gray-200'
                 }`}
-              />
-            </button>
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  recargoActivo ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+              <div>
+                <p className={`text-sm font-semibold ${recargoActivo ? 'text-teal-700' : 'text-gray-500'}`}>
+                  {recargoActivo ? 'Activado' : 'Desactivado'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Se aplicarán recargos automáticamente a las facturas a crédito vencidas.
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Porcentaje de recargo */}
-          <div className={`transition-opacity ${recargoActivo ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-            <div className="space-y-1.5 md:max-w-xs">
-              <Label>Porcentaje de recargo (%)</Label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="100"
-                  value={recargoPorcentaje}
-                  onChange={e => setRecargoPorcentaje(e.target.value)}
-                  placeholder="2.00"
-                  className="pr-8"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
-              </div>
-              <p className="text-xs text-gray-400">
-                Se aplica al vencer la factura. Default: 2.00% (200 basis points).
+          {/* Layout: formulario (izq) + ejemplo (der) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+
+            {/* ── FORM ─────────────────────────────────────────────── */}
+            <div className={`space-y-6 ${recargoActivo ? '' : 'opacity-40 pointer-events-none'}`}>
+
+              {/* Sección 1: ¿Cuánto cobrar? */}
+              <section className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">1</span>
+                  ¿Cuánto cobrar?
+                </h3>
+                <div className="space-y-1.5 md:max-w-sm">
+                  <Label>Tipo de recargo</Label>
+                  <Select value={recargoModo} onValueChange={v => setRecargoModo(v as 'porcentaje' | 'fijo')}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="porcentaje">Porcentaje del saldo pendiente</SelectItem>
+                      <SelectItem value="fijo">Monto fijo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {recargoModo === 'porcentaje' ? (
+                  <div className="space-y-1.5 md:max-w-sm">
+                    <Label>Porcentaje de recargo</Label>
+                    <div className="relative">
+                      <Input
+                        type="number" step="0.01" min="0.01" max="100"
+                        value={recargoPorcentaje}
+                        onChange={e => setRecargoPorcentaje(e.target.value)}
+                        placeholder="2.00" className="pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Se cobrará el {parseFloat(recargoPorcentaje || '0').toFixed(2)}% del saldo pendiente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 md:max-w-sm">
+                    <Label>Monto fijo del recargo</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">RD$</span>
+                      <Input
+                        type="number" step="0.01" min="0.01"
+                        value={recargoMontoFijo}
+                        onChange={e => setRecargoMontoFijo(e.target.value)}
+                        placeholder="500.00" className="pl-11"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400">Se cobra este monto exacto en cada recargo.</p>
+                  </div>
+                )}
+              </section>
+
+              {/* Sección 2: ¿Cuándo empezar? */}
+              <section className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">2</span>
+                  ¿Cuándo empezar?
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Días de gracia</Label>
+                    <div className="relative">
+                      <Input
+                        type="number" step="1" min="0" max="365"
+                        value={recargoDiasGracia}
+                        onChange={e => setRecargoDiasGracia(e.target.value)}
+                        placeholder="0" className="pr-16"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Días después del vencimiento antes de aplicar el primer recargo. 0 = al día siguiente.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>¿Cada cuánto se repite?</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { dias: 0,  label: 'Una sola vez' },
+                        { dias: 15, label: 'Cada 15 días' },
+                        { dias: 30, label: 'Cada 30 días' },
+                        { dias: 60, label: 'Cada 60 días' },
+                      ].map(opt => {
+                        const activo = parseInt(recargoPeriodicidad || '0', 10) === opt.dias;
+                        return (
+                          <button
+                            key={opt.dias}
+                            type="button"
+                            onClick={() => setRecargoPeriodicidad(String(opt.dias))}
+                            className={`rounded-lg border px-3 py-2 text-xs transition-colors ${
+                              activo
+                                ? 'border-teal-600 bg-teal-50 text-teal-700 font-medium'
+                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Días personalizados: para cualquier valor fuera de los presets. */}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-gray-400 shrink-0">o cada</span>
+                      <div className="relative w-24">
+                        <Input
+                          type="number" step="1" min="0" max="365"
+                          value={recargoPeriodicidad}
+                          onChange={e => setRecargoPeriodicidad(e.target.value)}
+                          placeholder="0"
+                          className="h-9 pr-10 text-sm"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">días</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {etiquetaPeriodicidad(parseInt(recargoPeriodicidad || '0', 10))}
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              {/* Sección 3: ¿Poner límites? (opcional) */}
+              <section className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">3</span>
+                  ¿Poner límites al recargo?
+                  <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Límite del monto total</Label>
+                    <Select
+                      value={recargoTope === '' ? 'sin' : recargoTope}
+                      onValueChange={v => setRecargoTope(v === 'sin' ? '' : v)}
+                    >
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sin">Sin límite</SelectItem>
+                        {recargoTope && !['25', '50', '100', '150', '200'].includes(recargoTope) && (
+                          <SelectItem value={recargoTope}>{recargoTope}% de la factura</SelectItem>
+                        )}
+                        <SelectItem value="25">25% de la factura</SelectItem>
+                        <SelectItem value="50">50% de la factura</SelectItem>
+                        <SelectItem value="100">100% de la factura</SelectItem>
+                        <SelectItem value="150">150% de la factura</SelectItem>
+                        <SelectItem value="200">200% de la factura</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-400">
+                      Máximo que se puede cobrar de recargos en esta factura.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Máximo de veces que se aplica</Label>
+                    <Select
+                      value={recargoMaxPeriodos === '' ? 'sin' : recargoMaxPeriodos}
+                      onValueChange={v => setRecargoMaxPeriodos(v === 'sin' ? '' : v)}
+                    >
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sin">Sin límite</SelectItem>
+                        {recargoMaxPeriodos && !['1', '3', '6', '12'].includes(recargoMaxPeriodos) && (
+                          <SelectItem value={recargoMaxPeriodos}>{recargoMaxPeriodos} veces</SelectItem>
+                        )}
+                        <SelectItem value="1">1 vez</SelectItem>
+                        <SelectItem value="3">3 veces</SelectItem>
+                        <SelectItem value="6">6 veces</SelectItem>
+                        <SelectItem value="12">12 veces</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-400">
+                      Número máximo de recargos que se aplicarán.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* ── ASÍ FUNCIONA (ejemplo dinámico) ──────────────────── */}
+            <aside className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 h-fit lg:sticky lg:top-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Así funciona (ejemplo)</h3>
+              <ol className="space-y-3">
+                {construirEjemploMora({
+                  modo: recargoModo,
+                  porcentaje: parseFloat(recargoPorcentaje || '0'),
+                  montoFijo: parseFloat(recargoMontoFijo || '0'),
+                  diasGracia: parseInt(recargoDiasGracia || '0', 10),
+                  periodicidad: parseInt(recargoPeriodicidad || '0', 10),
+                }).map((paso, i) => (
+                  <li key={i} className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <span className="mt-0.5 h-2 w-2 rounded-full bg-teal-500 shrink-0" />
+                      {i < 3 && <span className="flex-1 w-px bg-gray-200 my-1" />}
+                    </div>
+                    <div className="min-w-0 -mt-1">
+                      <p className="text-xs font-semibold text-gray-900">{paso.titulo}</p>
+                      <p className="text-[11px] text-gray-500">{paso.fecha}</p>
+                      <p className="text-xs text-gray-600 mt-0.5">{paso.detalle}</p>
+                      {paso.monto && (
+                        <p className="text-xs font-semibold text-teal-700 mt-0.5">= {paso.monto}</p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-3 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-[11px] text-amber-800">
+                El recargo siempre se calcula sobre el saldo pendiente. Los recargos anteriores no
+                generan nuevos recargos.
               </p>
+            </aside>
+          </div>
+
+          {/* Resumen de tu configuración */}
+          <div className="rounded-xl border border-teal-100 bg-teal-50/50 px-4 py-3.5">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-3">
+              <CheckCircle className="h-4 w-4 text-teal-600" />
+              Resumen de tu configuración
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div>
+                <p className="text-gray-500">Recargo</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {recargoModo === 'fijo'
+                    ? `${fmtEjemplo(parseFloat(recargoMontoFijo || '0'))} fijo`
+                    : `${parseFloat(recargoPorcentaje || '0').toFixed(2)}% del saldo`}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Inicia</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {parseInt(recargoDiasGracia || '0', 10) > 0
+                    ? `${recargoDiasGracia} días después del vencimiento`
+                    : 'Al día siguiente del vencimiento'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Se repite</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {parseInt(recargoPeriodicidad || '0', 10) > 0
+                    ? `Cada ${recargoPeriodicidad} días`
+                    : 'Una sola vez'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Límites</p>
+                <p className="font-medium text-gray-900 mt-0.5">
+                  {recargoTope ? `Hasta ${recargoTope}% de la factura` : 'Sin límite de monto'}
+                  {recargoMaxPeriodos ? ` · máx. ${recargoMaxPeriodos} veces` : ' · sin límite de veces'}
+                </p>
+              </div>
             </div>
           </div>
 
           {recargoActivo && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
               <strong>Nota fiscal:</strong> El recargo NO modifica la factura electrónica emitida ante la DGII.
-              Solo se suma al saldo visible en Cuentas por cobrar y en tickets de cobranza.
+              Solo se suma al saldo visible en Cuentas por cobrar y en los tickets de cobranza.
             </div>
           )}
         </CardContent>

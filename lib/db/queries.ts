@@ -588,7 +588,23 @@ export async function getCuentasPorCobrar(
       // crédito sin pagar, contado sin cobrar y parciales. PAGADA/ANULADA/GRATUITA/
       // USO quedan fuera vía estado_pago. Solo se excluyen ANULADO/RECHAZADO (no
       // cobrables).
-      sql`${ecfDocuments.estadoPago} IN ('PENDIENTE', 'PARCIAL')`,
+      // La factura entra si su CAPITAL sigue pendiente/parcial, O si su capital
+      // ya está pagado pero le queda una ND de mora sin saldar. Sin este OR, una
+      // factura con capital pagado (estado_pago='PAGADA') y mora pendiente
+      // desaparecía de AR y su ND de mora también (por moraOrigenId IS NULL),
+      // dejando la mora invisible.
+      sql`(
+        ${ecfDocuments.estadoPago} IN ('PENDIENTE', 'PARCIAL')
+        OR EXISTS (
+          SELECT 1 FROM ecf_documents nd
+          WHERE nd.mora_origen_id = ecf_documents.id
+            AND nd.estado != 'ANULADO'
+            AND (nd.monto_total - coalesce((
+              SELECT SUM(monto_centavos) FROM pagos_recibidos
+              WHERE pagos_recibidos.ecf_document_id = nd.id
+            ), 0)) > 0
+        )
+      )`,
       sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`,
       // NOTA: aquí vivía un filtro que excluía los BORRADOR con e-NCF real
       // (`NOT (estado='BORRADOR' AND encf ~ '^E[0-9]{12}$')`, commit 3ffe6a9),
@@ -613,7 +629,11 @@ export async function getCuentasPorCobrar(
   // Lista de ND de mora (id, codigo, saldo>0) por factura padre, para distribuir
   // el pago en el frontend/desglose. Un solo query agrupado en memoria.
   const facturaIds = rows.map(r => r.id);
-  const moraNotasPorFactura = new Map<number, { id: number; codigo: string | null; saldo: number }[]>();
+  const moraNotasPorFactura = new Map<number, {
+    id: number; codigo: string | null; montoTotal: number; saldo: number;
+    estado: 'PENDIENTE' | 'PARCIAL';
+    fechaEmision: string | Date | null; periodo: string | Date | null;
+  }[]>();
   if (facturaIds.length > 0) {
     const moraRows = await db
       .select({
@@ -621,6 +641,8 @@ export async function getCuentasPorCobrar(
         codigo:       ecfDocuments.codigo,
         moraOrigenId: ecfDocuments.moraOrigenId,
         montoTotal:   ecfDocuments.montoTotal,
+        fechaEmision: ecfDocuments.fechaEmision,
+        periodo:      ecfDocuments.moraPeriodo,
         pagado: sql<number>`coalesce((
           SELECT SUM(monto_centavos) FROM pagos_recibidos
           WHERE pagos_recibidos.ecf_document_id = ecf_documents.id
@@ -635,10 +657,16 @@ export async function getCuentasPorCobrar(
       .orderBy(ecfDocuments.id);
 
     for (const m of moraRows) {
-      const saldoNd = m.montoTotal - Number(m.pagado);
+      const pagadoNd = Number(m.pagado);
+      const saldoNd = m.montoTotal - pagadoNd;
       if (saldoNd <= 0 || m.moraOrigenId == null) continue;
       const arr = moraNotasPorFactura.get(m.moraOrigenId) ?? [];
-      arr.push({ id: m.id, codigo: m.codigo, saldo: saldoNd });
+      // Solo entran NDs con saldo > 0 → estado PENDIENTE (sin pagos) o PARCIAL.
+      arr.push({
+        id: m.id, codigo: m.codigo, montoTotal: m.montoTotal, saldo: saldoNd,
+        estado: pagadoNd > 0 ? 'PARCIAL' : 'PENDIENTE',
+        fechaEmision: m.fechaEmision, periodo: m.periodo,
+      });
       moraNotasPorFactura.set(m.moraOrigenId, arr);
     }
   }
@@ -742,6 +770,12 @@ export async function getPagosListado(
       // Usuario que registró el pago.
       registradoPor: users.name,
       registradoPorEmail: users.email,
+      // Comprobantes de la factura. Solo el conteo — el binario jamás sale en
+      // un listado (el de una sola factura ya pesaría más que toda la página).
+      comprobantes: sql<number>`(
+        SELECT count(*)::int FROM pago_adjuntos
+        WHERE pago_adjuntos.ecf_document_id = ecf_documents.id
+      )`,
     })
     .from(pagosRecibidos)
     .leftJoin(ecfDocuments, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
@@ -1151,8 +1185,9 @@ export async function registrarPagoFacturaConMora(input: {
     }
   }
 
+  let filasInsertadas: { id: number }[] = [];
   if (inserts.length > 0) {
-    await db.insert(pagosRecibidos).values(
+    filasInsertadas = await db.insert(pagosRecibidos).values(
       inserts.map(i => ({
         teamId:        input.teamId,
         ecfDocumentId: i.ecfDocumentId,
@@ -1166,7 +1201,7 @@ export async function registrarPagoFacturaConMora(input: {
         turnoCajaId:   input.turnoCajaId ?? null,
         createdBy:     input.createdBy ?? null,
       })),
-    );
+    ).returning({ id: pagosRecibidos.id });
   }
 
   // Sincronizar espejo/estado_pago de la factura y de cada ND tocada
@@ -1179,6 +1214,8 @@ export async function registrarPagoFacturaConMora(input: {
     saldoNuevo: capacidad - totalLineas,
     saldado:    capacidad - totalLineas === 0,
     repartido:  { facturaCents, moraCents },
+    /** Filas creadas, en el orden en que se insertaron (factura primero). */
+    pagos:      filasInsertadas,
   };
 }
 

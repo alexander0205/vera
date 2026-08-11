@@ -1,12 +1,26 @@
 {
   "private": true,
-  "version": "1.15.3",
+  "version": "1.18.1",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
       "esbuild",
       "sharp"
-    ]
+    ],
+    "supportedArchitectures": {
+      "os": [
+        "current",
+        "linux"
+      ],
+      "cpu": [
+        "current",
+        "x64"
+      ],
+      "libc": [
+        "current",
+        "glibc"
+      ]
+    }
   },
   "scripts": {
     "release:patch": "npm version patch -m \"chore(release): v%s\"",
@@ -27,9 +41,12 @@
     "db:studio": "drizzle-kit studio",
     "db:reset": "npx tsx lib/db/reset.ts",
     "db:local:setup": "bash scripts/setup-local-db.sh",
-    "branch:setup": "bash scripts/branch-setup.sh"
+    "branch:setup": "bash scripts/branch-setup.sh",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1105.0",
     "@react-pdf/renderer": "^4.4.0",
     "@tailwindcss/postcss": "4.1.7",
     "@types/adm-zip": "^0.5.8",
@@ -64,6 +81,7 @@
     "recharts": "^3.9.2",
     "resend": "^6.10.0",
     "server-only": "^0.0.1",
+    "sharp": "^0.35.3",
     "sonner": "^2.0.7",
     "stripe": "^18.1.0",
     "swr": "^2.3.3",
@@ -77,6 +95,7 @@
     "@playwright/test": "^1.59.1",
     "@types/papaparse": "^5.5.2",
     "@types/pdf-parse": "^1.1.5",
-    "@types/qrcode": "^1.5.6"
+    "@types/qrcode": "^1.5.6",
+    "vitest": "^4.1.10"
   }
 }

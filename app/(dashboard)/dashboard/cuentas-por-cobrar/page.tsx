@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle, Clock, DollarSign,
-  X, Wallet, Loader2, Archive, Wallet2,
+  X, Wallet, Loader2, Archive, Wallet2, Eye,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
-import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { NotasMoraTable } from '@/components/notas-mora-table';
+import { fmtDOP, fmtFechaCorta, fmtCodigoCorto } from '@/lib/utils/format';
 import { PagoMetodos, pagosValidos, type PagoLinea, type NotaCreditoDisponible } from '@/components/pagos/PagoMetodos';
+import ComprobantesUploader, { type AdjuntoSubido } from '@/components/pagos/ComprobantesUploader';
 
 interface Cuenta {
   id:                   number;
@@ -32,7 +34,7 @@ interface Cuenta {
   // Saldo combinado de las ND de mora atadas a esta factura.
   moraSaldo:            number;
   // Lista de ND de mora con saldo > 0 (para desglose).
-  moraNotas?:           { id: number; codigo: string | null; saldo: number }[];
+  moraNotas?:           { id: number; codigo: string | null; montoTotal: number; saldo: number; estado: 'PENDIENTE' | 'PARCIAL' }[];
   vencida:              boolean;
   diasVencido:          number;
 }
@@ -110,13 +112,25 @@ export default function CuentasPorCobrarPage() {
       id: 'codigo',
       header: 'Código',
       render: c => (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Link href={`/dashboard/facturas/${c.id}`} className="text-teal-600 hover:underline font-mono text-xs font-medium">
-            {c.codigo ?? `Factura #${c.id}`}
+        <div className="flex items-center gap-1.5">
+          {/* Solo la cola del código: el prefijo (tipo-año-empresa) se repite en
+              todas las filas y "FA-2026-YTSY-YH2WR-000038" se comía la columna.
+              El completo va en el tooltip. */}
+          <Link
+            href={`/dashboard/facturas/${c.id}`}
+            title={c.codigo ?? `Factura #${c.id}`}
+            className="whitespace-nowrap font-mono text-xs font-medium text-teal-600 hover:underline"
+          >
+            {c.codigo ? fmtCodigoCorto(c.codigo) : `#${c.id}`}
           </Link>
           {isHistorica(c) && (
             <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
               histórica
+            </span>
+          )}
+          {c.saldoFactura === 0 && c.moraSaldo > 0 && (
+            <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+              Mora pendiente
             </span>
           )}
         </div>
@@ -125,65 +139,124 @@ export default function CuentasPorCobrarPage() {
     {
       id: 'cliente',
       header: 'Cliente',
+      sortable: true,
+      sortAccessor: c => c.razonSocialComprador ?? '',
+      // Una línea por celda: el RNC tiene su propia columna. Apilarlo debajo en
+      // gris chico obliga a leer cada fila en vez de barrerlas con la vista.
       render: c => (
-        <div className="max-w-[220px]">
-          <p className="text-sm text-gray-900 truncate">{c.razonSocialComprador ?? 'Consumidor Final'}</p>
-          {c.rncComprador && <p className="text-[11px] text-gray-400 font-mono">{c.rncComprador}</p>}
-        </div>
+        // "Consumidor Final" no es un cliente al que llamar: se escribe apagado
+        // para que los nombres reales —los que se cobran— destaquen solos.
+        c.razonSocialComprador
+          ? <p className="max-w-[150px] truncate text-xs text-gray-900" title={c.razonSocialComprador}>{c.razonSocialComprador}</p>
+          : <p className="text-xs italic text-gray-400">Consumidor final</p>
+      ),
+    },
+    {
+      id: 'rnc',
+      header: 'RNC / Cédula',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: c => c.rncComprador ?? '',
+      render: c => (
+        <span className="font-mono text-xs tabular-nums text-gray-600">
+          {c.rncComprador ?? ''}
+        </span>
       ),
     },
     {
       id: 'fechaEmision',
       header: 'Emisión',
       visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
+      sortable: true,
+      sortAccessor: c => c.fechaEmision ?? '',
+      render: c => <span className="text-xs tabular-nums text-gray-600">{fmtFechaCorta(c.fechaEmision)}</span>,
     },
     {
       id: 'vence',
       header: 'Vence',
       visibleAt: 'lg',
-      render: c => c.fechaLimitePago ? (
-        <div>
-          <p className={`text-xs ${c.vencida ? 'text-red-700 font-medium' : 'text-gray-700'}`}>
-            {fmtFechaCorta(c.fechaLimitePago)}
-          </p>
-          {c.vencida && (
-            <p className="text-[11px] text-red-600">{c.diasVencido} día{c.diasVencido !== 1 ? 's' : ''} vencida</p>
-          )}
-        </div>
-      ) : <span className="text-gray-400 text-xs">—</span>,
+      sortable: true,
+      sortAccessor: c => c.fechaLimitePago ?? '',
+      render: c => c.fechaLimitePago
+        ? <span className={`text-xs tabular-nums ${c.vencida ? 'font-medium text-red-700' : 'text-gray-700'}`}>{fmtFechaCorta(c.fechaLimitePago)}</span>
+        : null,
+    },
+    {
+      id: 'atraso',
+      header: 'Atraso',
+      visibleAt: 'md',
+      sortable: true,
+      // Ordenar por atraso es la forma natural de trabajar la cartera: primero
+      // el que más días lleva. Por eso es columna propia y no un texto chico.
+      sortAccessor: c => (c.vencida ? c.diasVencido : -1),
+      // Un solo acento en toda la tabla: el rojo. La intensidad la da el peso
+      // de la tipografía, no otro color — con ámbar y verde a la vez la tabla
+      // se leía como un semáforo y ningún dato destacaba.
+      render: c => c.vencida
+        ? (
+          <span className={`whitespace-nowrap text-xs tabular-nums text-red-600 ${c.diasVencido > 30 ? 'font-semibold' : ''}`}>
+            {c.diasVencido} {c.diasVencido === 1 ? 'día' : 'días'}
+          </span>
+        )
+        : null,
     },
     {
       id: 'total',
-      header: 'Total',
+      // "Facturado" y no "Total": el otro total de la tabla es el saldo, y dos
+      // columnas llamadas Total con significados distintos se confunden solas.
+      header: 'Facturado',
       align: 'right',
-      visibleAt: 'md',
-      render: c => <span className="text-xs text-gray-600 whitespace-nowrap">{fmtDOP(c.montoTotal)}</span>,
+      visibleAt: 'xl',
+      sortable: true,
+      sortAccessor: c => c.montoTotal,
+      render: c => <span className="whitespace-nowrap text-xs tabular-nums text-gray-400">{fmtDOP(c.montoTotal)}</span>,
     },
     {
       id: 'pagado',
       header: 'Pagado',
       align: 'right',
       visibleAt: 'lg',
-      render: c => <span className="text-xs text-emerald-700 whitespace-nowrap">{fmtDOP(c.pagado)}</span>,
+      sortable: true,
+      sortAccessor: c => c.pagado,
+      render: c => (
+        <span className={`whitespace-nowrap text-xs tabular-nums ${c.pagado > 0 ? 'text-gray-600' : 'text-gray-300'}`}>
+          {fmtDOP(c.pagado)}
+        </span>
+      ),
+    },
+    {
+      id: 'mora',
+      // La mora NO es un monto aparte: ya va dentro del saldo. La columna
+      // existe para poder ver cuánto del saldo es recargo.
+      header: 'Mora incluida',
+      align: 'right',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: c => c.moraSaldo,
+      render: c => c.moraSaldo > 0
+        ? <span className="whitespace-nowrap text-xs tabular-nums text-red-600">{fmtDOP(c.moraSaldo)}</span>
+        : null,
     },
     {
       id: 'saldo',
-      header: 'Saldo',
+      header: 'Saldo total',
       align: 'right',
+      sortable: true,
+      sortAccessor: c => c.saldo,
       render: c => (
-        <div className="text-right">
-          <span className="text-sm font-bold text-gray-900 whitespace-nowrap">{fmtDOP(c.saldo)}</span>
-          {c.moraSaldo > 0 && (
-            <p className="text-[11px] text-orange-600 whitespace-nowrap">incl. mora {fmtDOP(c.moraSaldo)}</p>
-          )}
-        </div>
+        <span className={`whitespace-nowrap text-[15px] font-bold tabular-nums ${c.vencida ? 'text-red-700' : 'text-gray-900'}`}>
+          {fmtDOP(c.saldo)}
+        </span>
       ),
     },
   ], []);
 
+  // Ambas inline y siempre visibles: sin menú de tres puntos. Cobrar es la
+  // acción del día a día; el ojito entra al detalle sin tener que apuntarle
+  // al código.
   const rowActions = (c: Cuenta): RowAction[] => [
-    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c) },
+    { icon: Wallet2, title: 'Registrar pago', onClick: () => setPagoModal(c), primary: true },
+    { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${c.id}`, primary: true },
   ];
 
   return (
@@ -278,7 +351,13 @@ export default function CuentasPorCobrarPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
+        // Abre por lo más atrasado: es el orden en que se trabaja la cartera.
+        // Sin franjas ni fondos de color — la urgencia la comunica el dato en
+        // rojo, no rayar la fila entera.
+        defaultSort={{ columnId: 'atraso', dir: 'desc' }}
         rowActions={rowActions}
+        rowExpandable={c => (c.moraNotas?.length ?? 0) > 0}
+        renderExpanded={c => <MoraHijas cuenta={c} />}
         groupBy={agrupar ? (c => c.razonSocialComprador ?? 'Consumidor Final') : undefined}
         renderGroupHeader={agrupar ? ((key, rows) => {
           const tot  = rows.reduce((s, c) => s + c.saldo, 0);
@@ -341,6 +420,14 @@ function StatCard({ icon, label, value, color }: {
   );
 }
 
+// ─── Filas hijas: notas de débito por mora de una factura ────────────────────
+
+function MoraHijas({ cuenta }: { cuenta: Cuenta }) {
+  return (
+    <NotasMoraTable notas={cuenta.moraNotas ?? []} conEstado={false} />
+  );
+}
+
 // ─── Modal: registrar pago ───────────────────────────────────────────────────
 
 function PagoModal({
@@ -360,6 +447,15 @@ function PagoModal({
   const [fecha, setFecha]         = useState(today);
   const [guardando, setGuardando] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  // Resultado del pago recién registrado → resumen claro (recibido / a factura /
+  // a mora / queda pendiente) antes de cerrar. null = aún en el formulario.
+  const [resultado, setResultado] = useState<{
+    recibidoCents: number;
+    facturaCents:  number;
+    moraCents:     number;
+    saldoNuevo:    number;
+    saldado:       boolean;
+  } | null>(null);
   // Cuando el pago se bloquea por método que obliga DGII sobre factura no emitida,
   // el backend devuelve el link al detalle para emitirla primero.
   const [emitirUrl, setEmitirUrl] = useState<string | null>(null);
@@ -381,8 +477,27 @@ function PagoModal({
   const [lineas, setLineas] = useState<PagoLinea[]>([
     { metodo: 'transferencia', valor: '', referencia: '' },
   ]);
+  const [adjuntos, setAdjuntos] = useState<AdjuntoSubido[]>([]);
 
-  const valido = pagosValidos(lineas, totalDOP, pagadoDOP);
+  // Métodos que la empresa marcó como "exige comprobante". Si el usuario elige
+  // uno, el bloque de comprobantes se marca como requerido y el submit se frena
+  // acá mismo — el servidor lo revalida igual.
+  const [metodosExige, setMetodosExige] = useState<string[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/equipo/perfil')
+      .then(r => r.json())
+      .then(j => { if (vivo) setMetodosExige(Array.isArray(j.metodosExigeComprobante) ? j.metodosExigeComprobante : []); })
+      .catch(() => { if (vivo) setMetodosExige([]); });
+    return () => { vivo = false; };
+  }, []);
+
+  const exigeComprobante = lineas.some(
+    l => (parseFloat(l.valor || '0') || 0) > 0 && metodosExige.includes(l.metodo),
+  );
+  const faltaComprobante = exigeComprobante && adjuntos.length === 0;
+
+  const valido = pagosValidos(lineas, totalDOP, pagadoDOP) && !faltaComprobante;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -403,14 +518,25 @@ function PagoModal({
       const res = await fetch(`/api/cuentas-por-cobrar/${cuenta.id}/pagos`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaPago: fecha, pagos }),
+        body: JSON.stringify({
+          fechaPago: fecha,
+          pagos,
+          adjuntoIds: adjuntos.map(a => a.id),
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
         setEmitirUrl(typeof json.emitirUrl === 'string' ? json.emitirUrl : null);
         throw new Error(json.error ?? 'Error al registrar pago');
       }
-      onSuccess();
+      const recibidoCents = pagos.reduce((s, p) => s + Math.round(p.montoDOP * 100), 0);
+      setResultado({
+        recibidoCents,
+        facturaCents: json.repartido?.facturaCents ?? 0,
+        moraCents:    json.repartido?.moraCents ?? 0,
+        saldoNuevo:   json.saldoNuevo ?? 0,
+        saldado:      !!json.saldado,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -423,14 +549,22 @@ function PagoModal({
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Registrar pago</h2>
+            <h2 className="text-base font-semibold text-gray-900">
+              {resultado ? 'Pago registrado' : 'Registrar pago'}
+            </h2>
             <p className="text-xs text-gray-500 mt-0.5">{cuenta.codigo ?? `Factura #${cuenta.id}`}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+          <button
+            onClick={() => (resultado ? onSuccess() : onClose())}
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-400"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
+        {resultado ? (
+          <ResumenPago resultado={resultado} onListo={onSuccess} />
+        ) : (
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
             <div className="flex justify-between">
@@ -476,6 +610,14 @@ function PagoModal({
             notasCredito={notasCredito}
           />
 
+          <ComprobantesUploader
+            docId={cuenta.id}
+            adjuntos={adjuntos}
+            onChange={setAdjuntos}
+            disabled={guardando}
+            obligatorio={exigeComprobante}
+          />
+
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
               <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
@@ -511,6 +653,70 @@ function PagoModal({
             </button>
           </div>
         </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Resumen del pago registrado (recibido / a factura / a mora / pendiente) ──
+
+function ResumenPago({
+  resultado, onListo,
+}: {
+  resultado: { recibidoCents: number; facturaCents: number; moraCents: number; saldoNuevo: number; saldado: boolean };
+  onListo: () => void;
+}) {
+  const { recibidoCents, facturaCents, moraCents, saldoNuevo, saldado } = resultado;
+  return (
+    <div className="p-5 space-y-4">
+      <div className={`flex items-start gap-2 p-3 rounded-lg border ${
+        saldado ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+      }`}>
+        <CheckCircle className={`h-5 w-5 mt-0.5 shrink-0 ${saldado ? 'text-emerald-600' : 'text-amber-600'}`} />
+        <p className="text-sm text-gray-800">
+          {saldado
+            ? 'Pago registrado. La cuenta quedó saldada por completo (factura y mora).'
+            : 'Pago registrado. Quedó un saldo pendiente — revisa el desglose.'}
+        </p>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1.5">
+        <div className="flex justify-between">
+          <span className="text-gray-500">Recibido</span>
+          <span className="text-gray-900 font-medium tabular-nums">{fmtDOP(recibidoCents)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500">Aplicado a la factura</span>
+          <span className="text-gray-700 tabular-nums">{fmtDOP(facturaCents)}</span>
+        </div>
+        {moraCents > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-500">Aplicado a la mora</span>
+            <span className="text-orange-600 tabular-nums">{fmtDOP(moraCents)}</span>
+          </div>
+        )}
+        <div className="flex justify-between border-t border-gray-200 pt-1.5 mt-1.5 font-medium">
+          <span className="text-gray-700">Queda pendiente</span>
+          <span className={`tabular-nums ${saldoNuevo > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+            {fmtDOP(saldoNuevo)}
+          </span>
+        </div>
+        {saldoNuevo > 0 && (
+          <p className="text-[11px] text-gray-400 pt-0.5">
+            El pago cubre primero la factura; el resto se aplica a la mora. Lo que reste queda como saldo pendiente.
+          </p>
+        )}
+      </div>
+
+      <div className="flex justify-end pt-1">
+        <button
+          type="button"
+          onClick={onListo}
+          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg"
+        >
+          Listo
+        </button>
       </div>
     </div>
   );

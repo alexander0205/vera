@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import {
   AlertTriangle, CheckCircle, User, Calendar, Package, FileText,
   StickyNote, ScrollText, MessageSquare, CreditCard, Send,
 } from 'lucide-react';
@@ -65,6 +68,8 @@ export type { BorradorInicial, EmpresaPerfil };
 type EmitirOpts = {
   andThen?: 'nueva' | 'imprimir' | 'correo' | 'cobrar';
   metodoConfirmado?: boolean;
+  /** El aviso de "contado sin pago" ya se aceptó → no reabrir en la 2ª llamada. */
+  contadoConfirmado?: boolean;
 };
 
 export default function NuevaFacturaForm({
@@ -79,7 +84,12 @@ export default function NuevaFacturaForm({
 }) {
   const router  = useRouter();
   const empresa = initialPerfil;
-  const { can } = usePermissions();
+  const { can, isLoading: permLoading } = usePermissions();
+  // Sin `facturas:precio-editar` el precio, el descuento y el ITBIS de cada
+  // línea quedan en solo lectura. Mientras el permiso carga no se bloquea nada:
+  // `can()` responde false por defecto y trancaría la pantalla al owner por un
+  // instante. El servidor revalida al guardar, así que la ventana no abre nada.
+  const bloquearPrecios = !permLoading && !can('facturas:precio-editar');
   // Alerta double-check del método: solo si el rol del usuario tiene el permiso.
   // Combina el toggle por-empresa con el permiso por-rol: la alerta sale solo si
   // la empresa la tiene activa Y el rol del usuario tiene el permiso.
@@ -478,6 +488,25 @@ export default function NuevaFacturaForm({
     null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
   >(null);
 
+  // Aviso al guardar una factura de venta marcada "de contado" que queda sin
+  // pago y la empresa tiene mora configurada. Guarda el emitir() pendiente.
+  const [confirmContado, setConfirmContado] = useState<
+    null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
+  >(null);
+  // "No volver a mostrar": persistido en localStorage (por navegador).
+  const [ocultarAvisoContado, setOcultarAvisoContado] = useState(false);
+  // Estado del checkbox dentro del diálogo (se reinicia al abrir).
+  const [noMostrarContado, setNoMostrarContado] = useState(false);
+
+  function persistOcultarAvisoContado() {
+    try {
+      const prefs = JSON.parse(localStorage.getItem('emitedo:facturaOpciones') ?? '{}');
+      prefs.ocultarAvisoContado = true;
+      localStorage.setItem('emitedo:facturaOpciones', JSON.stringify(prefs));
+    } catch {}
+    setOcultarAvisoContado(true);
+  }
+
   const [comentario, setComentario] = useState(initialData?.comentario ?? '');
 
   // ── Enviar por correo modal ────────────────────────────────────────────────
@@ -548,6 +577,7 @@ export default function NuevaFacturaForm({
       if (prefs.almacen)      setShowAlmacen(true);
       if (prefs.listaPrecios) setShowListaPrecios(true);
       if (prefs.vendedor)     setShowVendedor(true);
+      if (prefs.ocultarAvisoContado) setOcultarAvisoContado(true);
     } catch {}
   }, []);
 
@@ -895,6 +925,18 @@ export default function NuevaFacturaForm({
     // solo aplica si el rol del usuario tiene el permiso 'pagos:alerta-metodo'.
     if (alertaMetodoPago && pagoRecibido && sumaPagos(pagoLineas) > 0 && !opts?.metodoConfirmado) {
       setConfirmMetodo({ modo, opts });
+      return;
+    }
+
+    // Aviso: venta "de contado" sin pago registrado y con mora configurada. La
+    // factura quedaría por cobrar sin vencimiento ni mora automática. Se ofrece
+    // corregir la condición a crédito o continuar. Solo ventas cobrables.
+    const esVentaCobrable = ['31', '32', '45', '46', '47', 'sin-ncf'].includes(tipoEcf);
+    const sinPago = !pagoRecibido || sumaPagos(pagoLineas) <= 0;
+    if (esVentaCobrable && condicionPago === '1' && sinPago
+        && empresa?.recargoMoraActivo && !opts?.contadoConfirmado && !ocultarAvisoContado) {
+      setNoMostrarContado(false);
+      setConfirmContado({ modo, opts });
       return;
     }
 
@@ -1360,6 +1402,8 @@ export default function NuevaFacturaForm({
                   diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
                   tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
                   fechaLimitePago={fechaLimitePago}
+                  empresa={empresa}
+                  sinPagoRegistrado={!pagoRecibido || sumaPagos(pagoLineas) <= 0}
                 />
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <ClasificacionFactura
@@ -1397,6 +1441,7 @@ export default function NuevaFacturaForm({
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
                   dependientes={dependientesCliente}
+                  bloquearPrecios={bloquearPrecios}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}
@@ -1564,6 +1609,64 @@ export default function NuevaFacturaForm({
               void emitir(pend.modo, { ...pend.opts, metodoConfirmado: true });
             }}
           />
+        )}
+
+        {/* Aviso al guardar una factura de contado sin pago (con mora configurada) */}
+        {confirmContado && (
+          <Dialog open onOpenChange={(o) => { if (!o && !loading) setConfirmContado(null); }}>
+            <DialogContent className="max-w-md w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                  Factura sin pago registrado
+                </DialogTitle>
+                <DialogDescription className="pt-1 text-sm text-gray-600">
+                  Está marcada <span className="font-semibold">de contado</span> pero no registraste
+                  ningún pago. Quedará por cobrar, sin fecha de vencimiento y sin generar la mora
+                  automática que tienes configurada. Puedes cambiarla a crédito para que aplique el
+                  vencimiento y la mora, o continuar de contado.
+                </DialogDescription>
+              </DialogHeader>
+              <label className="flex items-center gap-2 mt-1 text-sm text-gray-600 select-none cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={noMostrarContado}
+                  onChange={(e) => setNoMostrarContado(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                />
+                No volver a mostrar este mensaje
+              </label>
+              <DialogFooter className="gap-2 mt-2 flex-col-reverse sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmContado(null)}
+                  disabled={loading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-teal-600 text-teal-700 hover:bg-teal-50"
+                  onClick={() => { if (noMostrarContado) persistOcultarAvisoContado(); setCondicionPago('2'); setConfirmContado(null); }}
+                  disabled={loading}
+                >
+                  Cambiar a crédito
+                </Button>
+                <Button
+                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                  onClick={() => {
+                    const pend = confirmContado;
+                    if (noMostrarContado) persistOcultarAvisoContado();
+                    setConfirmContado(null);
+                    void emitir(pend.modo, { ...pend.opts, contadoConfirmado: true });
+                  }}
+                  disabled={loading}
+                >
+                  Continuar de contado
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
 
       </div>

@@ -56,6 +56,108 @@ function estadoBadge(estado: string) {
   }
 }
 
+// ─── Fila hija: facturas generadas por el plan (esencial + mora) ──────────────
+
+interface GeneradaEsencial {
+  id: number;
+  codigo: string | null;
+  encf: string;
+  fechaEmision: string;
+  montoTotal: number;
+  estadoPago: string;
+  saldo: number;
+  moraAplicada: number;
+  moraPendiente: number;
+}
+
+function cobroBadge(estadoPago: string, moraPendiente: number) {
+  // Capital saldado pero con mora impaga → no es "Pagada" del todo.
+  if (estadoPago === 'PAGADA' && moraPendiente > 0)
+    return <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-orange-100 text-orange-700 border-orange-200 whitespace-nowrap">Mora pendiente</span>;
+  if (estadoPago === 'PAGADA')
+    return <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-emerald-100 text-emerald-700 border-emerald-200 whitespace-nowrap">Pagada</span>;
+  if (estadoPago === 'PARCIAL')
+    return <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-amber-100 text-amber-700 border-amber-200 whitespace-nowrap">Parcial</span>;
+  return <span className="text-[10px] px-1.5 py-0.5 rounded-full border bg-gray-100 text-gray-600 border-gray-200 whitespace-nowrap">Pendiente</span>;
+}
+
+function RecurrenteHijos({ recurrenteId }: { recurrenteId: number }) {
+  const [rows, setRows]     = useState<GeneradaEsencial[] | null>(null);
+  const [error, setError]   = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch(`/api/facturas-recurrentes/${recurrenteId}/generadas`)
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(d => { if (vivo) setRows(Array.isArray(d.generadas) ? d.generadas : []); })
+      .catch(() => { if (vivo) setError(true); });
+    return () => { vivo = false; };
+  }, [recurrenteId]);
+
+  const contenido = (() => {
+    if (error) return <p className="text-xs text-red-600">No se pudo cargar el historial.</p>;
+    if (rows === null) return (
+      <p className="flex items-center gap-2 text-xs text-gray-400">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando facturas generadas…
+      </p>
+    );
+    if (rows.length === 0) return <p className="text-xs text-gray-400">Aún no hay facturas generadas.</p>;
+
+    const totalSaldo = rows.reduce((s, g) => s + g.saldo, 0);
+    const totalMoraPend = rows.reduce((s, g) => s + g.moraPendiente, 0);
+
+    return (
+      <div className="space-y-1.5">
+        {rows.map(g => (
+          <Link
+            key={g.id}
+            href={`/dashboard/facturas/${g.id}`}
+            className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 hover:border-teal-300 hover:bg-white transition-colors"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-mono text-xs font-semibold text-teal-700 truncate">
+                {g.codigo ?? (g.encf && !g.encf.startsWith('BOR-') ? g.encf : `#${g.id}`)}
+              </span>
+              <span className="text-[11px] text-gray-400 whitespace-nowrap hidden sm:inline">{fmtFechaCorta(g.fechaEmision)}</span>
+              {cobroBadge(g.estadoPago, g.moraPendiente)}
+            </div>
+            <div className="text-right whitespace-nowrap">
+              <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(g.saldo)}</span>
+              {g.moraAplicada > 0 && (
+                <p className="text-[11px] text-orange-600">
+                  mora {fmtDOP(g.moraAplicada)}
+                  {g.moraPendiente > 0 && <span className="text-gray-400"> · {fmtDOP(g.moraPendiente)} pend.</span>}
+                </p>
+              )}
+            </div>
+          </Link>
+        ))}
+        {rows.length > 1 && (
+          <div className="flex items-center justify-between gap-3 px-3 pt-1 text-[11px] text-gray-500">
+            <span>{rows.length} factura{rows.length === 1 ? '' : 's'}</span>
+            <span className="tabular-nums">
+              Saldo <span className="font-semibold text-gray-800">{fmtDOP(totalSaldo)}</span>
+              {totalMoraPend > 0 && <span className="text-orange-600"> · mora pend. {fmtDOP(totalMoraPend)}</span>}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  })();
+
+  return (
+    <div className="py-1">
+      <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
+          <RefreshCw className="h-4 w-4 text-teal-600 shrink-0" />
+          <span className="text-sm font-semibold text-gray-900">Facturas generadas</span>
+        </div>
+        <div className="p-4">{contenido}</div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function FacturasRecurrentesPage({ canOperate = true }: { canOperate?: boolean }) {
@@ -238,6 +340,8 @@ export default function FacturasRecurrentesPage({ canOperate = true }: { canOper
         description="Automatiza el ciclo de facturación de tus clientes"
         rowActions={rowActions}
         rowHref={f => `/dashboard/facturas-recurrentes/${f.id}`}
+        rowExpandable={f => f.facturasEmitidas > 0}
+        renderExpanded={f => <RecurrenteHijos recurrenteId={f.id} />}
         emptyState={{
           icon: RefreshCw,
           title: 'Sin facturas recurrentes',

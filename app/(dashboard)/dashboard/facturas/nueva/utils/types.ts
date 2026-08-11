@@ -130,6 +130,12 @@ export interface EmpresaPerfil {
   recargoMoraActivo?:     boolean;
   recargoMoraPorcentaje?: number;  // basis points
   recargoMoraDiasGracia?: number;
+  recargoMoraModo?:       'porcentaje' | 'fijo';
+  recargoMoraMontoCents?: number;
+  recargoMoraPeriodicidadDias?: number;
+  recargoMoraCompuesta?:  boolean;
+  recargoMoraTopeBps?:    number;
+  recargoMoraMaxPeriodos?: number;
   // Plazo de pago por defecto. null = de contado; N = crédito a N días.
   plazoPagoDefaultDias?:  number | null;
   // Toggle empresa: alerta double-check del método de pago (combina con permiso).

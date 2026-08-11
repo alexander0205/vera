@@ -20,6 +20,7 @@ import { db } from '@/lib/db/drizzle';
 import { teamMembers, ecfDocuments, teams } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
+import { faltaComprobanteExigido, vincularAdjuntos } from '@/lib/pagos/adjuntos';
 import { logAudit, getIp } from '@/lib/audit';
 
 const schema = z.object({
@@ -31,6 +32,7 @@ const schema = z.object({
   fechaPago:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notas:         z.string().max(500).optional(),
   notaCreditoId: z.number().int().positive().optional(),
+  adjuntoIds:    z.array(z.number().int().positive()).max(5).optional(),
 }).refine(d => d.montoCentavos || d.montoDOP, {
   message: 'Debes proveer montoCentavos o montoDOP',
 });
@@ -51,6 +53,7 @@ const splitLineaSchema = z.object({
 const splitSchema = z.object({
   fechaPago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pagos:     z.array(splitLineaSchema).min(1),
+  adjuntoIds: z.array(z.number().int().positive()).max(5).optional(),
 });
 
 export async function GET(
@@ -112,6 +115,7 @@ export async function POST(
     }>;
     let fechaPago: string;
     let esSplit = false;
+    let adjuntoIds: number[] = [];
 
     if (body && Array.isArray((body as { pagos?: unknown }).pagos)) {
       const parsedSplit = splitSchema.safeParse(body);
@@ -119,8 +123,9 @@ export async function POST(
         return NextResponse.json({ error: 'Datos inválidos', detalles: parsedSplit.error.flatten() }, { status: 400 });
       }
       const split = parsedSplit.data;
-      fechaPago = split.fechaPago;
-      esSplit   = true;
+      fechaPago  = split.fechaPago;
+      esSplit    = true;
+      adjuntoIds = split.adjuntoIds ?? [];
       lineas = split.pagos.map(p => ({
         montoCentavos: p.montoCentavos ?? Math.round((p.montoDOP ?? 0) * 100),
         metodo:        p.metodo,
@@ -135,7 +140,8 @@ export async function POST(
         return NextResponse.json({ error: 'Datos inválidos', detalles: parsed.error.flatten() }, { status: 400 });
       }
       const data = parsed.data;
-      fechaPago = data.fechaPago;
+      fechaPago  = data.fechaPago;
+      adjuntoIds = data.adjuntoIds ?? [];
       lineas = [{
         montoCentavos: data.montoCentavos ?? Math.round((data.montoDOP ?? 0) * 100),
         metodo:        data.metodo,
@@ -157,6 +163,24 @@ export async function POST(
       .from(teams)
       .where(eq(teams.id, teamId))
       .limit(1);
+
+    // ── Método que exige comprobante ────────────────────────────────────────────
+    // Se valida ANTES de crear el cobro: si falta el respaldo, no entra la plata.
+    // Los archivos ya se subieron colgando del documento; aquí solo se verifica
+    // que los ids sean comprobantes reales de esta factura.
+    const metodoSinRespaldo = await faltaComprobanteExigido(
+      teamId, docIdNum, lineas.map(l => l.metodo), adjuntoIds,
+    );
+    if (metodoSinRespaldo) {
+      return NextResponse.json(
+        {
+          error: `Un cobro con «${labelMetodo(metodoSinRespaldo)}» necesita el comprobante adjunto.`,
+          requiereComprobante: true,
+          metodoExigeComprobante: metodoSinRespaldo,
+        },
+        { status: 422 },
+      );
+    }
     const metodosObliga = new Set(
       ((teamCfg?.metodosObligaDgii as string[] | null) ?? []).map(m => m.trim().toLowerCase()),
     );
@@ -274,6 +298,15 @@ export async function POST(
       turnoCajaId,
       lineas,
     });
+
+    // Atar los comprobantes a la primera fila del cobro. Un pago puede generar
+    // varias filas (factura + cada ND de mora); el archivo respalda la operación
+    // completa, así que apunta a la primera y sigue colgado del documento.
+    const primerPagoId = result.pagos?.[0]?.id;
+    if (adjuntoIds.length > 0 && primerPagoId) {
+      await vincularAdjuntos(teamId, docIdNum, adjuntoIds, primerPagoId)
+        .catch(e => console.error('[pagos] vincularAdjuntos', e));
+    }
 
     logAudit({
       teamId, userId: user.id, actor: user.email,

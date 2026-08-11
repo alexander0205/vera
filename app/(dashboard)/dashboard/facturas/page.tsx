@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText, Upload, Eye, Printer,
+  Plus, Download, Ban, FileText, Upload, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
+import { NotasMoraTable } from '@/components/notas-mora-table';
 import { ImportModal } from '@/components/import-modal';
-import { fmtDOP, fmtFechaCorta, fmtFechaRD, fmtHora, diasVencido } from '@/lib/utils/format';
+import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
@@ -83,6 +84,15 @@ interface Doc {
   fechaEmision: string;
   fechaLimitePago: string | null;
   pagado: number;
+  moraPendiente?: number;
+  /** Saldo vivo de notas de débito manuales (cargo adicional) de esta factura. */
+  ndPendiente?: number;
+  moraAplicada?: number;
+  moraNotas?: {
+    id: number; codigo: string | null; montoTotal: number; saldo: number;
+    estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA';
+    fechaEmision?: string | null; periodo?: string | null;
+  }[];
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
@@ -98,8 +108,6 @@ export default function FacturasPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage]       = useState(1);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [emailModal, setEmailModal] = useState<{ id: number; email: string } | null>(null);
-  const [emailLoading, setEmailLoading] = useState(false);
   const [showImport, setShowImport] = useState(false);
   // Maestros de factura (Plan A) → filtros dinámicos por valor.
   const [facturaMaestros, setFacturaMaestros] = useState<
@@ -166,24 +174,6 @@ export default function FacturasPage() {
     window.location.href = `/api/facturas/export?${sp}`;
   }
 
-  async function sendEmail() {
-    if (!emailModal) return;
-    setEmailLoading(true);
-    const res = await fetch(`/api/facturas/${emailModal.id}/email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: emailModal.email }),
-    });
-    if (res.ok) {
-      toast.success('Factura enviada por email');
-      setEmailModal(null);
-    } else {
-      const d = await res.json();
-      toast.error(d.error ?? 'Error enviando email');
-    }
-    setEmailLoading(false);
-  }
-
   // ─── Columns ────────────────────────────────────────────────────────────────
 
   const columns: DataTableColumn<Doc>[] = [
@@ -193,12 +183,14 @@ export default function FacturasPage() {
       sortable: true,
       sortAccessor: doc => doc.codigo ?? '',
       render: doc => (
+        // Solo la cola del código: el prefijo (tipo-año-empresa) es idéntico en
+        // todas las filas y se comía media columna. El completo, en el tooltip.
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          className="font-mono text-xs font-semibold text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600 tabular-nums leading-tight block"
+          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
           title={doc.codigo ?? `#${doc.id}`}
         >
-          {doc.codigo ?? `#${doc.id}`}
+          {doc.codigo ? fmtCodigoCorto(doc.codigo) : `#${doc.id}`}
         </Link>
       ),
     },
@@ -207,23 +199,28 @@ export default function FacturasPage() {
       header: 'Cliente',
       sortable: true,
       sortAccessor: doc => doc.razonSocialComprador ?? '',
+      // Una línea por celda: el RNC vive en su propia columna y el beneficiario
+      // en el detalle. Apilar tres textos grises debajo del nombre convertía la
+      // tabla en un muro y no dejaba comparar filas de un vistazo.
       render: doc => (
-        <div className="max-w-[200px] min-w-0">
-          <p
-            className="text-sm text-gray-900 truncate font-medium leading-tight"
-            title={doc.razonSocialComprador ?? 'Consumidor Final'}
-          >
-            {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
-          </p>
-          {doc.rncComprador && (
-            <p className="text-[11px] text-gray-400 font-mono mt-0.5 leading-tight">{doc.rncComprador}</p>
-          )}
-          {doc.dependienteNombre && (
-            <p className="text-[11px] text-gray-400 mt-0.5 leading-tight truncate" title={`Beneficiario: ${doc.dependienteNombre}`}>
-              Benef.: {doc.dependienteNombre}
-            </p>
-          )}
-        </div>
+        <p
+          className="max-w-[150px] truncate text-xs font-medium leading-tight text-gray-900"
+          title={doc.razonSocialComprador ?? 'Consumidor Final'}
+        >
+          {doc.razonSocialComprador ?? <span className="text-gray-400 font-normal">Consumidor Final</span>}
+        </p>
+      ),
+    },
+    {
+      id: 'rnc',
+      header: 'RNC / Cédula',
+      visibleAt: 'lg',
+      sortable: true,
+      sortAccessor: doc => doc.rncComprador ?? '',
+      render: doc => (
+        <span className="font-mono text-xs tabular-nums text-gray-600">
+          {doc.rncComprador ?? <span className="text-gray-300">—</span>}
+        </span>
       ),
     },
     {
@@ -234,10 +231,10 @@ export default function FacturasPage() {
       sortAccessor: doc => doc.createdAt,
       render: doc => (
         <div className="whitespace-nowrap tabular-nums leading-tight">
+          {/* Solo la fecha: la hora del alta no ayuda a ubicar una factura en
+              un listado y competía con el dato que sí importa. Sigue visible
+              en el detalle del documento. */}
           <span className="text-xs text-gray-600">{fmtFechaRD(doc.createdAt)}</span>
-          {doc.createdAt && (
-            <span className="block text-[11px] text-gray-400">{fmtHora(doc.createdAt)}</span>
-          )}
         </div>
       ),
     },
@@ -250,18 +247,16 @@ export default function FacturasPage() {
         const dias = diasVencido(doc.fechaLimitePago);
         const saldo = doc.montoTotal - (doc.pagado ?? 0);
         const vencida = esCredito && saldo > 0 && dias > 0 && ['ACEPTADO','ACEPTADO_CONDICIONAL','EN_PROCESO'].includes(doc.estado);
+        // De contado no tiene vencimiento; a crédito, la fecha ES el dato — la
+        // palabra "Crédito" sobra al lado de una fecha de vencimiento.
+        if (!esCredito || !doc.fechaLimitePago) {
+          return <span className="text-xs text-gray-500 whitespace-nowrap">{TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}</span>;
+        }
         return (
-          <div className="min-w-0">
-            <p className={`text-xs font-medium leading-tight ${esCredito ? 'text-amber-700' : 'text-gray-500'}`}>
-              {TIPO_PAGO_LABEL[doc.tipoPago ?? 1] ?? '—'}
-            </p>
-            {esCredito && doc.fechaLimitePago && (
-              <p className={`text-[11px] mt-0.5 tabular-nums leading-tight whitespace-nowrap ${vencida ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
-                {fmtFechaCorta(doc.fechaLimitePago)}
-                {vencida && <span className="ml-1 text-red-500">· {dias}d</span>}
-              </p>
-            )}
-          </div>
+          <span className={`text-xs tabular-nums whitespace-nowrap ${vencida ? 'font-semibold text-red-600' : 'text-gray-600'}`}>
+            {fmtFechaCorta(doc.fechaLimitePago)}
+            {vencida && <span className="ml-1 font-normal text-red-500">· {dias}d</span>}
+          </span>
         );
       },
     },
@@ -275,17 +270,6 @@ export default function FacturasPage() {
       render: doc => (
         <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
           {fmtDOP(doc.montoTotal - doc.totalItbis)}
-        </span>
-      ),
-    },
-    {
-      id: 'itbis',
-      header: 'ITBIS',
-      visibleAt: 'xl',
-      align: 'right',
-      render: doc => (
-        <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
-          {doc.totalItbis > 0 ? fmtDOP(doc.totalItbis) : <span className="text-gray-300">—</span>}
         </span>
       ),
     },
@@ -318,8 +302,16 @@ export default function FacturasPage() {
         const saldo   = doc.montoTotal - pagado;
         const esCred  = doc.tipoPago === 2;
         const dias    = diasVencido(doc.fechaLimitePago);
+        // Cualquier nota de débito viva sobre esta factura —mora automática o
+        // cargo manual— es deuda de la misma cuenta.
+        const ndPend = Number(doc.moraPendiente ?? 0) + Number(doc.ndPendiente ?? 0);
         if (ep === 'GRATUITA') return <Badge color="gray">Gratuita</Badge>;
         if (ep === 'USO')      return <Badge color="gray">Uso</Badge>;
+        // Capital saldado pero con notas de débito sin pagar: la factura no
+        // está cobrada del todo, así que no puede anunciarse como Pagada.
+        if (ep === 'PAGADA' && ndPend > 0) {
+          return <Badge color="orange" title={`Capital pagado; falta ${fmtDOP(ndPend)} en notas de débito`}>Parcial</Badge>;
+        }
         if (ep === 'PAGADA')   return <Badge color="green">Pagada</Badge>;
         if (ep === 'PARCIAL')  return <Badge color="amber" title={`Falta ${fmtDOP(saldo)}`}>Parcial</Badge>;
         if (ep === 'PENDIENTE' && esCred && dias > 0) {
@@ -343,7 +335,7 @@ export default function FacturasPage() {
     {
       // Comprobante al final. Texto coloreado según estado DGII. Formato E31-252.
       id: 'encf',
-      header: 'Comprobante',
+      header: 'e-NCF',
       align: 'right',
       sortable: true,
       sortAccessor: doc => doc.encf,
@@ -363,27 +355,17 @@ export default function FacturasPage() {
     },
   ];
 
-  const rowActions = (doc: Doc): RowAction[] => {
-    // "Ver" inline (👁) antes de los 3 puntos — abre el detalle.
-    const ver: RowAction = { icon: Eye, title: 'Ver detalle', href: `/dashboard/facturas/${doc.id}`, primary: true };
-    // Recibo POS: solo para ventas sin-ncf (ticket de mostrador). Reabre el recibo 80mm.
-    const recibo: RowAction[] = doc.tipoEcf === 'sin-ncf'
-      ? [{ icon: Printer, title: 'Reimprimir recibo', onClick: () => window.open(`/pos-ticket/${doc.id}`, '_blank', 'width=420,height=680') }]
-      : [];
-    if (doc.estado === 'BORRADOR') {
-      return [
-        ver,
-        { icon: FileText, title: 'Continuar edición', href: `/dashboard/facturas/${doc.id}/editar` },
-        ...recibo,
-      ];
-    }
-    return [
-      ver,
-      { icon: FileText, title: 'Ver PDF', href: `/api/pdf/factura/${doc.codigo ?? doc.id}` },
-      { icon: Mail,     title: 'Enviar por email', onClick: () => setEmailModal({ id: doc.id, email: doc.emailComprador ?? '' }) },
-      ...recibo,
-    ];
-  };
+  // Una sola acción, siempre visible: entrar al detalle. El menú de tres puntos
+  // escondía PDF / email / recibo detrás de dos clics, y esas tres acciones ya
+  // están en el detalle. Un ojito fijo se entiende sin abrir nada.
+  const rowActions = (doc: Doc): RowAction[] => [
+    {
+      icon:    Eye,
+      title:   doc.estado === 'BORRADOR' ? 'Continuar edición' : 'Ver detalle',
+      href:    doc.estado === 'BORRADOR' ? `/dashboard/facturas/${doc.id}/editar` : `/dashboard/facturas/${doc.id}`,
+      primary: true,
+    },
+  ];
 
   // Derivar bulk/header actions según permisos (default-deny mientras carga)
   const canAnular   = !permLoading && can('facturas:anular');
@@ -426,8 +408,11 @@ export default function FacturasPage() {
         ]}
         filterValues={filterValues}
         onFilterChange={setFilterValues}
-        // Toda la fila abre el detalle: el ojo de la derecha y el código son
-        // dianas chicas en una tabla ancha, y se leían como decoración.
+        // La fila con notas de mora las despliega; la que no tiene nada que
+        // desplegar abre el detalle. Las dos responden al clic en cualquier
+        // punto: el ojo y el código son dianas chicas en una tabla ancha.
+        rowExpandable={doc => (doc.moraNotas?.length ?? 0) > 0}
+        renderExpanded={doc => <ResumenFactura doc={doc} />}
         rowHref={doc => `/dashboard/facturas/${doc.id}`}
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
@@ -490,45 +475,26 @@ export default function FacturasPage() {
         onDone={() => fetchDocs()}
       />
 
-      {/* Email modal */}
-      {emailModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-base font-semibold text-gray-900">Enviar factura por email</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email del destinatario</label>
-              <input
-                type="email"
-                value={emailModal.email}
-                onChange={e => setEmailModal(m => m ? { ...m, email: e.target.value } : m)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                placeholder="cliente@empresa.com"
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setEmailModal(null)}
-                className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-                Cancelar
-              </button>
-              <button onClick={sendEmail} disabled={emailLoading || !emailModal.email}
-                className="text-sm px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50">
-                {emailLoading ? 'Enviando...' : 'Enviar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
+  );
+}
+
+// ─── Fila hija: resumen general de una factura (montos + cobro + mora) ────────
+
+function ResumenFactura({ doc }: { doc: Doc }) {
+  return (
+    <NotasMoraTable notas={doc.moraNotas ?? []} />
   );
 }
 
 // ─── Badge helper (uso interno a esta página) ─────────────────────────────────
 
 const BADGE_COLORS = {
-  green: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
-  amber: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
-  red:   'bg-red-50 text-red-700 ring-1 ring-red-200',
-  gray:  'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
+  green:  'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  amber:  'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
+  orange: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200',
+  red:    'bg-red-50 text-red-700 ring-1 ring-red-200',
+  gray:   'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
 } as const;
 
 function Badge({

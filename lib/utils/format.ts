@@ -65,6 +65,24 @@ export function fmtDOP(centavos: number): string {
 }
 
 /**
+ * Cola del código interno de un comprobante, para listados.
+ * `FA-2026-CAND-Q3YY7-000446` → `Q3YY7-000446`.
+ *
+ * El prefijo (tipo + año + empresa) se repite en todas las filas de un listado:
+ * ocupa la mitad de la columna sin distinguir nada. Los dos últimos segmentos
+ * sí identifican al documento. El código completo va en el `title` para quien
+ * lo necesite copiar.
+ *
+ * Sin guiones (códigos legacy) devuelve los últimos 8 caracteres.
+ */
+export function fmtCodigoCorto(codigo: string | null | undefined): string {
+  if (!codigo) return '';
+  const partes = codigo.split('-').filter(Boolean);
+  if (partes.length >= 2) return partes.slice(-2).join('-');
+  return codigo.length > 8 ? codigo.slice(-8) : codigo;
+}
+
+/**
  * Formatea un teléfono RD a `(XXX) XXX-XXXX`. Acepta cualquier input,
  * extrae dígitos (max 10) y aplica máscara progresivamente.
  *

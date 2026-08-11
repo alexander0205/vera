@@ -114,6 +114,18 @@ export const teams = pgTable('teams', {
   recargoMoraActivo:      boolean('recargo_mora_activo').notNull().default(false),
   recargoMoraPorcentaje:  integer('recargo_mora_porcentaje').notNull().default(200),  // basis points; 200 = 2.00%
   recargoMoraDiasGracia:  integer('recargo_mora_dias_gracia').notNull().default(5),
+  /** 'porcentaje' → usa recargoMoraPorcentaje; 'fijo' → usa recargoMoraMontoCents. */
+  recargoMoraModo:        varchar('recargo_mora_modo', { length: 12 }).notNull().default('porcentaje'),
+  /** Cargo en centavos cuando el modo es 'fijo'. */
+  recargoMoraMontoCents:  integer('recargo_mora_monto_cents').notNull().default(0),
+  /** Cada cuántos días se recobra mientras siga vencida. 0 = una sola vez. */
+  recargoMoraPeriodicidadDias: integer('recargo_mora_periodicidad_dias').notNull().default(0),
+  /** true = la base incluye las moras anteriores impagas (mora sobre mora). */
+  recargoMoraCompuesta:   boolean('recargo_mora_compuesta').notNull().default(false),
+  /** Tope de mora ACUMULADA como % del documento, en bps. 0 = sin tope. */
+  recargoMoraTopeBps:     integer('recargo_mora_tope_bps').notNull().default(0),
+  /** Máximo de períodos a cobrar. 0 = sin límite. */
+  recargoMoraMaxPeriodos: integer('recargo_mora_max_periodos').notNull().default(0),
 
   // ── Alerta double-check del método de pago ────────────────────────────────
   // Toggle por empresa. Si está activo (Y el rol tiene el permiso
@@ -154,6 +166,12 @@ export const teams = pgTable('teams', {
   // como borrador: hay que emitirla a la DGII. Vacío = sin restricción.
   // Ej: ["tarjeta"] → toda venta con tarjeta va obligatoriamente a la DGII.
   metodosObligaDgii:      jsonb('metodos_obliga_dgii').notNull().default([]),
+
+  // ── Métodos de pago que EXIGEN comprobante adjunto ────────────────────────
+  // Mismo patrón que metodosObligaDgii. Al registrar un cobro con alguno de
+  // estos métodos hay que adjuntar la imagen o el archivo del comprobante.
+  // Vacío = sin restricción, que es como nacen todas las empresas.
+  metodosExigeComprobante: jsonb('metodos_exige_comprobante').notNull().default([]),
 
   // ── Textos por defecto de los comprobantes ────────────────────────────────
   // Se copian al crear una factura o cotización nueva para no reescribirlos
@@ -489,10 +507,8 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // sin .references() para evitar import circular (FK declarada en la migración).
   moraOrigenId: integer('mora_origen_id'),
 
-  // Override por factura del recargo por mora (crédito + recargo activo).
-  // NULL = usar el default del team (recargoMoraPorcentaje / recargoMoraDiasGracia).
-  moraPorcentaje: integer('mora_porcentaje'),  // basis points (200 = 2%)
-  moraDiasGracia: integer('mora_dias_gracia'), // días de gracia
+  /** Período que cubre esta nota de mora (inicio del período). Solo en las notas. */
+  moraPeriodo:    date('mora_periodo'),
 
   // Metadatos de venta: almacén, vendedor y lista de precios usada al emitir
   almacenId:      integer('almacen_id').references(() => almacenes.id),
@@ -762,10 +778,6 @@ export const facturasRecurrentes = pgTable('facturas_recurrentes', {
   items:            text('items').notNull().default('[]'),
   notas:            text('notas'),
   totalEstimado:    integer('total_estimado').notNull().default(0),
-  /** Override de mora por plan (bps; 200=2%). null → usa config global del team. */
-  moraPorcentaje:   integer('mora_porcentaje'),
-  /** Override de días de gracia por plan. null → usa config global del team. */
-  moraDiasGracia:   integer('mora_dias_gracia'),
   facturasEmitidas: integer('facturas_emitidas').notNull().default(0),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
@@ -804,6 +816,45 @@ export const pagosRecibidos = pgTable('pagos_recibidos', {
   index('pagos_team_doc_idx').on(t.teamId, t.ecfDocumentId),
   index('pagos_team_fecha_idx').on(t.teamId, t.fechaPago),
   index('pagos_turno_idx').on(t.turnoCajaId),
+]);
+
+// ─── Comprobantes de pago (imagen / PDF que respalda un cobro) ────────────────
+/**
+ * El adjunto cuelga del DOCUMENTO, no de la fila del ledger: las filas de
+ * `pagosRecibidos` no son estables. `/api/facturas/[id]/pago` borra y reinserta
+ * el pago completo en cada guardado, y `registrarPagoFacturaConMora` parte un
+ * pago en varias filas (factura + cada ND de mora). `pagoRecibidoId` queda como
+ * referencia fina con ON DELETE SET NULL, para que el archivo sobreviva.
+ *
+ * El binario vive en S3 (bucket privado). `contenido` es el fallback base64
+ * para desarrollo local sin credenciales de AWS.
+ */
+export const pagoAdjuntos = pgTable('pago_adjuntos', {
+  id:             serial('id').primaryKey(),
+  teamId:         integer('team_id').notNull().references(() => teams.id),
+  ecfDocumentId:  integer('ecf_document_id').notNull().references(() => ecfDocuments.id),
+  /** Abono concreto que respalda. Null si su fila del ledger fue reescrita. */
+  pagoRecibidoId: integer('pago_recibido_id').references(() => pagosRecibidos.id, { onDelete: 'set null' }),
+  nombre:         varchar('nombre', { length: 255 }).notNull(),
+  mime:           varchar('mime', { length: 100 }).notNull(),
+  tamanoBytes:    integer('tamano_bytes').notNull(),
+  /** Hash del binario: evita guardar dos veces el mismo comprobante. */
+  sha256:         char('sha256', { length: 64 }).notNull(),
+  /** 's3' → el binario está en s3Key. 'db' → está en contenido (base64). */
+  storage:        varchar('storage', { length: 10 }).notNull().default('s3'),
+  /** prod/team_12/pago/<uuid>.jpg — UUID, nunca el id, para que no se enumere. */
+  s3Key:          text('s3_key'),
+  /** Miniatura ~300px derivada del binario guardado. NULL en PDF. */
+  thumbS3Key:     text('thumb_s3_key'),
+  contenido:      text('contenido'),
+  subidoPor:      integer('subido_por').references(() => users.id),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('pago_adjuntos_doc_idx').on(t.teamId, t.ecfDocumentId),
+  index('pago_adjuntos_pago_idx').on(t.pagoRecibidoId),
+  // Un archivo, una fila por factura. La garantía vive en la DB porque dos
+  // subidas simultáneas del mismo comprobante ven ambas la tabla vacía.
+  uniqueIndex('pago_adjuntos_sha_uq').on(t.teamId, t.ecfDocumentId, t.sha256),
 ]);
 
 // ─── Pasarelas de pago (links de pago — CardNet / Azul) ───────────────────────
@@ -1045,6 +1096,13 @@ export const pagosRecibidosRelations = relations(pagosRecibidos, ({ one }) => ({
   team:        one(teams,        { fields: [pagosRecibidos.teamId],        references: [teams.id] }),
   ecfDocument: one(ecfDocuments, { fields: [pagosRecibidos.ecfDocumentId], references: [ecfDocuments.id] }),
   createdByUser: one(users,      { fields: [pagosRecibidos.createdBy],     references: [users.id] }),
+}));
+
+export const pagoAdjuntosRelations = relations(pagoAdjuntos, ({ one }) => ({
+  team:         one(teams,          { fields: [pagoAdjuntos.teamId],         references: [teams.id] }),
+  ecfDocument:  one(ecfDocuments,   { fields: [pagoAdjuntos.ecfDocumentId],  references: [ecfDocuments.id] }),
+  pagoRecibido: one(pagosRecibidos, { fields: [pagoAdjuntos.pagoRecibidoId], references: [pagosRecibidos.id] }),
+  subidoPorUser: one(users,         { fields: [pagoAdjuntos.subidoPor],      references: [users.id] }),
 }));
 
 // ─── EmiteDO — System Logs ───────────────────────────────────────────────────
@@ -1627,6 +1685,8 @@ export type NewCotizacion = typeof cotizaciones.$inferInsert;
 export type Categoria = typeof categorias.$inferSelect;
 export type PagoRecibido    = typeof pagosRecibidos.$inferSelect;
 export type NewPagoRecibido = typeof pagosRecibidos.$inferInsert;
+export type PagoAdjunto     = typeof pagoAdjuntos.$inferSelect;
+export type NewPagoAdjunto  = typeof pagoAdjuntos.$inferInsert;
 export type FacturaRecurrente = typeof facturasRecurrentes.$inferSelect;
 export type NewFacturaRecurrente = typeof facturasRecurrentes.$inferInsert;
 export type Almacen = typeof almacenes.$inferSelect;

@@ -17,18 +17,20 @@ import {
   Loader2, AlertTriangle, CheckCircle, Clock,
   Printer, Ticket, ChevronDown, Mail, Copy,
   Package, ChevronUp, Plus, MoreVertical, Send,
-  TrendingDown, TrendingUp,
+  TrendingUp,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SectionCard } from '../nueva/sections/SectionCard';
 import { AccordionSection } from '../nueva/sections/AccordionSection';
 import { PagoCard, type PagoData } from './_pago-card';
 import { CobrarLinkButton } from '@/components/pagos/CobrarLinkButton';
+import { ComprobantesCard } from '@/components/pagos/ComprobantesCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
@@ -120,7 +122,7 @@ interface FacturaDetalle {
   comentario: string | null;
   lineas: Linea[];
   ncsAsociadas?: NcAsociada[];
-  notasMora?: { id: number; codigo: string | null; montoTotal: number; estado: string; estadoPago: string }[];
+  notasMora?: { id: number; codigo: string | null; montoTotal: number; pagado: number; estado: string; estadoPago: string }[];
   moraOrigen?: { id: number; codigo: string | null; encf: string } | null;
   notaOrigen?: { id: number; codigo: string | null; encf: string; estado: string } | null;
   emisor: {
@@ -317,6 +319,36 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+/** Fecha + hora — para el detalle, donde sí interesa a qué hora se emitió. */
+function fmtDateHora(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return `${fmtDate(iso)} ${d.toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit' })}`;
+  } catch {
+    return iso;
+  }
+}
+
+/** Tarjeta de cifra del encabezado del documento. */
+function CifraCard({
+  label, valor, tono = 'neutro', pie,
+}: {
+  label: string;
+  valor: string;
+  tono?: 'neutro' | 'ok' | 'alerta';
+  pie?: string;
+}) {
+  const color = tono === 'alerta' ? 'text-red-600' : tono === 'ok' ? 'text-emerald-700' : 'text-gray-900';
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`mt-1 text-lg font-bold tabular-nums ${color}`}>{valor}</p>
+      {pie && <p className={`mt-0.5 text-[11px] ${tono === 'alerta' ? 'text-red-500' : 'text-gray-400'}`}>{pie}</p>}
+    </div>
+  );
+}
+
 function calcTotalLinea(l: Linea): number {
   const cant  = Number(l.cantidadItem) || 0;
   const prec  = Number(l.precioUnitarioItem) || 0;
@@ -361,7 +393,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const [anularForce, setAnularForce] = useState(false);
   const [anularMotivo, setAnularMotivo] = useState('');
 
-  const [resumenOpen, setResumenOpen] = useState(true);
 
   const [showEmail, setShowEmail]     = useState(false);
   const [emailTo, setEmailTo]         = useState('');
@@ -698,6 +729,24 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const [generandoMora, setGenerandoMora] = useState(false);
   const [showConfirmMora, setShowConfirmMora] = useState(false);
 
+  // Preview de la próxima mora automática (cuándo + cuánto), sin generar nada.
+  const [moraPreview, setMoraPreview] = useState<
+    | { estado: 'inactiva' }
+    | { estado: 'no_aplica'; razon: string }
+    | { estado: 'pendiente'; fecha: string; montoCents: number; yaVencida: boolean }
+    | null
+  >(null);
+
+  useEffect(() => {
+    if (!factura || factura.moraOrigenId != null) { setMoraPreview(null); return; }
+    let cancelled = false;
+    fetch(`/api/facturas/${docId}/nota-debito-mora`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled && d?.preview) setMoraPreview(d.preview); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [factura, docId]);
+
   async function handleGenerarNotaDebitoMora() {
     if (!factura) return;
     setGenerandoMora(true);
@@ -734,6 +783,15 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // Saldo = total − pagos − notas de crédito aplicadas (nunca negativo)
   const saldo     = Math.max(0, totales.total - pagadoDOP - ncAplicadoDOP);
   const facturaPagada = saldo === 0 && (pagadoDOP > 0 || ncAplicadoDOP > 0) && totales.total > 0;
+
+  /** Estado del vencimiento para la tarjeta de arriba. Null si no aplica. */
+  const vencimiento = useMemo(() => {
+    if (!factura?.fechaLimitePago || saldo <= 0) return null;
+    const dias = Math.floor((Date.now() - Date.parse(`${factura.fechaLimitePago}T00:00:00`)) / 86_400_000);
+    if (dias > 0)  return { texto: `Vencida hace ${dias} día${dias === 1 ? '' : 's'}`, tono: 'alerta' as const };
+    if (dias === 0) return { texto: 'Vence hoy', tono: 'alerta' as const };
+    return { texto: `En ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`, tono: 'neutro' as const };
+  }, [factura?.fechaLimitePago, saldo]);
 
   // ─── Render guards ──────────────────────────────────────────────────────────
 
@@ -783,6 +841,17 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const esFinal     = ['ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO', 'ANULADO'].includes(factura.estado);
   // Consultar/Estado DGII solo para e-CF real (ya emitido a DGII), no anulado.
   const puedePolling = esEcfReal && factura.estado !== 'ANULADO';
+
+  // ── Mora: valores derivados para las 2 tarjetas ──────────────────────────────
+  // (1) Info general (aplicada + próxima) → izquierda, bajo "Datos del comprador".
+  // (2) Lista de NDs por mora → sidebar, bajo "Notas asociadas" en su tarjeta.
+  const notasMoraActivas   = (factura.notasMora ?? []).filter(nd => nd.estado !== 'ANULADO');
+  const moraAplicadoCents  = notasMoraActivas.reduce((s, nd) => s + nd.montoTotal, 0);
+  const moraPendienteCents = notasMoraActivas.reduce((s, nd) => s + Math.max(0, nd.montoTotal - nd.pagado), 0);
+  const capitalPagado      = factura.pago?.recibido === true;
+  const hayMoraPendiente   = moraPendienteCents > 0;
+  const hayProximaMora     = moraPreview?.estado === 'pendiente';
+  const mostrarMoraInfo    = notasMoraActivas.length > 0 || hayProximaMora;
 
   // Trigger unificado para "Enviar a DGII" (footer + sidebar card). Si la factura
   // es de contado y no tiene pago registrado, abre el alert de confirmación.
@@ -851,13 +920,16 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               ) : null}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              {/* Solo mostrar el nombre fiscal del comprobante si fue emitido a DGII.
-                  Borrador/sin-ncf/histórica → genérico, NO el tipo fiscal. */}
-              <span className="font-medium text-gray-600">
-                {esEcfReal ? factura.tipoNombre : (esBorrador ? 'Sin comprobante' : 'Documento sin comprobante fiscal')}
-              </span>
-              <span className="mx-1.5">·</span>
-              Fecha: {fmtDate(factura.fechaEmision)}
+              {/* El tipo solo se escribe cuando aporta algo: si el documento no
+                  fue a la DGII, el badge de arriba ya dice "Sin comprobante" y
+                  repetirlo aquí era decir dos veces lo mismo en la misma línea. */}
+              {esEcfReal && (
+                <>
+                  <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
+                  <span className="mx-1.5">·</span>
+                </>
+              )}
+              Fecha: {fmtDateHora(factura.fechaEmision)}
               {factura.fechaLimitePago && (
                 <>
                   <span className="mx-1.5">·</span>
@@ -877,6 +949,21 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             >
               <RefreshCw className={`h-4 w-4 mr-1 ${pollingStatus === 'loading' ? 'animate-spin' : ''}`} />
               Consultar DGII
+            </Button>
+          )}
+
+          {/* Acción principal del documento, junto al resto de acciones. Antes
+              vivía en una tarjeta del sidebar: el usuario tenía que buscar a la
+              derecha lo que iba a hacer en el 90% de los casos, y esa tarjeta
+              se comía el alto de la columna. */}
+          {!esEcfReal && puedeEmitir && canEmitir && (
+            <Button
+              size="sm"
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              onClick={triggerEnviarDgii}
+            >
+              <Send className="h-4 w-4 mr-1" />
+              {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
             </Button>
           )}
 
@@ -999,6 +1086,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               )}
               {canCreate && puedeCrearNota && (
                 <>
+                  {/* Separadores por intención: arriba lo que hace con ESTE
+                      documento, en medio lo que CREA otro, abajo lo que lo
+                      destruye. Siete acciones seguidas se leen como una lista
+                      de la compra. */}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
@@ -1043,6 +1135,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 </DropdownMenuItem>
               )}
               {esAnulable && canAnular && (
+                <>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={() => { setShowAnular(true); setAnularError(null); }}
                   className="flex items-center gap-2 cursor-pointer text-red-600"
@@ -1050,6 +1144,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <XCircle className="h-4 w-4" />
                   Anular comprobante
                 </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1074,6 +1169,30 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
             : <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />}
           {pollMsg}
+        </div>
+      )}
+
+      {/* ─── Cifras del documento, arriba ────────────────────────────────────
+          Antes vivían en una tarjeta "Resumen" del sidebar que repetía línea por
+          línea lo que ya muestra "Productos y servicios". Lo que se busca al
+          abrir una factura es cuánto es, cuánto pagaron y cuánto falta: eso va
+          arriba y se lee sin desplazar. */}
+      {!esNc && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <CifraCard label={esNc ? 'Total acreditado' : 'Total'} valor={fmtDOP(totales.total)} />
+          <CifraCard label="Pagado" valor={fmtDOP(pagadoDOP)} tono={pagadoDOP > 0 ? 'ok' : 'neutro'} />
+          <CifraCard
+            label="Saldo pendiente"
+            valor={fmtDOP(saldo)}
+            tono={saldo > 0 ? 'alerta' : 'ok'}
+            pie={saldo === 0 ? 'Pagada en su totalidad' : undefined}
+          />
+          <CifraCard
+            label={factura.fechaLimitePago ? 'Vence' : 'Condición'}
+            valor={factura.fechaLimitePago ? fmtDate(factura.fechaLimitePago) : 'De contado'}
+            tono={vencimiento?.tono ?? 'neutro'}
+            pie={vencimiento?.texto}
+          />
         </div>
       )}
 
@@ -1221,6 +1340,37 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                       );
                     })}
                   </tbody>
+                  {/* La suma vive donde están las líneas que la producen. */}
+                  <tfoot>
+                    <tr className="border-t border-gray-200">
+                      <td colSpan={4} />
+                      <td className="py-2 px-2 text-right text-xs text-gray-500">Subtotal</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtDOP(totales.subtotal)}</td>
+                      <td />
+                    </tr>
+                    {totales.itbis > 0 && (
+                      <tr>
+                        <td colSpan={4} />
+                        <td className="py-1 px-2 text-right text-xs text-gray-500">ITBIS</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtDOP(totales.itbis)}</td>
+                        <td />
+                      </tr>
+                    )}
+                    {ncAplicadoDOP > 0 && (
+                      <tr>
+                        <td colSpan={4} />
+                        <td className="py-1 px-2 text-right text-xs text-teal-700">Notas de crédito</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-teal-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
+                        <td />
+                      </tr>
+                    )}
+                    <tr className="border-t-2 border-gray-200">
+                      <td colSpan={4} />
+                      <td className="py-2 px-2 text-right text-sm font-bold text-gray-900">{esNc ? 'Total acreditado' : 'Total'}</td>
+                      <td className="py-2 px-2 text-right text-sm font-bold tabular-nums text-gray-900 whitespace-nowrap">{fmtDOP(totales.total)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
@@ -1360,6 +1510,71 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             )}
           </SectionCard>
 
+          {/* ── Mora (info general): aplicada + próxima automática ──────────────
+              Reubicada aquí (bajo Datos del comprador) para descargar el sidebar.
+              El detalle de las NDs por mora vive en su propia tarjeta (sidebar,
+              bajo "Notas asociadas"). */}
+          {mostrarMoraInfo && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 md:pt-5">
+                <TrendingUp className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-gray-900">Mora</h2>
+              </header>
+              <div className="px-4 pb-4 md:px-5 space-y-3">
+                {/* Aviso: capital pagado pero mora aún pendiente. */}
+                {capitalPagado && hayMoraPendiente && (
+                  <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
+                    <TrendingUp className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" aria-hidden="true" />
+                    <p className="text-xs text-gray-700">
+                      El pago de la factura está saldado, pero la mora sigue pendiente:
+                      {' '}<span className="font-semibold text-orange-700">{fmtDOP(moraPendienteCents / 100)}</span> por cobrar.
+                    </p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5">
+                    <p className="text-xs text-gray-500">Mora aplicada</p>
+                    <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                      {fmtDOP(moraAplicadoCents / 100)}
+                      {notasMoraActivas.length > 0 && (
+                        <span className="ml-1 text-xs font-normal text-gray-400">
+                          · {notasMoraActivas.length} nota{notasMoraActivas.length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </p>
+                    {hayMoraPendiente && (
+                      <p className="text-[11px] text-orange-600 mt-0.5">
+                        {fmtDOP(moraPendienteCents / 100)} pendiente
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2.5">
+                    <p className="text-xs text-gray-500">Próxima mora automática</p>
+                    {hayProximaMora ? (
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">
+                        {fmtDOP(moraPreview!.montoCents / 100)}
+                        <span className="ml-1 text-xs font-normal text-gray-500">
+                          · {fmtFechaCorta(moraPreview!.fecha)}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-400 mt-0.5">Sin cargos programados</p>
+                    )}
+                  </div>
+                </div>
+
+                {hayProximaMora && (
+                  <p className="text-xs text-gray-500">
+                    {moraPreview!.yaVencida
+                      ? `Ya exigible desde el ${fmtFechaCorta(moraPreview!.fecha)}; se generará en la próxima corrida automática.`
+                      : `Si no se paga, el ${fmtFechaCorta(moraPreview!.fecha)} se cobrará ${fmtDOP(moraPreview!.montoCents / 100)}.`}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
             </TabsContent>
 
             <TabsContent value="notas">
@@ -1386,101 +1601,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
         {/* ━━━ RIGHT: sticky sidebar ━━━ */}
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start min-w-0">
-
-          {/* Resumen */}
-          <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setResumenOpen(v => !v)}
-              className="w-full flex items-center gap-2 px-4 pt-4 pb-3 md:px-5 hover:bg-gray-50 transition-colors"
-              aria-expanded={resumenOpen}
-            >
-              <FileText className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
-              <h2 className="text-sm font-semibold text-gray-900 flex-1 text-left">Resumen</h2>
-              {resumenOpen
-                ? <ChevronUp className="h-4 w-4 text-gray-400" />
-                : <ChevronDown className="h-4 w-4 text-gray-400" />}
-            </button>
-
-            {resumenOpen && (
-              <div className="px-4 pb-4 md:px-5">
-                {factura.lineas.length > 0 && (
-                  <>
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-3 text-[11px] text-gray-500 uppercase tracking-wide pb-2 border-b border-gray-100">
-                      <span>Descripción</span>
-                      <span className="text-right">Cant.</span>
-                      <span className="text-right">Total</span>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                      {factura.lineas.map((l, idx) => (
-                        <div key={l.id ?? idx} className="grid grid-cols-[1fr_auto_auto] gap-3 py-2 text-sm">
-                          <span className="text-gray-700 truncate" title={l.nombreItem}>
-                            {l.nombreItem || '—'}
-                          </span>
-                          <span className="text-gray-600 text-right tabular-nums">
-                            {Number(l.cantidadItem) || 0}
-                          </span>
-                          <span className="text-gray-900 font-medium text-right tabular-nums whitespace-nowrap">
-                            {fmtDOP(calcTotalLinea(l))}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                <div className="pt-3 mt-1 space-y-1.5 border-t border-gray-100">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Subtotal</span>
-                    <span className="font-medium text-gray-800 tabular-nums">{fmtDOP(totales.subtotal)}</span>
-                  </div>
-                  {totales.itbis > 0 && (
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>ITBIS (18%)</span>
-                      <span className="font-medium text-gray-800 tabular-nums">{fmtDOP(totales.itbis)}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-between text-base font-bold text-gray-900 border-t-2 border-gray-200 pt-3 mt-3">
-                  <span>{esNc ? 'Total acreditado' : 'Total'}</span>
-                  <span className="tabular-nums">{fmtDOP(totales.total)}</span>
-                </div>
-
-                {ncAplicadoDOP > 0 && (
-                  <div className="flex justify-between text-sm mt-3 text-teal-700">
-                    <span>Notas de crédito</span>
-                    <span className="font-medium tabular-nums">−{fmtDOP(ncAplicadoDOP)}</span>
-                  </div>
-                )}
-
-                {!esNc && (
-                  <>
-                    <div className={`flex justify-between text-sm ${ncAplicadoDOP > 0 ? 'mt-1.5' : 'mt-3'} ${pagadoDOP > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                      <span>Pagado</span>
-                      <span className="font-medium tabular-nums">{fmtDOP(pagadoDOP)}</span>
-                    </div>
-
-                    <div className={`flex justify-between text-sm rounded-lg px-3 py-2 mt-2 border ${
-                      saldo === 0
-                        ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
-                        : 'bg-red-50 border-red-100 text-red-800'
-                    }`}>
-                      <span className="font-semibold">Saldo pendiente</span>
-                      <span className="font-bold tabular-nums">{fmtDOP(saldo)}</span>
-                    </div>
-
-                    {facturaPagada && (
-                      <p className="text-[11px] text-emerald-700 mt-2 flex items-center gap-1">
-                        <CheckCircle className="h-3 w-3" />
-                        Factura pagada en su totalidad
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </section>
 
           {/* Estado DGII card — solo cuando hay e-CF real emitido a DGII.
               HISTORICA (ALG-), borrador (BOR-) y sin-ncf no fueron a DGII. */}
@@ -1526,59 +1646,20 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 No emitida a la DGII. Es un registro {esBorrador ? 'sin comprobante' : 'histórico'} sin e-CF.
                 Genera un e-CF para enviarla a la DGII.
               </p>
-              <div className="flex flex-col gap-2">
-                {canEmitir && (
-                  <Button
-                    type="button"
-                    className="bg-teal-600 hover:bg-teal-700 text-white h-9 w-full"
-                    onClick={triggerEnviarDgii}
-                  >
-                    <Send className="h-4 w-4 mr-1.5" />
-                    {sinLineas && canEdit ? 'Completar y generar e-CF' : 'Generar e-CF / Enviar a DGII'}
-                  </Button>
-                )}
-                {canEdit && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 w-full text-teal-700 border-teal-300 hover:bg-teal-50"
-                    asChild
-                  >
-                    <Link href={`/dashboard/facturas/${factura.id}/editar`}>Editar antes de emitir</Link>
-                  </Button>
-                )}
-                {!canEdit && (
-                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
-                    <span>Para editar esta factura, pídele al administrador.</span>
-                  </div>
-                )}
-              </div>
+              {/* Sin botones: emitir y editar viven en el encabezado y en la
+                  barra inferior. Esta tarjeta solo informa en qué estado está
+                  el documento frente a la DGII. */}
+              {!canEdit && !canEmitir && (
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                  <span>Para emitir o editar esta factura, pídele al administrador.</span>
+                </div>
+              )}
             </section>
           )}
 
-          {/* Crear nota de crédito / débito — CTA visible en sidebar */}
-          {puedeCrearNota && can('facturas:crear') && (
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
-              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-3">Crear nota</h3>
-              <div className="space-y-2">
-                <Button asChild variant="outline" className="w-full h-9 text-teal-700 border-teal-200 hover:bg-teal-50 justify-start gap-2">
-                  <Link href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}>
-                    <TrendingDown className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left text-sm">Nota de crédito</span>
-                    <span className="text-[10px] text-gray-400">Reduce el saldo</span>
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full h-9 text-orange-700 border-orange-200 hover:bg-orange-50 justify-start gap-2">
-                  <Link href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}>
-                    <TrendingUp className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 text-left text-sm">Nota de débito</span>
-                    <span className="text-[10px] text-gray-400">Cargo adicional</span>
-                  </Link>
-                </Button>
-              </div>
-            </section>
-          )}
+          {/* Crear NC/ND: disponible desde el menú de acciones (3 puntos) del
+              encabezado — se quitó la tarjeta CTA duplicada del sidebar. */}
 
           {/* Notas de crédito/débito que modifican esta factura */}
           {factura.ncsAsociadas && factura.ncsAsociadas.length > 0 && (
@@ -1615,6 +1696,49 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {/* Notas de débito por mora — tarjeta aparte, justo bajo "Notas asociadas".
+              Documentos vinculados a esta factura (la info general de mora vive en
+              la tarjeta "Mora" bajo Datos del comprador). */}
+          {notasMoraActivas.length > 0 && (
+            <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
+              <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+                Notas de débito por mora ({notasMoraActivas.length})
+              </h3>
+              <div className="space-y-2">
+                {notasMoraActivas.map(nd => {
+                  const saldoNd = Math.max(0, nd.montoTotal - nd.pagado);
+                  const pagada  = saldoNd === 0;
+                  const parcial = !pagada && nd.pagado > 0;
+                  const badge = pagada
+                    ? { txt: 'Pagada',    cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                    : parcial
+                    ? { txt: 'Parcial',   cls: 'bg-amber-100 text-amber-700 border-amber-200' }
+                    : { txt: 'Pendiente', cls: 'bg-orange-100 text-orange-700 border-orange-200' };
+                  return (
+                    <Link
+                      key={nd.id}
+                      href={`/dashboard/facturas/${nd.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-xs font-semibold text-orange-800 truncate">{nd.codigo ?? `#${nd.id}`}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${badge.cls}`}>
+                          {badge.txt}
+                        </span>
+                      </span>
+                      <span className="text-right whitespace-nowrap">
+                        <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(saldoNd / 100)}</span>
+                        {!pagada && saldoNd !== nd.montoTotal && (
+                          <span className="ml-1 text-[11px] text-gray-400">de {fmtDOP(nd.montoTotal / 100)}</span>
+                        )}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             </section>
           )}
 
@@ -1669,27 +1793,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </section>
           )}
 
-          {/* Notas de débito por mora atadas a esta factura */}
-          {factura.notasMora && factura.notasMora.length > 0 && (
-            <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-                <Plus className="h-4 w-4 text-orange-600 shrink-0" aria-hidden="true" />
-                <h2 className="text-sm font-semibold text-gray-900">Notas de débito por mora</h2>
-              </div>
-              <div className="px-4 pb-4 md:px-5 space-y-2">
-                {factura.notasMora.map(nd => (
-                  <Link
-                    key={nd.id}
-                    href={`/dashboard/facturas/${nd.id}`}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/40 px-3 py-2 hover:bg-orange-50"
-                  >
-                    <span className="font-mono text-xs font-semibold text-orange-800">{nd.codigo ?? `#${nd.id}`}</span>
-                    <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtDOP(nd.montoTotal / 100)}</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* Pago — historial read-only (los pagos se gestionan en Cuentas por cobrar).
               No aplica a notas de crédito: acreditan, no se cobran. */}
@@ -1699,6 +1802,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               totalDOP={factura.montos.montoTotalDOP}
             />
           )}
+
+          {/* Comprobantes del cobro: cuelgan del documento, así que siguen aquí
+              aunque el pago se reescriba o se reparta entre factura y mora. */}
+          {!esNc && <ComprobantesCard docId={factura.id} />}
 
           {/* Cobro en línea: link de pago (CardNet/Azul/Simulador). Disponible en
               cualquier factura (borrador o emitida) que no sea NC y no esté pagada. */}

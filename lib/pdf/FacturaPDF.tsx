@@ -88,6 +88,21 @@ export interface FacturaPDFData {
     nota?:      string;
     referencia?: string;
   }>;
+  /** Si este documento ES una nota de débito por mora → la factura que recarga. */
+  moraOrigen?: {
+    codigo?: string;
+    encf?:   string;
+    fecha?:  string;
+  };
+  /** Si este documento es una factura → sus notas de débito por mora (recargos). */
+  moras?: Array<{
+    codigo?:   string;
+    encf?:     string;
+    fecha?:    string;
+    montoDOP:  number;
+    saldoDOP:  number;
+    estado:    'PENDIENTE' | 'PARCIAL' | 'PAGADA';
+  }>;
 }
 
 // ─── Monto en letras ──────────────────────────────────────────────────────────
@@ -125,6 +140,7 @@ function numeroALetras(n: number): string {
 
 const fmt = (n: number) =>
   'RD$' + n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 
 // Labels desde la fuente única (lib/pagos/metodos). 'Pago' si viene vacío.
 const metodoLabelPDF = (m: string) => (m ? labelMetodo(m) : 'Pago');
@@ -321,15 +337,21 @@ const S = StyleSheet.create({
     color:    '#666666',
   },
 
-  // column widths
-  colCant:   { width: 52,  textAlign: 'left'  },
-  colDesc:   { flex: 3,                       },
-  colUnidad: { width: 56,  textAlign: 'left'  },
-  colPrecio: { width: 56,  textAlign: 'right' },
-  colDesc2:  { width: 50,  textAlign: 'right' },
-  colImp:    { width: 46,  textAlign: 'right' },
-  colValor:  { width: 64,  textAlign: 'right' },
-  colNum:    { width: 20,  textAlign: 'left'  },
+  // Anchos de columna. Las de dinero se dimensionan para el peor caso —
+  // "RD$99,999,999.99" a 8.5pt ≈ 74pt— más un canal de 8pt a la izquierda, para
+  // que dos cifras largas seguidas no puedan tocarse. Antes medían 56/46/64 sin
+  // canal y a partir de RD$47,250.00 el texto se salía sobre la columna vecina.
+  //
+  // La descripción es la única flexible: cuando el texto es largo baja de línea
+  // dentro de su celda en vez de robarle ancho a los montos.
+  colCant:   { width: 46,  textAlign: 'left',  paddingRight: 6 },
+  colDesc:   { flex: 3,                        paddingRight: 8 },
+  colUnidad: { width: 50,  textAlign: 'left',  paddingRight: 6 },
+  colPrecio: { width: 82,  textAlign: 'right', paddingLeft: 8  },
+  colDesc2:  { width: 50,  textAlign: 'right', paddingLeft: 8  },
+  colImp:    { width: 76,  textAlign: 'right', paddingLeft: 8  },
+  colValor:  { width: 88,  textAlign: 'right', paddingLeft: 8  },
+  colNum:    { width: 16,  textAlign: 'left'  },
 
   // COMPRADOR section
   compLabel: {
@@ -467,6 +489,45 @@ const S = StyleSheet.create({
   pagosColFecha:  { width: 60 },
   pagosColMetodo: { flex: 1 },
   pagosColMonto:  { width: 90, textAlign: 'right' },
+
+  // ── Referencia de mora (cuando el doc ES una ND de mora) ──
+  moraRefBox: {
+    backgroundColor:  '#fff7ed',
+    borderWidth:      1,
+    borderColor:      '#fed7aa',
+    borderRadius:     4,
+    paddingVertical:  8,
+    paddingHorizontal: 10,
+    marginBottom:     12,
+  },
+  moraRefLabel: {
+    fontFamily:    'Helvetica-Bold',
+    fontSize:      8,
+    color:         '#c2410c',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom:  3,
+  },
+  moraRefText: {
+    fontSize: 9,
+    color:    '#1a1a1a',
+  },
+  moraRefStrong: {
+    fontFamily: 'Helvetica-Bold',
+  },
+
+  // ── Recargos por mora (cuando el doc es la factura) ──
+  moraBlock:    { marginTop: 12 },
+  moraTitle:    { fontFamily: 'Helvetica-Bold', fontSize: 8.5, color: '#c2410c', marginBottom: 3 },
+  moraHeadRow:  { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#fed7aa', paddingBottom: 2, marginBottom: 1 },
+  moraRow:      { flexDirection: 'row', paddingVertical: 1.5, borderBottomWidth: 0.3, borderBottomColor: '#f5f5f5' },
+  moraCellHead: { fontFamily: 'Helvetica-Bold', fontSize: 7, color: '#9a3412' },
+  moraCell:     { fontSize: 7.5, color: '#333333' },
+  moraColFecha:  { width: 56 },
+  moraColComp:   { flex: 1 },
+  moraColEstado: { width: 58 },
+  moraColMonto:  { width: 66, textAlign: 'right' },
+  moraTotalText: { fontSize: 8, color: '#9a3412', textAlign: 'right', marginTop: 3, fontFamily: 'Helvetica-Bold' },
 
   // ── Términos / Notas ──
   notasBlock:  { marginTop: 12 },
@@ -652,7 +713,11 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
       author={data.emisor.razonSocial}
       subject="Comprobante Fiscal Electrónico"
     >
-      <Page size="A4" style={S.page}>
+      {/* El pie fijo de la DGII (QR 68pt + código de seguridad + fecha de firma)
+          mide ~110pt, pero la página solo reservaba 72pt abajo: en facturas
+          largas las últimas líneas quedaban DEBAJO del QR, ilegibles. El espacio
+          reservado ahora se ajusta a si ese bloque existe. */}
+      <Page size="A4" style={[S.page, (data.codigoSeguridad || data.qrDataUrl) ? { paddingBottom: 140 } : {}]}>
 
         {/* ── Header (fixed → se repite en cada página) ── */}
         <View style={S.header} fixed>
@@ -757,6 +822,19 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             })()}
           </View>
         </View>
+
+        {/* ── Referencia a la factura de origen (solo en ND de mora) ── */}
+        {data.moraOrigen && (
+          <View style={S.moraRefBox}>
+            <Text style={S.moraRefLabel}>Recargo por mora</Text>
+            <Text style={S.moraRefText}>
+              Corresponde a la factura{' '}
+              <Text style={S.moraRefStrong}>{data.moraOrigen.codigo ?? data.moraOrigen.encf ?? '—'}</Text>
+              {data.moraOrigen.codigo && data.moraOrigen.encf ? <Text> · NCF {data.moraOrigen.encf}</Text> : null}
+              {data.moraOrigen.fecha ? <Text> · emitida el {data.moraOrigen.fecha}</Text> : null}
+            </Text>
+          </View>
+        )}
 
         {/* ── Tabla de ítems ── */}
         {/* Encabezado de columnas (fixed → se repite en cada página) */}
@@ -886,6 +964,34 @@ export function FacturaPDF({ data }: { data: FacturaPDFData }) {
             ))}
           </View>
         )}
+
+        {/* ── Recargos por mora (solo en la factura, si tiene ND de mora) ── */}
+        {data.moras && data.moras.length > 0 && (() => {
+          const moraPendiente = data.moras.reduce((s, m) => s + m.saldoDOP, 0);
+          const estadoLabel = { PENDIENTE: 'Pendiente', PARCIAL: 'Parcial', PAGADA: 'Pagada' } as const;
+          return (
+            <View style={S.moraBlock} wrap={false}>
+              <Text style={S.moraTitle}>RECARGOS POR MORA</Text>
+              <View style={S.moraHeadRow}>
+                <Text style={[S.moraCellHead, S.moraColFecha]}>FECHA</Text>
+                <Text style={[S.moraCellHead, S.moraColComp]}>COMPROBANTE</Text>
+                <Text style={[S.moraCellHead, S.moraColEstado]}>ESTADO</Text>
+                <Text style={[S.moraCellHead, S.moraColMonto]}>MONTO</Text>
+              </View>
+              {data.moras.map((m, i) => (
+                <View key={i} style={S.moraRow}>
+                  <Text style={[S.moraCell, S.moraColFecha]}>{m.fecha ?? '—'}</Text>
+                  <Text style={[S.moraCell, S.moraColComp]}>{m.codigo ?? m.encf ?? '—'}</Text>
+                  <Text style={[S.moraCell, S.moraColEstado]}>{estadoLabel[m.estado]}</Text>
+                  <Text style={[S.moraCell, S.moraColMonto]}>{fmt(m.montoDOP)}</Text>
+                </View>
+              ))}
+              {moraPendiente > 0.005 && (
+                <Text style={S.moraTotalText}>Mora pendiente: {fmt(moraPendiente)}</Text>
+              )}
+            </View>
+          );
+        })()}
 
         {/* ── Términos y condiciones / Notas (solo si existen) ── */}
         {(data.terminosCondiciones?.trim() || data.notas?.trim()) && (

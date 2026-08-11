@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser, getTeamIdForUser, registrarPago, getPagosDocumento } from '@/lib/db/queries';
 import { getTurnoAbierto } from '@/lib/caja/core';
+import { faltaComprobanteExigido } from '@/lib/pagos/adjuntos';
+import { labelMetodo } from '@/lib/pagos/metodos';
 
 /**
  * Pagos de una factura — usa el ledger `pagos_recibidos` (source of truth).
@@ -30,6 +32,20 @@ export async function POST(req: NextRequest) {
   // Cuadre de caja: atribuir el cobro al turno ABIERTO del cajero (si lo hay).
   const turno = await getTurnoAbierto(teamId, user.id);
   const turnoCajaId = turno?.estado === 'ABIERTO' ? turno.id : null;
+
+  // Método que exige comprobante: la regla es la misma por todas las puertas.
+  const sinRespaldo = await faltaComprobanteExigido(
+    teamId, Number(ecfDocumentId), [String(metodo ?? 'otro')],
+  );
+  if (sinRespaldo) {
+    return NextResponse.json(
+      {
+        error: `Un cobro con «${labelMetodo(sinRespaldo)}» necesita el comprobante adjunto.`,
+        requiereComprobante: true,
+      },
+      { status: 422 },
+    );
+  }
 
   try {
     const result = await registrarPago({

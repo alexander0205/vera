@@ -7,6 +7,8 @@ import {
 } from '@/components/ui/select';
 import { Info } from 'lucide-react';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
+import type { EmpresaPerfil } from '../utils/types';
+import { describirMora } from '@/lib/cobranza/mora-calculo';
 
 export const MOTIVOS_NOTA = [
   { value: 'devolucion',   label: 'Devolución de mercancía',   codigo: 3 },
@@ -42,25 +44,22 @@ const TIPOS_INGRESO = [
 // Tipos donde TipoIngresos NO aplica (campo prohibido en IdDoc): Compras, Gastos, Pagos Exterior.
 const SIN_TIPO_INGRESO = ['41', '43', '47'];
 
-/** Formatea YYYY-MM-DD → DD/MM/YYYY */
-function formatFechaCorta(iso: string): string {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  if (!y || !m || !d) return '';
-  return `${d}/${m}/${y}`;
-}
-
 interface Props {
   regla: TipoEcfRegla | undefined;
   tipoEcf: string;
   condicionPago: string;
   setCondicionPago: (v: string) => void;
+  /** Plazo de crédito en días (editable; arranca del default de la empresa). */
   diasParaPago: string;
   setDiasParaPago: (v: string) => void;
   tipoIngresos: string;
   setTipoIngresos: (v: string) => void;
-  /** Vencimiento derivado (YYYY-MM-DD) — solo para mostrar el info pill. */
+  /** Vencimiento derivado (YYYY-MM-DD) — se muestra read-only y en el info pill. */
   fechaLimitePago: string;
+  /** Config de mora de la empresa, para avisar los términos al elegir crédito. */
+  empresa?: EmpresaPerfil | null;
+  /** true = el usuario no ha registrado ningún pago en esta factura. */
+  sinPagoRegistrado?: boolean;
 }
 
 export function DetallesSection({
@@ -70,18 +69,38 @@ export function DetallesSection({
   diasParaPago, setDiasParaPago,
   tipoIngresos, setTipoIngresos,
   fechaLimitePago,
+  empresa,
+  sinPagoRegistrado = false,
 }: Props) {
   const esCredito = condicionPago === '2';
+
+  // Descripción de la mora que aplicaría. null si la empresa no la tiene activa.
+  const textoMora = empresa?.recargoMoraActivo
+    ? describirMora(
+        {
+          modo:             empresa.recargoMoraModo ?? 'porcentaje',
+          porcentajeBps:    empresa.recargoMoraPorcentaje ?? 0,
+          montoCents:       empresa.recargoMoraMontoCents ?? 0,
+          diasGracia:       empresa.recargoMoraDiasGracia ?? 0,
+          periodicidadDias: empresa.recargoMoraPeriodicidadDias ?? 0,
+          compuesta:        empresa.recargoMoraCompuesta ?? false,
+          topeBps:          empresa.recargoMoraTopeBps ?? 0,
+          maxPeriodos:      empresa.recargoMoraMaxPeriodos ?? 0,
+        },
+        (cents) => `RD$${(cents / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
+      )
+    : null;
   const muestraTipoIngresos = !SIN_TIPO_INGRESO.includes(tipoEcf);
 
   return (
     <div className="space-y-4">
-      {/* Fila: Condición de pago · Plazo de vencimiento */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Fila: Condición de pago · Plazo de vencimiento (días) · Vence el (fecha
+          read-only, derivada del plazo) · Tipo de ingresos. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div>
           <Label className="text-xs text-gray-600 uppercase tracking-wide">Condición de pago</Label>
           <Select value={condicionPago} onValueChange={setCondicionPago}>
-            <SelectTrigger className="mt-1 h-10">
+            <SelectTrigger className="mt-1 h-10 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -91,11 +110,12 @@ export function DetallesSection({
             </SelectContent>
           </Select>
         </div>
+
         <div>
           <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
             Plazo de vencimiento {esCredito && <span className="text-red-500">*</span>}
           </Label>
-          <div className="relative mt-1 w-28">
+          <div className="relative mt-1">
             <Input
               type="number"
               min={1}
@@ -108,11 +128,26 @@ export function DetallesSection({
           </div>
         </div>
 
+        <div>
+          <Label className={`text-xs uppercase tracking-wide ${esCredito ? 'text-gray-600' : 'text-gray-300'}`}>
+            Vence el
+          </Label>
+          {/* Read-only: se recalcula solo cuando cambia el plazo de vencimiento. */}
+          <Input
+            type="date"
+            value={esCredito ? fechaLimitePago : ''}
+            readOnly
+            disabled
+            tabIndex={-1}
+            className="mt-1 h-10 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-default"
+          />
+        </div>
+
         {muestraTipoIngresos && (
           <div>
             <Label className="text-xs text-gray-600 uppercase tracking-wide">Tipo de ingresos</Label>
             <Select value={tipoIngresos} onValueChange={setTipoIngresos}>
-              <SelectTrigger className="mt-1 h-10">
+              <SelectTrigger className="mt-1 h-10 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -125,13 +160,35 @@ export function DetallesSection({
         )}
       </div>
 
-      {/* Info pill: vencimiento derivado */}
-      {esCredito && fechaLimitePago && (
-        <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
-          <Info className="h-4 w-4 text-teal-700 shrink-0" />
+      {/* Info: mora que aplicará si la factura vence sin pagarse */}
+      {esCredito && fechaLimitePago && textoMora && (
+        <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
+          <Info className="h-4 w-4 text-teal-700 shrink-0 mt-0.5" />
           <p className="text-sm text-teal-900">
-            Vence el <span className="font-semibold">{formatFechaCorta(fechaLimitePago)}</span>.
+            Si no se paga tras el vencimiento, se aplicará una mora de <span className="font-semibold">{textoMora}</span>
           </p>
+        </div>
+      )}
+
+      {/* Contado sin pago: la factura queda por cobrar sin vencimiento ni mora.
+          No se cambia sola — la condición de pago se reporta a la DGII, así que
+          la decisión es del usuario; aquí solo se hace visible. */}
+      {!esCredito && condicionPago === '1' && sinPagoRegistrado && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 flex items-start gap-2.5">
+          <Info className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-900">
+            <p>
+              Marcada <span className="font-semibold">de contado</span> pero sin pago registrado.
+              Queda por cobrar, sin fecha de vencimiento y sin generar mora.
+            </p>
+            <button
+              type="button"
+              onClick={() => setCondicionPago('2')}
+              className="mt-1.5 font-semibold underline underline-offset-2 hover:text-amber-950"
+            >
+              Cambiarla a crédito
+            </button>
+          </div>
         </div>
       )}
 
