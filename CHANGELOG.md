@@ -4,6 +4,13 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.19.1 — 2026-08-11
+
+### Arreglado
+
+- **build**: apuntar el trace de sharp a los directorios reales del store
+- miniaturas rotas en prod, permisos faltantes y correos en el repo
+
 ## v1.19.0 — 2026-08-11
 
 ### Nuevo
