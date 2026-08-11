@@ -79,8 +79,10 @@ export async function GET(req: NextRequest, { params }: Ctx) {
       stockActual,
       stockMinimo:  v.stockMinimo,
       precioDOP:    precioCents / 100,
+      // Override crudo: null = hereda del padre (para el editor de variantes).
+      precioOverrideDOP: v.precio != null ? v.precio / 100 : null,
     };
   });
 
-  return NextResponse.json({ variants });
+  return NextResponse.json({ variants, basePrecioDOP: prod.precio / 100 });
 }

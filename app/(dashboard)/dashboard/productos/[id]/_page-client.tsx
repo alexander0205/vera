@@ -1,12 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
-import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags, Camera } from 'lucide-react';
+import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags, Camera, Pencil } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
+import { ProductoFormModal } from '@/components/productos/ProductoFormModal';
 import AlmacenesPosSection from './_almacenes-pos';
 
 interface Producto {
@@ -222,6 +224,8 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
     `/api/productos/${productoId}`, fetcher,
   );
   const [subiendoImagen, setSubiendoImagen] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const { mutate: globalMutate } = useSWRConfig();
   const { data: ventasData, isLoading: loadingVentas } = useSWR<{ ventas?: VentaProducto[]; error?: string }>(
     `/api/productos/${productoId}/ventas`, fetcher,
   );
@@ -334,11 +338,28 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
             {subiendoImagen ? <span className="text-[10px]">…</span> : <Camera className="h-4 w-4" />}
           </div>
         </label>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-lg font-bold text-gray-900 leading-tight">{producto?.nombre ?? '—'}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{producto?.referencia ? `Ref. ${producto.referencia}` : 'Sin referencia'}</p>
         </div>
+        {producto && (
+          <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="shrink-0">
+            <Pencil className="h-4 w-4 mr-1.5" /> Editar
+          </Button>
+        )}
       </div>
+
+      {/* Modal compartido de edición (mismo form que la lista). */}
+      <ProductoFormModal
+        open={showEdit}
+        productoId={productoId}
+        onClose={() => setShowEdit(false)}
+        onSaved={() => {
+          // Revalidar detalle + secciones que dependen del producto (variantes,
+          // stock por almacén, maestros).
+          globalMutate((key) => typeof key === 'string' && key.startsWith(`/api/productos/${productoId}`));
+        }}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3">
