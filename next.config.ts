@@ -41,9 +41,19 @@ const nextConfig: NextConfig = {
   // plataforma de sharp, y sin ellas la función arranca sin el binario: en
   // producción las miniaturas de los comprobantes dejaron de generarse en
   // silencio. Se fuerza su copia para las rutas que las usan.
+  // Se apunta al directorio REAL de cada paquete dentro del store de pnpm. Un
+  // glob más ancho (…@img+sharp-linux-x64*/**) también arrastra los symlinks
+  // que cada paquete tiene hacia los otros, y Vercel rechaza el despliegue con
+  // "invalid deployment package … files in symlinked directories".
   outputFileTracingIncludes: {
-    '/api/pagos/adjuntos': ['./node_modules/.pnpm/@img+sharp-linux-x64*/**', './node_modules/.pnpm/@img+sharp-libvips-linux-x64*/**'],
-    '/api/pagos/adjuntos/[id]': ['./node_modules/.pnpm/@img+sharp-linux-x64*/**', './node_modules/.pnpm/@img+sharp-libvips-linux-x64*/**'],
+    '/api/pagos/adjuntos': [
+      './node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**',
+      './node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**',
+    ],
+    '/api/pagos/adjuntos/[id]': [
+      './node_modules/.pnpm/@img+sharp-linux-x64@*/node_modules/@img/sharp-linux-x64/**',
+      './node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**',
+    ],
   },
   allowedDevOrigins: ['10.0.0.63', '*.trycloudflare.com', '*.ngrok-free.app', '*.ngrok.app'],
   experimental: {
