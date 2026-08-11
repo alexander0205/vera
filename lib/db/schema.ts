@@ -355,6 +355,11 @@ export const products = pgTable('products', {
   // POS: favorito → se muestra primero en la grilla.
   posFavorito: boolean('pos_favorito').notNull().default(false),
   esMora: boolean('es_mora').notNull().default(false),                        // servicio de sistema: línea de las ND de mora (1 por team)
+  // Definición de ejes de variante DEL PRODUCTO (MVP "por producto"): el usuario
+  // define aquí sus propios atributos y valores. Formato:
+  //   [{ nombre: "Talla", valores: ["M","L","XL"] }, { nombre: "Color", valores: [...] }]
+  // Vacío ([]) = producto sin variantes (comportamiento actual: stock plano en stockActual).
+  variantAtributos: jsonb('variant_atributos').notNull().default([]),
   categoriaId: integer('categoria_id').references(() => categorias.id),
   imagen: text('imagen'),  // data URL base64 (mismo patrón que teams.logo), tope ~800KB en el cliente
   createdBy: integer('created_by').references(() => users.id),
@@ -1150,6 +1155,8 @@ export const inventoryMovements = pgTable('inventory_movements', {
   id:              serial('id').primaryKey(),
   teamId:          integer('team_id').notNull().references(() => teams.id),
   productoId:      integer('producto_id').notNull().references(() => products.id),
+  // Variante afectada (null = producto sin variantes / movimiento a nivel producto).
+  variantId:       integer('variant_id').references(() => productVariants.id),
   // VENTA | ENTRADA | AJUSTE_SALIDA | AJUSTE_ENTRADA | DEVOLUCION | STOCK_INICIAL
   tipo:            varchar('tipo', { length: 20 }).notNull(),
   cantidad:        integer('cantidad').notNull(),   // siempre positivo
@@ -1177,6 +1184,58 @@ export const productAlmacenStock = pgTable('product_almacen_stock', {
 }, (t) => [
   index('pas_team_idx').on(t.teamId),
   index('pas_almacen_idx').on(t.almacenId),
+]);
+
+// ─── EmiteDO — Inventario: Variantes de producto ─────────────────────────────
+// MVP "global": cada variante lleva su propio stock (una sola cifra, sin desglose
+// por almacén). Un producto con variantes deja de usar products.stockActual para
+// el conteo real; la verdad del stock vive por variante. Los atributos de cada
+// variante (p.ej. { Talla:"M", Color:"Rojo" }) se guardan como jsonb libre, así
+// la misma estructura sirve para ropa, bebidas, ferretería, etc.
+
+export const productVariants = pgTable('product_variants', {
+  id:           serial('id').primaryKey(),
+  teamId:       integer('team_id').notNull().references(() => teams.id),
+  productId:    integer('product_id').notNull().references(() => products.id),
+  // Combinación concreta de valores: { "Talla": "M", "Color": "Rojo" }.
+  atributos:    jsonb('atributos').notNull().default({}),
+  // Display listo para mostrar/imprimir: "M" ó "Rojo · M". Lo arma el cliente.
+  nombre:       varchar('nombre', { length: 255 }).notNull(),
+  referencia:   varchar('referencia', { length: 100 }),   // SKU propio (opcional)
+  codigoBarras: varchar('codigo_barras', { length: 64 }), // EAN/UPC (opcional)
+  // Override de precio: null = usa el precio del producto padre.
+  precio:       integer('precio'),                        // centavos, nullable
+  costo:        integer('costo').notNull().default(0),    // centavos
+  stockActual:  integer('stock_actual').notNull().default(0),
+  stockMinimo:  integer('stock_minimo').notNull().default(0),
+  activo:       boolean('activo').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('product_variants_team_idx').on(t.teamId),
+  index('product_variants_product_idx').on(t.teamId, t.productId),
+]);
+
+export const productVariantsRelations = relations(productVariants, ({ one }) => ({
+  team:    one(teams,    { fields: [productVariants.teamId],    references: [teams.id] }),
+  product: one(products, { fields: [productVariants.productId], references: [products.id] }),
+}));
+
+export type ProductVariant = typeof productVariants.$inferSelect;
+export type NewProductVariant = typeof productVariants.$inferInsert;
+
+// Stock de variante por almacén (Opción B) — fuente de verdad del stock de
+// variantes. product_variants.stock_actual = suma por todos los almacenes.
+export const productVariantAlmacenStock = pgTable('product_variant_almacen_stock', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  variantId:   integer('variant_id').notNull().references(() => productVariants.id),
+  almacenId:   integer('almacen_id').notNull().references(() => almacenes.id),
+  stockActual: integer('stock_actual').notNull().default(0),
+}, (t) => [
+  uniqueIndex('pvas_variant_almacen_uniq').on(t.variantId, t.almacenId),
+  index('pvas_team_idx').on(t.teamId),
+  index('pvas_almacen_idx').on(t.almacenId),
 ]);
 
 // ─── EmiteDO — Compras locales ────────────────────────────────────────────────

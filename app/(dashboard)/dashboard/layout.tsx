@@ -872,7 +872,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-[100dvh] bg-gray-50 overflow-hidden">
       <GlobalSearch />
 
       {/* Sidebar — desktop (oculto cuando collapsed) */}

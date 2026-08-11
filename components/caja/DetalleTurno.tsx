@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { labelMetodo, esEfectivo } from '@/lib/pagos/metodos';
 
 /** Comprobante que amerita revisión: anulado, o con saldo sin cobrar. */
 interface Excepcion {
@@ -39,6 +40,7 @@ interface Movimiento {
   id: number;
   tipo: string;
   montoCentavos: number;
+  metodo: string | null;
   descripcion: string | null;
   motivo: string | null;
 }
@@ -229,11 +231,16 @@ export function DetalleTurno({ turnoId }: { turnoId: number }) {
               <tbody className="divide-y divide-gray-100">
                 {movimientos.map(m => (
                   <tr key={m.id}>
-                    <td className="px-3 py-1.5 text-xs font-medium text-gray-500">{m.tipo}</td>
-                    <td className="truncate px-3 py-1.5 text-gray-700">
-                      {m.descripcion || m.motivo || '—'}
+                    <td className="px-3 py-1.5 text-xs font-medium text-gray-500 align-top">{m.tipo}</td>
+                    <td className="px-3 py-1.5 text-gray-700">
+                      <div className="truncate">{m.descripcion || m.motivo || '—'}</div>
+                      {/* Método + si toca o no el efectivo en caja */}
+                      <div className="text-[11px] text-gray-400">
+                        {labelMetodo(m.metodo)}
+                        {esEfectivo(m.metodo) ? ' · afecta caja' : ' · no afecta caja'}
+                      </div>
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-gray-900">
+                    <td className="px-3 py-1.5 text-right tabular-nums text-gray-900 align-top">
                       {fmt(m.montoCentavos)}
                     </td>
                   </tr>

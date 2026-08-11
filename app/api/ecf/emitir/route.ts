@@ -20,6 +20,7 @@ import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
+import { validarVariantes } from '@/lib/inventario/variante-guard';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -51,6 +52,8 @@ const itemSchema = z.object({
   dependienteNombre:      z.string().max(255).optional(),
   // Control de inventario — metadato, no va al XML DGII
   productoId:             z.number().int().positive().optional().nullable(),
+  // Variante vendida — el descuento de stock pega a esta variante (lib/inventario/descuento.ts).
+  variantId:              z.number().int().positive().optional().nullable(),
 });
 
 const retencionSchema = z.object({
@@ -291,6 +294,14 @@ export async function POST(request: NextRequest) {
       });
       if (errPrecio) return NextResponse.json({ error: errPrecio }, { status: 403 });
     }
+
+    // ── Gate: variante obligatoria ────────────────────────────────────────────
+    // Un producto con ejes de variante (talla, color…) no se puede vender sin
+    // decir cuál. El formulario y el POS ya lo piden; esto sostiene la regla
+    // cuando el POST no viene de ahí. Sin esto el descuento cae al stock del
+    // producto y el de las variantes queda intacto: los números dejan de cuadrar.
+    const errVariante = await validarVariantes(teamId, data.items);
+    if (errVariante) return NextResponse.json({ error: errVariante }, { status: 422 });
 
     // Cross-field: sin-ncf solo permitido en modo borrador
     if (data.tipoEcf === 'sin-ncf' && data.modo !== 'borrador') {
@@ -640,6 +651,7 @@ export async function POST(request: NextRequest) {
             const lineasViejas = JSON.parse(existing.lineasJson) as Array<Record<string, unknown>>;
             const itemsViejos = lineasViejas.map(i => ({
               productoId:             i.productoId ? Number(i.productoId) : null,
+              variantId:              i.variantId ? Number(i.variantId) : null,
               cantidadItem:           Number(i.cantidadItem) || 0,
               indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1') ? 1 as const : 2 as const,
             }));
@@ -1208,6 +1220,7 @@ export async function POST(request: NextRequest) {
     const lineasJsonParaGuardar = data.lineasJson
       ?? JSON.stringify(data.items.map(item => ({
           productoId:         item.productoId ?? null,
+          variantId:          item.variantId ?? null,
           nombreItem:         item.nombreItem,
           descripcionItem:    item.descripcionItem,
           cantidadItem:       item.cantidadItem,

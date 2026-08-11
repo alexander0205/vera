@@ -43,6 +43,8 @@ import { ModalNuevoProducto } from './modals/ModalNuevoProducto';
 import { ModalNuevoAlmacen } from './modals/ModalNuevoAlmacen';
 import { ModalNuevaLista } from './modals/ModalNuevaLista';
 import { ModalNuevoVendedor } from './modals/ModalNuevoVendedor';
+import { ModalAbrirCaja } from './modals/ModalAbrirCaja';
+import { ModalSeleccionarVariante } from './modals/ModalSeleccionarVariante';
 import { ModalPreviewPDF } from './modals/ModalPreviewPDF';
 import { ModalEditarNCF } from './modals/ModalEditarNCF';
 import { ModalEnviarCorreo } from './modals/ModalEnviarCorreo';
@@ -57,7 +59,7 @@ import { validate as validateEcf } from '@/lib/factura/validator';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import type {
   BorradorInicial, Cliente, EmpresaPerfil, ItemLinea, Producto,
-  ResultadoEmision, Retencion,
+  ResultadoEmision, Retencion, VariantePick,
 } from './utils/types';
 
 // Re-export for callers that import from this module.
@@ -493,6 +495,19 @@ export default function NuevaFacturaForm({
   const [confirmContado, setConfirmContado] = useState<
     null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
   >(null);
+
+  // Sin turno de caja abierto el backend bloquea guardar/emitir con code
+  // CAJA_SIN_TURNO (solo si la empresa tiene caja habilitada). Guarda el
+  // emitir() pendiente para reintentarlo al abrir el turno desde el modal.
+  const [abrirCajaPend, setAbrirCajaPend] = useState<
+    null | { modo: 'emitir' | 'borrador'; opts?: EmitirOpts }
+  >(null);
+
+  // Producto con variantes recién elegido en una línea: guarda a qué línea aplica
+  // y el producto, hasta que el usuario escoja la variante en el selector.
+  const [variantePickFor, setVariantePickFor] = useState<
+    null | { idx: number; producto: Producto }
+  >(null);
   // "No volver a mostrar": persistido en localStorage (por navegador).
   const [ocultarAvisoContado, setOcultarAvisoContado] = useState(false);
   // Estado del checkbox dentro del diálogo (se reinicia al abrir).
@@ -692,6 +707,18 @@ export default function NuevaFacturaForm({
   }
 
   function seleccionarProducto(idx: number, p: Producto) {
+    // Producto con variantes (talla/color…): no se puede vender "el producto" a
+    // secas — hay que elegir la variante para saber a qué stock pega el descuento.
+    // Se abre el selector y la línea se completa al escoger (aplicarVarianteEnLinea).
+    if (p.tipo === 'bien' && (p.variantAtributos?.length ?? 0) > 0) {
+      setVariantePickFor({ idx, producto: p });
+      return;
+    }
+    aplicarProductoEnLinea(idx, p);
+  }
+
+  /** Aplica un producto SIN variantes a la línea (comportamiento clásico). */
+  function aplicarProductoEnLinea(idx: number, p: Producto) {
     const tasa = (p.tasaItbis as ItemLinea['tasaItbis']) ?? '0.18';
     // Si la regla no existe (tipoEcf = 'sin-ncf' o sin tipo) usar la tasa del
     // producto. Solo forzar 'exento' si la regla explícitamente prohíbe ITBIS.
@@ -703,6 +730,8 @@ export default function NuevaFacturaForm({
       idx,
       patch: {
         productoId: p.id,
+        variantId: undefined,
+        variantNombre: undefined,
         nombreItem: p.nombre,
         referencia: p.referencia ?? '',
         descripcionItem: p.descripcion ?? '',
@@ -721,6 +750,37 @@ export default function NuevaFacturaForm({
       } else if (p.stockActual <= p.stockMinimo) {
         toast.warning(`Stock bajo en "${p.nombre}": ${p.stockActual} unidades (mínimo: ${p.stockMinimo}).`, { duration: 6000 });
       }
+    }
+  }
+
+  /** Completa la línea con el producto + la variante elegida en el selector. */
+  function aplicarVarianteEnLinea(idx: number, p: Producto, v: VariantePick) {
+    const tasa = (p.tasaItbis as ItemLinea['tasaItbis']) ?? '0.18';
+    const tasaFinal: ItemLinea['tasaItbis'] =
+      regla === undefined ? tasa : regla.permiteItbis ? tasa : 'exento';
+    dispatchItems({
+      type: 'APPLY_PRODUCTO',
+      idx,
+      patch: {
+        productoId: p.id,
+        variantId: v.id,
+        variantNombre: v.nombre,
+        nombreItem: `${p.nombre} · ${v.nombre}`,
+        referencia: v.referencia ?? p.referencia ?? '',
+        descripcionItem: p.descripcion ?? '',
+        precioUnitarioItem: v.precioDOP,
+        tasaItbis: tasaFinal,
+        indicadorBienoServicio: '1',
+        unidadMedida: (p as Producto & { unidad?: string }).unidad ?? '',
+      },
+    });
+
+    if (v.stockActual === 0 && !p.permiteVentaSinStock) {
+      toast.error(`"${p.nombre} · ${v.nombre}" está agotada y no permite venta sin stock.`, { duration: 7000 });
+    } else if (v.stockActual === 0) {
+      toast.warning(`"${p.nombre} · ${v.nombre}" está agotada. Stock: 0.`, { duration: 6000 });
+    } else if (v.stockActual <= v.stockMinimo) {
+      toast.warning(`Stock bajo en "${p.nombre} · ${v.nombre}": ${v.stockActual} (mínimo: ${v.stockMinimo}).`, { duration: 6000 });
     }
   }
 
@@ -1071,6 +1131,15 @@ export default function NuevaFacturaForm({
         : await fetch('/api/ecf/emitir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, _traza: traza }) });
       const data = await res.json();
       if (!res.ok) {
+        // Sin turno de caja abierto (solo si la empresa usa el módulo de caja):
+        // abrir el modal para abrir caja aquí mismo y reintentar el guardado, en
+        // vez de dejar al usuario en un callejón con solo el mensaje de error.
+        // CAJA_TURNO_VENCIDO no entra aquí a propósito: abrir un turno no lo
+        // resuelve (hay que cerrar el vencido), así que cae al error de abajo.
+        if (data.code === 'CAJA_SIN_TURNO') {
+          setAbrirCajaPend({ modo, opts });
+          return;
+        }
         // El backend reservó el e-NCF en un borrador: guardarlo para que el
         // próximo intento lo reuse en vez de consumir otro número.
         if (typeof data.docId === 'number') setReservaDocId(data.docId);
@@ -1592,6 +1661,34 @@ export default function NuevaFacturaForm({
             setShowNuevoVendedor(false);
           }}
         />
+
+        {variantePickFor && (
+          <ModalSeleccionarVariante
+            open
+            productoId={variantePickFor.producto.id}
+            productoNombre={variantePickFor.producto.nombre}
+            almacenId={almacenId}
+            onClose={() => setVariantePickFor(null)}
+            onPick={(v) => {
+              aplicarVarianteEnLinea(variantePickFor.idx, variantePickFor.producto, v);
+              setVariantePickFor(null);
+            }}
+          />
+        )}
+
+        {abrirCajaPend && (
+          <ModalAbrirCaja
+            open
+            onClose={() => setAbrirCajaPend(null)}
+            onOpened={() => {
+              const pend = abrirCajaPend;
+              setAbrirCajaPend(null);
+              // Turno abierto: reintentar el guardado con las mismas opciones
+              // (conserva metodoConfirmado/contadoConfirmado si ya se aceptaron).
+              if (pend) void emitir(pend.modo, pend.opts);
+            }}
+          />
+        )}
 
         {confirmMetodo && (
           <ConfirmarMetodoPagoDialog

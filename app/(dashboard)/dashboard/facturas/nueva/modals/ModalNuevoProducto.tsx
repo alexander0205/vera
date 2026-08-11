@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Check, ChevronDown, ChevronUp, Loader2, PackagePlus } from 'lucide-react';
+import { VariantesEditor, type VariantesPayload } from '@/components/productos/VariantesEditor';
 import type { Producto } from '../utils/types';
 
 const TASA_ITBIS_MODAL = [
@@ -28,6 +29,8 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
   { value: 'combo',    label: 'Combo', disabled: true },
 ];
 
+const SIN_VARIANTES: VariantesPayload = { activo: false, variantAtributos: [], variants: [] };
+
 export function ModalNuevoProducto({ open, onClose, onCreated }: {
   open: boolean; onClose: () => void; onCreated: (p: Producto) => void;
 }) {
@@ -35,17 +38,25 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
   const [saving, setSaving]             = useState(false);
   const [error, setError]               = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
+  const [variantes, setVariantes]       = useState<VariantesPayload>(SIN_VARIANTES);
+  const [resetVariantes, setResetVariantes] = useState(0);
+
+  const usaVariantes = form.tipo === 'bien' && variantes.activo;
+
+  function resetAll() {
+    setForm({ nombre: '', precio: '', tasaItbis: 'exento', tipo: 'servicio', descripcion: '', unidad: 'Unidad', cantidadInicial: '' });
+    setShowAvanzado(false);
+    setVariantes(SIN_VARIANTES);
+    setResetVariantes(n => n + 1);
+  }
 
   async function handleSave() {
     if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
     setSaving(true); setError(null);
     try {
-      // Si es un bien y se indicó cantidad inicial, activar control de inventario
-      // y sembrar el stock. Sin esto el producto no genera movimientos de venta
-      // ni aparece en el historial del detalle de producto.
       const cantidadInicial = parseInt(form.cantidadInicial, 10);
       const tieneStockInicial =
-        form.tipo === 'bien' && form.cantidadInicial.trim() !== '' && !isNaN(cantidadInicial);
+        form.tipo === 'bien' && !usaVariantes && form.cantidadInicial.trim() !== '' && !isNaN(cantidadInicial);
 
       const payload = {
         nombre:       form.nombre,
@@ -58,13 +69,16 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
           controlaInventario: true,
           stockActual:        Math.max(0, cantidadInicial),
         }),
+        ...(usaVariantes && {
+          variantAtributos: variantes.variantAtributos,
+          variants:         variantes.variants,
+        }),
       };
       const res  = await fetch('/api/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onCreated(data.producto);
-      setForm({ nombre: '', precio: '', tasaItbis: 'exento', tipo: 'servicio', descripcion: '', unidad: 'Unidad', cantidadInicial: '' });
-      setShowAvanzado(false);
+      resetAll();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -74,7 +88,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) { onClose(); setError(null); } }}>
-      <DialogContent className="max-w-lg w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6">
+      <DialogContent className={`${usaVariantes ? 'max-w-2xl' : 'max-w-lg'} w-[calc(100%-1rem)] sm:w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PackagePlus className="h-5 w-5 text-teal-600" />Nuevo producto/servicio
@@ -117,7 +131,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
 
           <div className="space-y-1.5">
             <Label>Nombre <span className="text-red-500">*</span></Label>
-            <Input placeholder={form.tipo === 'bien' ? 'Ej. Camisa talla M' : 'Ej. Diseño de logo'}
+            <Input placeholder={form.tipo === 'bien' ? 'Ej. Camisa polo' : 'Ej. Diseño de logo'}
               value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
           </div>
 
@@ -126,6 +140,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
               <Label>Precio (DOP) <span className="text-red-500">*</span></Label>
               <Input type="number" min={0} step={0.01} placeholder="0.00"
                 value={form.precio} onChange={(e) => setForm((f) => ({ ...f, precio: e.target.value }))} />
+              {usaVariantes && <p className="text-[11px] text-gray-400">Precio base; cada variante puede sobreescribirlo.</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Impuesto (ITBIS)</Label>
@@ -148,12 +163,18 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
             </Select>
           </div>
 
-          {form.tipo === 'bien' && (
+          {/* Cantidad inicial — solo si es bien SIN variantes (con variantes el stock va por variante) */}
+          {form.tipo === 'bien' && !usaVariantes && (
             <div className="space-y-1.5">
               <Label>Cantidad inicial en inventario</Label>
               <Input type="number" min={0} step={1} placeholder="0"
                 value={form.cantidadInicial} onChange={(e) => setForm((f) => ({ ...f, cantidadInicial: e.target.value }))} />
             </div>
+          )}
+
+          {/* Variantes — solo para bienes */}
+          {form.tipo === 'bien' && (
+            <VariantesEditor onChange={setVariantes} resetSignal={resetVariantes} />
           )}
 
           <div>

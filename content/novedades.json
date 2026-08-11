@@ -132,6 +132,16 @@
         "tipo": "nuevo",
         "titulo": "Activa tu facturación electrónica paso a paso",
         "detalle": "La habilitación con la DGII ahora es un asistente guiado: sube el Set de Pruebas, corre la simulación y sigue el avance sin salir del sistema. Mientras no estés en Producción, el acceso aparece arriba en el menú; al terminar se guarda en Configuración."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Vende por talla, color o la medida que uses",
+        "detalle": "Un producto puede tener variantes con su propio precio y su propio inventario. Al facturar o vender en el mostrador eliges cuál, y el descuento de stock va a esa variante. Desde el detalle del producto puedes editarlas: renombrarlas, agregar, quitar y ajustar precio y existencias."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Movimientos de caja con método de pago",
+        "detalle": "Al registrar una entrada o salida de caja eliges el método y ves si suma o resta. Lo que no es efectivo no afecta el conteo de efectivo del cierre, y el método queda visible en el historial y en la hoja impresa."
       }
     ]
   },

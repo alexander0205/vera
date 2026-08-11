@@ -22,11 +22,15 @@ export interface ProductoPos {
   controlaInventario:   boolean;
   permiteVentaSinStock: boolean;
   favorito:             boolean;
-  /** Stock en el almacén de la terminal. null si el producto no controla inventario. */
+  /** Stock en el almacén de la terminal. null si el producto no controla inventario.
+   *  Para productos con variantes es la suma del stock de sus variantes EN ESE
+   *  almacén (Opción B: product_variant_almacen_stock). */
   stockAlmacen:         number | null;
   categoriaId:          number | null;
   categoriaNombre:      string | null;
   imagen:               string | null;
+  /** Ejes de variante del producto. Vacío = sin variantes. */
+  variantAtributos:     { nombre: string; valores: string[] }[];
 }
 
 export async function getCatalogoPos(
@@ -48,6 +52,15 @@ export async function getCatalogoPos(
       permiteVentaSinStock: products.permiteVentaSinStock,
       favorito:             products.posFavorito,
       stockAlmacen:         productAlmacenStock.stockActual,
+      // Suma del stock de las variantes de este producto en ESTE almacén.
+      variantStockAlmacen:  sql<number>`COALESCE((
+        SELECT SUM(pvas.stock_actual)
+          FROM product_variant_almacen_stock pvas
+          JOIN product_variants pv ON pv.id = pvas.variant_id
+         WHERE pv.product_id = ${products.id}
+           AND pvas.almacen_id = ${almacenId}
+      ), 0)`,
+      variantAtributos:     products.variantAtributos,
       categoriaId:          products.categoriaId,
       categoriaNombre:      categorias.nombre,
       imagen:               products.imagen,
@@ -74,24 +87,41 @@ export async function getCatalogoPos(
       eq(products.teamId, teamId),
       eq(products.activo, 'true'),
       eq(products.visiblePos, true),
-      sql`(${products.controlaInventario} = false OR ${productAlmacenStock.id} IS NOT NULL)`,
+      // Aparece si: no controla inventario, tiene stock de producto en este
+      // almacén, o tiene alguna variante con stock asignado en este almacén.
+      sql`(${products.controlaInventario} = false
+           OR ${productAlmacenStock.id} IS NOT NULL
+           OR EXISTS (
+             SELECT 1 FROM product_variant_almacen_stock pvas
+               JOIN product_variants pv ON pv.id = pvas.variant_id
+              WHERE pv.product_id = ${products.id} AND pvas.almacen_id = ${almacenId}
+           ))`,
     ))
     .orderBy(desc(products.posFavorito), asc(products.nombre));
 
-  return rows.map((r) => ({
-    id: r.id,
-    nombre: r.nombre,
-    referencia: r.referencia,
-    codigoBarras: r.codigoBarras,
-    precio: r.precioLista ?? r.precio,
-    tasaItbis: r.tasaItbis,
-    tipo: r.tipo,
-    controlaInventario: r.controlaInventario,
-    permiteVentaSinStock: r.permiteVentaSinStock,
-    favorito: r.favorito,
-    stockAlmacen: r.controlaInventario ? Number(r.stockAlmacen ?? 0) : null,
-    categoriaId: r.categoriaId,
-    categoriaNombre: r.categoriaNombre,
-    imagen: r.imagen,
-  }));
+  return rows.map((r) => {
+    const variantAtributos = (r.variantAtributos as { nombre: string; valores: string[] }[] | null) ?? [];
+    const tieneVariantes = variantAtributos.length > 0;
+    return {
+      id: r.id,
+      nombre: r.nombre,
+      referencia: r.referencia,
+      codigoBarras: r.codigoBarras,
+      precio: r.precioLista ?? r.precio,
+      tasaItbis: r.tasaItbis,
+      tipo: r.tipo,
+      controlaInventario: r.controlaInventario,
+      permiteVentaSinStock: r.permiteVentaSinStock,
+      favorito: r.favorito,
+      // Con variantes: suma del stock de variantes en este almacén.
+      // Sin variantes: el stock del producto en este almacén.
+      stockAlmacen: tieneVariantes
+        ? Number(r.variantStockAlmacen ?? 0)
+        : (r.controlaInventario ? Number(r.stockAlmacen ?? 0) : null),
+      categoriaId: r.categoriaId,
+      categoriaNombre: r.categoriaNombre,
+      imagen: r.imagen,
+      variantAtributos,
+    };
+  });
 }

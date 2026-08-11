@@ -340,6 +340,7 @@ export async function POST(
     // Parse items from lineasJson
     let items: Array<{
       productoId?: number | null;
+      variantId?: number | null;
       nombreItem: string;
       descripcionItem?: string;
       cantidadItem: number;
@@ -368,6 +369,7 @@ export async function POST(
 
             return {
               productoId:             i.productoId ? Number(i.productoId) : null,
+              variantId:              i.variantId ? Number(i.variantId) : null,
               nombreItem:             String(i.nombreItem),
               descripcionItem:        i.descripcionItem ? String(i.descripcionItem) : undefined,
               cantidadItem:           Number(i.cantidadItem) || 1,
