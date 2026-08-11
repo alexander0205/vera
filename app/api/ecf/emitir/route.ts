@@ -20,6 +20,7 @@ import { getPlan, PLANS } from '@/lib/config/plans';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
+import { validarVariantes } from '@/lib/inventario/variante-guard';
 import { calcularTotales } from '@/lib/ecf/types';
 import { logError, logInfo } from '@/lib/logger';
 import { logAudit, getIp } from '@/lib/audit';
@@ -293,6 +294,14 @@ export async function POST(request: NextRequest) {
       });
       if (errPrecio) return NextResponse.json({ error: errPrecio }, { status: 403 });
     }
+
+    // ── Gate: variante obligatoria ────────────────────────────────────────────
+    // Un producto con ejes de variante (talla, color…) no se puede vender sin
+    // decir cuál. El formulario y el POS ya lo piden; esto sostiene la regla
+    // cuando el POST no viene de ahí. Sin esto el descuento cae al stock del
+    // producto y el de las variantes queda intacto: los números dejan de cuadrar.
+    const errVariante = await validarVariantes(teamId, data.items);
+    if (errVariante) return NextResponse.json({ error: errVariante }, { status: 422 });
 
     // Cross-field: sin-ncf solo permitido en modo borrador
     if (data.tipoEcf === 'sin-ncf' && data.modo !== 'borrador') {

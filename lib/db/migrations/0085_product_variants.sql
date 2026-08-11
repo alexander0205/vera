@@ -39,6 +39,15 @@ CREATE TABLE IF NOT EXISTS "product_variants" (
 CREATE INDEX IF NOT EXISTS "product_variants_team_idx"    ON "product_variants" ("team_id");
 CREATE INDEX IF NOT EXISTS "product_variants_product_idx" ON "product_variants" ("team_id", "product_id");
 
+-- Una combinación, una fila. Sin esto se pueden crear dos veces la "Talla M"
+-- del mismo producto y el stock queda partido entre las dos sin que se note.
+-- Parcial sobre activo: una variante dada de baja (soft-delete) no debe impedir
+-- volver a crear esa misma combinación más adelante. jsonb normaliza el orden
+-- de las llaves, así que {"Talla":"M"} compara igual sin importar cómo se envió.
+CREATE UNIQUE INDEX IF NOT EXISTS "product_variants_combo_uniq"
+  ON "product_variants" ("product_id", "atributos")
+  WHERE "activo";
+
 -- 3) La bitácora de inventario puede apuntar a una variante concreta.
 --    NULL = movimiento a nivel producto (producto sin variantes).
 ALTER TABLE "inventory_movements"

@@ -51,8 +51,13 @@ export async function restaurarInventario(
 
         // Con variante: se restaura el stock de la variante y, en paralelo, el
         // stock global del producto (que guarda la suma).
-        let stockAntes:   number;
-        let stockDespues: number;
+        //
+        // Si la variante ya no existe (se borró después de la venta) NO se toma
+        // en cuenta y la devolución entra al producto. Antes se saltaba el item:
+        // la nota de crédito se emitía y la mercancía nunca volvía al inventario.
+        let variantEfectiva: number | null = null;
+        let stockAntes = prod.stock_actual;
+
         if (variantId) {
           const [variante] = await tx.execute<{ stock_actual: number }>(sql`
             SELECT stock_actual
@@ -60,21 +65,28 @@ export async function restaurarInventario(
             WHERE id = ${variantId} AND product_id = ${productoId} AND team_id = ${teamId}
             FOR UPDATE
           `);
-          if (!variante) return; // variante inexistente → no tocar nada
-          stockAntes   = variante.stock_actual;
-          stockDespues = stockAntes + cantidadInt;
+          if (variante) {
+            variantEfectiva = variantId;
+            stockAntes      = variante.stock_actual;
+          } else {
+            console.warn(
+              `[inventario] variante ${variantId} no existe para el producto ${productoId} ` +
+              `(team ${teamId}); la devolución entra a nivel de producto`,
+            );
+          }
+        }
 
+        const stockDespues = stockAntes + cantidadInt;
+
+        if (variantEfectiva) {
           await tx.update(productVariants)
             .set({ stockActual: stockDespues, updatedAt: new Date() })
-            .where(and(eq(productVariants.id, variantId), eq(productVariants.teamId, teamId)));
+            .where(and(eq(productVariants.id, variantEfectiva), eq(productVariants.teamId, teamId)));
 
           await tx.update(products)
             .set({ stockActual: prod.stock_actual + cantidadInt, updatedAt: new Date() })
             .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
         } else {
-          stockAntes   = prod.stock_actual;
-          stockDespues = stockAntes + cantidadInt;
-
           await tx.update(products)
             .set({ stockActual: stockDespues, updatedAt: new Date() })
             .where(and(eq(products.id, productoId), eq(products.teamId, teamId)));
@@ -83,7 +95,7 @@ export async function restaurarInventario(
         await tx.insert(inventoryMovements).values({
           teamId,
           productoId,
-          variantId,
+          variantId: variantEfectiva,
           tipo:           'DEVOLUCION',
           cantidad:       cantidadInt,
           esEntrada:      true,
@@ -95,14 +107,14 @@ export async function restaurarInventario(
         });
 
         if (almacenId) {
-          if (variantId) {
+          if (variantEfectiva) {
             // Opción B: restaurar el stock de la variante por almacén.
             await tx.execute(sql`
               INSERT INTO product_variant_almacen_stock (team_id, variant_id, almacen_id, stock_actual)
-              VALUES (${teamId}, ${variantId}, ${almacenId},
+              VALUES (${teamId}, ${variantEfectiva}, ${almacenId},
                 COALESCE((
                   SELECT stock_actual FROM product_variant_almacen_stock
-                  WHERE variant_id = ${variantId} AND almacen_id = ${almacenId}
+                  WHERE variant_id = ${variantEfectiva} AND almacen_id = ${almacenId}
                 ), 0) + ${cantidadInt}
               )
               ON CONFLICT (variant_id, almacen_id)
@@ -119,6 +131,32 @@ export async function restaurarInventario(
               )
               ON CONFLICT (product_id, almacen_id)
               DO UPDATE SET stock_actual = product_almacen_stock.stock_actual + ${cantidadInt}
+            `);
+          }
+
+          // El stock por almacén es la VERDAD; los otros dos niveles son sumas
+          // denormalizadas. Antes cada nivel se decrementaba por su cuenta y
+          // cada uno recortaba en 0 por separado: vender 5 de una variante con
+          // 3 en el almacén dejaba los tres números distintos, sin forma de
+          // saber cuál creer. Recalcularlos de la suma los mantiene exactos.
+          if (variantEfectiva) {
+            await tx.execute(sql`
+              UPDATE product_variants pv
+              SET stock_actual = COALESCE((
+                    SELECT SUM(stock_actual) FROM product_variant_almacen_stock
+                    WHERE variant_id = pv.id
+                  ), 0),
+                  updated_at = now()
+              WHERE pv.id = ${variantEfectiva} AND pv.team_id = ${teamId}
+            `);
+            await tx.execute(sql`
+              UPDATE products p
+              SET stock_actual = COALESCE((
+                    SELECT SUM(stock_actual) FROM product_variants
+                    WHERE product_id = p.id AND activo = true
+                  ), 0),
+                  updated_at = now()
+              WHERE p.id = ${productoId} AND p.team_id = ${teamId}
             `);
           }
         }
