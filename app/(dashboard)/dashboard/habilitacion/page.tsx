@@ -1402,7 +1402,6 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
     r.estadoDgii === 'ERROR' ||
     (r.status === 'FAILED' && !r.estadoDgii),
   ) ?? [];
-  const failedEncfs = failedCases.map(c => c.eNcf).filter(Boolean) as string[];
   const hasErrors = isComplete && (run?.status === 'FALLIDO' || failedCases.length > 0);
   const isWaiting = uploading || (!!runId && !isComplete);
 
@@ -1413,10 +1412,10 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
     fetch('/api/habilitacion/set-pruebas/alertar-error', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        runId,
-        detalle: `${failedCases.length} caso(s) fallido(s): ${failedEncfs.join(', ') || 'sin e-NCF'}`,
-      }),
+      // Solo el runId: el detalle de la alerta lo arma el servidor leyendo la
+      // corrida en ecf-api, para que el cliente no pueda escribir en el Slack
+      // del equipo.
+      body: JSON.stringify({ runId }),
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasErrors, alertSent, runId]);

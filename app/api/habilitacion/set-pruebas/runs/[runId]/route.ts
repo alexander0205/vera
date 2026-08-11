@@ -10,16 +10,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { setPruebas, EcfApiError } from '@/lib/ecf-api/client';
 import { ownsRun } from '@/lib/habilitacion/ownership';
 
 async function requireOwnRun(runId: string) {
-  const user = await getUser();
-  if (!user) return { error: NextResponse.json({ error: 'No autenticado' }, { status: 401 }) };
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return { error: NextResponse.json({ error: 'Sin empresa' }, { status: 403 }) };
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso con
+  // el que el nav ya gatea la pantalla.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return { error: auth.response };
+  const teamId = auth.teamId;
 
   if (!(await ownsRun(teamId, runId))) {
     return { error: NextResponse.json({ error: 'Corrida no encontrada' }, { status: 404 }) };

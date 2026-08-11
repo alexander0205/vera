@@ -5,10 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { eq, sql } from 'drizzle-orm';
 
 // Shape canónico del estado — todo opcional para permitir merges parciales
@@ -74,11 +74,11 @@ export type HabilitacionState = z.infer<typeof HabilitacionStateSchema>;
 // ─── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   const [team] = await db
     .select({
@@ -108,11 +108,11 @@ export async function GET() {
 // ─── PUT — merge shallow ────────────────────────────────────────────────────
 
 export async function PUT(request: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   const body   = await request.json().catch(() => ({}));
   const parsed = HabilitacionStateSchema.safeParse(body);
@@ -169,11 +169,11 @@ export async function PUT(request: NextRequest) {
 // ─── DELETE — reinicia la habilitación (útil para testing) ───────────────────
 
 export async function DELETE() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   await db.update(teams)
     .set({

@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ecf-api/contribuyente';
 import { simulacion, EcfApiError } from '@/lib/ecf-api/client';
 
@@ -16,11 +16,12 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla. Sin esto, cualquier miembro con
+  // sesión podía arrancarla por API aunque no viera el enlace.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   const { runId } = await params;
 

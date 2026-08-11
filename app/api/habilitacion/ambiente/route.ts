@@ -9,10 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { contribuyentes, EcfApiError } from '@/lib/ecf-api/client';
 import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ecf-api/contribuyente';
 import { eq, sql } from 'drizzle-orm';
@@ -22,11 +22,12 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla. Sin esto, cualquier miembro con
+  // sesión podía arrancarla por API aunque no viera el enlace.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   const body = await request.json().catch(() => ({}));
   const parsed = schema.safeParse(body);

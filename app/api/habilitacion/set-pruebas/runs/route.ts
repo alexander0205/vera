@@ -12,12 +12,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { ensureContribuyente, ContribuyenteCamposFaltantesError } from '@/lib/ecf-api/contribuyente';
 import { contribuyentes, setPruebas, EcfApiError, type SetPruebasAmbiente } from '@/lib/ecf-api/client';
+import { leerRncEmisores, normalizarRnc } from '@/lib/habilitacion/excel-rnc';
 
 /** Mapea el ambiente de ecf-api (source of truth) al slug del endpoint set-pruebas. */
 function mapAmbiente(ambiente: string | undefined): SetPruebasAmbiente | null {
@@ -29,11 +30,12 @@ function mapAmbiente(ambiente: string | undefined): SetPruebasAmbiente | null {
 }
 
 export async function GET() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla. Sin esto, cualquier miembro con
+  // sesión podía arrancarla por API aunque no viera el enlace.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   const [team] = await db.select({ rnc: teams.rnc }).from(teams).where(eq(teams.id, teamId)).limit(1);
   if (!team) return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 });
@@ -55,11 +57,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-  const teamId = await getTeamIdForUser();
-  if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+  // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+  // con el que el nav ya gatea la pantalla. Sin esto, cualquier miembro con
+  // sesión podía arrancarla por API aunque no viera el enlace.
+  const auth = await requirePermission('configuracion:gestionar');
+  if (!auth.ok) return auth.response;
+  const teamId = auth.teamId;
 
   // Ambiente = source of truth en ecf-api (contrib.ambiente), NO copia local.
   let ambiente: SetPruebasAmbiente | null;
@@ -99,8 +102,57 @@ export async function POST(request: NextRequest) {
 
   const skipEncfs = (incoming?.get('skipEncfs') as string | null)?.trim() || undefined;
 
+  // ── El Excel solo puede emitir bajo el RNC de la empresa que lo sube ───────
+  // ecf-api resuelve el contribuyente por la columna `RNCEmisor` del archivo y
+  // autoriza con la API key master: sin este chequeo, subir un Excel con el RNC
+  // de otra empresa emite e-CF de prueba a la DGII bajo su RNC y le consume las
+  // secuencias. El RNC de una empresa es público, así que no hay que adivinarlo.
+  const [teamRnc] = await db
+    .select({ rnc: teams.rnc })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  if (!teamRnc?.rnc) {
+    return NextResponse.json(
+      { error: 'La empresa no tiene RNC configurado; complétalo antes de correr el Set de Pruebas.' },
+      { status: 422 },
+    );
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  let emisores: Set<string>;
+  try {
+    emisores = await leerRncEmisores(bytes);
+  } catch (err) {
+    console.error('[set-pruebas] no se pudo leer el Excel', err);
+    return NextResponse.json(
+      { error: 'No se pudo leer el archivo. Verifica que sea el Excel del Set de Pruebas (.xlsx).' },
+      { status: 400 },
+    );
+  }
+
+  const propio  = normalizarRnc(teamRnc.rnc);
+  const ajenos  = [...emisores].filter(r => r !== propio);
+  if (emisores.size === 0) {
+    return NextResponse.json(
+      { error: 'El archivo no tiene la columna RNCEmisor. Usa la plantilla del Set de Pruebas de la DGII.' },
+      { status: 422 },
+    );
+  }
+  if (ajenos.length > 0) {
+    console.warn(`[set-pruebas] team ${teamId} (RNC ${propio}) intentó emitir con RNC ajeno: ${ajenos.join(', ')}`);
+    return NextResponse.json(
+      {
+        error: `El archivo declara el RNC ${ajenos[0]} y esta empresa es ${propio}. `
+             + 'Solo puedes correr el Set de Pruebas con el RNC de tu propia empresa.',
+        rncAjeno: ajenos[0],
+      },
+      { status: 403 },
+    );
+  }
+
   const forward = new FormData();
-  forward.append('file', file, file.name);
+  forward.append('file', new Blob([new Uint8Array(bytes)]), file.name);
 
   console.log(`[set-pruebas] team ${teamId} subiendo "${file.name}" · ambiente=${ambiente}${skipEncfs ? ` · skip=${skipEncfs}` : ''}`);
 
