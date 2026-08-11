@@ -63,6 +63,7 @@ export type Permission =
   // Punto de venta (POS)
   | 'pos:vender'     // abrir terminal, vender y cobrar en el POS (cajero)
   | 'pos:configurar' // crear/editar terminales y config del POS (admin/owner)
+  | 'pos:anular'     // anular/unsettle recibos ya cobrados en el POS (admin/owner)
   // Acceso por módulo del producto (facturación / POS). El acceso efectivo de
   // un usuario a un módulo = módulo activo en la empresa (teams.modulosHabilitados)
   // ∩ este permiso en su rol. Ver lib/auth/modules.ts.
@@ -140,7 +141,7 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
-      'pos:vender', 'pos:configurar',
+      'pos:vender', 'pos:configurar', 'pos:anular',
       'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
       'suscripcion:gestionar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
@@ -167,7 +168,7 @@ export const ROLES: RoleDef[] = [
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
-      'pos:vender', 'pos:configurar',
+      'pos:vender', 'pos:configurar', 'pos:anular',
       'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
@@ -304,6 +305,7 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
   { module: 'Punto de venta', icon: 'Store', permissions: [
     { key: 'pos:vender',     label: 'Vender y cobrar (cajero)' },
     { key: 'pos:configurar', label: 'Configurar terminales del POS' },
+    { key: 'pos:anular',     label: 'Anular / reabrir recibos cobrados' },
   ]},
   { module: 'Acceso a módulos', icon: 'LayoutGrid', permissions: [
     { key: 'modulo:facturacion',    label: 'Acceso al módulo Facturación' },

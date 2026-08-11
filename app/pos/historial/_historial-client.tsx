@@ -11,14 +11,16 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
 import { ReceiptText, X, Printer, Undo2, Trash2, RefreshCw } from 'lucide-react';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 
 const fmt = (c: number) => (c / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -59,6 +61,7 @@ interface Ticket {
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
 
 export default function PosHistorialClient() {
+  const { can } = usePermissions();
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [sinTurno, setSinTurno] = useState(false);
@@ -122,7 +125,14 @@ export default function PosHistorialClient() {
           opciones={TIPOS_ORDEN.map((t) => ({ value: t, label: TIPO_ORDEN_LABEL[t] }))} />
       </Box>
 
-      {sel && <ReciboDrawer venta={sel} onClose={() => setSel(null)} />}
+      {sel && (
+        <ReciboDrawer
+          venta={sel}
+          puedeAnular={can('pos:anular')}
+          onClose={() => setSel(null)}
+          onAnulada={() => { setSel(null); cargar(); }}
+        />
+      )}
     </Box>
   );
 }
@@ -193,9 +203,17 @@ function TarjetaVenta({ v, onClick }: { v: Venta; onClick: () => void }) {
   );
 }
 
-function ReciboDrawer({ venta, onClose }: { venta: Venta; onClose: () => void }) {
+function ReciboDrawer({ venta, puedeAnular, onClose, onAnulada }: {
+  venta: Venta; puedeAnular: boolean; onClose: () => void; onAnulada: () => void;
+}) {
+  const router = useRouter();
   const [t, setT] = useState<Ticket | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmar, setConfirmar] = useState<'eliminar' | 'unsettle' | null>(null);
+  const [procesando, setProcesando] = useState(false);
+
+  const anulado = venta.estado === 'ANULADO';
+  const tieneMesa = venta.mesa != null;   // unsettle solo aplica a órdenes de mesa
 
   useEffect(() => {
     fetch(`/api/pos/ticket/${venta.id}`)
@@ -203,6 +221,31 @@ function ReciboDrawer({ venta, onClose }: { venta: Venta; onClose: () => void })
       .then(setT)
       .catch((e) => setError(typeof e === 'string' ? e : 'No se pudo cargar el recibo'));
   }, [venta.id]);
+
+  async function anular(modo: 'eliminar' | 'unsettle') {
+    setProcesando(true);
+    try {
+      const res = await fetch(`/api/pos/venta/${venta.id}/anular`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modo }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error ?? 'No se pudo anular'); return; }
+      // e-CF fiscal aceptado → el POS no lo anula: manda al form de Nota de Crédito.
+      if (data.requiereNotaCredito) {
+        toast.info('Requiere Nota de Crédito — te llevo al formulario');
+        router.push(data.redirectTo);
+        return;
+      }
+      toast.success(modo === 'unsettle'
+        ? (data.comandaReabierta ? 'Orden reabierta en la mesa' : 'Recibo anulado')
+        : 'Recibo eliminado');
+      onAnulada();
+    } finally {
+      setProcesando(false);
+      setConfirmar(null);
+    }
+  }
 
   return (
     <Dialog open onClose={onClose} fullWidth slotProps={{ paper: { sx: { maxWidth: 420, m: 2, borderRadius: '14px' } } }}>
@@ -260,24 +303,51 @@ function ReciboDrawer({ venta, onClose }: { venta: Venta; onClose: () => void })
               >
                 Ver / imprimir recibo
               </Button>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Tooltip title="Disponible en la Fase 2 (anula el e-CF y reabre la orden)">
-                  <span style={{ flex: 1 }}>
-                    <Button fullWidth disabled variant="outlined" startIcon={<Undo2 style={{ width: 15, height: 15 }} />}
-                      sx={{ textTransform: 'none', color: '#6b7280', borderColor: '#e5e7eb' }}>
+
+              {anulado ? (
+                <Box sx={{ mt: 0.5, textAlign: 'center', fontSize: 13, color: '#991b1b', fontWeight: 600 }}>
+                  Recibo anulado
+                </Box>
+              ) : !puedeAnular ? (
+                <Box sx={{ mt: 0.5, textAlign: 'center', fontSize: 12, color: '#9ca3af' }}>
+                  Solo un administrador puede anular o reabrir recibos.
+                </Box>
+              ) : confirmar ? (
+                <Box sx={{ mt: 0.5, borderRadius: '10px', border: '1px solid #fecaca', bgcolor: '#fef2f2', p: 1.25 }}>
+                  <Typography sx={{ fontSize: 13, color: '#991b1b', mb: 1 }}>
+                    {confirmar === 'unsettle'
+                      ? '¿Anular el cobro y reabrir la orden en la mesa?'
+                      : '¿Anular este recibo? Se revierte el cobro y se restaura el inventario.'}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button fullWidth size="small" variant="outlined" disabled={procesando}
+                      onClick={() => setConfirmar(null)}
+                      sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }}>
+                      Cancelar
+                    </Button>
+                    <Button fullWidth size="small" variant="contained" disableElevation disabled={procesando}
+                      onClick={() => anular(confirmar)}
+                      sx={{ textTransform: 'none', bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' } }}>
+                      {procesando ? 'Anulando…' : 'Sí, anular'}
+                    </Button>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {tieneMesa && (
+                    <Button fullWidth variant="outlined" startIcon={<Undo2 style={{ width: 15, height: 15 }} />}
+                      onClick={() => setConfirmar('unsettle')}
+                      sx={{ textTransform: 'none', color: '#b45309', borderColor: '#fcd34d' }}>
                       Unsettle
                     </Button>
-                  </span>
-                </Tooltip>
-                <Tooltip title="Disponible en la Fase 2 (nota de crédito + reversa de caja)">
-                  <span style={{ flex: 1 }}>
-                    <Button fullWidth disabled variant="outlined" startIcon={<Trash2 style={{ width: 15, height: 15 }} />}
-                      sx={{ textTransform: 'none', color: '#6b7280', borderColor: '#e5e7eb' }}>
-                      Eliminar
-                    </Button>
-                  </span>
-                </Tooltip>
-              </Box>
+                  )}
+                  <Button fullWidth variant="outlined" startIcon={<Trash2 style={{ width: 15, height: 15 }} />}
+                    onClick={() => setConfirmar('eliminar')}
+                    sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
+                    Eliminar
+                  </Button>
+                </Box>
+              )}
             </Box>
           </>
         )}
