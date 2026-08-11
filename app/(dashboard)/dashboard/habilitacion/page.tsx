@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Check, Building2, KeyRound, Hash, FileText, Rocket, Loader2,
@@ -10,6 +10,7 @@ import {
   Download, Printer, Globe, ScrollText, FlaskConical,
   FileSignature, Upload, Zap, Lock, RefreshCw,
   Image as ImageIcon, Mail, Clock, PartyPopper,
+  Database, FileCheck, ScanLine, Link2, PlayCircle, Inbox, ThumbsUp, ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,48 +33,53 @@ interface CertInfo {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// 6 fases del wizard (excluye los 2 pre-requisitos: empresa + certificado)
+// 15 fases del wizard (excluye los 2 pre-requisitos: empresa + certificado).
+// Nombres/iconos de los pasos aún no definidos se ajustan uno por uno.
 const PHASES = [
-  { id: 0, label: 'Postulación DGII',    icon: FileText,     sub: ['Datos del portal', 'Firma XML', 'Validación'] },
-  { id: 1, label: 'Pruebas e-CF',        icon: FlaskConical, sub: ['Datos del producto', 'Envío', 'Confirmación'] },
-  { id: 2, label: 'Representaciones',    icon: Printer,      sub: ['Descargar PDFs', 'Subida', 'Validación'] },
-  { id: 3, label: 'URLs Producción',     icon: Globe,        sub: ['Registrar URLs'] },
-  { id: 4, label: 'Declaración Jurada',  icon: ScrollText,   sub: ['Firmar y enviar', 'Verificación RNC'] },
-  { id: 5, label: '¡Finalizado!',        icon: PartyPopper,  sub: ['Entrar a OFV'] },
+  { id: 0,  label: 'Postulación DGII',         icon: FileText,     sub: ['Datos del portal', 'Firma digital', 'Envío al portal'] },
+  { id: 1,  label: 'Pruebas de Datos e-CF',    icon: FlaskConical, sub: ['Subir Excel', 'Procesamiento'] },
+  { id: 2,  label: 'Aprobaciones Comerciales', icon: FileCheck,    sub: ['Subir Excel', 'Procesamiento'] },
+  { id: 3,  label: 'Pruebas Simulación e-CF',  icon: Database,     sub: ['Iniciar', 'Procesamiento'] },
+  { id: 4,  label: 'Pruebas de Simulación Representación Impresa', icon: Printer, sub: ['Descargar PDFs'] },
+  { id: 5,  label: 'Validación Representación Impresa', icon: ScanLine, sub: ['Espera DGII'] },
+  { id: 6,  label: 'URL Servicios Prueba',     icon: Link2,        sub: ['Registrar URLs'] },
+  { id: 7,  label: 'Inicio Prueba Recepción e-CF',              icon: PlayCircle, sub: ['Portal DGII'] },
+  { id: 8,  label: 'Recepción e-CF',                            icon: Inbox,      sub: ['Portal DGII'] },
+  { id: 9,  label: 'Inicio Prueba Recepción Aprobación Comercial', icon: PlayCircle, sub: ['Portal DGII'] },
+  { id: 10, label: 'Recepción Aprobación Comercial',            icon: ThumbsUp,   sub: ['Portal DGII'] },
+  { id: 11, label: 'URLs Producción',          icon: Globe,        sub: ['Registrar URLs'] },
+  { id: 12, label: 'Declaración Jurada',       icon: ScrollText,   sub: ['Firmar y enviar', 'Verificación RNC'] },
+  { id: 13, label: 'Verificación Estatus',     icon: ShieldCheck,  sub: ['Espera DGII'] },
+  { id: 14, label: '¡Finalizado!',             icon: PartyPopper,  sub: ['Entrar a OFV'] },
 ];
 
 const PHASE_TITLES = [
   'Postulación en el portal DGII',
-  'Pruebas de simulación e-CF',
-  'Representaciones impresas',
+  'Pruebas de Datos e-CF',
+  'Aprobaciones Comerciales',
+  'Pruebas Simulación e-CF',
+  'Pruebas de Simulación Representación Impresa',
+  'Validación Representación Impresa',
+  'URL Servicios Prueba',
+  'Inicio Prueba Recepción e-CF',
+  'Recepción e-CF',
+  'Inicio Prueba Recepción Aprobación Comercial',
+  'Recepción Aprobación Comercial',
   'URLs de producción',
   'Declaración jurada',
+  'Verificación Estatus',
   '¡Habilitación completada!',
 ];
 
 const EMITEDO = {
   tipoSoftware:    'EXTERNO',
-  nombreSoftware:  'EmiteDO',
+  nombreSoftware:  'Zero ECF API',
   version:         '1',
-  rncProveedor:    '1333307391',
+  rncProveedor:    '133307391',
   nombreProveedor: 'Yisrael Technology SRL',
 };
 
 // La webhookBaseUrl viene de ecf-api en tiempo real — se carga en el componente.
-
-const PDFS = [
-  { tipo: '31',  nombre: 'Factura de Crédito Fiscal',        tam: '~45 KB' },
-  { tipo: '32a', nombre: 'Factura de Consumo (≥RD$250,000)', tam: '~43 KB' },
-  { tipo: '32b', nombre: 'Factura de Consumo (<RD$250,000)', tam: '~40 KB' },
-  { tipo: '33',  nombre: 'Nota de Débito',                   tam: '~38 KB' },
-  { tipo: '34',  nombre: 'Nota de Crédito',                  tam: '~38 KB' },
-  { tipo: '41',  nombre: 'Compras',                          tam: '~36 KB' },
-  { tipo: '43',  nombre: 'Gastos Menores',                   tam: '~36 KB' },
-  { tipo: '44',  nombre: 'Regímenes Especiales',             tam: '~36 KB' },
-  { tipo: '45',  nombre: 'Gubernamental',                    tam: '~36 KB' },
-  { tipo: '46',  nombre: 'Exportaciones',                    tam: '~36 KB' },
-  { tipo: '47',  nombre: 'Pagos al Exterior',                tam: '~36 KB' },
-];
 
 // ─── Pruebas de simulación e-CF — tipos y tandas según set oficial DGII ──────
 
@@ -137,8 +143,11 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 
 // Campo estilo portal DGII — label + asterisco arriba, valor en input con copy button dentro.
 // Si `isUrl=true` muestra "https://" como prefijo visual gris (no se copia).
-function DgiiField({ label, value, span, required = true, isUrl = false }: {
+function DgiiField({ label, value, span, required = true, isUrl = false, disabled = false }: {
   label: string; value: string; span?: 'full' | '2'; required?: boolean; isUrl?: boolean;
+  /** Valor fijo de configuración (no varía por contribuyente/team) — se
+   *  muestra con look de input deshabilitado en vez de campo activo. */
+  disabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const spanCls = span === 'full' ? 'col-span-full' : span === '2' ? 'col-span-2' : '';
@@ -147,13 +156,17 @@ function DgiiField({ label, value, span, required = true, isUrl = false }: {
       <label className="block text-sm text-gray-700 mb-1">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
-      <div className="flex items-center border border-gray-300 rounded-md bg-white overflow-hidden focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-400">
+      <div className={`flex items-center border rounded-md overflow-hidden ${
+        disabled
+          ? 'border-gray-200 bg-gray-50'
+          : 'border-gray-300 bg-white focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-400'
+      }`}>
         {isUrl && (
           <span className="shrink-0 px-3 py-2 text-sm text-gray-400 bg-gray-50 border-r border-gray-200 select-none">
             https://
           </span>
         )}
-        <span className="flex-1 px-3 py-2 text-sm text-gray-900 truncate min-w-0">{value}</span>
+        <span className={`flex-1 px-3 py-2 text-sm truncate min-w-0 ${disabled ? 'text-gray-500' : 'text-gray-900'}`}>{value}</span>
         <button
           onClick={() => { navigator.clipboard.writeText(value).catch(()=>{}); setCopied(true); setTimeout(()=>setCopied(false),1500); }}
           className="shrink-0 px-3 py-2 border-l border-gray-200 bg-gray-50 hover:bg-teal-50 text-gray-400 hover:text-teal-600 transition-colors"
@@ -514,10 +527,15 @@ function StatusPill({ status }: { status: EcfSendStatus }) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<number>; onJump: (p: number) => void }) {
+// Filas de fases (círculo + línea conectora + label) — compartidas entre el
+// nav de desktop (Sidebar) y el panel expandible de mobile, para que se vean
+// exactamente igual en ambos y la línea quede alineada en los dos lugares.
+function PhaseListItems({ phase, completed, onJump, onSelect }: {
+  phase: number; completed: Set<number>; onJump: (p: number) => void; onSelect?: () => void;
+}) {
   const maxReached = Math.max(phase, ...Array.from(completed), 0);
   return (
-    <nav className="hidden md:flex flex-col w-56 shrink-0 pt-2 select-none">
+    <>
       {PHASES.map((p, i) => {
         const isDone    = completed.has(p.id);
         const isCurrent = p.id === phase;
@@ -525,11 +543,14 @@ function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<n
         return (
           <div key={p.id} className="relative">
             {i < PHASES.length - 1 && (
-              <div className={`absolute left-[15px] top-8 w-0.5 h-[calc(100%-4px)]
+              // left = padding del botón (px-2 = 8px) + mitad del círculo (30px / 2 = 15px).
+              // top = borde inferior real del círculo (py-2 8px + mt-0.5 2px + 30px alto = 40px);
+              // con un valor menor la línea queda dibujada por encima, cruzando el círculo.
+              <div className={`absolute left-[23px] top-10 w-0.5 h-[calc(100%-4px)]
                 ${isDone ? 'bg-teal-400' : 'bg-gray-200'}`} />
             )}
             <button
-              onClick={() => !isLocked && onJump(p.id)}
+              onClick={() => { if (isLocked) return; onJump(p.id); onSelect?.(); }}
               disabled={isLocked}
               className={`w-full flex items-start gap-3 px-2 py-2 rounded-xl text-left transition-colors mb-1
                 ${isCurrent ? 'bg-teal-50' : isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
@@ -541,7 +562,7 @@ function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<n
                 {isDone ? <Check className="h-3.5 w-3.5" /> : <span className="text-xs font-bold">{p.id + 1}</span>}
               </div>
               <div className="pt-0.5 min-w-0">
-                <p className={`text-sm font-semibold leading-tight truncate
+                <p className={`text-sm font-semibold leading-tight
                   ${isCurrent ? 'text-gray-900' : isDone ? 'text-teal-700' : 'text-gray-400'}`}>
                   {p.label}
                 </p>
@@ -557,6 +578,14 @@ function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<n
           </div>
         );
       })}
+    </>
+  );
+}
+
+function Sidebar({ phase, completed, onJump }: { phase: number; completed: Set<number>; onJump: (p: number) => void }) {
+  return (
+    <nav className="hidden md:flex flex-col w-64 shrink-0 pt-2 select-none">
+      <PhaseListItems phase={phase} completed={completed} onJump={onJump} />
     </nav>
   );
 }
@@ -832,7 +861,9 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
   const [xmlFirmado,     setXmlFirmado]     = useState<{ base64: string; name: string } | null>(null);
 
   useEffect(() => {
-    fetch('/api/ecf/urls-dgii').then(r => r.json()).then(d => setWebhookBaseUrl(d.webhookBaseUrl ?? ''));
+    fetch('/api/habilitacion/contexto').then(r => r.json()).then(d => {
+      setWebhookBaseUrl(d.webhookBaseUrl ?? '');
+    });
     // Cargar estado persistido
     import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
       cargarEstado().then(({ state }) => {
@@ -845,9 +876,19 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           setSigned(true);
           setDownloaded(true);
         }
+        if (typeof state.subPaso === 'number') setSub(state.subPaso);
       }).catch(() => { /* silent */ });
     });
   }, []);
+
+  // Cambia de sub-paso y persiste — así recargar la página retoma el mismo
+  // sub-paso exacto en el que quedó el usuario, no solo la fase.
+  function goToSub(n: number) {
+    setSub(n);
+    import('@/lib/habilitacion/client').then(({ guardarEstado }) => {
+      guardarEstado({ subPaso: n }).catch(() => {});
+    });
+  }
 
   const urls = {
     recepcion:    webhookBaseUrl || 'Cargando…',
@@ -891,7 +932,7 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
     await guardarEstado({ postulacion: { uploadConfirmed: v } });
   }
 
-  const STEPS = ['Datos del portal', 'Firma digital', 'Envío al portal', 'Validación DGII'];
+  const STEPS = ['Datos del portal', 'Firma digital', 'Envío al portal'];
 
   return (
     <div className="space-y-5">
@@ -961,9 +1002,9 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
                 />
               </div>
               <div className="grid grid-cols-3 gap-4">
-                <DgiiField label="Tipo de software"            value={EMITEDO.tipoSoftware}  required={false} />
-                <DgiiField label="Nombre del software"         value={EMITEDO.nombreSoftware} />
-                <DgiiField label="Versión del software"        value={EMITEDO.version} />
+                <DgiiField label="Tipo de software"            value={EMITEDO.tipoSoftware}   required={false} disabled />
+                <DgiiField label="Nombre del software"         value={EMITEDO.nombreSoftware} disabled />
+                <DgiiField label="Versión del software"        value={EMITEDO.version}        disabled />
                 <DgiiField label="URL de recepción"            value={urls.recepcion}     span="full" isUrl />
                 <DgiiField label="URL de aprobación comercial" value={urls.aprobacion}    span="full" isUrl />
                 <DgiiField label="URL de autenticación"        value={urls.autenticacion} span="full" isUrl />
@@ -976,16 +1017,15 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
                 <p className="text-sm font-semibold text-gray-800">👤 Datos del proveedor electrónico.</p>
               </div>
               <div className="grid grid-cols-3 gap-4">
-                <DgiiField label="RNC / Cédula"   value={EMITEDO.rncProveedor} />
-                <DgiiField label="Razón social"    value={EMITEDO.nombreProveedor} span="2" />
-                <DgiiField label="Nombre comercial" value={EMITEDO.nombreSoftware} span="full" required={false} />
+                <DgiiField label="RNC / Cédula"   value={EMITEDO.rncProveedor} disabled />
+                <DgiiField label="Razón social"    value={EMITEDO.nombreProveedor} span="2" disabled />
+                <DgiiField label="Nombre comercial" value={EMITEDO.nombreSoftware} span="full" required={false} disabled />
               </div>
             </div>
 
           </div>
 
-
-          <NavFooter onBack={onBack} onNext={() => setSub(1)} nextLabel="Ya generé el XML" />
+          <NavFooter onBack={onBack} onNext={() => goToSub(1)} nextLabel="Ya generé el XML" />
         </div>
       )}
 
@@ -1090,8 +1130,8 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           </div>
 
           <NavFooter
-            onBack={() => setSub(0)}
-            onNext={() => setSub(2)}
+            onBack={() => goToSub(0)}
+            onNext={() => goToSub(2)}
             nextDisabled={!downloaded}
             nextLabel="Ya lo descargué"
           />
@@ -1135,1221 +1175,1249 @@ function PhasePostulacion({ onComplete, onBack }: { onComplete: () => void; onBa
           </label>
 
           <NavFooter
-            onBack={() => setSub(1)}
-            onNext={() => setSub(3)}
+            onBack={() => goToSub(1)}
+            onNext={onComplete}
             nextDisabled={!uploadConfirmed}
-            nextLabel="Esperar validación"
+            nextLabel="Continuar a Pruebas de Datos e-CF"
           />
-        </div>
-      )}
-
-      {/* ── Sub 3: Esperar confirmación de DGII ──
-           DGII no expone un endpoint público para consultar estado de postulación.
-           La respuesta llega por Buzón de Oficina Virtual (correo DGII).
-           El usuario debe confirmar manualmente cuando reciba el correo. */}
-      {sub === 3 && (
-        <div className="space-y-5">
-
-          {/* Cabecera con icono de correo */}
-          <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-6 space-y-3">
-            <div className="flex items-start gap-4">
-              <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                <Mail className="h-6 w-6 text-amber-700" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-bold text-gray-900">
-                  Espera la respuesta de DGII
-                </h3>
-                <p className="text-sm text-gray-700 mt-1">
-                  Enviaste tu Formulario de Postulación firmado al portal DGII.
-                  Ahora DGII lo está validando en sus servidores.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Cómo te responde DGII */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-gray-400" />
-              <p className="text-sm font-semibold text-gray-800">Tiempo estimado: 1 a 3 días hábiles</p>
-            </div>
-
-            <div className="space-y-2.5">
-              <p className="text-sm text-gray-700">
-                DGII te notificará el resultado por <strong>Buzón de Oficina Virtual</strong>.
-                No cierres sesión en Zero — tu progreso ya está guardado.
-              </p>
-              <ul className="space-y-1.5 text-sm text-gray-600 pl-4 list-disc">
-                <li>Si tu postulación es <strong className="text-teal-700">aprobada</strong>, DGII habilita el Set de Pruebas en el Portal de Certificación.</li>
-                <li>Si es <strong className="text-red-600">rechazada</strong>, DGII te indica qué datos corregir.</li>
-              </ul>
-            </div>
-
-            <a
-              href="https://dgii.gov.do/ofv/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800 underline-offset-2 hover:underline"
-            >
-              Abrir Oficina Virtual DGII
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-
-          {/* Confirmación manual */}
-          <div className="rounded-xl border-2 border-teal-200 bg-teal-50/50 p-5 space-y-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-teal-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-gray-900">
-                  ¿Ya recibiste el correo de aprobación de DGII?
-                </p>
-                <p className="text-xs text-gray-600 mt-0.5">
-                  Solo cuando DGII confirme que tu postulación fue aprobada, puedes continuar con el Set de Pruebas.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Button
-                onClick={onComplete}
-                className="flex-1 bg-teal-600 hover:bg-teal-700 gap-2"
-              >
-                <Check className="h-4 w-4" />
-                DGII ya aprobó mi postulación
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setSub(2)}
-                className="sm:flex-none border-gray-300 text-gray-700 hover:bg-gray-50 gap-2"
-              >
-                <AlertCircle className="h-4 w-4" />
-                DGII me rechazó
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex justify-start">
-            <button
-              onClick={() => setSub(2)}
-              className="text-sm text-gray-500 hover:text-gray-700 inline-flex items-center gap-1"
-            >
-              ← Volver
-            </button>
-          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Phase 1: Pruebas e-CF ────────────────────────────────────────────────────
+// ─── Phase 1: Pruebas de Datos e-CF ───────────────────────────────────────────
+// Set de Pruebas DGII: se sube el Excel oficial, el contribuyente se resuelve
+// por RNCEmisor dentro del archivo (no hace falta pasarlo). Reusa las rutas
+// team-scoped /api/habilitacion/set-pruebas/*. Réplica funcional completa de
+// Step2Body en app/admin/empresas/[id]/_habilitacion-stepper.tsx.
+
+interface SetPruebasCase {
+  eNcf?: string;
+  tipoECF?: string;
+  formato?: string;
+  status?: string;
+  estadoDgii?: string;
+  error?: string;
+  mensajesDgii?: string[];
+}
+
+interface SetPruebasRun {
+  importId: string;
+  status: 'PENDIENTE' | 'PROCESANDO' | 'COMPLETO' | 'FALLIDO' | string;
+  total?: number;
+  ok?: number;
+  failed?: number;
+  skipped?: number;
+  errorMessage?: string;
+  rows?: SetPruebasCase[];
+}
 
 function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
-  const [sub,    setSub]    = useState(0);
-  const [maxSub, setMaxSub] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Form
-  const [nombre,     setNombre]     = useState('');
-  const [precio,     setPrecio]     = useState('');
-  const [tarifa,     setTarifa]     = useState('18');
-  const [itemTipo,   setItemTipo]   = useState('servicio');
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [file,       setFile]       = useState<File | null>(null);
+  const [skipEncfs,  setSkipEncfs]  = useState('');
+  const [uploading,  setUploading]  = useState(false);
+  const [run,        setRun]        = useState<SetPruebasRun | null>(null);
+  const [polling,    setPolling]    = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+  // Excel ya importado antes (ej. intento anterior interrumpido por un error de red)
+  const [dupRunId,   setDupRunId]   = useState<string | null>(null);
+  const [deleting,   setDeleting]   = useState(false);
+  const [reemitting, setReemitting] = useState(false);
+  const [showSkipEncfs,   setShowSkipEncfs]   = useState(false);
+  const [alertSent,       setAlertSent]       = useState(false);
+  const [confirmedUpload, setConfirmedUpload] = useState(false);
+  // Marca cuando el usuario ya inició una acción propia (subir/reiniciar) —
+  // evita que el fetch de "retomar corrida persistida" (async, puede resolver
+  // tarde) pise ese estado con datos de una corrida vieja.
+  const userActedRef = useRef(false);
 
-  // Progress
-  const [counts,      setCounts]      = useState<Record<string, number>>({});
-  const [statuses,    setStatuses]    = useState<Record<string, EcfSendStatus>>({});
-  const [currentType, setCurrentType] = useState<string | null>(null);
-  const [batchDone,   setBatchDone]   = useState<Set<number>>(new Set());
-  const [emitError,   setEmitError]   = useState<string | null>(null);
+  const persistRun = useCallback(async (runId: string, status: string) => {
+    const { guardarEstado } = await import('@/lib/habilitacion/client');
+    await guardarEstado({ pruebas: { setPruebasRunId: runId, setPruebasStatus: status } }).catch(e => {
+      console.error('[set-pruebas] no se pudo persistir el estado del run', runId, e);
+    });
+  }, []);
 
-  // Polling de validación DGII — arranca cuando termina la emisión.
-  // Consulta el estado final de cada trackId contra CerteCF.
-  const [polling,          setPolling]          = useState(false);
-  const [pendingTrackIds,  setPendingTrackIds]  = useState<{ tipo: string; encf: string; trackId: string; documentoId?: number }[]>([]);
-  const [validatedByTipo,  setValidatedByTipo]  = useState<Record<string, number>>({});
-
-  // FC <250Mil
-  const [fc250Done,        setFc250Done]        = useState(false);
-  const [downloading32b,   setDownloading32b]   = useState(false);
-  const [download32bError, setDownload32bError] = useState<string | null>(null);
-
-  const [confirmed, setConfirmed] = useState(false);
-
-  /** Descarga el XML firmado de un e-CF emitido durante las pruebas. */
-  async function downloadXml(documentoId: number, encf: string) {
+  const fetchRun = useCallback(async (runId: string, opts?: { skipIfActed?: boolean }) => {
     try {
-      const res = await fetch(`/api/ecf/xml?id=${documentoId}`);
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `${encf}.xml`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      // silencioso — si falla el usuario puede reintentar
+      const res = await fetch(`/api/habilitacion/set-pruebas/runs/${runId}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error consultando la corrida');
+      if (opts?.skipIfActed && userActedRef.current) return null;
+      setRun(data as SetPruebasRun);
+      await persistRun(runId, data.status);
+      return data.status as string;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error consultando la corrida');
+      return null;
     }
-  }
+  }, [persistRun]);
 
-  /** Descarga el PDF de la Factura de Consumo RFCE (<RD$250K) del Set de Pruebas. */
-  async function handleDownload32b() {
-    setDownloading32b(true);
-    setDownload32bError(null);
-    try {
-      const res = await fetch('/api/habilitacion/pdf-representacion', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tipo: '32b' }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `Error ${res.status}`);
-      }
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = 'representacion-32b-rfce.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setDownload32bError(err instanceof Error ? err.message : 'Error descargando PDF');
-    } finally {
-      setDownloading32b(false);
-    }
-  }
-
-  // Un tipo está listo cuando DGII aceptó todos los requeridos.
-  // Todos los tipos listos → grid completo → auto-avance a Sub 2.
-  const gridDone = PRUEBA_ECF_TYPES
-    .filter(t => t.required !== null)
-    .every(t => statuses[t.tipo] === 'aceptado');
-
-  function goSub(i: number) { setSub(i); setMaxSub(m => Math.max(m, i)); }
-
-  function reset() {
-    setCounts({}); setStatuses({}); setCurrentType(null);
-    setBatchDone(new Set()); setFc250Done(false);
-    setSub(0); setMaxSub(0);
-    setEmitError(null);
-    setPolling(false); setPendingTrackIds([]); setValidatedByTipo({});
-  }
-
-  // Cargar estado persistido al montar
+  // Retomar corrida persistida al recargar la página
   useEffect(() => {
     import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
       cargarEstado().then(({ state }) => {
-        if (state.pruebas?.emitidas) {
-          setCounts(state.pruebas.emitidas);
-          // Reconstruir status: emitidos quedan en 'proceso' hasta que
-          // el polling confirme el estado final con DGII.
-          const newStatuses: Record<string, EcfSendStatus> = {};
-          for (const t of PRUEBA_ECF_TYPES) {
-            if (t.required === null) continue;
-            const n = state.pruebas!.emitidas![t.tipo] ?? 0;
-            if (n >= t.required) newStatuses[t.tipo] = 'proceso';
-          }
-          setStatuses(newStatuses);
-        }
-        // Restaurar datos del formulario de pruebas
-        if (state.pruebas?.itemNombre) setNombre(state.pruebas.itemNombre);
-        if (state.pruebas?.itemPrecio) setPrecio(state.pruebas.itemPrecio);
-        if (state.pruebas?.itemTarifa) setTarifa(state.pruebas.itemTarifa);
-        if (state.pruebas?.itemTipo)   setItemTipo(state.pruebas.itemTipo);
-
-        if (state.pruebas?.fc250Done) setFc250Done(true);
-        if (state.pruebas?.confirmed) {
-          setConfirmed(true);
-          // Las pruebas ya fueron confirmadas — saltar directamente a sub 3 (Confirmación)
-          // para que el usuario pueda hacer clic en "Continuar" y avanzar a la fase 3.
-          setSub(3);
-        }
-
-        // Si ya hay trackIds guardados y la confirmación aún no se hizo,
-        // reanudar polling para refrescar los estados con DGII.
-        if (state.pruebas?.trackIds && state.pruebas.trackIds.length > 0 && !state.pruebas.confirmed) {
-          setSub(1);
-          setPendingTrackIds(state.pruebas.trackIds);
-          setPolling(true);
-        }
+        const runId = state.pruebas?.setPruebasRunId;
+        if (runId && !userActedRef.current) fetchRun(runId, { skipIfActed: true });
       }).catch(() => { /* silent */ });
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-avance cuando gridDone se vuelve true y no hay polling activo
-  // (p. ej. RFCE aceptado sincrónicamente o todos los tipos ya validados)
+  // Auto-poll mientras la corrida no llegó a un estado terminal.
+  // OJO: el status recién creada la corrida puede venir undefined (no es
+  // "PENDIENTE" ni "PROCESANDO" literal) — por eso se poll por defecto y solo
+  // se detiene al ver un estado terminal explícito, nunca al revés.
   useEffect(() => {
-    if (gridDone && !polling && sub === 1) {
-      goSub(2);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gridDone, polling]);
-
-  // ── Polling de validación DGII ──
-  // Se activa al terminar la emisión. Consulta el estado de cada trackId cada 5s.
-  // Cuando todos están en estado final (Aceptado, AceptadoCondicional o Rechazado),
-  // detiene el polling. Si todos aceptados → auto-avanza a Sub 2 (FC <250K).
-  useEffect(() => {
-    if (!polling) return;
-
-    // Si no hay trackIds que consultar, detener el polling de inmediato.
-    // Ocurre cuando startEmission reutiliza e-CF ya emitidos o todos eran RFCE síncronos.
-    if (pendingTrackIds.length === 0) {
-      setPolling(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function tick() {
-      try {
-        const { consultarEstadosPruebas } = await import('@/lib/habilitacion/client');
-
-        // Filtrar trackIds válidos (RFCE puede no tener trackId — respuesta síncrona DGII)
-        // Usar comparación estricta en lugar de !! para no enviar strings vacíos al API
-        const validItems   = pendingTrackIds.filter(p => typeof p.trackId === 'string' && p.trackId.length > 0);
-        const trackIds     = validItems.map(p => p.trackId);
-
-        // Items sin trackId (RFCE síncrono) → ya aceptados, no necesitan polling
-        const syncAccepted = pendingTrackIds.filter(p => !p.trackId);
-
-        // Si no hay nada que consultar, marcar síncronos como aceptados y avanzar
-        if (trackIds.length === 0) {
-          if (!cancelled) {
-            const validated: Record<string, number> = {};
-            for (const item of syncAccepted) {
-              validated[item.tipo] = (validated[item.tipo] ?? 0) + 1;
-            }
-            setValidatedByTipo(validated);
-            // Actualizar statuses para los tipos aceptados sincrónicamente
-            if (Object.keys(validated).length > 0) {
-              setStatuses(prev => {
-                const next = { ...prev };
-                for (const t of PRUEBA_ECF_TYPES) {
-                  if (t.required === null) continue;
-                  const v = validated[t.tipo] ?? 0;
-                  if (v >= t.required) next[t.tipo] = 'aceptado';
-                }
-                return next;
-              });
-            }
-            setPolling(false);
-          }
-          return;
-        }
-
-        const results  = await consultarEstadosPruebas(trackIds);
-
-        if (cancelled) return;
-
-        // Agrupar resultados por tipo del wizard
-        const validated: Record<string, number> = {};
-        const rejected:  Record<string, number> = {};
-        let   allFinal  = true;
-        let   anyReject = false;
-        const mensajesRechazo: string[] = [];
-
-        // Contar RFCE síncronos (sin trackId) como aceptados directamente
-        for (const item of syncAccepted) {
-          validated[item.tipo] = (validated[item.tipo] ?? 0) + 1;
-        }
-
-        for (const r of results) {
-          const match = validItems.find(p => p.trackId === r.trackId);
-          if (!match) continue;
-          if (r.estadoInterno === 'ACEPTADO' || r.estadoInterno === 'ACEPTADO_CONDICIONAL') {
-            validated[match.tipo] = (validated[match.tipo] ?? 0) + 1;
-          } else if (r.estadoInterno === 'RECHAZADO') {
-            rejected[match.tipo] = (rejected[match.tipo] ?? 0) + 1;
-            anyReject = true;
-            const desc = r.mensajes?.[0]?.descripcion ?? 'Rechazado por DGII';
-            mensajesRechazo.push(`${match.tipo} (${match.encf}): ${desc}`);
-          } else {
-            allFinal = false;
-          }
-        }
-
-        setValidatedByTipo(validated);
-
-        // Actualizar status por tipo basado en las validaciones
-        setStatuses(() => {
-          const next: Record<string, EcfSendStatus> = {};
-          for (const t of PRUEBA_ECF_TYPES) {
-            if (t.required === null) continue;
-            const v = validated[t.tipo] ?? 0;
-            const r = rejected[t.tipo]  ?? 0;
-            if (r > 0)              next[t.tipo] = 'rechazado';
-            else if (v >= t.required) next[t.tipo] = 'aceptado';
-            else                    next[t.tipo] = 'proceso';
-          }
-          return next;
-        });
-
-        // Si todos en estado final → detener polling
-        if (allFinal) {
-          setPolling(false);
-          if (anyReject) {
-            setEmitError(
-              'DGII rechazó algunos comprobantes:\n' + mensajesRechazo.join('\n'),
-            );
-          } else {
-            // Todos aceptados → auto-avanzar a Sub 2 (FC <250K)
-            goSub(2);
-          }
-        }
-      } catch (err) {
-        // Silencioso — reintentamos en el siguiente tick
-        console.error('[habilitacion/polling] error:', err);
-      }
-    }
-
-    // Primer tick inmediato + luego cada 5s
-    tick();
-    const interval = setInterval(tick, 5000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [polling, pendingTrackIds]);
-
-  function validateForm() {
-    const e: Record<string, string> = {};
-    if (!nombre.trim()) e.nombre = 'Requerido';
-    if (!precio.trim() || isNaN(parseFloat(precio)) || parseFloat(precio) <= 0)
-      e.precio = 'Ingresa un precio válido';
-    setFormErrors(e);
-    return Object.keys(e).length === 0;
-  }
-
-  // Mapea el tipo del wizard al tipoEcf real de la DGII
-  function mapTipoReal(uiTipo: string): string {
-    if (uiTipo === '32g' || uiTipo === '32r' || uiTipo === '32b') return '32';
-    return uiTipo;
-  }
-
-  async function startEmission() {
-    if (!validateForm()) return;
-    goSub(1);
-    setEmitError(null);
-
-    const precioBase = parseFloat(precio);
-    const tarifaDec  = (parseFloat(tarifa) / 100) as 0 | 0.16 | 0.18;
-    const itemTipoCode = (itemTipo === 'bien' ? 1 : 2) as 1 | 2;
-
-    const { emitirEcfPrueba, buildEncfPruebaRandom, guardarEstado } = await import('@/lib/habilitacion/client');
-
-    // Persistir datos del formulario para restaurarlos al recargar la página
-    guardarEstado({
-      pruebas: { itemNombre: nombre, itemPrecio: precio, itemTarifa: tarifa, itemTipo },
-    }).catch(() => {});
-
-    const counterLocal: Record<string, number> = { ...counts };
-    const trackIdsLocal: { tipo: string; encf: string; trackId: string; documentoId?: number }[] = [];
-
-    for (const batchInfo of PRUEBA_BATCHES) {
-      const types = PRUEBA_ECF_TYPES.filter(t => t.batch === batchInfo.id && t.required !== null);
-      for (const t of types) {
-        // Si ya está completo, saltar
-        if ((counterLocal[t.tipo] ?? 0) >= t.required!) {
-          setStatuses(s => ({ ...s, [t.tipo]: 'aceptado' }));
-          continue;
-        }
-
-        setCurrentType(t.tipo);
-        setStatuses(s => ({ ...s, [t.tipo]: 'sending' }));
-
-        const realTipo = mapTipoReal(t.tipo);
-        // 32g requiere monto ≥ RD$250K; 32r/32b → < RD$250K (va por RFCE)
-        const realPrecio = t.tipo === '32g'
-          ? Math.max(precioBase, 260000)
-          : (t.tipo === '32r' || t.tipo === '32b')
-            ? Math.min(precioBase, 100000)
-            : precioBase;
-        // rncComprador obligatorio: tipos B2B + compras + gubernamental + 32≥250K + exportaciones
-        const requiereRnc = ['31','33','34','41','44','45','46'].includes(realTipo) || t.tipo === '32g';
-        // razonSocialComprador obligatorio también para exportaciones (tipo 46)
-        const requiereRazonSocial = requiereRnc || realTipo === '46';
-
-        // Tipos 33 (nota débito) y 34 (nota crédito) requieren referenciar un e-CF
-        // tipo 31 real ya enviado a la DGII.  Buscamos el NCF primero en la emisión
-        // actual (trackIdsLocal) y, si el tipo 31 fue emitido en una sesión anterior,
-        // en los trackIds ya persistidos que se cargaron en pendingTrackIds al montar.
-        const esNota        = realTipo === '33' || realTipo === '34';
-        const ncfReferencia = esNota
-          ? (trackIdsLocal.find(e => e.tipo === '31')?.encf ??
-             pendingTrackIds.find(e => e.tipo === '31')?.encf)
-          : undefined;
-
-        // Guardia: si no encontramos un tipo 31 previo, las notas fallarán en DGII.
-        if (esNota && !ncfReferencia) {
-          setEmitError(
-            `Tipo ${t.tipo} requiere un tipo 31 (Crédito Fiscal) ya emitido como referencia. ` +
-            `Asegúrate de que el Batch 1 (tipo 31) fue aceptado antes de emitir notas.`,
-          );
-          setStatuses(s => ({ ...s, [t.tipo]: 'rechazado' }));
-          setCurrentType(null);
-          return;
-        }
-
-        // Código de modificación:
-        //   '1' = Anulación     → montoTotal DEBE ser 0 (no aplica para pruebas con monto)
-        //   '2' = Corrección    → montoTotal DEBE ser 0
-        //   '3' = Devolución/Descuento → montoTotal > 0 ✓ (compatible con item de prueba)
-        // Usamos '3' para tipos 33 y 34 ya que el item de prueba tiene monto > 0.
-        const codModif   = esNota ? '3' : undefined;
-        const razonModif = esNota ? 'Prueba de certificación DGII' : undefined;
-
-        let ok = counterLocal[t.tipo] ?? 0;
-        for (let i = ok + 1; i <= t.required!; i++) {
-          // Hasta 3 intentos por e-CF: cada intento genera un NCF aleatorio nuevo,
-          // lo que evita la colisión "código ya utilizado" sin llevar contador manual.
-          const MAX_RETRIES = 3;
-          let lastErr: Error | null = null;
-          let succeeded = false;
-
-          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-              const encfHardcoded = buildEncfPruebaRandom(realTipo);
-
-              // Tipos exentos de ITBIS — forzar tarifa 0
-              // Tipo 41 siempre usa 18% (IndicadorFacturacion=1 fijo); si el usuario eligió 16%
-              // DGII rechaza con cod=1930 porque MontoGravadoI2 no concuerda con IndicadorFacturacion=1.
-              const tarifaEfectiva = (['43', '44', '46', '47'].includes(realTipo)
-                ? 0
-                : realTipo === '41'
-                  ? 0.18
-                  : tarifaDec) as 0 | 0.16 | 0.18;
-
-              const result = await emitirEcfPrueba({
-                tipoEcf: realTipo,
-                encf:    encfHardcoded,
-                rncComprador:         requiereRnc          ? TEST_CONTRIBUYENTE.rnc         : undefined,
-                razonSocialComprador: requiereRazonSocial  ? TEST_CONTRIBUYENTE.razonSocial : undefined,
-                ncfModificado:        ncfReferencia,
-                codigoModificacion:   codModif,
-                razonModificacion:    razonModif,
-                itemNombre: nombre,
-                itemPrecio: realPrecio,
-                itemTarifa: tarifaEfectiva,
-                // Tipo 47 (Pagos al Exterior): DGII cod=294 — solo permite IndicadorBienoServicio=2 (Servicio)
-                itemTipo:   realTipo === '47' ? 2 : itemTipoCode,
-              });
-              trackIdsLocal.push({ tipo: t.tipo, encf: result.encf, trackId: result.trackId, documentoId: result.documentoId });
-              ok = i;
-              counterLocal[t.tipo] = i;
-              setCounts({ ...counterLocal });
-              succeeded = true;
-              break; // Éxito — salir del loop de reintentos
-            } catch (err) {
-              lastErr = err instanceof Error ? err : new Error(String(err));
-              if (attempt < MAX_RETRIES) {
-                // Pausa breve antes de reintentar con un nuevo NCF aleatorio
-                await new Promise(r => setTimeout(r, 600));
-              }
-            }
-          }
-
-          if (!succeeded) {
-            const msg = lastErr?.message ?? 'Error desconocido';
-            setEmitError(`Tipo ${t.tipo} (tras ${MAX_RETRIES} intentos): ${msg}`);
-            setStatuses(s => ({ ...s, [t.tipo]: 'rechazado' }));
-            await guardarEstado({
-              pruebas: { emitidas: counterLocal, trackIds: trackIdsLocal },
-            }).catch(() => {});
-            setCurrentType(null);
-            return;
-          }
-        }
-
-        // Emisión del tipo terminada → ahora DGII debe validar.
-        // Status queda en 'proceso' hasta que el polling confirme Aceptado.
-        setStatuses(s => ({ ...s, [t.tipo]: 'proceso' }));
-        await guardarEstado({
-          pruebas: { emitidas: counterLocal, trackIds: trackIdsLocal },
-        }).catch(() => {});
-      }
-
-      setBatchDone(s => { const n = new Set(s); n.add(batchInfo.id); return n; });
-    }
-
-    setCurrentType(null);
-
-    if (trackIdsLocal.length === 0) {
-      // Todos los tipos ya estaban completos en el estado — no se emitió nada nuevo.
-      // Las statuses ya se marcaron 'aceptado' en el skip de arriba. Avanzar directamente.
-      goSub(2);
-      return;
-    }
-
-    // Todos los e-CF enviados. Arranca el polling a DGII para validar los trackIds.
-    // El usuario no puede hacer nada — auto-avanzaremos cuando DGII termine.
-    setPendingTrackIds(trackIdsLocal);
+    if (!run?.importId) { setPolling(false); return; }
+    if (run.status === 'COMPLETO' || run.status === 'FALLIDO') { setPolling(false); return; }
     setPolling(true);
+    const timer = setTimeout(() => fetchRun(run.importId), 5000);
+    return () => clearTimeout(timer);
+  }, [run?.importId, run?.status, fetchRun]);
+
+  function handleFile(f: File) {
+    if (!f.name.match(/\.xlsx$/i)) { setError('Debe ser un archivo .xlsx'); return; }
+    if (f.size > 20_000_000)        { setError('Máximo 20 MB'); return; }
+    setFile(f);
+    setError(null);
   }
 
-  const STEPS = ['Datos', 'Envío', 'FC <250K', 'Confirmación'];
+  async function findDuplicateRun() {
+    try {
+      const res = await fetch('/api/habilitacion/set-pruebas/runs');
+      const data = await res.json().catch(() => ({}));
+      const runs: Array<{ importId: string; sourceFilename?: string }> = data.runs ?? [];
+      // Match por nombre de archivo; si no, la corrida más reciente (probable intento anterior)
+      const match = runs.find(r => r.sourceFilename === file?.name) ?? runs[0];
+      if (match) setDupRunId(match.importId);
+    } catch {
+      // silencioso — el botón de borrar/re-emitir simplemente no aparecerá
+    }
+  }
 
-  // Suppress unused warning for maxSub (reserved for future step navigation)
-  void maxSub;
+  async function handleDeleteDuplicate() {
+    if (!dupRunId) return;
+    if (!confirm('¿Borrar la corrida previa (con purga de emisiones) para re-subir el Excel?')) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/habilitacion/set-pruebas/runs/${dupRunId}?purgeEmisiones=true`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al borrar la corrida previa');
+      setDupRunId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al borrar la corrida previa');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
-  return (
-    <div className="space-y-5">
+  // Re-emite todos los casos de una corrida (la duplicada, o la activa) SIN
+  // borrarla ni re-subir el Excel — útil cuando el intento anterior falló por
+  // red a mitad de camino.
+  async function reemitirRun(runId: string) {
+    userActedRef.current = true;
+    setReemitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/habilitacion/set-pruebas/runs/${runId}/emitir-todos`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al re-emitir la corrida');
+      setDupRunId(null);
+      setFile(null);
+      setRun({ importId: runId, ...data });
+      await persistRun(runId, data.status);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al re-emitir la corrida');
+    } finally {
+      setReemitting(false);
+    }
+  }
 
-      {/* ── Stepper ── */}
-      <div className="flex items-center">
-        {STEPS.map((label, i) => (
-          <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
-                :             'bg-white border-gray-200 text-gray-400'}`}>
-                {i < sub ? <Check className="h-3 w-3" /> : i + 1}
-              </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
-                {label}
-              </span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
-            )}
-          </div>
-        ))}
-      </div>
+  function handleForgetRun() {
+    if (!confirm('¿Olvidar esta corrida solo aquí? (no se borra en ecf-api)')) return;
+    userActedRef.current = true;
+    setRun(null);
+    setError(null);
+    persistRun('', '').catch(() => {});
+  }
 
-      {/* ── Step 0: Configuración y tabla de comprobantes ── */}
-      {sub === 0 && (
-        <div className="space-y-4">
-          <InfoBox color="blue" title="¿Cómo funciona el Set de Pruebas?">
-            Zero genera y envía automáticamente todos los e-CF de prueba (10 tipos + RFCE)
-            con los datos que completes a continuación. Solo la factura de consumo &lt; RD$250K
-            se sube manualmente al portal al final.{' '}
-            <DgiiScreenshot
-              src="/dgii-guia/paso4-pruebas-simulacion.png"
-              alt="Pantalla de Pruebas de Simulación en el portal DGII"
-              caption="El portal DGII muestra un contador por tipo de comprobante. Zero replica esta misma vista en el paso de envío."
-              label="Ver pantalla en el portal DGII"
-            />
-          </InfoBox>
+  async function handleDeleteRun() {
+    if (!run?.importId) return;
+    if (!confirm('¿BORRAR la corrida en ecf-api? Elimina casos, comparaciones y purga emisiones (re-correr limpio). Irreversible.')) return;
+    userActedRef.current = true;
+    setError(null);
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/habilitacion/set-pruebas/runs/${run.importId}?purgeEmisiones=true`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al borrar la corrida');
+      setRun(null);
+      await persistRun('', '');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al borrar la corrida');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
-          {/* ── Config compacta ── */}
-          <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
-              Configuración del ítem de prueba
+  async function handleUpload() {
+    if (!file) return;
+    userActedRef.current = true;
+    setUploading(true);
+    setError(null);
+    setDupRunId(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      if (skipEncfs.trim()) fd.append('skipEncfs', skipEncfs.trim());
+      const res = await fetch('/api/habilitacion/set-pruebas/runs', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Excel ya importado antes → buscar esa corrida para ofrecer borrar/re-emitir
+        if ((data.error ?? '').toLowerCase().includes('importado')) {
+          await findDuplicateRun();
+        }
+        throw new Error(data.error ?? 'Error al subir el Excel');
+      }
+      setRun({ importId: data.importId, status: data.status });
+      setFile(null);
+      await persistRun(data.importId, data.status);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al subir el Excel');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // Derivados
+  const runId = run?.importId ?? null;
+  const isComplete = run?.status === 'COMPLETO' || run?.status === 'FALLIDO';
+  const failedCases = run?.rows?.filter(r =>
+    r.estadoDgii === 'RECHAZADO' ||
+    r.estadoDgii === 'ERROR' ||
+    (r.status === 'FAILED' && !r.estadoDgii),
+  ) ?? [];
+  const hasErrors = isComplete && (run?.status === 'FALLIDO' || failedCases.length > 0);
+  const isWaiting = uploading || (!!runId && !isComplete);
+
+  // Alerta a Slack (una sola vez) cuando la corrida termina con casos fallidos
+  useEffect(() => {
+    if (!hasErrors || alertSent || !runId) return;
+    setAlertSent(true);
+    fetch('/api/habilitacion/set-pruebas/alertar-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // Solo el runId: el detalle de la alerta lo arma el servidor leyendo la
+      // corrida en ecf-api, para que el cliente no pueda escribir en el Slack
+      // del equipo.
+      body: JSON.stringify({ runId }),
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasErrors, alertSent, runId]);
+
+  function handleReiniciar() {
+    setConfirmedUpload(false);
+    setAlertSent(false);
+    if (run?.importId) handleDeleteRun();
+    else handleForgetRun();
+  }
+
+  // ── Sub-paso: subir Excel (solo cuando no hay corrida activa) ──
+  if (!runId && !uploading) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+          <div className="flex-1 text-sm text-blue-900 leading-relaxed">
+            <p>
+              Etapa en la que se comprueba la capacidad de su sistema para generar
+              Comprobantes Fiscales Electrónicos (e-CF), con datos suministrados por DGII.
             </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <Label className="text-xs mb-1.5 block">
-                  Descripción <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={nombre}
-                  onChange={e => { setNombre(e.target.value); setFormErrors(v => ({...v, nombre: ''})); }}
-                  placeholder={itemTipo === 'servicio' ? 'Ej: Consultoría de sistemas' : 'Ej: Computadora HP'}
-                  className={`text-sm ${formErrors.nombre ? 'border-red-400' : ''}`}
-                />
-                {formErrors.nombre && <p className="text-xs text-red-500 mt-1">{formErrors.nombre}</p>}
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">Tipo de ítem</Label>
-                <select
-                  value={itemTipo}
-                  onChange={e => setItemTipo(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                  <option value="servicio">Servicio</option>
-                  <option value="bien">Producto / Bien</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">Tarifa ITBIS</Label>
-                <select
-                  value={tarifa}
-                  onChange={e => setTarifa(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                  <option value="18">18%</option>
-                  <option value="16">16%</option>
-                  <option value="0">0% — Exento</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs mb-1.5 block">
-                  Precio base (RD$) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="number" min="0" step="0.01"
-                  value={precio}
-                  onChange={e => { setPrecio(e.target.value); setFormErrors(v => ({...v, precio: ''})); }}
-                  placeholder="0.00"
-                  className={`font-mono text-sm ${formErrors.precio ? 'border-red-400' : ''}`}
-                />
-                {formErrors.precio && <p className="text-xs text-red-500 mt-1">{formErrors.precio}</p>}
-              </div>
-            </div>
+            <ul className="list-disc ml-5 mt-1.5 space-y-1">
+              <li>
+                Descarga el <strong>Excel (Set de pruebas)</strong> del portal DGII, súbelo aquí y el
+                sistema emite los casos automáticamente con el cert del contribuyente (resuelto por{' '}
+                <code className="bg-blue-100 px-1 rounded font-mono text-xs">RNCEmisor</code> del Excel).
+              </li>
+              <li>
+                Las FC <strong>&lt; RD$250,000</strong> NO se envían por API: se descargan en ZIP y se
+                suben manual al portal DGII.
+              </li>
+            </ul>
           </div>
-
-          <NavFooter onBack={onBack} onNext={startEmission} nextLabel="Iniciar pruebas" />
         </div>
-      )}
 
-      {/* ── Step 1: Envío y progreso ── */}
-      {sub === 1 && (
-        <div className="space-y-4">
+        <div className="rounded-xl border border-gray-200 p-5 space-y-4">
+          <p className="text-sm font-semibold text-gray-800">Subir Excel del Set de Pruebas</p>
 
-          {/* Banner mientras EMITIMOS a DGII */}
-          {currentType && !polling && (
-            <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50">
-              <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
-              <p className="text-sm text-blue-800">
-                Enviando comprobantes tipo <span className="font-bold">{currentType.replace(/[grb]/g, '')}</span>…
-              </p>
-            </div>
-          )}
-
-          {/* Banner mientras DGII VALIDA los trackIds — polling activo */}
-          {polling && (
-            <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-4 space-y-1.5">
-              <div className="flex items-center gap-2.5">
-                <Loader2 className="h-4 w-4 text-amber-600 animate-spin shrink-0" />
-                <p className="text-sm font-semibold text-amber-900">
-                  DGII está validando tus comprobantes…
-                </p>
+          {!file ? (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
+            >
+              <Upload className="h-7 w-7 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">Excel del Set de Pruebas (.xlsx)</p>
+                <p className="text-xs text-gray-400 mt-0.5">Ambiente: CerteCF · Excel .xlsx, máx 20 MB</p>
               </div>
-              <p className="text-xs text-amber-800 pl-6">
-                {(() => {
-                  const totalValidados = Object.values(validatedByTipo).reduce((a, b) => a + b, 0);
-                  const totalRequeridos = PRUEBA_ECF_TYPES
-                    .filter(t => t.required !== null)
-                    .reduce((a, b) => a + (b.required ?? 0), 0);
-                  return `Validados ${totalValidados} de ${totalRequeridos} · esto puede tomar 1–3 minutos. No cierres esta ventana.`;
-                })()}
-              </p>
             </div>
-          )}
-
-          {/* Banner cuando todo está aceptado (un instante antes de auto-avanzar) */}
-          {gridDone && !polling && !fc250Done && (
-            <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-teal-200 bg-teal-50">
-              <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" />
-              <p className="text-sm font-semibold text-teal-900">Pruebas validadas exitosamente</p>
-            </div>
-          )}
-
-          {/* Banner de error / rechazo DGII */}
-          {emitError && (
-            <div className="rounded-xl border border-red-300 bg-red-50 p-4 space-y-3">
-              {/* Encabezado */}
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 shrink-0 rounded-full bg-red-100 p-1.5">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-red-900">
-                    {emitError.startsWith('DGII rechazó')
-                      ? 'La DGII rechazó los comprobantes de prueba'
-                      : 'Ocurrió un error al enviar los comprobantes'}
-                  </p>
-                  <p className="text-xs text-red-700 mt-0.5 leading-relaxed">
-                    {emitError.startsWith('DGII rechazó')
-                      ? 'Uno o más comprobantes fueron rechazados por validación de esquema. Haz clic en el botón para volver al inicio y reintentar.'
-                      : 'No se pudo completar el envío. Verifica tu conexión o inténtalo de nuevo.'}
-                  </p>
-                </div>
+          ) : (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
+              <FileText className="h-4 w-4 text-teal-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
               </div>
-
-              {/* Detalle técnico colapsable (opcional) */}
-              <details className="group">
-                <summary className="text-[11px] text-red-500 cursor-pointer select-none list-none flex items-center gap-1 hover:text-red-700">
-                  <ChevronRight className="h-3 w-3 group-open:rotate-90 transition-transform" />
-                  Ver detalle del error
-                </summary>
-                <pre className="mt-2 text-[10px] text-red-700 bg-red-100/60 rounded-lg p-2 overflow-auto max-h-28 whitespace-pre-wrap break-words">
-                  {emitError}
-                </pre>
-              </details>
-
-              {/* CTA principal */}
-              <button
-                onClick={() => {
-                  // Limpiar trackIds persistidos para que al recargar no reanude el polling fallido
-                  import('@/lib/habilitacion/client').then(({ guardarEstado }) => {
-                    guardarEstado({ pruebas: { trackIds: [] } }).catch(() => {});
-                  });
-                  reset();
-                }}
-                className="w-full flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-semibold px-4 py-2 transition-colors"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Volver al inicio y reintentar
+              <button onClick={() => setFile(null)}
+                className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           )}
+          <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
 
-          {/* Grid + screenshot lado a lado */}
-          <div className="grid lg:grid-cols-2 gap-4 items-start">
-
-            {/* Izquierda: contadores compactos */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                Estado del Set de Pruebas
-              </p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {PRUEBA_ECF_TYPES.filter(t => t.batch <= 3).map(t => {
-                  const count  = counts[t.tipo] ?? 0;
-                  const req    = t.required!;
-                  const status = statuses[t.tipo] ?? 'idle';
-                  const active = status === 'sending';
-                  const done   = status === 'aceptado';
-                  const label  = t.tipo === '32g' ? '32 — ≥250Mil'
-                               : t.tipo === '32r' ? '32 RFCE'
-                               : t.tipo;
-                  return (
-                    <div key={t.tipo} className={`rounded-lg border px-3 py-2 transition-all
-                      ${done   ? 'border-teal-200 bg-teal-50'
-                      : active ? 'border-blue-200 bg-blue-50/60'
-                      :          'border-gray-100 bg-white'}`}>
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className={`text-base font-bold font-mono leading-none
-                          ${done ? 'text-teal-600' : active ? 'text-blue-600' : 'text-gray-300'}`}>
-                          {count}/{req}
-                        </span>
-                        {done   && <Check   className="h-3.5 w-3.5 text-teal-500 shrink-0" />}
-                        {active && <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin shrink-0" />}
-                      </div>
-                      <p className={`text-[10px] font-medium leading-tight
-                        ${done ? 'text-teal-700' : active ? 'text-blue-700' : 'text-gray-400'}`}>
-                        Tipo {label}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Derecha: screenshot inline pequeño */}
-            <div className="rounded-xl border border-gray-200 overflow-hidden bg-white shrink-0">
-              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-1.5">
-                <ImageIcon className="h-3 w-3 text-gray-400" />
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  Así se ve en el portal DGII
-                </p>
-              </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/dgii-guia/paso4-pruebas-simulacion.png"
-                alt="Estado de pruebas en el portal DGII"
-                className="w-full h-auto"
-              />
-              <p className="text-[10px] text-gray-500 px-3 py-2 border-t border-gray-100 leading-snug">
-                El portal DGII muestra el mismo progreso por tipo. Puedes verificar allí en tiempo real.
-              </p>
-            </div>
-          </div>
-
-          {/* ── Panel de descarga de XMLs generados ── */}
-          {pendingTrackIds.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50 rounded-t-xl">
-                <div className="flex items-center gap-2">
-                  <Download className="h-3.5 w-3.5 text-gray-500" />
-                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                    XMLs generados — descargar para inspección
-                  </p>
-                </div>
-                <span className="text-[10px] text-gray-400">{pendingTrackIds.length} archivos</span>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {pendingTrackIds.map(doc => (
-                  <button
-                    key={doc.encf}
-                    onClick={() => doc.documentoId && downloadXml(doc.documentoId, doc.encf)}
-                    disabled={!doc.documentoId}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <Download className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                    <span className="flex-1 text-xs font-mono text-gray-800">{doc.encf}.xml</span>
-                    <span className="text-[10px] text-gray-400 shrink-0">Tipo {doc.tipo.replace(/[grb]/g, '')}</span>
-                    <span className="text-[10px] text-teal-600 font-medium shrink-0">↓ Descargar</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Navegación: se bloquea durante emisión y polling — solo aparece
-              cuando todo está aceptado (auto-avance ya se dispara, pero dejamos
-              el botón por si el usuario quiere hacerlo manual). */}
-          {!currentType && !polling && (
-            <NavFooter
-              onBack={() => setSub(0)}
-              onNext={() => goSub(2)}
-              nextDisabled={!gridDone}
-              nextLabel="Siguiente →"
-            />
-          )}
-        </div>
-      )}
-
-      {/* ── Sub 2: Factura de consumo <250K ── */}
-      {sub === 2 && (
-        <div className="space-y-5">
-          <div className="grid lg:grid-cols-2 gap-4 items-start">
-            <div className="space-y-4">
-              <InfoBox color="amber" title="Un paso más en el portal DGII">
-                Descarga tu factura de consumo (&lt; RD$250 mil) y{' '}
-                <strong>súbela al portal DGII</strong> en la sección{' '}
-                &ldquo;Facturas de consumo &lt;250Mil&rdquo;.
-              </InfoBox>
-
-              <Button
-                variant="outline"
-                className="gap-2 text-sm w-full"
-                disabled={downloading32b}
-                onClick={handleDownload32b}
-              >
-                {downloading32b
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Generando PDF…</>
-                  : <><Download className="h-4 w-4" />Descargar factura de consumo (&lt;RD$250K)</>}
-              </Button>
-
-              {download32bError && (
-                <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5">
-                  <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-red-700">{download32bError}</p>
-                  </div>
-                  <button onClick={() => setDownload32bError(null)} className="text-red-400 hover:text-red-600">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-
-              <InfoBox color="blue" title="Si la DGII la rechaza">
-                Será necesario reiniciar todas las pruebas de simulación.{' '}
-                <button className="underline font-semibold" onClick={() => { reset(); setSub(1); }}>
-                  Reiniciar envío
-                </button>
-              </InfoBox>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 border-b flex items-center gap-1.5">
-                <ImageIcon className="h-3 w-3 text-gray-400" />
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  Dónde subirla en el portal
-                </p>
-              </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/dgii-guia/paso4-fc-menor-250k.png"
-                alt="Sección Facturas de consumo menor a 250K en el portal DGII"
-                className="w-full h-auto"
-              />
-              <p className="text-[10px] text-gray-500 px-3 py-2 border-t border-gray-100 leading-snug">
-                Baja hasta &ldquo;Facturas de consumo &lt;250Mil&rdquo;, selecciona el PDF y haz clic en ENVIAR.
-              </p>
-            </div>
-          </div>
-
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
-              checked={fc250Done}
-              onChange={async e => {
-                const v = e.target.checked;
-                setFc250Done(v);
-                const { guardarEstado } = await import('@/lib/habilitacion/client');
-                guardarEstado({ pruebas: { fc250Done: v } }).catch(() => {});
-              }}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600"
+              checked={showSkipEncfs}
+              onChange={e => setShowSkipEncfs(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
             />
-            <span className="text-sm text-gray-700">
-              Subí con éxito la factura de consumo al portal DGII
-            </span>
+            <span className="text-xs text-gray-600">Excluir e-NCFs específicos</span>
           </label>
 
-          <NavFooter
-            onBack={() => setSub(1)}
-            onNext={() => goSub(3)}
-            nextDisabled={!fc250Done}
-            nextLabel="Ver confirmación"
+          {showSkipEncfs && (
+            <div>
+              <Label className="text-xs mb-1.5 block">Excluir e-NCFs (opcional)</Label>
+              <Input
+                value={skipEncfs}
+                onChange={e => setSkipEncfs(e.target.value)}
+                placeholder="E320000000012,E320000000015"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                CSV de e-NCF a saltar. Útil para re-subir el Excel omitiendo los que ya fallaron.
+              </p>
+            </div>
+          )}
+
+          {error && !dupRunId && (
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-700">{error}</p>
+            </div>
+          )}
+
+          {dupRunId ? (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
+              <p className="text-xs text-amber-800">
+                Ese Excel (o uno con el mismo contenido) ya fue subido antes — probablemente de un
+                intento anterior que no terminó. Corrida existente: <code className="font-mono">{dupRunId}</code>.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={() => reemitirRun(dupRunId)} disabled={reemitting || deleting}
+                  className="flex-1 bg-teal-600 hover:bg-teal-700 gap-2" size="sm">
+                  {reemitting
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Re-emitiendo…</>
+                    : <><RefreshCw className="h-3.5 w-3.5" />Continuar esa corrida</>}
+                </Button>
+                <Button onClick={handleDeleteDuplicate} disabled={reemitting || deleting}
+                  variant="outline" className="flex-1 gap-2" size="sm">
+                  {deleting
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Borrando…</>
+                    : <><X className="h-3.5 w-3.5" />Borrar y re-subir</>}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button onClick={handleUpload} disabled={!file || uploading}
+              className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+              {uploading
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Procesando…</>
+                : <><Upload className="h-4 w-4" />Procesar Set de Pruebas</>}
+            </Button>
+          )}
+        </div>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: pantalla de espera (mientras DGII procesa) ──
+  if (isWaiting) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
+            <Clock className="h-8 w-8 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">En proceso</p>
+            <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+              Estamos esperando que la DGII procese tus pruebas de simulación correctamente.
+              Puede tomar unos minutos.
+            </p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-red-700">{error}</p>
+          </div>
+        )}
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: resultado con errores ──
+  if (hasErrors) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-gray-50 flex items-center justify-center">
+            <AlertTriangle className="h-8 w-8 text-gray-400" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">Hubo un error en las pruebas</p>
+            <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+              Comunícate con nuestro equipo de soporte:{' '}
+              <a href="mailto:alexander.ferreras@yisraeltech.com" className="font-semibold underline text-gray-700">
+                alexander.ferreras@yisraeltech.com
+              </a>
+            </p>
+          </div>
+          <Button onClick={handleReiniciar} disabled={deleting} variant="outline" className="gap-2">
+            {deleting
+              ? <><Loader2 className="h-4 w-4 animate-spin" />Reiniciando…</>
+              : <><RefreshCw className="h-4 w-4" />Intentar de nuevo</>}
+          </Button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: resultado exitoso ──
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-8 flex flex-col items-center text-center gap-3">
+        <div className="h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center">
+          <CheckCircle className="h-7 w-7 text-emerald-600" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-emerald-800">Envío exitoso — verifica en el portal DGII</p>
+          <p className="text-sm text-emerald-700 mt-1.5 max-w-md">
+            Para continuar descarga las facturas de consumo (&lt; RD$250,000) y súbelas al portal DGII.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 p-5 space-y-3">
+        <a
+          href={`/api/habilitacion/set-pruebas/runs/${runId}/manual-upload/zip`}
+          className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+        >
+          <Download className="h-4 w-4" /> Descargar ZIP Facturas &lt; RD$250K
+        </a>
+        <p className="text-xs text-gray-500 text-center">
+          Descomprime y sube cada XML al portal DGII en <strong>"Facturas de consumo &lt; 250Mil"</strong>.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+        <p className="text-sm text-blue-800">
+          Si la DGII rechaza las facturas subidas será necesario reiniciar las pruebas.
+        </p>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={confirmedUpload}
+            onChange={e => setConfirmedUpload(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
           />
-        </div>
-      )}
+          <span className="text-sm text-blue-900">
+            Confirmo que subí las facturas al portal DGII
+          </span>
+        </label>
+      </div>
 
-      {/* ── Sub 3: Confirmación ── */}
-      {sub === 3 && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-teal-200 bg-teal-50 p-5">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
-                <CheckCircle className="h-5 w-5 text-teal-600" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-teal-900">Pruebas de simulación completadas</p>
-                <p className="text-xs text-teal-700 mt-0.5">
-                  Todos los e-CF de prueba fueron aceptados por la DGII
-                </p>
-              </div>
-            </div>
-          </div>
+      <button onClick={handleReiniciar} disabled={deleting} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 disabled:opacity-50">
+        {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Reiniciar pruebas
+      </button>
+      {error && <p className="text-xs text-red-600">{error}</p>}
 
-          <InfoBox color="blue" title="Próximo: Representación Impresa">
-            Ahora DGII necesita validar los <strong>PDFs impresos</strong> de cada tipo de comprobante.
-            Son 11 archivos (uno por tipo) que te entregamos en el siguiente paso.
-          </InfoBox>
-
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={async e => {
-                const v = e.target.checked;
-                setConfirmed(v);
-                const { guardarEstado } = await import('@/lib/habilitacion/client');
-                guardarEstado({ pruebas: { confirmed: v } }).catch(() => {});
-              }}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600" />
-            <span className="text-sm text-gray-700">
-              Confirmo que el Set de Pruebas fue aprobado en el portal DGII
-            </span>
-          </label>
-
-          <NavFooter onBack={() => setSub(2)} onNext={onComplete} nextDisabled={!confirmed} />
-        </div>
-      )}
+      <NavFooter onBack={onBack} onNext={onComplete} nextDisabled={!confirmedUpload} nextLabel="Continuar" />
     </div>
   );
 }
 
 // ─── Phase 2: Representaciones impresas (con espera DGII) ────────────────────
 
+interface AprobResultRow {
+  eNcf?: string;
+  error?: string;
+  estadoDgii?: string;
+  estadoEnvio?: string;
+  trackId?: string;
+}
+
+interface AprobResult {
+  total: number;
+  ok: number;
+  failed: number;
+  rows?: AprobResultRow[];
+}
+
 function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
-  const [sub,             setSub]             = useState(0);
-  const [downloaded,      setDownloaded]      = useState<Set<string>>(new Set());
-  const [downloading,     setDownloading]     = useState<string | null>(null);
-  const [downloadingAll,  setDownloadingAll]  = useState(false);
-  const [uploadConfirmed, setUploadConfirmed] = useState(false);
-  const [downloadError,   setDownloadError]   = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /** Descarga el PDF de representación de un tipo concreto del servidor. */
-  async function handleDownloadOne(tipo: string) {
-    setDownloading(tipo);
-    setDownloadError(null);
+  const [file,       setFile]       = useState<File | null>(null);
+  const [secShiftEncfs, setSecShiftEncfs] = useState('');
+  const [showSecShift,  setShowSecShift]  = useState(false);
+  const [uploading,  setUploading]  = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+  const [result,     setResult]     = useState<AprobResult | null>(null);
+
+  function handleFile(f: File) {
+    if (!f.name.match(/\.xlsx$/i)) { setError('Debe ser un archivo .xlsx'); return; }
+    if (f.size > 20_000_000)        { setError('Máximo 20 MB'); return; }
+    setFile(f);
+    setError(null);
+  }
+
+  async function handleUpload() {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
     try {
-      const res = await fetch('/api/habilitacion/pdf-representacion?soloAprobados=true', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tipo }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? `Error ${res.status}`);
-      }
-
-      const blob     = await res.blob();
-      const url      = URL.createObjectURL(blob);
-      const a        = document.createElement('a');
-      a.href         = url;
-      a.download     = `representacion-${tipo}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      setDownloaded(prev => new Set([...prev, tipo]));
-    } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : 'Error descargando PDF');
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      if (secShiftEncfs.trim()) fd.append('secShiftEncfs', secShiftEncfs.trim());
+      const res = await fetch('/api/habilitacion/set-pruebas/aprobaciones', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al procesar las aprobaciones');
+      setResult(data as AprobResult);
+      setFile(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al procesar las aprobaciones');
     } finally {
-      setDownloading(null);
+      setUploading(false);
     }
   }
 
-  /** Descarga todos los PDFs de forma secuencial. */
-  async function handleDownloadAll() {
-    setDownloadingAll(true);
-    setDownloadError(null);
-    for (const pdf of PDFS) {
-      if (!downloaded.has(pdf.tipo)) {
-        await handleDownloadOne(pdf.tipo);
-      }
-    }
-    setDownloadingAll(false);
+  function handleReiniciar() {
+    setResult(null);
+    setError(null);
   }
 
-  const allDone = PDFS.every(p => downloaded.has(p.tipo));
+  const failedRows = (result?.rows ?? []).filter(r =>
+    !!r.error || r.estadoDgii === 'RECHAZADO' || r.estadoDgii === 'ERROR' ||
+    (r.estadoEnvio && !/acept/i.test(r.estadoEnvio)),
+  );
+  const hasErrors = !!result && failedRows.length > 0;
+  const isSuccess = !!result && !hasErrors;
 
-  const STEPS = ['Descargar PDFs', 'Subida al portal', 'Validación DGII'];
+  // ── Sub-paso: pantalla de espera (mientras se procesa la subida) ──
+  if (uploading) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
+            <Clock className="h-8 w-8 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">En proceso</p>
+            <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+              La DGII se encuentra procesando tus Aprobaciones Comerciales. Este proceso puede
+              tomar unos minutos, no cierres ni recargues esta página.
+            </p>
+          </div>
+        </div>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: resultado con errores ──
+  if (hasErrors) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-gray-50 flex items-center justify-center">
+            <AlertTriangle className="h-8 w-8 text-gray-400" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">Hubo un error en las pruebas</p>
+            <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+              Comunícate con nuestro equipo de soporte:{' '}
+              <a href="mailto:alexander.ferreras@yisraeltech.com" className="font-semibold underline text-gray-700">
+                alexander.ferreras@yisraeltech.com
+              </a>
+            </p>
+          </div>
+          <Button onClick={handleReiniciar} variant="outline" className="gap-2">
+            <RefreshCw className="h-4 w-4" /> Intentar de nuevo
+          </Button>
+        </div>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: resultado exitoso ──
+  if (isSuccess) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-8 flex flex-col items-center text-center gap-3">
+          <div className="h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center">
+            <CheckCircle className="h-7 w-7 text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-emerald-800">Envío exitoso — verifica en el portal DGII</p>
+            <p className="text-sm text-emerald-700 mt-1.5 max-w-md">
+              {result?.ok}/{result?.total} aprobaciones aceptadas por la DGII.
+            </p>
+          </div>
+        </div>
+
+        <button onClick={handleReiniciar} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+          <RefreshCw className="h-3 w-3" /> Reiniciar pruebas
+        </button>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextLabel="Continuar" />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: subir Excel de Aprobaciones Comerciales ──
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+        <div className="flex-1 text-sm text-blue-900 leading-relaxed">
+          <p>
+            Etapa en la que se comprueba la capacidad de su sistema para generar
+            Aprobaciones Comerciales (ACECF), con datos suministrados por DGII.
+          </p>
+          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+            <li>Descarga <strong>"Aprobaciones Comerciales"</strong> del portal DGII (archivo distinto al del paso anterior) y súbelo aquí.</li>
+            <li>Cada ACECF se firma con el cert del <strong>RNCComprador</strong> (derivado del Excel) y se envía a DGII. Proceso síncrono.</li>
+            <li>Para certificar deben enviarse satisfactoriamente <strong>todas</strong> las aprobaciones generadas.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 p-5 space-y-4">
+        <p className="text-sm font-semibold text-gray-800">Subir Excel de Aprobaciones Comerciales</p>
+
+        {!file ? (
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-xl border-2 border-dashed border-gray-200 hover:border-teal-300 hover:bg-gray-50 cursor-pointer flex flex-col items-center gap-2 py-7 px-4 text-center transition-colors"
+          >
+            <Upload className="h-7 w-7 text-gray-400" />
+            <div>
+              <p className="text-sm font-medium text-gray-700">Excel de Aprobaciones Comerciales (.xlsx)</p>
+              <p className="text-xs text-gray-400 mt-0.5">Hoja ACEECF_Generadas · Excel .xlsx, máx 20 MB</p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
+            <FileText className="h-4 w-4 text-teal-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+              <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
+            </div>
+            <button onClick={() => setFile(null)}
+              className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showSecShift}
+            onChange={e => setShowSecShift(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+          />
+          <span className="text-xs text-gray-600">Shift selectivo de fecha</span>
+        </label>
+
+        {showSecShift && (
+        <div>
+          <Label className="text-xs mb-1.5 block">Shift selectivo de fecha (opcional)</Label>
+          <Input
+            value={secShiftEncfs}
+            onChange={e => setSecShiftEncfs(e.target.value)}
+            placeholder="E450000000010,E330000000001"
+            className="font-mono text-sm"
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            CSV de e-NCF — ajusta FechaHoraAprobacionComercial si DGII lo pide al re-enviar.
+          </p>
+        </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-red-700">{error}</p>
+          </div>
+        )}
+
+        <Button onClick={handleUpload} disabled={!file || uploading}
+          className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+          <Upload className="h-4 w-4" />Procesar Aprobaciones
+        </Button>
+      </div>
+
+      <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+    </div>
+  );
+}
+
+// ─── Phase: Pruebas de Simulación e-CF (idéntico a /admin Step4Body) ─────────
+// Genera 29 e-CF sintéticos (sin Excel) y los envía a DGII. cp-scoped.
+
+// Shape real de /contribuyentes/{cp}/pruebas-simulacion/* — DISTINTO del de
+// /set-pruebas/*: usa `runId` (start usa `importId`), `estado` por fila (no
+// `estadoDgii`/`status`), y `byEstado` en vez de ok/failed. Confirmado por
+// probing directo a ecf-api (ver scripts/probe-simulacion-run.ts).
+interface SimulacionRow {
+  tipoECF?: string;
+  formato?: string;
+  paso?: number;
+  estado?: string;
+  eNcf?: string;
+  trackId?: string | null;
+  emisionId?: string;
+  mensajesDgii?: Array<{ valor?: string; codigo?: number }> | null;
+}
+
+interface SimulacionRun {
+  importId?: string;
+  runId?:    string;
+  total?:    number;
+  byEstado?: Record<string, number>;
+  skipped?:  number;
+  errors?:   unknown[];
+  rows?:     SimulacionRow[];
+}
+
+function PhaseSimulacion({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+  const [ncfStart, setNcfStart] = useState(500);
+  const [starting, setStarting] = useState(false);
+  const [run,      setRun]      = useState<SimulacionRun | null>(null);
+  const [error,    setError]    = useState<string | null>(null);
+  // Evita que el fetch de "retomar corrida persistida" (async) pise el
+  // estado si el usuario ya inició (iniciar/reiniciar) mientras resolvía.
+  const userActedRef = useRef(false);
+
+  const persistRun = useCallback(async (runId: string, status: string) => {
+    const { guardarEstado } = await import('@/lib/habilitacion/client');
+    await guardarEstado({ simulacion: { runId, status } }).catch(e => {
+      console.error('[simulacion] no se pudo persistir el estado del run', runId, e);
+    });
+  }, []);
+
+  const fetchRun = useCallback(async (runId: string, opts?: { skipIfActed?: boolean }) => {
+    try {
+      const res = await fetch(`/api/habilitacion/simulacion/runs/${runId}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error consultando la simulación');
+      if (opts?.skipIfActed && userActedRef.current) return null;
+      setRun(data as SimulacionRun);
+      const pend = data.byEstado?.PENDIENTE ?? 0;
+      const status = pend > 0 ? 'PROCESANDO' : 'COMPLETO';
+      await persistRun(runId, status);
+      return status;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error consultando la simulación');
+      return null;
+    }
+  }, [persistRun]);
+
+  // Retomar corrida persistida al recargar la página
+  useEffect(() => {
+    import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
+      cargarEstado().then(({ state }) => {
+        const runId = state.simulacion?.runId;
+        if (runId && !userActedRef.current) fetchRun(runId, { skipIfActed: true });
+      }).catch(() => { /* silent */ });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const activeRunId = run ? (run.runId ?? run.importId ?? null) : null;
+  // Las FC <RD$250,000 no se envían por API (se suben manual al portal DGII)
+  // — su fila "ECF" duplicada nunca recibe trackId y queda PENDIENTE para
+  // siempre en ecf-api. No deben bloquear la finalización de la corrida.
+  const pendientes = run?.rows?.filter(r => r.estado === 'PENDIENTE' && r.trackId != null).length ?? 0;
+  const hasResultado = !!run && ((run.rows?.length ?? 0) > 0 || Object.keys(run.byEstado ?? {}).length > 0);
+
+  // Auto-poll mientras queden filas PENDIENTE (DGII sigue procesando).
+  useEffect(() => {
+    if (!activeRunId) return;
+    if (hasResultado && pendientes === 0) return;
+    const timer = setTimeout(() => fetchRun(activeRunId), 5000);
+    return () => clearTimeout(timer);
+  }, [activeRunId, hasResultado, pendientes, fetchRun]);
+
+  async function handleStart() {
+    userActedRef.current = true;
+    setStarting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/habilitacion/simulacion/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ncfStart }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al iniciar la simulación');
+      setRun(data as SimulacionRun);
+      const id = data.runId ?? data.importId;
+      if (id) await persistRun(id, (data.byEstado?.PENDIENTE ?? 0) > 0 ? 'PROCESANDO' : 'COMPLETO');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al iniciar la simulación');
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function handleReiniciar() {
+    userActedRef.current = true;
+    setError(null);
+    setStarting(true);
+    try {
+      const res = await fetch('/api/habilitacion/simulacion/restart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ncfBump: 100 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Error al reiniciar');
+      setRun(data as SimulacionRun);
+      const id = data.runId ?? data.importId;
+      if (id) await persistRun(id, (data.byEstado?.PENDIENTE ?? 0) > 0 ? 'PROCESANDO' : 'COMPLETO');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al reiniciar');
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  const runId = activeRunId;
+  const isComplete = !!runId && hasResultado && pendientes === 0;
+  const isWaiting  = starting || (!!runId && !isComplete);
+  const rows = run?.rows ?? [];
+  const failedCases = rows.filter(r => r.estado === 'RECHAZADO' || r.estado === 'ERROR');
+  const hasErrors = isComplete && (failedCases.length > 0 || (run?.errors?.length ?? 0) > 0);
+
+  // ── Sub-paso: pantalla de espera ──
+  if (isWaiting) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
+            <Clock className="h-8 w-8 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">En proceso</p>
+            <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+              Estamos esperando que la DGII procese tus pruebas de simulación correctamente.
+              Puede tomar unos minutos.
+            </p>
+          </div>
+        </div>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: resultado con errores ──
+  if (hasErrors) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-gray-50 flex items-center justify-center">
+            <AlertTriangle className="h-8 w-8 text-gray-400" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">Hubo un error en las pruebas</p>
+            <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+              Comunícate con nuestro equipo de soporte:{' '}
+              <a href="mailto:alexander.ferreras@yisraeltech.com" className="font-semibold underline text-gray-700">
+                alexander.ferreras@yisraeltech.com
+              </a>
+            </p>
+          </div>
+          <Button onClick={handleReiniciar} disabled={starting} variant="outline" className="gap-2">
+            {starting
+              ? <><Loader2 className="h-4 w-4 animate-spin" />Reiniciando…</>
+              : <><RefreshCw className="h-4 w-4" />Intentar de nuevo</>}
+          </Button>
+        </div>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: resultado exitoso ──
+  if (isComplete) {
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+          <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center">
+            <CheckCircle className="h-8 w-8 text-emerald-500" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">Envío exitoso — verifica en el portal DGII</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 p-5 space-y-3">
+          <a
+            href={`/api/habilitacion/set-pruebas/runs/${runId}/manual-upload/zip`}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+          >
+            <Download className="h-4 w-4" /> Descargar ZIP Facturas &lt; RD$250K
+          </a>
+          <p className="text-xs text-gray-500 text-center">
+            Descomprime y sube cada XML al portal DGII en <strong>"Facturas de consumo &lt; 250Mil"</strong>.
+          </p>
+        </div>
+
+        <button onClick={handleReiniciar} disabled={starting} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+          <RefreshCw className="h-3 w-3" /> Reiniciar pruebas
+        </button>
+
+        <NavFooter onBack={onBack} onNext={onComplete} nextLabel="Continuar" />
+      </div>
+    );
+  }
+
+  // ── Sub-paso: iniciar simulación ──
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+        <div className="flex-1 text-sm text-blue-900 leading-relaxed">
+          <p>
+            Pruebas de Simulación: el sistema genera <strong>29 e-CF sintéticos</strong> y
+            los envía a DGII con el cert del contribuyente. No requiere Excel.
+          </p>
+          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+            <li>Cada tipo usa un rango de NCF 1–10,000,000; los NCF rechazados no se reutilizan.</li>
+            <li>Las FC <strong>&lt; RD$250,000</strong> se descargan en ZIP y se suben manual al portal DGII.</li>
+            <li>Si DGII rechaza, usa <strong>Re-iniciar</strong> para correr con NCFs frescos (+100).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 p-5 space-y-4">
+        <p className="text-sm font-semibold text-gray-800">Iniciar simulación</p>
+
+        <div>
+          <Label className="text-xs mb-1.5 block">NCF inicial</Label>
+          <Input
+            type="number"
+            value={ncfStart}
+            onChange={e => setNcfStart(parseInt(e.target.value, 10) || 500)}
+            min={1}
+            className="font-mono text-sm"
+          />
+          <p className="text-xs text-gray-400 mt-1">Usa un valor alto/fresco (500+) para no chocar con eNCF ya quemados.</p>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-red-700">{error}</p>
+          </div>
+        )}
+
+        <Button onClick={handleStart} disabled={starting}
+          className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+          {starting
+            ? <><Loader2 className="h-4 w-4 animate-spin" />Iniciando…</>
+            : <><FlaskConical className="h-4 w-4" />Iniciar simulación (29 casos)</>}
+        </Button>
+      </div>
+
+      <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+    </div>
+  );
+}
+
+// ─── Phase: Pruebas de Simulación Representación Impresa (idéntico a /admin Step5Body) ───
+// Subida MANUAL al portal DGII. El API solo entrega los PDF (con QR correcto).
+// Reusa el runId persistido del paso de Simulación (Paso 4).
+
+function PhaseRepresentacionSimulacion({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+  const [runId,   setRunId]   = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
+      cargarEstado()
+        .then(({ state }) => { if (!cancelled) setRunId(state.simulacion?.runId ?? null); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLoading(false); });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!loading && !runId) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-sm text-amber-900">
+            <p className="font-semibold mb-0.5">Completa el paso 4 primero</p>
+            <p>Las representaciones impresas (PDF) salen de los e-CF emitidos en la Simulación (paso 4).</p>
+          </div>
+        </div>
+        <NavFooter onBack={onBack} onNext={onComplete} nextDisabled />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
-
-      {/* Stepper */}
-      <div className="flex items-center">
-        {STEPS.map((label, i) => (
-          <div key={i} className={`flex items-center ${i < STEPS.length - 1 ? 'flex-1' : ''}`}>
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all
-                ${i < sub  ? 'bg-teal-600 border-teal-600 text-white'
-                : i === sub ? 'bg-white border-teal-600 text-teal-600'
-                :             'bg-white border-gray-200 text-gray-400'}`}>
-                {i < sub ? <Check className="h-3 w-3" /> : i + 1}
-              </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap
-                ${i === sub ? 'text-teal-700' : i < sub ? 'text-teal-500' : 'text-gray-400'}`}>
-                {label}
-              </span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <div className={`flex-1 h-0.5 mb-4 mx-2 rounded transition-colors
-                ${i < sub ? 'bg-teal-400' : 'bg-gray-200'}`} />
-            )}
-          </div>
-        ))}
+      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+        <div className="flex-1 text-sm text-blue-900 leading-relaxed">
+          <p>
+            Genera y envía las Representaciones Impresas (PDF) de los e-CF del paso 4.
+            La subida es <strong>manual en el portal DGII</strong> — el sistema solo entrega los PDF con el QR correcto.
+          </p>
+          <ul className="list-disc ml-5 mt-1.5 space-y-1">
+            <li>Descarga el paquete, descomprime y sube un PDF de cada tipo en el portal (Paso 5 → ENVIAR ARCHIVOS).</li>
+            <li>La suma de archivos no puede superar <strong>10MB</strong>.</li>
+          </ul>
+        </div>
       </div>
 
-      {/* ── Sub 0: Descargar los 11 PDFs ── */}
-      {sub === 0 && (
-        <div className="space-y-5">
-          <InfoBox color="amber" title="11 representaciones impresas requeridas">
-            DGII necesita aprobar el PDF impreso de cada tipo de comprobante. Zero los genera
-            automáticamente con los QR correctos — solo descárgalos y súbelos al portal.
-          </InfoBox>
+      <div className="rounded-xl border border-gray-200 p-5 space-y-3">
+        <p className="text-sm font-semibold text-gray-800">Descargar representaciones (PDF)</p>
+        <a
+          href={`/api/habilitacion/set-pruebas/runs/${runId}/package?pdfOnly=true`}
+          className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2"
+        >
+          <Download className="h-4 w-4" /> Descargar PDFs
+        </a>
+      </div>
 
-          <div className="flex items-center justify-between">
-            <Button onClick={handleDownloadAll} disabled={downloadingAll || !!downloading || allDone} variant="outline" className="gap-2">
-              {downloadingAll
-                ? <><Loader2 className="h-4 w-4 animate-spin" />Descargando {downloaded.size + 1} de {PDFS.length}…</>
-                : allDone
-                ? <><CheckCircle className="h-4 w-4 text-teal-500" />Todos descargados</>
-                : <><Download className="h-4 w-4" />Descargar todos (uno a uno)</>}
-            </Button>
-            <span className="text-xs font-mono text-gray-500">
-              {downloaded.size}/{PDFS.length}
-            </span>
-          </div>
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+        <p className="text-xs text-gray-600 leading-relaxed">
+          El paquete incluye el PDF de los tipos <strong>31, 32 (≥RD$250mil y &lt;RD$250mil), 33, 34,
+          41, 43, 44, 45, 46 y 47</strong>. Asegúrate de subir cada tipo en la sección que corresponda
+          del portal DGII, según lo que especifique la DGII, para evitar errores.
+        </p>
+      </div>
 
-          {downloadError && (
-            <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-red-700">Error al descargar PDF</p>
-                <p className="text-xs text-red-600 mt-0.5">{downloadError}</p>
-              </div>
-              <button onClick={() => setDownloadError(null)} className="text-red-400 hover:text-red-600">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+        <p className="text-xs text-amber-800">
+          Es responsabilidad del contribuyente que la representación impresa cumpla con la Ley 32-23
+          y la documentación técnica del Formato de e-CF.
+        </p>
+      </div>
 
-          <div className="space-y-1.5">
-            {PDFS.map(pdf => {
-              const done = downloaded.has(pdf.tipo);
-              const busy = downloading === pdf.tipo;
-              return (
-                <div key={pdf.tipo} className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all
-                  ${done ? 'border-teal-200 bg-teal-50/60' : 'border-gray-200 bg-white'}`}>
-                  <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold
-                    ${done ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {pdf.tipo.replace(/[ab]/g, '')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{pdf.nombre}</p>
-                    <p className="text-xs text-gray-400">{pdf.tam}</p>
-                  </div>
-                  <button onClick={() => !done && !busy && handleDownloadOne(pdf.tipo)} disabled={done || busy}
-                    className={`shrink-0 p-1.5 rounded-lg transition-colors
-                      ${done ? 'text-teal-500 cursor-default' : busy ? 'text-gray-300' : 'text-gray-400 hover:text-teal-600 hover:bg-teal-50'}`}>
-                    {busy
-                      ? <Loader2 className="h-4 w-4 animate-spin" />
-                      : done
-                      ? <CheckCircle className="h-4 w-4" />
-                      : <Download className="h-4 w-4" />}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+      <NavFooter onBack={onBack} onNext={onComplete} />
+    </div>
+  );
+}
 
-          <NavFooter
-            onBack={onBack}
-            onNext={() => setSub(1)}
-            nextDisabled={!allDone}
-            nextLabel="Ya los descargué"
-          />
+// ─── Phase: URL Servicios Prueba (idéntico a /admin UrlServiciosBody, produccion=false) ───
+
+function PhaseUrlServiciosPrueba({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+  const [webhookBaseUrl, setWebhookBaseUrl] = useState('');
+
+  useEffect(() => {
+    fetch('/api/ecf/urls-dgii').then(r => r.json()).then(d => setWebhookBaseUrl(d.webhookBaseUrl ?? ''));
+  }, []);
+
+  const value = webhookBaseUrl || 'Cargando…';
+
+  return (
+    <div className="space-y-5">
+      <InfoBox color="blue" title="URLs para el ambiente de pruebas">
+        Etapa en la que deben ser validadas y/o actualizadas las URL de los servicios de
+        Recepción, Aprobación Comercial y Autenticación. Pega la misma URL en cada campo del
+        portal DGII — el portal añade el sufijo (<code>/fe/recepcion/api/ecf</code>, etc.) automáticamente.
+      </InfoBox>
+
+      <div className="rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b flex items-center gap-2">
+          <Link2 className="h-4 w-4 text-gray-400" />
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">URLs para confirmación</p>
         </div>
-      )}
-
-      {/* ── Sub 1: Confirmar subida al portal ── */}
-      {sub === 1 && (
-        <div className="space-y-5">
-          <InfoBox color="blue" title="Sube los 11 PDFs al portal DGII">
-            En el portal DGII, ve a <strong>Paso 5: Representación Impresa</strong>. Verás 11 casillas,
-            una por cada tipo. Sube cada PDF en su casilla correspondiente (el nombre del archivo
-            indica el tipo) y haz clic en <strong>ENVIAR ARCHIVOS</strong>.
-          </InfoBox>
-
-          <DgiiScreenshot
-            src="/dgii-guia/paso5-representacion-impresa.jpg"
-            alt="Pantalla de Pruebas de Representación Impresa en el portal DGII"
-            caption="Las 11 casillas en el portal DGII. Sube cada PDF en su casilla correspondiente."
-            mode="inline"
-          />
-
-          <label className="flex items-start gap-3 cursor-pointer p-4 rounded-xl border border-gray-200 hover:border-teal-300 transition-colors">
-            <input
-              type="checkbox"
-              checked={uploadConfirmed}
-              onChange={e => setUploadConfirmed(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600"
-            />
-            <span className="text-sm text-gray-700">
-              Subí los 11 PDFs al portal DGII y di clic en <strong>ENVIAR ARCHIVOS</strong>
-            </span>
-          </label>
-
-          <NavFooter
-            onBack={() => setSub(0)}
-            onNext={() => setSub(2)}
-            nextDisabled={!uploadConfirmed}
-            nextLabel="Esperar validación"
-          />
+        <div className="px-4 divide-y divide-gray-50">
+          <CopyRow label="Servicio de Autenticación"        value={value} />
+          <CopyRow label="Servicio de Recepción"             value={value} />
+          <CopyRow label="Servicio de Aprobación Comercial"  value={value} />
         </div>
-      )}
+      </div>
 
-      {/* ── Sub 2: Espera validación DGII ── */}
-      {sub === 2 && (
-        <>
-          <WaitForDgii
-            title="DGII está validando tus representaciones impresas"
-            description="DGII revisa cada PDF para verificar que los datos y el código QR estén correctos. Este es el paso con mayor plazo."
-            estimated="2 a 5 días hábiles"
-            simulateSeconds={10}
-            successTitle="Representaciones impresas aprobadas"
-            successDescription="DGII validó los 11 PDFs. Ya casi terminamos — solo faltan las URLs de producción y la declaración jurada."
-            onComplete={onComplete}
-          />
-          <p className="text-xs text-amber-600 mt-3 flex items-start gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>
-              Si DGII rechaza alguna representación, recibirás un correo con los detalles. Vuelve a este paso,
-              descarga nuevamente el PDF corregido y re-súbelo al portal.
-            </span>
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+        <p className="text-xs text-amber-800">
+          Tras pegar las URLs en el portal DGII, haz clic en <strong>"Confirmar URLs"</strong> ahí,
+          luego continúa aquí.
+        </p>
+      </div>
+
+      <NavFooter onBack={onBack} onNext={onComplete} />
+    </div>
+  );
+}
+
+// ─── Phase: Validación Representación Impresa (idéntico a /admin PasoPasivoBody id=6) ───
+// Paso pasivo — DGII valida los PDFs subidos en el paso anterior. Sin acción en el sistema.
+
+function PhaseValidacionRepresentacionImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+        <div className="h-16 w-16 rounded-full bg-blue-50 flex items-center justify-center">
+          <ScanLine className="h-8 w-8 text-blue-500" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-gray-900">Validación de la Representación Impresa</p>
+          <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+            DGII valida las representaciones impresas (PDF) subidas en el paso anterior. No requiere
+            acción en el sistema — espera la confirmación en el portal DGII.
           </p>
-        </>
-      )}
+        </div>
+      </div>
+
+      <NavFooter onBack={onBack} onNext={onComplete} />
+    </div>
+  );
+}
+
+// ─── Phases 8-11: acción en portal DGII + DGII valida (idéntico a /admin PortalStepBody) ───
+// Pasivos — no hay backend propio que llamar, solo instrucciones + link al portal.
+
+const PORTAL_STEP_INFO: Record<number, { icon: React.ComponentType<{ className?: string }>; intro: string; accion: string; valida: string }> = {
+  8: {
+    icon: PlayCircle,
+    intro: 'Inicio de la prueba de Recepción de e-CF. DGII enviará e-CF de prueba a tu Servicio de Recepción.',
+    accion: 'En el portal DGII haz clic en "Enviar prueba de recepción e-CF".',
+    valida: 'DGII enviará los comprobantes a tu webhook de recepción registrado en el paso anterior.',
+  },
+  9: {
+    icon: Mail,
+    intro: 'Recepción de e-CF. DGII valida que tu servicio recibió y respondió correctamente los e-CF de prueba.',
+    accion: 'No requiere acción en el sistema — el flujo ocurre entre DGII y tu Servicio de Recepción.',
+    valida: 'DGII valida las respuestas que devolvió tu servicio. Verifica el estatus en el portal.',
+  },
+  10: {
+    icon: PlayCircle,
+    intro: 'Inicio de la prueba de Recepción de Aprobación Comercial.',
+    accion: 'En el portal DGII haz clic en "Enviar prueba de aprobaciones comerciales".',
+    valida: 'DGII enviará las aprobaciones comerciales de prueba a tu webhook registrado.',
+  },
+  11: {
+    icon: CheckCircle,
+    intro: 'Recepción de Aprobación Comercial. DGII valida que tu servicio procesó las aprobaciones recibidas.',
+    accion: 'No requiere acción en el sistema — el flujo ocurre entre DGII y tu Servicio de Aprobación Comercial.',
+    valida: 'DGII valida el procesamiento. Verifica el estatus en el portal DGII.',
+  },
+};
+
+function PhasePortalStep({ stepId, onComplete, onBack }: { stepId: number; onComplete: () => void; onBack: () => void }) {
+  const [ambiente, setAmbiente] = useState<string | null>(null);
+  const info = PORTAL_STEP_INFO[stepId];
+  const Icon = info.icon;
+
+  useEffect(() => {
+    fetch('/api/habilitacion/contexto').then(r => r.json()).then(d => setAmbiente(d.ambiente ?? null)).catch(() => {});
+  }, []);
+
+  const portalUrl = ambiente === 'Produccion'
+    ? 'https://ecf.dgii.gov.do/ecf/contribuyentes'
+    : ambiente === 'CerteCF'
+      ? 'https://ecf.dgii.gov.do/certecf/contribuyentes'
+      : 'https://ecf.dgii.gov.do/testecf/contribuyentes';
+
+  return (
+    <div className="space-y-5">
+      <InfoBox color="blue" title="">{info.intro}</InfoBox>
+
+      <div className="space-y-3">
+        <div className="flex items-start gap-2.5">
+          <span className="shrink-0 h-6 w-6 rounded-full bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center">1</span>
+          <p className="text-sm text-gray-700 flex-1">{info.accion}</p>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <span className="shrink-0 h-6 w-6 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center">2</span>
+          <p className="text-sm text-gray-600 flex-1">{info.valida}</p>
+        </div>
+      </div>
+
+      <a
+        href={portalUrl}
+        target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg"
+      >
+        <Icon className="h-4 w-4" /> Abrir portal DGII <ExternalLink className="h-3.5 w-3.5" />
+      </a>
+
+      <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+        <p className="text-xs text-amber-800">
+          Cuando DGII confirme este paso en el portal, continúa aquí.
+        </p>
+      </div>
+
+      <NavFooter onBack={onBack} onNext={onComplete} />
+    </div>
+  );
+}
+
+// ─── Phase: Verificación Estatus (idéntico a /admin PasoPasivoBody id=14) ───
+
+function PhaseVerificacionEstatus({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-gray-100 bg-white p-14 flex flex-col items-center text-center gap-4">
+        <div className="h-16 w-16 rounded-full bg-blue-50 flex items-center justify-center">
+          <ShieldCheck className="h-8 w-8 text-blue-500" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-gray-900">Verificación de Estatus</p>
+          <p className="text-sm text-gray-500 mt-1.5 max-w-md">
+            DGII verifica el estatus final de la habilitación. No requiere acción en el sistema —
+            el resultado se refleja en el portal DGII.
+          </p>
+        </div>
+      </div>
+
+      <NavFooter onBack={onBack} onNext={onComplete} />
     </div>
   );
 }
@@ -2361,7 +2429,7 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
   const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
-    fetch('/api/ecf/urls-dgii').then(r => r.json()).then(d => setWebhookBaseUrl(d.webhookBaseUrl ?? ''));
+    fetch('/api/habilitacion/contexto').then(r => r.json()).then(d => setWebhookBaseUrl(d.webhookBaseUrl ?? ''));
   }, []);
 
   const urls = {
@@ -2421,15 +2489,72 @@ function PhaseUrls({ onComplete, onBack }: { onComplete: () => void; onBack: () 
 
 function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBack: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [sub,     setSub]     = useState(0);
-  const [xmlFile, setXmlFile] = useState<File | null>(null);
-  const [signing, setSigning] = useState(false);
-  const [signed,  setSigned]  = useState(false);
-  const [sending, setSending] = useState(false);
-  const [sent,    setSent]    = useState(false);
+  const [sub,       setSub]       = useState(0);
+  const [xmlFile,   setXmlFile]   = useState<File | null>(null);
+  const [signing,   setSigning]   = useState(false);
+  const [signed,    setSigned]    = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
+  const [enviado,   setEnviado]   = useState(false);
 
-  async function handleSign() { setSigning(true); await sleep(2100); setSigning(false); setSigned(true); }
-  async function handleSend() { setSending(true); await sleep(1700); setSending(false); setSent(true); }
+  // XML firmado (base64) devuelto por el backend — se usa para descargar
+  const [xmlFirmado, setXmlFirmado] = useState<{ base64: string; name: string } | null>(null);
+
+  useEffect(() => {
+    import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
+      cargarEstado().then(({ state }) => {
+        if (state.declaracionJurada?.enviado) setEnviado(true);
+        if (state.declaracionJurada?.xmlFirmadoDataUrl) {
+          setXmlFirmado({
+            base64: state.declaracionJurada.xmlFirmadoDataUrl,
+            name:   state.declaracionJurada.xmlFirmadoName ?? 'declaracion-jurada-firmada.xml',
+          });
+          setSigned(true);
+        }
+        if (typeof state.subPaso === 'number') setSub(state.subPaso);
+      }).catch(() => { /* silent */ });
+    });
+  }, []);
+
+  function goToSub(n: number) {
+    setSub(n);
+    import('@/lib/habilitacion/client').then(({ guardarEstado }) => {
+      guardarEstado({ subPaso: n }).catch(() => {});
+    });
+  }
+
+  async function handleFirmar() {
+    if (!xmlFile) return;
+    setSignError(null);
+    setSigning(true);
+    try {
+      const { firmarXml, guardarEstado } = await import('@/lib/habilitacion/client');
+      const result = await firmarXml({ xmlFile, proposito: 'declaracion-jurada' });
+      setXmlFirmado({ base64: result.xmlFirmadoBase64, name: result.xmlFirmadoNombre });
+      setSigned(true);
+      await guardarEstado({
+        declaracionJurada: {
+          xmlFirmadoDataUrl: result.xmlFirmadoBase64,
+          xmlFirmadoName:    result.xmlFirmadoNombre,
+        },
+      });
+    } catch (err) {
+      setSignError(err instanceof Error ? err.message : 'Error firmando el XML');
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  async function handleDescargar() {
+    if (!xmlFirmado) return;
+    const { descargarBase64 } = await import('@/lib/habilitacion/client');
+    descargarBase64(xmlFirmado.base64, xmlFirmado.name);
+  }
+
+  async function handleConfirmarEnvio(v: boolean) {
+    setEnviado(v);
+    const { guardarEstado } = await import('@/lib/habilitacion/client');
+    await guardarEstado({ declaracionJurada: { enviado: v } });
+  }
 
   const STEPS = ['Firmar y enviar', 'Verificación RNC'];
 
@@ -2509,7 +2634,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
                   <p className="text-sm font-medium text-gray-900 truncate">{xmlFile.name}</p>
                   <p className="text-xs text-gray-400">{fmtSize(xmlFile.size)}</p>
                 </div>
-                <button onClick={() => { setXmlFile(null); setSigned(false); setSent(false); }}
+                <button onClick={() => { setXmlFile(null); setSigned(false); setXmlFirmado(null); }}
                   className="p-1 rounded-full hover:bg-gray-200 text-gray-400">
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -2529,7 +2654,7 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
               <p className="text-sm font-semibold text-gray-800">Firmar con certificado P12</p>
             </div>
             {!signed ? (
-              <Button onClick={handleSign} disabled={!xmlFile || signing} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
+              <Button onClick={handleFirmar} disabled={!xmlFile || signing} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
                 {signing
                   ? <><Loader2 className="h-4 w-4 animate-spin" />Firmando declaración jurada…</>
                   : <><FileSignature className="h-4 w-4" />Firmar declaración jurada</>}
@@ -2540,40 +2665,46 @@ function PhaseDeclaracion({ onComplete, onBack }: { onComplete: () => void; onBa
                   <CheckCircle className="h-4 w-4" />
                   <p className="text-sm font-medium">Firmado · RSA-SHA256</p>
                 </div>
-                <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
+                <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={handleDescargar} disabled={!xmlFirmado}>
                   <Download className="h-3.5 w-3.5" /> Descargar
                 </Button>
+              </div>
+            )}
+            {signError && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-red-700">{signError}</p>
               </div>
             )}
           </div>
 
           {/* Step 3 */}
-          <div className={`rounded-xl border p-5 space-y-4 transition-all ${sent ? 'border-teal-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
+          <div className={`rounded-xl border p-5 space-y-4 transition-all ${enviado ? 'border-teal-200' : !signed ? 'border-gray-100 opacity-40' : 'border-gray-200'}`}>
             <div className="flex items-center gap-2">
               <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0
-                ${sent ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                {sent ? <Check className="h-3.5 w-3.5" /> : '3'}
+                ${enviado ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                {enviado ? <Check className="h-3.5 w-3.5" /> : '3'}
               </div>
               <p className="text-sm font-semibold text-gray-800">Enviar al portal DGII</p>
             </div>
-            {!sent ? (
-              <Button onClick={handleSend} disabled={!signed || sending} className="w-full bg-teal-600 hover:bg-teal-700 gap-2">
-                {sending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Enviando a DGII…</>
-                  : <><ExternalLink className="h-4 w-4" />Enviar declaración jurada</>}
-              </Button>
-            ) : (
-              <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg p-3 text-teal-800">
-                <CheckCircle className="h-4 w-4 shrink-0" />
-                <p className="text-sm font-medium">Enviada y recibida por la DGII</p>
-              </div>
-            )}
+            <label className={`flex items-start gap-3 cursor-pointer ${!signed ? 'pointer-events-none' : ''}`}>
+              <input
+                type="checkbox"
+                checked={enviado}
+                disabled={!signed}
+                onChange={e => handleConfirmarEnvio(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+              />
+              <span className="text-sm text-gray-700">
+                Subí el XML firmado en el portal DGII ("Enviar archivo")
+              </span>
+            </label>
           </div>
 
           <NavFooter
             onBack={onBack}
-            onNext={() => setSub(1)}
-            nextDisabled={!sent}
+            onNext={() => goToSub(1)}
+            nextDisabled={!enviado}
             nextLabel="Verificar RNC"
           />
         </div>
@@ -3054,36 +3185,56 @@ export default function HabilitacionPage() {
   const [rnc,                setRnc]                = useState('');
   const [showCancelConfirm,  setShowCancelConfirm]  = useState(false);
   const [canceling,          setCanceling]          = useState(false);
-
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem(INTRO_KEY)) setShowIntro(true);
-    } catch { setShowIntro(true); }
-  }, []);
+  const [showMobileNav,      setShowMobileNav]      = useState(false);
 
   useEffect(() => {
     fetch('/api/equipo/perfil').then(r => r.json()).then(d => setRnc(d.rnc ?? ''));
   }, []);
 
-  // Cargar fase + completado desde servidor (persistencia cross-session)
+  // Cargar fase + completado desde servidor (persistencia cross-session).
+  // El modal de intro (showIntro) se decide DENTRO de este load, no en un
+  // efecto aparte basado solo en localStorage — si ya hay progreso o el
+  // proceso está completo, nunca debe aparecer, sin importar si este
+  // navegador/dispositivo ya vio el intro antes.
   useEffect(() => {
     import('@/lib/habilitacion/client').then(({ cargarEstado }) => {
       cargarEstado().then(({ state, completado }) => {
+        // fase puede llegar a PHASES.length (15): es el centinela de "wizard
+        // terminado, mostrar resumen" — no se recorta a 14, o clickear un
+        // paso anterior desde el resumen nunca podría volver a mostrarlo.
         if (typeof state.fase === 'number') setPhase(state.fase);
         const done = new Set<number>();
         // Reconstruir: cualquier fase < state.fase se considera completada
         if (typeof state.fase === 'number') {
           for (let i = 0; i < state.fase; i++) done.add(i);
         }
-        if (completado) for (let i = 0; i < 6; i++) done.add(i);
+        if (completado) for (let i = 0; i < PHASES.length; i++) done.add(i);
         setCompleted(done);
+        const tieneProgreso = completado || typeof state.fase === 'number';
         // Si hay progreso guardado (fase ≥ 1) o proceso completado → saltar PASO PREVIO
-        if (completado || typeof state.fase === 'number') setStage('wizard');
-      }).catch(() => { /* silent */ });
+        if (tieneProgreso) {
+          setStage('wizard');
+        } else {
+          try { if (!localStorage.getItem(INTRO_KEY)) setShowIntro(true); }
+          catch { setShowIntro(true); }
+        }
+      }).catch(() => {
+        // Si falla la carga del estado, no podemos saber si hay progreso —
+        // fallback al criterio anterior (solo localStorage) para no dejar al
+        // usuario sin intro para siempre por un error de red pasajero.
+        try { if (!localStorage.getItem(INTRO_KEY)) setShowIntro(true); }
+        catch { setShowIntro(true); }
+      });
     });
   }, []);
 
   const isDone = completed.size === PHASES.length;
+  // Distinto de isDone (que una vez true queda true para siempre, usado para
+  // ocultar el CTA de cancelar/el hero). viewingSummary es solo si estamos
+  // parados en el resumen final (fase 15) vs. revisando una fase pasada
+  // (0-14) desde el sidebar tras terminar — así el click en un paso anterior
+  // sí puede volver a mostrar su contenido en vez de quedar pegado al resumen.
+  const viewingSummary = phase >= PHASES.length;
 
   function handleModeSelected(m: IntroMode) {
     setMode(m);
@@ -3094,10 +3245,29 @@ export default function HabilitacionPage() {
     setCompleted(prev => new Set([...prev, id]));
     const nextPhase = id + 1;
     setPhase(nextPhase);
-    // Persistir fase alcanzada (fire-and-forget)
+    // Persistir fase alcanzada + resetear el sub-paso (la fase nueva arranca
+    // desde su primer sub-paso, no debe heredar el de la fase anterior).
     import('@/lib/habilitacion/client').then(({ guardarEstado }) => {
-      guardarEstado({ fase: nextPhase }).catch(() => {});
+      guardarEstado({ fase: nextPhase, subPaso: 0 }).catch(() => {});
     });
+    // Postulación (fase 0) completada → pasar de TesteCF a CerteCF antes de
+    // entrar a Pruebas de Datos e-CF. Fire-and-forget: si falla, no bloquea
+    // el avance (el usuario puede reintentar el cambio de ambiente después).
+    if (id === 0) {
+      fetch('/api/habilitacion/ambiente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ambiente: 'CerteCF' }),
+      }).catch(() => {});
+    }
+    // Declaración Jurada (fase 12) completada → pasar de CerteCF a Producción.
+    if (id === 12) {
+      fetch('/api/habilitacion/ambiente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ambiente: 'Produccion' }),
+      }).catch(() => {});
+    }
     // Si completó la última fase → marcar habilitación finalizada
     if (nextPhase >= PHASES.length) {
       fetch('/api/habilitacion/state', {
@@ -3130,7 +3300,7 @@ export default function HabilitacionPage() {
     requisito: 'Configura tu empresa y certificado primero',
     eleccion:  'Elige cómo quieres completar la habilitación',
     credencial:'Ingresa tus credenciales del portal DGII',
-    wizard:    'Proceso de certificación ante la DGII · 6 fases',
+    wizard:    `Proceso de certificación ante la DGII · ${PHASES.length} fases`,
   };
 
   return (
@@ -3143,7 +3313,7 @@ export default function HabilitacionPage() {
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Habilitación e-CF</h1>
+              <h1 className="text-lg font-bold text-gray-900">Activar facturación electrónica</h1>
               <p className="text-xs text-gray-400 mt-0.5">{subtitles[stage]}</p>
             </div>
 
@@ -3247,25 +3417,51 @@ export default function HabilitacionPage() {
             />
           )}
 
-          {/* ── Wizard 6 fases ── */}
+          {/* ── Wizard 15 fases ── */}
           {stage === 'wizard' && (
             <div className="space-y-4">
               {!isDone && <EtapasHero />}
 
               <div className="flex gap-8">
-                <Sidebar phase={isDone ? PHASES.length : phase} completed={completed} onJump={handleJump} />
+                <Sidebar phase={phase} completed={completed} onJump={handleJump} />
                 <div className="flex-1 bg-white rounded-2xl border border-gray-200 p-6 min-h-[540px]">
-                  {!isDone ? (
+                  {!viewingSummary ? (
                     <>
                       <div className="mb-6">
+                        {isDone && (
+                          <button
+                            type="button"
+                            onClick={() => setPhase(PHASES.length)}
+                            className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 mb-3"
+                          >
+                            <ChevronRight className="h-3 w-3 rotate-180" /> Volver al resumen
+                          </button>
+                        )}
                         <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
-                          <span className="shrink-0">Fase {phase + 1} de {PHASES.length}</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowMobileNav(v => !v)}
+                            className="md:pointer-events-none shrink-0 flex items-center gap-1 text-gray-400"
+                          >
+                            Fase {phase + 1} de {PHASES.length}
+                            <ChevronRight className={`md:hidden h-3 w-3 transition-transform ${showMobileNav ? 'rotate-90' : ''}`} />
+                          </button>
                           <div className="flex-1 bg-gray-100 rounded-full h-1.5">
                             <div className="bg-teal-500 h-1.5 rounded-full transition-all duration-500"
                               style={{ width: `${(completed.size / PHASES.length) * 100}%` }} />
                           </div>
                           <span className="shrink-0">{Math.round((completed.size / PHASES.length) * 100)}%</span>
                         </div>
+                        {showMobileNav && (
+                          <div className="md:hidden mb-4 rounded-xl border border-gray-200 p-2 select-none">
+                            <PhaseListItems
+                              phase={phase}
+                              completed={completed}
+                              onJump={handleJump}
+                              onSelect={() => setShowMobileNav(false)}
+                            />
+                          </div>
+                        )}
                         <div className="flex items-center gap-2">
                           <h2 className="text-xl font-bold text-gray-900">{PHASE_TITLES[phase]}</h2>
                           {mode === 'asistido' && (
@@ -3276,12 +3472,21 @@ export default function HabilitacionPage() {
                         </div>
                       </div>
 
-                      {phase === 0 && <PhasePostulacion onComplete={() => completePhase(0)} onBack={() => setStage('eleccion')} />}
-                      {phase === 1 && <PhasePruebas      onComplete={() => completePhase(1)} onBack={() => setPhase(0)} />}
-                      {phase === 2 && <PhaseImpresa      onComplete={() => completePhase(2)} onBack={() => setPhase(1)} />}
-                      {phase === 3 && <PhaseUrls         onComplete={() => completePhase(3)} onBack={() => setPhase(2)} />}
-                      {phase === 4 && <PhaseDeclaracion  onComplete={() => completePhase(4)} onBack={() => setPhase(3)} />}
-                      {phase === 5 && <PhaseFinalizado   onComplete={() => completePhase(5)} onBack={() => setPhase(4)} />}
+                      {phase === 0  && <PhasePostulacion onComplete={() => completePhase(0)}  onBack={() => setStage('eleccion')} />}
+                      {phase === 1  && <PhasePruebas      onComplete={() => completePhase(1)}  onBack={() => setPhase(0)} />}
+                      {phase === 2  && <PhaseImpresa      onComplete={() => completePhase(2)}  onBack={() => setPhase(1)} />}
+                      {phase === 3  && <PhaseSimulacion   onComplete={() => completePhase(3)}  onBack={() => setPhase(2)} />}
+                      {phase === 4  && <PhaseRepresentacionSimulacion onComplete={() => completePhase(4)} onBack={() => setPhase(3)} />}
+                      {phase === 5  && <PhaseValidacionRepresentacionImpresa onComplete={() => completePhase(5)} onBack={() => setPhase(4)} />}
+                      {phase === 6  && <PhaseUrlServiciosPrueba onComplete={() => completePhase(6)} onBack={() => setPhase(5)} />}
+                      {phase === 7  && <PhasePortalStep stepId={8}  onComplete={() => completePhase(7)}  onBack={() => setPhase(6)} />}
+                      {phase === 8  && <PhasePortalStep stepId={9}  onComplete={() => completePhase(8)}  onBack={() => setPhase(7)} />}
+                      {phase === 9  && <PhasePortalStep stepId={10} onComplete={() => completePhase(9)}  onBack={() => setPhase(8)} />}
+                      {phase === 10 && <PhasePortalStep stepId={11} onComplete={() => completePhase(10)} onBack={() => setPhase(9)} />}
+                      {phase === 11 && <PhaseUrls         onComplete={() => completePhase(11)} onBack={() => setPhase(10)} />}
+                      {phase === 12 && <PhaseDeclaracion  onComplete={() => completePhase(12)} onBack={() => setPhase(11)} />}
+                      {phase === 13 && <PhaseVerificacionEstatus onComplete={() => completePhase(13)} onBack={() => setPhase(12)} />}
+                      {phase === 14 && <PhaseFinalizado   onComplete={() => completePhase(14)} onBack={() => setPhase(13)} />}
                     </>
                   ) : (
                     <PhaseListo />

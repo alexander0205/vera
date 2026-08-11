@@ -127,6 +127,11 @@
         "tipo": "mejora",
         "titulo": "Listados más fáciles de leer",
         "detalle": "En Facturas y Cuentas por cobrar el código sale corto (el completo aparece al pasar el mouse) y el botón para entrar al detalle está siempre a la vista, también en el celular."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Activa tu facturación electrónica paso a paso",
+        "detalle": "La habilitación con la DGII ahora es un asistente guiado: sube el Set de Pruebas, corre la simulación y sigue el avance sin salir del sistema. Mientras no estés en Producción, el acceso aparece arriba en el menú; al terminar se guarda en Configuración."
       }
     ]
   },
