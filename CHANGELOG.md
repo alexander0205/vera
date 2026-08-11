@@ -4,6 +4,39 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.19.0 — 2026-08-11
+
+### Nuevo
+
+- **habilitacion**: renombrar wizard, nav condicional por ambiente, alertas por email
+  - Renombra "Habilitación e-CF" a "Activar facturación electrónica" en el wizard mientras está pendiente; dentro de Configuración vuelve a "Habilitación e-CF" una vez el team llega a Producción.
+  - El link vive arriba del nav (fuera de Configuración) mientras el ambiente DGII no sea Producción, y se mueve a Configuración una vez lo es. Fuente rápida: teams.habilitacion_completado_at (mismo fetch que el resto del nav, sin round-trip extra). Nuevo GET /api/habilitacion/ambiente-actual lee el ambiente real en ecf-api en paralelo y auto-sana ese flag para teams que llegaron a producción antes de que existiera.
+  - Arregla el modal de intro apareciendo con progreso ya guardado: ahora se decide junto con la carga real del estado, no solo por localStorage.
+  - Arregla navegación a fases anteriores tras completar el wizard (quedaba pegada a la pantalla de resumen) y la línea conectora del stepper (desalineada del centro del círculo, ahora también unificada entre desktop y mobile).
+  - Alerta por email (Resend) como complemento de la alerta de Slack cuando el Set de Pruebas falla — 3 destinatarios por default, configurable via HABILITACION_ALERT_EMAIL (coma-separado).
+- **habilitacion**: reconstruir el wizard de Habilitación e-CF a 15 pasos
+  - Postulación: quita el sub-paso de espera de validación DGII, persiste el sub-paso exacto (no solo la fase) para retomar tras recargar.
+  - Pruebas de Datos e-CF: reemplaza la simulación anterior por el flujo real de Set de Pruebas (subir Excel, sub-pasos de espera/éxito/error sin desglosar detalle, descarga solo XML).
+  - Pruebas Simulación e-CF (nuevo): genera los 29 e-CF sintéticos vía ecf-api, con las mismas pantallas de espera/éxito/error.
+  - Pruebas de Simulación Representación Impresa, Validación Representación Impresa, URL Servicios Prueba, Inicio/Recepción de pruebas (e-CF y Aprobación Comercial), Verificación Estatus (nuevos, portados de sus equivalentes en /admin).
+  - Declaración Jurada: reemplaza la firma/envío simulados por firma real (firmarXml) + descarga funcional + confirmación de envío manual.
+  - Cambia el ambiente TesteCF→CerteCF al completar Postulación y CerteCF→Producción al completar la Declaración Jurada.
+  - Corrige URLs de referencia para reflejar el dominio actual en vez del cacheado por ecf-api.
+- **habilitacion**: endpoints team-scoped para Set de Pruebas y Simulación
+  - ambiente: cambia TesteCF/CerteCF/Produccion del contribuyente propio.
+  - contexto: datos del team + codigoPublico + webhookBaseUrl (reconstruida contra el dominio actual de ECF_API_URL, no el cacheado por ecf-api).
+  - set-pruebas/*: subir Excel, estado/casos, re-emitir, borrar, descargas (ZIP <250K solo XML, paquete completo con filtro opcional pdfOnly).
+  - simulacion/*: iniciar/reiniciar/consultar la Simulación e-CF (29 casos sintéticos, sin Excel).
+  - emisiones/[id]/pdf: proxy de descarga con verificación de dueño.
+  - ownership.ts: verifica que un runId pertenezca al team antes de dejarlo operar sobre él — necesario porque ecf-api no acota estos endpoints por team.
+- **habilitacion**: alertar por Slack cuando el Set de Pruebas falla
+
+### Arreglado
+
+- **habilitacion**: cerrar tres huecos de autorización
+
+_2 commit(s) de mantenimiento no listados._
+
 ## v1.18.1 — 2026-08-07
 
 ### Arreglado
