@@ -126,6 +126,10 @@ const emitirSchema = z.object({
   vendedorId:     z.number().int().positive().optional().nullable(),
   listaPreciosId: z.number().int().positive().optional().nullable(),
 
+  // POS: tipo de orden (operativo, no fiscal — no va al XML DGII). Clasifica el
+  // recibo en el historial del POS. Ver ecf_documents.tipo_orden (mig 0109).
+  tipoOrden: z.enum(['comer-aqui', 'para-llevar', 'delivery', 'mostrador']).optional(),
+
   // Traza anti-duplicados (tracking): identifica el botón + secuencia de clicks
   // del montaje del form que disparó este submit. Solo para diagnóstico.
   _traza: z.object({
@@ -520,6 +524,7 @@ export async function POST(request: NextRequest) {
       almacenId:      data.almacenId      ?? null,
       vendedorId:     data.vendedorId     ?? null,
       listaPreciosId: data.listaPreciosId ?? null,
+      tipoOrden:      data.tipoOrden      ?? null,
       notas:               data.notas          || null,
       terminosCondiciones: data.terminosCondiciones || null,
       pieFactura:          data.pieFactura      || null,

@@ -482,6 +482,12 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // tiene un turno abierto. Permite la conciliación NCF↔efectivo del cierre.
   turnoCajaId: integer('turno_caja_id').references(() => cajaTurnos.id),
 
+  // POS: cómo se despacha la orden ('comer-aqui' | 'para-llevar' | 'delivery' |
+  // 'mostrador'). Dato operativo, NO fiscal (no entra al XML DGII). Nullable:
+  // ventas no-POS, legacy y tickets sin-ncf quedan en NULL. 'comer-aqui' solo
+  // aplica a órdenes con mesa (comanda). Ver mig 0109.
+  tipoOrden: varchar('tipo_orden', { length: 20 }),
+
   // Si fue generado por una recurrente, la fecha de cobro (período) del schedule
   // a la que corresponde. Permite el timeline de períodos y detección de duplicados.
   periodoRecurrente: date('periodo_recurrente'),

@@ -20,7 +20,7 @@ import Typography from '@mui/material/Typography';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Store, Clock, Wallet, Undo2, Users, Package, Settings, FileText, } from 'lucide-react';
+  Store, Clock, Wallet, Undo2, Users, Package, Settings, FileText, ReceiptText, } from 'lucide-react';
 
 const RAIL = 68;
 const OPEN = 224;
@@ -31,6 +31,7 @@ type Item = { href: string; label: string; icon: typeof Store; shared?: boolean 
 // a Facturación. Contactos e Inventario son entidades COMPARTIDAS (mismas tablas).
 const ITEMS: Item[] = [
   { href: '/pos',              label: 'Vender',              icon: Store },
+  { href: '/pos/historial',    label: 'Historial',           icon: ReceiptText },
   { href: '/pos/turnos',       label: 'Turnos',              icon: Clock },
   { href: '/pos/caja',         label: 'Gestión de efectivo', icon: Wallet },
   { href: '/pos/devoluciones', label: 'Devoluciones',        icon: Undo2 },

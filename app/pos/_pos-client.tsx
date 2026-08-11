@@ -80,6 +80,20 @@ type Metodo = typeof METODOS[number];
 // monedero prepago y sí descuenta saldo en el momento.
 type MetodoCobro = Metodo | 'cuenta-estudiante' | 'credito';
 
+// Tipo de orden POS (dato operativo, no fiscal — no entra al XML DGII). Sirve
+// para clasificar/filtrar el historial de recibos. 'comer-aqui' solo aplica a
+// órdenes con mesa (comanda); las ventas rápidas sin mesa usan 'mostrador'.
+type TipoOrden = 'comer-aqui' | 'para-llevar' | 'delivery' | 'mostrador';
+const TIPO_ORDEN_LABEL: Record<TipoOrden, string> = {
+  'comer-aqui':  'Comer aquí',
+  'para-llevar': 'Para llevar',
+  'delivery':    'Delivery',
+  'mostrador':   'Mostrador',
+};
+/** Opciones ofrecidas según el contexto: con mesa se puede comer aquí; sin mesa no. */
+const tiposOrdenPara = (enMesa: boolean): TipoOrden[] =>
+  enMesa ? ['comer-aqui', 'para-llevar', 'delivery'] : ['mostrador', 'para-llevar', 'delivery'];
+
 /** Venta aparcada (hold) — se persiste en localStorage por turno para no perder
  *  el carrito al atender otra venta o si se recarga la página. */
 interface VentaAparcada {
@@ -638,6 +652,7 @@ function Venta({
     pagos: { metodo: MetodoCobro; valorCentavos: number }[],
     recibidoCentavos: number,
     propinaCentavos = 0,
+    tipoOrden: TipoOrden = comandaId != null ? 'comer-aqui' : 'mostrador',
   ) {
     const esMonedero = pagos.length === 1 && pagos[0].metodo === 'cuenta-estudiante';
     // Fiado: sin pagos. El motor calcula estado_pago = PENDIENTE y el documento
@@ -737,6 +752,9 @@ function Venta({
       pagoRecibido:         !esCredito,
       pagos:                pagos.map((p) => ({ metodo: p.metodo, valor: p.valorCentavos / 100 })),
       almacenId:            terminal?.almacenId ?? null,
+      // Clasificación operativa del POS (no fiscal). El motor la estampa en
+      // ecf_documents.tipo_orden para el historial de recibos.
+      tipoOrden,
     };
 
     // Cobro con monedero: saga atómica server-side (descuenta → emite → revierte
@@ -1092,6 +1110,7 @@ function Venta({
             onAplicarDescuento={setDescuentoAplicado}
             cobroDirecto={cobroDirecto}
             onCobroConsumido={() => setCobroDirecto(false)}
+            enMesa={comandaId != null}
           />
         </Box>
       </Box>
@@ -1132,6 +1151,7 @@ function Venta({
               onSelectCliente={setCliente}
               descuentoAplicado={descuentoAplicado}
               onAplicarDescuento={setDescuentoAplicado}
+              enMesa={comandaId != null}
             />
           </Box>
         </Box>
@@ -1177,14 +1197,14 @@ function Venta({
 function CarritoPanel({
   carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, estudiante, onSelectEstudiante,
   listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
-  descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido,
+  descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido, enMesa = false,
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
   cambiarQty: (id: number, delta: number) => void;
   editarPrecio: (id: number, centavos: number | null) => void;
   cobrando: boolean;
-  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
+  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
   escolar: boolean;
   estudiante: MonederoView | null;
   onSelectEstudiante: (e: MonederoView | null) => void;
@@ -1199,6 +1219,8 @@ function CarritoPanel({
   onAplicarDescuento: (d: DescuentoAplicado | null) => void;
   cobroDirecto?: boolean;
   onCobroConsumido?: () => void;
+  /** true si la venta se cobra desde una mesa (comanda) → habilita "Comer aquí". */
+  enMesa?: boolean;
 }) {
   const [abrirCobro, setAbrirCobro] = useState(false);
   const [panelDescuento, setPanelDescuento] = useState(false);
@@ -1364,8 +1386,9 @@ function CarritoPanel({
           cobrando={cobrando}
           estudiante={estudiante}
           cliente={cliente}
+          enMesa={enMesa}
           onClose={() => setAbrirCobro(false)}
-          onConfirm={(pagos, recibido, propina) => { onCobrar(pagos, recibido, propina); setAbrirCobro(false); }}
+          onConfirm={(pagos, recibido, propina, tipoOrden) => { onCobrar(pagos, recibido, propina, tipoOrden); setAbrirCobro(false); }}
         />
       )}
     </Box>
@@ -1651,18 +1674,24 @@ function EstudiantePicker({ estudiante, onSelect }: {
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
 
 function CobroModal({
-  total, cobrando, estudiante, cliente, onClose, onConfirm,
+  total, cobrando, estudiante, cliente, enMesa = false, onClose, onConfirm,
 }: {
   total: number;
   cobrando: boolean;
   estudiante: MonederoView | null;
   /** Necesario para el fiado: sin alguien a quien cobrarle no hay crédito. */
   cliente: ClienteView | null;
+  /** true si se cobra desde una mesa (comanda) → ofrece "Comer aquí". */
+  enMesa?: boolean;
   onClose: () => void;
-  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
+  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
 }) {
   const [propina, setPropina] = useState('');
   const [split, setSplit] = useState(false);
+
+  // Tipo de orden: por defecto "Comer aquí" en mesa, "Mostrador" en venta rápida.
+  const opcionesTipoOrden = tiposOrdenPara(enMesa);
+  const [tipoOrden, setTipoOrden] = useState<TipoOrden>(opcionesTipoOrden[0]);
 
   // Modo simple (un método) — o cuenta-estudiante.
   const [metodo, setMetodo] = useState<MetodoCobro>('efectivo');
@@ -1712,21 +1741,21 @@ function CobroModal({
       const pagos = filas
         .map((f) => ({ metodo: f.metodo as MetodoCobro, valorCentavos: Math.round((Number(f.valor) || 0) * 100) }))
         .filter((p) => p.valorCentavos > 0);
-      onConfirm(pagos, totalCobrar, propinaCentavos);
+      onConfirm(pagos, totalCobrar, propinaCentavos, tipoOrden);
       return;
     }
     if (esMonedero) {
-      onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos);
+      onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos, tipoOrden);
       return;
     }
     // Crédito: se confirma SIN pagos. El motor calcula estado_pago = PENDIENTE
     // y el documento entra a la cartera.
     if (esCredito) {
-      onConfirm([], 0, propinaCentavos);
+      onConfirm([], 0, propinaCentavos, tipoOrden);
       return;
     }
     const recibidoOut = metodo === 'efectivo' ? recibidoCentavos : totalCobrar;
-    onConfirm([{ metodo, valorCentavos: totalCobrar }], recibidoOut, propinaCentavos);
+    onConfirm([{ metodo, valorCentavos: totalCobrar }], recibidoOut, propinaCentavos, tipoOrden);
   }
 
   const puedeConfirmar = !cobrando && (split ? splitCuadra : (!faltaEfectivo && !monederoBloqueado));
@@ -1745,6 +1774,27 @@ function CobroModal({
           {propinaCentavos > 0 && (
             <Box sx={{ mt: 0.25, fontSize: 11, color: '#9ca3af', ...MONEY }}>Incluye propina {fmt(propinaCentavos)}</Box>
           )}
+        </Box>
+
+        {/* Tipo de orden (operativo, no fiscal) — clasifica el recibo en el historial. */}
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Tipo de orden</Typography>
+        <Box sx={{ mb: 1.5, display: 'flex', gap: 0.75 }}>
+          {opcionesTipoOrden.map((t) => (
+            <Button
+              key={t}
+              onClick={() => setTipoOrden(t)}
+              disableElevation
+              variant={tipoOrden === t ? 'contained' : 'outlined'}
+              sx={{
+                flex: 1, textTransform: 'none', borderRadius: '8px', fontSize: 13, py: 0.75, minWidth: 0,
+                ...(tipoOrden === t
+                  ? { bgcolor: '#10b981', color: '#fff', '&:hover': { bgcolor: '#059669' } }
+                  : { color: '#374151', borderColor: '#d1d5db' }),
+              }}
+            >
+              {TIPO_ORDEN_LABEL[t]}
+            </Button>
+          ))}
         </Box>
 
         {/* Propina */}
