@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { METODO_PAGO_LABELS as METODO_LABELS } from '@/lib/pagos/metodos';
+import { METODO_PAGO_LABELS as METODO_LABELS, METODOS_PAGO, esEfectivo } from '@/lib/pagos/metodos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,10 +102,18 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
   turnoId: number; onClose: () => void; onCreated: () => void;
 }) {
   const [tipo, setTipo]           = useState('ENTRADA');
+  const [metodo, setMetodo]       = useState('efectivo');
   const [monto, setMonto]         = useState('');
   const [descripcion, setDesc]    = useState('');
   const [motivo, setMotivo]       = useState('');
   const [loading, setLoading]     = useState(false);
+
+  // Dirección del dinero: ENTRADA/AJUSTE suman, el resto resta (espejo de
+  // lib/caja/core → TIPOS_SUMAN / TIPOS_RESTAN).
+  const esEntrada = ['ENTRADA', 'AJUSTE'].includes(tipo);
+  // Solo el efectivo entra a la gaveta; los demás métodos se registran pero no
+  // afectan el efectivo esperado del cierre (el backend ya lo ignora).
+  const afectaCaja = esEfectivo(metodo);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -119,6 +127,7 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
       body: JSON.stringify({
         turnoId,
         tipo,
+        metodo,
         monto: montoNum,
         descripcion: descripcion || undefined,
         motivo: motivo || undefined,
@@ -142,7 +151,17 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
         <h2 className="text-base font-semibold text-gray-900">Registrar movimiento</h2>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700">Tipo</label>
+            {/* Dirección del dinero, visible al elegir el tipo. */}
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+              esEntrada ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'
+            }`}>
+              {esEntrada
+                ? <><ArrowDownCircle className="h-3 w-3" /> Entra dinero</>
+                : <><ArrowUpCircle className="h-3 w-3" /> Sale dinero</>}
+            </span>
+          </div>
           <select
             value={tipo}
             onChange={e => setTipo(e.target.value)}
@@ -150,6 +169,22 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
           >
             {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Método / saldo</label>
+          <select
+            value={metodo}
+            onChange={e => setMetodo(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            {METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+          {!afectaCaja && (
+            <p className="mt-1 text-[11px] text-gray-400">
+              No afecta el efectivo en caja — se aplica a {METODO_LABELS[metodo] ?? metodo}.
+            </p>
+          )}
         </div>
 
         <div>
@@ -747,7 +782,17 @@ export default function CajaPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-700 truncate">{m.descripcion ?? m.motivo ?? '—'}</p>
-                    <p className="text-xs text-gray-400">{fmtHora(m.createdAt)}</p>
+                    <p className="text-xs text-gray-400 flex flex-wrap items-center gap-x-1.5">
+                      <span>{fmtHora(m.createdAt)}</span>
+                      <span className="text-gray-300">·</span>
+                      {/* Método del movimiento + si toca o no el efectivo en caja */}
+                      <span className="inline-flex items-center gap-1">
+                        <span className="text-gray-500 font-medium">{METODO_LABELS[m.metodo] ?? m.metodo}</span>
+                        {esEfectivo(m.metodo)
+                          ? <span className="text-[10px] text-emerald-600">afecta caja</span>
+                          : <span className="text-[10px] text-gray-400">no afecta caja</span>}
+                      </span>
+                    </p>
                   </div>
                   <span className={`text-sm font-semibold tabular-nums ${
                     ['ENTRADA', 'AJUSTE'].includes(m.tipo) ? 'text-emerald-700' : 'text-red-700'

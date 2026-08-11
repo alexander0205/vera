@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Printer, ArrowLeft, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { labelMetodo, esEfectivo } from '@/lib/pagos/metodos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -476,6 +477,7 @@ export default function ImprimirCajaPage() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Hora</th>
                     <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Tipo</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Método</th>
                     <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Descripción</th>
                     <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Monto</th>
                   </tr>
@@ -489,6 +491,10 @@ export default function ImprimirCajaPage() {
                           {new Date(m.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td className="px-3 py-2 text-gray-700">{TIPO_LABEL[m.tipo] ?? m.tipo}</td>
+                        <td className="px-3 py-2 text-gray-600 text-xs whitespace-nowrap">
+                          {labelMetodo(m.metodo)}
+                          {!esEfectivo(m.metodo) && <span className="text-gray-400"> (no afecta caja)</span>}
+                        </td>
                         <td className="px-3 py-2 text-gray-600 text-xs">{m.descripcion ?? m.motivo ?? '—'}</td>
                         <td className={`px-3 py-2 text-right tabular-nums font-medium ${suma ? 'text-emerald-700' : 'text-red-700'}`}>
                           {suma ? '+' : '−'} DOP {fmt(m.montoCentavos)}
