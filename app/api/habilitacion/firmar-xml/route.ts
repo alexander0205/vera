@@ -16,8 +16,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { z } from 'zod';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { logAudit, getIp } from '@/lib/audit';
 import { rateLimitDb } from '@/lib/rate-limit';
 import { contribuyentes, EcfApiError, type TipoDocumentoFirma } from '@/lib/ecf-api/client';
@@ -48,11 +48,12 @@ function mapTipoDocumento(proposito: string): TipoDocumentoFirma | undefined {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUser();
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-    const teamId = await getTeamIdForUser();
-    if (!teamId) return NextResponse.json({ error: 'Sin empresa' }, { status: 403 });
+    // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+    // con el que el nav ya gatea la pantalla, y el mismo que usan el resto de
+    // las rutas de habilitación.
+    const auth = await requirePermission('configuracion:gestionar');
+    if (!auth.ok) return auth.response;
+    const { user, teamId } = auth;
 
     const body   = await request.json().catch(() => ({}));
     const parsed = bodySchema.safeParse(body);

@@ -31,7 +31,20 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   // pdf-parse / pdfjs-dist cargan su worker desde node_modules en runtime;
   // si Next los bundlea, el worker no se resuelve. Mantenerlos externos.
-  serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
+  //
+  // sharp va acá por lo mismo pero con una vuelta más: resuelve su binario
+  // nativo (@img/sharp-linux-x64 + libvips) en tiempo de ejecución, así que
+  // bundlearlo lo rompe. Ver también outputFileTracingIncludes abajo.
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist', 'sharp'],
+
+  // El trazado estático no siempre sigue las dependencias opcionales por
+  // plataforma de sharp, y sin ellas la función arranca sin el binario: en
+  // producción las miniaturas de los comprobantes dejaron de generarse en
+  // silencio. Se fuerza su copia para las rutas que las usan.
+  outputFileTracingIncludes: {
+    '/api/pagos/adjuntos': ['./node_modules/.pnpm/@img+sharp-linux-x64*/**', './node_modules/.pnpm/@img+sharp-libvips-linux-x64*/**'],
+    '/api/pagos/adjuntos/[id]': ['./node_modules/.pnpm/@img+sharp-linux-x64*/**', './node_modules/.pnpm/@img+sharp-libvips-linux-x64*/**'],
+  },
   allowedDevOrigins: ['10.0.0.63', '*.trycloudflare.com', '*.ngrok-free.app', '*.ngrok.app'],
   experimental: {
     ppr: true,

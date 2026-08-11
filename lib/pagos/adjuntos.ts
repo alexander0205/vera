@@ -113,7 +113,10 @@ async function generarThumb(buffer: Buffer, mime: string): Promise<Buffer | null
       .resize(THUMB_LADO, THUMB_LADO, { fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 72 })
       .toBuffer();
-  } catch {
+  } catch (e) {
+    // Sin este log el fallo era invisible: la galería caía al original y nadie
+    // se enteraba de que la miniatura llevaba días sin generarse.
+    console.error('[comprobantes] sharp no pudo generar la miniatura', e);
     return null;
   }
 }
@@ -135,7 +138,8 @@ async function limpiarMetadatos(buffer: Buffer, mime: string): Promise<Buffer> {
                  : await img.jpeg({ quality: 90 }).toBuffer();
     // Si reencodear engordó el archivo, quedarse con el original.
     return limpio.length < buffer.length ? limpio : buffer;
-  } catch {
+  } catch (e) {
+    console.error('[comprobantes] sharp no pudo limpiar metadatos; se guarda el original', e);
     return buffer;
   }
 }
@@ -198,7 +202,10 @@ export async function guardarAdjunto(input: {
       // Si falla solo la miniatura, el comprobante igual queda subido: la
       // galería cae al ícono en vez de perderse el archivo.
       await subirComprobante(thumbS3Key, thumb, 'image/jpeg')
-        .catch(() => { thumbS3Key = null; });
+        .catch(e => {
+          console.error('[comprobantes] no se pudo subir la miniatura a S3', e);
+          thumbS3Key = null;
+        });
     }
   } else {
     contenido = buffer.toString('base64');
