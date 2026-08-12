@@ -171,6 +171,9 @@ export const teamMembers = pgTable('team_members', {
     .references(() => teams.id),
   role: varchar('role', { length: 50 }).notNull(),
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
+  // PIN de autorización del POS (4–6 dígitos). Un supervisor (admin/owner) lo
+  // configura para autorizar que un cajero quite un ítem de un recibo cobrado.
+  posPin: varchar('pos_pin', { length: 6 }),
 });
 
 // ── Roles por empresa (permisos editables) ──────────────────────────────────

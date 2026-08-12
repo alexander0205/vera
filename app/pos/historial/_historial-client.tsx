@@ -19,7 +19,8 @@ import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
-import { ReceiptText, X, Printer, Undo2, Trash2, RefreshCw } from 'lucide-react';
+import TextField from '@mui/material/TextField';
+import { ReceiptText, X, Printer, Undo2, Trash2, RefreshCw, Pencil } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
 const fmt = (c: number) => (c / 100).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -31,6 +32,13 @@ const METODO_LABEL: Record<string, string> = {
 const TIPO_ORDEN_LABEL: Record<string, string> = {
   'comer-aqui': 'Comer aquí', 'para-llevar': 'Para llevar', 'delivery': 'Delivery', 'mostrador': 'Mostrador',
 };
+// Estado de cobro → badge en la tarjeta. ANULADA se muestra aparte ("Anulado").
+const PAGO_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  'PAGADA':    { label: 'Pagado',    bg: '#dcfce7', color: '#166534' },
+  'PARCIAL':   { label: 'Parcial',   bg: '#fef3c7', color: '#92400e' },
+  'PENDIENTE': { label: 'No pagado', bg: '#fee2e2', color: '#991b1b' },
+  'GRATUITA':  { label: 'Gratis',    bg: '#e0e7ff', color: '#3730a3' },
+};
 const METODOS = ['efectivo', 'tarjeta', 'transferencia', 'cuenta-estudiante', 'credito'] as const;
 const TIPOS_ORDEN = ['comer-aqui', 'para-llevar', 'delivery', 'mostrador'] as const;
 
@@ -40,6 +48,7 @@ interface Venta {
   encf: string;
   tipoEcf: string;
   estado: string;
+  estadoPago: string;
   tipoOrden: string | null;
   montoTotal: number;
   cliente: string;
@@ -60,8 +69,10 @@ interface Ticket {
 
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
 
-export default function PosHistorialClient() {
+export default function PosHistorialClient({ modoMesas = false }: { modoMesas?: boolean } = {}) {
   const { can } = usePermissions();
+  // Fuera de modo restaurante, "Comer aquí" no aplica: se oculta del filtro.
+  const tiposOrdenVisibles = modoMesas ? TIPOS_ORDEN : TIPOS_ORDEN.filter((t) => t !== 'comer-aqui');
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [sinTurno, setSinTurno] = useState(false);
@@ -122,13 +133,14 @@ export default function PosHistorialClient() {
         <FiltroFila etiqueta="Método" valor={metodo} onChange={setMetodo}
           opciones={METODOS.map((m) => ({ value: m, label: METODO_LABEL[m] }))} />
         <FiltroFila etiqueta="Tipo de orden" valor={tipoOrden} onChange={setTipoOrden}
-          opciones={TIPOS_ORDEN.map((t) => ({ value: t, label: TIPO_ORDEN_LABEL[t] }))} />
+          opciones={tiposOrdenVisibles.map((t) => ({ value: t, label: TIPO_ORDEN_LABEL[t] }))} />
       </Box>
 
       {sel && (
         <ReciboDrawer
           venta={sel}
           puedeAnular={can('pos:anular')}
+          puedeQuitarPin={can('pos:quitar-item-pin')}
           onClose={() => setSel(null)}
           onAnulada={() => { setSel(null); cargar(); }}
         />
@@ -150,14 +162,19 @@ function FiltroFila({ etiqueta, valor, onChange, opciones }: {
   etiqueta: string; valor: string | null; onChange: (v: string | null) => void;
   opciones: { value: string; label: string }[];
 }) {
+  const chipSx = (activo: boolean) => ({
+    fontSize: 14, height: 40, borderRadius: '10px', px: 0.5,
+    '& .MuiChip-label': { px: 1.75 },
+    bgcolor: activo ? '#3658e1' : '#f3f4f6', color: activo ? '#fff' : '#374151',
+    fontWeight: activo ? 600 : 500,
+    '&:hover': { bgcolor: activo ? '#2a45c4' : '#e5e7eb' },
+  });
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, flexWrap: 'wrap' }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', width: 96, flexShrink: 0 }}>{etiqueta}</Typography>
-      <Chip label="Todos" size="small" onClick={() => onChange(null)}
-        sx={{ fontSize: 12, height: 26, bgcolor: valor == null ? '#3658e1' : '#f3f4f6', color: valor == null ? '#fff' : '#374151', fontWeight: valor == null ? 600 : 500 }} />
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, flexWrap: 'wrap' }}>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', width: 110, flexShrink: 0 }}>{etiqueta}</Typography>
+      <Chip label="Todos" onClick={() => onChange(null)} sx={chipSx(valor == null)} />
       {opciones.map((o) => (
-        <Chip key={o.value} label={o.label} size="small" onClick={() => onChange(o.value)}
-          sx={{ fontSize: 12, height: 26, bgcolor: valor === o.value ? '#3658e1' : '#f3f4f6', color: valor === o.value ? '#fff' : '#374151', fontWeight: valor === o.value ? 600 : 500 }} />
+        <Chip key={o.value} label={o.label} onClick={() => onChange(o.value)} sx={chipSx(valor === o.value)} />
       ))}
     </Box>
   );
@@ -193,7 +210,12 @@ function TarjetaVenta({ v, onClick }: { v: Venta; onClick: () => void }) {
       </Typography>
 
       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-        {anulado && <Chip label="Anulado" size="small" sx={{ height: 22, fontSize: 11, bgcolor: '#fee2e2', color: '#991b1b', fontWeight: 600 }} />}
+        {anulado ? (
+          <Chip label="Anulado" size="small" sx={{ height: 22, fontSize: 11, bgcolor: '#fee2e2', color: '#991b1b', fontWeight: 600 }} />
+        ) : PAGO_BADGE[v.estadoPago] && (
+          <Chip label={PAGO_BADGE[v.estadoPago].label} size="small"
+            sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: PAGO_BADGE[v.estadoPago].bg, color: PAGO_BADGE[v.estadoPago].color }} />
+        )}
         {v.tipoOrden && <Chip label={TIPO_ORDEN_LABEL[v.tipoOrden] ?? v.tipoOrden} size="small" sx={{ height: 22, fontSize: 11, bgcolor: '#eef2fe', color: '#3658e1', fontWeight: 600 }} />}
         {v.metodos.map((m) => (
           <Chip key={m} label={METODO_LABEL[m] ?? m} size="small" sx={{ height: 22, fontSize: 11, bgcolor: '#f3f4f6', color: '#374151' }} />
@@ -203,17 +225,31 @@ function TarjetaVenta({ v, onClick }: { v: Venta; onClick: () => void }) {
   );
 }
 
-function ReciboDrawer({ venta, puedeAnular, onClose, onAnulada }: {
-  venta: Venta; puedeAnular: boolean; onClose: () => void; onAnulada: () => void;
+function ReciboDrawer({ venta, puedeAnular, puedeQuitarPin, onClose, onAnulada }: {
+  venta: Venta; puedeAnular: boolean; puedeQuitarPin: boolean; onClose: () => void; onAnulada: () => void;
 }) {
   const router = useRouter();
   const [t, setT] = useState<Ticket | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmar, setConfirmar] = useState<'eliminar' | 'unsettle' | null>(null);
   const [procesando, setProcesando] = useState(false);
+  // Cajero quitando un ítem con PIN: índice de la línea elegida.
+  const [quitarLinea, setQuitarLinea] = useState<number | null>(null);
 
   const anulado = venta.estado === 'ANULADO';
-  const tieneMesa = venta.mesa != null;   // unsettle solo aplica a órdenes de mesa
+  // Un e-CF ACEPTADO por la DGII es inmutable: no se edita ni se hace unsettle;
+  // su única reversa es una Nota de Crédito (tipo 34). El botón Eliminar, en ese
+  // caso, redirige al formulario de NC (el backend responde requiereNotaCredito).
+  const aceptadoDgii = ['ACEPTADO', 'ACEPTADO_CONDICIONAL'].includes(venta.estado);
+  // En proceso = enviado a la DGII, esperando respuesta: no se toca en vuelo.
+  const enProceso = venta.estado === 'EN_PROCESO';
+  // (Editable en el POS = el caso restante: sin-ncf / borrador / rechazado.)
+  const editable = !anulado && !aceptadoDgii && !enProceso;
+  // Cajero (sin pos:anular) puede quitar un ítem con el PIN de un supervisor.
+  const cajeroQuita = puedeQuitarPin && !puedeAnular && editable;
+  // "Marcar no pagado" (unsettle) solo tiene sentido si hay un cobro que revertir.
+  const tienePago = ['PAGADA', 'PARCIAL'].includes(venta.estadoPago);
+  const irAEditar = () => router.push(`/pos/historial/${venta.id}/editar`);
 
   useEffect(() => {
     fetch(`/api/pos/ticket/${venta.id}`)
@@ -221,6 +257,29 @@ function ReciboDrawer({ venta, puedeAnular, onClose, onAnulada }: {
       .then(setT)
       .catch((e) => setError(typeof e === 'string' ? e : 'No se pudo cargar el recibo'));
   }, [venta.id]);
+
+  async function quitarItem(pin: string) {
+    if (quitarLinea == null) return;
+    setProcesando(true);
+    try {
+      const res = await fetch(`/api/pos/venta/${venta.id}/quitar-item`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineaIndex: quitarLinea, pin }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error ?? 'No se pudo quitar el ítem'); return; }
+      if (data.requiereNotaCredito) {
+        toast.info('Requiere Nota de Crédito — te llevo al formulario');
+        router.push(data.redirectTo);
+        return;
+      }
+      toast.success(data.devolucionCts > 0 ? `Ítem quitado. Devolución ${fmt(data.devolucionCts)}` : 'Ítem quitado');
+      setQuitarLinea(null);
+      onAnulada();
+    } finally {
+      setProcesando(false);
+    }
+  }
 
   async function anular(modo: 'eliminar' | 'unsettle') {
     setProcesando(true);
@@ -237,9 +296,7 @@ function ReciboDrawer({ venta, puedeAnular, onClose, onAnulada }: {
         router.push(data.redirectTo);
         return;
       }
-      toast.success(modo === 'unsettle'
-        ? (data.comandaReabierta ? 'Orden reabierta en la mesa' : 'Recibo anulado')
-        : 'Recibo eliminado');
+      toast.success(modo === 'unsettle' ? 'Recibo marcado como no pagado' : 'Recibo eliminado');
       onAnulada();
     } finally {
       setProcesando(false);
@@ -274,9 +331,16 @@ function ReciboDrawer({ venta, puedeAnular, onClose, onAnulada }: {
 
             <Box sx={{ mb: 1.5 }}>
               {t.lineas.map((l, i) => (
-                <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, py: 0.25 }}>
+                <Box key={i} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, fontSize: 13, py: 0.25 }}>
                   <span>{l.cantidadItem}× {l.nombreItem}</span>
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(Math.round(l.precioUnitarioItem * l.cantidadItem * 100))}</span>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(Math.round(l.precioUnitarioItem * l.cantidadItem * 100))}</span>
+                    {cajeroQuita && t.lineas.length > 1 && (
+                      <IconButton onClick={() => setQuitarLinea(i)} size="small" title="Quitar ítem (requiere PIN)" sx={{ color: '#dc2626', p: 0.25 }}>
+                        <Trash2 style={{ width: 15, height: 15 }} />
+                      </IconButton>
+                    )}
+                  </Box>
                 </Box>
               ))}
               {t.lineas.length === 0 && <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>(sin detalle de líneas)</Typography>}
@@ -310,14 +374,22 @@ function ReciboDrawer({ venta, puedeAnular, onClose, onAnulada }: {
                 </Box>
               ) : !puedeAnular ? (
                 <Box sx={{ mt: 0.5, textAlign: 'center', fontSize: 12, color: '#9ca3af' }}>
-                  Solo un administrador puede anular o reabrir recibos.
+                  {cajeroQuita
+                    ? 'Para quitar un ítem, toca la papelera junto a la línea (pide el PIN de un supervisor).'
+                    : 'Solo un administrador puede anular o reabrir recibos.'}
+                </Box>
+              ) : enProceso ? (
+                <Box sx={{ mt: 0.5, borderRadius: '10px', border: '1px solid #fde68a', bgcolor: '#fffbeb', p: 1.25, fontSize: 12, color: '#92400e', textAlign: 'center' }}>
+                  Comprobante en proceso en la DGII. Espera la respuesta para poder anularlo.
                 </Box>
               ) : confirmar ? (
                 <Box sx={{ mt: 0.5, borderRadius: '10px', border: '1px solid #fecaca', bgcolor: '#fef2f2', p: 1.25 }}>
                   <Typography sx={{ fontSize: 13, color: '#991b1b', mb: 1 }}>
-                    {confirmar === 'unsettle'
-                      ? '¿Anular el cobro y reabrir la orden en la mesa?'
-                      : '¿Anular este recibo? Se revierte el cobro y se restaura el inventario.'}
+                    {aceptadoDgii
+                      ? 'Este comprobante fue aceptado por la DGII y no se puede borrar. Su anulación se hace con una Nota de Crédito (tipo 34). Te llevamos al formulario.'
+                      : confirmar === 'unsettle'
+                        ? '¿Marcar este recibo como NO pagado? Se revierte el cobro; la venta y su inventario se conservan.'
+                        : '¿Anular este recibo? Se revierte el cobro y se restaura el inventario.'}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button fullWidth size="small" variant="outlined" disabled={procesando}
@@ -328,29 +400,99 @@ function ReciboDrawer({ venta, puedeAnular, onClose, onAnulada }: {
                     <Button fullWidth size="small" variant="contained" disableElevation disabled={procesando}
                       onClick={() => anular(confirmar)}
                       sx={{ textTransform: 'none', bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' } }}>
-                      {procesando ? 'Anulando…' : 'Sí, anular'}
+                      {procesando ? 'Procesando…' : aceptadoDgii ? 'Ir a Nota de Crédito' : confirmar === 'unsettle' ? 'Sí, marcar no pagado' : 'Sí, anular'}
                     </Button>
                   </Box>
                 </Box>
-              ) : (
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  {tieneMesa && (
-                    <Button fullWidth variant="outlined" startIcon={<Undo2 style={{ width: 15, height: 15 }} />}
-                      onClick={() => setConfirmar('unsettle')}
-                      sx={{ textTransform: 'none', color: '#b45309', borderColor: '#fcd34d' }}>
-                      Unsettle
-                    </Button>
-                  )}
+              ) : aceptadoDgii ? (
+                // e-CF aceptado: NO se edita ni se hace unsettle. Solo "Eliminar",
+                // que en realidad emite la Nota de Crédito (handoff, no borra en el POS).
+                <>
+                  <Box sx={{ borderRadius: '8px', bgcolor: '#eff6ff', p: 1, fontSize: 12, color: '#1e40af', textAlign: 'center' }}>
+                    Comprobante fiscal emitido. Su reversa es una Nota de Crédito.
+                  </Box>
                   <Button fullWidth variant="outlined" startIcon={<Trash2 style={{ width: 15, height: 15 }} />}
                     onClick={() => setConfirmar('eliminar')}
                     sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
                     Eliminar
                   </Button>
-                </Box>
+                </>
+              ) : (
+                // Editable en el POS (sin-ncf / borrador / rechazado): añadir, quitar, unsettle.
+                <>
+                  <Button fullWidth variant="outlined" startIcon={<Pencil style={{ width: 15, height: 15 }} />}
+                    onClick={irAEditar}
+                    sx={{ textTransform: 'none', color: '#2a45c4', borderColor: '#c7d2fe' }}>
+                    Editar
+                  </Button>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    {/* Unsettle: solo si el recibo tiene un cobro que revertir. */}
+                    {tienePago && (
+                      <Button fullWidth variant="outlined" startIcon={<Undo2 style={{ width: 15, height: 15 }} />}
+                        onClick={() => setConfirmar('unsettle')}
+                        sx={{ textTransform: 'none', color: '#b45309', borderColor: '#fcd34d' }}>
+                        Marcar no pagado
+                      </Button>
+                    )}
+                    <Button fullWidth variant="outlined" startIcon={<Trash2 style={{ width: 15, height: 15 }} />}
+                      onClick={() => setConfirmar('eliminar')}
+                      sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
+                      Eliminar
+                    </Button>
+                  </Box>
+                </>
               )}
             </Box>
           </>
         )}
+      </Box>
+
+      {quitarLinea != null && t && (
+        <QuitarItemPinDialog
+          nombre={t.lineas[quitarLinea]?.nombreItem ?? 'este ítem'}
+          procesando={procesando}
+          onCancel={() => setQuitarLinea(null)}
+          onConfirm={quitarItem}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+// ─── Cajero: quitar un ítem con PIN de supervisor ────────────────────────────
+
+function QuitarItemPinDialog({ nombre, procesando, onCancel, onConfirm }: {
+  nombre: string; procesando: boolean; onCancel: () => void; onConfirm: (pin: string) => void;
+}) {
+  const [pin, setPin] = useState('');
+  const valido = /^\d{4,6}$/.test(pin);
+  return (
+    <Dialog open onClose={onCancel} fullWidth slotProps={{ paper: { sx: { maxWidth: 380, m: 2, borderRadius: '14px' } } }}>
+      <Box sx={{ p: 2.5 }}>
+        <Typography sx={{ fontSize: 16, fontWeight: 700, mb: 1 }}>¿Estás seguro que lo quieres eliminar?</Typography>
+        <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 2 }}>
+          Se quitará <b>{nombre}</b> de la factura y se devolverá lo pagado por ese ítem. Un supervisor debe autorizarlo con su PIN.
+        </Typography>
+        <TextField
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          type="password"
+          inputMode="numeric"
+          autoFocus
+          fullWidth
+          label="PIN de supervisor"
+          placeholder="••••"
+          onKeyDown={(e) => { if (e.key === 'Enter' && valido && !procesando) onConfirm(pin); }}
+          sx={{ mb: 2 }}
+        />
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button fullWidth variant="outlined" onClick={onCancel} disabled={procesando} sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }}>Cancelar</Button>
+          <Button fullWidth variant="contained" disableElevation disabled={!valido || procesando}
+            onClick={() => onConfirm(pin)} startIcon={<Trash2 style={{ width: 15, height: 15 }} />}
+            sx={{ textTransform: 'none', bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' }, '&.Mui-disabled': { opacity: 0.5 } }}>
+            {procesando ? 'Procesando…' : 'Quitar ítem'}
+          </Button>
+        </Box>
       </Box>
     </Dialog>
   );

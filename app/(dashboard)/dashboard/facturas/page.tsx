@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Mail, Ban, FileText, Upload, Eye, Printer,
+  Plus, Download, Mail, Ban, FileText, Upload, Eye, Printer, Store,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
@@ -95,6 +95,7 @@ interface Doc {
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
+  turnoCajaId?: number | null;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -222,6 +223,21 @@ export default function FacturasPage() {
           >
             {doc.codigo ?? `#${doc.id}`}
           </Typography>
+          {doc.turnoCajaId != null && (
+            <Chip
+              icon={<Store style={{ width: 11, height: 11 }} />}
+              label="POS"
+              size="small"
+              title="Venta hecha en el Punto de Venta"
+              sx={{
+                mt: '3px', height: 18, borderRadius: '6px',
+                bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fe',
+                fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.03em',
+                '& .MuiChip-label': { px: '5px' },
+                '& .MuiChip-icon': { ml: '4px', mr: '-2px', color: '#2a45c4' },
+              }}
+            />
+          )}
         </Link>
       ),
     },

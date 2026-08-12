@@ -4,7 +4,9 @@
  *
  * Body: { modo: 'eliminar' | 'unsettle' }
  *   - eliminar → la venta queda ANULADA en el historial (no se borra la fila).
- *   - unsettle → además reabre la comanda (mesa) para volver a cobrarla.
+ *   - unsettle → NO anula: solo revierte el cobro y deja el recibo como NO PAGADO
+ *     (estadoPago = PENDIENTE). El documento y su inventario quedan intactos; solo
+ *     deja de contar como pagado. No abre el editor ni reabre comandas.
  *
  * Anular una venta interna (sin-ncf / borrador / rechazado) se hace en-app:
  * marca ANULADO, revierte los pagos (→ la reversa de caja es automática porque
@@ -23,7 +25,6 @@ import { logAudit, getIp } from '@/lib/audit';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos } from '@/lib/db/schema';
 import { restaurarInventario } from '@/lib/inventario/devolucion';
-import { reabrirComanda } from '@/lib/pos/restaurante';
 
 // Estados que ya pasaron por la DGII y fueron aceptados: la reversa fiscal es
 // una Nota de Crédito, no una anulación local.
@@ -71,6 +72,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (doc.estado === 'ANULADO') {
     return NextResponse.json({ error: 'El recibo ya está anulado' }, { status: 409 });
   }
+  // Enviado a la DGII y esperando respuesta: no se anula en vuelo (espera el ACEPTADO
+  // para reversar con Nota de Crédito, o el RECHAZADO para anular en local).
+  if (doc.estado === 'EN_PROCESO') {
+    return NextResponse.json({ error: 'Comprobante en proceso en la DGII; espera la respuesta.' }, { status: 409 });
+  }
 
   // e-CF fiscal aceptado → handoff a la Nota de Crédito (no se muta nada).
   if (REQUIERE_NOTA_CREDITO.includes(doc.estado)) {
@@ -79,6 +85,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       redirectTo: `/dashboard/notas-credito/nueva?padreId=${doc.id}`,
       mensaje: 'Este comprobante fue aceptado por la DGII. Su reversa formal es una Nota de Crédito (tipo 34).',
     });
+  }
+
+  // ── Unsettle: dejar el recibo como NO PAGADO, sin anular ───────────────────
+  // Revierte solo el cobro (borra pagos_recibidos → la caja reconcilia sola) y
+  // marca estadoPago = PENDIENTE. El documento y su inventario NO se tocan: la
+  // venta sigue válida, solo deja de contar como pagada.
+  if (modo === 'unsettle') {
+    await db.delete(pagosRecibidos).where(eq(pagosRecibidos.ecfDocumentId, id));
+    await db.update(ecfDocuments).set({
+      estadoPago: 'PENDIENTE',
+      pagoRecibido: 'false',
+      updatedBy: user.id,
+      updatedAt: new Date(),
+    }).where(eq(ecfDocuments.id, id));
+
+    logAudit({
+      teamId, userId: user.id, actor: user.email,
+      action: 'POS_VENTA_UNSETTLE', resource: `ecf:${id}`, ip: getIp(req),
+      meta: { encf: doc.encf, modo },
+    });
+    return NextResponse.json({ ok: true, estadoPago: 'PENDIENTE', modo });
   }
 
   // ── Anulación interna (sin-ncf / borrador / rechazado) ─────────────────────
@@ -111,19 +138,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
-  // Unsettle: reabrir la comanda (mesa) si la venta vino de una.
-  let comandaReabierta = false;
-  if (modo === 'unsettle') {
-    const reab = await reabrirComanda(teamId, id);
-    comandaReabierta = reab != null;
-  }
-
   logAudit({
     teamId, userId: user.id, actor: user.email,
-    action: modo === 'unsettle' ? 'POS_VENTA_UNSETTLE' : 'POS_VENTA_ELIMINAR',
+    action: 'POS_VENTA_ELIMINAR',
     resource: `ecf:${id}`, ip: getIp(req),
-    meta: { encf: doc.encf, modo, comandaReabierta },
+    meta: { encf: doc.encf, modo },
   });
 
-  return NextResponse.json({ ok: true, estado: 'ANULADO', modo, comandaReabierta });
+  return NextResponse.json({ ok: true, estado: 'ANULADO', modo });
 }

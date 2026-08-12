@@ -63,7 +63,8 @@ export type Permission =
   // Punto de venta (POS)
   | 'pos:vender'     // abrir terminal, vender y cobrar en el POS (cajero)
   | 'pos:configurar' // crear/editar terminales y config del POS (admin/owner)
-  | 'pos:anular'     // anular/unsettle recibos ya cobrados en el POS (admin/owner)
+  | 'pos:anular'     // editar/eliminar/anular/unsettle recibos ya cobrados (admin/owner)
+  | 'pos:quitar-item-pin' // cajero: quitar un ítem de un recibo cobrado autorizando con el PIN de un supervisor
   // Acceso por módulo del producto (facturación / POS). El acceso efectivo de
   // un usuario a un módulo = módulo activo en la empresa (teams.modulosHabilitados)
   // ∩ este permiso en su rol. Ver lib/auth/modules.ts.
@@ -141,7 +142,7 @@ export const ROLES: RoleDef[] = [
       'compras:ver',
       'maestros:gestionar',
       'caja:ver', 'caja:operar', 'caja:aprobar',
-      'pos:vender', 'pos:configurar', 'pos:anular',
+      'pos:vender', 'pos:configurar', 'pos:anular', 'pos:quitar-item-pin',
       'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
       'suscripcion:gestionar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
@@ -168,7 +169,7 @@ export const ROLES: RoleDef[] = [
       'caja:ver', 'caja:operar', 'caja:aprobar',
       'administracion-escolar:ver', 'administracion-escolar:gestionar', 'administracion-escolar:configurar', 'administracion-escolar:pagos',
       'contabilidad:ver', 'contabilidad:gestionar', 'contabilidad:configurar',
-      'pos:vender', 'pos:configurar', 'pos:anular',
+      'pos:vender', 'pos:configurar', 'pos:anular', 'pos:quitar-item-pin',
       'modulo:facturacion', 'modulo:administracion', 'modulo:pos', 'modulo:escolar',
     ],
     ui: { color: 'text-purple-600 bg-purple-50 border-purple-200', icon: 'Shield'     },
@@ -192,7 +193,7 @@ export const ROLES: RoleDef[] = [
       // estudiantes. El colegio se atiende con 'personal-escolar'.
       // Solo lectura contable: el vendedor consulta secuencias y e-NCF, no toca asientos.
       'contabilidad:ver',
-      'pos:vender',
+      'pos:vender', 'pos:quitar-item-pin',
       'modulo:facturacion', 'modulo:administracion', 'modulo:pos',
     ],
     ui: { color: 'text-zero-600 bg-zero-50 border-zero-200',       icon: 'User'       },
@@ -229,7 +230,7 @@ export const ROLES: RoleDef[] = [
       'clientes:ver', 'clientes:gestionar',
       'productos:ver',
       'caja:ver', 'caja:operar',
-      'pos:vender',
+      'pos:vender', 'pos:quitar-item-pin',
       'modulo:pos', 'modulo:administracion',
     ],
     ui: { color: 'text-zero-600 bg-zero-50 border-zero-200', icon: 'Store' },
@@ -303,9 +304,10 @@ export const PERMISSION_CATALOG: PermissionGroup[] = [
     { key: 'caja:aprobar', label: 'Aprobar cierres y descuadres' },
   ]},
   { module: 'Punto de venta', icon: 'Store', permissions: [
-    { key: 'pos:vender',     label: 'Vender y cobrar (cajero)' },
-    { key: 'pos:configurar', label: 'Configurar terminales del POS' },
-    { key: 'pos:anular',     label: 'Anular / reabrir recibos cobrados' },
+    { key: 'pos:vender',          label: 'Vender y cobrar (cajero)' },
+    { key: 'pos:configurar',      label: 'Configurar terminales del POS' },
+    { key: 'pos:anular',          label: 'Editar / eliminar / anular recibos cobrados (admin)' },
+    { key: 'pos:quitar-item-pin', label: 'Quitar ítem de un recibo con PIN de supervisor' },
   ]},
   { module: 'Acceso a módulos', icon: 'LayoutGrid', permissions: [
     { key: 'modulo:facturacion',    label: 'Acceso al módulo Facturación' },

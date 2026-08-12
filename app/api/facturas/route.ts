@@ -120,6 +120,8 @@ export async function GET(req: NextRequest) {
         )`,
         createdByName:     users.name,
         dependienteNombre: ecfDocuments.dependienteNombre,
+        // Ventas del POS traen turno de caja: se resaltan en el listado.
+        turnoCajaId:       ecfDocuments.turnoCajaId,
       })
       .from(ecfDocuments)
       .leftJoin(users, eq(users.id, ecfDocuments.createdBy))
