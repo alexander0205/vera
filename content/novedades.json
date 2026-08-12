@@ -27,7 +27,13 @@
   ],
   "pendiente": {
     "titulo": "",
-    "cambios": []
+    "cambios": [
+      {
+        "tipo": "mejora",
+        "titulo": "Más protección para los datos de tus clientes",
+        "detalle": "Reforzamos las reglas internas para que una copia de seguridad de la base de datos no pueda subirse por error a nuestro repositorio de código. Nada tuyo estuvo expuesto: es una barrera preventiva."
+      }
+    ]
   },
   "versiones": [
     {
