@@ -27,15 +27,21 @@
   ],
   "pendiente": {
     "titulo": "",
-    "cambios": [
-      {
-        "tipo": "mejora",
-        "titulo": "Novedades al día",
-        "detalle": "Esta pantalla llevaba desde julio sin actualizarse por un fallo nuestro: lo que escribíamos en cada actualización no llegaba a publicarse. Ya está corregido, y aquí abajo tienes el historial completo de lo que cambió en los últimos meses."
-      }
-    ]
+    "cambios": []
   },
   "versiones": [
+    {
+      "version": "1.21.1",
+      "fecha": "2026-08-12",
+      "titulo": "Novedades al día",
+      "cambios": [
+        {
+          "tipo": "mejora",
+          "titulo": "Novedades al día",
+          "detalle": "Esta pantalla llevaba desde julio sin actualizarse por un fallo nuestro: lo que escribíamos en cada actualización no llegaba a publicarse. Ya está corregido, y aquí abajo tienes el historial completo de lo que cambió en los últimos meses."
+        }
+      ]
+    },
     {
       "version": "1.21.0",
       "fecha": "2026-08-12",
