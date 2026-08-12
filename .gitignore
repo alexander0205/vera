@@ -32,6 +32,18 @@ yarn-error.log*
 !.env.*.example
 *.bak
 
+# volcados de base de datos — NUNCA al repo
+# Traen datos reales de clientes (RNC, correos, montos, comprobantes fiscales).
+# Un `git add -A` con un dump suelto los sube a GitHub, y del historial de git
+# no se quitan con un commit encima: hay que reescribir el historial entero.
+# Por eso van por patrón y no por carpeta: el dump aparece donde caiga.
+db-backups/
+*.dump
+*.sql
+*.sql.gz
+*.pgdump
+!lib/db/migrations/*.sql
+
 # vercel
 .vercel
 
