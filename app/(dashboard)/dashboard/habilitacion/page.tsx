@@ -1591,8 +1591,8 @@ function PhasePruebas({ onComplete, onBack }: { onComplete: () => void; onBack: 
             <p className="text-base font-semibold text-gray-900">Hubo un error en las pruebas</p>
             <p className="text-sm text-gray-500 mt-1.5 max-w-md">
               Comunícate con nuestro equipo de soporte:{' '}
-              <a href="mailto:alexander.ferreras@yisraeltech.com" className="font-semibold underline text-gray-700">
-                alexander.ferreras@yisraeltech.com
+              <a href="mailto:info@zero.com.do" className="font-semibold underline text-gray-700">
+                info@zero.com.do
               </a>
             </p>
           </div>
@@ -1763,8 +1763,8 @@ function PhaseImpresa({ onComplete, onBack }: { onComplete: () => void; onBack: 
             <p className="text-base font-semibold text-gray-900">Hubo un error en las pruebas</p>
             <p className="text-sm text-gray-500 mt-1.5 max-w-md">
               Comunícate con nuestro equipo de soporte:{' '}
-              <a href="mailto:alexander.ferreras@yisraeltech.com" className="font-semibold underline text-gray-700">
-                alexander.ferreras@yisraeltech.com
+              <a href="mailto:info@zero.com.do" className="font-semibold underline text-gray-700">
+                info@zero.com.do
               </a>
             </p>
           </div>
@@ -2066,8 +2066,8 @@ function PhaseSimulacion({ onComplete, onBack }: { onComplete: () => void; onBac
             <p className="text-base font-semibold text-gray-900">Hubo un error en las pruebas</p>
             <p className="text-sm text-gray-500 mt-1.5 max-w-md">
               Comunícate con nuestro equipo de soporte:{' '}
-              <a href="mailto:alexander.ferreras@yisraeltech.com" className="font-semibold underline text-gray-700">
-                alexander.ferreras@yisraeltech.com
+              <a href="mailto:info@zero.com.do" className="font-semibold underline text-gray-700">
+                info@zero.com.do
               </a>
             </p>
           </div>
