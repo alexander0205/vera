@@ -29,143 +29,260 @@
     "titulo": "",
     "cambios": [
       {
-        "tipo": "nuevo",
-        "titulo": "Cobra con tarjeta enviando un link",
-        "detalle": "Desde una factura puedes generar un link de pago y mandarlo por WhatsApp, correo o mostrarlo como código QR. Tu cliente paga con tarjeta desde su teléfono y el cobro queda registrado solo, sin que tengas que anotarlo a mano."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Guarda la factura y cobra en un solo paso",
-        "detalle": "Al guardar una factura puedes elegir «Guardar y generar link de pago» y el link aparece al instante, listo para enviar. También puedes generarlo después desde la factura."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Mira en qué va cada link que enviaste",
-        "detalle": "Hay una pantalla nueva con todos los links de pago: cuál se pagó, cuál sigue esperando y por cuánto. Antes no había forma de saber si el cliente ya había pagado sin revisar factura por factura."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "La sesión ya no se cierra sola",
-        "detalle": "En algunos casos el sistema perdía la sesión y mostraba un error raro al guardar. Ahora, si la sesión vence, te lleva al inicio de sesión con un mensaje claro."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "Ya no se pierden facturas en cuentas por cobrar",
-        "detalle": "Algunas facturas con saldo pendiente no aparecían en cuentas por cobrar, incluso cuando ya tenían abonos registrados, y la deuda quedaba fuera de la cartera sin aviso. Ahora se muestran todas."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "Las cotizaciones vuelven a guardarse",
-        "detalle": "Al guardar una cotización aparecía un error técnico y el trabajo se perdía. Ya se guarda normal. Además, si algo llega a fallar del lado del servidor, ahora verás un mensaje que se entiende en vez de un error en inglés."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "Enviar la factura por correo vuelve a funcionar",
-        "detalle": "Al enviar una factura o una cotización por correo salía un error y el cliente nunca la recibía. Ya sale con el PDF adjunto. Además, si el correo llegara a fallar, ahora el sistema lo avisa en vez de decir que se envió."
-      },
-      {
         "tipo": "mejora",
-        "titulo": "El correo de la factura ahora sale a nombre de tu institución",
-        "detalle": "Antes el cliente recibía un correo genérico del sistema. Ahora llega con tu logo, tus colores, tu nombre y tus datos de contacto, y si responde te escribe a ti. Igual para las cotizaciones."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Envía una cotización por correo desde la lista",
-        "detalle": "Antes había que entrar a la cotización para mandarla. Ahora la envías directo desde la lista, y al enviarla pasa sola de borrador a enviada."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Escribe tus términos y condiciones una sola vez",
-        "detalle": "En Configuración puedes dejar guardados los términos y condiciones de tu empresa. A partir de ahí se escriben solos en cada factura, cotización o plan recurrente que crees, y los puedes editar o borrar documento por documento."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "Los beneficiarios ya funcionan en las cotizaciones",
-        "detalle": "El selector de beneficiario por línea salía siempre vacío, así que no se podía cotizar por estudiante. Ahora se elige igual que en la factura, se ve en el PDF y se conserva al convertir la cotización en factura."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "«Convertir a factura» siempre a la vista",
-        "detalle": "El botón vivía en la columna de la derecha, que en pantallas chicas queda al final de la página. Ahora está también en la barra fija de abajo."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "La cotización ya no sale marcada como borrador",
-        "detalle": "El PDF llevaba un sello gigante de BORRADOR cruzando la página mientras la cotización no se hubiera enviado. El cliente recibía un documento que parecía a medio hacer. Ya sale limpio."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "Abre una factura o cotización haciendo clic en cualquier parte de la fila",
-        "detalle": "Para ver el detalle había que atinarle a un icono gris diminuto al final de la fila, y en cotizaciones ni eso existía. Ahora la fila completa abre el documento, el número se ve como enlace y las cotizaciones tienen su botón de ver detalle."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "Los montos ya no se montan unos sobre otros en el PDF",
-        "detalle": "En facturas con precios de seis dígitos, las columnas de precio, ITBIS y total se encimaban y el documento quedaba ilegible. Ahora cada columna tiene su propio espacio con una separación fija entre ellas, y la descripción baja de línea cuando es larga en vez de empujar a los montos."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "Las facturas largas ya no salen con el texto encima del código QR",
-        "detalle": "En facturas con muchas líneas, las últimas quedaban debajo del recuadro del QR y no se podían leer. Y en el formato de tirilla, el QR y el código de seguridad se iban a una segunda hoja que la impresora térmica no saca. Las dos cosas quedaron arregladas."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Decide quién puede cambiar los precios al facturar",
-        "detalle": "En Equipo → Permisos hay un permiso nuevo: «Cambiar precio y descuento al facturar». Nace apagado para todos menos Propietario y Administrador. Sin él, el vendedor factura con el precio del catálogo: no puede cambiar el precio, ni aplicar descuentos, ni inventar líneas sueltas, tampoco desde el punto de venta. Habilítaselo a quien quieras y podrá hacerlo."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Guarda el comprobante de cada pago",
-        "detalle": "Al registrar un cobro puedes adjuntar la imagen o el PDF del comprobante: arrástralo, pégalo con Ctrl+V o tómale una foto desde el celular. Queda guardado en la factura y lo puedes ver cuando quieras, sin tener que buscarlo en WhatsApp."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Exige comprobante según el método de pago",
-        "detalle": "En Configuración puedes marcar qué métodos —transferencia, cheque— obligan a adjuntar el comprobante. Sin él no se puede registrar el cobro, así ninguna transferencia entra sin respaldo. En el listado de pagos se ve en rojo cuál quedó sin comprobante."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "Listados más fáciles de leer",
-        "detalle": "En Facturas y Cuentas por cobrar el código sale corto (el completo aparece al pasar el mouse) y el botón para entrar al detalle está siempre a la vista, también en el celular."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Activa tu facturación electrónica paso a paso",
-        "detalle": "La habilitación con la DGII ahora es un asistente guiado: sube el Set de Pruebas, corre la simulación y sigue el avance sin salir del sistema. Mientras no estés en Producción, el acceso aparece arriba en el menú; al terminar se guarda en Configuración."
-      },
-      {
-        "tipo": "nuevo",
-        "titulo": "Vende por talla, color o la medida que uses",
-        "detalle": "Un producto puede tener variantes con su propio precio y su propio inventario. Al facturar o vender en el mostrador eliges cuál, y el descuento de stock va a esa variante. Desde el detalle del producto puedes editarlas: renombrarlas, agregar, quitar y ajustar precio y existencias."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "Movimientos de caja con método de pago",
-        "detalle": "Al registrar una entrada o salida de caja eliges el método y ves si suma o resta. Lo que no es efectivo no afecta el conteo de efectivo del cierre, y el método queda visible en el historial y en la hoja impresa."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "El correo del cliente ya viene puesto al enviar",
-        "detalle": "Al enviar una factura o cotización por correo, el destinatario aparece lleno con el correo del cliente si lo tienes en su ficha. Antes, si la factura se guardó sin correo, había que escribirlo a mano cada vez aunque el dato ya estuviera guardado."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "El detalle de la factura se lee de un vistazo",
-        "detalle": "El encabezado cabe en una sola línea, se ve en qué posición vas dentro del listado («3 de 15») y puedes pasar a la factura anterior o siguiente sin volver atrás. El estado ante la DGII ahora se explica en palabras, no en códigos."
-      },
-      {
-        "tipo": "mejora",
-        "titulo": "El menú recuerda cómo lo dejaste",
-        "detalle": "Si dejas abierto un grupo del menú lateral, sigue abierto la próxima vez que entres. Caja pasó a estar debajo de Inventario, que es donde la gente la buscaba."
-      },
-      {
-        "tipo": "arreglo",
-        "titulo": "La barra de botones ya no deja una franja gris abajo",
-        "detalle": "Al bajar hasta el final de una factura o cotización, la barra con Cancelar, Editar y Enviar quedaba despegada del borde y se veía una franja gris debajo. Ahora queda pegada al fondo en todas las pantallas."
+        "titulo": "Novedades al día",
+        "detalle": "Esta pantalla llevaba desde julio sin actualizarse por un fallo nuestro: lo que escribíamos en cada actualización no llegaba a publicarse. Ya está corregido, y aquí abajo tienes el historial completo de lo que cambió en los últimos meses."
       }
     ]
   },
   "versiones": [
+    {
+      "version": "1.21.0",
+      "fecha": "2026-08-12",
+      "titulo": "Mejoras del sistema",
+      "cambios": [
+        {
+          "tipo": "mejora",
+          "titulo": "El correo del cliente ya viene puesto al enviar",
+          "detalle": "Al enviar una factura o cotización por correo, el destinatario aparece lleno con el correo del cliente si lo tienes en su ficha. Antes, si la factura se guardó sin correo, había que escribirlo a mano cada vez aunque el dato ya estuviera guardado."
+        },
+        {
+          "tipo": "mejora",
+          "titulo": "El detalle de la factura se lee de un vistazo",
+          "detalle": "El encabezado cabe en una sola línea, se ve en qué posición vas dentro del listado («3 de 15») y puedes pasar a la factura anterior o siguiente sin volver atrás. El estado ante la DGII ahora se explica en palabras, no en códigos."
+        },
+        {
+          "tipo": "mejora",
+          "titulo": "El menú recuerda cómo lo dejaste",
+          "detalle": "Si dejas abierto un grupo del menú lateral, sigue abierto la próxima vez que entres. Caja pasó a estar debajo de Inventario, que es donde la gente la buscaba."
+        },
+        {
+          "tipo": "arreglo",
+          "titulo": "La barra de botones ya no deja una franja gris abajo",
+          "detalle": "Al bajar hasta el final de una factura o cotización, la barra con Cancelar, Editar y Enviar quedaba despegada del borde y se veía una franja gris debajo. Ahora queda pegada al fondo en todas las pantallas."
+        }
+      ]
+    },
+    {
+      "version": "1.20.0",
+      "fecha": "2026-08-11",
+      "titulo": "Mejoras del sistema",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Vende por talla, color o la medida que uses",
+          "detalle": "Un producto puede tener variantes con su propio precio y su propio inventario. Al facturar o vender en el mostrador eliges cuál, y el descuento de stock va a esa variante. Desde el detalle del producto puedes editarlas: renombrarlas, agregar, quitar y ajustar precio y existencias."
+        },
+        {
+          "tipo": "mejora",
+          "titulo": "Movimientos de caja con método de pago",
+          "detalle": "Al registrar una entrada o salida de caja eliges el método y ves si suma o resta. Lo que no es efectivo no afecta el conteo de efectivo del cierre, y el método queda visible en el historial y en la hoja impresa."
+        }
+      ]
+    },
+    {
+      "version": "1.19.0",
+      "fecha": "2026-08-11",
+      "titulo": "Activa tu facturación electrónica paso a paso",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Activa tu facturación electrónica paso a paso",
+          "detalle": "La habilitación con la DGII ahora es un asistente guiado: sube el Set de Pruebas, corre la simulación y sigue el avance sin salir del sistema. Mientras no estés en Producción, el acceso aparece arriba en el menú; al terminar se guarda en Configuración."
+        }
+      ]
+    },
+    {
+      "version": "1.18.0",
+      "fecha": "2026-08-07",
+      "titulo": "Mejoras del sistema",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Guarda el comprobante de cada pago",
+          "detalle": "Al registrar un cobro puedes adjuntar la imagen o el PDF del comprobante: arrástralo, pégalo con Ctrl+V o tómale una foto desde el celular. Queda guardado en la factura y lo puedes ver cuando quieras, sin tener que buscarlo en WhatsApp."
+        },
+        {
+          "tipo": "nuevo",
+          "titulo": "Exige comprobante según el método de pago",
+          "detalle": "En Configuración puedes marcar qué métodos —transferencia, cheque— obligan a adjuntar el comprobante. Sin él no se puede registrar el cobro, así ninguna transferencia entra sin respaldo. En el listado de pagos se ve en rojo cuál quedó sin comprobante."
+        },
+        {
+          "tipo": "mejora",
+          "titulo": "Listados más fáciles de leer",
+          "detalle": "En Facturas y Cuentas por cobrar el código sale corto (el completo aparece al pasar el mouse) y el botón para entrar al detalle está siempre a la vista, también en el celular."
+        }
+      ]
+    },
+    {
+      "version": "1.17.0",
+      "fecha": "2026-08-07",
+      "titulo": "Decide quién puede cambiar los precios al facturar",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Decide quién puede cambiar los precios al facturar",
+          "detalle": "En Equipo → Permisos hay un permiso nuevo: «Cambiar precio y descuento al facturar». Nace apagado para todos menos Propietario y Administrador. Sin él, el vendedor factura con el precio del catálogo: no puede cambiar el precio, ni aplicar descuentos, ni inventar líneas sueltas, tampoco desde el punto de venta. Habilítaselo a quien quieras y podrá hacerlo."
+        }
+      ]
+    },
+    {
+      "version": "1.15.5",
+      "fecha": "2026-08-07",
+      "titulo": "Las facturas largas ya no salen con el texto encima del código QR",
+      "cambios": [
+        {
+          "tipo": "arreglo",
+          "titulo": "Las facturas largas ya no salen con el texto encima del código QR",
+          "detalle": "En facturas con muchas líneas, las últimas quedaban debajo del recuadro del QR y no se podían leer. Y en el formato de tirilla, el QR y el código de seguridad se iban a una segunda hoja que la impresora térmica no saca. Las dos cosas quedaron arregladas."
+        }
+      ]
+    },
+    {
+      "version": "1.15.4",
+      "fecha": "2026-08-05",
+      "titulo": "Los montos ya no se montan unos sobre otros en el PDF",
+      "cambios": [
+        {
+          "tipo": "arreglo",
+          "titulo": "Los montos ya no se montan unos sobre otros en el PDF",
+          "detalle": "En facturas con precios de seis dígitos, las columnas de precio, ITBIS y total se encimaban y el documento quedaba ilegible. Ahora cada columna tiene su propio espacio con una separación fija entre ellas, y la descripción baja de línea cuando es larga en vez de empujar a los montos."
+        }
+      ]
+    },
+    {
+      "version": "1.15.3",
+      "fecha": "2026-08-05",
+      "titulo": "Abre una factura o cotización haciendo clic en cualquier parte de la fila",
+      "cambios": [
+        {
+          "tipo": "mejora",
+          "titulo": "Abre una factura o cotización haciendo clic en cualquier parte de la fila",
+          "detalle": "Para ver el detalle había que atinarle a un icono gris diminuto al final de la fila, y en cotizaciones ni eso existía. Ahora la fila completa abre el documento, el número se ve como enlace y las cotizaciones tienen su botón de ver detalle."
+        }
+      ]
+    },
+    {
+      "version": "1.15.2",
+      "fecha": "2026-08-05",
+      "titulo": "La cotización ya no sale marcada como borrador",
+      "cambios": [
+        {
+          "tipo": "mejora",
+          "titulo": "La cotización ya no sale marcada como borrador",
+          "detalle": "El PDF llevaba un sello gigante de BORRADOR cruzando la página mientras la cotización no se hubiera enviado. El cliente recibía un documento que parecía a medio hacer. Ya sale limpio."
+        }
+      ]
+    },
+    {
+      "version": "1.15.1",
+      "fecha": "2026-08-05",
+      "titulo": "Mejoras del sistema",
+      "cambios": [
+        {
+          "tipo": "arreglo",
+          "titulo": "Los beneficiarios ya funcionan en las cotizaciones",
+          "detalle": "El selector de beneficiario por línea salía siempre vacío, así que no se podía cotizar por estudiante. Ahora se elige igual que en la factura, se ve en el PDF y se conserva al convertir la cotización en factura."
+        },
+        {
+          "tipo": "mejora",
+          "titulo": "«Convertir a factura» siempre a la vista",
+          "detalle": "El botón vivía en la columna de la derecha, que en pantallas chicas queda al final de la página. Ahora está también en la barra fija de abajo."
+        }
+      ]
+    },
+    {
+      "version": "1.15.0",
+      "fecha": "2026-08-05",
+      "titulo": "Mejoras del sistema",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Envía una cotización por correo desde la lista",
+          "detalle": "Antes había que entrar a la cotización para mandarla. Ahora la envías directo desde la lista, y al enviarla pasa sola de borrador a enviada."
+        },
+        {
+          "tipo": "nuevo",
+          "titulo": "Escribe tus términos y condiciones una sola vez",
+          "detalle": "En Configuración puedes dejar guardados los términos y condiciones de tu empresa. A partir de ahí se escriben solos en cada factura, cotización o plan recurrente que crees, y los puedes editar o borrar documento por documento."
+        }
+      ]
+    },
+    {
+      "version": "1.14.0",
+      "fecha": "2026-08-05",
+      "titulo": "El correo de la factura ahora sale a nombre de tu institución",
+      "cambios": [
+        {
+          "tipo": "mejora",
+          "titulo": "El correo de la factura ahora sale a nombre de tu institución",
+          "detalle": "Antes el cliente recibía un correo genérico del sistema. Ahora llega con tu logo, tus colores, tu nombre y tus datos de contacto, y si responde te escribe a ti. Igual para las cotizaciones."
+        }
+      ]
+    },
+    {
+      "version": "1.13.2",
+      "fecha": "2026-08-05",
+      "titulo": "Enviar la factura por correo vuelve a funcionar",
+      "cambios": [
+        {
+          "tipo": "arreglo",
+          "titulo": "Enviar la factura por correo vuelve a funcionar",
+          "detalle": "Al enviar una factura o una cotización por correo salía un error y el cliente nunca la recibía. Ya sale con el PDF adjunto. Además, si el correo llegara a fallar, ahora el sistema lo avisa en vez de decir que se envió."
+        }
+      ]
+    },
+    {
+      "version": "1.13.1",
+      "fecha": "2026-08-05",
+      "titulo": "Las cotizaciones vuelven a guardarse",
+      "cambios": [
+        {
+          "tipo": "arreglo",
+          "titulo": "Las cotizaciones vuelven a guardarse",
+          "detalle": "Al guardar una cotización aparecía un error técnico y el trabajo se perdía. Ya se guarda normal. Además, si algo llega a fallar del lado del servidor, ahora verás un mensaje que se entiende en vez de un error en inglés."
+        }
+      ]
+    },
+    {
+      "version": "1.11.1",
+      "fecha": "2026-08-03",
+      "titulo": "Ya no se pierden facturas en cuentas por cobrar",
+      "cambios": [
+        {
+          "tipo": "arreglo",
+          "titulo": "Ya no se pierden facturas en cuentas por cobrar",
+          "detalle": "Algunas facturas con saldo pendiente no aparecían en cuentas por cobrar, incluso cuando ya tenían abonos registrados, y la deuda quedaba fuera de la cartera sin aviso. Ahora se muestran todas."
+        }
+      ]
+    },
+    {
+      "version": "1.3.0",
+      "fecha": "2026-07-17",
+      "titulo": "Mejoras del sistema",
+      "cambios": [
+        {
+          "tipo": "nuevo",
+          "titulo": "Cobra con tarjeta enviando un link",
+          "detalle": "Desde una factura puedes generar un link de pago y mandarlo por WhatsApp, correo o mostrarlo como código QR. Tu cliente paga con tarjeta desde su teléfono y el cobro queda registrado solo, sin que tengas que anotarlo a mano."
+        },
+        {
+          "tipo": "nuevo",
+          "titulo": "Guarda la factura y cobra en un solo paso",
+          "detalle": "Al guardar una factura puedes elegir «Guardar y generar link de pago» y el link aparece al instante, listo para enviar. También puedes generarlo después desde la factura."
+        },
+        {
+          "tipo": "nuevo",
+          "titulo": "Mira en qué va cada link que enviaste",
+          "detalle": "Hay una pantalla nueva con todos los links de pago: cuál se pagó, cuál sigue esperando y por cuánto. Antes no había forma de saber si el cliente ya había pagado sin revisar factura por factura."
+        },
+        {
+          "tipo": "arreglo",
+          "titulo": "La sesión ya no se cierra sola",
+          "detalle": "En algunos casos el sistema perdía la sesión y mostraba un error raro al guardar. Ahora, si la sesión vence, te lleva al inicio de sesión con un mensaje claro."
+        }
+      ]
+    },
     {
       "version": "1.2.0",
       "fecha": "2026-07-17",
