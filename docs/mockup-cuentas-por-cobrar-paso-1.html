@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mockup Vera - Gestion de cartera</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #657181;
+      --line: #d9dee7;
+      --brand: #0f766e;
+      --brand-soft: #e4f5f2;
+      --danger: #b42318;
+      --danger-soft: #fff0ed;
+      --warn: #9a6700;
+      --warn-soft: #fff7df;
+      --ok: #067647;
+      --ok-soft: #e8f7ef;
+      --blue: #175cd3;
+      --blue-soft: #eaf1ff;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 248px 1fr;
+      min-height: 100vh;
+    }
+
+    aside {
+      background: #111827;
+      color: #d1d5db;
+      padding: 20px 16px;
+    }
+
+    .brand {
+      color: white;
+      font-weight: 750;
+      font-size: 20px;
+      margin-bottom: 28px;
+    }
+
+    .nav-group {
+      margin-top: 18px;
+      color: #9ca3af;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-top: 4px;
+      border-radius: 6px;
+      color: #e5e7eb;
+    }
+
+    .nav-item.active {
+      background: #1f2937;
+      color: #ffffff;
+      box-shadow: inset 3px 0 0 var(--brand);
+    }
+
+    main { padding: 24px; }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      max-width: 760px;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 9px 12px;
+      font-weight: 650;
+      cursor: default;
+      min-height: 38px;
+    }
+
+    button.primary {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: white;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .stat-note {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .filters {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1.8fr repeat(4, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+      font-weight: 650;
+    }
+
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: white;
+      color: var(--ink);
+      min-height: 38px;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+    }
+
+    .table-panel, .detail-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-title {
+      font-weight: 750;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      background: #fbfcfe;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #edf0f4;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    tr.selected { background: var(--brand-soft); }
+
+    .money { text-align: right; font-variant-numeric: tabular-nums; }
+    th.money { text-align: right; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge.danger { color: var(--danger); background: var(--danger-soft); }
+    .badge.warn { color: var(--warn); background: var(--warn-soft); }
+    .badge.ok { color: var(--ok); background: var(--ok-soft); }
+    .badge.blue { color: var(--blue); background: var(--blue-soft); }
+
+    .detail-panel { min-height: 620px; }
+
+    .detail-body { padding: 16px; }
+
+    .customer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+
+    .name {
+      font-size: 18px;
+      font-weight: 760;
+      margin-bottom: 4px;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #edf0f4;
+    }
+
+    .kv span:first-child { color: var(--muted); }
+    .kv span:last-child { font-weight: 700; text-align: right; }
+
+    .section-title {
+      margin: 18px 0 10px;
+      font-weight: 750;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+    }
+
+    .event {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px;
+    }
+
+    .event-title { font-weight: 700; }
+    .event-meta { color: var(--muted); font-size: 12px; }
+
+    .detail-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .annotation {
+      margin-top: 16px;
+      background: #fff;
+      border: 1px dashed #aab2c0;
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .aging {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .aging-item {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px 12px;
+    }
+
+    .aging-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .aging-value {
+      font-weight: 760;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .followup {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .note-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcfe;
+    }
+
+    .note-title {
+      font-weight: 750;
+      margin-bottom: 4px;
+    }
+
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; }
+      aside { display: none; }
+      .stats, .aging { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .content { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 680px) {
+      main { padding: 16px; }
+      .topbar { display: block; }
+      .button-row { justify-content: flex-start; margin-top: 12px; }
+      .stats, .filters, .aging { grid-template-columns: 1fr; }
+      table { min-width: 900px; }
+      .table-panel { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand">Vera</div>
+      <div class="nav-group">Operacion</div>
+      <div class="nav-item">Dashboard</div>
+      <div class="nav-item">Facturas</div>
+      <div class="nav-item active">Cuentas por cobrar</div>
+      <div class="nav-item">Pagos recibidos</div>
+      <div class="nav-item">Clientes</div>
+      <div class="nav-group">Fiscal</div>
+      <div class="nav-item">Reportes DGII</div>
+      <div class="nav-item">Secuencias</div>
+      <div class="nav-group">Configuracion</div>
+      <div class="nav-item">Empresa</div>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div>
+          <h1>Gestion de cartera</h1>
+          <p class="subtitle">Evolucion de cuentas por cobrar: prioriza cobros, revisa historial, registra seguimiento y decide la proxima accion sin salir de la pantalla.</p>
+        </div>
+        <div class="button-row">
+          <button>Exportar</button>
+          <button>Recordatorios masivos</button>
+          <button>Registrar seguimiento</button>
+          <button class="primary">Registrar pago</button>
+        </div>
+      </div>
+
+      <section class="stats">
+        <div class="stat">
+          <div class="stat-label">Total pendiente</div>
+          <div class="stat-value">RD$ 428,350.00</div>
+          <div class="stat-note">37 documentos abiertos</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Vencido</div>
+          <div class="stat-value" style="color: var(--danger)">RD$ 96,200.00</div>
+          <div class="stat-note">9 facturas fuera de plazo</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Por vencer 7 dias</div>
+          <div class="stat-value" style="color: var(--warn)">RD$ 54,800.00</div>
+          <div class="stat-note">6 facturas proximas</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Promesas de pago</div>
+          <div class="stat-value" style="color: var(--blue)">RD$ 71,200.00</div>
+          <div class="stat-note">4 prometidas esta semana</div>
+        </div>
+      </section>
+
+      <section class="aging" aria-label="Antiguedad de saldos vencidos">
+        <div class="aging-item">
+          <div class="aging-label">1-30 dias vencido</div>
+          <div class="aging-value">RD$ 62,450.00</div>
+        </div>
+        <div class="aging-item">
+          <div class="aging-label">31-60 dias vencido</div>
+          <div class="aging-value">RD$ 21,100.00</div>
+        </div>
+        <div class="aging-item">
+          <div class="aging-label">61-90 dias vencido</div>
+          <div class="aging-value">RD$ 8,900.00</div>
+        </div>
+        <div class="aging-item">
+          <div class="aging-label">Mas de 90 dias</div>
+          <div class="aging-value" style="color: var(--danger)">RD$ 3,750.00</div>
+        </div>
+      </section>
+
+      <section class="filters">
+        <div>
+          <label>Buscar</label>
+          <input value="Colegio / E310000000145 / cliente" />
+        </div>
+        <div>
+          <label>Estado</label>
+          <select>
+            <option>Pendiente y parcial</option>
+            <option>Solo vencidas</option>
+            <option>Pagadas</option>
+          </select>
+        </div>
+        <div>
+          <label>Cliente</label>
+          <select>
+            <option>Todos</option>
+            <option>Colegio Duarte</option>
+            <option>Grupo Norte</option>
+          </select>
+        </div>
+        <div>
+          <label>Vendedor</label>
+          <select>
+            <option>Todos</option>
+            <option>Maria</option>
+            <option>Joel</option>
+          </select>
+        </div>
+        <div>
+          <label>Prioridad</label>
+          <select>
+            <option>Urgentes primero</option>
+            <option>Mayor saldo</option>
+            <option>Promesa vencida</option>
+          </select>
+        </div>
+        <button>Filtrar</button>
+      </section>
+
+      <section class="content">
+        <div class="table-panel">
+          <div class="panel-head">
+            <div class="panel-title">Cuentas priorizadas</div>
+            <span class="badge blue">Urgencia, monto y seguimiento</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 132px">Documento</th>
+                <th>Cliente</th>
+                <th style="width: 118px">Vence</th>
+                <th class="money" style="width: 110px">Total</th>
+                <th class="money" style="width: 110px">Pagado</th>
+                <th class="money" style="width: 92px">Mora</th>
+                <th class="money" style="width: 116px">Saldo</th>
+                <th style="width: 126px">Proxima accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="selected">
+                <td>E3100000145</td>
+                <td>Colegio Duarte</td>
+                <td>2026-07-01</td>
+                <td class="money">18,800.00</td>
+                <td class="money">8,000.00</td>
+                <td class="money">350.00</td>
+                <td class="money">11,150.00</td>
+                <td><span class="badge danger">Llamar hoy</span></td>
+              </tr>
+              <tr>
+                <td>E3100000146</td>
+                <td>Grupo Norte SRL</td>
+                <td>2026-07-10</td>
+                <td class="money">74,340.00</td>
+                <td class="money">0.00</td>
+                <td class="money">0.00</td>
+                <td class="money">74,340.00</td>
+                <td><span class="badge warn">Por vencer</span></td>
+              </tr>
+              <tr>
+                <td>E3200000088</td>
+                <td>Ana Perez</td>
+                <td>2026-07-14</td>
+                <td class="money">5,500.00</td>
+                <td class="money">3,000.00</td>
+                <td class="money">0.00</td>
+                <td class="money">2,500.00</td>
+                <td><span class="badge blue">Prometio pago</span></td>
+              </tr>
+              <tr>
+                <td>E3100000147</td>
+                <td>Constructora Alba</td>
+                <td>2026-07-20</td>
+                <td class="money">129,800.00</td>
+                <td class="money">40,000.00</td>
+                <td class="money">0.00</td>
+                <td class="money">89,800.00</td>
+                <td><span class="badge blue">Enviar aviso</span></td>
+              </tr>
+              <tr>
+                <td>E3100000148</td>
+                <td>Farmacia Central</td>
+                <td>2026-06-28</td>
+                <td class="money">21,240.00</td>
+                <td class="money">0.00</td>
+                <td class="money">640.00</td>
+                <td class="money">21,880.00</td>
+                <td><span class="badge danger">Escalar</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <aside class="detail-panel">
+          <div class="panel-head">
+            <div class="panel-title">Detalle y seguimiento</div>
+            <span class="badge danger">5 dias vencida</span>
+          </div>
+          <div class="detail-body">
+            <div class="customer">
+              <div>
+                <div class="name">Colegio Duarte</div>
+                <div class="event-meta">RNC 101999888 | E3100000145</div>
+              </div>
+              <span class="badge blue">Parcial</span>
+            </div>
+
+            <div class="kv"><span>Total factura</span><span>RD$ 18,800.00</span></div>
+            <div class="kv"><span>Pagos registrados</span><span>RD$ 8,000.00</span></div>
+            <div class="kv"><span>Nota de credito aplicada</span><span>RD$ 0.00</span></div>
+            <div class="kv"><span>Mora pendiente</span><span>RD$ 350.00</span></div>
+            <div class="kv"><span>Saldo actual</span><span>RD$ 11,150.00</span></div>
+            <div class="kv"><span>Fecha limite</span><span>2026-07-01</span></div>
+            <div class="kv"><span>Responsable</span><span>Maria Gomez</span></div>
+            <div class="kv"><span>Proxima accion</span><span>Llamar hoy</span></div>
+            <div class="kv"><span>Promesa de pago</span><span>2026-07-08</span></div>
+
+            <div class="section-title">Historial</div>
+            <div class="timeline">
+              <div class="event">
+                <div>
+                  <div class="event-title">Factura emitida</div>
+                  <div class="event-meta">2026-06-21 | Credito a 10 dias</div>
+                </div>
+                <strong>18,800.00</strong>
+              </div>
+              <div class="event">
+                <div>
+                  <div class="event-title">Pago recibido</div>
+                  <div class="event-meta">2026-06-28 | Transferencia | Ref. 8841</div>
+                </div>
+                <strong>8,000.00</strong>
+              </div>
+              <div class="event">
+                <div>
+                  <div class="event-title">Mora generada</div>
+                  <div class="event-meta">2026-07-06 | 5 dias vencida</div>
+                </div>
+                <strong>350.00</strong>
+              </div>
+            </div>
+
+            <div class="section-title">Seguimiento de cobranza</div>
+            <div class="followup">
+              <div class="note-box">
+                <div class="note-title">Ultimo contacto</div>
+                <div class="event-meta">2026-07-05 | WhatsApp enviado por Maria. Cliente indica que pagara el 08/07.</div>
+              </div>
+              <div class="note-box">
+                <div class="note-title">Riesgo</div>
+                <div class="event-meta">Promesa de pago cercana. Si no paga el 08/07, marcar para escalamiento.</div>
+              </div>
+            </div>
+
+            <div class="detail-actions">
+              <button class="primary">Registrar pago</button>
+              <button>Ver factura</button>
+              <button>Registrar nota</button>
+              <button>Enviar aviso</button>
+            </div>
+
+            <div class="annotation">
+              Este mockup redisenado representa el paso 1 ajustado a lo que Vera ya tiene. No propone rehacer cuentas por cobrar; propone convertirla en gestion de cartera: priorizacion, antiguedad de saldos, seguimiento, promesas de pago y acciones de cobranza antes de agregar asientos contables.
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
