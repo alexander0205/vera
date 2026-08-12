@@ -27,15 +27,21 @@
   ],
   "pendiente": {
     "titulo": "",
-    "cambios": [
-      {
-        "tipo": "mejora",
-        "titulo": "Más protección para los datos de tus clientes",
-        "detalle": "Reforzamos las reglas internas para que una copia de seguridad de la base de datos no pueda subirse por error a nuestro repositorio de código. Nada tuyo estuvo expuesto: es una barrera preventiva."
-      }
-    ]
+    "cambios": []
   },
   "versiones": [
+    {
+      "version": "1.21.2",
+      "fecha": "2026-08-12",
+      "titulo": "Más protección para los datos de tus clientes",
+      "cambios": [
+        {
+          "tipo": "mejora",
+          "titulo": "Más protección para los datos de tus clientes",
+          "detalle": "Reforzamos las reglas internas para que una copia de seguridad de la base de datos no pueda subirse por error a nuestro repositorio de código. Nada tuyo estuvo expuesto: es una barrera preventiva."
+        }
+      ]
+    },
     {
       "version": "1.21.1",
       "fecha": "2026-08-12",
