@@ -48,11 +48,16 @@ jobs:
             echo "::warning::Las notas traían datos de clientes y se redactaron. Revisa el estilo de los commits."
           fi
 
-      - name: Commitear bump + changelog
+      - name: Commitear bump + changelog + novedades
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json CHANGELOG.md
+          # content/novedades.json va aquí obligatoriamente: release-notes.mjs lo
+          # reescribe moviendo `pendiente` a `versiones`, y si no se commitea esa
+          # promoción se pierde en cada release. Pasó: la página de Novedades se
+          # quedó congelada en la v1.2.0 mientras producción iba por la v1.21.0,
+          # y `pendiente` acumuló 28 entradas que ningún cliente llegó a ver.
+          git add package.json CHANGELOG.md content/novedades.json
           git commit -m "chore(release): v${{ steps.notas.outputs.version }} [skip ci]"
           git tag "v${{ steps.notas.outputs.version }}"
           git push origin main --follow-tags
