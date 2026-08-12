@@ -21,6 +21,8 @@ interface Cotizacion {
   estado: string;
   razonSocialComprador: string | null;
   emailComprador: string | null;
+  /** Correo de la ficha del cliente. Solo para proponer destinatario. */
+  emailCliente?: string | null;
   montoTotal: number;
   fechaEmision: string;
   fechaVencimiento: string | null;
@@ -172,7 +174,7 @@ export default function CotizacionesPage() {
     // El detalle es donde vive "Convertir a factura"; sin esta puerta había que
     // adivinar que el número era un enlace.
     { icon: Eye,    title: 'Ver detalle', href: `/dashboard/cotizaciones/${c.id}`, primary: true },
-    { icon: Mail,   title: 'Enviar por correo', onClick: () => setEmailTarget({ cot: c, email: c.emailComprador ?? '' }) },
+    { icon: Mail,   title: 'Enviar por correo', onClick: () => setEmailTarget({ cot: c, email: c.emailComprador || c.emailCliente || '' }) },
     { icon: Pencil, title: 'Editar',   href: `/dashboard/cotizaciones/${c.id}/editar` },
     { icon: Trash2, title: 'Eliminar', variant: 'danger', onClick: () => { setDeleteTarget(c); setOpError(null); } },
   ];

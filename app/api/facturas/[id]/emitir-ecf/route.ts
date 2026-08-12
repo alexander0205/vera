@@ -154,7 +154,7 @@ export async function POST(
     const { doc, team } = row;
 
     // Permitir emisión para documentos SIN e-CF real: BORRADOR, HISTORICA
-    // (importadas de Alegra) o sin-ncf. Bloquear los que ya fueron a DGII o
+    // (importadas por CSV) o sin-ncf. Bloquear los que ya fueron a DGII o
     // están anulados.
     const yaEnDgii = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(doc.estado);
     if (doc.estado === 'ANULADO' || yaEnDgii) {

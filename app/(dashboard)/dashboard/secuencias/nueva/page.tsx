@@ -262,7 +262,7 @@ export default function NuevaSecuenciaPage() {
 
             {/* Row 2: Numeración automática + Número inicial */}
             <div className="grid grid-cols-2 gap-4 items-start">
-              {/* Numeración automática (checkbox estilo Alegra) */}
+              {/* Numeración automática */}
               <div className="flex items-center gap-2 pt-1">
                 <div className="h-4 w-4 rounded border-2 border-teal-600 bg-teal-600 flex items-center justify-center shrink-0">
                   <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 12 12">

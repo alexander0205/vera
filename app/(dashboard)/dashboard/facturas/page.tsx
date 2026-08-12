@@ -10,6 +10,7 @@ import { NotasMoraTable } from '@/components/notas-mora-table';
 import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { guardarListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ const ESTADOS = [
   { value: 'ACEPTADO_CONDICIONAL', label: 'Aceptado condicional' },
   { value: 'RECHAZADO',            label: 'Rechazado' },
   { value: 'ANULADO',              label: 'Anulado' },
-  { value: 'HISTORICA',            label: 'Histórica (Alegra)' },
+  { value: 'HISTORICA',            label: 'Histórica (importada)' },
 ];
 
 // Etiqueta legible para el badge de estado DGII
@@ -417,6 +418,9 @@ export default function FacturasPage() {
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
+        // El detalle usa este orden para las flechas «‹ 2 de 548 ›»: recorre
+        // lo que el usuario tiene filtrado delante, no todo el histórico.
+        onVisibleRowsChange={ids => guardarListaNavegacion('/dashboard/facturas', ids as number[])}
         rowActions={rowActions}
         pagination={{
           page,
@@ -438,7 +442,7 @@ export default function FacturasPage() {
             {canCrear && (
               <button onClick={() => setShowImport(true)}
                 className="flex items-center gap-1.5 text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
-                <Upload className="h-4 w-4" /> Importar de Alegra
+                <Upload className="h-4 w-4" /> Importar CSV
               </button>
             )}
             {canExportar && (
@@ -461,8 +465,8 @@ export default function FacturasPage() {
         open={showImport}
         onClose={() => setShowImport(false)}
         endpoint="/api/import/facturas"
-        title="Importar facturas de Alegra"
-        helpText="CSV de Alegra (Facturas). Se agrupan por código, no van a DGII (estado Histórica). Crea clientes y productos faltantes. Dedup por código."
+        title="Importar facturas desde CSV"
+        helpText="CSV de facturas. Se agrupan por código, no van a DGII (estado Histórica). Crea clientes y productos faltantes. Dedup por código."
         columns={[
           { key: 'codigo',        label: 'Código' },
           { key: 'fecha',         label: 'Fecha' },

@@ -1,5 +1,5 @@
 /**
- * Template PDF de Factura Electrónica EmiteDO — estilo Alegra
+ * Template PDF de Factura Electrónica
  * Usa @react-pdf/renderer — solo en API routes (Node.js), nunca en client components.
  */
 import React from 'react';

@@ -47,6 +47,7 @@ export function ComprobantesCard({ docId }: { docId: number }) {
           adjuntos={adjuntos}
           onChange={setAdjuntos}
           disabled={!puedeSubir}
+          compacto
         />
       </div>
     </div>

@@ -15,8 +15,8 @@ Stash original sigue intacto (`stash@{0}` en main) — esta branch es la versió
 - `app/api/facturas/[id]/route.ts` y `app/api/facturas/route.ts`: campo `pagado` viene del ledger; fallback al inline para docs legacy (`GREATEST(ledger, inline)`).
 - `app/api/pagos/route.ts`: GET/POST sobre `pagos_recibidos` via helpers.
 - `app/api/ecf/emitir/route.ts`: al emitir/borrador, registra el pago inline en el ledger.
-- `app/api/import/facturas/route.ts`: `ESTADO=Cobrada` (Alegra) → `registrarPago` full. Líneas en formato canónico `ItemLinea` (para que detalle/editar/emitir reconstruyan).
-- `app/api/import/pagos/route.ts`: **eliminado** (import de recibos PDF Alegra retirado).
+- `app/api/import/facturas/route.ts`: `ESTADO=Cobrada` (CSV importado) → `registrarPago` full. Líneas en formato canónico `ItemLinea` (para que detalle/editar/emitir reconstruyan).
+- `app/api/import/pagos/route.ts`: **eliminado** (import de recibos PDF retirado).
 - `scripts/migrate-pagos-to-ledger.ts`: backfill `pagos_recibidos` desde `ecf_documents.pago*` legacy.
 
 ### 2. Audit log a nivel DB (triggers)
@@ -53,14 +53,14 @@ Stash original sigue intacto (`stash@{0}` en main) — esta branch es la versió
 - `app/(dashboard)/dashboard/facturas/[id]/_pago-card.tsx`: confirmación antes de quitar pago + nuevos métodos (`tarjeta`, `deposito`, `otro`).
 - `app/(dashboard)/dashboard/facturas/page.tsx`: columna "Saldo" → "Cobro" con pills (Pagada/Parcial/Pendiente/Vencida/Sin pago/Gratuita/Uso). Columna "Estado" → "Estado DGII".
 - `app/(dashboard)/dashboard/facturas/nueva/NuevaFacturaForm.tsx` + `sections/TopBar.tsx`: marcador `'00'` → HISTORICA en edición; título dinámico Nueva/Editar.
-- `app/(dashboard)/dashboard/cuentas-por-cobrar/page.tsx`: quita botón "Importar pagos (Alegra)".
+- `app/(dashboard)/dashboard/cuentas-por-cobrar/page.tsx`: quita botón "Importar pagos".
 - `components/import-modal.tsx`: soporta `format(value)` por columna.
 
 ### 7. Dev env
 
 - `Dockerfile.dev`: Next 15.6+ con hot reload + seed Neon dump.
 - `entrypoint.dev.sh`: espera Postgres, aplica dump si DB vacía, arranca `next dev`.
-- `scripts/delete-facturas-by-rnc.ts`: limpieza de imports Alegra erróneos.
+- `scripts/delete-facturas-by-rnc.ts`: limpieza de imports erróneos.
 
 ## Estado del build
 

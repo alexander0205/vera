@@ -354,7 +354,7 @@ export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string
 }
 
 /**
- * Reporte "Ventas generales" estilo Alegra.
+ * Reporte "Ventas generales".
  * Devuelve agregados + lista de documentos del rango.
  *
  * - Ventas brutas: SUM(montoTotal) de documentos venta (tipo 31/32) ACEPTADOS

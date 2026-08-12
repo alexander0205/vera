@@ -78,7 +78,7 @@ export default async function EditarBorradorPage({
   ]);
 
   if (!row) notFound();
-  // Editables: documentos sin e-CF real (borrador, histórica de Alegra).
+  // Editables: documentos sin e-CF real (borrador, histórica importada).
   // Los ya emitidos a DGII / anulados no se editan.
   if (!['BORRADOR', 'HISTORICA'].includes(row.doc.estado)) {
     redirect(`/dashboard/facturas`);

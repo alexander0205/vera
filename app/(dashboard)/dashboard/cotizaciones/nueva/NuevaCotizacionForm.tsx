@@ -558,7 +558,7 @@ export default function NuevaCotizacionForm({
 
           {/* Barra de acciones — sticky abajo. mt-auto empuja la barra al fondo
               cuando el contenido es corto (evita el hueco antes de Guardar). */}
-          <div className="sticky bottom-0 z-30 -mx-3 sm:-mx-4 md:-mx-5 mt-auto flex justify-end gap-3 border-t border-gray-200 bg-white/95 px-3 sm:px-4 md:px-5 py-3 backdrop-blur">
+          <div className="sticky bottom-0 z-30 -mx-3 sm:-mx-4 md:-mx-5 -mb-3 sm:-mb-4 md:-mb-5 mt-auto flex justify-end gap-3 border-t border-gray-200 bg-white/95 px-3 sm:px-4 md:px-5 py-3 backdrop-blur">
             <Button
               type="button"
               variant="outline"

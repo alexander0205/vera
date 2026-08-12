@@ -142,7 +142,7 @@ export default function ClientesPage() {
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setShowImport(true)}>
               <Upload className="h-4 w-4 mr-2" />
-              Importar de Alegra
+              Importar CSV
             </Button>
             <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => router.push('/dashboard/clientes/nuevo')}>
               <Plus className="h-4 w-4 mr-2" />
@@ -156,8 +156,8 @@ export default function ClientesPage() {
         open={showImport}
         onClose={() => setShowImport(false)}
         endpoint="/api/import/clientes"
-        title="Importar clientes de Alegra"
-        helpText="Archivo CSV exportado de Alegra (Contactos). Se omiten duplicados por RNC o nombre."
+        title="Importar clientes desde CSV"
+        helpText="Archivo CSV de contactos. Se omiten duplicados por RNC o nombre."
         columns={[
           { key: 'razonSocial', label: 'Nombre / Razón Social' },
           { key: 'rnc',         label: 'RNC / Cédula' },

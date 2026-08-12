@@ -142,6 +142,26 @@
         "tipo": "mejora",
         "titulo": "Movimientos de caja con método de pago",
         "detalle": "Al registrar una entrada o salida de caja eliges el método y ves si suma o resta. Lo que no es efectivo no afecta el conteo de efectivo del cierre, y el método queda visible en el historial y en la hoja impresa."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "El correo del cliente ya viene puesto al enviar",
+        "detalle": "Al enviar una factura o cotización por correo, el destinatario aparece lleno con el correo del cliente si lo tienes en su ficha. Antes, si la factura se guardó sin correo, había que escribirlo a mano cada vez aunque el dato ya estuviera guardado."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "El detalle de la factura se lee de un vistazo",
+        "detalle": "El encabezado cabe en una sola línea, se ve en qué posición vas dentro del listado («3 de 15») y puedes pasar a la factura anterior o siguiente sin volver atrás. El estado ante la DGII ahora se explica en palabras, no en códigos."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "El menú recuerda cómo lo dejaste",
+        "detalle": "Si dejas abierto un grupo del menú lateral, sigue abierto la próxima vez que entres. Caja pasó a estar debajo de Inventario, que es donde la gente la buscaba."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "La barra de botones ya no deja una franja gris abajo",
+        "detalle": "Al bajar hasta el final de una factura o cotización, la barra con Cancelar, Editar y Enviar quedaba despegada del borde y se veía una franja gris debajo. Ahora queda pegada al fondo en todas las pantallas."
       }
     ]
   },

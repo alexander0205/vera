@@ -1,7 +1,7 @@
 /**
  * Categorías de documentos ECF para República Dominicana.
  *
- * Sigue el mismo patrón de Alegra RD:
+ * Sigue el patrón habitual en facturación RD:
  *   "Tipo de documento" (categoría de negocio) → filtra los tipos e-NCF disponibles
  *
  * Mapping DGII B → e-CF:
@@ -20,7 +20,7 @@ export interface TipoEcfOpcion {
 
 export interface CategoriaEcf {
   id:    string;
-  label: string;      // Nombre en la UI (igual que Alegra)
+  label: string;      // Nombre en la UI
   tipos: TipoEcfOpcion[];
 }
 

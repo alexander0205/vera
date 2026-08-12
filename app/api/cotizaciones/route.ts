@@ -5,12 +5,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { cotizaciones } from '@/lib/db/schema';
+import { cotizaciones, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
-import { eq, desc, and, or, ilike } from 'drizzle-orm';
+import { eq, desc, and, or, ilike, getTableColumns } from 'drizzle-orm';
 
 // GET /api/cotizaciones?q=...
 export async function GET(req: NextRequest) {
@@ -31,9 +31,12 @@ export async function GET(req: NextRequest) {
       )
     : eq(cotizaciones.teamId, teamId);
 
+  // `emailCliente` sale de la ficha del cliente y no de la cotización: se usa
+  // para proponer destinatario cuando la cotización se guardó sin correo.
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(cotizaciones), emailCliente: clients.email })
     .from(cotizaciones)
+    .leftJoin(clients, eq(clients.id, cotizaciones.clientId))
     .where(where)
     .orderBy(desc(cotizaciones.createdAt))
     .limit(100);
