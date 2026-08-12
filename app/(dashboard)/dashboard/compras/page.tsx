@@ -226,7 +226,7 @@ export default function ComprasPage() {
 
   return (
     <section className="p-4 sm:p-6 space-y-4">
-      {/* Header tipo Alegra */}
+      {/* Header del listado */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">

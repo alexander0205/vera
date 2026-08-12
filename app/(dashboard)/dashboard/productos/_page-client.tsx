@@ -226,7 +226,7 @@ export default function ProductosPage() {
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setShowImport(true)}>
               <Upload className="h-4 w-4 mr-2" />
-              Importar de Alegra
+              Importar CSV
             </Button>
             <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
               <Plus className="h-4 w-4 mr-2" />
@@ -240,8 +240,8 @@ export default function ProductosPage() {
         open={showImport}
         onClose={() => setShowImport(false)}
         endpoint="/api/import/productos"
-        title="Importar productos de Alegra"
-        helpText="Archivo CSV exportado de Alegra (Productos-servicios). Se omiten duplicados por referencia o nombre."
+        title="Importar productos desde CSV"
+        helpText="Archivo CSV de productos y servicios. Se omiten duplicados por referencia o nombre."
         columns={[
           { key: 'nombre',      label: 'Nombre' },
           { key: 'referencia',  label: 'Referencia' },

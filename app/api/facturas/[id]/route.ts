@@ -96,7 +96,7 @@ export async function GET(
   // Lineas / items.
   // Soporta dos formatos en lineas_json:
   //  - canónico: { nombreItem, cantidadItem, precioUnitarioItem, descripcionItem, tasaItbis }
-  //  - Alegra/legacy: { nombre, cantidad, precio, descripcion, tasa }
+  //  - legacy: { nombre, cantidad, precio, descripcion, tasa }
   // Normaliza a las keys canónicas que lee el frontend (el `??` deja intactas las canónicas).
   function normalizeLinea(l: Record<string, unknown>) {
     return {

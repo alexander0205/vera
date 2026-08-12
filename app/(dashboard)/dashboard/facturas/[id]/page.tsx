@@ -836,7 +836,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // (encf ALG-), borrador (BOR-) y sin-ncf NUNCA fueron a DGII → sin estado
   // ni consulta DGII.
   const esEcfReal   = /^E\d/.test(factura.encf) && !['HISTORICA', 'BORRADOR'].includes(factura.estado);
-  // Sin e-CF real → se puede emitir a DGII (borrador, histórica de Alegra, sin-ncf).
+  // Sin e-CF real → se puede emitir a DGII (borrador, histórica importada, sin-ncf).
   const yaEnDgii    = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(factura.estado);
   const puedeEmitir = factura.estado !== 'ANULADO' && !yaEnDgii;
   const sinLineas   = factura.lineas.length === 0;

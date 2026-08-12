@@ -1,7 +1,7 @@
 /**
  * POST /api/import/clientes
  *
- * Importa contactos (CSV export de Alegra) → tabla clients.
+ * Importa contactos (CSV de contactos) → tabla clients.
  * mode=preview → solo analiza y devuelve qué pasaría (no escribe).
  * mode=commit  → inserta los nuevos.
  *

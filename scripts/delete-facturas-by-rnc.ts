@@ -1,6 +1,6 @@
 /**
  * Borra facturas (ecf_documents) y sus pagos (pagos_recibidos, payments) de
- * todos los teams con un RNC dado. Útil para limpiar imports erróneos de Alegra.
+ * todos los teams con un RNC dado. Útil para limpiar imports erróneos.
  *
  * Uso:
  *   npx tsx scripts/delete-facturas-by-rnc.ts <RNC>            # DRY RUN (solo cuenta)
