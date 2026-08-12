@@ -138,6 +138,8 @@ interface FacturaDetalle {
     rnc?: string;
     razonSocial?: string;
     email?: string;
+    /** Correo de la ficha del cliente. Solo para proponer destinatario. */
+    emailCliente?: string;
     telefono?: string;
     direccion?: string;
   };
@@ -562,7 +564,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error cargando factura');
       setFactura(data);
-      setEmailTo(data.comprador?.email ?? '');
+      // Destinatario propuesto: primero el correo grabado en la factura; si el
+      // documento se creó sin él, el de la ficha del cliente. Muchas facturas
+      // viejas no lo traen y había que teclearlo a mano cada vez.
+      setEmailTo(data.comprador?.email || data.comprador?.emailCliente || '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -1842,7 +1847,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       {/* ─── Bottom action bar ────────────────────────────────────────────── */}
       {/* Vista detalle = read-only. Solo borrador habilita acciones de edición.
           Para facturas emitidas: Volver + Ver PDF + Acciones (imprimir/email). */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           type="button"
           variant="outline"

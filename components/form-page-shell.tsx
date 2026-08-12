@@ -20,6 +20,18 @@ import type { ReactNode } from 'react';
  *
  * REGLA: el contenedor directo de la barra debe ser `flex flex-col` y la barra
  * el último hijo con `mt-auto`. `BottomActionBar` ya trae `mt-auto sticky bottom-0`.
+ *
+ * REGLA 2 — el padding vertical del contenedor también hay que anularlo:
+ * un elemento `sticky` no puede salirse del content box de su bloque contenedor.
+ * Si el wrapper tiene `p-5`, la barra se detiene 20px ANTES del fondo y aparece
+ * una franja gris al llegar al final del scroll. El `-mx-*` que ya se usa para
+ * sangrar a lo ancho necesita su gemelo `-mb-*` con el MISMO valor por breakpoint:
+ *
+ *   wrapper `p-3 sm:p-4 md:p-5`  →  barra `-mx-3 sm:-mx-4 md:-mx-5 -mb-3 sm:-mb-4 md:-mb-5`
+ *   wrapper `p-4 sm:p-6`         →  barra `-mx-4 sm:-mx-6 -mb-4 sm:-mb-6`
+ *
+ * El síntoma engaña porque solo se ve con el scroll AL FONDO: a media página la
+ * barra sí queda pegada, y el hueco aparece únicamente en el último tramo.
  */
 export function FormPageShell({
   children,
