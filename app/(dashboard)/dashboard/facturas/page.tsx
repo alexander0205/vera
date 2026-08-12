@@ -10,6 +10,7 @@ import { NotasMoraTable } from '@/components/notas-mora-table';
 import { ImportModal } from '@/components/import-modal';
 import { fmtDOP, fmtFechaCorta, fmtFechaRD, diasVencido, fmtCodigoCorto } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { guardarListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago-calc';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -417,6 +418,9 @@ export default function FacturasPage() {
         bulkActions={[
           ...(canAnular ? [{ label: 'Anular seleccionados', icon: Ban, variant: 'danger' as const, onClick: (ids: (string | number)[]) => bulkAnular(ids) }] : []),
         ]}
+        // El detalle usa este orden para las flechas «‹ 2 de 548 ›»: recorre
+        // lo que el usuario tiene filtrado delante, no todo el histórico.
+        onVisibleRowsChange={ids => guardarListaNavegacion('/dashboard/facturas', ids as number[])}
         rowActions={rowActions}
         pagination={{
           page,

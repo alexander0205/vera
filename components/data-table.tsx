@@ -142,6 +142,9 @@ export interface DataTableProps<T> {
   rowClassName?: (row: T) => string;
   /** Orden inicial de la tabla. Sin esto se muestra en el orden que llega. */
   defaultSort?: { columnId: string; dir: 'asc' | 'desc' };
+  /** Ids en el orden que el usuario ve (filtrado + ordenado). Lo usa el
+   *  detalle para recorrer la lista con flechas. */
+  onVisibleRowsChange?: (ids: (string | number)[]) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -184,6 +187,7 @@ export function DataTable<T>({
   rowExpandable,
   rowClassName,
   defaultSort,
+  onVisibleRowsChange,
 }: DataTableProps<T>) {
   const router = useRouter();
   // Estado interno de filtros si no se controla externamente.
@@ -213,6 +217,21 @@ export function DataTable<T>({
     });
     return sorted;
   }, [data, sortBy, columns]);
+
+  // El orden que el usuario tiene delante, ya filtrado y ordenado. Lo consume
+  // el detalle para las flechas «‹ 2 de 548 ›»: sin esto navegaría por el orden
+  // en que llegaron los datos, que deja de ser el visible en cuanto alguien
+  // toca un encabezado para ordenar.
+  const idsVisibles = useMemo(() => sortedData.map(rowId), [sortedData, rowId]);
+  // El callback suele venir como flecha inline, así que cambia de identidad en
+  // cada render. Guardarlo en un ref deja que el efecto dependa solo de los
+  // ids; si no, esto reescribiría el storage en cada render.
+  const cbVisibles = useRef(onVisibleRowsChange);
+  cbVisibles.current = onVisibleRowsChange;
+  const firmaIds = idsVisibles.join(',');
+  useEffect(() => {
+    cbVisibles.current?.(firmaIds ? firmaIds.split(',').map(Number) : []);
+  }, [firmaIds]);
 
   // Bulk selection.
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
