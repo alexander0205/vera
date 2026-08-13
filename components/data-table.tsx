@@ -125,6 +125,9 @@ export interface DataTableProps<T> {
   groupBy?:       (row: T) => string;
   /** Render del encabezado de cada grupo (clave, sus filas y el colSpan total). */
   renderGroupHeader?: (groupKey: string, rows: T[], colSpan: number) => React.ReactNode;
+  /** Ids en el orden que el usuario ve (filtrado + ordenado). Lo usa el
+   *  detalle para recorrer la lista con flechas. */
+  onVisibleRowsChange?: (ids: (string | number)[]) => void;
 }
 
 // ─── Breakpoint helpers ───────────────────────────────────────────────────────
@@ -168,6 +171,7 @@ export function DataTable<T>({
   description,
   groupBy,
   renderGroupHeader,
+  onVisibleRowsChange,
 }: DataTableProps<T>) {
   const router = useRouter();
   // Filter state
@@ -196,6 +200,21 @@ export function DataTable<T>({
       return 0;
     });
   }, [data, sortBy, columns]);
+
+  // El orden que el usuario tiene delante, ya filtrado y ordenado. Lo consume
+  // el detalle para las flechas «‹ 2 de 548 ›»: sin esto navegaría por el orden
+  // en que llegaron los datos, que deja de ser el visible en cuanto alguien
+  // toca un encabezado para ordenar.
+  const idsVisibles = useMemo(() => sortedData.map(rowId), [sortedData, rowId]);
+  // El callback suele venir como flecha inline, así que cambia de identidad en
+  // cada render. Guardarlo en un ref deja que el efecto dependa solo de los
+  // ids; si no, esto reescribiría el storage en cada render.
+  const cbVisibles = useRef(onVisibleRowsChange);
+  cbVisibles.current = onVisibleRowsChange;
+  const firmaIds = idsVisibles.join(',');
+  useEffect(() => {
+    cbVisibles.current?.(firmaIds ? firmaIds.split(',').map(Number) : []);
+  }, [firmaIds]);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());

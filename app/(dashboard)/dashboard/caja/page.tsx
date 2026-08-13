@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
-import { METODO_PAGO_LABELS as METODO_LABELS } from '@/lib/pagos/metodos';
+import { METODO_PAGO_LABELS as METODO_LABELS, METODOS_PAGO, esEfectivo } from '@/lib/pagos/metodos';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -117,11 +117,19 @@ function StatCard({ label, value, sub, color = 'gray' }: {
 function ModalMovimiento({ turnoId, onClose, onCreated }: {
   turnoId: number; onClose: () => void; onCreated: () => void;
 }) {
-  const [tipo, setTipo]       = useState('ENTRADA');
-  const [monto, setMonto]     = useState('');
-  const [descripcion, setDesc] = useState('');
-  const [motivo, setMotivo]   = useState('');
-  const [loading, setLoading] = useState(false);
+  const [tipo, setTipo]           = useState('ENTRADA');
+  const [metodo, setMetodo]       = useState('efectivo');
+  const [monto, setMonto]         = useState('');
+  const [descripcion, setDesc]    = useState('');
+  const [motivo, setMotivo]       = useState('');
+  const [loading, setLoading]     = useState(false);
+
+  // Dirección del dinero: ENTRADA/AJUSTE suman, el resto resta (espejo de
+  // lib/caja/core → TIPOS_SUMAN / TIPOS_RESTAN).
+  const esEntrada = ['ENTRADA', 'AJUSTE'].includes(tipo);
+  // Solo el efectivo entra a la gaveta; los demás métodos se registran pero no
+  // afectan el efectivo esperado del cierre (el backend ya lo ignora).
+  const afectaCaja = esEfectivo(metodo);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,8 +138,16 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
 
     setLoading(true);
     const res = await fetch('/api/caja/movimientos', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ turnoId, tipo, monto: montoNum, descripcion: descripcion || undefined, motivo: motivo || undefined }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        turnoId,
+        tipo,
+        metodo,
+        monto: montoNum,
+        descripcion: descripcion || undefined,
+        motivo: motivo || undefined,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     setLoading(false);
@@ -146,12 +162,46 @@ function ModalMovimiento({ turnoId, onClose, onCreated }: {
       <Box component="form" onSubmit={submit}>
         <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Registrar movimiento</DialogTitle>
         <DialogContent sx={{ pt: '8px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <FormControl size="small" fullWidth>
-            <InputLabel>Tipo</InputLabel>
-            <Select value={tipo} label="Tipo" onChange={e => setTipo(e.target.value)} sx={{ borderRadius: '8px' }}>
-              {Object.entries(TIPO_LABELS).map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}
-            </Select>
-          </FormControl>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mb: 0.5 }}>
+              {/* Dirección del dinero, visible al elegir el tipo. */}
+              <Chip
+                size="small"
+                icon={esEntrada
+                  ? <ArrowDownCircle style={{ width: 12, height: 12 }} />
+                  : <ArrowUpCircle style={{ width: 12, height: 12 }} />}
+                label={esEntrada ? 'Entra dinero' : 'Sale dinero'}
+                sx={{
+                  height: 22, fontSize: '0.6875rem', fontWeight: 600,
+                  '& .MuiChip-label': { px: 0.75 },
+                  ...(esEntrada
+                    ? { color: '#047857', bgcolor: '#ecfdf5' }
+                    : { color: '#b91c1c', bgcolor: '#fef2f2' }),
+                }}
+              />
+            </Box>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Tipo</InputLabel>
+              <Select value={tipo} label="Tipo" onChange={e => setTipo(e.target.value)} sx={{ borderRadius: '8px' }}>
+                {Object.entries(TIPO_LABELS).map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Box>
+
+          {/* Método del movimiento: solo el efectivo entra a la gaveta. */}
+          <Box>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Método / saldo</InputLabel>
+              <Select value={metodo} label="Método / saldo" onChange={e => setMetodo(e.target.value)} sx={{ borderRadius: '8px' }}>
+                {METODOS_PAGO.map(m => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
+              </Select>
+            </FormControl>
+            {!afectaCaja && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}>
+                No afecta el efectivo en caja — se aplica a {METODO_LABELS[metodo] ?? metodo}.
+              </Typography>
+            )}
+          </Box>
           <MuiTextField
             type="number" label="Monto (RD$)" placeholder="0.00"
             value={monto} onChange={e => setMonto(e.target.value)}
@@ -636,7 +686,17 @@ export default function CajaPage() {
                     <Typography variant="body2" sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.descripcion ?? m.motivo ?? '—'}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fmtHora(m.createdAt)}</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 0.75 }}>
+                      <Box component="span">{fmtHora(m.createdAt)}</Box>
+                      <Box component="span" sx={{ color: '#d1d5db' }}>·</Box>
+                      {/* Método del movimiento + si toca o no el efectivo en caja */}
+                      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                        <Box component="span" sx={{ color: '#6b7280', fontWeight: 500 }}>{METODO_LABELS[m.metodo] ?? m.metodo}</Box>
+                        {esEfectivo(m.metodo)
+                          ? <Box component="span" sx={{ fontSize: 10, color: '#059669' }}>afecta caja</Box>
+                          : <Box component="span" sx={{ fontSize: 10, color: '#9ca3af' }}>no afecta caja</Box>}
+                      </Box>
+                    </Typography>
                   </Box>
                   <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0, color: ['ENTRADA', 'AJUSTE'].includes(m.tipo) ? '#059669' : '#dc2626' }}>
                     {['ENTRADA', 'AJUSTE'].includes(m.tipo) ? '+' : '−'}{fmtDOP(m.montoCentavos)}

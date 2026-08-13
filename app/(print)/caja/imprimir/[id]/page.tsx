@@ -20,6 +20,7 @@ import TableBody from '@mui/material/TableBody';
 import TableFooter from '@mui/material/TableFooter';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
+import { labelMetodo, esEfectivo } from '@/lib/pagos/metodos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -860,6 +861,9 @@ export default function ImprimirCajaPage() {
                         Tipo
                       </TableCell>
                       <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
+                        Método
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
                         Descripción
                       </TableCell>
                       <TableCell align="right" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', py: 1, px: 1.5 }}>
@@ -884,6 +888,10 @@ export default function ImprimirCajaPage() {
                           </TableCell>
                           <TableCell sx={{ color: '#374151', py: 1, px: 1.5, border: 'none' }}>
                             {TIPO_LABEL[m.tipo] ?? m.tipo}
+                          </TableCell>
+                          <TableCell sx={{ color: '#4b5563', fontSize: '0.75rem', whiteSpace: 'nowrap', py: 1, px: 1.5, border: 'none' }}>
+                            {labelMetodo(m.metodo)}
+                            {!esEfectivo(m.metodo) && <Box component="span" sx={{ color: '#9ca3af' }}> (no afecta caja)</Box>}
                           </TableCell>
                           <TableCell sx={{ color: '#4b5563', fontSize: '0.75rem', py: 1, px: 1.5, border: 'none' }}>
                             {m.descripcion ?? m.motivo ?? '—'}

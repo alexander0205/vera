@@ -1,7 +1,7 @@
 /**
  * POST /api/import/productos
  *
- * Importa productos/servicios (CSV export de Alegra "Items") → tabla products.
+ * Importa productos/servicios (CSV de productos y servicios) → tabla products.
  * Dedup por referencia (si existe) o por nombre normalizado.
  */
 
@@ -24,7 +24,7 @@ interface ProductoData {
   tipo: string;         // 'bien' | 'servicio'
 }
 
-/** Interpreta un valor de impuesto Alegra → tasaItbis EmiteDO. */
+/** Interpreta el valor de impuesto del CSV → tasaItbis. */
 function parseTasa(raw: string): string {
   const s = normKey(raw);
   if (!s || s.includes('exento') || s.includes('exent')) return 'exento';

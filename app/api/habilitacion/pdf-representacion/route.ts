@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth/api-guard';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { createElement } from 'react';
 import QRCode from 'qrcode';
@@ -20,7 +21,6 @@ import { z } from 'zod';
 import { eq, and, ne, or, isNull, inArray, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, teams } from '@/lib/db/schema';
-import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { FacturaPDF, type FacturaPDFData } from '@/lib/pdf/FacturaPDF';
 import { extraerItems } from '@/lib/pdf/extraerItems';
 
@@ -74,11 +74,12 @@ function extraerFechaFirma(xmlFirmado: string | null): string | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUser();
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-    const teamId = await getTeamIdForUser();
-    if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
+    // Habilitación e-CF toca el ambiente fiscal de la empresa: mismo permiso
+    // con el que el nav ya gatea la pantalla, y el mismo que usan el resto de
+    // las rutas de habilitación.
+    const auth = await requirePermission('configuracion:gestionar');
+    if (!auth.ok) return auth.response;
+    const teamId = auth.teamId;
 
     const body   = await req.json().catch(() => ({}));
     const parsed = bodySchema.safeParse(body);

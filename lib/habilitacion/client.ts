@@ -26,6 +26,13 @@ export interface HabilitacionState {
     itemPrecio?: string;
     itemTarifa?: string;
     itemTipo?:   string;
+    /** Set de Pruebas (Excel) — corrida en curso, para retomar tras recargar. */
+    setPruebasRunId?:  string;
+    setPruebasStatus?: string;
+  };
+  simulacion?: {
+    runId?:  string;
+    status?: string;
   };
   representaciones?: {
     downloaded?:      string[];

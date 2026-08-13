@@ -96,7 +96,7 @@ export async function GET(
   // Lineas / items.
   // Soporta dos formatos en lineas_json:
   //  - canónico: { nombreItem, cantidadItem, precioUnitarioItem, descripcionItem, tasaItbis }
-  //  - Alegra/legacy: { nombre, cantidad, precio, descripcion, tasa }
+  //  - legacy: { nombre, cantidad, precio, descripcion, tasa }
   // Normaliza a las keys canónicas que lee el frontend (el `??` deja intactas las canónicas).
   function normalizeLinea(l: Record<string, unknown>) {
     return {
@@ -291,6 +291,11 @@ export async function GET(
       // Datos adicionales del cliente si está guardado
       telefono:    cliente?.telefono,
       direccion:   cliente?.direccion,
+      // El correo de la FICHA del cliente, aparte del que se copió al documento.
+      // Van separados a propósito: `email` es lo que quedó grabado en la factura
+      // (y lo que se declaró a la DGII); `emailCliente` es el dato vivo del
+      // cliente, que se usa solo para proponer destinatario al enviar por correo.
+      emailCliente: cliente?.email ?? undefined,
     },
 
     montos: {

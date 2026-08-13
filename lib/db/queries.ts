@@ -260,6 +260,7 @@ export async function getUserTeams() {
         logo: teams.logo,
         cajaHabilitada: teams.cajaHabilitada,
         posHabilitado: teams.posHabilitado,
+        habilitacionCompletadoAt: teams.habilitacionCompletadoAt,
       })
       .from(teams)
       .orderBy(teams.createdAt);
@@ -279,6 +280,7 @@ export async function getUserTeams() {
       logo: teams.logo,
       cajaHabilitada: teams.cajaHabilitada,
       posHabilitado: teams.posHabilitado,
+      habilitacionCompletadoAt: teams.habilitacionCompletadoAt,
     })
     .from(teamMembers)
     .innerJoin(teams, eq(teamMembers.teamId, teams.id))
@@ -374,7 +376,7 @@ export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string
 }
 
 /**
- * Reporte "Ventas generales" estilo Alegra.
+ * Reporte "Ventas generales".
  * Devuelve agregados + lista de documentos del rango.
  *
  * - Ventas brutas: SUM(montoTotal) de documentos venta (tipo 31/32) ACEPTADOS

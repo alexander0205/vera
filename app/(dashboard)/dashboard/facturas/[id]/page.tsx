@@ -21,7 +21,7 @@ import {
   Loader2, AlertTriangle, CheckCircle, Clock,
   Printer, Ticket, ChevronDown, Mail, Copy,
   Package, ChevronUp, Plus, MoreVertical, Send,
-  TrendingUp,
+  TrendingUp, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -42,6 +42,7 @@ import { StickyNote, History as HistoryIcon } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useVolver } from '@/lib/hooks/useVolver';
+import { useListaNavegacion } from '@/lib/hooks/useListaNavegacion';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
@@ -142,6 +143,8 @@ interface FacturaDetalle {
     rnc?: string;
     razonSocial?: string;
     email?: string;
+    /** Correo de la ficha del cliente. Solo para proponer destinatario. */
+    emailCliente?: string;
     telefono?: string;
     direccion?: string;
   };
@@ -229,47 +232,45 @@ function EstadoDgiiCard({
           </button>
         )}
       </header>
-      <div className="px-4 pb-4 md:px-5 flex items-start gap-4">
-        {/* Badge circular */}
-        <div className={`flex flex-col items-center justify-center rounded-lg ${badgeColor} px-3 py-3 shrink-0 min-w-[88px]`}>
-          <Icon className="h-7 w-7" />
-          <span className="text-xs font-semibold mt-1 text-center leading-tight">{cfg.label}</span>
+      {/* El e-NCF manda: es lo que se viene a buscar. Antes eran cinco filas
+          del mismo peso —con el estado escrito dos veces, en el recuadro y en
+          la primera fila— y había que leerlas todas para encontrarlo. */}
+      <div className="px-4 pb-4 md:px-5">
+        <div className={`flex items-center gap-2 rounded-lg ${badgeColor} px-3 py-2 mb-3`}>
+          <Icon className="h-4 w-4 shrink-0" />
+          <span className="text-xs font-semibold leading-tight">{cfg.label}</span>
         </div>
-        {/* Detalle fields */}
-        <div className="flex-1 space-y-1.5 text-xs min-w-0">
-          <div className="flex justify-between gap-2">
-            <span className="text-gray-500">Estado:</span>
-            <span className="text-gray-900 font-medium">{cfg.label}</span>
+
+        <p className="font-mono text-base text-gray-900 leading-tight truncate" title={factura.encf}>
+          {factura.encf}
+        </p>
+        <p className="text-[11px] text-gray-500 mt-0.5">
+          emitida {factura.createdAt ? fmtFechaHora(factura.createdAt) : fmtFechaCorta(factura.fechaEmision)}
+        </p>
+
+        {/* Lo que casi nunca se mira, más callado y debajo de una línea. */}
+        {(factura.codigoSeguridad || factura.fechaFirma || factura.trackId) && (
+          <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5 text-[11px]">
+            {factura.codigoSeguridad && (
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-500">Código de seguridad</span>
+                <span className="text-gray-700 font-mono">{factura.codigoSeguridad}</span>
+              </div>
+            )}
+            {factura.fechaFirma && (
+              <div className="flex justify-between gap-2">
+                <span className="text-gray-500">Fecha firma</span>
+                <span className="text-gray-700">{factura.fechaFirma}</span>
+              </div>
+            )}
+            {factura.trackId && (
+              <div className="flex justify-between gap-2 min-w-0">
+                <span className="text-gray-500 shrink-0">Track ID</span>
+                <span className="text-gray-400 font-mono truncate" title={factura.trackId}>{factura.trackId}</span>
+              </div>
+            )}
           </div>
-          <div className="flex justify-between gap-2">
-            <span className="text-gray-500">e-NCF:</span>
-            <span className="text-gray-900 font-mono truncate">{factura.encf}</span>
-          </div>
-          {factura.codigoSeguridad && (
-            <div className="flex justify-between gap-2">
-              <span className="text-gray-500">Código de seguridad:</span>
-              <span className="text-gray-900 font-mono">{factura.codigoSeguridad}</span>
-            </div>
-          )}
-          <div className="flex justify-between gap-2">
-            <span className="text-gray-500">Fecha emisión:</span>
-            <span className="text-gray-900">
-              {factura.createdAt ? fmtFechaHora(factura.createdAt) : fmtFechaCorta(factura.fechaEmision)}
-            </span>
-          </div>
-          {factura.fechaFirma && (
-            <div className="flex justify-between gap-2">
-              <span className="text-gray-500">Fecha firma:</span>
-              <span className="text-gray-900">{factura.fechaFirma}</span>
-            </div>
-          )}
-          {factura.trackId && (
-            <div className="flex justify-between gap-2">
-              <span className="text-gray-500">Track ID:</span>
-              <span className="text-gray-900 font-mono truncate" title={factura.trackId}>{factura.trackId}</span>
-            </div>
-          )}
-        </div>
+        )}
       </div>
       {dgiiMensajes.length > 0 && (
         <div className="px-4 pb-4 md:px-5">
@@ -385,6 +386,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // A esta pantalla se llega desde muchos sitios —la ficha de un estudiante,
   // cuentas por cobrar, el buscador—, así que el listado es solo el respaldo.
   const volver   = useVolver(ui.backHref);
+
+  // Posición dentro de la lista de la que se llegó, para las flechas del
+  // header. Va antes de cualquier return temprano: es un hook.
+  const navLista = useListaNavegacion(ui.backHref, Number(docId));
 
   const [factura, setFactura] = useState<FacturaDetalle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -567,7 +572,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error cargando factura');
       setFactura(data);
-      setEmailTo(data.comprador?.email ?? '');
+      // Destinatario propuesto: primero el correo grabado en la factura; si el
+      // documento se creó sin él, el de la ficha del cliente. Muchas facturas
+      // viejas no lo traen y había que teclearlo a mano cada vez.
+      setEmailTo(data.comprador?.email || data.comprador?.emailCliente || '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -841,7 +849,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   // (encf ALG-), borrador (BOR-) y sin-ncf NUNCA fueron a DGII → sin estado
   // ni consulta DGII.
   const esEcfReal   = /^E\d/.test(factura.encf) && !['HISTORICA', 'BORRADOR'].includes(factura.estado);
-  // Sin e-CF real → se puede emitir a DGII (borrador, histórica de Alegra, sin-ncf).
+  // Sin e-CF real → se puede emitir a DGII (borrador, histórica importada, sin-ncf).
   const yaEnDgii    = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(factura.estado);
   const puedeEmitir = factura.estado !== 'ANULADO' && !yaEnDgii;
   const sinLineas   = factura.lineas.length === 0;
@@ -900,53 +908,89 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
     <section className="p-4 sm:p-6 min-h-full flex flex-col">
 
       {/* ─── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={volver}>
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">{ui.backLabel}</span>
-          </Button>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-mono">
-                {factura.encf && !factura.encf.startsWith('BOR-')
-                  ? factura.encf
-                  : (factura.codigo ?? `${ui.noun} #${factura.id}`)}
-              </h1>
-              <EstadoBadge estado={factura.estado} />
-              {/* Estado de COBRO (independiente del estado DGII) */}
-              {facturaPagada ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-                  Pagada
-                </span>
-              ) : saldo > 0 && pagadoDOP > 0 ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-                  Pago parcial
-                </span>
-              ) : null}
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {/* El tipo solo se escribe cuando aporta algo: si el documento no
-                  fue a la DGII, el badge de arriba ya dice "Sin comprobante" y
-                  repetirlo aquí era decir dos veces lo mismo en la misma línea. */}
-              {esEcfReal && (
-                <>
-                  <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
-                  <span className="mx-1.5">·</span>
-                </>
-              )}
-              Fecha: {fmtDateHora(factura.fechaEmision)}
-              {factura.fechaLimitePago && (
-                <>
-                  <span className="mx-1.5">·</span>
-                  Vencimiento: {fmtDate(factura.fechaLimitePago)}
-                </>
-              )}
-            </p>
-          </div>
+      {/* Una sola fila, sin envolver: cuando falta ancho el que cede es el
+          código (se recorta), no la fila entera partiéndose en dos pisos.
+          Los badges de estado DGII y de cobro salieron de aquí — el estado
+          fiscal lo cuenta la tarjeta Estado DGII y el cobro las cifras de
+          arriba; en el título eran una tercera copia. */}
+      <div className="flex items-center gap-3 mb-5 min-w-0">
+        {/* A esta pantalla se llega desde muchos sitios, así que el botón
+            vuelve a donde se vino y el listado queda solo como respaldo. */}
+        <Button variant="ghost" size="sm" onClick={volver} className="shrink-0">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          <span className="hidden sm:inline">{ui.backLabel}</span>
+        </Button>
+
+        <div className="flex flex-col min-w-0 flex-1">
+          <h1
+            className="text-xl sm:text-2xl font-bold text-gray-900 font-mono truncate leading-tight"
+            title={factura.encf && !factura.encf.startsWith('BOR-') ? factura.encf : (factura.codigo ?? undefined)}
+          >
+            {factura.encf && !factura.encf.startsWith('BOR-')
+              ? factura.encf
+              : (factura.codigo ?? `${ui.noun} #${factura.id}`)}
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">
+            {esEcfReal && (
+              <>
+                <span className="font-medium text-gray-600">{factura.tipoNombre}</span>
+                <span className="mx-1.5">·</span>
+              </>
+            )}
+            {fmtDateHora(factura.fechaEmision)}
+            {factura.fechaLimitePago && (
+              <>
+                <span className="mx-1.5">·</span>
+                Vence {fmtDate(factura.fechaLimitePago)}
+              </>
+            )}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-2 justify-end shrink-0">
+          {/* Recorrer la lista de la que se vino. Solo aparece si este documento
+              estaba en ella; con link directo no hay contexto que recorrer. */}
+          {navLista && (
+            <div className="hidden md:flex items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 p-0.5 mr-1">
+              <Button
+                variant="ghost" size="sm"
+                className="h-7 w-7 p-0"
+                disabled={!navLista.anteriorId}
+                title="Anterior"
+                aria-label="Documento anterior"
+                onClick={() => navLista.anteriorId && router.push(`${ui.backHref}/${navLista.anteriorId}`)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="px-1.5 text-[11px] font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {navLista.posicion} de {navLista.total.toLocaleString('es-DO')}
+              </span>
+              <Button
+                variant="ghost" size="sm"
+                className="h-7 w-7 p-0"
+                disabled={!navLista.siguienteId}
+                title="Siguiente"
+                aria-label="Documento siguiente"
+                onClick={() => navLista.siguienteId && router.push(`${ui.backHref}/${navLista.siguienteId}`)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Ver PDF sube al header: vivía en la barra de abajo, así que en una
+              factura larga había que recorrerla entera para verla impresa. */}
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <FileText className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Ver PDF</span>
+            </a>
+          </Button>
+
           {puedePolling && (
             <Button
               variant="outline" size="sm"
@@ -958,20 +1002,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </Button>
           )}
 
-          {/* Acción principal del documento, junto al resto de acciones. Antes
-              vivía en una tarjeta del sidebar: el usuario tenía que buscar a la
-              derecha lo que iba a hacer en el 90% de los casos, y esa tarjeta
-              se comía el alto de la columna. */}
-          {!esEcfReal && puedeEmitir && canEmitir && (
-            <Button
-              size="sm"
-              className="bg-teal-600 hover:bg-teal-700 text-white"
-              onClick={triggerEnviarDgii}
-            >
-              <Send className="h-4 w-4 mr-1" />
-              {sinLineas && canEdit ? 'Completar y emitir' : 'Enviar a DGII'}
-            </Button>
-          )}
+          {/* «Enviar a DGII» no se repite aquí: vive en la barra inferior, que
+              es fija y sigue a la vista al recorrer la factura. El header, en
+              cambio, se va con el scroll — es el peor sitio para la acción
+              principal, y tenerla en los dos era el mismo botón dos veces. */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1645,18 +1679,23 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           {!esEcfReal && puedeEmitir && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
               <div className="flex items-center gap-2 mb-2">
-                <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" aria-hidden="true" />
+                <Clock className="h-4 w-4 text-gray-400 shrink-0" aria-hidden="true" />
                 <h2 className="text-sm font-semibold text-gray-900">Estado DGII</h2>
               </div>
-              <p className="text-xs text-gray-500 mb-3 leading-snug">
-                No emitida a la DGII. Es un registro {esBorrador ? 'sin comprobante' : 'histórico'} sin e-CF.
-                Genera un e-CF para enviarla a la DGII.
+              {/* Una frase. La anterior decía «un registro sin comprobante sin
+                  e-CF» —el mismo dato dos veces y mal escrito— y encima repetía
+                  lo que ya dice el título de la pantalla. El botón de emitir
+                  vive en el header, con el resto de las acciones. */}
+              <p className="text-xs text-gray-500 leading-snug">
+                {esBorrador
+                  ? 'Este documento aún no lleva comprobante fiscal. Puedes generarle un e-CF cuando lo necesites.'
+                  : 'Registro histórico: nunca se envió a la DGII y no lleva e-CF.'}
               </p>
               {/* Sin botones: emitir y editar viven en el encabezado y en la
                   barra inferior. Esta tarjeta solo informa en qué estado está
                   el documento frente a la DGII. */}
               {!canEdit && !canEmitir && (
-                <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
                   <span>Para emitir o editar esta factura, pídele al administrador.</span>
                 </div>
@@ -1748,33 +1787,17 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </section>
           )}
 
-          {/* Info del comprobante — solo cuando hay e-CF real emitido a DGII */}
-          {esEcfReal && (
+          {/* Datos de la MODIFICACIÓN (solo notas de crédito/débito). El e-NCF,
+              el código de seguridad y el Track ID salieron de aquí: los muestra
+              la tarjeta Estado DGII, y tenerlos en las dos era leer lo mismo dos
+              veces seguidas en la misma columna. El tipo ya está en el subtítulo
+              del encabezado, escrito completo. */}
+          {esEcfReal && (factura.ncfModificado || factura.codigoModificacion != null || factura.razonModificacion) && (
             <section className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-4 md:px-5">
               <h3 className="text-[11px] uppercase tracking-wide text-gray-500 mb-2">
-                Información del comprobante
+                Documento que modifica
               </h3>
               <dl className="space-y-2 text-xs">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">e-NCF</dt>
-                  <dd className="font-mono font-semibold text-gray-900 text-right break-all">{factura.encf}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">Tipo</dt>
-                  <dd className="text-gray-800 text-right">e-{factura.tipoEcf}</dd>
-                </div>
-                {factura.codigoSeguridad && (
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-gray-500">Código seg.</dt>
-                    <dd className="font-mono font-bold text-teal-700 text-right">{factura.codigoSeguridad}</dd>
-                  </div>
-                )}
-                {factura.trackId && (
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-gray-500">Track ID</dt>
-                    <dd className="font-mono text-gray-700 text-[10px] text-right break-all">{factura.trackId}</dd>
-                  </div>
-                )}
                 {factura.ncfModificado && (
                   <div className="flex justify-between gap-3">
                     <dt className="text-gray-500">NCF modificado</dt>
@@ -1832,7 +1855,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       {/* ─── Bottom action bar ────────────────────────────────────────────── */}
       {/* Vista detalle = read-only. Solo borrador habilita acciones de edición.
           Para facturas emitidas: Volver + Ver PDF + Acciones (imprimir/email). */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           type="button"
           variant="outline"
@@ -1842,23 +1865,10 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           {esBorrador ? 'Cancelar' : 'Volver'}
         </Button>
 
+        {/* Ver PDF salió de aquí: ahora vive en el header, donde se alcanza sin
+            recorrer la factura entera. Abajo solo queda lo que cambia el
+            documento, para no tener el mismo botón dos veces en la pantalla. */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-          <Button
-            type="button"
-            variant="outline"
-            className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-            asChild
-          >
-            <a
-              href={`/api/pdf/factura/${factura.codigo ?? factura.id}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <FileText className="h-4 w-4 mr-1.5" />
-              Ver PDF
-            </a>
-          </Button>
-
           {puedeEmitir ? (
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto sm:items-center">
               {canEdit ? (

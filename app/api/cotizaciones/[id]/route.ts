@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { cotizaciones } from '@/lib/db/schema';
+import { cotizaciones, clients } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { userCanForTeam } from '@/lib/auth/permissions';
@@ -25,7 +25,20 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   const [row] = await db.select().from(cotizaciones)
     .where(and(eq(cotizaciones.id, numId), eq(cotizaciones.teamId, teamId)));
   if (!row) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
-  return NextResponse.json({ cotizacion: row });
+
+  // Correo de la ficha del cliente, aparte del que se copió a la cotización.
+  // `emailComprador` es lo que quedó grabado; `emailCliente` es el dato vivo y
+  // sirve solo para proponer destinatario al enviar por correo.
+  let emailCliente: string | null = null;
+  if (row.clientId) {
+    const [cl] = await db.select({ email: clients.email })
+      .from(clients)
+      .where(and(eq(clients.id, row.clientId), eq(clients.teamId, teamId)))
+      .limit(1);
+    emailCliente = cl?.email ?? null;
+  }
+
+  return NextResponse.json({ cotizacion: { ...row, emailCliente } });
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {

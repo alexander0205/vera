@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(parseInt(sp.get('limit') ?? '50', 10), 200);
   const offset = parseInt(sp.get('offset') ?? '0', 10);
 
-  // Facturas históricas (estado=HISTORICA, tipoEcf='00') importadas de Alegra
+  // Facturas históricas (estado=HISTORICA, tipoEcf='00') importadas por CSV
   // SÍ se listan aquí como ventas — además de en /dashboard/cuentas-por-cobrar.
   const conditions = [
     eq(ecfDocuments.teamId, teamId),

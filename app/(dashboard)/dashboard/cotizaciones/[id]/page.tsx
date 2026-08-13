@@ -28,6 +28,8 @@ interface Cotizacion {
   razonSocialComprador: string | null;
   rncComprador:         string | null;
   emailComprador:       string | null;
+  /** Correo de la ficha del cliente. Solo para proponer destinatario. */
+  emailCliente?:        string | null;
   fechaEmision:         string;
   fechaVencimiento:     string | null;
   montoSubtotal:        number;
@@ -117,7 +119,9 @@ export default function CotizacionDetallePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error cargando cotización');
       setCot(data.cotizacion);
-      setEmailTo(data.cotizacion?.emailComprador ?? '');
+      // Igual que en facturas: el correo grabado en la cotización y, si no hay,
+      // el de la ficha del cliente.
+      setEmailTo(data.cotizacion?.emailComprador || data.cotizacion?.emailCliente || '');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -508,7 +512,7 @@ export default function CotizacionDetallePage() {
       </div>
 
       {/* ── Bottom bar ───────────────────────────────────────────────────────── */}
-      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
+      <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-auto bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_-2px_rgba(0,0,0,0.08)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3">
         <Button
           variant="outline"
           className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"

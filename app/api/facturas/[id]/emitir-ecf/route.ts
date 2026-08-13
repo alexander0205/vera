@@ -155,7 +155,7 @@ export async function POST(
     const { doc, team } = row;
 
     // Permitir emisión para documentos SIN e-CF real: BORRADOR, HISTORICA
-    // (importadas de Alegra) o sin-ncf. Bloquear los que ya fueron a DGII o
+    // (importadas por CSV) o sin-ncf. Bloquear los que ya fueron a DGII o
     // están anulados.
     const yaEnDgii = ['EN_PROCESO', 'ACEPTADO', 'ACEPTADO_CONDICIONAL', 'RECHAZADO'].includes(doc.estado);
     if (doc.estado === 'ANULADO' || yaEnDgii) {
@@ -363,6 +363,7 @@ export async function POST(
     // Parse items from lineasJson
     let items: Array<{
       productoId?: number | null;
+      variantId?: number | null;
       nombreItem: string;
       descripcionItem?: string;
       cantidadItem: number;
@@ -391,6 +392,7 @@ export async function POST(
 
             return {
               productoId:             i.productoId ? Number(i.productoId) : null,
+              variantId:              i.variantId ? Number(i.variantId) : null,
               nombreItem:             String(i.nombreItem),
               descripcionItem:        i.descripcionItem ? String(i.descripcionItem) : undefined,
               cantidadItem:           Number(i.cantidadItem) || 1,

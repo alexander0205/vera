@@ -35,6 +35,9 @@ interface Props {
   /** El método elegido exige comprobante: cambia el copy y marca el bloque. */
   obligatorio?:     boolean;
   max?:             number;
+  /** Columna angosta (sidebar del detalle): el encabezado se apila en vez de
+   *  competir por el ancho, que es lo que partía el título en dos líneas. */
+  compacto?:        boolean;
 }
 
 const ACEPTA = 'image/jpeg,image/png,image/webp,application/pdf';
@@ -46,7 +49,7 @@ function kb(bytes: number): string {
 }
 
 export default function ComprobantesUploader({
-  docId, adjuntos, onChange, disabled = false, obligatorio = false, max = 5,
+  docId, adjuntos, onChange, disabled = false, obligatorio = false, max = 5, compacto = false,
 }: Props) {
   const [subiendo, setSubiendo]     = useState(false);
   const [viendo, setViendo]         = useState<number | null>(null);
@@ -192,12 +195,14 @@ export default function ComprobantesUploader({
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-2.5">
-        <span className="text-xs font-medium text-gray-700">
+      <div className={`mb-2.5 ${compacto ? 'space-y-0.5' : 'flex items-center justify-between gap-3'}`}>
+        <span className="block text-xs font-medium text-gray-700">
           Comprobante de pago {obligatorio && <span className="text-amber-700">· requerido</span>}
         </span>
-        <span className="text-[10px] text-gray-400">
-          {obligatorio ? 'Este método lo exige' : 'Opcional'} · arrastra, pega o elige · hasta {max}, 3 MB c/u
+        <span className="block text-[10px] text-gray-400 leading-snug">
+          {compacto
+            ? `Arrastra, pega o elige · hasta ${max}, 3 MB c/u`
+            : `${obligatorio ? 'Este método lo exige' : 'Opcional'} · arrastra, pega o elige · hasta ${max}, 3 MB c/u`}
         </span>
       </div>
 

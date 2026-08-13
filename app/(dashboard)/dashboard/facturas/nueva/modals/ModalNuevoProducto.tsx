@@ -15,6 +15,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { Check, ChevronDown, ChevronUp, PackagePlus } from 'lucide-react';
+import { VariantesEditor, type VariantesPayload } from '@/components/productos/VariantesEditor';
 import type { Producto } from '../utils/types';
 
 const TASA_ITBIS_MODAL = [
@@ -32,6 +33,8 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
   { value: 'combo',    label: 'Combo', disabled: true },
 ];
 
+const SIN_VARIANTES: VariantesPayload = { activo: false, variantAtributos: [], variants: [] };
+
 export function ModalNuevoProducto({ open, onClose, onCreated }: {
   open: boolean; onClose: () => void; onCreated: (p: Producto) => void;
 }) {
@@ -39,17 +42,25 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
   const [saving, setSaving]             = useState(false);
   const [error, setError]               = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
+  const [variantes, setVariantes]       = useState<VariantesPayload>(SIN_VARIANTES);
+  const [resetVariantes, setResetVariantes] = useState(0);
+
+  const usaVariantes = form.tipo === 'bien' && variantes.activo;
+
+  function resetAll() {
+    setForm({ nombre: '', precio: '', tasaItbis: 'exento', tipo: 'servicio', descripcion: '', unidad: 'Unidad', cantidadInicial: '' });
+    setShowAvanzado(false);
+    setVariantes(SIN_VARIANTES);
+    setResetVariantes(n => n + 1);
+  }
 
   async function handleSave() {
     if (!form.nombre.trim()) { setError('El nombre es obligatorio'); return; }
     setSaving(true); setError(null);
     try {
-      // Si es un bien y se indicó cantidad inicial, activar control de inventario
-      // y sembrar el stock. Sin esto el producto no genera movimientos de venta
-      // ni aparece en el historial del detalle de producto.
       const cantidadInicial = parseInt(form.cantidadInicial, 10);
       const tieneStockInicial =
-        form.tipo === 'bien' && form.cantidadInicial.trim() !== '' && !isNaN(cantidadInicial);
+        form.tipo === 'bien' && !usaVariantes && form.cantidadInicial.trim() !== '' && !isNaN(cantidadInicial);
 
       const payload = {
         nombre:       form.nombre,
@@ -62,13 +73,16 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
           controlaInventario: true,
           stockActual:        Math.max(0, cantidadInicial),
         }),
+        ...(usaVariantes && {
+          variantAtributos: variantes.variantAtributos,
+          variants:         variantes.variants,
+        }),
       };
       const res  = await fetch('/api/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onCreated(data.producto);
-      setForm({ nombre: '', precio: '', tasaItbis: 'exento', tipo: 'servicio', descripcion: '', unidad: 'Unidad', cantidadInicial: '' });
-      setShowAvanzado(false);
+      resetAll();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -85,7 +99,13 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
     <Dialog
       open={open}
       onClose={handleClose}
-      slotProps={{ paper: { sx: { borderRadius: '16px', maxWidth: 520, width: '100%' } } as object }}
+      slotProps={{ paper: { sx: {
+        borderRadius: '16px',
+        // Con variantes la tabla necesita más ancho; sin ellas el modal es el de siempre.
+        maxWidth: usaVariantes ? 720 : 520,
+        width: '100%',
+        maxHeight: '90vh',
+      } } as object }}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}>
         <PackagePlus size={20} color="#3658e1" />
@@ -156,7 +176,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
           label={<>Nombre <span style={{ color: '#ef4444' }}>*</span></>}
           size="small"
           fullWidth
-          placeholder={form.tipo === 'bien' ? 'Ej. Camisa talla M' : 'Ej. Diseño de logo'}
+          placeholder={form.tipo === 'bien' ? 'Ej. Camisa polo' : 'Ej. Diseño de logo'}
           value={form.nombre}
           onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
           sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
@@ -174,6 +194,7 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
             onChange={(e) => setForm((f) => ({ ...f, precio: e.target.value }))}
             slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+            helperText={usaVariantes ? 'Precio base; cada variante puede sobreescribirlo.' : undefined}
           />
           <FormControl size="small" fullWidth>
             <InputLabel>Impuesto (ITBIS)</InputLabel>
@@ -205,8 +226,8 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
           </Select>
         </FormControl>
 
-        {/* Cantidad inicial — solo para bienes */}
-        {form.tipo === 'bien' && (
+        {/* Cantidad inicial — solo si es bien SIN variantes (con variantes el stock va por variante) */}
+        {form.tipo === 'bien' && !usaVariantes && (
           <TextField
             label="Cantidad inicial en inventario"
             size="small"
@@ -218,6 +239,13 @@ export function ModalNuevoProducto({ open, onClose, onCreated }: {
             slotProps={{ htmlInput: { min: 0, step: 1 } }}
             sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
           />
+        )}
+
+        {/* Variantes — solo para bienes */}
+        {form.tipo === 'bien' && (
+          <Box sx={{ mb: 2 }}>
+            <VariantesEditor onChange={setVariantes} resetSignal={resetVariantes} />
+          </Box>
         )}
 
         {/* Formulario avanzado toggle */}

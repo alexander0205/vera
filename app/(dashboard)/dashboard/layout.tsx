@@ -50,6 +50,12 @@ type NavItem = {
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
+/** Grupos del nav abiertos/cerrados. Se recuerda entre recargas: quien
+ *  cierra Contabilidad porque no la usa no quiere volver a cerrarla cada
+ *  vez que entra. En localStorage, no sessionStorage — es una preferencia,
+ *  no un contexto de navegación. */
+const NAV_GRUPOS_KEY = 'zero:nav-grupos';
+
 const GROUPS: NavGroup[] = [
   {
     id: 'ingresos',
@@ -118,6 +124,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/maestros',      label: 'Maestros' },
       { href: '/dashboard/secuencias',    label: 'Secuencias NCF' },
       { href: '/dashboard/certificado',   label: 'Certificado digital' },
+      { href: '/dashboard/habilitacion',  label: 'Activar facturación electrónica' },
       // Usuarios, roles y plan viven en el área de Administración (/cuenta):
       // son del negocio, no de Facturación. Se llega por el switcher de módulo.
       { href: '/dashboard/impresoras',    label: 'Impresoras' },
@@ -192,6 +199,7 @@ const HREF_PERMISSION: Record<string, Permission | Permission[]> = {
 
   '/dashboard/secuencias':            'configuracion:gestionar',
   '/dashboard/certificado':           'configuracion:gestionar',
+  '/dashboard/habilitacion':          'configuracion:gestionar',
   '/dashboard/equipo':                'equipo:ver',
   '/dashboard/equipo/permisos':       'equipo:gestionar',
   '/dashboard/impresoras':            'configuracion:ver',
@@ -215,7 +223,7 @@ function canAccessHref(
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; }
+interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; habilitacionCompletadoAt: string | Date | null; }
 
 function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => void) {
   useEffect(() => {
@@ -259,10 +267,12 @@ const RAIL_WIDTH = 68;   // ancho colapsado (solo iconos) del sidebar desktop
 function SidebarContent({
   teams,
   activeTeamId,
+  dgiiHabilitado,
   onClose,
 }: {
   teams: Team[];
   activeTeamId: number | null;
+  dgiiHabilitado: boolean;
   onClose?: () => void;
 }) {
   const pathname    = usePathname();
@@ -317,19 +327,86 @@ function SidebarContent({
   const FACTURACION_ONLY_GROUPS = new Set(['ingresos', 'compras']);
   const sinFacturacion = !permsLoading && !modules.includes('facturacion');
 
-  const topItemsVisibles  = TOP_ITEMS.filter(item => can(item.href));
+  // "Activar facturación electrónica" vive arriba (fuera de Configuración)
+  // mientras el ambiente DGII del team no sea Producción; una vez ahí se
+  // mueve a Configuración, su ubicación permanente. Nunca aparece en los dos
+  // lugares a la vez. dgiiHabilitado viene de /api/habilitacion/ambiente-actual
+  // (lectura en vivo del ambiente en ecf-api) — ver DashboardLayout.
+  const habilitacionTopItem: NavItem = { href: '/dashboard/habilitacion', icon: Zap, label: 'Activar facturación electrónica' };
+
+  const topItemsVisibles  = [
+    ...TOP_ITEMS,
+    ...(!dgiiHabilitado ? [habilitacionTopItem] : []),
+  ].filter(item => can(item.href));
   const staticGroupsVis   = GROUPS
     .filter(g => !(sinFacturacion && FACTURACION_ONLY_GROUPS.has(g.id)))
-    .map(g => ({ ...g, children: g.children.filter(c => can(c.href)) }))
+    .map(g => ({
+      ...g,
+      children: g.children
+        .filter(c => can(c.href) && (dgiiHabilitado || c.href !== '/dashboard/habilitacion'))
+        // Dentro de Configuración, ya habilitado, es un ítem permanente — vuelve
+        // a su nombre original, distinto del CTA de arriba mientras está pendiente.
+        .map(c => c.href === '/dashboard/habilitacion' ? { ...c, label: 'Habilitación e-CF' } : c),
+    }))
     .filter(g => g.children.length > 0);
-  const groupsVisibles    = [cajaGroup, ...staticGroupsVis].filter((g): g is NavGroup => g !== null);
+  // Caja va detrás de Inventario, no arriba del todo: se abre una vez al día,
+  // mientras que Ingresos e Inventario se tocan a cada rato. El POS no entra
+  // aquí: en v2 es un módulo del rail, no un grupo del nav de Facturación.
+  const iInventario = staticGroupsVis.findIndex(g => g.id === 'inventario');
+  const conCaja = iInventario === -1
+    ? [...staticGroupsVis, cajaGroup]
+    : [
+        ...staticGroupsVis.slice(0, iInventario + 1),
+        cajaGroup,
+        ...staticGroupsVis.slice(iInventario + 1),
+      ];
+  const groupsVisibles    = conCaja.filter((g): g is NavGroup => g !== null);
 
-  const defaultOpen = groupsVisibles.reduce((acc, g) => {
-    acc[g.id] = g.children.some(c => pathname.startsWith(c.href));
-    return acc;
-  }, {} as Record<string, boolean>);
+  // Grupo que contiene la ruta actual. Siempre termina abierto: si no, el ítem
+  // en el que estás quedaría escondido dentro de un grupo cerrado.
+  const grupoActivo = groupsVisibles.find(
+    g => g.children.some(c => pathname.startsWith(c.href)),
+  )?.id ?? null;
 
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(defaultOpen);
+  // Arranca solo con el grupo activo. Lo guardado se lee DESPUÉS del primer
+  // render: tocar localStorage mientras se renderiza rompe la hidratación,
+  // porque el servidor no lo tiene y pinta otra cosa.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(
+    () => (grupoActivo ? { [grupoActivo]: true } : {}),
+  );
+  const leidoDelDisco = useRef(false);
+
+  useEffect(() => {
+    try {
+      const crudo = localStorage.getItem(NAV_GRUPOS_KEY);
+      const guardado = crudo ? (JSON.parse(crudo) as Record<string, boolean>) : {};
+      setOpenGroups(grupoActivo ? { ...guardado, [grupoActivo]: true } : guardado);
+    } catch {
+      // Storage bloqueado (modo privado, permisos): se queda con el default.
+    }
+    leidoDelDisco.current = true;
+    // Solo al montar: a partir de ahí manda lo que el usuario toque.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Al navegar a otra sección, su grupo se abre. Depende de `grupoActivo` y no
+  // de `pathname`: así, si cierras a mano el grupo en el que estás, se queda
+  // cerrado —moverte dentro de él no lo vuelve a abrir de un salto—.
+  useEffect(() => {
+    if (!grupoActivo) return;
+    setOpenGroups(prev => (prev[grupoActivo] ? prev : { ...prev, [grupoActivo]: true }));
+  }, [grupoActivo]);
+
+  // Se persiste el estado completo, no solo el último clic, para que abrir dos
+  // grupos y recargar los devuelva a los dos.
+  useEffect(() => {
+    if (!leidoDelDisco.current) return;
+    try {
+      localStorage.setItem(NAV_GRUPOS_KEY, JSON.stringify(openGroups));
+    } catch {
+      // Sin persistencia el nav sigue funcionando, solo no recuerda.
+    }
+  }, [openGroups]);
 
   const toggleGroup = (id: string) =>
     setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
@@ -657,6 +734,25 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
   // Gate del contador de turno: sin el módulo, el badge no debe ni consultar.
   const cajaHabilitada = (teams.find(t => t.id === activeTeamId) ?? teams[0])?.cajaHabilitada ?? false;
 
+  const activeTeamNav = teams.find(t => t.id === activeTeamId) ?? teams[0];
+
+  // Dónde vive el link de habilitación en el nav: el flag local
+  // (habilitacionCompletadoAt) llega gratis en el mismo /api/empresa/list de
+  // arriba — decide sin round-trip extra ni parpadeo. La lectura en vivo del
+  // ambiente en ecf-api (abajo) corre en paralelo solo para auto-sanar teams
+  // que llegaron a Producción antes de que este flag existiera; su GET ya
+  // deja el flag escrito (ver ambiente-actual/route.ts), así que solo hace
+  // falta revalidar la lista de empresas una vez si detecta un desfase.
+  const dgiiHabilitado = !!activeTeamNav?.habilitacionCompletadoAt;
+  const { data: ambienteActual } = useSWR<{ ambiente: string | null }>(
+    '/api/habilitacion/ambiente-actual',
+    layoutFetcher,
+    { revalidateOnFocus: false, revalidateOnReconnect: false },
+  );
+  useEffect(() => {
+    if (ambienteActual?.ambiente === 'Produccion' && !dgiiHabilitado) mutateEmpresa();
+  }, [ambienteActual, dgiiHabilitado, mutateEmpresa]);
+
   function handleSwitch(teamId: number) {
     setActiveTeamOverride(teamId);
     mutateEmpresa();
@@ -692,7 +788,7 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
               }),
             }}
           >
-            <SidebarContent teams={teams} activeTeamId={activeTeamId} />
+            <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} />
           </Box>
         </Box>
 
@@ -707,7 +803,7 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
           '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, boxSizing: 'border-box', border: 'none' },
         }}
       >
-        <SidebarContent teams={teams} activeTeamId={activeTeamId} onClose={() => setMobileOpen(false)} />
+        <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} onClose={() => setMobileOpen(false)} />
       </Drawer>
 
       {/* Columna de contenido: header (barra) + página */}

@@ -1,9 +1,9 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
-import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags, Camera } from 'lucide-react';
+import { ArrowLeft, Package, ShoppingBag, TrendingUp, CalendarClock, ShoppingCart, Truck, Tags, Camera, Pencil } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import MuiLink from '@mui/material/Link';
@@ -13,6 +13,8 @@ import Chip from '@mui/material/Chip';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
+import MuiButton from '@mui/material/Button';
+import { ProductoFormModal } from '@/components/productos/ProductoFormModal';
 import AlmacenesPosSection from './_almacenes-pos';
 
 interface Producto {
@@ -235,6 +237,8 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
   );
   const [subiendoImagen, setSubiendoImagen] = useState(false);
   const [tab, setTab] = useState('detalle');
+  const [showEdit, setShowEdit] = useState(false);
+  const { mutate: globalMutate } = useSWRConfig();
   const { data: ventasData, isLoading: loadingVentas } = useSWR<{ ventas?: VentaProducto[]; error?: string }>(
     `/api/productos/${productoId}/ventas`, fetcher,
   );
@@ -352,11 +356,30 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
             {subiendoImagen ? <Box component="span" sx={{ fontSize: '10px' }}>…</Box> : <Camera style={{ width: 16, height: 16 }} />}
           </Box>
         </Box>
-        <Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography component="h1" sx={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>{producto?.nombre ?? '—'}</Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', mt: 0.25 }}>{producto?.referencia ? `Ref. ${producto.referencia}` : 'Sin referencia'}</Typography>
         </Box>
+        {producto && (
+          <MuiButton variant="outlined" size="small" onClick={() => setShowEdit(true)}
+            startIcon={<Pencil style={{ width: 16, height: 16 }} />}
+            sx={{ flexShrink: 0, borderRadius: '8px', textTransform: 'none' }}>
+            Editar
+          </MuiButton>
+        )}
       </Box>
+
+      {/* Modal compartido de edición (mismo form que la lista). */}
+      <ProductoFormModal
+        open={showEdit}
+        productoId={productoId}
+        onClose={() => setShowEdit(false)}
+        onSaved={() => {
+          // Revalidar detalle + secciones que dependen del producto (variantes,
+          // stock por almacén, maestros).
+          globalMutate((key) => typeof key === 'string' && key.startsWith(`/api/productos/${productoId}`));
+        }}
+      />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 1.5 }}>
         <ResumenCard icon={<TrendingUp style={{ width: 18, height: 18, color: '#059669' }} />} iconBg="#ecfdf5"

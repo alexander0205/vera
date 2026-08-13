@@ -4,6 +4,135 @@ Todos los cambios publicados en producción. Una entrada por cada push a main.
 No se publican nombres de clientes, correos ni documentos: las notas se redactan
 automáticamente (ver scripts/release-notes.mjs).
 
+## v1.21.2 — 2026-08-12
+
+_1 commit(s) de mantenimiento no listados._
+
+## v1.21.1 — 2026-08-12
+
+### Arreglado
+
+- **novedades**: publicar el historial y que el release guarde el archivo
+
+## v1.21.0 — 2026-08-12
+
+### Nuevo
+
+- **nav**: recordar grupos abiertos, Caja bajo Inventario, fuera Alegra
+  - El estado abierto/cerrado de cada grupo del sidebar se guarda en localStorage. Quien cierra Contabilidad porque no la usa no tiene que volver a cerrarla cada vez que entra.
+  - Se lee DESPUÉS del primer render: tocar localStorage mientras se renderiza rompe la hidratación, porque el servidor no lo tiene y pinta otra cosa.
+  - El grupo de la ruta actual siempre termina abierto; si no, el ítem en el que estás quedaría escondido. Depende de qué grupo está activo y no del pathname, así que cerrar a mano el grupo en el que estás lo deja cerrado mientras te mueves dentro de él.
+  - Pasa a ir detrás de Inventario en vez de arriba del todo. Se abre una vez al día; Ingresos e Inventario se tocan a cada rato.
+  - Fuera de todo el producto: botones «Importar de Alegra» → «Importar CSV» en productos, clientes y facturas, sus modales, el estado «Histórica (Alegra)» → «Histórica (importada)» y las notas que se escriben en la BD al importar. También los comentarios de código en las rutas de import, lib/import/csv.ts, lib/ecf/categorias.ts, el template del PDF y el log de QA.
+  - Se conserva a propósito en .qa-report-persona.md: ahí Alegra es el competidor analizado, y borrarlo dejaría el documento sin sentido.
+- **factura**: header de una línea, contador de lista y Estado DGII legible
+  - Una sola fila que no envuelve. Cuando falta ancho cede el código, que se recorta con puntos suspensivos y guarda el completo en el title; antes la fila se partía en dos pisos. Verificado: alto fijo de 48px con un código corto, uno largo y uno absurdo, y sin desbordar a 760px.
+  - Fuera los badges de estado DGII y de cobro. El fiscal lo cuenta la tarjeta Estado DGII y el cobro las cifras de arriba; en el título eran una tercera copia de lo mismo.
+  - «Ver PDF» sube al header. Vivía solo en la barra inferior, así que en una factura larga había que recorrerla entera para verla impresa.
+  - «Enviar a DGII» deja de estar duplicado: se queda en la barra inferior, que es fija y sigue a la vista al hacer scroll. El header se va con el scroll, que es el peor sitio para la acción principal.
+  - Recorre la lista de la que se vino, con su filtro y su orden, no todos los documentos de la empresa: un contador global es un número sin significado.
+  - lib/hooks/useListaNavegacion.ts guarda el orden en sessionStorage (no en la URL, para no ensuciar los enlaces que la gente copia). DataTable reporta los ids ya ordenados, no los que llegaron del fetch — si no, ordenar por una columna dejaba las flechas siguiendo otro orden del que se ve.
+  - Sin contexto (link directo) no se muestra nada, en vez de flechas que saltan a documentos al azar.
+  - Sin e-CF: una frase. La anterior decía «un registro sin comprobante sin e-CF» —el mismo dato dos veces y mal escrito— y repetía el badge del título.
+  - Con e-CF: manda el e-NCF, que es lo que se viene a buscar. Antes eran cinco filas del mismo peso con el estado escrito dos veces. Código de seguridad y Track ID bajan de tono debajo de una línea.
+  - La tarjeta «Información del comprobante» repetía e-NCF, código de seguridad y Track ID justo debajo. Queda solo con lo que únicamente ella tiene —el documento que modifica, en notas de crédito y débito— y no se dibuja si no hay nada que contar.
+  - Modo compacto para la columna angosta: el encabezado se apila en vez de competir por el ancho, que era lo que partía el título en dos líneas y dejaba el recuadro de subir diminuto.
+
+### Arreglado
+
+- **ui**: barra inferior pegada al fondo y destinatario por defecto del cliente
+
+## v1.20.1 — 2026-08-12
+
+### Otros
+
+- Update support email in habilitation flow
+
+## v1.20.0 — 2026-08-11
+
+### Nuevo
+
+- **caja**: metodo y direccion en movimientos de caja
+- **productos**: editar variantes y form compartido crear/editar
+- **pos**: vender variantes en el POS (Opcion B, por almacen)
+  - El catalogo POS muestra productos con variantes usando la SUMA del stock de sus variantes EN EL ALMACEN de la terminal (product_variant_almacen_stock), y aparecen solo si tienen stock de variante asignado en ese almacen.
+  - Al tocar un producto con variantes se abre el selector, que consulta el stock por el almacen de la terminal; cada variante es su propia linea (clave compuesta). El cobro manda variantId -> el descuento baja el stock de la variante en ese almacen.
+  - Carrito, descuentos y ediciones operan por linea (lineKey).
+- **inventario**: Opcion B — stock de variante por almacen
+  - Nueva tabla product_variant_almacen_stock (variante x almacen) = fuente de verdad del stock de variantes; product_variants.stock_actual y products.stock_actual quedan como sumas denormalizadas. Migracion 0086.
+  - Al crear un producto con variantes se siembra el stock inicial de cada una en el almacen por defecto del equipo.
+  - descontarInventario/restaurarInventario: para ventas de variante el stock por-almacen se ajusta en product_variant_almacen_stock (no en product_almacen_stock, que es solo para productos sin variantes).
+  - GET /api/productos/[id]/variants acepta ?almacenId= y devuelve el stock de la variante en ese almacen (sin el, stock global). Acepta pos:vender ademas de productos:ver.
+  - El selector de variante en la factura pasa el almacen seleccionado.
+- **productos**: variantes tambien en el popup de Productos y servicios
+  - Se extrae la UI de variantes a un componente compartido VariantesEditor (components/productos) para no duplicar logica.
+  - ModalNuevoProducto (Nueva factura) ahora usa el componente compartido.
+  - El popup de Productos y servicios muestra el editor de variantes al CREAR un bien (al editar no, gestionar variantes existentes necesita UI aparte). Con variantes activas se oculta el bloque de stock manual y el backend fuerza controlaInventario y stock = suma de variantes.
+- **pos**: vender variantes de producto en el punto de venta
+  - Catalogo POS incluye productos con variantes (antes se excluian por no tener fila en product_almacen_stock). Su stock en la grilla es el GLOBAL (suma de variantes), no el del almacen: las variantes usan stock global en este MVP.
+  - Al tocar un producto con variantes se abre el selector de variante; cada variante es su propia linea del carrito (clave compuesta producto+variante).
+  - El cobro manda variantId por linea -> el descuento pega al stock de la variante.
+  - Descuentos globales y ediciones de qty/precio ahora operan por linea (lineKey) en vez de por id de producto, para soportar varias variantes del mismo producto.
+  - El endpoint de variantes acepta pos:vender ademas de productos:ver.
+- **facturacion**: abrir caja desde factura + variantes de producto
+  - Al guardar/emitir sin turno de caja abierto, el backend ya respondia 409 CAJA_SIN_TURNO (solo si la empresa usa el modulo de caja). El form ahora intercepta ese codigo y abre ModalAbrirCaja para abrir el turno sin salir de la factura; al abrir con exito reintenta el guardado. CAJA_TURNO_VENCIDO no entra al modal (hay que cerrar, no abrir).
+  - Schema: products.variant_atributos (ejes por producto), tabla product_variants (una fila por combinacion, stock global propio) e inventory_movements.variant_id. Migracion 0085.
+  - Crear producto: ModalNuevoProducto permite definir ejes (Talla/Color...) y generar combinaciones con stock/precio por variante.
+  - Vender en factura: al elegir un producto con variantes se abre ModalSeleccionarVariante; la linea guarda variantId y el descuento pega al stock de la variante (con ajuste paralelo del stock global del producto).
+  - descontarInventario y restaurarInventario ahora son variant-aware y simetricos.
+  - Nuevo endpoint GET /api/productos/[id]/variants para el selector.
+
+### Arreglado
+
+- **inventario**: variante inexistente, guard server-side y stock que no deriva
+- **dashboard**: usar 100dvh en el layout para evitar hueco al final en movil
+
+### Otros
+
+- Revert "feat(pos): vender variantes de producto en el punto de venta"
+
+_1 commit(s) de mantenimiento no listados._
+
+## v1.19.1 — 2026-08-11
+
+### Arreglado
+
+- **build**: apuntar el trace de sharp a los directorios reales del store
+- miniaturas rotas en prod, permisos faltantes y correos en el repo
+
+## v1.19.0 — 2026-08-11
+
+### Nuevo
+
+- **habilitacion**: renombrar wizard, nav condicional por ambiente, alertas por email
+  - Renombra "Habilitación e-CF" a "Activar facturación electrónica" en el wizard mientras está pendiente; dentro de Configuración vuelve a "Habilitación e-CF" una vez el team llega a Producción.
+  - El link vive arriba del nav (fuera de Configuración) mientras el ambiente DGII no sea Producción, y se mueve a Configuración una vez lo es. Fuente rápida: teams.habilitacion_completado_at (mismo fetch que el resto del nav, sin round-trip extra). Nuevo GET /api/habilitacion/ambiente-actual lee el ambiente real en ecf-api en paralelo y auto-sana ese flag para teams que llegaron a producción antes de que existiera.
+  - Arregla el modal de intro apareciendo con progreso ya guardado: ahora se decide junto con la carga real del estado, no solo por localStorage.
+  - Arregla navegación a fases anteriores tras completar el wizard (quedaba pegada a la pantalla de resumen) y la línea conectora del stepper (desalineada del centro del círculo, ahora también unificada entre desktop y mobile).
+  - Alerta por email (Resend) como complemento de la alerta de Slack cuando el Set de Pruebas falla — 3 destinatarios por default, configurable via HABILITACION_ALERT_EMAIL (coma-separado).
+- **habilitacion**: reconstruir el wizard de Habilitación e-CF a 15 pasos
+  - Postulación: quita el sub-paso de espera de validación DGII, persiste el sub-paso exacto (no solo la fase) para retomar tras recargar.
+  - Pruebas de Datos e-CF: reemplaza la simulación anterior por el flujo real de Set de Pruebas (subir Excel, sub-pasos de espera/éxito/error sin desglosar detalle, descarga solo XML).
+  - Pruebas Simulación e-CF (nuevo): genera los 29 e-CF sintéticos vía ecf-api, con las mismas pantallas de espera/éxito/error.
+  - Pruebas de Simulación Representación Impresa, Validación Representación Impresa, URL Servicios Prueba, Inicio/Recepción de pruebas (e-CF y Aprobación Comercial), Verificación Estatus (nuevos, portados de sus equivalentes en /admin).
+  - Declaración Jurada: reemplaza la firma/envío simulados por firma real (firmarXml) + descarga funcional + confirmación de envío manual.
+  - Cambia el ambiente TesteCF→CerteCF al completar Postulación y CerteCF→Producción al completar la Declaración Jurada.
+  - Corrige URLs de referencia para reflejar el dominio actual en vez del cacheado por ecf-api.
+- **habilitacion**: endpoints team-scoped para Set de Pruebas y Simulación
+  - ambiente: cambia TesteCF/CerteCF/Produccion del contribuyente propio.
+  - contexto: datos del team + codigoPublico + webhookBaseUrl (reconstruida contra el dominio actual de ECF_API_URL, no el cacheado por ecf-api).
+  - set-pruebas/*: subir Excel, estado/casos, re-emitir, borrar, descargas (ZIP <250K solo XML, paquete completo con filtro opcional pdfOnly).
+  - simulacion/*: iniciar/reiniciar/consultar la Simulación e-CF (29 casos sintéticos, sin Excel).
+  - emisiones/[id]/pdf: proxy de descarga con verificación de dueño.
+  - ownership.ts: verifica que un runId pertenezca al team antes de dejarlo operar sobre él — necesario porque ecf-api no acota estos endpoints por team.
+- **habilitacion**: alertar por Slack cuando el Set de Pruebas falla
+
+### Arreglado
+
+- **habilitacion**: cerrar tres huecos de autorización
+
+_2 commit(s) de mantenimiento no listados._
+
 ## v1.18.1 — 2026-08-07
 
 ### Arreglado

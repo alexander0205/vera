@@ -305,7 +305,7 @@ export default function ClientesPage() {
             <MuiButton variant="outlined" size="small" onClick={() => setShowImport(true)}
               startIcon={<Upload style={{ width: 14, height: 14 }} />}
               sx={{ borderRadius: '8px', textTransform: 'none', borderColor: 'divider', color: 'text.secondary' }}>
-              Importar de Alegra
+              Importar CSV
             </MuiButton>
             <MuiButton variant="contained" size="small" disableElevation onClick={abrirNuevo}
               startIcon={<Plus style={{ width: 14, height: 14 }} />}
@@ -320,8 +320,8 @@ export default function ClientesPage() {
         open={showImport}
         onClose={() => setShowImport(false)}
         endpoint="/api/import/clientes"
-        title="Importar clientes de Alegra"
-        helpText="Archivo CSV exportado de Alegra (Contactos). Se omiten duplicados por RNC o nombre."
+        title="Importar clientes desde CSV"
+        helpText="Archivo CSV de contactos. Se omiten duplicados por RNC o nombre."
         columns={[
           { key: 'razonSocial', label: 'Nombre / Razón Social' },
           { key: 'rnc',         label: 'RNC / Cédula' },
