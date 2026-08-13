@@ -26,8 +26,44 @@
     "sistemas. Si no lo entiende, está mal escrito."
   ],
   "pendiente": {
-    "titulo": "",
-    "cambios": []
+    "titulo": "Tu colegio, cobrado solo",
+    "cambios": [
+      {
+        "tipo": "nuevo",
+        "titulo": "El colegio ya lleva su propio cobro",
+        "detalle": "Antes matriculabas al alumno aquí y la mensualidad la cobrabas por fuera, en una hoja aparte. Ahora cada concepto tiene su calendario de cuotas, su fecha de vencimiento y su recargo por mora, y de cada cargo sale la factura con su comprobante fiscal."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Recordatorios de pago que salen solos",
+        "detalle": "Puedes avisarle a la familia por correo, WhatsApp y mensaje de texto en tres momentos: cuando sale la factura, el día que vence y unos días antes de que entre el recargo. Se manda una sola vez por cargo y por vía, así que a nadie le llega el mismo aviso dos veces."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Una pantalla para las familias que pagan",
+        "detalle": "Cada responsable de pago tiene ahora su ficha: lo que se le facturó, lo que abonó, lo que debe por cada hijo, sus facturas, sus recordatorios y por dónde se le puede escribir. Antes había que ir alumno por alumno para armar esa cuenta."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Panorama de la cartera del colegio",
+        "detalle": "De un vistazo: cuánto se facturó, cuánto entró, cuánto está vencido y quién debe más. Y del alumno puedes imprimir un récord financiero completo, cargo por cargo y pago por pago, que es el papel que la familia viene a discutir."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Los papeles de cada alumno, en su sitio",
+        "detalle": "Defines qué documentos pide el colegio, ves cuáles faltan y le mandas a la familia un enlace para que los suba ella misma, sin ir presencialmente a entregarlos."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Se avisa a quien de verdad paga",
+        "detalle": "El responsable de pago dejó de ser una casilla dentro del tutor y pasó a ser un contacto de facturación. Antes la misma persona vivía duplicada —como tutor y como cliente— y con el teléfono y el correo escritos dos veces, que casi nunca coincidían."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Se ve claro por dónde NO se le puede avisar",
+        "detalle": "Si a un responsable le falta el celular, el WhatsApp o el correo, ahora se marca en rojo en su ficha y el aviso se queda mientras falte alguno. El teléfono fijo ya no cuenta como vía de contacto: no recibe ni mensajes de texto ni WhatsApp."
+      }
+    ]
   },
   "versiones": [
     {

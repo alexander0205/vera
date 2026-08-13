@@ -230,7 +230,13 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) { onClose(); setShowAvanzado(false); } }}>
-      <DialogContent className="max-w-3xl lg:left-[calc(50%+7rem)]">
+      {/* Sin `lg:left-[calc(50%+7rem)]`. Esa compensación venía de cuando
+          `DialogContent` era el de Radix —que se centra a mano con `left-1/2` y
+          un translate— y había que correrlo para que el sidebar no lo tapara.
+          Aquí ese mismo componente ya es un Dialog de MUI, que centra por flex:
+          el `left` deja de compensar nada y se convierte en un desplazamiento a
+          secas, que sacaba el modal 652 px fuera de la pantalla. */}
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>{esEdicion ? 'Editar ítem' : 'Nuevo producto o servicio'}</DialogTitle>
         </DialogHeader>
