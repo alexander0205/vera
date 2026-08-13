@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, users, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
@@ -216,22 +216,22 @@ async function validarStockAgotado(
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUser();
+    // Sesión y team activo en paralelo (ambos cacheados por-request). Antes eran
+    // dos await seriales contra Neon (~142ms c/u en us-east-1).
+    const [user, teamId] = await Promise.all([getUser(), getTeamIdForUser()]);
     if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-
-    const teamId = await getTeamIdForUser();
     if (!teamId) return NextResponse.json({ error: 'Sin empresa configurada' }, { status: 403 });
 
     // ── Gate: facturas:crear ──────────────────────────────────────────────────
-    const [[u], [m]] = await Promise.all([
-      db.select({ platformRole: users.platformRole }).from(users).where(eq(users.id, user.id)).limit(1),
+    // platformRole ya viene en el row de getUser() → no re-consultarlo. El rol de
+    // miembro y los datos del team son independientes entre sí → un round-trip.
+    const [[m], [team]] = await Promise.all([
       db.select({ role: teamMembers.role }).from(teamMembers).where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId))).limit(1),
+      db.select().from(teams).where(eq(teams.id, teamId)).limit(1),
     ]);
-    if (!await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:crear')) {
+    if (!await userCanForTeam(teamId, user.platformRole, m?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso para crear facturas' }, { status: 403 });
     }
-
-    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
 
     const body = await request.json();
     const modoPrevio = body?.modo ?? 'emitir';
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
     const fechaEmisionCustom =
       data.tipoEcf === 'sin-ncf' &&
       data.fechaEmision &&
-      await userCanForTeam(teamId, u?.platformRole, m?.role, 'facturas:fecha-personalizada')
+      await userCanForTeam(teamId, user.platformRole, m?.role, 'facturas:fecha-personalizada')
         ? new Date(`${data.fechaEmision}T12:00:00`)
         : null;
 
@@ -866,49 +866,50 @@ export async function POST(request: NextRequest) {
       }
       const saved = outcome.row;
 
-      // Descuento de stock al guardar la factura definitiva (sin-ncf). El
-      // borrador real (tipo e31/e32/etc, BOR-xxx) no descuenta hasta emitirse.
-      if (esFacturaDefinitivaNueva) {
-        await descontarInventario(teamId, user.id, saved.id, saved.encf, data.items, data.almacenId ?? null)
-          .catch((e) => console.error('[borrador nuevo] descuento stock falló', e));
-      }
-
-      // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
-      if (data.tipoEcf === '34' && padreDoc) {
-        try { await recalcularEstadoPago(padreDoc.id); } catch (e) { console.error('[emitir NC recalc padre]', e); }
-      }
-
-      // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
-      // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
-      // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
-      // recalcula estado_pago). Si no, flujo single existente.
-      if (data.pagos?.length) {
-        try {
-          await registrarPagosSplit({
-            teamId,
-            ecfDocumentId: saved.id,
-            fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
-            createdBy:     user.id,
-            turnoCajaId:   turnoBorradorId,
-            pagos: data.pagos
-              .filter(p => p.valor > 0)
-              .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
-          });
-        } catch (e) { console.error('[emitir borrador registrarPagosSplit]', e); }
-      } else if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0) {
-        try {
-          await registrarPago({
-            teamId,
-            ecfDocumentId: saved.id,
-            montoCentavos: Math.min(Math.round(data.pagoValor * 100), Math.round(totales.montoTotal * 100)),
-            metodo:        data.pagoMetodo || 'otro',
-            cuenta:        data.pagoCuenta || null,
-            fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
-            createdBy:     user.id,
-            turnoCajaId:   turnoBorradorId,
-          });
-        } catch (e) { console.error('[emitir borrador registrarPago]', e); }
-      }
+      // Efectos secundarios independientes tras crear el borrador → en paralelo.
+      // Antes eran hasta 3 bloques await seriales (descuento de stock, recálculo
+      // del padre en NC, registro de pago), cada uno 1+ round-trips a Neon. No
+      // comparten datos ni tabla entre sí, así que se pueden solapar. Cada uno
+      // conserva su propio catch para que un fallo no tumbe a los otros.
+      await Promise.all([
+        // Descuento de stock al guardar la factura definitiva (sin-ncf). El
+        // borrador real (tipo e31/e32/etc, BOR-xxx) no descuenta hasta emitirse.
+        esFacturaDefinitivaNueva
+          ? descontarInventario(teamId, user.id, saved.id, saved.encf, data.items, data.almacenId ?? null)
+              .catch((e) => console.error('[borrador nuevo] descuento stock falló', e))
+          : null,
+        // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
+        data.tipoEcf === '34' && padreDoc
+          ? recalcularEstadoPago(padreDoc.id).catch((e) => console.error('[emitir NC recalc padre]', e))
+          : null,
+        // Pago al crear: registrar en el ledger (source of truth). Inline ya quedó
+        // como seed en extraFields; registrarPago lo sincroniza desde el ledger.
+        // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
+        // recalcula estado_pago). Si no, flujo single existente.
+        data.pagos?.length
+          ? registrarPagosSplit({
+              teamId,
+              ecfDocumentId: saved.id,
+              fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+              createdBy:     user.id,
+              turnoCajaId:   turnoBorradorId,
+              pagos: data.pagos
+                .filter(p => p.valor > 0)
+                .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
+            }).catch((e) => console.error('[emitir borrador registrarPagosSplit]', e))
+          : (data.pagoRecibido && data.pagoValor && data.pagoValor > 0
+              ? registrarPago({
+                  teamId,
+                  ecfDocumentId: saved.id,
+                  montoCentavos: Math.min(Math.round(data.pagoValor * 100), Math.round(totales.montoTotal * 100)),
+                  metodo:        data.pagoMetodo || 'otro',
+                  cuenta:        data.pagoCuenta || null,
+                  fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
+                  createdBy:     user.id,
+                  turnoCajaId:   turnoBorradorId,
+                }).catch((e) => console.error('[emitir borrador registrarPago]', e))
+              : null),
+      ]);
 
       // Split: la suma de los métodos (clamped al total) es el pago reportado.
       const sumaSplit = data.pagos?.length
