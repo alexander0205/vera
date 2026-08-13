@@ -775,7 +775,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const codigo      = await generarCodigoFactura(db, { teamId, userId: user.id, tipoEcf: data.tipoEcf });
+      const codigo      = await generarCodigoFactura(db, {
+        teamId, userId: user.id, tipoEcf: data.tipoEcf,
+        // team y user ya cargados arriba → evita 2 SELECT redundantes.
+        empNombre: team?.razonSocial ?? team?.nombreComercial ?? team?.name ?? null,
+        usrNombre: user.name ?? null,
+        usrEmail:  user.email ?? null,
+      });
       const estadoPago  = calcularEstadoPago({
         estado: 'BORRADOR', tipoPago: data.tipoPago ?? 1, montoTotal: montoCts, totalPagado: 0,
       });
