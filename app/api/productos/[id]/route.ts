@@ -72,7 +72,29 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     .where(and(eq(products.id, prodId), eq(products.teamId, teamId))).limit(1);
   if (!prod) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 });
 
-  return NextResponse.json({ producto: { ...prod, precioDOP: prod.precio / 100, costoDOP: prod.costo / 100 } });
+  // Las variantes van con el producto: quien pregunta por un producto con ejes
+  // casi siempre necesita saber CUÁLES son (para elegir talla al ajustar el
+  // inventario, por ejemplo). Traerlas aparte obligaba a una segunda ruta y a
+  // que cada pantalla se acordara de llamarla.
+  const variantes = await db.select({
+    id: productVariants.id,
+    nombre: productVariants.nombre,
+    atributos: productVariants.atributos,
+    precio: productVariants.precio,
+    stockActual: productVariants.stockActual,
+    activo: productVariants.activo,
+  })
+    .from(productVariants)
+    .where(and(
+      eq(productVariants.productId, prodId),
+      eq(productVariants.teamId, teamId),
+      eq(productVariants.activo, true),
+    ))
+    .orderBy(productVariants.id);
+
+  return NextResponse.json({
+    producto: { ...prod, precioDOP: prod.precio / 100, costoDOP: prod.costo / 100, variantes },
+  });
 }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {

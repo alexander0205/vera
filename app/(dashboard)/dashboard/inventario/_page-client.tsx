@@ -19,6 +19,8 @@ import {
   PackagePlus, ArrowDownLeft, ArrowUpRight, Wrench, Package,
 } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { Autocomplete } from '@/app/(dashboard)/dashboard/facturas/nueva/components/Autocomplete';
+import { renderProductoOption } from '@/components/productos/ProductoOption';
 
 interface Movimiento {
   id:             number;
@@ -62,6 +64,10 @@ type TipoAjuste = 'ENTRADA' | 'AJUSTE_SALIDA' | 'AJUSTE_ENTRADA' | 'STOCK_INICIA
 
 interface AjusteForm {
   productoId: string;
+  /** Qué talla/color entra o sale. Vacío si el producto no tiene ejes. */
+  variantId:  string;
+  /** A qué almacén. En el POS viene fijado por la terminal. */
+  almacenId:  string;
   tipo:       TipoAjuste;
   cantidad:   string;
   motivo:     string;
@@ -69,10 +75,29 @@ interface AjusteForm {
 
 const EMPTY_AJUSTE: AjusteForm = {
   productoId: '',
+  variantId:  '',
+  almacenId:  '',
   tipo:       'ENTRADA',
   cantidad:   '',
   motivo:     '',
 };
+
+/** Lo mínimo del producto elegido para saber qué más hay que preguntar. */
+interface ProductoElegido {
+  id: number;
+  nombre: string;
+  referencia?: string | null;
+  descripcion?: string | null;
+  variantAtributos?: { nombre: string; valores: string[] }[] | null;
+}
+
+interface VarianteBasica {
+  id: number;
+  nombre: string;
+  stockActual?: number;
+}
+
+interface AlmacenBasico { id: number; nombre: string }
 
 /**
  * `almacenId` fija la pantalla a UN almacén — lo usa el POS para mostrar solo
@@ -88,6 +113,44 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
   const [saving,      setSaving]          = useState(false);
   const [opError,     setOpError]         = useState<string | null>(null);
   const [ajusteOk,    setAjusteOk]        = useState<string | null>(null);
+  const [elegido,     setElegido]         = useState<ProductoElegido | null>(null);
+  const [variantes,   setVariantes]       = useState<VarianteBasica[]>([]);
+  const [almacenes,   setAlmacenes]       = useState<AlmacenBasico[]>([]);
+
+  // Los ejes del producto (Talla, Color…) dicen si hay que preguntar cuál.
+  const tieneVariantes = (elegido?.variantAtributos?.length ?? 0) > 0;
+
+  // Al elegir producto se traen sus variantes. Van por su propia consulta y no
+  // con el listado: son de UN producto y el listado trae ciento y pico.
+  useEffect(() => {
+    const id = ajuste.productoId;
+    if (!id) { setVariantes([]); return; }
+    let vivo = true;
+    fetch(`/api/productos/${id}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!vivo || !d) return;
+        const p = d.producto ?? d;
+        setElegido({
+          id: p.id, nombre: p.nombre, referencia: p.referencia, descripcion: p.descripcion,
+          variantAtributos: p.variantAtributos ?? [],
+        });
+        setVariantes((p.variantes ?? []).map((v: { id: number; nombre: string; stockActual?: number }) => ({
+          id: v.id, nombre: v.nombre, stockActual: v.stockActual,
+        })));
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [ajuste.productoId]);
+
+  // Los almacenes solo hacen falta cuando la pantalla NO está fijada a uno.
+  useEffect(() => {
+    if (almacenId) return;
+    fetch('/api/almacenes')
+      .then(r => (r.ok ? r.json() : { almacenes: [] }))
+      .then(d => setAlmacenes(d.almacenes ?? []))
+      .catch(() => {});
+  }, [almacenId]);
 
   const productoFilter = filterValues.productoId ?? '';
   const tipoFilter     = filterValues.tipo        ?? '';
@@ -115,23 +178,60 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
       .then(d => setProductos(d.productos?.map((p: { id: number; nombre: string }) => ({ id: p.id, nombre: p.nombre })) ?? []));
   }, []);
 
+  /** Busca en el catálogo de bienes. El buscador manda al servidor, no filtra
+   *  en memoria: el listado de arriba trae solo la primera página. */
+  const buscarProductos = useCallback(async (q: string): Promise<ProductoElegido[]> => {
+    const p = new URLSearchParams({ tipo: 'bien', limit: '20' });
+    if (q.trim()) p.set('q', q.trim());
+    const res = await fetch(`/api/productos?${p}`);
+    if (!res.ok) return [];
+    const d = await res.json();
+    return (d.productos ?? []).map((x: ProductoElegido) => ({
+      id: x.id, nombre: x.nombre, referencia: x.referencia, descripcion: x.descripcion,
+      variantAtributos: x.variantAtributos ?? [],
+    }));
+  }, []);
+
   async function handleAjuste() {
     if (!ajuste.productoId) { setOpError('Selecciona un producto'); return; }
+    // Se corta aquí y no en el servidor para no hacer el viaje, pero el
+    // servidor lo vuelve a comprobar: esta pantalla no es su único cliente.
+    if (tieneVariantes && !ajuste.variantId) {
+      setOpError('Este producto tiene variantes: elige a cuál va el movimiento');
+      return;
+    }
     const cant = parseInt(ajuste.cantidad);
     if (!cant || cant <= 0) { setOpError('La cantidad debe ser mayor a 0'); return; }
+
+    // El almacén de la terminal manda cuando la pantalla está fijada a uno.
+    const almacenElegido = almacenId ?? (ajuste.almacenId ? parseInt(ajuste.almacenId) : null);
 
     setSaving(true); setOpError(null);
     try {
       const res  = await fetch('/api/inventario/ajuste', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ productoId: parseInt(ajuste.productoId), tipo: ajuste.tipo, cantidad: cant, motivo: ajuste.motivo || null }),
+        body:    JSON.stringify({
+          productoId: parseInt(ajuste.productoId),
+          variantId:  ajuste.variantId ? parseInt(ajuste.variantId) : null,
+          almacenId:  almacenElegido,
+          tipo: ajuste.tipo,
+          cantidad: cant,
+          motivo: ajuste.motivo || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error registrando ajuste');
-      setAjusteOk(`Stock actualizado: ${data.stockActual} unidades`);
+      // Se dice de QUÉ es el stock: con tallas, "23 unidades" a secas hacía
+      // pensar que era el total del producto cuando es el de la M.
+      const deQue = ajuste.variantId
+        ? `${elegido?.nombre ?? 'producto'} · ${variantes.find(v => String(v.id) === ajuste.variantId)?.nombre ?? ''}`
+        : (elegido?.nombre ?? 'Stock');
+      setAjusteOk(`${deQue}: ${data.stockActual} unidades`);
       setShowAjuste(false);
       setAjuste(EMPTY_AJUSTE);
+      setElegido(null);
+      setVariantes([]);
       cargar(productoFilter, tipoFilter);
     } catch (e: unknown) {
       setOpError(e instanceof Error ? e.message : 'Error');
@@ -308,22 +408,79 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
             <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
               Producto
             </Typography>
-            <FormControl size="small" fullWidth>
-              <Select
-                value={ajuste.productoId}
-                onChange={(e) => setAjuste(a => ({ ...a, productoId: e.target.value }))}
-                displayEmpty
-                renderValue={(selected) => selected
-                  ? (productos.find(p => String(p.id) === selected)?.nombre ?? selected)
-                  : <Box component="span" sx={{ color: '#9ca3af' }}>Selecciona un producto...</Box>}
-              >
-                {productos.map(p => <MenuItem key={p.id} value={String(p.id)}>{p.nombre}</MenuItem>)}
-              </Select>
-            </FormControl>
-            {productos.length === 0 && (
-              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: '#9ca3af' }}>No hay productos tipo bien con control de inventario activo.</Typography>
-            )}
+            {/* El mismo buscador que la línea de factura, con la misma rejilla
+                de referencia + nombre + descripción. Era un <select> con solo
+                el nombre, y en un catálogo con "Material gastable 01", "02" y
+                "03" el nombre no alcanza para saber cuál es cuál. */}
+            <Autocomplete<ProductoElegido>
+              placeholder="Busca por nombre o referencia…"
+              value={elegido?.nombre ?? ''}
+              dropdownMinWidth={380}
+              onSearch={buscarProductos}
+              renderOption={renderProductoOption}
+              onSelect={(p) => {
+                setElegido(p);
+                // La talla anterior no vale para otro producto.
+                setAjuste(a => ({ ...a, productoId: String(p.id), variantId: '' }));
+              }}
+              onClear={() => { setElegido(null); setVariantes([]); setAjuste(a => ({ ...a, productoId: '', variantId: '' })); }}
+            />
           </Box>
+
+          {/* Solo si el producto tiene ejes. Preguntarlo siempre sería un campo
+              vacío en el 95% de los casos; no preguntarlo cuando los hay es lo
+              que descuadraba el total con la suma de las tallas. */}
+          {tieneVariantes && (
+            <Box>
+              <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                {elegido?.variantAtributos?.map(a => a.nombre).join(' / ') || 'Variante'}
+              </Typography>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={ajuste.variantId}
+                  onChange={(e) => setAjuste(a => ({ ...a, variantId: e.target.value }))}
+                  displayEmpty
+                  renderValue={(sel) => sel
+                    ? (variantes.find(v => String(v.id) === sel)?.nombre ?? sel)
+                    : <Box component="span" sx={{ color: '#9ca3af' }}>¿Cuál?</Box>}
+                >
+                  {variantes.map(v => (
+                    <MenuItem key={v.id} value={String(v.id)}>
+                      {v.nombre}
+                      <Box component="span" sx={{ ml: 1, color: '#9ca3af', fontSize: '0.75rem' }}>
+                        stock {v.stockActual ?? 0}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
+
+          {/* Fijado en el POS (la terminal ya dice cuál), a elegir en
+              Facturación. Sin almacén el movimiento no llega a ninguna caja: se
+              guardaba con almacén vacío y la propia lista, que filtra por
+              almacén, no lo volvía a encontrar. */}
+          {!almacenId && (
+            <Box>
+              <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+                Almacén <Box component="span" sx={{ color: '#9ca3af', fontWeight: 400 }}>(opcional)</Box>
+              </Typography>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={ajuste.almacenId}
+                  onChange={(e) => setAjuste(a => ({ ...a, almacenId: e.target.value }))}
+                  displayEmpty
+                  renderValue={(sel) => sel
+                    ? (almacenes.find(x => String(x.id) === sel)?.nombre ?? sel)
+                    : <Box component="span" sx={{ color: '#9ca3af' }}>Solo el stock general</Box>}
+                >
+                  <MenuItem value="">Solo el stock general</MenuItem>
+                  {almacenes.map(x => <MenuItem key={x.id} value={String(x.id)}>{x.nombre}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
 
           <Box>
             <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>

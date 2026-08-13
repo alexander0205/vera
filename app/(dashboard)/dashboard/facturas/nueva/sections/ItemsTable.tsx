@@ -17,6 +17,7 @@ import { Info, X } from 'lucide-react';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import type { TipoEcfRegla } from '@/lib/ecf/types';
 import { Autocomplete } from '../components/Autocomplete';
+import { renderProductoOption } from '@/components/productos/ProductoOption';
 import { LineaMaestros } from './LineaMaestros';
 import { calcularMontoItem } from '../utils/calculos';
 import { TASA_ITBIS } from '../utils/types';
@@ -43,28 +44,8 @@ const inputNumeroSx = {
 };
 
 /** Fila del dropdown de productos: código (referencia) · nombre + descripción · precio/ITBIS. */
-function renderProductoOption(p: Producto) {
-  return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '5rem 1fr', alignItems: 'start', columnGap: 1.5, rowGap: 0.25 }}>
-      <Typography
-        component="span"
-        title={p.referencia ?? undefined}
-        sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pt: '2px' }}
-      >
-        {p.referencia || '—'}
-      </Typography>
-      <Typography sx={{ minWidth: 0, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</Typography>
-      {p.descripcion && (
-        <Typography
-          title={p.descripcion}
-          sx={{ gridColumn: 'span 2', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem', color: '#6b7280' }}
-        >
-          {p.descripcion}
-        </Typography>
-      )}
-    </Box>
-  );
-}
+// Se mudó a components/productos/ProductoOption.tsx: ahora también lo usa el
+// ajuste de inventario, y dos copias del mismo dibujo se separan solas.
 
 interface Props {
   items: ItemLinea[];
