@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Download, Ban, FileText, Upload, Eye,
+  Plus, Download, Ban, FileText, Upload, Eye, Store,
 } from 'lucide-react';
+import Chip from '@mui/material/Chip';
 import { toast } from 'sonner';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import { NotasMoraTable } from '@/components/notas-mora-table';
@@ -96,6 +97,8 @@ interface Doc {
   createdAt: string;
   createdByName?: string | null;
   dependienteNombre?: string | null;
+  turnoCajaId?: number | null;
+  tipoOrden?: string | null;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -190,7 +193,27 @@ export default function FacturasPage() {
           className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
           title={doc.codigo ?? `#${doc.id}`}
         >
+          {/* El código corto es de esta rama; el sello POS viene de la del
+              punto de venta. Se quedan los dos: uno dice CUÁL factura es y el
+              otro DE DÓNDE salió, y en una lista mezclada las dos preguntas se
+              hacen a la vez. El <Typography> de allá se cayó porque repetía
+              punto por punto los estilos que ya trae el <Link>. */}
           {doc.codigo ? fmtCodigoCorto(doc.codigo) : `#${doc.id}`}
+          {doc.tipoOrden != null && (
+            <Chip
+              icon={<Store style={{ width: 11, height: 11 }} />}
+              label="POS"
+              size="small"
+              title="Venta hecha en el Punto de Venta"
+              sx={{
+                mt: '3px', height: 18, borderRadius: '6px',
+                bgcolor: '#eef2fe', color: '#2a45c4', border: '1px solid #c7d2fe',
+                fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.03em',
+                '& .MuiChip-label': { px: '5px' },
+                '& .MuiChip-icon': { ml: '4px', mr: '-2px', color: '#2a45c4' },
+              }}
+            />
+          )}
         </Link>
       ),
     },

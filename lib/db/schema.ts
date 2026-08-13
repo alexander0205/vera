@@ -201,6 +201,9 @@ export const teamMembers = pgTable('team_members', {
     .references(() => teams.id),
   role: varchar('role', { length: 50 }).notNull(),
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
+  // PIN de autorización del POS (4–6 dígitos). Un supervisor (admin/owner) lo
+  // configura para autorizar que un cajero quite un ítem de un recibo cobrado.
+  posPin: varchar('pos_pin', { length: 6 }),
 });
 
 // ── Roles por empresa (permisos editables) ──────────────────────────────────
@@ -515,6 +518,12 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // (legacy + empresas sin caja habilitada). Se estampa al emitir si el usuario
   // tiene un turno abierto. Permite la conciliación NCF↔efectivo del cierre.
   turnoCajaId: integer('turno_caja_id').references(() => cajaTurnos.id),
+
+  // POS: cómo se despacha la orden ('comer-aqui' | 'para-llevar' | 'delivery' |
+  // 'mostrador'). Dato operativo, NO fiscal (no entra al XML DGII). Nullable:
+  // ventas no-POS, legacy y tickets sin-ncf quedan en NULL. 'comer-aqui' solo
+  // aplica a órdenes con mesa (comanda). Ver mig 0109.
+  tipoOrden: varchar('tipo_orden', { length: 20 }),
 
   // Si fue generado por una recurrente, la fecha de cobro (período) del schedule
   // a la que corresponde. Permite el timeline de períodos y detección de duplicados.

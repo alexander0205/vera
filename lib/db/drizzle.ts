@@ -20,7 +20,13 @@ export const client =
   globalForDb._pgClient ??
   postgres(connectionString, {
     max: 10,
-    idle_timeout: 20,
+    // Neon está en us-east-1 y cada reconexión cuesta ~1.4s (TLS + wake). Con
+    // idle_timeout bajo, cualquier hueco entre acciones (p. ej. POS entre
+    // clientes) cerraba la conexión y el próximo cobro pagaba ese arranque en
+    // frío. Mantener las conexiones vivas 5 min elimina esos picos; max_lifetime
+    // las recicla para que ninguna quede huérfana indefinidamente.
+    idle_timeout: 300,
+    max_lifetime: 60 * 30,
     connect_timeout: 10,
     ssl: isLocalDb ? false : 'require',
   });

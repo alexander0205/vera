@@ -136,6 +136,10 @@ export async function GET(req: NextRequest) {
         ), 0)`,
         createdByName:     users.name,
         dependienteNombre: ecfDocuments.dependienteNombre,
+        // Un turno concilia el cobro, pero no identifica el origen: Facturación
+        // también puede cobrar mientras hay turno abierto. `tipoOrden` es POS.
+        turnoCajaId:       ecfDocuments.turnoCajaId,
+        tipoOrden:         ecfDocuments.tipoOrden,
       })
       .from(ecfDocuments)
       .leftJoin(users, eq(users.id, ecfDocuments.createdBy))

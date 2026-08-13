@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import useSWR from 'swr';
 import {
   Crown, Shield, User, Eye, UserCog, Plus, Lock, ArrowLeft, Trash2,
-  Check, Pencil, AlertTriangle,
+  Check, Pencil, AlertTriangle, KeyRound,
   FileText, Users, Package, FileSpreadsheet, ShoppingCart, BarChart3,
   Wallet, Settings, CreditCard,
 } from 'lucide-react';
@@ -91,6 +91,9 @@ export default function PermisosClient() {
 
   return (
     <>
+      <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
+        <MiPinCard />
+      </Box>
       <RolesList
         roles={data.roles}
         onSelect={setSelectedId}
@@ -231,6 +234,91 @@ function RolesList({ roles, onSelect, onCreate }: {
         })}
       </Box>
     </Box>
+  );
+}
+
+// ─── Mi PIN de autorización POS ──────────────────────────────────────────────
+// Un supervisor (admin/owner) fija aquí su PIN. Con él, un cajero puede quitar
+// un ítem de un recibo ya cobrado (permiso pos:quitar-item-pin).
+function MiPinCard() {
+  const { data, mutate } = useSWR<{ tienePin: boolean }>('/api/pos/mi-pin', fetcher);
+  const [editando, setEditando] = useState(false);
+  const [pin, setPin] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const valido = /^\d{4,6}$/.test(pin);
+
+  async function guardar(nuevo: string | null) {
+    setSaving(true); setError(null);
+    try {
+      const res = await fetch('/api/pos/mi-pin', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: nuevo }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Error al guardar');
+      setEditando(false); setPin('');
+      mutate();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Paper elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', p: 2, mb: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', height: 36, width: 36, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: '8px', bgcolor: '#eef2fe' }}>
+          <KeyRound style={{ width: 18, height: 18, color: '#2a45c4' }} />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Mi PIN de autorización (POS)</Typography>
+          <Typography sx={{ fontSize: '0.75rem', color: '#6b7280', mb: editando ? 1.5 : 0 }}>
+            Con tu PIN autorizas que un cajero quite un ítem de un recibo ya cobrado.
+            {data && (
+              <Box component="span" sx={{ ml: 0.75, fontWeight: 600, color: data.tienePin ? '#059669' : '#9ca3af' }}>
+                {data.tienePin ? '· Configurado' : '· Sin configurar'}
+              </Box>
+            )}
+          </Typography>
+
+          {editando && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
+              <TextField
+                autoFocus size="small" type="password" inputMode="numeric" label="Nuevo PIN (4–6 dígitos)"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                sx={{ width: 200 }}
+              />
+              <Button onClick={() => guardar(pin)} disabled={!valido || saving} variant="contained"
+                sx={{ textTransform: 'none', bgcolor: '#3658e1', boxShadow: 'none', '&:hover': { bgcolor: '#2a45c4', boxShadow: 'none' }, '&.Mui-disabled': { bgcolor: '#3658e1', opacity: 0.5, color: '#fff' } }}>
+                {saving ? 'Guardando…' : 'Guardar PIN'}
+              </Button>
+              <Button onClick={() => { setEditando(false); setPin(''); setError(null); }} disabled={saving} variant="outlined"
+                sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }}>
+                Cancelar
+              </Button>
+            </Box>
+          )}
+          {error && <Typography sx={{ fontSize: '0.75rem', color: '#dc2626', mt: 1 }}>{error}</Typography>}
+        </Box>
+
+        {!editando && (
+          <Box sx={{ display: 'flex', flexShrink: 0, gap: 1 }}>
+            <Button onClick={() => setEditando(true)} variant="outlined" size="small"
+              sx={{ textTransform: 'none', color: '#374151', borderColor: '#d1d5db' }}>
+              {data?.tienePin ? 'Cambiar PIN' : 'Configurar PIN'}
+            </Button>
+            {data?.tienePin && (
+              <Button onClick={() => guardar(null)} disabled={saving} variant="outlined" size="small"
+                sx={{ textTransform: 'none', color: '#dc2626', borderColor: '#fecaca' }}>
+                Quitar
+              </Button>
+            )}
+          </Box>
+        )}
+      </Box>
+    </Paper>
   );
 }
 

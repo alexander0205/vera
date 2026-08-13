@@ -10,7 +10,7 @@ import { ProductoDialog } from '@/components/shared/producto-dialog';
 import { ClienteDialog } from '@/components/shared/cliente-dialog';
 import { montosRapidos } from '@/lib/pos/montos';
 import Link from 'next/link';
-import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound, Zap } from 'lucide-react';
+import { ArrowLeft, LogOut, FileText, Star, Plus, X, Percent, PauseCircle, ListChecks, UserRound, Zap, Banknote, CreditCard, ArrowLeftRight, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -77,11 +77,29 @@ interface ClienteView { id: number; razonSocial: string; rnc: string | null; ema
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia'] as const;
 type Metodo = typeof METODOS[number];
+// Iconos grandes para los botones de método de cobro (táctil).
+const METODO_ICONO: Record<Metodo, LucideIcon> = {
+  efectivo: Banknote, tarjeta: CreditCard, transferencia: ArrowLeftRight,
+};
 // 'credito' = fiado: la venta se registra SIN pago y queda con saldo
 // pendiente, así aparece sola en cuentas por cobrar (facturación y POS
 // leen la misma cartera). No confundir con 'cuenta-estudiante', que es el
 // monedero prepago y sí descuenta saldo en el momento.
 type MetodoCobro = Metodo | 'cuenta-estudiante' | 'credito';
+
+// Tipo de orden POS (dato operativo, no fiscal — no entra al XML DGII). Sirve
+// para clasificar/filtrar el historial de recibos. 'comer-aqui' solo aplica a
+// órdenes con mesa (comanda); las ventas rápidas sin mesa usan 'mostrador'.
+type TipoOrden = 'comer-aqui' | 'para-llevar' | 'delivery' | 'mostrador';
+const TIPO_ORDEN_LABEL: Record<TipoOrden, string> = {
+  'comer-aqui':  'Comer aquí',
+  'para-llevar': 'Para llevar',
+  'delivery':    'Delivery',
+  'mostrador':   'Mostrador',
+};
+/** Opciones ofrecidas según el contexto: con mesa se puede comer aquí; sin mesa no. */
+const tiposOrdenPara = (enMesa: boolean): TipoOrden[] =>
+  enMesa ? ['comer-aqui', 'para-llevar', 'delivery'] : ['mostrador', 'para-llevar', 'delivery'];
 
 /** Venta aparcada (hold) — se persiste en localStorage por turno para no perder
  *  el carrito al atender otra venta o si se recarga la página. */
@@ -673,6 +691,7 @@ function Venta({
     pagos: { metodo: MetodoCobro; valorCentavos: number }[],
     recibidoCentavos: number,
     propinaCentavos = 0,
+    tipoOrden: TipoOrden = comandaId != null ? 'comer-aqui' : 'mostrador',
   ) {
     const esMonedero = pagos.length === 1 && pagos[0].metodo === 'cuenta-estudiante';
     // Fiado: sin pagos. El motor calcula estado_pago = PENDIENTE y el documento
@@ -772,6 +791,9 @@ function Venta({
       pagoRecibido:         !esCredito,
       pagos:                pagos.map((p) => ({ metodo: p.metodo, valor: p.valorCentavos / 100 })),
       almacenId:            terminal?.almacenId ?? null,
+      // Clasificación operativa del POS (no fiscal). El motor la estampa en
+      // ecf_documents.tipo_orden para el historial de recibos.
+      tipoOrden,
     };
 
     // Cobro con monedero: saga atómica server-side (descuenta → emite → revierte
@@ -1129,6 +1151,7 @@ function Venta({
             onAplicarDescuento={setDescuentoAplicado}
             cobroDirecto={cobroDirecto}
             onCobroConsumido={() => setCobroDirecto(false)}
+            enMesa={comandaId != null}
           />
         </Box>
       </Box>
@@ -1171,6 +1194,7 @@ function Venta({
               onSelectCliente={setCliente}
               descuentoAplicado={descuentoAplicado}
               onAplicarDescuento={setDescuentoAplicado}
+              enMesa={comandaId != null}
             />
           </Box>
         </Box>
@@ -1216,7 +1240,7 @@ function Venta({
 function CarritoPanel({
   carrito, totales, cambiarQty, editarPrecio, cobrando, onCobrar, escolar, alertaMetodoPago, bloquearPrecios, estudiante, onSelectEstudiante,
   listas, listaPreciosId, onSelectLista, tipoEcf, onSelectTipoEcf, cliente, onSelectCliente,
-  descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido,
+  descuentoAplicado, onAplicarDescuento, cobroDirecto = false, onCobroConsumido, enMesa = false,
 }: {
   carrito: LineaCarrito[];
   totales: { subtotal: number; itbis: number; total: number; descuentoTotal: number };
@@ -1227,7 +1251,7 @@ function CarritoPanel({
   alertaMetodoPago: boolean;
   /** Sin `facturas:precio-editar`: precio de catálogo, sin retoques. */
   bloquearPrecios: boolean;
-  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
+  onCobrar: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
   escolar: boolean;
   estudiante: MonederoView | null;
   onSelectEstudiante: (e: MonederoView | null) => void;
@@ -1242,6 +1266,8 @@ function CarritoPanel({
   onAplicarDescuento: (d: DescuentoAplicado | null) => void;
   cobroDirecto?: boolean;
   onCobroConsumido?: () => void;
+  /** true si la venta se cobra desde una mesa (comanda) → habilita "Comer aquí". */
+  enMesa?: boolean;
 }) {
   const [abrirCobro, setAbrirCobro] = useState(false);
   const [panelDescuento, setPanelDescuento] = useState(false);
@@ -1408,8 +1434,9 @@ function CarritoPanel({
           cobrando={cobrando}
           estudiante={estudiante}
           cliente={cliente}
+          enMesa={enMesa}
           onClose={() => setAbrirCobro(false)}
-          onConfirm={(pagos, recibido, propina) => { onCobrar(pagos, recibido, propina); setAbrirCobro(false); }}
+          onConfirm={(pagos, recibido, propina, tipoOrden) => { onCobrar(pagos, recibido, propina, tipoOrden); setAbrirCobro(false); }}
         />
       )}
     </Box>
@@ -1694,7 +1721,7 @@ function EstudiantePicker({ estudiante, onSelect }: {
 // ─── Modal de cobro ──────────────────────────────────────────────────────────
 
 function CobroModal({
-  total, cobrando, estudiante, cliente, alertaMetodoPago, onClose, onConfirm,
+  total, cobrando, estudiante, cliente, alertaMetodoPago, enMesa = false, onClose, onConfirm,
 }: {
   total: number;
   cobrando: boolean;
@@ -1703,8 +1730,10 @@ function CobroModal({
   estudiante: MonederoView | null;
   /** Necesario para el fiado: sin alguien a quien cobrarle no hay crédito. */
   cliente: ClienteView | null;
+  /** true si se cobra desde una mesa (comanda) → ofrece "Comer aquí". */
+  enMesa?: boolean;
   onClose: () => void;
-  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number) => void;
+  onConfirm: (pagos: { metodo: MetodoCobro; valorCentavos: number }[], recibidoCentavos: number, propinaCentavos: number, tipoOrden: TipoOrden) => void;
 }) {
   const [propina, setPropina] = useState('');
   const [split, setSplit] = useState(false);
@@ -1717,6 +1746,10 @@ function CobroModal({
   const [pendienteConfirm, setPendienteConfirm] = useState<
     null | { pagos: { metodo: MetodoCobro; valorCentavos: number }[]; recibidoCentavos: number }
   >(null);
+
+  // Tipo de orden: por defecto "Comer aquí" en mesa, "Mostrador" en venta rápida.
+  const opcionesTipoOrden = tiposOrdenPara(enMesa);
+  const [tipoOrden, setTipoOrden] = useState<TipoOrden>(opcionesTipoOrden[0]);
 
   // Modo simple (un método) — o cuenta-estudiante.
   const [metodo, setMetodo] = useState<MetodoCobro>('efectivo');
@@ -1769,8 +1802,12 @@ function CobroModal({
     pagos: { metodo: MetodoCobro; valorCentavos: number }[],
     recibidoCentavos: number,
   ) {
+    // El tipo de orden viaja hasta el final por los dos caminos. Si se quedara
+    // fuera del que pasa por el doble-check, reconfirmar el método convertiría
+    // un "para llevar" en lo que diga el valor por defecto — y eso cambia el
+    // recibo que se imprime.
     if (alertaMetodoPago) setPendienteConfirm({ pagos, recibidoCentavos });
-    else onConfirm(pagos, recibidoCentavos, propinaCentavos);
+    else onConfirm(pagos, recibidoCentavos, propinaCentavos, tipoOrden);
   }
 
   function confirmar() {
@@ -1783,13 +1820,13 @@ function CobroModal({
       return;
     }
     if (esMonedero) {
-      onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos);
+      onConfirm([{ metodo: 'cuenta-estudiante', valorCentavos: totalCobrar }], totalCobrar, propinaCentavos, tipoOrden);
       return;
     }
     // Crédito: se confirma SIN pagos. El motor calcula estado_pago = PENDIENTE
     // y el documento entra a la cartera.
     if (esCredito) {
-      onConfirm([], 0, propinaCentavos);
+      onConfirm([], 0, propinaCentavos, tipoOrden);
       return;
     }
     const recibidoOut = metodo === 'efectivo' ? recibidoCentavos : totalCobrar;
@@ -1799,19 +1836,40 @@ function CobroModal({
   const puedeConfirmar = !cobrando && (split ? splitCuadra : (!faltaEfectivo && !monederoBloqueado));
 
   return (
-    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 384, maxHeight: '92vh', m: 2, borderRadius: '12px' } } }}>
-      <Box sx={{ p: 2.5 }}>
-        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box component="span" sx={{ fontSize: 16, fontWeight: 500 }}>Cobrar venta</Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
+    <Dialog open onClose={onClose} fullWidth maxWidth={false} slotProps={{ paper: { sx: { maxWidth: 560, maxHeight: '94vh', m: 2, borderRadius: '16px' } } }}>
+      <Box sx={{ p: { xs: 2.5, sm: 3.5 } }}>
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ fontSize: 20, fontWeight: 700 }}>Cobrar venta</Box>
+          <IconButton onClick={onClose} sx={{ color: '#9ca3af' }}><X style={{ width: 22, height: 22 }} /></IconButton>
         </Box>
 
-        <Box sx={{ mb: 1.5, borderRadius: '8px', bgcolor: '#f9fafb', p: 1.5, textAlign: 'center' }}>
-          <Box sx={{ fontSize: 12, color: '#6b7280' }}>Total a cobrar</Box>
-          <Box sx={{ fontSize: 24, fontWeight: 500, ...MONEY }}>{fmt(totalCobrar)}</Box>
+        <Box sx={{ mb: 2, borderRadius: '12px', bgcolor: '#f9fafb', p: 2, textAlign: 'center' }}>
+          <Box sx={{ fontSize: 13, color: '#6b7280' }}>Total a cobrar</Box>
+          <Box sx={{ fontSize: 34, fontWeight: 700, ...MONEY }}>{fmt(totalCobrar)}</Box>
           {propinaCentavos > 0 && (
-            <Box sx={{ mt: 0.25, fontSize: 11, color: '#9ca3af', ...MONEY }}>Incluye propina {fmt(propinaCentavos)}</Box>
+            <Box sx={{ mt: 0.25, fontSize: 12, color: '#9ca3af', ...MONEY }}>Incluye propina {fmt(propinaCentavos)}</Box>
           )}
+        </Box>
+
+        {/* Tipo de orden (operativo, no fiscal) — clasifica el recibo en el historial. */}
+        <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, color: '#6b7280' }}>Tipo de orden</Typography>
+        <Box sx={{ mb: 1.5, display: 'flex', gap: 0.75 }}>
+          {opcionesTipoOrden.map((t) => (
+            <Button
+              key={t}
+              onClick={() => setTipoOrden(t)}
+              disableElevation
+              variant={tipoOrden === t ? 'contained' : 'outlined'}
+              sx={{
+                flex: 1, textTransform: 'none', borderRadius: '10px', fontSize: 15, fontWeight: 600, py: 1.25, minWidth: 0,
+                ...(tipoOrden === t
+                  ? { bgcolor: '#10b981', color: '#fff', '&:hover': { bgcolor: '#059669' } }
+                  : { color: '#374151', borderColor: '#d1d5db' }),
+              }}
+            >
+              {TIPO_ORDEN_LABEL[t]}
+            </Button>
+          ))}
         </Box>
 
         {/* Propina */}
@@ -1830,28 +1888,34 @@ function CobroModal({
         />
 
         {/* Toggle pago dividido */}
-        <Box component="label" sx={{ mb: 1.5, display: 'flex', cursor: 'pointer', alignItems: 'center', justifyContent: 'space-between', borderRadius: '8px', border: '1px solid #e5e7eb', px: 1.5, py: 1, fontSize: 14 }}>
+        <Box component="label" sx={{ mb: 2, display: 'flex', cursor: 'pointer', alignItems: 'center', justifyContent: 'space-between', borderRadius: '10px', border: '1px solid #e5e7eb', px: 2, py: 1.5, fontSize: 15, fontWeight: 500 }}>
           <Box component="span" sx={{ color: '#374151' }}>Pago dividido</Box>
-          <Checkbox checked={split} onChange={(e) => setSplit(e.target.checked)} size="small" sx={{ p: 0 }} />
+          <Checkbox checked={split} onChange={(e) => setSplit(e.target.checked)} sx={{ p: 0 }} />
         </Box>
 
         {!split ? (
           <>
-            <Box sx={{ mb: 1.5, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
-              {METODOS.map((m) => (
-                <ButtonBase
-                  key={m}
-                  onClick={() => setMetodo(m)}
-                  sx={{
-                    borderRadius: '8px', border: '1px solid', py: 1, fontSize: 12, textTransform: 'capitalize',
-                    borderColor: metodo === m ? '#3658e1' : '#e5e7eb',
-                    bgcolor: metodo === m ? '#eef2fe' : 'transparent',
-                    color: metodo === m ? '#2a45c4' : '#4b5563',
-                  }}
-                >
-                  {m}
-                </ButtonBase>
-              ))}
+            <Box sx={{ mb: 2, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5 }}>
+              {METODOS.map((m) => {
+                const Ico = METODO_ICONO[m];
+                return (
+                  <ButtonBase
+                    key={m}
+                    onClick={() => setMetodo(m)}
+                    sx={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.75,
+                      borderRadius: '14px', border: '1px solid', minHeight: 90, py: 1.5, fontSize: 15, fontWeight: 600, textTransform: 'capitalize',
+                      borderColor: metodo === m ? '#3658e1' : '#e5e7eb',
+                      bgcolor: metodo === m ? '#eef2fe' : 'transparent',
+                      color: metodo === m ? '#2a45c4' : '#4b5563',
+                      '&:active': { transform: 'scale(0.97)' },
+                    }}
+                  >
+                    <Ico style={{ width: 32, height: 32 }} />
+                    {m}
+                  </ButtonBase>
+                );
+              })}
             </Box>
 
             {estudiante && (
@@ -1921,7 +1985,7 @@ function CobroModal({
                       key={mc}
                       onClick={() => setRecibido((mc / 100).toFixed(2))}
                       sx={{
-                        borderRadius: '8px', border: '1px solid', py: 0.875, fontSize: 12, ...MONEY,
+                        borderRadius: '10px', border: '1px solid', py: 1.5, fontSize: 15, fontWeight: 600, ...MONEY,
                         borderColor: recibidoCentavos === mc ? '#3658e1' : '#e5e7eb',
                         bgcolor: recibidoCentavos === mc ? '#eef2fe' : 'transparent',
                         color: recibidoCentavos === mc ? '#2a45c4' : '#4b5563',
@@ -1942,46 +2006,46 @@ function CobroModal({
           </>
         ) : (
           <>
-            <Box sx={{ mb: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ mb: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {filas.map((f, i) => (
                 <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <TextField
                     select
                     value={f.metodo}
                     onChange={(e) => setFilaMetodo(i, e.target.value as Metodo)}
-                    sx={{ '& .MuiInputBase-root': { height: 40 }, '& .MuiSelect-select': { textTransform: 'capitalize' } }}
+                    sx={{ minWidth: 132, '& .MuiInputBase-root': { height: 52, fontSize: 15 }, '& .MuiSelect-select': { textTransform: 'capitalize' } }}
                   >
-                    {METODOS.map((m) => <MenuItem key={m} value={m} sx={{ textTransform: 'capitalize' }}>{m}</MenuItem>)}
+                    {METODOS.map((m) => <MenuItem key={m} value={m} sx={{ textTransform: 'capitalize', fontSize: 15, py: 1.25 }}>{m}</MenuItem>)}
                   </TextField>
                   <TextField
                     type="number"
                     value={f.valor}
                     onChange={(e) => setFilaValor(i, e.target.value)}
                     placeholder="0.00"
-                    sx={{ flex: 1 }}
+                    sx={{ flex: 1, '& .MuiInputBase-root': { height: 52 }, '& input': { fontSize: 16 } }}
                     slotProps={{
-                      input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af', '& .MuiTypography-root': { fontSize: 12 } }}>RD$</InputAdornment> },
+                      input: { startAdornment: <InputAdornment position="start" sx={{ color: '#9ca3af' }}>RD$</InputAdornment> },
                       htmlInput: { min: 0, step: 0.01 },
                     }}
                   />
                   <ButtonBase onClick={() => autollenarResto(i)} title="Completar el resto"
-                    sx={{ borderRadius: '8px', border: '1px solid #e5e7eb', px: 1, py: 1, fontSize: 12, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' } }}>resto</ButtonBase>
+                    sx={{ flexShrink: 0, borderRadius: '10px', border: '1px solid #e5e7eb', minWidth: 56, height: 52, fontSize: 14, fontWeight: 600, color: '#6b7280', '&:hover': { bgcolor: '#f9fafb' } }}>resto</ButtonBase>
                   {filas.length > 2 && (
                     <Box component="button" onClick={() => setFilas((prev) => prev.filter((_, idx) => idx !== i))}
-                      sx={{ border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 16, height: 16 }} /></Box>
+                      sx={{ flexShrink: 0, border: 'none', bgcolor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 52, color: '#d1d5db', '&:hover': { color: '#ef4444' } }}><X style={{ width: 20, height: 20 }} /></Box>
                   )}
                 </Box>
               ))}
             </Box>
-            <Box component="button"
+            <ButtonBase
               onClick={() => setFilas((prev) => [...prev, { metodo: 'transferencia', valor: '' }])}
-              sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5, border: 'none', bgcolor: 'transparent', cursor: 'pointer', fontSize: 12, fontWeight: 500, color: '#3658e1' }}
+              sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, width: '100%', minHeight: 48, borderRadius: '10px', border: '1px dashed #c7d2fe', fontSize: 15, fontWeight: 600, color: '#3658e1', '&:hover': { bgcolor: '#eef2fe' } }}
             >
-              <Plus style={{ width: 14, height: 14 }} /> Agregar método
-            </Box>
-            <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'space-between', borderRadius: '8px', px: 1.5, py: 1, fontSize: 14, bgcolor: splitCuadra ? '#f0fdf4' : '#fffbeb', color: splitCuadra ? '#15803d' : '#b45309' }}>
+              <Plus style={{ width: 18, height: 18 }} /> Agregar método
+            </ButtonBase>
+            <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '10px', px: 1.75, py: 1.5, fontSize: 15, fontWeight: 600, bgcolor: splitCuadra ? '#f0fdf4' : '#fffbeb', color: splitCuadra ? '#15803d' : '#b45309' }}>
               <Box component="span">{splitCuadra ? 'Cuadra' : (restanteSplit > 0 ? 'Falta' : 'Sobra')}</Box>
-              <Box component="span" sx={{ fontWeight: 500, ...MONEY }}>{fmt(Math.abs(restanteSplit))}</Box>
+              <Box component="span" sx={{ fontWeight: 700, fontSize: 17, ...MONEY }}>{fmt(Math.abs(restanteSplit))}</Box>
             </Box>
           </>
         )}
@@ -1992,7 +2056,7 @@ function CobroModal({
           variant="contained"
           fullWidth
           disableElevation
-          sx={{ bgcolor: '#10b981', py: 1.5, fontWeight: 500, color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' } }}
+          sx={{ borderRadius: '14px', bgcolor: '#10b981', py: 2, fontSize: 18, fontWeight: 700, textTransform: 'none', color: '#fff', '&:hover': { bgcolor: '#059669' }, '&.Mui-disabled': { opacity: 0.5, color: '#fff' } }}
         >
           {cobrando ? 'Procesando…'
             : split ? (splitCuadra ? 'Confirmar venta' : 'El pago no cuadra')
@@ -2013,7 +2077,7 @@ function CobroModal({
           onConfirm={() => {
             const pend = pendienteConfirm;
             setPendienteConfirm(null);
-            onConfirm(pend.pagos, pend.recibidoCentavos, propinaCentavos);
+            onConfirm(pend.pagos, pend.recibidoCentavos, propinaCentavos, tipoOrden);
           }}
         />
       )}
