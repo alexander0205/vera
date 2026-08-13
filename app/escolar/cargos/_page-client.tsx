@@ -14,13 +14,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { NativeSelect } from '@/components/ui/native-select';
-import { BuscadorSelect, type OpcionBuscador } from '@/components/ui/buscador-select';
+import { SelectorCurso } from '@/components/administracion-escolar/SelectorCurso';
+import { ConceptoPicker } from '@/components/administracion-escolar/ConceptoPicker';
 import { Paginador } from '@/components/ui/paginador';
-import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
+import { ModalHeader } from '@/components/ui/modal-header';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { mesesDelPeriodo, type MesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
-import { AlertTriangle, CalendarClock, CalendarDays, Loader2, Plus, Receipt, Search, Wallet } from 'lucide-react';
+import { AlertTriangle, CalendarDays, Loader2, Plus, Receipt, Search, Wallet } from 'lucide-react';
 
 interface Cargo {
   id: number;
@@ -41,17 +42,14 @@ interface Cargo {
 interface Periodo { id: number; nombre: string; fechaInicio: string | null; fechaFin: string | null; activo: boolean; }
 interface Curso {
   id: number; nombre: string; activo: boolean;
-  gradoNombre: string; gradoActivo: boolean;
-  servicioNombre: string; servicioTanda: string | null; servicioActivo: boolean;
+  // El id del grado y el del servicio los pide `SelectorCurso` para encadenar
+  // los tres campos; la API ya los devolvía.
+  gradoId: number; gradoNombre: string; gradoActivo: boolean;
+  servicioId: number; servicioNombre: string; servicioTanda: string | null; servicioActivo: boolean;
   periodoId: number;
 }
 
-/** El grado y la tanda de una sección: sola se llama "A" y no dice nada. */
-function etiquetaGrado(c: Curso): string {
-  const tanda = c.servicioTanda ? ` · ${c.servicioTanda}` : '';
-  return `${c.gradoNombre} — ${c.servicioNombre}${tanda}`;
-}
-interface Concepto { id: number; nombre: string; tipo: string; recurrente: boolean; activo: boolean; }
+interface Concepto { id: number; nombre: string; tipo: string; activo: boolean; }
 interface Matricula { id: number; estudianteId: number; periodoId: number; cursoId: number; estado: string; }
 interface Estudiante { id: number; nombres: string; apellidos: string; }
 
@@ -132,38 +130,28 @@ export default function CargosClient() {
   const [resultado, setResultado] = useState<{ creados: number; omitidos: number; total: number } | null>(null);
 
   /**
-   * Devengo del mes: crea los cargos de las cuotas que ya entraron en vigor.
+   * El botón «Cargos del mes» se quitó de esta pantalla.
    *
-   * Existe además del cron porque un colegio que acaba de configurar su
-   * calendario no puede esperar a mañana para ver la deuda, y porque cuando
-   * algo no cuadra lo primero que hace cualquiera es volver a darle.
-   * Repetirlo no cobra de más: el índice único descarta lo ya creado.
+   * Llamaba al devengo a mano, y el devengo tenía un agujero: los conceptos sin
+   * calendario —inscripción, uniforme— se guardan con `cuota_id` en NULL, y en
+   * Postgres dos NULL no chocan, así que el índice único que debía impedir el
+   * duplicado no impedía nada. Cada clic volvía a crear los mismos cargos.
+   *
+   * El agujero está tapado en `lib/administracion-escolar/devengar.ts`, pero el
+   * botón no vuelve: un control que crea deuda sobre TODAS las matrículas del
+   * colegio, al alcance de un doble clic y sin confirmación, no gana lo
+   * suficiente como para dejarlo. La deuda la sigue creando el cron a diario
+   * (`/api/cron/escolar-devengo`), y para un alumno suelto está «Cargo
+   * individual», que se ve antes de guardar.
    */
-  const [devengando, setDevengando] = useState(false);
-  const [avisoDevengo, setAvisoDevengo] = useState<string | null>(null);
-
-  async function handleDevengar() {
-    setDevengando(true);
-    setAvisoDevengo(null);
-    try {
-      const res = await fetch('/api/administracion-escolar/cargos/devengar', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'No se pudieron generar los cargos del mes');
-      setAvisoDevengo(data.cargosCreados === 0
-        ? 'Todo al día: no había cuotas nuevas que cargar.'
-        : `${data.cargosCreados} cargo(s) nuevos sobre ${data.matriculas} matrícula(s).`);
-      await cargar();
-    } catch (e: unknown) {
-      setAvisoDevengo(e instanceof Error ? e.message : 'No se pudieron generar los cargos del mes');
-    } finally {
-      setDevengando(false);
-    }
-  }
 
   // Cargo individual (un estudiante) — dialog aparte del masivo.
   const [openInd, setOpenInd] = useState(false);
   const [formInd, setFormInd] = useState({
-    periodoId: '', cursoId: 'todos', estudianteId: '', matriculaId: '',
+    // Sin filtro de curso: el alumno se busca por nombre, y pedir antes
+    // servicio/grado/sección obligaba a saber en qué sección está justo el que
+    // se está buscando.
+    periodoId: '', estudianteId: '', matriculaId: '',
     conceptoId: '', mes: '', anio: String(new Date().getFullYear()), monto: '', fechaVencimiento: hoy(),
   });
   const [queryEst, setQueryEst] = useState('');
@@ -237,20 +225,6 @@ export default function CargosClient() {
    * etiquetan con el grado porque la sección sola se llama "A": sin eso el
    * desplegable eran treinta opciones idénticas.
    */
-  const opcionesCurso = useCallback((periodoId: string): OpcionBuscador[] => {
-    const periodo = Number(periodoId) || null;
-    return [
-      { valor: 'todos', etiqueta: 'Todos los cursos' },
-      ...cursosActivos
-        .filter((c) => !periodo || c.periodoId === periodo)
-        .map((c) => ({
-          valor: String(c.id),
-          etiqueta: `${etiquetaGrado(c)} — ${c.nombre}`,
-          etiquetaLista: c.nombre,
-          grupo: etiquetaGrado(c),
-        })),
-    ];
-  }, [cursosActivos]);
   const conceptosActivos = useMemo(() => conceptos.filter((c) => c.activo !== false), [conceptos]);
   const conceptoSeleccionado = conceptos.find((c) => String(c.id) === form.conceptoId) ?? null;
   const periodoForm = periodos.find((p) => String(p.id) === form.periodoId);
@@ -350,19 +324,18 @@ export default function CargosClient() {
       .filter((m) => (
         m.estado === 'activa'
         && String(m.periodoId) === formInd.periodoId
-        && (formInd.cursoId === 'todos' || String(m.cursoId) === formInd.cursoId)
       ))
       .map((m) => ({ matriculaId: m.id, estudianteId: m.estudianteId, cursoId: m.cursoId, nombre: estNombre.get(m.estudianteId) ?? `#${m.estudianteId}` }))
       .filter((x) => !q || x.nombre.toLowerCase().includes(q))
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [matriculas, formInd.periodoId, formInd.cursoId, queryEst, estNombre]);
+  }, [matriculas, formInd.periodoId, queryEst, estNombre]);
 
   function abrirIndividual() {
     const periodoActivo = periodos.find((p) => p.activo);
     const primerMes = mesInicial(periodoActivo);
     setFormInd({
       periodoId: periodoActivo ? String(periodoActivo.id) : '',
-      cursoId: 'todos', estudianteId: '', matriculaId: '',
+      estudianteId: '', matriculaId: '',
       conceptoId: '', mes: '', anio: String(primerMes?.anio ?? new Date().getFullYear()), monto: '', fechaVencimiento: hoy(),
     });
     setQueryEst('');
@@ -423,11 +396,6 @@ export default function CargosClient() {
         </div>
         {puedeGestionar && (
           <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" onClick={handleDevengar} disabled={loading || devengando}>
-              {devengando
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Devengando…</>
-                : <><CalendarClock className="h-4 w-4 mr-2" />Cargos del mes</>}
-            </Button>
             <Button variant="outline" onClick={abrirIndividual} disabled={loading || sinCatalogos}>
               <Plus className="h-4 w-4 mr-2" />Cargo individual
             </Button>
@@ -444,12 +412,6 @@ export default function CargosClient() {
         <StatCard icon={AlertTriangle} label="Vencidos" value={String(vencidos)} accent={vencidos > 0} />
         <StatCard icon={CalendarDays} label="Cobrado" value={fmtDOP(cobrado)} />
       </div>
-
-      {avisoDevengo && (
-        <div className="rounded-lg border border-zero-200 bg-zero-50 px-3 py-2.5 text-sm text-zero-800">
-          {avisoDevengo}
-        </div>
-      )}
 
       <Card>
         <CardContent className="p-4 space-y-4">
@@ -544,7 +506,7 @@ export default function CargosClient() {
 
       <Dialog open={open} onOpenChange={(o: boolean) => { if (!o) setOpen(false); }}>
         <DialogContent className="max-w-lg">
-          <ModalHeaderIcon icon={Receipt} title="Generar cargos masivos"
+          <ModalHeader title="Generar cargos masivos"
             subtitle="Crea el mismo cargo para todas las matrículas del filtro." />
           <div className="space-y-4 px-6 py-4">
             {opError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{opError}</div>}
@@ -570,34 +532,41 @@ export default function CargosClient() {
                   {periodos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
                 </NativeSelect>
               </div>
-              <div className="space-y-1.5">
-                <Label>Curso</Label>
-                <BuscadorSelect
-                  value={form.cursoId}
-                  onChange={(v) => setForm((f) => ({ ...f, cursoId: v || 'todos' }))}
-                  opciones={opcionesCurso(form.periodoId)}
-                  placeholder="Todos los cursos"
-                  vacio="Ninguna sección de este período coincide"
-                />
-              </div>
             </div>
+
+            {/* El MISMO selector que Matriculación: servicio → grado → sección.
+                Antes esto era un buscador aplanado donde cada línea decía solo
+                «A» o «B» bajo un encabezado en gris — con diecinueve grados,
+                cincuenta líneas para acertar una letra. */}
+            <SelectorCurso
+              permitirTodos
+              cursos={cursosActivos}
+              periodoId={Number(form.periodoId) || null}
+              valor={form.cursoId}
+              onChange={(v) => setForm((f) => ({ ...f, cursoId: v || 'todos' }))}
+            />
 
             <div className="space-y-1.5">
               <Label>Concepto *</Label>
-              <NativeSelect value={form.conceptoId} onChange={(e) => {
-                const concepto = conceptos.find((c) => String(c.id) === e.target.value);
-                const siguiente = mesInicial(periodoForm);
-                setForm((f) => ({
-                  ...f,
-                  conceptoId: e.target.value,
-                  ...(concepto?.tipo === 'mensualidad'
-                    ? (perteneceMes(periodoForm, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
-                    : { mes: '' }),
-                }));
-              }}>
-                <option value="" disabled>Concepto</option>
-                {conceptosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
-              </NativeSelect>
+              {/* Busca en los conceptos del colegio Y en el catálogo de
+                  productos/servicios: cobrar una excursión obligaba antes a ir
+                  a Configuración a crear un concepto con el mismo nombre. */}
+              <ConceptoPicker
+                conceptos={conceptosActivos}
+                value={form.conceptoId}
+                onConceptoCreado={() => void cargarCatalogos()}
+                onChange={(id) => {
+                  const concepto = conceptos.find((c) => String(c.id) === id);
+                  const siguiente = mesInicial(periodoForm);
+                  setForm((f) => ({
+                    ...f,
+                    conceptoId: id,
+                    ...(concepto?.tipo === 'mensualidad'
+                      ? (perteneceMes(periodoForm, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
+                      : { mes: '' }),
+                  }));
+                }}
+              />
             </div>
 
             {conceptoSeleccionado?.tipo === 'mensualidad' ? (
@@ -641,7 +610,7 @@ export default function CargosClient() {
       {/* Cargo individual — un estudiante */}
       <Dialog open={openInd} onOpenChange={(o: boolean) => { if (!o) setOpenInd(false); }}>
         <DialogContent className="max-w-lg">
-          <ModalHeaderIcon icon={Receipt} title="Cargo individual"
+          <ModalHeader title="Cargo individual"
             subtitle="Un cargo para un estudiante en específico." />
           <div className="space-y-4 px-6 py-4">
             {errInd && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{errInd}</div>}
@@ -666,17 +635,9 @@ export default function CargosClient() {
                   {periodos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
                 </NativeSelect>
               </div>
-              <div className="space-y-1.5">
-                <Label>Curso</Label>
-                <BuscadorSelect
-                  value={formInd.cursoId}
-                  onChange={(v) => setFormInd((f) => ({ ...f, cursoId: v || 'todos', estudianteId: '', matriculaId: '' }))}
-                  opciones={opcionesCurso(formInd.periodoId)}
-                  placeholder="Todos los cursos"
-                  vacio="Ninguna sección de este período coincide"
-                />
-              </div>
             </div>
+
+
 
             {/* Estudiante: búsqueda + lista */}
             <div className="space-y-1.5">
@@ -709,20 +670,25 @@ export default function CargosClient() {
             {/* Concepto */}
             <div className="space-y-1.5">
               <Label>Concepto *</Label>
-              <NativeSelect value={formInd.conceptoId} onChange={(e) => {
-                const concepto = conceptos.find((c) => String(c.id) === e.target.value);
-                const siguiente = mesInicial(periodoInd);
-                setFormInd((f) => ({
-                  ...f,
-                  conceptoId: e.target.value,
-                  ...(concepto?.tipo === 'mensualidad'
-                    ? (perteneceMes(periodoInd, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
-                    : { mes: '' }),
-                }));
-              }}>
-                <option value="" disabled>Concepto</option>
-                {conceptosActivos.map((c) => <option key={c.id} value={String(c.id)}>{c.nombre}</option>)}
-              </NativeSelect>
+              {/* Busca en los conceptos del colegio Y en el catálogo de
+                  productos/servicios: cobrar una excursión obligaba antes a ir
+                  a Configuración a crear un concepto con el mismo nombre. */}
+              <ConceptoPicker
+                conceptos={conceptosActivos}
+                value={formInd.conceptoId}
+                onConceptoCreado={() => void cargarCatalogos()}
+                onChange={(id) => {
+                  const concepto = conceptos.find((c) => String(c.id) === id);
+                  const siguiente = mesInicial(periodoInd);
+                  setFormInd((f) => ({
+                    ...f,
+                    conceptoId: id,
+                    ...(concepto?.tipo === 'mensualidad'
+                      ? (perteneceMes(periodoInd, f.mes, f.anio) ? {} : { mes: String(siguiente?.mes ?? ''), anio: String(siguiente?.anio ?? f.anio) })
+                      : { mes: '' }),
+                  }));
+                }}
+              />
             </div>
 
             {conceptoIndSel?.tipo === 'mensualidad' ? (

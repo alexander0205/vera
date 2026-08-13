@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -18,6 +17,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
 import { ArrowLeft, HelpCircle } from 'lucide-react';
 import { CATEGORIAS_ECF } from '@/lib/ecf/categorias';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +54,7 @@ const cardHeaderSx = {
 
 export default function NuevaSecuenciaPage() {
   const router = useRouter();
+  const volver = useVolver('/dashboard/secuencias');
 
   const [categoriaId, setCategoriaId] = useState(CATEGORIAS_ECF[0].id);
   const [tipoCodigo, setTipoCodigo]   = useState(CATEGORIAS_ECF[0].tipos[0].codigo);
@@ -138,12 +139,11 @@ export default function NuevaSecuenciaPage() {
 
       {/* Top bar */}
       <Box sx={{ bgcolor: '#fff', borderBottom: '1px solid #e5e7eb', px: 3, py: 2.5 }}>
-        <Link href="/dashboard/secuencias" style={{ textDecoration: 'none' }}>
-          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1, color: '#6b7280', '&:hover': { color: '#111827' }, transition: 'color 0.15s' }}>
-            <ArrowLeft style={{ height: 14, width: 14 }} />
-            <Typography variant="caption" sx={{ fontSize: '0.8125rem' }}>Secuencias</Typography>
-          </Box>
-        </Link>
+        <Box component="button" type="button" onClick={volver}
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1, p: 0, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', '&:hover': { color: '#111827' }, transition: 'color 0.15s' }}>
+          <ArrowLeft style={{ height: 14, width: 14 }} />
+          <Typography variant="caption" sx={{ fontSize: '0.8125rem' }}>Secuencias</Typography>
+        </Box>
         <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', lineHeight: 1.3 }}>
           Nueva numeración
         </Typography>
@@ -472,15 +472,14 @@ export default function NuevaSecuenciaPage() {
           Los campos con <span style={{ color: '#ef4444' }}>*</span> son obligatorios
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Link href="/dashboard/secuencias" style={{ textDecoration: 'none' }}>
-            <Button
-              variant="outlined"
-              disabled={saving}
-              sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}
-            >
-              Cancelar
-            </Button>
-          </Link>
+          <Button
+            variant="outlined"
+            disabled={saving}
+            onClick={volver}
+            sx={{ borderRadius: '8px', textTransform: 'none', borderColor: '#d1d5db', color: '#374151', '&:hover': { borderColor: '#9ca3af', bgcolor: '#f9fafb' } }}
+          >
+            Cancelar
+          </Button>
           <Button
             variant="contained"
             disableElevation

@@ -12,6 +12,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Users, Plus, X, ArrowLeft } from 'lucide-react';
 import { RncSearch } from '@/components/RncSearch';
 import { formatTelefonoDO } from '@/lib/utils/format';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 interface Dependiente {
   id: number;   // > 0 persistido en DB; < 0 temporal (en memoria, modo crear)
@@ -19,7 +20,7 @@ interface Dependiente {
   apellido: string;
 }
 
-const EMPTY_FORM = { razonSocial: '', rnc: '', email: '', telefono: '', direccion: '', descripcion: '' };
+const EMPTY_FORM = { razonSocial: '', rnc: '', email: '', telefono: '', celular: '', whatsapp: '', direccion: '', descripcion: '' };
 type ClienteForm = typeof EMPTY_FORM;
 
 const inputSx = { '& .MuiOutlinedInput-root': { borderRadius: '8px' } } as const;
@@ -36,7 +37,7 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
   form: ClienteForm;
   setForm: React.Dispatch<React.SetStateAction<ClienteForm>>;
 }) {
-  const isTelefono = field === 'telefono';
+  const isTelefono = field === 'telefono' || field === 'celular' || field === 'whatsapp';
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
       <Typography component="label" sx={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
@@ -66,11 +67,39 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
  *   - Editar: dependientes se persisten en vivo (ya hay clientId).
  *   - Crear:  se acumulan en memoria y se guardan tras crear el cliente.
  */
-export default function ClienteForm({ clienteId }: { clienteId?: number }) {
+export default function ClienteForm({
+  clienteId, embebido = false, valoresIniciales, onGuardado, onCancelar,
+}: {
+  clienteId?: number;
+  /**
+   * Dentro de un diálogo: sin cabecera de página ni botón de volver, y al
+   * guardar avisa en vez de navegar. Existe para que la ficha del alumno pueda
+   * crear el responsable de pago con ESTE formulario y no con una copia que se
+   * separaría del original al primer campo nuevo.
+   */
+  embebido?: boolean;
+  /**
+   * Datos con los que arrancar el formulario al CREAR.
+   *
+   * Lo usa «Hacer responsable de pago»: el tutor ya tiene cédula, nombre y
+   * teléfonos, y volver a teclearlos es la vía rápida a escribirlos distinto y
+   * acabar con dos fichas de la misma persona.
+   */
+  valoresIniciales?: Partial<typeof EMPTY_FORM>;
+  /**
+   * Devuelve también el nombre: quien lo embebe lo necesita para pintarlo, y
+   * pedirlo otra vez al servidor era un viaje para leer lo que se acaba de
+   * escribir aquí mismo.
+   */
+  onGuardado?: (clienteId: number, razonSocial: string) => void;
+  onCancelar?: () => void;
+}) {
   const router = useRouter();
+  const volverPagina = useVolver('/dashboard/clientes');
+  const volver = onCancelar ?? volverPagina;
   const isEdit = clienteId != null;
 
-  const [form, setForm]       = useState<ClienteForm>(EMPTY_FORM);
+  const [form, setForm]       = useState<ClienteForm>({ ...EMPTY_FORM, ...valoresIniciales });
   const [loading, setLoading] = useState(isEdit);   // edición: carga datos primero
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -110,6 +139,8 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
           rnc:         c.rnc         ?? '',
           email:       c.email       ?? '',
           telefono:    formatTelefonoDO(c.telefono ?? ''),
+          celular:     formatTelefonoDO(c.celular ?? ''),
+          whatsapp:    formatTelefonoDO(c.whatsapp ?? ''),
           direccion:   c.direccion   ?? '',
           descripcion: c.descripcion ?? '',
         });
@@ -227,6 +258,7 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
         }
       }
 
+      if (onGuardado) { onGuardado(id, form.razonSocial.trim()); return; }
       router.push('/dashboard/clientes');
       router.refresh();
     } catch (e: unknown) {
@@ -244,25 +276,29 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
   }
 
   return (
-    <Box component="section" sx={{ mx: 'auto', maxWidth: 768, p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* Encabezado */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <IconButton
-          onClick={() => router.push('/dashboard/clientes')}
-          title="Volver a clientes"
-          sx={{ ml: -1, borderRadius: '8px', color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
-        >
-          <ArrowLeft size={20} />
-        </IconButton>
-        <Box>
-          <Typography variant="h5" sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827' }}>
-            {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
-          </Typography>
-          <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
-            Datos del cliente y sus dependientes
-          </Typography>
+    <Box component="section" sx={embebido
+      ? { display: 'flex', flexDirection: 'column', gap: 2 }
+      : { mx: 'auto', maxWidth: 768, p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {/* Encabezado — dentro de un diálogo lo pone el propio diálogo. */}
+      {!embebido && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <IconButton
+            onClick={volver}
+            title="Volver a clientes"
+            sx={{ ml: -1, borderRadius: '8px', color: '#6b7280', '&:hover': { bgcolor: '#f3f4f6' } }}
+          >
+            <ArrowLeft size={20} />
+          </IconButton>
+          <Box>
+            <Typography variant="h5" sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#111827' }}>
+              {isEdit ? 'Editar cliente' : 'Nuevo cliente'}
+            </Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              Datos del cliente y sus dependientes
+            </Typography>
+          </Box>
         </Box>
-      </Box>
+      )}
 
       {error && (
         <Box sx={{ bgcolor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.875rem', borderRadius: '8px', p: 1.5 }}>
@@ -296,6 +332,10 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
         <Field label="Nombre / Razón Social *" field="razonSocial" placeholder="Empresa XYZ SRL" form={form} setForm={setForm} />
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
           <Field label="Teléfono" field="telefono" placeholder="(809) 000-0000" form={form} setForm={setForm} />
+          {/* Aparte del teléfono: por aquí salen los avisos, y en muchas casas
+              el fijo y el número que contesta no son el mismo. */}
+          <Field label="Celular" field="celular" placeholder="(809) 000-0000" form={form} setForm={setForm} />
+          <Field label="WhatsApp" field="whatsapp" placeholder="(809) 000-0000" form={form} setForm={setForm} />
           <Field label="Email" field="email" type="email" placeholder="facturacion@empresa.com" form={form} setForm={setForm} />
         </Box>
         <Field label="Dirección" field="direccion" placeholder="Calle, No., Ciudad" form={form} setForm={setForm} />
@@ -324,7 +364,9 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
             Dependientes
           </Typography>
           <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
-            Personas asociadas al cliente. Puedes agregarlas desde ya.
+            {embebido
+              ? 'El alumno se agrega solo al guardar. Aquí se ven los que ya tiene este contacto.'
+              : 'Personas asociadas al cliente. Puedes agregarlas desde ya.'}
           </Typography>
         </Box>
 
@@ -334,6 +376,7 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
           </Box>
         )}
 
+        {!embebido && (
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { sm: 'flex-end' } }}>
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
             <Typography component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151' }}>
@@ -376,6 +419,7 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
               : <><Plus size={16} style={{ marginRight: 4 }} />Agregar</>}
           </Button>
         </Box>
+        )}
 
         {dependientes.length === 0 ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, py: 4, textAlign: 'center', fontSize: '0.875rem', color: '#9ca3af' }}>
@@ -420,7 +464,7 @@ export default function ClienteForm({ clienteId }: { clienteId?: number }) {
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
         <Button
           variant="outlined"
-          onClick={() => router.push('/dashboard/clientes')}
+          onClick={volver}
           disabled={saving}
           sx={{ textTransform: 'none', borderRadius: '8px' }}
         >

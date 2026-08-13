@@ -14,6 +14,18 @@ export type Sexo = (typeof SEXOS)[number]['value'];
 
 export const SEXOS_VALIDOS: readonly string[] = SEXOS.map((s) => s.value);
 
+/**
+ * Situación del alumno en el colegio. Solo se elige al EDITAR: al dar de alta
+ * siempre entra 'activo' —nadie inscribe a alguien ya retirado— y ofrecerlo en
+ * el alta invitaría a crear fichas nacidas muertas.
+ */
+export const ESTADOS_ESTUDIANTE = [
+  { value: 'activo',   label: 'Activo' },
+  { value: 'inactivo', label: 'Inactivo' },
+  { value: 'retirado', label: 'Retirado' },
+  { value: 'graduado', label: 'Graduado' },
+] as const;
+
 export function labelSexo(sexo: string | null | undefined): string {
   return SEXOS.find((s) => s.value === sexo)?.label ?? '—';
 }

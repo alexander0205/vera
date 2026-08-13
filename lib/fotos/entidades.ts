@@ -1,5 +1,5 @@
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarEstudiantes, escolarPersonal, products, teams } from '@/lib/db/schema';
+import { adminEscolarEstudiantes, adminEscolarTutores, escolarPersonal, products, teams } from '@/lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { Permission } from '@/lib/config/roles';
 import type { ModuleKey } from '@/lib/auth/modules';
@@ -75,6 +75,21 @@ export const ENTIDADES_FOTO = {
         .where(and(eq(products.id, id), eq(products.teamId, teamId)))
         .limit(1);
       return r?.nombre ?? null;
+    },
+  },
+
+  tutor: {
+    tipo: 'Tutor',
+    modulo: 'escolar',
+    permisoVer: 'administracion-escolar:ver',
+    permisoGestionar: 'administracion-escolar:gestionar',
+    async cargar(teamId, id) {
+      const [r] = await db
+        .select({ nombre: adminEscolarTutores.nombre })
+        .from(adminEscolarTutores)
+        .where(and(eq(adminEscolarTutores.id, id), eq(adminEscolarTutores.teamId, teamId)))
+        .limit(1);
+      return r?.nombre?.trim() || (r ? 'Sin nombre' : null);
     },
   },
 

@@ -12,7 +12,9 @@ import { and, eq, ne } from 'drizzle-orm';
 import { calcularTotales } from '@/lib/ecf/types';
 import { generarCodigoFactura } from '@/lib/facturas/codigo';
 import { calcularEstadoPago } from '@/lib/facturas/estado-pago';
-import { reflejarFacturaRecurrenteEnCargo } from '@/lib/administracion-escolar/facturacion-recurrente';
+import {
+  reflejarFacturaRecurrenteEnCargo, mesYaFacturadoAMano,
+} from '@/lib/administracion-escolar/facturacion-recurrente';
 
 export interface GenerarFacturaResult {
   ok: true;
@@ -24,6 +26,8 @@ export type GenerarFacturaError =
   | { ok: false; reason: 'no_sequence' }
   | { ok: false; reason: 'not_found' }
   | { ok: false; reason: 'already_generated' }
+  /** El mes ya se facturó a mano desde la ficha del estudiante. */
+  | { ok: false; reason: 'ya_facturado_a_mano' }
   | { ok: false; reason: string };
 
 /**
@@ -116,6 +120,14 @@ export async function generarFacturaDeRecurrente(
 
   if (existentes[0]) {
     return { ok: false, reason: 'already_generated' };
+  }
+
+  // Candado contra la doble factura del mismo mes. El chequeo de arriba solo ve
+  // las facturas que nacieron de ESTA recurrente; la que hizo la secretaria a
+  // mano desde la ficha del estudiante no lleva `origenRecurrenteId` y por ahí
+  // es invisible. Se mira el cargo del mes, que es lo único que tocan las dos.
+  if (await mesYaFacturadoAMano(fr.id, periodo)) {
+    return { ok: false, reason: 'ya_facturado_a_mano' };
   }
 
   // Parsear ítems y calcular totales

@@ -3,11 +3,19 @@
 import * as React from 'react';
 import MuiTextField from '@mui/material/TextField';
 
-type InputProps = Omit<React.ComponentProps<'input'>, 'size' | 'ref'>;
+type InputProps = Omit<React.ComponentProps<'input'>, 'size' | 'ref'> & {
+  /**
+   * Marca el campo como rechazado: borde y etiqueta en rojo.
+   *
+   * Existe porque un aviso arriba del formulario no basta cuando el formulario
+   * es largo: hay que poder ver DÓNDE falta el dato, no solo que falta.
+   */
+  error?: boolean;
+};
 
 function Input({
   className, type, value, defaultValue, onChange, placeholder,
-  disabled, required, id, name, style, readOnly, ...htmlInputProps
+  disabled, required, id, name, style, readOnly, error, ...htmlInputProps
 }: InputProps) {
   // Color pickers don't work well as MUI TextField — pass through as native
   if (type === 'color') {
@@ -37,6 +45,7 @@ function Input({
       required={required}
       id={id}
       name={name}
+      error={error}
       fullWidth
       size="small"
       sx={{

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { adminEscolarEstudiantes, dependientes, clients } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { deudaEstudiante, sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
+import { sincronizarSaldosDesdeFacturas } from '@/lib/administracion-escolar/queries';
+import { estudianteConDependiente } from '@/lib/administracion-escolar/ficha-estudiante';
 import { SEXOS_VALIDOS } from '@/lib/administracion-escolar/estudiante-utils';
 import { limpiarCamposSigerd } from '@/lib/administracion-escolar/estudiante-sigerd-campos';
 import { eq, and } from 'drizzle-orm';
@@ -14,32 +15,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const [estudiante] = await db.select().from(adminEscolarEstudiantes)
-    .where(and(eq(adminEscolarEstudiantes.id, parseInt(id)), eq(adminEscolarEstudiantes.teamId, teamId)))
-    .limit(1);
-  if (!estudiante) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
   // Refleja el cobro de las facturas vinculadas antes de calcular la deuda.
-  await sincronizarSaldosDesdeFacturas(teamId, estudiante.id);
-  const deudaCentavos = await deudaEstudiante(teamId, estudiante.id);
-
-  // Enlace opcional a Contactos (dependiente del cliente/tutor).
-  let dependiente: { nombre: string; apellido: string; clienteId: number; clienteRazonSocial: string } | null = null;
-  if (estudiante.dependienteId) {
-    const [row] = await db
-      .select({
-        nombre: dependientes.nombre,
-        apellido: dependientes.apellido,
-        clienteId: clients.id,
-        clienteRazonSocial: clients.razonSocial,
-      })
-      .from(dependientes)
-      .innerJoin(clients, eq(dependientes.clientId, clients.id))
-      .where(and(eq(dependientes.id, estudiante.dependienteId), eq(dependientes.teamId, teamId)))
-      .limit(1);
-    dependiente = row ?? null;
-  }
-
-  return NextResponse.json({ estudiante: { ...estudiante, deudaCentavos, dependiente } });
+  await sincronizarSaldosDesdeFacturas(teamId, parseInt(id));
+  const estudiante = await estudianteConDependiente(teamId, parseInt(id));
+  if (!estudiante) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  return NextResponse.json({ estudiante });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -48,9 +28,38 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { teamId } = auth;
   const { id } = await params;
   const body = await req.json();
-  const { codigo, nombres, apellidos, sexo, fechaNacimiento, estado, dependienteId } = body;
+  const { codigo, nombres, apellidos, sexo, fechaNacimiento, estado, dependienteId, sigerdId } = body;
   // Campos extra de la ficha: solo los que vengan en el cuerpo (update parcial).
   const extra = limpiarCamposSigerd(body, { soloPresentes: true });
+
+  /**
+   * El id del alumno en el padrón del MINERD, cuando la ficha se cruza con
+   * SIGERD desde la pantalla de edición.
+   *
+   * Es lo que permite reconocer a este mismo niño en una sincronización futura
+   * en vez de crear una segunda ficha. Se comprueba que no lo tenga ya otro
+   * alumno: dos fichas con el mismo id de SIGERD hacen que la próxima
+   * sincronización pise una con los datos de la otra.
+   */
+  let sigerdIdOk: number | null | undefined;
+  if (sigerdId !== undefined) {
+    sigerdIdOk = Number.isInteger(sigerdId) && sigerdId > 0 ? Number(sigerdId) : null;
+    if (sigerdIdOk !== null) {
+      const [ya] = await db.select({ id: adminEscolarEstudiantes.id })
+        .from(adminEscolarEstudiantes)
+        .where(and(
+          eq(adminEscolarEstudiantes.teamId, teamId),
+          eq(adminEscolarEstudiantes.sigerdId, sigerdIdOk),
+        ))
+        .limit(1);
+      if (ya && ya.id !== parseInt(id)) {
+        return NextResponse.json(
+          { error: 'Ese alumno de SIGERD ya está registrado en este colegio.', estudianteId: ya.id },
+          { status: 409 },
+        );
+      }
+    }
+  }
 
   // dependienteId: null desvincula; si viene un id, debe pertenecer al team.
   if (dependienteId !== undefined && dependienteId !== null) {
@@ -69,6 +78,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(fechaNacimiento !== undefined ? { fechaNacimiento: fechaNacimiento || null } : {}),
       ...(estado !== undefined && ESTADOS.includes(estado) ? { estado } : {}),
       ...(dependienteId !== undefined ? { dependienteId } : {}),
+      ...(sigerdIdOk !== undefined ? { sigerdId: sigerdIdOk } : {}),
       ...extra,
       updatedAt: new Date(),
     })

@@ -17,6 +17,7 @@ import {
   ArrowLeft, Download, FileText, Loader2, XCircle, CheckCircle,
   Clock, ChevronDown, Mail, Pencil, FileCheck, MoreVertical,
 } from 'lucide-react';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,7 @@ export default function CotizacionDetallePage() {
   const params = useParams();
   const router = useRouter();
   const cotId  = params.id as string;
+  const volver = useVolver('/dashboard/cotizaciones');
 
   const [cot, setCot]         = useState<Cotizacion | null>(null);
   const [loading, setLoading] = useState(true);
@@ -204,7 +206,7 @@ export default function CotizacionDetallePage() {
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
           <XCircle className="h-12 w-12 mx-auto mb-3 text-red-400" />
           <p className="font-medium">{error ?? 'Cotización no encontrada'}</p>
-          <Button variant="outline" className="mt-4" onClick={() => router.push('/dashboard/cotizaciones')}>
+          <Button variant="outline" className="mt-4" onClick={volver}>
             Volver a cotizaciones
           </Button>
         </div>
@@ -239,11 +241,9 @@ export default function CotizacionDetallePage() {
       {/* ── Header ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/dashboard/cotizaciones">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Cotizaciones</span>
-            </Link>
+          <Button variant="ghost" size="sm" onClick={volver}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            <span className="hidden sm:inline">Cotizaciones</span>
           </Button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -512,7 +512,7 @@ export default function CotizacionDetallePage() {
         <Button
           variant="outline"
           className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-          onClick={() => router.push('/dashboard/cotizaciones')}
+          onClick={volver}
         >
           Volver
         </Button>

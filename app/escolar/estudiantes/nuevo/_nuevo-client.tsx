@@ -1,150 +1,159 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useId } from 'react';
-import Link from 'next/link';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  ArrowLeft, Loader2, Plus, X, User, ClipboardList, IdCard, Phone, FileText, MapPin, Award,
-  type LucideIcon,
-} from 'lucide-react';
+import { ArrowLeft, Loader2, Search, Users, Wallet } from 'lucide-react';
 import { usePermissions } from '@/lib/hooks/usePermissions';
-import { SEXOS, calcularEdad } from '@/lib/administracion-escolar/estudiante-utils';
+import { useVolver } from '@/lib/hooks/useVolver';
 import {
-  CAMPOS_SIGERD_ESTUDIANTE, GRUPOS_SIGERD, type GrupoCampo,
-} from '@/lib/administracion-escolar/estudiante-sigerd-campos';
+  Categoria, Field, DatosEstudiante, CamposSigerd, camposExtraVacios,
+} from '@/components/administracion-escolar/FormularioEstudiante';
+import { BuscarSigerdDialog } from '@/components/administracion-escolar/BuscarSigerdDialog';
+import { TutoresPanel, type TutorVinculo } from '@/components/administracion-escolar/TutoresPanel';
+import { ResponsablePagoDialog, type Contacto } from '@/components/administracion-escolar/ResponsablePagoDialog';
 
-interface Periodo { id: number; nombre: string; activo: boolean }
-interface Curso { id: number; nombre: string }
-
-function hoy() { return new Date().toISOString().slice(0, 10); }
-
-/** Ícono + subtítulo de cada categoría de la ficha extendida. */
-const CATEGORIA: Record<GrupoCampo, { icon: LucideIcon; hint: string }> = {
-  'Identidad':          { icon: IdCard,   hint: 'Nacionalidad, estado civil y RNE' },
-  'Contacto':           { icon: Phone,    hint: 'Teléfonos y WhatsApp' },
-  'Acta de nacimiento': { icon: FileText, hint: 'Datos de la Junta Central Electoral' },
-  'Dirección':          { icon: MapPin,   hint: 'Domicilio del estudiante' },
-  'Programa y subsidio':{ icon: Award,    hint: 'Jornada y tarjetas de subsidio' },
-};
 
 export default function NuevoEstudianteClient() {
   const router = useRouter();
+  const volver = useVolver('/escolar/estudiantes');
   const { permissions } = usePermissions();
-  const puedeConfigurar = permissions.includes('administracion-escolar:configurar');
 
-  const [periodos, setPeriodos] = useState<Periodo[]>([]);
-  const [cursos, setCursos]     = useState<Curso[]>([]);
-  const [loading, setLoading]   = useState(true);
 
   const [form, setForm] = useState({
     nombres: '', apellidos: '', sexo: '', fechaNacimiento: '',
-    periodoId: '', cursoId: '', fechaInscripcion: hoy(),
+    codigoMatricula: '',
   });
+  const [buscarSigerd, setBuscarSigerd] = useState(false);
+  /**
+   * Id del alumno en SIGERD, si vino del buscador del portal.
+   *
+   * Va aparte del formulario porque no se teclea: o lo trae el portal o no
+   * existe. Es lo que después permite reconocer a este mismo alumno en una
+   * sincronización futura sin crear una ficha duplicada.
+   */
+  const [sigerdId, setSigerdId] = useState<number | null>(null);
   // Ficha extendida (opcional). Estado aparte del núcleo obligatorio.
-  const [extra, setExtra] = useState<Record<string, string>>(
-    () => Object.fromEntries(CAMPOS_SIGERD_ESTUDIANTE.map((c) => [c.key, ''])),
-  );
+  const [extra, setExtra] = useState<Record<string, string>>(camposExtraVacios);
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState<string | null>(null);
+  /**
+   * Qué falta, para poder pintarlo en rojo donde está.
+   *
+   * El aviso solo vive arriba del formulario, y el formulario es largo: al
+   * pulsar «Crear estudiante» desde abajo no pasaba nada visible y parecía que
+   * el botón estaba roto. Ahora el mensaje se busca solo y el campo se marca.
+   */
+  const [campoError, setCampoError] = useState<'nombres' | 'apellidos' | 'tutores' | 'responsable' | null>(null);
+  const avisoRef = useRef<HTMLDivElement>(null);
 
-  // Alta inline de periodo/curso (para escuelas sin catálogo previo).
-  const [nuevoPeriodo, setNuevoPeriodo] = useState<string | null>(null);
-  const [nuevoCurso, setNuevoCurso]     = useState<string | null>(null);
-  const [guardandoCat, setGuardandoCat] = useState(false);
-
-  const cargar = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [p, c] = await Promise.all([
-        fetch('/api/administracion-escolar/periodos').then((r) => r.json()),
-        fetch('/api/administracion-escolar/cursos').then((r) => r.json()),
-      ]);
-      const per: Periodo[] = p.periodos ?? [];
-      setPeriodos(per);
-      setCursos(c.cursos ?? []);
-      setForm((f) => f.periodoId ? f : { ...f, periodoId: String(per.find((x) => x.activo)?.id ?? '') });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { cargar(); }, [cargar]);
-
-  const edad = calcularEdad(form.fechaNacimiento);
-
-  async function crearPeriodoInline() {
-    if (!nuevoPeriodo?.trim()) return;
-    setGuardandoCat(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/administracion-escolar/periodos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre: nuevoPeriodo.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error creando período');
-      await cargar();
-      setForm((f) => ({ ...f, periodoId: String(data.periodo.id) }));
-      setNuevoPeriodo(null);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error creando período');
-    } finally {
-      setGuardandoCat(false);
-    }
+  function fallar(mensaje: string, campo: typeof campoError) {
+    setError(mensaje);
+    setCampoError(campo);
+    // Al siguiente pintado, cuando el aviso ya existe en el árbol.
+    requestAnimationFrame(() => {
+      avisoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
-  async function crearCursoInline() {
-    if (!nuevoCurso?.trim()) return;
-    setGuardandoCat(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/administracion-escolar/cursos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre: nuevoCurso.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Error creando curso');
-      await cargar();
-      setForm((f) => ({ ...f, cursoId: String(data.curso.id) }));
-      setNuevoCurso(null);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error creando curso');
-    } finally {
-      setGuardandoCat(false);
+  /**
+   * Los tutores del alumno, en el aire hasta que se guarde.
+   *
+   * El TUTOR sí se crea de verdad al añadirlo —vive en el colegio, no en el
+   * alumno, y así se puede reutilizar en el hermano—. Lo que espera es el
+   * vínculo con este alumno, que todavía no existe.
+   */
+  const [tutores, setTutores] = useState<TutorVinculo[]>([]);
+
+  /**
+   * El contacto al que se le facturará. Va aparte de los tutores a propósito:
+   * el tutor es quien responde por el alumno y el responsable es a quien se le
+   * cobra, y no siempre son la misma persona.
+   */
+  const [responsable, setResponsable] = useState<{ id: number; nombre: string; rnc: string | null } | null>(null);
+  /** La cédula del que paga: con ella la tabla de tutores señala cuál es. */
+  const responsableDoc = responsable?.rnc ?? null;
+  const [responsableAbierto, setResponsableAbierto] = useState(false);
+  const [responsablePrefill, setResponsablePrefill] = useState<Record<string, string> | undefined>();
+  const [responsableModo, setResponsableModo] = useState<'buscar' | 'crear'>('buscar');
+  /** El contacto que ya tenía esa cédula, para ofrecerlo en vez de duplicarlo. */
+  const [responsableExistente, setResponsableExistente] = useState<Contacto | null>(null);
+
+  /**
+   * Convertir un tutor en el responsable de pago.
+   *
+   * Siempre se abre «Nuevo contacto» con sus datos ya puestos, y de paso se
+   * busca su cédula en Contactos comparando SOLO los dígitos —el mismo
+   * documento está escrito con guiones en un sitio y sin ellos en otro, y por
+   * ese guion se acaba creando al mismo padre dos veces—. Si ya existe, sale
+   * arriba con un «Usar este» en vez de asignarse solo: así se ve de quién se
+   * trata antes de que la pantalla cambie.
+   */
+  async function hacerResponsable(t: TutorVinculo) {
+    const digitos = (t.documento ?? '').replace(/\D/g, '');
+    let hallado: Contacto | null = null;
+    if (digitos.length >= 7) {
+      try {
+        const r = await fetch(`/api/clientes?q=${encodeURIComponent(digitos)}`);
+        const j = await r.json();
+        hallado = (j.clientes ?? []).find(
+          (c: Contacto) => (c.rnc ?? '').replace(/\D/g, '') === digitos,
+        ) ?? null;
+      } catch { /* sin red: se sigue por el camino de crear */ }
     }
+    setResponsableExistente(hallado);
+    setResponsablePrefill({
+      razonSocial: t.nombre,
+      rnc: t.documento ?? '',
+      telefono: t.telefono ?? '',
+      whatsapp: t.whatsapp ?? '',
+      email: t.email ?? '',
+    });
+    setResponsableModo('crear');
+    setResponsableAbierto(true);
+  }
+
+  function agregarTutor(v: TutorVinculo) {
+    setTutores((prev) => [...prev.filter((t) => t.tutorId !== v.tutorId), v]);
   }
 
   async function guardar() {
-    if (!form.nombres.trim() || !form.apellidos.trim()) {
-      setError('Nombres y apellidos son obligatorios'); return;
+    if (!form.nombres.trim()) {
+      fallar('Escribe los nombres del estudiante', 'nombres'); return;
     }
-    if (!form.periodoId || !form.cursoId) {
-      setError('Período y curso son obligatorios (definen la primera inscripción)'); return;
+    if (!form.apellidos.trim()) {
+      fallar('Escribe los apellidos del estudiante', 'apellidos'); return;
+    }
+    if (tutores.length === 0) {
+      fallar('Agrega al menos un tutor: sin él no se le puede avisar', 'tutores'); return;
+    }
+    if (!responsable) {
+      fallar('Falta el responsable de pago: es a quien se le emiten las facturas', 'responsable'); return;
     }
     setSaving(true);
     setError(null);
+    setCampoError(null);
     try {
       const res = await fetch('/api/administracion-escolar/estudiantes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nombres: form.nombres, apellidos: form.apellidos,
           sexo: form.sexo || null, fechaNacimiento: form.fechaNacimiento || null,
+          sigerdId,
           ...extra, // ficha extendida (la API recorta/ignora lo vacío)
-          matricula: {
-            periodoId: Number(form.periodoId), cursoId: Number(form.cursoId),
-            fechaInscripcion: form.fechaInscripcion || hoy(),
-          },
+          tutores: tutores.map((t) => ({ tutorId: t.tutorId, relacion: t.relacion })),
+          facturarAClientId: responsable.id,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error creando estudiante');
-      router.push(`/escolar/estudiantes/${data.estudiante.id}`);
+      // Sin matrícula el alumno no cobra ni aparece en un curso, así que se
+      // entra derecho a ponérsela. `?matricular=1` abre el diálogo solo.
+      router.push(`/escolar/estudiantes/${data.estudiante.id}?matricular=1`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error creando estudiante');
       setSaving(false);
@@ -155,191 +164,185 @@ export default function NuevoEstudianteClient() {
 
   return (
     <section className="mx-auto max-w-4xl space-y-5 p-6">
-      <Link href="/escolar/estudiantes"
-        className="inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-zero-600">
+      <button type="button" onClick={volver}
+        className="inline-flex items-center gap-1 self-start text-sm text-gray-500 transition-colors hover:text-zero-600">
         <ArrowLeft className="h-4 w-4" />Volver a estudiantes
-      </Link>
+      </button>
 
-      <header>
-        <h1 className="text-2xl font-bold text-gray-900">Nuevo estudiante</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Completa los datos del estudiante. Solo el nombre y la primera inscripción son obligatorios;
-          el resto puedes llenarlo ahora o más tarde. El código se genera automáticamente (AAAA-####).
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900">Nuevo estudiante</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Obligatorios: el nombre y al menos un tutor con su responsable de pago. Al guardar se pasa
+            a matricularlo — ahí se eligen período y curso, y sale el código.
+          </p>
+        </div>
+        {/* Antes que teclear: si el alumno está en el padrón del MINERD, sus
+            datos vienen ya escritos como el ministerio los tiene. Una letra
+            distinta aquí es un alumno que después no cruza con SIGERD. */}
+        <Button variant="outline" className="shrink-0" onClick={() => setBuscarSigerd(true)}>
+          <Search className="mr-1.5 h-4 w-4" />Buscar en SIGERD
+        </Button>
       </header>
 
-      {loading ? (
-        <div className="flex justify-center py-24"><Loader2 className="h-8 w-8 animate-spin text-zero-600" /></div>
-      ) : (
-        <div className="space-y-5">
+      <BuscarSigerdDialog
+        open={buscarSigerd}
+        onClose={() => setBuscarSigerd(false)}
+        onElegir={(e) => {
+          setForm((f) => ({
+            ...f,
+            nombres: e.nombres || f.nombres,
+            apellidos: e.apellidos || f.apellidos,
+            sexo: e.sexo || f.sexo,
+            fechaNacimiento: e.fechaNacimiento || f.fechaNacimiento,
+            // El colegio usa el RNE como código de matrícula cuando no lleva uno
+            // propio. Solo se pone si el campo está vacío: lo que ya escribió
+            // una persona manda sobre lo que sugiere el portal.
+            codigoMatricula: f.codigoMatricula || e.codigoSugerido,
+          }));
+          // La ficha del portal: dirección, acta, teléfonos, programa. Solo
+          // pisa lo que esté vacío — quien ya escribió algo a mano lo hizo por
+          // algo, y el portal no siempre está al día.
+          setExtra((x) => {
+            const y: Record<string, string> = { ...x, codigoRne: x.codigoRne || e.codigoRne };
+            for (const [k, v] of Object.entries(e.campos)) {
+              if (!y[k]?.trim()) y[k] = v;
+            }
+            return y;
+          });
+          // Los responsables que el portal tenía. Ninguno llega marcado como
+          // responsable de pago —SIGERD no sabe de contactos de Facturación—,
+          // así que eso lo decide el usuario. Se añaden a los que ya hubiera.
+          if (e.tutores.length > 0) {
+            setTutores((prev) => {
+              const ya = new Set(prev.map((t) => t.tutorId));
+              const nuevos = e.tutores
+                .filter((t) => !ya.has(t.tutorId))
+                .map((t) => ({
+                  id: -t.tutorId,
+                  tutorId: t.tutorId,
+                  nombre: t.nombre,
+                  documento: t.documento,
+                  telefono: t.telefono,
+                  whatsapp: null,
+                  email: t.email,
+                  imagen: null,
+                  relacion: t.relacion,
+                }));
+              return [...prev, ...nuevos];
+            });
+          }
+          setSigerdId(e.sigerdId);
+        }}
+      />
+
+      <div className="space-y-5">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+            <div ref={avisoRef}
+              className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
           )}
 
           {/* ── Datos del estudiante (obligatorio) ── */}
-          <Categoria icon={User} titulo="Datos del estudiante" hint="Información principal" requerido>
-            <Field label="Nombres *">
-              <Input autoFocus value={form.nombres}
-                onChange={(e) => setForm((f) => ({ ...f, nombres: e.target.value }))} />
-            </Field>
-            <Field label="Apellidos *">
-              <Input value={form.apellidos}
-                onChange={(e) => setForm((f) => ({ ...f, apellidos: e.target.value }))} />
-            </Field>
-            <Field label="Sexo">
-              <Select value={form.sexo} onValueChange={(v) => setForm((f) => ({ ...f, sexo: v }))}>
-                <SelectTrigger aria-label="Sexo" className="w-full"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                <SelectContent>
-                  {SEXOS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label={`Fecha de nacimiento${edad != null ? ` · ${edad} años` : ''}`}>
-              <Input type="date" value={form.fechaNacimiento}
-                onChange={(e) => setForm((f) => ({ ...f, fechaNacimiento: e.target.value }))} />
-            </Field>
-          </Categoria>
+          <DatosEstudiante
+            form={form}
+            campoError={campoError === 'nombres' || campoError === 'apellidos' ? campoError : null}
+            onChange={(parche) => {
+              // Escribir borra la marca: si el usuario ya está corrigiendo, el
+              // rojo deja de ser información y pasa a ser un reproche.
+              if (campoError) { setCampoError(null); setError(null); }
+              setForm((f) => ({ ...f, ...parche }));
+            }} />
 
           {/* ── Primera inscripción (obligatorio) ── */}
-          <Categoria icon={ClipboardList} titulo="Primera inscripción"
-            hint="Define el código y la primera matrícula" requerido>
-            <Field label="Período *">
-              {nuevoPeriodo !== null ? (
-                <InlineCrear value={nuevoPeriodo} onChange={setNuevoPeriodo} onGuardar={crearPeriodoInline}
-                  onCancelar={() => setNuevoPeriodo(null)} saving={guardandoCat} placeholder="Ej: 2026-2027" />
-              ) : (
-                <div className="flex gap-2">
-                  <Select value={form.periodoId} onValueChange={(v) => setForm((f) => ({ ...f, periodoId: v }))}>
-                    <SelectTrigger aria-label="Período" className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                    <SelectContent>
-                      {periodos.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {puedeConfigurar && (
-                    <Button type="button" variant="outline" size="icon" onClick={() => setNuevoPeriodo('')} title="Nuevo período">
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  )}
+
+          {/* ── Tutores ──────────────────────────────────────────────────
+              Obligatorio, y por eso va antes de las categorías opcionales: el
+              responsable de pago es el comprador de todas las facturas del
+              alumno. Un alumno sin tutor no se puede cobrar ni avisar, y
+              arreglarlo después obliga a volver a su ficha.
+
+              Es el MISMO panel de la ficha, en modo borrador: aquí no hay
+              alumno al que atar nada todavía. */}
+          <Categoria icon={Users} titulo="Tutores" hint="Quién responde por el alumno" requerido
+            resaltado={campoError === 'tutores'}>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <TutoresPanel
+                estudianteId={null}
+                tutores={tutores}
+                onChange={() => {}}
+                responsableDocumento={responsableDoc}
+                onHacerResponsable={(t) => void hacerResponsable(t)}
+                onVincularBorrador={agregarTutor}
+                onQuitarBorrador={(tutorId) => setTutores((p) => p.filter((t) => t.tutorId !== tutorId))}
+              />
+            </div>
+          </Categoria>
+
+          {/* ── Responsable de pago ──────────────────────────────────────
+              Debajo de Tutores porque se lee en ese orden: primero quién
+              responde por el alumno, después a quién se le cobra. Es un
+              contacto de Facturación, no un tutor. */}
+          <Categoria icon={Wallet} titulo="Responsable de pago" hint="A quién se le factura" requerido
+            resaltado={campoError === 'responsable'}>
+            <div className="sm:col-span-2 lg:col-span-3">
+              {responsable ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900">{responsable.nombre}</p>
+                    <p className="text-xs text-gray-500">Recibirá las facturas de este alumno</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="shrink-0"
+                    onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
+                    Cambiar
+                  </Button>
                 </div>
-              )}
-            </Field>
-            <Field label="Curso *">
-              {nuevoCurso !== null ? (
-                <InlineCrear value={nuevoCurso} onChange={setNuevoCurso} onGuardar={crearCursoInline}
-                  onCancelar={() => setNuevoCurso(null)} saving={guardandoCat} placeholder="Ej: Primero A" />
               ) : (
-                <div className="flex gap-2">
-                  <Select value={form.cursoId} onValueChange={(v) => setForm((f) => ({ ...f, cursoId: v }))}>
-                    <SelectTrigger aria-label="Curso" className="flex-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                    <SelectContent>
-                      {cursos.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {puedeConfigurar && (
-                    <Button type="button" variant="outline" size="icon" onClick={() => setNuevoCurso('')} title="Nuevo curso">
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+                <Button variant="outline"
+                  onClick={() => { setResponsablePrefill(undefined); setResponsableExistente(null); setResponsableModo('buscar'); setResponsableAbierto(true); }}>
+                  <Wallet className="mr-1.5 h-4 w-4" />Asignar responsable de pago
+                </Button>
               )}
-            </Field>
-            <Field label="Fecha de inscripción">
-              <Input type="date" value={form.fechaInscripcion}
-                onChange={(e) => setForm((f) => ({ ...f, fechaInscripcion: e.target.value }))} />
-            </Field>
+            </div>
           </Categoria>
 
           {/* ── Categorías opcionales (una tarjeta por categoría) ── */}
-          {GRUPOS_SIGERD.map((grupo) => {
-            const meta = CATEGORIA[grupo];
-            return (
-              <Categoria key={grupo} icon={meta.icon} titulo={grupo} hint={meta.hint}>
-                {CAMPOS_SIGERD_ESTUDIANTE.filter((c) => c.grupo === grupo).map((c) => (
-                  <Field key={c.key} label={c.label}>
-                    <Input
-                      type={c.tipo === 'tel' ? 'tel' : 'text'}
-                      value={extra[c.key] ?? ''}
-                      placeholder={c.placeholder}
-                      onChange={(e) => setExtraCampo(c.key, e.target.value)}
-                    />
-                  </Field>
-                ))}
-              </Categoria>
-            );
-          })}
+          <CamposSigerd valores={extra} onChange={setExtraCampo} />
 
           {/* ── Acciones ── */}
           <div className="flex items-center justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => router.back()} disabled={saving}>Cancelar</Button>
+            {/* El `router.back()` pelado que había aquí podía devolver al sitio
+                de donde se llegó a la app —o a ninguno, si el alta se abrió en
+                pestaña nueva—. Ahora el listado hace de red. */}
+            <Button variant="outline" onClick={volver} disabled={saving}>Cancelar</Button>
             <Button className="bg-zero-600 hover:bg-zero-700" onClick={guardar} disabled={saving}>
               {saving ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Guardando…</> : 'Crear estudiante'}
             </Button>
           </div>
-        </div>
-      )}
+      </div>
+      <ResponsablePagoDialog
+        open={responsableAbierto}
+        onOpenChange={setResponsableAbierto}
+        prefill={responsablePrefill}
+        modoInicial={responsableModo}
+        existente={responsableExistente}
+        onElegir={(c: Contacto) => {
+          setResponsable({ id: c.id, nombre: c.razonSocial, rnc: c.rnc });
+          if (campoError === 'responsable') { setCampoError(null); setError(null); }
+        }}
+        onCreado={(clientId, nombre) => {
+          // Recién creado no sabemos con qué cédula quedó —el formulario pudo
+          // corregirla—, y de ella depende que la tabla de tutores lo señale.
+          setResponsable({ id: clientId, nombre, rnc: null });
+          void fetch(`/api/clientes/${clientId}`)
+            .then((r) => r.json())
+            .then((j) => setResponsable((prev) =>
+              prev && prev.id === clientId ? { ...prev, rnc: j.cliente?.rnc ?? null } : prev))
+            .catch(() => { /* sin cédula solo se pierde el distintivo */ });
+          if (campoError === 'responsable') { setCampoError(null); setError(null); }
+        }}
+      />
     </section>
-  );
-}
-
-/** Tarjeta de una categoría del formulario. */
-function Categoria({ icon: Icon, titulo, hint, requerido, children }: {
-  icon: LucideIcon; titulo: string; hint?: string; requerido?: boolean; children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <div className="mb-5 flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zero-50 text-zero-600">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-gray-900">{titulo}</h2>
-            {requerido
-              ? <span className="rounded-full bg-zero-50 px-2 py-0.5 text-[10px] font-medium text-zero-700">Obligatorio</span>
-              : <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Opcional</span>}
-          </div>
-          {hint && <p className="text-xs text-gray-400">{hint}</p>}
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Campo con su etiqueta REALMENTE asociada al control (htmlFor ↔ id generado),
- * para que tenga nombre accesible y el clic en la etiqueta enfoque el control.
- */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  const id = useId();
-  const control = React.isValidElement(children)
-    ? React.cloneElement(children as React.ReactElement<{ id?: string }>, { id })
-    : children;
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {control}
-    </div>
-  );
-}
-
-function InlineCrear({ value, onChange, onGuardar, onCancelar, saving, placeholder }: {
-  value: string; onChange: (v: string) => void; onGuardar: () => void; onCancelar: () => void;
-  saving: boolean; placeholder: string;
-}) {
-  return (
-    <div className="flex gap-2">
-      <Input autoFocus placeholder={placeholder} value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onGuardar(); } }} />
-      <Button type="button" size="icon" className="bg-zero-600 hover:bg-zero-700" onClick={onGuardar} disabled={saving}>
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-      </Button>
-      <Button type="button" variant="outline" size="icon" onClick={onCancelar} disabled={saving}>
-        <X className="h-4 w-4" />
-      </Button>
-    </div>
   );
 }

@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
-import { Loader2, Receipt } from 'lucide-react';
+import { ModalHeader } from '@/components/ui/modal-header';
+import { Loader2 } from 'lucide-react';
 import { mesesDelPeriodo } from '@/lib/administracion-escolar/periodo-utils';
 
 interface Concepto {
@@ -20,7 +20,8 @@ interface Concepto {
 interface Props {
   open: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  /** `cargoId` llega cuando el usuario pidió facturarlo de una vez. */
+  onSaved: (cargoId?: number) => void;
   estudianteId: number;
   matriculaId: number | null;
   periodoId: number | null;
@@ -68,6 +69,15 @@ export function CrearCargoEstudianteDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ conceptoId: '', mes: '', anio: '', monto: '', fechaVencimiento: hoy() });
+  /**
+   * Facturarlo en el mismo gesto.
+   *
+   * Lo que se cobra suelto —una excursión, un uniforme, la reposición del
+   * carnet— casi siempre se factura al momento, con el padre delante. Sin esto
+   * había que crear el cargo, cerrar, buscarlo en la lista y facturarlo: tres
+   * pasos para algo que es uno solo en el mostrador.
+   */
+  const [facturarYa, setFacturarYa] = useState(false);
   const meses = useMemo(() => mesesDelPeriodo(fechaInicio, fechaFin), [fechaInicio, fechaFin]);
   const concepto = conceptos.find((c) => String(c.id) === form.conceptoId) ?? null;
   // Mes bloqueado: se abrió desde el panel de un mes concreto y ese mes existe
@@ -88,6 +98,7 @@ export function CrearCargoEstudianteDialog({
       fechaVencimiento: preseleccion ? vencimientoDefault(preseleccion.anio, preseleccion.mes) : hoy(),
     });
     setError(null);
+    setFacturarYa(false);
     setLoading(true);
     fetch('/api/administracion-escolar/conceptos')
       .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
@@ -132,7 +143,9 @@ export function CrearCargoEstudianteDialog({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'No se pudo crear el cargo');
-      onSaved();
+      // El id solo viaja si se pidió facturar: quien llama abre la factura con
+      // este cargo ya marcado.
+      onSaved(facturarYa ? (data.cargo?.id ?? data.id) : undefined);
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'No se pudo crear el cargo');
@@ -144,7 +157,7 @@ export function CrearCargoEstudianteDialog({
   return (
     <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
       <DialogContent className="max-w-md">
-        <ModalHeaderIcon icon={Receipt} subtitle="Se suma a la cuenta del estudiante."
+        <ModalHeader subtitle="Se suma a la cuenta del estudiante."
           title={<>Agregar cargo · {mesBloqueado
             ? new Intl.DateTimeFormat('es-DO', { month: 'long', year: 'numeric' }).format(new Date(Number(form.anio), (mesInicial ?? 1) - 1, 1))
             : periodoNombre}</>} />
@@ -195,6 +208,11 @@ export function CrearCargoEstudianteDialog({
           </>}
         </div>
         <DialogFooter>
+          <label className="mr-auto flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={facturarYa} className="h-4 w-4 accent-zero-600"
+              onChange={(e) => setFacturarYa(e.target.checked)} />
+            Facturarlo ahora
+          </label>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button className="bg-zero-600 hover:bg-zero-700" onClick={guardar} disabled={loading || saving || !matriculaId || !periodoId}>
             {saving ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />Guardando…</> : 'Crear cargo'}

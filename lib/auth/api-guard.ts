@@ -30,17 +30,28 @@ export interface AuthErr {
 }
 
 export async function requirePermission(permission: Permission): Promise<AuthOk | AuthErr> {
-  const user = await getUser();
+  /**
+   * Los tres a la vez, no en fila.
+   *
+   * `getUser`, `getTeamIdForUser` y `getTeamRoleForUser` van memoizados por
+   * request (React.cache) pero se encadenaban: cada uno esperaba al anterior
+   * para hacer SU viaje a la base. Contra Neon eso son tres idas y vueltas de
+   * red antes de tocar el dato que la ruta viene a buscar — y todas las rutas
+   * del módulo pasan por aquí. Internamente cada uno vuelve a pedir los
+   * anteriores, pero eso ya sale de la caché de la request.
+   */
+  const [user, teamId, teamRole] = await Promise.all([
+    getUser(),
+    getTeamIdForUser(),
+    getTeamRoleForUser(),
+  ]);
+
   if (!user) {
     return { ok: false, response: NextResponse.json({ error: 'No autenticado' }, { status: 401 }) };
   }
-
-  const teamId = await getTeamIdForUser();
   if (!teamId) {
     return { ok: false, response: NextResponse.json({ error: 'Sin empresa configurada' }, { status: 403 }) };
   }
-
-  const teamRole = await getTeamRoleForUser();
 
   if (!(await userCanForTeam(teamId, user.platformRole, teamRole, permission))) {
     return { ok: false, response: NextResponse.json({ error: 'Sin permiso' }, { status: 403 }) };
@@ -61,6 +72,9 @@ export async function requireModuleAndPermission(
   const auth = await requirePermission(permission);
   if (!auth.ok) return auth;
 
+  // El permiso ya se comprobó arriba; esto solo añade «¿el colegio tiene el
+  // módulo?». Comparte la caché de la request con lo anterior, así que no
+  // vuelve a preguntar los roles.
   if (!(await userHasModule(auth.teamId, auth.user.platformRole, auth.teamRole, mod))) {
     return {
       ok: false,

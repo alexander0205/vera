@@ -15,7 +15,7 @@ import { cuotasVigentes, finDeMes } from '@/lib/administracion-escolar/devengar'
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { conflictoMatriculaActivaPorPeriodo } from '@/lib/administracion-escolar/matricula-periodo';
 import { validarPertenencia } from '@/lib/administracion-escolar/pertenencia';
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count, ilike, or, sql } from 'drizzle-orm';
 import { armarPagina, leerPaginacion } from '@/lib/api/paginacion';
 
 const ESTADOS = ['activa', 'finalizada', 'retirada', 'anulada'];
@@ -25,14 +25,46 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const periodoId = req.nextUrl.searchParams.get('periodoId');
+  const estado = req.nextUrl.searchParams.get('estado');
+  const q = (req.nextUrl.searchParams.get('q') ?? '').trim();
 
   const where = [eq(adminEscolarMatriculas.teamId, teamId)];
   if (periodoId) where.push(eq(adminEscolarMatriculas.periodoId, parseInt(periodoId)));
+  if (estado && ESTADOS.includes(estado)) where.push(eq(adminEscolarMatriculas.estado, estado));
+
+  // La búsqueda va aquí y no en el cliente: filtrar la página ya cargada solo
+  // encuentra dentro de los cincuenta que se bajaron, así que buscar a un alumno
+  // de la página tres no daba nada. Cubre nombre, apellido y código —lo que
+  // alguien tiene a mano cuando busca una matrícula.
+  if (q) {
+    const patron = `%${q}%`;
+    where.push(or(
+      ilike(adminEscolarEstudiantes.nombres, patron),
+      ilike(adminEscolarEstudiantes.apellidos, patron),
+      sql`${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos} ILIKE ${patron}`,
+      ilike(adminEscolarMatriculas.codigoMatricula, patron),
+    )!);
+  }
+
+  // Los contadores se cuentan sobre TODO lo filtrado, no sobre la página: con
+  // paginación, contar las filas cargadas decía "1 matrícula" habiendo cientos.
+  const cuenta = db
+    .select({
+      total: count(),
+      activas: sql<number>`COUNT(*) FILTER (WHERE ${adminEscolarMatriculas.estado} = 'activa')::int`,
+      cursos: sql<number>`COUNT(DISTINCT ${adminEscolarMatriculas.cursoId})::int`,
+    })
+    .from(adminEscolarMatriculas)
+    .leftJoin(adminEscolarEstudiantes, and(
+      eq(adminEscolarMatriculas.estudianteId, adminEscolarEstudiantes.id),
+      eq(adminEscolarEstudiantes.teamId, teamId),
+    ))
+    .where(and(...where));
 
   // Una matrícula por alumno y año, y se acumulan curso tras curso. Sin paginar, la ruta devolvía la tabla entera.
   const pag = leerPaginacion(req.nextUrl);
 
-  const [rows, [{ total }]] = await Promise.all([
+  const [rows, [stats]] = await Promise.all([
     db
     .select({
       id: adminEscolarMatriculas.id,
@@ -74,11 +106,19 @@ export async function GET(req: NextRequest) {
     .limit(pag.limit)
     .offset(pag.offset),
 
-    db.select({ total: count() }).from(adminEscolarMatriculas).where(and(...where)),
+    cuenta,
   ]);
 
-  const pagina = armarPagina(rows, total, pag);
-  return NextResponse.json({ matriculas: pagina.datos, ...pagina });
+  const pagina = armarPagina(rows, stats?.total ?? 0, pag);
+  return NextResponse.json({
+    matriculas: pagina.datos,
+    ...pagina,
+    stats: {
+      total:   stats?.total ?? 0,
+      activas: stats?.activas ?? 0,
+      cursos:  stats?.cursos ?? 0,
+    },
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -124,6 +164,7 @@ export async function POST(req: NextRequest) {
   const becaTipoOk = becaTipo === 'porcentaje' || becaTipo === 'monto' ? becaTipo : null;
   const becaValorOk = becaTipoOk && Number.isFinite(Number(becaValor)) ? Number(becaValor) : null;
   const inscripcion = fechaInscripcion || new Date().toISOString().slice(0, 10);
+  const pedidos: number[] = Array.isArray(conceptos) ? conceptos.map(Number).filter(Boolean) : [];
 
   try {
     // Matrícula y cargos en una sola transacción: una matrícula sin su deuda
@@ -142,9 +183,12 @@ export async function POST(req: NextRequest) {
         becaTipo: becaTipoOk,
         becaValor: becaValorOk,
         becaMotivo: becaMotivo?.trim() || null,
+        // Lo que se marcó aquí es lo que se le cobra el año entero: el devengo
+        // mensual sigue esta lista. Sin ella no podía saber si un concepto sin
+        // cargos estaba desmarcado a propósito o solo no le había tocado aún.
+        conceptosIds: pedidos,
       }).returning();
 
-      const pedidos: number[] = Array.isArray(conceptos) ? conceptos.map(Number).filter(Boolean) : [];
       if (pedidos.length === 0) return matricula;
 
       // Se recalcula aquí en vez de fiarse de los montos que mandó el cliente:
@@ -171,7 +215,10 @@ export async function POST(req: NextRequest) {
         // existe como fila, así que se guarda nulo.
         cuotaId:      cuota.cuotaId || null,
         mes:          cuota.mes,
-        anio:         Number(cuota.fechaVencimiento.slice(0, 4)),
+        // El año es el de la EMISIÓN: junto con `mes` dice de qué mensualidad
+        // es el cargo, y el del vencimiento se iría al año siguiente en la
+        // cuota de diciembre de un concepto que dé días para pagar.
+        anio:         Number(cuota.fechaEmision.slice(0, 4)),
         montoCentavos: cuota.montoCentavos,
         // Nace debiéndose entero. Matricular no cobra: el dinero se mueve
         // después, en Pagos.

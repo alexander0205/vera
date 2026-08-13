@@ -6,7 +6,7 @@
  * de agregación vive aquí para no repetirla entre rutas.
  */
 import 'server-only';
-import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists } from 'drizzle-orm';
+import { and, eq, ne, desc, sql, inArray, isNotNull, like, ilike, or, count, exists, notExists } from 'drizzle-orm';
 import { repartirCobro, type SaldoCalculado } from '@/lib/administracion-escolar/reparto';
 import { db } from '@/lib/db/drizzle';
 import {
@@ -18,6 +18,8 @@ import {
   adminEscolarEstudianteTutores,
   adminEscolarCargos,
   adminEscolarPagos,
+  clients,
+  dependientes,
   ecfDocuments,
   pagosRecibidos,
 } from '@/lib/db/schema';
@@ -25,23 +27,37 @@ import {
 /** Estados de cargo que cuentan como deuda viva. */
 export const ESTADOS_DEUDA = ['pendiente', 'parcial', 'vencido'] as const;
 
+/**
+ * De dónde salió la fila del listado. `dependiente` = beneficiario de Contactos
+ * al que ya se le factura pero que todavía no tiene ficha en el módulo escolar;
+ * en esas filas `id` es el id del DEPENDIENTE, no el de un estudiante, así que
+ * no sirve para pedir cargos, tutores ni el perfil.
+ */
+export type OrigenFilaEstudiante = 'estudiante' | 'dependiente';
+
 export interface EstudianteEnriquecido {
+  origen: OrigenFilaEstudiante;
   id: number;
+  dependienteId: number | null;
   codigo: string | null;
   nombres: string;
   apellidos: string;
-  estado: string;
+  /** null en los beneficiarios: el estado escolar es del alumno, no del beneficiario. */
+  estado: string | null;
   sexo: string | null;
   fechaNacimiento: string | null;
   // Derivados
   matriculaActivaId: number | null;
   periodoActivo: string | null;
   cursoActual: string | null;
+  /** Razón social del contacto (padre) al que se le factura. */
+  contacto: string | null;
   tutorResponsable: string | null;
   tutorTelefono: string | null;
   tutorEmail: string | null;
-  deudaCentavos: number;
-  cargosPendientes: number;
+  /** null (no cero) en los beneficiarios: sin ficha escolar no hay cargos que sumar. */
+  deudaCentavos: number | null;
+  cargosPendientes: number | null;
   ultimoPagoFecha: string | null;
   ultimoPagoCentavos: number | null;
 }
@@ -57,11 +73,23 @@ export interface ListarEstudiantesOpts {
   limit?: number;
   /** Desplazamiento (default 0). */
   offset?: number;
+  /**
+   * Mezclar también los beneficiarios de Contactos que aún no son alumnos.
+   * Apagado por defecto: el listado es de alumnos del módulo.
+   */
+  incluirDeContactos?: boolean;
 }
 
 export interface ListarEstudiantesResult {
   estudiantes: EstudianteEnriquecido[];
   total: number;
+  /**
+   * Beneficiarios que todavía no son alumnos (honra `q`, ignora curso/estado).
+   * La pantalla lo usa para avisar de los que sus filtros están escondiendo:
+   * el filtro de estado viene en 'activo' por defecto y sin este aviso nadie
+   * llegaría nunca a ellos.
+   */
+  sinMatricular: number;
 }
 
 /**
@@ -70,6 +98,12 @@ export interface ListarEstudiantesResult {
  * activa y el tutor responsable en JOIN); solo se enriquece la PÁGINA devuelta
  * (deuda + último pago por los ids de la página) — así no se traen todos los
  * estudiantes ni se calcula deuda de golpe. Ver `docs/plan-optimizacion-db.md`.
+ *
+ * El listado mezcla DOS orígenes: los alumnos del módulo y los beneficiarios de
+ * Contactos que aún no lo son (al colegio ya se les factura, pero eran
+ * invisibles aquí). La unión se pagina en SQL —`UNION ALL` + un `total` que es
+ * la suma de los dos conteos— y no en memoria: son cientos de alumnos contra
+ * miles de beneficiarios, y cortar en JS obligaba a traérselos todos.
  */
 export async function listarEstudiantesEnriquecidos(
   teamId: number,
@@ -104,6 +138,10 @@ export async function listarEstudiantesEnriquecidos(
       ilike(adminEscolarEstudiantes.apellidos, p),
       ilike(sql`${adminEscolarEstudiantes.nombres} || ' ' || ${adminEscolarEstudiantes.apellidos}`, p),
       ilike(adminEscolarEstudiantes.codigo, p),
+      // Buscar por el nombre de CUALQUIER tutor del alumno, no solo del que
+      // tuviera marcada la casilla `responsable_pago` —que ya nadie marca, así
+      // que buscar «Scarlet» no encontraba a su hijo—. Y también por el
+      // responsable de pago, que es un contacto y puede no ser tutor.
       exists(db.select({ x: sql`1` }).from(adminEscolarEstudianteTutores)
         .innerJoin(adminEscolarTutores, and(
           eq(adminEscolarTutores.id, adminEscolarEstudianteTutores.tutorId),
@@ -112,36 +150,194 @@ export async function listarEstudiantesEnriquecidos(
         .where(and(
           eq(adminEscolarEstudianteTutores.estudianteId, adminEscolarEstudiantes.id),
           eq(adminEscolarEstudianteTutores.teamId, teamId),
-          eq(adminEscolarEstudianteTutores.responsablePago, true),
           ilike(adminEscolarTutores.nombre, p),
+        ))),
+      exists(db.select({ x: sql`1` }).from(clients)
+        .where(and(
+          eq(clients.id, adminEscolarEstudiantes.facturarAClientId),
+          eq(clients.teamId, teamId),
+          ilike(clients.razonSocial, p),
         ))),
     )!);
   }
   const where = and(...filtros);
 
-  // Conteo total del set filtrado (para la paginación).
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(adminEscolarEstudiantes)
-    .where(where);
+  /**
+   * Los beneficiarios de Contactos NO salen en el listado salvo que se pidan.
+   *
+   * Salían siempre, y con eso el directorio de alumnos dejaba de ser el
+   * directorio de alumnos: un colegio con 367 beneficiarios facturados veía 367
+   * filas de gente que no está matriculada, mezcladas con las de verdad.
+   * Traerlos es una acción aparte —Exportar → Desde Contactos—, que además deja
+   * marcar cuáles.
+   *
+   * Y aunque se pidan, un beneficiario no tiene curso ni estado escolar: en
+   * cuanto se filtra por uno de los dos deja de poder aparecer, o filtrar por
+   * "3ro A" devolvería gente sin matrícula.
+   */
+  const incluirDependientes = opts.incluirDeContactos === true
+    && (!estadoF || estadoF === 'todos') && !opts.cursoId;
 
-  if (total === 0) return { estudiantes: [], total: 0 };
+  // Beneficiario que "todavía no es alumno" = ningún estudiante del team lo
+  // apunta por `dependiente_id`. El criterio es SOLO ese: dos personas pueden
+  // llamarse igual sin ser la misma, y cruzarlas por nombre escondería alumnos.
+  const filtrosDep = [
+    eq(dependientes.teamId, teamId),
+    notExists(db.select({ x: sql`1` }).from(adminEscolarEstudiantes).where(and(
+      eq(adminEscolarEstudiantes.teamId, teamId),
+      eq(adminEscolarEstudiantes.dependienteId, dependientes.id),
+    ))),
+  ];
+  if (q) {
+    const p = `%${q}%`;
+    filtrosDep.push(or(
+      ilike(dependientes.nombre, p),
+      ilike(dependientes.apellido, p),
+      ilike(sql`${dependientes.nombre} || ' ' || ${dependientes.apellido}`, p),
+      // El equivalente a buscar por tutor en los alumnos: el contacto al que se
+      // le factura.
+      ilike(clients.razonSocial, p),
+    )!);
+  }
+  const whereDep = and(...filtrosDep);
 
-  // Página: solo la tabla base (una fila por estudiante).
-  const base = await db
-    .select()
-    .from(adminEscolarEstudiantes)
-    .where(where)
-    .orderBy(adminEscolarEstudiantes.apellidos, adminEscolarEstudiantes.nombres)
-    .limit(limit)
-    .offset(offset);
+  // Conteos del set filtrado (para la paginación). El de beneficiarios se pide
+  // siempre, aunque los filtros los dejen fuera, porque la pantalla avisa de
+  // cuántos está escondiendo.
+  const [[{ total: totalEstudiantes }], [{ total: sinMatricular }]] = await Promise.all([
+    db.select({ total: count() }).from(adminEscolarEstudiantes).where(where),
+    db.select({ total: count() }).from(dependientes)
+      .innerJoin(clients, eq(dependientes.clientId, clients.id))
+      .where(whereDep),
+  ]);
 
-  const ids = base.map((e) => e.id);
+  const total = totalEstudiantes + (incluirDependientes ? sinMatricular : 0);
+  if (total === 0) return { estudiantes: [], total: 0, sinMatricular };
 
-  // Los cuatro enriquecimientos dependen solo de los ids de la página, así que
-  // se piden juntos: en serie eran cuatro viajes seguidos a la base para pintar
-  // una sola pantalla.
-  const [matriculas, tutores, deudas, pagos] = await Promise.all([
+  // Página: la unión de los dos orígenes, ordenada y cortada en la base. Las
+  // columnas que el beneficiario no tiene van NULL (no cero) para que la
+  // pantalla pueda pintarlas como «—» en vez de inventar datos.
+  //
+  // El orden va por `upper(...)`: la base es C.UTF-8 (ordena por byte) y los
+  // alumnos importados de SIGERD están en MAYÚSCULAS mientras que los
+  // beneficiarios se escribieron a mano en Contactos. Ordenando en crudo, TODAS
+  // las mayúsculas iban primero y los beneficiarios quedaban amontonados en las
+  // últimas páginas en vez de intercalados por apellido.
+  const ramaDependientes = incluirDependientes ? sql`
+      UNION ALL
+      SELECT 'dependiente',
+             dependientes.id,
+             dependientes.id,
+             NULL,
+             dependientes.nombre,
+             dependientes.apellido,
+             NULL,
+             NULL,
+             NULL,
+             clients.razon_social
+      FROM dependientes
+      JOIN clients ON clients.id = dependientes.client_id
+      WHERE ${whereDep}` : sql``;
+
+  const filas = await db.execute(sql`
+    SELECT * FROM (
+      SELECT 'estudiante' AS origen,
+             admin_escolar_estudiantes.id               AS id,
+             admin_escolar_estudiantes.dependiente_id   AS dependiente_id,
+             admin_escolar_estudiantes.codigo           AS codigo,
+             admin_escolar_estudiantes.nombres          AS nombres,
+             admin_escolar_estudiantes.apellidos        AS apellidos,
+             admin_escolar_estudiantes.estado           AS estado,
+             admin_escolar_estudiantes.sexo             AS sexo,
+             -- ::text a propósito: esto es SQL crudo, así que drizzle no mapea
+             -- la columna de tipo date y el driver la devolvería como Date de
+             -- JS (con hora y zona), que es justo lo que el listado no quiere.
+             admin_escolar_estudiantes.fecha_nacimiento::text AS fecha_nacimiento,
+             NULL::varchar                              AS contacto
+      FROM admin_escolar_estudiantes
+      WHERE ${where}${ramaDependientes}
+    ) u
+    ORDER BY upper(u.apellidos), upper(u.nombres), u.origen, u.id
+    LIMIT ${limit} OFFSET ${offset}
+  `) as unknown as FilaListado[];
+
+  const ids = filas.filter((f) => f.origen === 'estudiante').map((f) => Number(f.id));
+
+  // Los enriquecimientos dependen solo de los ids de la página, así que se
+  // piden juntos: en serie eran varios viajes seguidos a la base para pintar
+  // una sola pantalla. Si la página trae solo beneficiarios no hay nada que
+  // enriquecer y no se pide nada.
+  const { matriculas, tutores, deudas, pagos, contactos } = await enriquecerPagina(teamId, ids);
+
+  const matriculaPorEst = new Map<number, (typeof matriculas)[number]>();
+  for (const m of matriculas) {
+    if (!matriculaPorEst.has(m.estudianteId)) matriculaPorEst.set(m.estudianteId, m);
+  }
+  const tutorPorEst = new Map(tutores.map((t) => [t.estudianteId, t]));
+  const deudaPorEst = new Map(deudas.map((d) => [d.estudianteId, d]));
+  const contactoPorEst = new Map(contactos.map((c) => [c.id, c.contacto]));
+  const ultimoPagoPorEst = new Map<number, { fecha: string; monto: number }>();
+  for (const p of pagos) {
+    if (!ultimoPagoPorEst.has(p.estudianteId)) {
+      ultimoPagoPorEst.set(p.estudianteId, { fecha: p.fecha, monto: p.monto });
+    }
+  }
+
+  const estudiantes: EstudianteEnriquecido[] = filas.map((f) => {
+    const id = Number(f.id);
+    const esDependiente = f.origen === 'dependiente';
+    const m = esDependiente ? undefined : matriculaPorEst.get(id);
+    const t = esDependiente ? undefined : tutorPorEst.get(id);
+    const d = esDependiente ? undefined : deudaPorEst.get(id);
+    const up = esDependiente ? undefined : ultimoPagoPorEst.get(id);
+    return {
+      origen: esDependiente ? 'dependiente' : 'estudiante',
+      id,
+      dependienteId: f.dependiente_id == null ? null : Number(f.dependiente_id),
+      codigo: f.codigo,
+      nombres: f.nombres,
+      apellidos: f.apellidos,
+      estado: f.estado,
+      sexo: f.sexo,
+      fechaNacimiento: f.fecha_nacimiento,
+      matriculaActivaId: m?.id ?? null,
+      periodoActivo: m?.periodo ?? null,
+      cursoActual: m?.curso ?? null,
+      contacto: esDependiente ? f.contacto : (contactoPorEst.get(id) ?? null),
+      tutorResponsable: t?.nombre ?? null,
+      tutorTelefono: t?.telefono ?? null,
+      tutorEmail: t?.email ?? null,
+      deudaCentavos: esDependiente ? null : (d?.deuda ?? 0),
+      cargosPendientes: esDependiente ? null : (d?.cargos ?? 0),
+      ultimoPagoFecha: up?.fecha ?? null,
+      ultimoPagoCentavos: up?.monto ?? null,
+    };
+  });
+
+  return { estudiantes, total, sinMatricular };
+}
+
+/** Una fila cruda de la unión alumnos + beneficiarios. */
+interface FilaListado {
+  origen: string;
+  id: number | string;
+  dependiente_id: number | string | null;
+  codigo: string | null;
+  nombres: string;
+  apellidos: string;
+  estado: string | null;
+  sexo: string | null;
+  fecha_nacimiento: string | null;
+  contacto: string | null;
+}
+
+/** Datos derivados de los alumnos de la página (matrícula, tutor, deuda, pagos, contacto). */
+async function enriquecerPagina(teamId: number, ids: number[]) {
+  if (ids.length === 0) {
+    return { matriculas: [], tutores: [], deudas: [], pagos: [], contactos: [] };
+  }
+
+  const [matriculas, tutores, deudas, pagos, contactos] = await Promise.all([
   // Matrícula activa + período + curso. Si un estudiante tiene varias activas
   // (distintos períodos), se muestra la del período más reciente.
   db
@@ -168,23 +364,24 @@ export async function listarEstudiantesEnriquecidos(
     ))
     .orderBy(desc(adminEscolarMatriculas.periodoId)),
 
-  // Tutor responsable de pago.
+  // El responsable de pago: el CONTACTO al que se le factura. Antes salía del
+  // tutor con la casilla `responsable_pago`, que ya nadie marca — el listado
+  // enseñaba a todo el mundo sin responsable ni teléfono.
   db
     .select({
-      estudianteId: adminEscolarEstudianteTutores.estudianteId,
-      nombre: adminEscolarTutores.nombre,
-      telefono: adminEscolarTutores.telefono,
-      email: adminEscolarTutores.email,
+      estudianteId: adminEscolarEstudiantes.id,
+      nombre: clients.razonSocial,
+      telefono: sql<string | null>`COALESCE(NULLIF(${clients.celular}, ''), ${clients.telefono})`,
+      email: clients.email,
     })
-    .from(adminEscolarEstudianteTutores)
-    .innerJoin(adminEscolarTutores, and(
-      eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id),
-      eq(adminEscolarTutores.teamId, teamId),
+    .from(adminEscolarEstudiantes)
+    .innerJoin(clients, and(
+      eq(clients.id, adminEscolarEstudiantes.facturarAClientId),
+      eq(clients.teamId, teamId),
     ))
     .where(and(
-      eq(adminEscolarEstudianteTutores.teamId, teamId),
-      eq(adminEscolarEstudianteTutores.responsablePago, true),
-      inArray(adminEscolarEstudianteTutores.estudianteId, ids),
+      eq(adminEscolarEstudiantes.teamId, teamId),
+      inArray(adminEscolarEstudiantes.id, ids),
     )),
 
   // Deuda viva (suma de saldo) + conteo de cargos pendientes.
@@ -216,48 +413,47 @@ export async function listarEstudiantesEnriquecidos(
       inArray(adminEscolarPagos.estudianteId, ids),
     ))
     .orderBy(desc(adminEscolarPagos.fechaPago), desc(adminEscolarPagos.createdAt)),
+
+  // El contacto (padre) al que se le factura. Primero por el beneficiario
+  // enlazado, y si el alumno no tiene enlace, por el contacto del tutor
+  // responsable de pago. Van como subconsultas escalares y no como JOIN porque
+  // nada impide que un alumno tenga dos tutores marcados como responsables, y
+  // con JOIN esa fila salía dos veces en el listado.
+  db
+    .select({
+      id: adminEscolarEstudiantes.id,
+      // Las columnas del alumno van escritas con su tabla delante y NO como
+      // `${adminEscolarEstudiantes.id}`: dentro de una plantilla `sql` cruda
+      // drizzle las emite sin prefijo —«id» pelado— y ahí dentro hay tres
+      // tablas con esa columna (et, t, c), así que Postgres no sabía de cuál
+      // hablaba y la consulta entera moría con «column reference "id" is
+      // ambiguous». La primera subconsulta se salvaba de milagro: ninguna de
+      // sus tablas tiene `dependiente_id`.
+      // Primero el responsable de pago del alumno, que es a quien se le
+      // factura; el beneficiario de Contactos queda de respaldo para los que
+      // se importaron antes de que existiera ese campo.
+      //
+      // La segunda rama era el tutor con `responsable_pago = true`: esa casilla
+      // dejó de marcarse al separarse tutor y responsable, así que nunca
+      // acertaba y la columna salía vacía para todo el que no viniera de
+      // Contactos.
+      contacto: sql<string | null>`COALESCE(
+        (SELECT c.razon_social FROM clients c
+          WHERE c.id = admin_escolar_estudiantes.facturar_a_client_id AND c.team_id = ${teamId}),
+        (SELECT c.razon_social
+           FROM dependientes d
+           JOIN clients c ON c.id = d.client_id
+          WHERE d.id = admin_escolar_estudiantes.dependiente_id AND d.team_id = ${teamId})
+      )`,
+    })
+    .from(adminEscolarEstudiantes)
+    .where(and(
+      eq(adminEscolarEstudiantes.teamId, teamId),
+      inArray(adminEscolarEstudiantes.id, ids),
+    )),
   ]);
 
-  const matriculaPorEst = new Map<number, (typeof matriculas)[number]>();
-  for (const m of matriculas) {
-    if (!matriculaPorEst.has(m.estudianteId)) matriculaPorEst.set(m.estudianteId, m);
-  }
-  const tutorPorEst = new Map(tutores.map((t) => [t.estudianteId, t]));
-  const deudaPorEst = new Map(deudas.map((d) => [d.estudianteId, d]));
-  const ultimoPagoPorEst = new Map<number, { fecha: string; monto: number }>();
-  for (const p of pagos) {
-    if (!ultimoPagoPorEst.has(p.estudianteId)) {
-      ultimoPagoPorEst.set(p.estudianteId, { fecha: p.fecha, monto: p.monto });
-    }
-  }
-
-  const estudiantes = base.map((e) => {
-    const m = matriculaPorEst.get(e.id);
-    const t = tutorPorEst.get(e.id);
-    const d = deudaPorEst.get(e.id);
-    const up = ultimoPagoPorEst.get(e.id);
-    return {
-      id: e.id,
-      codigo: e.codigo,
-      nombres: e.nombres,
-      apellidos: e.apellidos,
-      estado: e.estado,
-      sexo: e.sexo,
-      fechaNacimiento: e.fechaNacimiento,
-      matriculaActivaId: m?.id ?? null,
-      periodoActivo: m?.periodo ?? null,
-      cursoActual: m?.curso ?? null,
-      tutorResponsable: t?.nombre ?? null,
-      tutorTelefono: t?.telefono ?? null,
-      tutorEmail: t?.email ?? null,
-      deudaCentavos: d?.deuda ?? 0,
-      cargosPendientes: d?.cargos ?? 0,
-      ultimoPagoFecha: up?.fecha ?? null,
-      ultimoPagoCentavos: up?.monto ?? null,
-    };
-  });
-
-  return { estudiantes, total };
+  return { matriculas, tutores, deudas, pagos, contactos };
 }
 
 export interface EstadisticasEstudiantes {

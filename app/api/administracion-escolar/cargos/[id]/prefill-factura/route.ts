@@ -87,25 +87,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     advertencias.push('El estudiante no está vinculado a un dependiente de Contactos; la línea quedará sin beneficiario.');
   }
 
-  // Tutor responsable de pago → cliente (comprador de la factura).
+  // El responsable de pago del alumno → comprador de la factura.
+  //
+  // Sale de `facturar_a_client_id`, que es un CONTACTO. Antes se buscaba el
+  // tutor con la casilla `responsable_pago`; esa casilla dejó de marcarse
+  // cuando tutor y responsable pasaron a ser cosas distintas, así que el
+  // prefill salía SIEMPRE sin comprador y obligaba a elegir el cliente a mano
+  // en cada factura del colegio.
   const [tut] = await db
     .select({
-      clientId:    adminEscolarTutores.clientId,
+      clientId:    clients.id,
       razonSocial: clients.razonSocial,
       rnc:         clients.rnc,
       email:       clients.email,
       telefono:    clients.telefono,
     })
-    .from(adminEscolarEstudianteTutores)
-    .innerJoin(adminEscolarTutores, and(
-      eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id),
-      eq(adminEscolarTutores.teamId, teamId),
+    .from(adminEscolarEstudiantes)
+    .leftJoin(clients, and(
+      eq(clients.id, adminEscolarEstudiantes.facturarAClientId),
+      eq(clients.teamId, teamId),
     ))
-    .leftJoin(clients, eq(adminEscolarTutores.clientId, clients.id))
     .where(and(
-      eq(adminEscolarEstudianteTutores.estudianteId, row.estudianteId),
-      eq(adminEscolarEstudianteTutores.teamId, teamId),
-      eq(adminEscolarEstudianteTutores.responsablePago, true),
+      eq(adminEscolarEstudiantes.id, row.estudianteId),
+      eq(adminEscolarEstudiantes.teamId, teamId),
     ))
     .limit(1);
 
@@ -119,7 +123,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       }
     : null;
   if (!comprador) {
-    advertencias.push('El tutor responsable no está vinculado a un cliente de Contactos; deberás elegir el cliente manualmente.');
+    advertencias.push('El estudiante no tiene responsable de pago asignado; deberás elegir el cliente manualmente.');
   }
 
   // Línea: nombre/ITBIS/tipo del producto si existe; si no, texto libre con el

@@ -7,22 +7,29 @@ import { Loader2, Receipt, HandCoins, AlertTriangle } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 
+/** Espejo de `EstudianteEnriquecido` de lib/administracion-escolar/queries.ts
+ *  (aquel es `server-only` y no se puede importar desde el cliente). */
 export interface EstudianteEnriquecido {
+  /** 'dependiente' = beneficiario de Contactos sin ficha escolar; entonces `id`
+   *  es el del DEPENDIENTE y esta ficha no aplica. */
+  origen: 'estudiante' | 'dependiente';
   id: number;
+  dependienteId: number | null;
   codigo: string | null;
   nombres: string;
   apellidos: string;
-  estado: string;
+  estado: string | null;
   sexo: string | null;
   fechaNacimiento: string | null;
   matriculaActivaId: number | null;
   periodoActivo: string | null;
   cursoActual: string | null;
+  contacto: string | null;
   tutorResponsable: string | null;
   tutorTelefono: string | null;
   tutorEmail: string | null;
-  deudaCentavos: number;
-  cargosPendientes: number;
+  deudaCentavos: number | null;
+  cargosPendientes: number | null;
   ultimoPagoFecha: string | null;
   ultimoPagoCentavos: number | null;
 }
@@ -91,7 +98,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-gray-900 truncate">{e.nombres} {e.apellidos}</p>
           <p className="text-xs text-gray-500">
-            {e.codigo ?? 'Sin código'} · <span className="capitalize">{e.estado}</span>
+            {e.codigo ?? 'Sin código'} · <span className="capitalize">{e.estado ?? '—'}</span>
           </p>
         </div>
         {puedeGestionar && (
@@ -107,7 +114,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         <MiniCard label="Matrícula" value={e.periodoActivo ?? '—'} />
         <MiniCard label="Curso" value={e.cursoActual ?? '—'} />
         <MiniCard label="Último pago" value={e.ultimoPagoFecha ? fmtFechaCorta(e.ultimoPagoFecha) : '—'} />
-        <MiniCard label="Estado" value={e.estado} capitalize />
+        <MiniCard label="Estado" value={e.estado ?? '—'} capitalize />
       </div>
 
       {/* Tutor responsable */}

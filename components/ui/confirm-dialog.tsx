@@ -21,6 +21,13 @@ export function ConfirmDialog({
   onConfirm,
   loading = false,
   confirmClassName = 'bg-teal-600 hover:bg-teal-700 text-white',
+  /**
+   * `destructive` pinta el botón en rojo. Hace falta como prop y no basta con
+   * mandar clases por `confirmClassName`: el botón es MUI por debajo y sus
+   * estilos ganan a las de Tailwind, así que un `bg-red-600` no se veía —el
+   * botón de borrar salía del mismo azul que el de guardar—.
+   */
+  destructive = false,
   icon,
 }: {
   open: boolean;
@@ -32,6 +39,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   loading?: boolean;
   confirmClassName?: string;
+  destructive?: boolean;
   icon?: ReactNode;
 }) {
   return (
@@ -49,7 +57,9 @@ export function ConfirmDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             {cancelLabel}
           </Button>
-          <Button className={confirmClassName} onClick={onConfirm} disabled={loading}>
+          <Button variant={destructive ? 'destructive' : undefined}
+            className={destructive ? undefined : confirmClassName}
+            onClick={onConfirm} disabled={loading}>
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {confirmLabel}
           </Button>

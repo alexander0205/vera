@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogBody,
 } from '@/components/ui/dialog';
@@ -107,6 +108,9 @@ export default function PersonalClient() {
   const [editId, setEditId] = useState<number | null>(null); // null = alta
   const [form, setForm] = useState<FormState>(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
+  const [porBorrar, setPorBorrar] = useState<Persona | null>(null);
+  const [borrando, setBorrando] = useState(false);
+  const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const lista = useMemo(() => {
@@ -172,14 +176,25 @@ export default function PersonalClient() {
     }
   }
 
-  async function eliminar(p: Persona) {
-    if (!confirm(`¿Eliminar a ${nombreCompleto(p)}? Esta persona fue agregada a mano.`)) return;
-    const res = await fetch(`/api/escolar/personal?id=${p.id}`, { method: 'DELETE' });
-    if (res.ok) {
+  /**
+   * Borra a una persona añadida a mano, con confirmación propia.
+   *
+   * No con `window.confirm`: en el navegador embebido de la app devuelve
+   * `false` al instante y sin enseñar nada, así que el botón no hacía nada.
+   */
+  async function confirmarBorrado() {
+    const p = porBorrar;
+    if (!p) return;
+    setBorrando(true);
+    try {
+      const res = await fetch(`/api/escolar/personal?id=${p.id}`, { method: 'DELETE' });
+      if (!res.ok) { setErrorBorrado('No se pudo eliminar.'); return; }
+      setPorBorrar(null);
+      setErrorBorrado(null);
       if (selKey === p.key) setSelKey(null);
       await mutate();
-    } else {
-      alert('No se pudo eliminar.');
+    } finally {
+      setBorrando(false);
     }
   }
 
@@ -284,7 +299,7 @@ export default function PersonalClient() {
                       <Button size="sm" variant="outline" onClick={() => abrirEdicion(sel)}>
                         <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
                       </Button>
-                      <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => eliminar(sel)}>
+                      <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setPorBorrar(sel)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -406,6 +421,25 @@ export default function PersonalClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={porBorrar !== null}
+        onOpenChange={(o: boolean) => { if (!o) { setPorBorrar(null); setErrorBorrado(null); } }}
+        title={`Eliminar a ${porBorrar ? nombreCompleto(porBorrar) : ''}`}
+        description={
+          <>
+            Esta persona se agregó a mano, así que no vuelve al re-sincronizar SIGERD.
+            {errorBorrado && (
+              <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                {errorBorrado}
+              </span>
+            )}
+          </>
+        }
+        confirmLabel="Eliminar"
+        destructive
+        loading={borrando}
+        onConfirm={() => void confirmarBorrado()} />
     </div>
   );
 }

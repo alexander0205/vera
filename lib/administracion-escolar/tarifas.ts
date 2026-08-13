@@ -255,8 +255,9 @@ export async function resolverTarifa(
       ))
       .limit(1);
 
-    // `admiteBeca` y no `recurrente`: son cosas distintas. Un concepto puede
-    // cobrarse en cuotas sin que la beca lo toque.
+    // `admiteBeca` y no la frecuencia: son cosas distintas. Un concepto puede
+    // cobrarse en cuotas sin que la beca lo toque —el transporte se paga todos
+    // los meses y no lo cubre la beca del colegio.
     if (concepto?.admiteBeca) {
       // El porcentaje necesita saber sobre cuánto descuenta, así que sin tarifa
       // debajo no hay beca que aplicar. El monto pactado sí se sostiene solo.

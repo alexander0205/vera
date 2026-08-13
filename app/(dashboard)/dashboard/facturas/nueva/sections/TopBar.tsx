@@ -1,8 +1,8 @@
 'use client';
 
 import { ArrowLeft, ChevronDown, Settings } from 'lucide-react';
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { useVolver } from '@/lib/hooks/useVolver';
 import type {
   AlmacenItem, ListaPrecioItem, VendedorItem,
 } from '../hooks/useDropdownsCatalog';
@@ -49,6 +49,10 @@ export function NavBar({
 }: Pick<Props, 'showAlmacen' | 'setShowAlmacen' | 'showListaPrecios' | 'setShowListaPrecios' | 'showVendedor' | 'setShowVendedor' | 'toggleOpcion'> & { title?: string }) {
   const personalizarRef = useRef<HTMLDivElement>(null);
   const [showPersonalizar, setShowPersonalizar] = useState(false);
+  // Esta barra la comparten factura y cotización, y el respaldo siempre fue el
+  // listado de facturas. Con el historial delante, el que entró a cotizar
+  // vuelve a cotizaciones sin tener que parametrizar nada.
+  const volver = useVolver('/dashboard/facturas');
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -63,8 +67,7 @@ export function NavBar({
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: 2 }}>
       <Button
-        component={Link}
-        href="/dashboard/facturas"
+        onClick={volver}
         variant="text"
         size="small"
         startIcon={<ArrowLeft size={16} />}

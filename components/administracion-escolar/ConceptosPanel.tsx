@@ -7,25 +7,56 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { fmtDOP } from '@/lib/utils/format';
 import { referenciaServicio } from '@/lib/administracion-escolar/referencia-servicio';
 import {
-  Loader2, Plus, X, Layers, Tag, Repeat, CalendarDays, Wand2, ChevronRight, ChevronDown,
+  Loader2, Plus, X, Layers, Tag, Repeat, CalendarDays,
   FileText, DoorOpen, AlertTriangle, Eye, User, UserRound, GraduationCap, Check,
 } from 'lucide-react';
+import { Fila, Nombre, Plegador, Resumen, Tanda, plural, porOrden } from './arbol';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ETIQUETA_FRECUENCIA, type Frecuencia } from '@/lib/administracion-escolar/calendario';
+
+/**
+ * Segunda línea de una fila: con qué producto del catálogo se factura.
+ *
+ * Va como fila aparte y no dentro de la de arriba porque el árbol alinea todo
+ * en una sola línea; meterle un renglón debajo descuadraba la sangría.
+ */
+function FilaProducto({ sangria, producto }: {
+  sangria: number; producto: { id: number; nombre: string; referencia: string | null };
+}) {
+  return (
+    <Fila sangria={sangria}>
+      <span className="w-[18px] shrink-0" aria-hidden />
+      <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+      <span className="shrink-0 text-xs text-gray-500">Se factura como</span>
+      {/* Nombre Y referencia, no uno u otro. Antes salía solo la referencia, y
+          cuando no la tiene caía al nombre — con treinta servicios llamados
+          "Pago de colegiatura" eso no identifica ninguno. La referencia es lo
+          único que los distingue; sin ella queda el número interno, que al
+          menos permite decir "ese, el 192" al buscarlo en Productos. */}
+      <span className="min-w-0 flex-1 truncate text-xs text-gray-500" title={producto.nombre}>
+        {producto.nombre}
+      </span>
+      <span className="shrink-0 font-mono text-xs text-gray-400">
+        {producto.referencia ?? `#${producto.id}`}
+      </span>
+    </Fila>
+  );
+}
 
 interface Periodo { id: number; nombre: string; activo: boolean }
 interface Servicio { id: number; nombre: string; tanda: string | null; orden: number }
 interface Grado { id: number; servicioId: number; nombre: string; orden: number }
-interface Seccion { id: number; gradoId: number; nombre: string }
-interface Concepto { id: number; nombre: string; tipo: string; recurrente: boolean }
+interface Seccion { id: number; gradoId: number; nombre: string; orden: number }
+interface Concepto { id: number; nombre: string; tipo: string; frecuencia: Frecuencia; orden: number }
 interface Producto { id: number; nombre: string; referencia: string | null; precio: number }
 interface Precio {
   id: number; conceptoId: number; objetivoTipo: string; objetivoId: number;
   montoCentavos: number; productId: number | null;
 }
-interface Sugerencia { nombre: string; productos: number }
 interface Data {
   periodos: Periodo[]; periodo: Periodo | null;
   servicios: Servicio[]; grados: Grado[]; secciones: Seccion[];
-  conceptos: Concepto[]; precios: Precio[]; productos: Producto[]; sugerencias: Sugerencia[];
+  conceptos: Concepto[]; precios: Precio[]; productos: Producto[];
 }
 
 type ObjTipo = 'servicio' | 'grado' | 'seccion';
@@ -56,11 +87,13 @@ interface Objetivo {
 export function ConceptosPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
-  const [ocupado, setOcupado] = useState(false);
 
   const [conceptoSel, setConceptoSel] = useState<number | null>(null);
-  const [abiertos, setAbiertos] = useState<Set<number>>(new Set());
+  const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<Objetivo | null>(null);
+  const [porBorrar, setPorBorrar] = useState<Concepto | null>(null);
+  const [borrando, setBorrando] = useState(false);
+  const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
 
   const cargar = useCallback(async (pid?: number | null) => {
     setLoading(true);
@@ -68,34 +101,46 @@ export function ConceptosPanel() {
       const url = pid
         ? `/api/administracion-escolar/concepto-precios?periodoId=${pid}`
         : '/api/administracion-escolar/concepto-precios';
-      const d: Data = await fetch(url).then((r) => r.json());
+      // `no-store` en la lectura: el servidor ya cachea por etiqueta y la
+      // invalida al escribir, pero el navegador tiene su propio caché HTTP y
+      // ahí se quedaba la estructura vieja después de reordenar.
+      const d: Data = await fetch(url, { cache: 'no-store' }).then((r) => r.json());
       setData(d);
       setConceptoSel((prev) => (prev && d.conceptos.some((c) => c.id === prev) ? prev : d.conceptos[0]?.id ?? null));
-      // Todo abierto de entrada: lo que se viene a ver aquí es qué grado tiene
-      // precio y cuál no, y eso no se ve con los servicios cerrados. Quien
-      // tenga muchos grados puede cerrar lo que no esté tocando.
-      setAbiertos(new Set(d.servicios.map((s) => s.id)));
+      // Cerrado de entrada. Se probó al revés —todo abierto, para ver de un
+      // golpe qué grado no tiene precio— y con cuatro servicios y veinte grados
+      // la pantalla arrancaba con cincuenta filas y había que buscar el
+      // concepto entre ellas. El aviso ámbar del servicio ya dice que algo de
+      // dentro está sin precio, así que se abre lo que haga falta.
+      //
+      // `prev` y no un `Set` nuevo: al guardar un precio ya no se recarga, pero
+      // cambiar de año escolar sí pasa por aquí y no tiene por qué cerrarte lo
+      // que tenías abierto.
+      setAbiertos((prev) => prev);
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { void cargar(); }, [cargar]);
 
-  async function traerSugerencias() {
-    if (!data?.sugerencias.length) return;
-    setOcupado(true);
+  /**
+   * Igual que en el catálogo: confirmación propia, no `window.confirm`. En el
+   * navegador embebido de la app devuelve `false` sin enseñar nada y el borrado
+   * se quedaba sin hacer, en silencio.
+   */
+  async function confirmarBorrado() {
+    const c = porBorrar;
+    if (!c) return;
+    setBorrando(true);
     try {
-      const r = await jsonReq('/api/administracion-escolar/concepto-precios', 'PUT', {
-        nombres: data.sugerencias.map((s) => s.nombre),
-      });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo traer.'); return; }
-      await cargar(data.periodo?.id);
-    } finally { setOcupado(false); }
-  }
-
-  async function borrarConcepto(c: Concepto) {
-    if (!confirm(`¿Eliminar el concepto "${c.nombre}" y sus precios?`)) return;
-    const r = await fetch(`/api/administracion-escolar/conceptos/${c.id}`, { method: 'DELETE' });
-    if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo eliminar.'); return; }
-    await cargar(data?.periodo?.id);
+      const r = await fetch(`/api/administracion-escolar/conceptos/${c.id}`, { method: 'DELETE' });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setErrorBorrado(j.error ?? 'No se pudo eliminar.');
+        return;
+      }
+      setPorBorrar(null);
+      setErrorBorrado(null);
+      await cargar(data?.periodo?.id);
+    } finally { setBorrando(false); }
   }
 
   async function quitarPrecio(precioId: number) {
@@ -121,9 +166,13 @@ export function ConceptosPanel() {
     return <div className="flex items-center gap-2 p-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>;
   }
 
-  function toggle(id: number) {
-    setAbiertos((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
+  /** Mismas claves que el árbol de Estructura: `s:5` servicio, `g:27` grado. */
+  const esta = (clave: string) => abiertos.has(clave);
+  const alternar = (clave: string) => setAbiertos((s) => {
+    const n = new Set(s);
+    if (!n.delete(clave)) n.add(clave);
+    return n;
+  });
 
   return (
     <div className="space-y-4">
@@ -137,22 +186,6 @@ export function ConceptosPanel() {
         <span className="text-xs text-gray-400">Las tarifas del año pasado se conservan.</span>
       </div>
 
-      {/* Asistente: lo que ya factura y todavía no es concepto */}
-      {data.sugerencias.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg bg-zero-50 px-4 py-3">
-          <Wand2 className="mt-0.5 h-4 w-4 shrink-0 text-zero-700" />
-          <div className="flex-1 text-sm text-zero-800">
-            Tienes {data.sugerencias.reduce((n, s) => n + s.productos, 0)} servicios de facturación sin usar aquí.
-            Se agrupan en {data.sugerencias.length} concepto{data.sugerencias.length === 1 ? '' : 's'}:{' '}
-            <span className="font-medium">{data.sugerencias.slice(0, 4).map((s) => s.nombre).join(', ')}</span>
-            {data.sugerencias.length > 4 && '…'}
-          </div>
-          <Button size="sm" variant="outline" className="h-7 shrink-0 border-zero-300 text-zero-700" onClick={traerSugerencias} disabled={ocupado}>
-            {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Traerlos'}
-          </Button>
-        </div>
-      )}
-
       {/* Conceptos */}
       <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
         <p className="mb-2 flex items-center gap-1.5 text-xs text-gray-500"><Tag className="h-3.5 w-3.5" /> Concepto</p>
@@ -165,8 +198,8 @@ export function ConceptosPanel() {
                 className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors ${
                   on ? 'border-zero-500 bg-zero-50 font-medium text-zero-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
                 <button onClick={() => setConceptoSel(c.id)}>{c.nombre}</button>
-                {c.recurrente && <Repeat className="h-3 w-3 opacity-60" aria-label="mensual" />}
-                <button onClick={() => borrarConcepto(c)} className="text-gray-300 hover:text-red-500" title="Eliminar concepto">
+                {c.frecuencia !== 'unico' && <Repeat className="h-3 w-3 opacity-60" aria-label={ETIQUETA_FRECUENCIA[c.frecuencia]} />}
+                <button onClick={() => setPorBorrar(c)} className="text-gray-300 hover:text-red-500" title="Eliminar concepto">
                   <X className="h-3 w-3" />
                 </button>
               </span>
@@ -192,7 +225,7 @@ export function ConceptosPanel() {
           <>
             <p className="text-sm font-medium text-gray-900">Precio de {concepto.nombre}</p>
             <p className="mb-3 text-xs text-gray-500">
-              {concepto.recurrente ? 'Se cobra cada mes. ' : 'Se cobra una sola vez. '}
+              {`Se cobra ${ETIQUETA_FRECUENCIA[concepto.frecuencia].toLowerCase()}. `}
               El precio va en el servicio; los grados lo heredan.
             </p>
 
@@ -200,116 +233,107 @@ export function ConceptosPanel() {
               <p className="py-6 text-center text-sm text-muted-foreground">Este año escolar no tiene servicios. Créalos en la pestaña Estructura.</p>
             ) : (
               <div className="overflow-hidden rounded-lg border border-gray-200">
-                {data.servicios.map((sv) => {
+                {data.servicios.slice().sort(porOrden).map((sv) => {
                   const pSv = precioDe('servicio', sv.id);
                   const prodSv = productoDe(pSv);
-                  const grados = data.grados.filter((g) => g.servicioId === sv.id);
+                  const grados = data.grados.filter((g) => g.servicioId === sv.id).slice().sort(porOrden);
                   const nSecciones = data.secciones.filter((s) => grados.some((g) => g.id === s.gradoId)).length;
-                  const abierto = abiertos.has(sv.id);
+                  const abierto = esta(`s:${sv.id}`);
                   const falta = !pSv;
 
                   return (
                     <div key={sv.id}>
                       {/* Servicio */}
-                      <div className={`flex flex-wrap items-center gap-2 border-b border-gray-200 px-3 py-2 ${falta ? 'bg-amber-50' : 'bg-gray-50'}`}>
-                        <button onClick={() => toggle(sv.id)} className="shrink-0 text-gray-400 hover:text-gray-700" aria-label={abierto ? 'Cerrar' : 'Abrir'}>
-                          {abierto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </button>
-                        <span className={`text-sm font-medium ${falta ? 'text-amber-800' : 'text-gray-900'}`}>{sv.nombre}</span>
-                        {sv.tanda && <span className="rounded-full bg-zero-100 px-2 py-0.5 text-xs font-medium text-zero-700">{sv.tanda}</span>}
-                        <span className={`text-xs ${falta ? 'text-amber-700' : 'text-gray-400'}`}>{grados.length} grado{grados.length === 1 ? '' : 's'}</span>
-                        <div className="flex-1" />
+                      <Fila sangria={0} tono={falta ? 'aviso' : 'cabecera'}>
+                        <Plegador abierto={abierto} vacio={grados.length === 0} onClick={() => alternar(`s:${sv.id}`)} />
+                        <Layers className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                        <Nombre className={`text-sm font-medium ${falta ? 'text-amber-800' : 'text-gray-900'}`}
+                          onClick={grados.length ? () => alternar(`s:${sv.id}`) : undefined}>{sv.nombre}</Nombre>
+                        {sv.tanda && <Tanda>{sv.tanda}</Tanda>}
+                        <Resumen tono={falta ? 'aviso' : 'normal'}
+                          partes={[plural(grados.length, 'grado', 'grados'), plural(nSecciones, 'sección', 'secciones')]} />
                         {pSv ? (
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex shrink-0 items-center gap-1.5">
                             <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pSv.montoCentavos)}</span>
                             <button onClick={() => quitarPrecio(pSv.id)} className="text-gray-300 hover:text-red-500" title="Quitar precio"><X className="h-3.5 w-3.5" /></button>
                           </span>
                         ) : (
                           <button onClick={() => setModal({ tipo: 'servicio', id: sv.id, servicio: sv.nombre, tanda: sv.tanda })}
-                            className="rounded-md border border-dashed border-amber-400 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100">
+                            className="shrink-0 rounded-md border border-dashed border-amber-400 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100">
                             <AlertTriangle className="mr-1 inline h-3 w-3" />Falta el precio
                           </button>
                         )}
-                      </div>
+                      </Fila>
+
+                      {/* Fuera del `abierto`: es la respuesta a "¿con cuál de
+                          mis servicios se está facturando esto?", y con el
+                          árbol cerrado no se podía ver sin desplegarlo todo. */}
+                      {prodSv && <FilaProducto sangria={1} producto={prodSv} />}
 
                       {abierto && (
                         <>
-                          {prodSv && (
-                            <div className="flex items-center gap-2 border-b border-gray-100 py-1.5 pl-9 pr-3">
-                              <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                              <span className="text-xs text-gray-500">Se factura como</span>
-                              <span className="break-all font-mono text-xs text-gray-400">{prodSv.referencia ?? prodSv.nombre}</span>
-                            </div>
-                          )}
 
                           {grados.map((g) => {
                             const pG = precioDe('grado', g.id);
                             const prodG = productoDe(pG);
                             // Lo que le toca al grado si no tiene precio propio.
                             const heredaG = pG ?? pSv;
-                            const secciones = data.secciones.filter((s) => s.gradoId === g.id);
+                            // Mismo criterio que el resto del árbol: el orden que puso el
+                            // colegio en Estructura, y el nombre solo desempata.
+                            const secciones = data.secciones.filter((s) => s.gradoId === g.id).slice().sort(porOrden);
+                            const abiertoG = esta(`g:${g.id}`);
                             return (
                               <div key={g.id}>
-                                <div className={`border-b border-gray-100 px-3 py-1.5 pl-9 ${pG ? 'bg-gray-50/60' : ''}`}>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <GraduationCap className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                                    <span className={`text-sm ${pG ? 'font-medium text-gray-900' : 'text-gray-600'}`}>{g.nombre}</span>
-                                    <div className="flex-1" />
-                                    {pG ? (
-                                      <>
-                                        <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pG.montoCentavos)}</span>
-                                        <button onClick={() => quitarPrecio(pG.id)} className="text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        {pSv && <span className="text-sm text-gray-400">hereda {fmtDOP(pSv.montoCentavos)}</span>}
-                                        <button onClick={() => setModal({ tipo: 'grado', id: g.id, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
-                                          className="rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
-                                          {pSv ? 'Excepción' : 'Precio'}
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                  {prodG && (
-                                    <div className="mt-1 flex items-center gap-2">
-                                      <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                                      <span className="text-xs text-gray-500">Se factura como</span>
-                                      <span className="break-all font-mono text-xs text-gray-400">{prodG.referencia ?? prodG.nombre}</span>
-                                    </div>
+                                <Fila sangria={1} tono={pG ? 'cabecera' : 'normal'}>
+                                  <Plegador abierto={abiertoG} vacio={secciones.length === 0} onClick={() => alternar(`g:${g.id}`)} />
+                                  <GraduationCap className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                                  <Nombre className={`text-sm ${pG ? 'font-medium text-gray-900' : 'text-gray-600'}`}
+                                    onClick={secciones.length ? () => alternar(`g:${g.id}`) : undefined}>{g.nombre}</Nombre>
+                                  {!abiertoG && secciones.length > 0 && (
+                                    <Resumen partes={[`Secciones ${secciones.map((s) => s.nombre).join(', ')}`]} />
                                   )}
-                                </div>
+                                  {pG ? (
+                                    <>
+                                      <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pG.montoCentavos)}</span>
+                                      <button onClick={() => quitarPrecio(pG.id)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {pSv && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(pSv.montoCentavos)}</span>}
+                                      <button onClick={() => setModal({ tipo: 'grado', id: g.id, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
+                                        className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-500 hover:border-zero-400 hover:text-zero-600">
+                                        {pSv ? 'Excepción' : 'Precio'}
+                                      </button>
+                                    </>
+                                  )}
+                                </Fila>
+                                {prodG && <FilaProducto sangria={2} producto={prodG} />}
 
-                                {secciones.map((s) => {
+                                {abiertoG && secciones.map((s) => {
                                   const pS = precioDe('seccion', s.id);
                                   const prodS = productoDe(pS);
                                   return (
-                                    <div key={s.id} className={`border-b border-gray-100 px-3 py-1.5 pl-16 ${pS ? 'bg-gray-50/60' : ''}`}>
-                                      <div className="flex flex-wrap items-center gap-2">
+                                    <div key={s.id}>
+                                      <Fila sangria={2} tono={pS ? 'cabecera' : 'normal'}>
+                                        <span className="w-[18px] shrink-0" aria-hidden />
                                         <DoorOpen className="h-3.5 w-3.5 shrink-0 text-gray-300" />
-                                        <span className={`text-sm ${pS ? 'font-medium text-gray-900' : 'text-gray-500'}`}>Sección {s.nombre}</span>
-                                        <div className="flex-1" />
+                                        <Nombre className={`text-sm ${pS ? 'font-medium text-gray-900' : 'text-gray-500'}`}>{`Sección ${s.nombre}`}</Nombre>
                                         {pS ? (
                                           <>
-                                            <span className="rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pS.montoCentavos)}</span>
-                                            <button onClick={() => quitarPrecio(pS.id)} className="text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
+                                            <span className="shrink-0 rounded-md border border-zero-200 bg-zero-50 px-2 py-0.5 text-sm font-semibold text-zero-800">{fmtDOP(pS.montoCentavos)}</span>
+                                            <button onClick={() => quitarPrecio(pS.id)} className="shrink-0 text-gray-300 hover:text-red-500" title="Quitar excepción"><X className="h-3.5 w-3.5" /></button>
                                           </>
                                         ) : (
                                           <>
-                                            {heredaG && <span className="text-sm text-gray-400">hereda {fmtDOP(heredaG.montoCentavos)}</span>}
+                                            {heredaG && <span className="shrink-0 text-sm text-gray-400">hereda {fmtDOP(heredaG.montoCentavos)}</span>}
                                             <button onClick={() => setModal({ tipo: 'seccion', id: s.id, seccion: s.nombre, grado: g.nombre, servicio: sv.nombre, tanda: sv.tanda })}
-                                              className="rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-400 hover:border-zero-400 hover:text-zero-600">
+                                              className="shrink-0 rounded-md border border-dashed border-gray-300 px-2 py-0.5 text-xs text-gray-400 hover:border-zero-400 hover:text-zero-600">
                                               {heredaG ? 'Excepción' : 'Precio'}
                                             </button>
                                           </>
                                         )}
-                                      </div>
-                                      {prodS && (
-                                        <div className="mt-1 flex items-center gap-2">
-                                          <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                                          <span className="text-xs text-gray-500">Se factura como</span>
-                                          <span className="break-all font-mono text-xs text-gray-400">{prodS.referencia ?? prodS.nombre}</span>
-                                        </div>
-                                      )}
+                                      </Fila>
+                                      {prodS && <FilaProducto sangria={3} producto={prodS} />}
                                     </div>
                                   );
                                 })}
@@ -335,9 +359,49 @@ export function ConceptosPanel() {
           productos={data.productos}
           usados={data.precios.filter((p) => p.conceptoId === concepto.id && p.productId).map((p) => p.productId!)}
           onCerrar={() => setModal(null)}
-          onGuardado={() => { setModal(null); void cargar(data.periodo?.id); }}
+          /* Se mete el precio en el estado en vez de recargar la pantalla
+             entera: la recarga volvía a pedir período, estructura, conceptos y
+             tarifas para una fila que ya se sabe cómo quedó, y de paso reabría
+             todas las ramas del árbol y perdía dónde estabas mirando. */
+          onGuardado={(precio) => {
+            setModal(null);
+            setData((d) => d && ({
+              ...d,
+              // Puede ser alta o cambio: se quita el que hubiera para ese mismo
+              // concepto y nodo antes de meter el nuevo, o al editar un precio
+              // saldría dos veces.
+              precios: [
+                ...d.precios.filter((p) => !(
+                  p.conceptoId === precio.conceptoId
+                  && p.objetivoTipo === precio.objetivoTipo
+                  && p.objetivoId === precio.objetivoId
+                )),
+                precio,
+              ],
+            }));
+          }}
         />
       )}
+
+      <ConfirmDialog
+        open={porBorrar !== null}
+        onOpenChange={(o: boolean) => { if (!o) { setPorBorrar(null); setErrorBorrado(null); } }}
+        title={`Eliminar "${porBorrar?.nombre ?? ''}"`}
+        description={
+          <>
+            Se va con él su calendario de cuotas y las tarifas de cada grado. Si ya
+            se le cobró a algún alumno, no se puede borrar.
+            {errorBorrado && (
+              <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                {errorBorrado}
+              </span>
+            )}
+          </>
+        }
+        confirmLabel="Eliminar"
+        destructive
+        loading={borrando}
+        onConfirm={() => void confirmarBorrado()} />
     </div>
   );
 }
@@ -356,7 +420,7 @@ function ModalTarifa({
   productos: Producto[];
   usados: number[];
   onCerrar: () => void;
-  onGuardado: () => void;
+  onGuardado: (precio: Precio) => void;
 }) {
   const [busca, setBusca] = useState('');
   const [elegido, setElegido] = useState<Producto | null>(null);
@@ -420,7 +484,10 @@ function ModalTarifa({
         return;
       }
       if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error ?? 'No se pudo guardar.'); return; }
-      onGuardado();
+      // `guardado` y no `precio`: aquí `precio` ya es el importe que se teclea
+      // en el formulario, y reusar el nombre lo tapaba.
+      const { precio: guardado } = await r.json();
+      onGuardado(guardado as Precio);
     } finally { setOcupado(false); }
   }
 

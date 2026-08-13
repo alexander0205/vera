@@ -8,7 +8,7 @@ import { db } from '@/lib/db/drizzle';
 import {
   facturasRecurrentes, clients,
   adminEscolarMatriculas, adminEscolarPeriodos, adminEscolarConceptosPago,
-  adminEscolarEstudianteTutores, adminEscolarTutores,
+  adminEscolarEstudiantes,
 } from '@/lib/db/schema';
 import { getTeamIdForUser } from '@/lib/db/queries';
 import { requirePermission } from '@/lib/auth/api-guard';
@@ -141,22 +141,25 @@ export async function POST(req: NextRequest) {
           eq(adminEscolarConceptosPago.activo, true),
         ))
         .limit(1),
-      db.select({ clientId: adminEscolarTutores.clientId })
-        .from(adminEscolarEstudianteTutores)
-        .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
+      // A quién se le factura: el responsable de pago del alumno, que es un
+      // CONTACTO (`facturar_a_client_id`). Antes salía del tutor con la casilla
+      // `responsable_pago`, que dejó de marcarse cuando tutor y responsable se
+      // separaron: la consulta no encontraba a nadie y toda mensualidad
+      // recurrente moría con «no tiene tutor responsable vinculado».
+      db.select({ clientId: adminEscolarEstudiantes.facturarAClientId })
+        .from(adminEscolarEstudiantes)
         .where(and(
-          eq(adminEscolarEstudianteTutores.teamId, teamId),
-          eq(adminEscolarEstudianteTutores.estudianteId, matricula.estudianteId),
-          eq(adminEscolarEstudianteTutores.responsablePago, true),
+          eq(adminEscolarEstudiantes.teamId, teamId),
+          eq(adminEscolarEstudiantes.id, matricula.estudianteId),
         ))
         .limit(1),
     ]);
     if (!concepto) return NextResponse.json({ error: 'Concepto de mensualidad no encontrado' }, { status: 422 });
     if (!responsable?.clientId) {
-      return NextResponse.json({ error: 'El estudiante no tiene tutor responsable vinculado a un contacto' }, { status: 422 });
+      return NextResponse.json({ error: 'El estudiante no tiene responsable de pago asignado' }, { status: 422 });
     }
     if (body.clientId !== responsable.clientId) {
-      return NextResponse.json({ error: 'La factura debe pertenecer al tutor responsable del estudiante' }, { status: 422 });
+      return NextResponse.json({ error: 'La factura debe pertenecer al responsable de pago del estudiante' }, { status: 422 });
     }
   }
 

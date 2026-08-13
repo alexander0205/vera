@@ -272,6 +272,10 @@ export const clients = pgTable('clients', {
   razonSocial: varchar('razon_social', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }),
   telefono: varchar('telefono', { length: 20 }),
+  /** El móvil al que se llama. Distinto del fijo y, a veces, del WhatsApp. */
+  celular: varchar('celular', { length: 30 }),
+  /** Por donde se le escribe de verdad; puede no ser el `telefono`. */
+  whatsapp: varchar('whatsapp', { length: 30 }),
   direccion: varchar('direccion', { length: 500 }),
   descripcion: text('descripcion'),
   createdBy: integer('created_by').references(() => users.id),
@@ -1815,6 +1819,16 @@ export const adminEscolarEstudiantes = pgTable('admin_escolar_estudiantes', {
   sigerdId:        integer('sigerd_id'),
   /** activo | inactivo | retirado | graduado */
   estado:          varchar('estado', { length: 20 }).notNull().default('activo'),
+  /**
+   * A quién se le factura si NO es el tutor responsable.
+   *
+   * El caso que lo justifica: el padre pide que la mensualidad salga a nombre
+   * de su empresa para deducirla. La empresa no es tutor del alumno —no recoge
+   * a nadie ni firma permisos— y aun así es a quien hay que facturarle todos
+   * los meses. Va en el estudiante y no en la matrícula porque ese acuerdo no
+   * se renegocia cada agosto. NULL = al tutor responsable, que es lo normal.
+   */
+  facturarAClientId: integer('facturar_a_client_id').references(() => clients.id),
   /** Enlace futuro con Contactos (dependientes). Nullable — integración post-MVP. */
   dependienteId:   integer('dependiente_id').references(() => dependientes.id),
 
@@ -1859,7 +1873,16 @@ export const adminEscolarTutores = pgTable('admin_escolar_tutores', {
   clientId:  integer('client_id').references(() => clients.id),
   nombre:    varchar('nombre', { length: 160 }).notNull(),
   documento: varchar('documento', { length: 30 }),
+  /**
+   * Id de la persona en SIGERD. Mejor llave que la cédula para no duplicar al
+   * mismo padre cada año: la cédula llega con guiones, sin ellos o mal escrita,
+   * y entonces la misma madre entra dos veces. Nulo en los tutores creados a
+   * mano, que no vienen del portal.
+   */
+  sigerdIdPersona: integer('sigerd_id_persona'),
   telefono:  varchar('telefono', { length: 30 }),
+  /** El colegio escribe por aquí, y no siempre es el mismo número que el fijo. */
+  whatsapp:  varchar('whatsapp', { length: 30 }),
   email:     varchar('email', { length: 160 }),
   direccion: varchar('direccion', { length: 300 }),
   /** Foto del tutor (data URL base64, mismo patrón que products.imagen/teams.logo).
@@ -1869,6 +1892,13 @@ export const adminEscolarTutores = pgTable('admin_escolar_tutores', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('admin_escolar_tutores_team_idx').on(t.teamId),
+  // Parciales: la cédula y el id de SIGERD son opcionales, y NULL no choca con
+  // NULL. Dos filas con la misma cédula son la misma madre metida dos veces —
+  // a partir de ahí los avisos salen duplicados y el histórico queda partido.
+  uniqueIndex('admin_escolar_tutores_documento_uniq').on(t.teamId, t.documento)
+    .where(sql`documento IS NOT NULL`),
+  uniqueIndex('admin_escolar_tutores_sigerd_uniq').on(t.teamId, t.sigerdIdPersona)
+    .where(sql`sigerd_id_persona IS NOT NULL`),
 ]);
 
 /** Relación N:M estudiante↔tutor. Solo un tutor responsable de pago por estudiante
@@ -1919,6 +1949,16 @@ export const adminEscolarMatriculas = pgTable('admin_escolar_matriculas', {
   becaValor:  integer('beca_valor'),
   /** Por qué: hermano, hijo de empleado, mérito. Sin esto nadie sabe explicarlo después. */
   becaMotivo: varchar('beca_motivo', { length: 80 }),
+  /**
+   * Qué conceptos se le cobran a ESTE alumno, decidido al matricular.
+   *
+   * La decisión vivía en el catálogo (`conceptos.aplicaPorDefecto`): se cobraba
+   * a todos o a nadie, y lo que la secretaria desmarcaba no quedaba anotado, así
+   * que el devengo mensual no podía distinguir "a este no le toca" de "todavía
+   * no le ha tocado" y volvía a añadirlo al mes siguiente. Guardado aquí,
+   * desmarcar pega y el devengo sigue esta lista y nada más.
+   */
+  conceptosIds:     jsonb('conceptos_ids').$type<number[]>().notNull().default([]),
   notas:            text('notas'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
@@ -1929,14 +1969,24 @@ export const adminEscolarMatriculas = pgTable('admin_escolar_matriculas', {
   uniqueIndex('admin_escolar_matriculas_factura_recurrente_uniq').on(t.facturaRecurrenteId),
 ]);
 
-/** Concepto de cargo escolar. `recurrente` = mensualidad (genera por mes). */
+/** Concepto de cargo escolar. La `frecuencia` decide cuántas cuotas genera. */
 export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago', {
   id:         serial('id').primaryKey(),
   teamId:     integer('team_id').notNull().references(() => teams.id),
   nombre:     varchar('nombre', { length: 80 }).notNull(),
   /** inscripcion | mensualidad | uniforme | actividad | otro */
   tipo:       varchar('tipo', { length: 20 }).notNull().default('otro'),
-  recurrente: boolean('recurrente').notNull().default(false),
+  /**
+   * unico | mensual | trimestral | semestral. Sustituye al viejo booleano
+   * `recurrente`, que solo distinguía "cada mes" de "una vez": el trimestre y
+   * el semestre —que los colegios que siguen los cortes del MINERD sí usan—
+   * había que fingirlos sembrando filas del calendario a mano.
+   *
+   * De ella sale el calendario entero: el número de cuotas es el largo del año
+   * escolar dividido por su paso.
+   */
+  frecuencia: varchar('frecuencia', { length: 12 }).notNull().default('unico')
+    .$type<'unico' | 'mensual' | 'trimestral' | 'semestral'>(),
   /**
    * Si llega marcado al matricular. La inscripción y la colegiatura las paga
    * todo el mundo; el uniforme no, y desmarcarlo 465 veces es peor que
@@ -1944,32 +1994,35 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
    */
   aplicaPorDefecto: boolean('aplica_por_defecto').notNull().default(false),
   /**
-   * Si la beca lo descuenta. Sigue a `recurrente`: la beca escolar es sobre lo
-   * que se paga cada mes, y la inscripción, los uniformes y los materiales se
-   * cobran completos. No se pregunta en pantalla —se derivaba en una casilla
-   * que nadie sabía para qué era— pero se guarda aparte porque el motor de
-   * tarifas lo consulta y porque un colegio con transporte mensual sin beca
-   * podría necesitar separarlos más adelante.
+   * Si la beca lo descuenta. La beca escolar es sobre lo que se paga cada mes,
+   * y la inscripción, los uniformes y los materiales se cobran completos. No
+   * se pregunta en pantalla —se derivaba en una casilla que nadie sabía para
+   * qué era— pero se guarda aparte porque el motor de tarifas lo consulta y
+   * porque un colegio con transporte mensual sin beca podría necesitar
+   * separarlos más adelante.
    */
   admiteBeca: boolean('admite_beca').notNull().default(false),
   /**
-   * Si se le cobra recargo por atraso. Columna propia y no `moraDiasGracia IS
-   * NULL` porque ese nulo ya significa "usa los días de gracia de la empresa".
+   * Si se le cobra recargo por atraso, y desde cuándo: el mismo día que vence.
+   *
+   * OJO: la empresa tiene su propio `teams.recargoMoraDiasGracia` (default 5)
+   * que el motor de recargo aplica cuando el plan no dice otra cosa. Aquí NO
+   * hay días de gracia que heredar: "recargo al vencer" significa gracia CERO,
+   * y quien conecte el recargo escolar tiene que forzarla explícitamente en
+   * vez de dejar que caiga el default del negocio.
    */
   cobraMora: boolean('cobra_mora').notNull().default(false),
   /**
    * Ciclo de cobro. Va en el concepto y no en un ajuste único del colegio
    * porque no todo se cobra igual: la colegiatura puede vencer el día 5 y el
-   * transporte el 10. En los conceptos mensuales estos números se copian al
+   * transporte el 10. En los conceptos periódicos estos números se copian al
    * plan de factura recurrente que se crea al matricular — el módulo escolar
    * configura la facturación, no la reimplementa.
    */
-  /** Día del mes en que se emite. Solo recurrentes; 0 = último día del mes. */
-  diaCobro:       smallint('dia_cobro'),
-  /** Días desde la emisión hasta el vencimiento. */
+  /** Día del mes en que se EMITE, 1-30. En meses cortos se recorta al último. */
+  diaEmision:     smallint('dia_emision'),
+  /** Días desde la emisión hasta el vencimiento. NULL = no vence nunca. */
   diasParaPago:   smallint('dias_para_pago'),
-  /** Gracia tras el vencimiento antes de la mora. */
-  moraDiasGracia: smallint('mora_dias_gracia'),
   /**
    * Interruptor maestro de los avisos. Apagado no sale nada aunque los días
    * estén puestos: así se para el envío sin perder la configuración.
@@ -1980,27 +2033,54 @@ export const adminEscolarConceptosPago = pgTable('admin_escolar_conceptos_pago',
    * la factura y cinco días antes le aviso": el ancla es el día en que sale la
    * factura, no el vencimiento. NULL = no avisar.
    */
-  avisoAntesEmisionDias: smallint('aviso_antes_emision_dias'),
   /** Avisar el día que sale la factura: "ya se generó, tienes que pagar". */
   avisoDiaEmision: boolean('aviso_dia_emision').notNull().default(false),
-  /** Días ANTES del vencimiento en que se avisa. NULL = no avisar antes. */
-  avisoPrevioDias: smallint('aviso_previo_dias'),
-  /** Avisar el mismo día que vence. */
-  avisoDiaCobro: boolean('aviso_dia_cobro').notNull().default(false),
   /**
-   * Días antes de que entre la mora. Es el aviso que de verdad hace pagar:
-   * "si no pagas en 2 días te cobramos un recargo". NULL = no avisar por eso.
+   * Días antes de la MORA en que se avisa. Es el aviso que de verdad hace
+   * pagar: el único que le ahorra dinero al padre.
+   *
+   * Cuelga de la fecha del recargo —vencimiento + `moraDiasGracia`— y no del
+   * vencimiento a secas. Anclarlo al vencimiento haría que cambiar los días de
+   * gracia moviera el aviso sin que nadie lo pidiera.
    */
   avisoAntesMoraDias: smallint('aviso_antes_mora_dias'),
-  /** A los cuántos días de vencido se insiste, en orden. Ej. [3,15]. */
-  avisoVencidoDias: jsonb('aviso_vencido_dias').$type<number[]>().notNull().default([]),
+  /**
+   * Avisar el día del vencimiento, que es el mismo en que entra el recargo: no
+   * hay días de gracia. Es un aviso aparte del anterior y no su sustituto —uno
+   * llega a tiempo de evitar la mora y el otro dice que ya la tiene—, y por eso
+   * el de antes exige al menos un día: con cero, los dos caerían juntos.
+   */
+  avisoDiaVencimiento: boolean('aviso_dia_vencimiento').notNull().default(false),
+  /**
+   * Días entre que la factura vence y le entra el recargo. 0 = el mismo día.
+   *
+   * Es del CONCEPTO y no del colegio porque no todo se cobra igual: la
+   * colegiatura puede dar cinco días de margen y la inscripción ninguno.
+   */
+  moraDiasGracia: smallint('mora_dias_gracia').notNull().default(0),
   avisoCorreo:   boolean('aviso_correo').notNull().default(false),
   avisoWhatsapp: boolean('aviso_whatsapp').notNull().default(false),
+  avisoSms:      boolean('aviso_sms').notNull().default(false),
+  /**
+   * Rebaja por saldar de una vez todo lo que queda pendiente, en porcentaje.
+   * NULL = no se ofrece. Es el descuento que los colegios ya dan por teléfono
+   * y que hoy se aplica bajando el monto de la factura a mano, sin dejar
+   * rastro de por qué; se registra como línea propia del estado de cuenta para
+   * que se vea cuánto se rebajó y para que reversar el pago lo reverse con él.
+   */
+  descuentoAdelantoPct: smallint('descuento_adelanto_pct'),
   /** Enlace opcional al catálogo de productos/servicios. Si viene, la factura
    *  generada desde el cargo hereda nombre/ITBIS del producto — evita duplicar
    *  catálogo. El monto sigue viniendo del cargo, no del producto. */
   productId:  integer('product_id').references(() => products.id),
   activo:     boolean('activo').notNull().default(true),
+  /**
+   * Orden en que el colegio quiere verlos. El alfabeto no es el orden en que se
+   * piensa el año: primero la inscripción, luego la colegiatura, al final los
+   * extras. Se empata por nombre para que dos conceptos con el mismo orden
+   * —heredado o recién creado— no bailen entre recargas.
+   */
+  orden:      smallint('orden').notNull().default(0),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
@@ -2069,7 +2149,15 @@ export const adminEscolarConceptoCuotas = pgTable('admin_escolar_concepto_cuotas
   etiqueta:   varchar('etiqueta', { length: 60 }).notNull(),
   /** Mes 1-12 si la cuota es de un mes concreto; alimenta `cargos.mes`. */
   mes:        smallint('mes'),
-  fechaVencimiento: date('fecha_vencimiento').notNull(),
+  /**
+   * El día que SALE la factura de esta cuota, no el día que vence.
+   *
+   * El vencimiento no se guarda: es `fechaEmision + conceptos.diasParaPago`.
+   * Guardar los dos obligaría a reescribir el calendario entero cada vez que
+   * el colegio cambia los días para pagar, y basta con que una fila se quede
+   * atrás para que a un padre le llegue una fecha límite que ya no es cierta.
+   */
+  fechaEmision: date('fecha_emision').notNull(),
   /**
    * Qué parte del monto se cobra aquí, en milésimas de por ciento
    * (100000 = 100%). En milésimas porque partir en tres da 33,333% y con
@@ -2091,13 +2179,31 @@ export const adminEscolarConceptoCuotas = pgTable('admin_escolar_concepto_cuotas
  * sin esta tabla el mismo recordatorio le llegaría al padre toda la semana. El
  * índice único por (cargo, tipo, día, canal) es lo que lo impide.
  */
+/**
+ * Interruptor maestro de cada canal de aviso, por colegio.
+ *
+ * Los conceptos deciden QUÉ se avisa y por dónde; esto decide si el canal
+ * existe. Sin ello, callar el correo obligaba a apagarlo concepto por concepto
+ * —y a encenderlo igual después.
+ *
+ * La fila puede faltar: eso son los tres encendidos. Es lo que hace que un
+ * colegio que nunca tocó esta pantalla siga comportándose como antes.
+ */
+export const adminEscolarCanales = pgTable('admin_escolar_canales', {
+  teamId:         integer('team_id').primaryKey().references(() => teams.id),
+  correoActivo:   boolean('correo_activo').notNull().default(true),
+  whatsappActivo: boolean('whatsapp_activo').notNull().default(true),
+  smsActivo:      boolean('sms_activo').notNull().default(true),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados', {
   id:      serial('id').primaryKey(),
   teamId:  integer('team_id').notNull().references(() => teams.id),
   cargoId: integer('cargo_id').notNull().references(() => adminEscolarCargos.id),
-  /** previo | vencido */
+  /** al-emitir | antes-vencer | al-vencer: los tres momentos de la factura. */
   tipo:    varchar('tipo', { length: 12 }).notNull(),
-  /** Días respecto al vencimiento: -5 = cinco antes, 3 = tres después. */
+  /** Días respecto al hito del `tipo`: 5 = cinco días antes. */
   offsetDias: smallint('offset_dias').notNull(),
   canal:   varchar('canal', { length: 12 }).notNull(),
   destino: varchar('destino', { length: 200 }),
@@ -2185,8 +2291,222 @@ export type AdminEscolarConceptoPago    = typeof adminEscolarConceptosPago.$infe
 export type NewAdminEscolarConceptoPago = typeof adminEscolarConceptosPago.$inferInsert;
 export type AdminEscolarCargo      = typeof adminEscolarCargos.$inferSelect;
 export type NewAdminEscolarCargo   = typeof adminEscolarCargos.$inferInsert;
+/**
+ * Lo que el colegio le EXIGE a la familia al matricular.
+ *
+ * Se guarda el `nivel` por nombre y no el id del servicio porque los servicios
+ * cuelgan de un período: hay un "Primario · Matutina" por año escolar, y un id
+ * obligaría a rehacer la configuración cada agosto.
+ */
+export const adminEscolarDocumentosRequeridos = pgTable('admin_escolar_documentos_requeridos', {
+  id:              serial('id').primaryKey(),
+  teamId:          integer('team_id').notNull().references(() => teams.id),
+  /** NULL = vale para todos los niveles. */
+  nivel:           varchar('nivel', { length: 60 }),
+  /** 'nuevo' | 'reinscripcion' */
+  tipoInscripcion: varchar('tipo_inscripcion', { length: 20 }).notNull(),
+  nombre:          varchar('nombre', { length: 160 }).notNull(),
+  /** 'requerido' | 'si_aplica' — "si aplica" NO es opcional: hay que resolverlo. */
+  exigencia:       varchar('exigencia', { length: 20 }).notNull().default('requerido'),
+  cantidad:        smallint('cantidad').notNull().default(1),
+  orden:           smallint('orden').notNull().default(0),
+  activo:          boolean('activo').notNull().default(true),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_docs_req_lista_idx').on(t.teamId, t.tipoInscripcion, t.orden),
+]);
+
+/**
+ * Lo que la familia ENTREGÓ, por matrícula.
+ *
+ * `recibido` y `aprobado` son estados distintos porque subir el archivo y darlo
+ * por bueno son dos actos de dos personas, y el colegio necesita el rastro del
+ * segundo. Lo que llega por el enlace público entra siempre como `recibido`.
+ */
+export const adminEscolarDocumentosEntregados = pgTable('admin_escolar_documentos_entregados', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  matriculaId:   integer('matricula_id').notNull().references(() => adminEscolarMatriculas.id, { onDelete: 'cascade' }),
+  requeridoId:   integer('requerido_id').notNull().references(() => adminEscolarDocumentosRequeridos.id, { onDelete: 'cascade' }),
+  /** pendiente | recibido | aprobado | rechazado | no_aplica */
+  estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  archivoNombre: varchar('archivo_nombre', { length: 255 }),
+  mime:          varchar('mime', { length: 100 }),
+  tamanoBytes:   integer('tamano_bytes'),
+  sha256:        char('sha256', { length: 64 }),
+  /** 's3' → el binario está en s3Key. 'db' → en `contenido` (base64). */
+  storage:       varchar('storage', { length: 10 }),
+  s3Key:         text('s3_key'),
+  contenido:     text('contenido'),
+  subidoEn:      timestamp('subido_en'),
+  subidoPor:     integer('subido_por').references(() => users.id),
+  /** Entró por el enlace de la familia; `subidoPor` va NULL (no hay sesión). */
+  subidoFamilia: boolean('subido_familia').notNull().default(false),
+  aprobadoEn:    timestamp('aprobado_en'),
+  aprobadoPor:   integer('aprobado_por').references(() => users.id),
+  /** Por qué se rechazó, o por qué no aplica. */
+  motivo:        text('motivo'),
+  notas:         text('notas'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_docs_ent_unico_idx').on(t.matriculaId, t.requeridoId),
+  index('admin_escolar_docs_ent_team_idx').on(t.teamId, t.estado),
+]);
+
+/**
+ * Los archivos de un documento entregado. Varios por documento.
+ *
+ * El acta de nacimiento tiene dos caras y la tarjeta de vacunas varias páginas,
+ * así que el binario no puede vivir en la fila de `entregados`: esa fila es el
+ * ESTADO del requisito —quién lo aprobó, cuándo, si no aplica— y se aprueba el
+ * documento entero, no cada foto. Por eso la aprobación no se repite aquí.
+ */
+export const adminEscolarDocumentoArchivos = pgTable('admin_escolar_documento_archivos', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  entregadoId:   integer('entregado_id').notNull()
+                   .references(() => adminEscolarDocumentosEntregados.id, { onDelete: 'cascade' }),
+  archivoNombre: varchar('archivo_nombre', { length: 255 }),
+  mime:          varchar('mime', { length: 100 }).notNull(),
+  tamanoBytes:   integer('tamano_bytes').notNull(),
+  sha256:        char('sha256', { length: 64 }).notNull(),
+  /** 's3' → el binario está en s3Key. 'db' → en `contenido` (base64). */
+  storage:       varchar('storage', { length: 10 }).notNull(),
+  s3Key:         text('s3_key'),
+  contenido:     text('contenido'),
+  /** "cara 1", "cara 2": el orden en que se fotografiaron es el de revisión. */
+  orden:         smallint('orden').notNull().default(0),
+  subidoEn:      timestamp('subido_en').notNull().defaultNow(),
+  subidoPor:     integer('subido_por').references(() => users.id),
+  /** Entró por el enlace de la familia; `subidoPor` va NULL (no hay sesión). */
+  subidoFamilia: boolean('subido_familia').notNull().default(false),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_doc_archivos_entregado_idx').on(t.entregadoId, t.orden),
+  // El mismo binario no entra dos veces en el mismo documento: el padre que
+  // dispara dos veces sin querer no genera dos filas idénticas.
+  uniqueIndex('admin_escolar_doc_archivos_sha_uniq').on(t.entregadoId, t.sha256),
+]);
+
+/**
+ * Enlace para que la familia suba sin cuenta.
+ *
+ * Se guarda el SHA-256 del token, nunca el token: quien lea la tabla —un dump,
+ * un backup, alguien con acceso a la base— no puede usarlo para entrar. El
+ * token en claro existe una sola vez, en el enlace que se copia.
+ */
+export const adminEscolarDocumentosEnlaces = pgTable('admin_escolar_documentos_enlaces', {
+  id:          serial('id').primaryKey(),
+  teamId:      integer('team_id').notNull().references(() => teams.id),
+  matriculaId: integer('matricula_id').notNull().references(() => adminEscolarMatriculas.id, { onDelete: 'cascade' }),
+  /**
+   * Acota el enlace a UN documento. NULL = el expediente entero.
+   *
+   * Un enlace por documento es lo que permite pedir solo lo que falta —"súbeme
+   * el certificado médico"— sin enseñarle a quien lo reciba el resto de la
+   * lista del alumno.
+   */
+  requeridoId: integer('requerido_id')
+                 .references(() => adminEscolarDocumentosRequeridos.id, { onDelete: 'cascade' }),
+  tokenHash:   char('token_hash', { length: 64 }).notNull(),
+  expiraEn:    timestamp('expira_en').notNull(),
+  creadoPor:   integer('creado_por').references(() => users.id),
+  creadoEn:    timestamp('creado_en').notNull().defaultNow(),
+  ultimoUsoEn: timestamp('ultimo_uso_en'),
+  revocadoEn:  timestamp('revocado_en'),
+}, (t) => [
+  uniqueIndex('admin_escolar_docs_enlace_token_idx').on(t.tokenHash),
+  index('admin_escolar_docs_enlace_matricula_idx').on(t.matriculaId),
+  index('admin_escolar_docs_enlace_requerido_idx').on(t.requeridoId),
+]);
+
+export type AdminEscolarDocumentoRequerido = typeof adminEscolarDocumentosRequeridos.$inferSelect;
+export type AdminEscolarDocumentoEntregado = typeof adminEscolarDocumentosEntregados.$inferSelect;
+export type AdminEscolarDocumentoArchivo   = typeof adminEscolarDocumentoArchivos.$inferSelect;
+export type AdminEscolarDocumentoEnlace    = typeof adminEscolarDocumentosEnlaces.$inferSelect;
+
 export type AdminEscolarPago       = typeof adminEscolarPagos.$inferSelect;
 export type NewAdminEscolarPago    = typeof adminEscolarPagos.$inferInsert;
+
+// ─── Administración Escolar — Formularios ─────────────────────────────────────
+// Formularios que el colegio arma a mano (ficha de inscripción, permisos,
+// encuestas) y las respuestas que llegan de las familias. Ver migración
+// 0121_formularios_escolares.sql — sus comentarios explican por qué una
+// respuesta NO toca la ficha del alumno hasta que alguien la revisa.
+//
+// Portado del constructor del CRM (crm-escolar), que es Mongo/Mongoose: allí
+// un formulario es un documento con `campos: ICampo[]` embebido. Aquí van en
+// JSONB por la misma razón que allí van embebidos —se leen y se guardan
+// siempre enteros, nunca se consulta "dame los formularios que tengan un
+// campo de tipo firma"—. El vocabulario de tipos (`TipoCampo`, `ICampo`,
+// `IFormularioConfig`) vive en lib/administracion-escolar/formularios.ts y no
+// aquí, para no atar este fichero a un import de otra capa.
+
+export const adminEscolarFormularios = pgTable('admin_escolar_formularios', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id),
+  nombre:        varchar('nombre', { length: 200 }).notNull(),
+  descripcion:   text('descripcion'),
+  /** Parte de la URL pública /f/<slug>. Único por colegio, no global — dos
+   *  colegios pueden tener los dos su "inscripcion-2026". */
+  slug:          varchar('slug', { length: 120 }).notNull(),
+  activo:        boolean('activo').notNull().default(true),
+  /** ICampo[] del constructor. */
+  campos:        jsonb('campos').notNull().default([]),
+  /** Colores, logo, mensaje de confirmación, expiración, tope de envíos. */
+  configuracion: jsonb('configuracion').notNull().default({}),
+  vistas:        integer('vistas').notNull().default(0),
+  envios:        integer('envios').notNull().default(0),
+  creadoPor:     integer('creado_por').references(() => users.id),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_formularios_slug_idx').on(t.teamId, t.slug),
+  index('admin_escolar_formularios_team_idx').on(t.teamId, t.activo),
+]);
+
+/**
+ * Lo que respondió una familia. `datos` guarda TODO por id de campo — lo
+ * accesorio se queda solo ahí. Lo que además tiene `mapaA` en el campo baja a
+ * su columna real del estudiante o del tutor, pero solo cuando alguien REVISA
+ * y aplica la respuesta (estado 'aplicada'): aplicar automáticamente lo que
+ * escribe un padre en un enlace público dejaría que cualquiera con el enlace
+ * reescribiera la dirección o el teléfono de un menor. Esa es la diferencia
+ * deliberada con el CRM, donde una respuesta es un lead y un blob basta.
+ */
+export const adminEscolarFormularioRespuestas = pgTable('admin_escolar_formulario_respuestas', {
+  id:               serial('id').primaryKey(),
+  teamId:           integer('team_id').notNull().references(() => teams.id),
+  formularioId:     integer('formulario_id').notNull().references(() => adminEscolarFormularios.id, { onDelete: 'cascade' }),
+  /** Copiado al responder: si renombran el formulario después, la respuesta
+   *  sigue diciendo a qué contestó la familia. */
+  formularioNombre: varchar('formulario_nombre', { length: 200 }).notNull(),
+  /** NULL si llegó por un enlace abierto y todavía nadie la ha emparejado con
+   *  un alumno. */
+  estudianteId:     integer('estudiante_id').references(() => adminEscolarEstudiantes.id, { onDelete: 'set null' }),
+  matriculaId:      integer('matricula_id').references(() => adminEscolarMatriculas.id, { onDelete: 'set null' }),
+  datos:            jsonb('datos').notNull().default({}),
+  /** 'pendiente' | 'aplicada' | 'rechazada' */
+  estado:           varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  aplicadaEn:       timestamp('aplicada_en'),
+  aplicadaPor:      integer('aplicada_por').references(() => users.id),
+  motivo:           text('motivo'),
+  /** Para rastrear un envío raro. No se usa para identificar a nadie. */
+  ip:               varchar('ip', { length: 60 }),
+  userAgent:        text('user_agent'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_form_resp_form_idx').on(t.formularioId, t.createdAt),
+  index('admin_escolar_form_resp_estudiante_idx').on(t.estudianteId),
+  index('admin_escolar_form_resp_pendientes_idx').on(t.teamId, t.estado),
+]);
+
+export type AdminEscolarFormulario           = typeof adminEscolarFormularios.$inferSelect;
+export type NewAdminEscolarFormulario        = typeof adminEscolarFormularios.$inferInsert;
+export type AdminEscolarFormularioRespuesta    = typeof adminEscolarFormularioRespuestas.$inferSelect;
+export type NewAdminEscolarFormularioRespuesta = typeof adminEscolarFormularioRespuestas.$inferInsert;
 
 // ─── TypeScript types ─────────────────────────────────────────────────────────
 
@@ -2580,6 +2900,46 @@ export const sigerdImportaciones = pgTable('sigerd_importaciones', {
  * de personal, así que vive aquí — consultable por cargo. Se repuebla en cada
  * sync (upsert por `sigerd_id_persona`).
  */
+/**
+ * Credenciales de SIGERD del colegio, para reconectar sin intervención.
+ *
+ * Rompe a propósito la regla que seguía `lib/sigerd/sesion-cookie.ts` —"la
+ * contraseña no se persiste en ningún lado"—, y conviene saber por qué: traer
+ * los expedientes de un colegio son ~1.860 llamadas y unos 25 minutos, y la
+ * sesión del portal dura menos. Sin reconexión automática, la importación no
+ * termina nunca.
+ *
+ * Lo que cuesta: quien consiga la base Y la llave de cifrado entra al portal
+ * como el colegio. La llave vive en el entorno, jamás en la base, así que hacen
+ * falta las dos piezas. Es la misma postura que con los certificados fiscales.
+ *
+ * La contraseña NO se devuelve nunca por la API: se escribe, no se consulta.
+ */
+export const sigerdCredenciales = pgTable('sigerd_credenciales', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').notNull().references(() => teams.id),
+  /** Cédula con la que se entra. No es secreta: el portal la pide a la vista. */
+  usuario: varchar('usuario', { length: 20 }).notNull(),
+  // Las tres piezas de AES-256-GCM, separadas y no en un blob: así se ve de un
+  // vistazo que hay authTag, sin el cual el descifrado no detecta manipulación.
+  claveCifrada: text('clave_cifrada').notNull(),
+  claveIv:      varchar('clave_iv', { length: 32 }).notNull(),
+  claveTag:     varchar('clave_tag', { length: 32 }).notNull(),
+  /** Perfil elegido cuando la cédula pertenece a varios centros. */
+  idCentro:     integer('id_centro'),
+  centroNombre: varchar('centro_nombre', { length: 200 }),
+  /** Última vez que el portal las aceptó. */
+  verificadoEn: timestamp('verificado_en'),
+  /** Motivo del último fallo, para poder decirle al colegio qué pasó. */
+  ultimoError:  varchar('ultimo_error', { length: 300 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  // Una sola por colegio: dos juegos para el mismo centro solo sirven para que
+  // la mitad de las importaciones use el caducado.
+  uniqueIndex('sigerd_credenciales_team_uniq').on(t.teamId),
+]);
+
 export const sigerdPersonal = pgTable('sigerd_personal', {
   id:             serial('id').primaryKey(),
   teamId:         integer('team_id').notNull().references(() => teams.id),

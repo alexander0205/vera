@@ -17,6 +17,7 @@ import {
   AlertTriangle, FileText, ChevronRight,
 } from 'lucide-react';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,7 @@ function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
 export default function FacturaRecurrenteDetallePage() {
   const params = useParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const volver = useVolver('/dashboard/facturas-recurrentes');
 
   const [data, setData]           = useState<DetalleResponse | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -222,9 +224,7 @@ export default function FacturaRecurrenteDetallePage() {
   if (error || !data) {
     return (
       <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Link href="/dashboard/facturas-recurrentes" style={{ textDecoration: 'none' }}>
-          <Button variant="text" startIcon={<ArrowLeft size={16} />} sx={{ textTransform: 'none', color: '#6b7280' }}>Volver</Button>
-        </Link>
+        <Button onClick={volver} variant="text" startIcon={<ArrowLeft size={16} />} sx={{ alignSelf: 'flex-start', textTransform: 'none', color: '#6b7280' }}>Volver</Button>
         <Alert severity="error" sx={{ borderRadius: '8px' }}>{error ?? 'No se encontró la factura recurrente.'}</Alert>
       </Box>
     );
@@ -238,11 +238,9 @@ export default function FacturaRecurrenteDetallePage() {
   return (
     <Box sx={{ bgcolor: '#eef0f7', minHeight: '100%', p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
       {/* Volver */}
-      <Link href="/dashboard/facturas-recurrentes" style={{ textDecoration: 'none' }}>
-        <Button variant="text" startIcon={<ArrowLeft size={16} />} sx={{ textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
-          Facturas recurrentes
-        </Button>
-      </Link>
+      <Button onClick={volver} variant="text" startIcon={<ArrowLeft size={16} />} sx={{ alignSelf: 'flex-start', textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
+        Facturas recurrentes
+      </Button>
 
       {/* Header */}
       <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 3 }}>

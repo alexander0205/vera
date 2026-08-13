@@ -1,3 +1,5 @@
+import type { Frecuencia } from './calendario';
+
 /**
  * Los conceptos con los que arranca un colegio.
  *
@@ -10,17 +12,16 @@
 export interface ConceptoBase {
   nombre: string;
   tipo: string;
-  /** true = se cobra cada mes del año escolar; false = una sola vez. */
-  recurrente: boolean;
+  frecuencia: Frecuencia;
   /** Sobre este se aplican las becas. Solo la mensualidad. */
   admiteBeca: boolean;
 }
 
 export const CONCEPTOS_BASE: ConceptoBase[] = [
-  { nombre: 'Colegiatura',        tipo: 'mensualidad', recurrente: true,  admiteBeca: true },
-  { nombre: 'Inscripción',        tipo: 'inscripcion', recurrente: false, admiteBeca: false },
-  { nombre: 'Materiales gastables', tipo: 'otro',      recurrente: false, admiteBeca: false },
-  { nombre: 'Uniformes',          tipo: 'uniforme',    recurrente: false, admiteBeca: false },
+  { nombre: 'Colegiatura',        tipo: 'mensualidad', frecuencia: 'mensual', admiteBeca: true },
+  { nombre: 'Inscripción',        tipo: 'inscripcion', frecuencia: 'unico',   admiteBeca: false },
+  { nombre: 'Materiales gastables', tipo: 'otro',      frecuencia: 'unico',   admiteBeca: false },
+  { nombre: 'Uniformes',          tipo: 'uniforme',    frecuencia: 'unico',   admiteBeca: false },
 ];
 
 /**

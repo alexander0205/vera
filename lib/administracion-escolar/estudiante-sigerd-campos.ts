@@ -79,3 +79,59 @@ export function limpiarCamposSigerd(
   }
   return out;
 }
+
+/**
+ * Traduce una ficha de SIGERD a los campos extra del estudiante.
+ *
+ * El puente entre el vocabulario del portal (`provincia`, `numeroActa`,
+ * `oficialiaJCE`…) y el nuestro (`dirProvincia`, `actaNumero`,
+ * `actaOficialiaJce`…). Vive aquí, junto al catálogo, porque es la misma lista
+ * mirada desde el otro lado: si mañana se añade un campo se añade en los dos
+ * sitios a la vez y no se descubre meses después que llegaba vacío.
+ *
+ * Devuelve solo lo que trae valor. Un campo ausente en la ficha no debe pisar
+ * con vacío lo que ya escribió una persona.
+ *
+ * Los datos básicos —nombres, apellidos, sexo, fecha— NO salen de aquí: son
+ * columnas propias y los coloca quien llama.
+ */
+export function camposDesdeFichaSigerd(
+  ficha: Record<string, unknown>,
+): Record<string, string> {
+  const de = (k: string): string => {
+    const v = ficha[k];
+    return typeof v === 'string' ? v.trim() : '';
+  };
+
+  const pares: Array<[string, string]> = [
+    ['nacionalidad', de('nacionalidad')],
+    ['estadoCivil', de('estadoCivil')],
+    ['codigoRne', de('codigoRNE')],
+
+    ['telefono', de('telefono')],
+    ['celular', de('celular')],
+    ['whatsapp', de('whatsapp')],
+
+    ['actaEstado', de('estadoActa')],
+    ['actaNumero', de('numeroActa')],
+    ['actaMunicipioJce', de('municipioJCE')],
+    ['actaOficialiaJce', de('oficialiaJCE')],
+    ['actaLibro', de('libro')],
+    ['actaFolio', de('folio')],
+    ['actaAnio', de('anioActa')],
+
+    ['dirProvincia', de('provincia')],
+    ['dirMunicipio', de('municipio')],
+    ['dirDistritoMunicipal', de('distrito')],
+    ['dirSeccion', de('seccion')],
+    ['dirBarrio', de('barrio')],
+    ['dirSubBarrio', de('subBarrio')],
+    ['direccion', de('direccion')],
+
+    ['programa', de('programa')],
+    ['tarjetaSolidaridad', de('tarjetaSolidaridad')],
+    ['tarjetaSolidaridadFamiliar', de('tarjetaSolidaridadFamiliar')],
+  ];
+
+  return Object.fromEntries(pares.filter(([, v]) => v !== ''));
+}

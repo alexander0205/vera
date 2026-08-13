@@ -91,16 +91,25 @@ interface DialogContentProps {
   children?: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
+  /**
+   * Tope de ancho de MUI. Por defecto `sm` (600 px), que es lo que había.
+   *
+   * Hace falta como prop porque MUI escribe `max-width` en el paper con más
+   * especificidad que Tailwind: un `max-w-none` en `className` no lo mueve, y
+   * el diálogo se quedaba en 600 px sin decir por qué. `false` lo suelta del
+   * todo y deja mandar al `className`.
+   */
+  maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | false;
 }
 
-function DialogContent({ children, className, style }: DialogContentProps) {
+function DialogContent({ children, className, style, maxWidth = 'sm' }: DialogContentProps) {
   const { open, setOpen } = React.useContext(DialogContext);
 
   return (
     <MuiDialog
       open={open}
       onClose={() => setOpen(false)}
-      maxWidth="sm"
+      maxWidth={maxWidth}
       fullWidth
       slotProps={{
         paper: {

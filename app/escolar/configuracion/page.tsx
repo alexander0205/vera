@@ -1,7 +1,5 @@
-import { requirePermission } from '@/lib/auth/page-guard';
-import ConfiguracionEscolarClient from './_page-client';
+import { redirect } from 'next/navigation';
 
-export default async function ConfiguracionEscolarPage() {
-  await requirePermission('administracion-escolar:configurar');
-  return <ConfiguracionEscolarClient />;
+export default function ConfiguracionEscolarPage() {
+  redirect('/escolar/configuracion/estructura');
 }

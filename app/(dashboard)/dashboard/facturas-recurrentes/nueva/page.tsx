@@ -94,18 +94,22 @@ export default async function NuevaFacturaRecurrentePage({ searchParams }: { sea
         .limit(1);
       if (matricula && concepto && matricula.estado === 'activa' && !matricula.facturaRecurrenteId &&
           matricula.fechaInicio && matricula.fechaFin) {
+        // El comprador es el responsable de pago del alumno: un CONTACTO
+        // (`facturar_a_client_id`), no el tutor con la casilla marcada — esa
+        // casilla ya no se marca y dejaba la pantalla sin cliente.
         const [tutor] = await db.select({
-          nombre: adminEscolarTutores.nombre,
-          clientId: adminEscolarTutores.clientId,
+          nombre: clients.razonSocial,
+          clientId: clients.id,
           clienteRazonSocial: clients.razonSocial,
         })
-          .from(adminEscolarEstudianteTutores)
-          .innerJoin(adminEscolarTutores, eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id))
-          .innerJoin(clients, eq(adminEscolarTutores.clientId, clients.id))
+          .from(adminEscolarEstudiantes)
+          .innerJoin(clients, and(
+            eq(clients.id, adminEscolarEstudiantes.facturarAClientId),
+            eq(clients.teamId, teamId),
+          ))
           .where(and(
-            eq(adminEscolarEstudianteTutores.teamId, teamId),
-            eq(adminEscolarEstudianteTutores.estudianteId, matricula.estudianteId),
-            eq(adminEscolarEstudianteTutores.responsablePago, true),
+            eq(adminEscolarEstudiantes.teamId, teamId),
+            eq(adminEscolarEstudiantes.id, matricula.estudianteId),
           ))
           .limit(1);
         if (tutor?.clientId) {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Camera, Loader2, Upload, Trash2, Check, RefreshCw } from 'lucide-react';
+import { Camera, Loader2, Upload, Trash2, Check, RefreshCw, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
 /**
@@ -144,19 +144,25 @@ export function CapturaFoto({
             <DialogTitle>Foto de {nombre ?? data?.nombre ?? 'la ficha'}</DialogTitle>
           </DialogHeader>
 
+          {/* `DialogHeader` trae su propio px-6; el resto del contenido no, y
+              sin él el QR y los botones quedaban pegados al borde. */}
           {abierto && (
-            <PanelQR
-              entidad={entidad}
-              entidadId={entidadId}
-              onFotoLista={async () => {
-                toast.success('Foto recibida desde el teléfono');
-                setAbierto(false);
-                await refrescar();
-              }}
-            />
+            <div className="px-6 py-4">
+              <PanelQR
+                entidad={entidad}
+                entidadId={entidadId}
+                onFotoLista={async () => {
+                  toast.success('Foto recibida desde el teléfono');
+                  setAbierto(false);
+                  await refrescar();
+                }}
+              />
+            </div>
           )}
 
-          <div className="border-t border-gray-100 pt-3 flex flex-wrap gap-2">
+          {/* Pie sobre fondo tintado, como el resto de diálogos del sistema: se
+              lee como el cierre del diálogo y no como un dato más. */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-4">
             <input
               ref={archivoRef}
               type="file"
@@ -165,18 +171,18 @@ export function CapturaFoto({
               onChange={(e) => subirArchivo(e.target.files?.[0])}
             />
             <Button
-              variant="outline" size="sm" disabled={subiendo}
+              variant="outline" size="sm" disabled={subiendo} className="bg-white"
               onClick={() => archivoRef.current?.click()}
             >
               <Upload className="h-4 w-4 mr-1.5" />Subir un archivo
             </Button>
             {foto && (
               <Button variant="outline" size="sm" disabled={subiendo} onClick={quitar}
-                className="text-red-600 hover:text-red-700">
+                className="bg-white text-red-600 hover:bg-red-50 hover:text-red-700">
                 <Trash2 className="h-4 w-4 mr-1.5" />Quitar
               </Button>
             )}
-            {subiendo && <Loader2 className="h-4 w-4 animate-spin text-gray-400 self-center" />}
+            {subiendo && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
           </div>
         </DialogContent>
       </Dialog>
@@ -196,6 +202,7 @@ function PanelQR({
   const [estado, setEstado] = useState<'pidiendo' | 'esperando' | 'expirada' | 'error'>('pidiendo');
   const [segundos, setSegundos] = useState(0);
   const [intento, setIntento] = useState(0);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -271,19 +278,49 @@ function PanelQR({
   }
 
   return (
-    <div className="text-center space-y-3">
-      <p className="text-sm text-gray-600">
-        Escanea este código con la cámara del teléfono y toma la foto.
-      </p>
+    <div className="flex items-center gap-4 text-left">
+      {/* QR más pequeño y a un lado, no centrado y enorme: a 160 px se escanea
+          igual de bien desde 20 cm, y deja sitio para lo que hay que leer. */}
       {/* eslint-disable-next-line @next/next/no-img-element -- data-URL generada en el servidor */}
-      <img src={sesion?.qr} alt="Código QR para tomar la foto" className="mx-auto h-56 w-56" />
-      <p className="text-xs text-gray-400 flex items-center justify-center gap-1.5">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        Esperando la foto{segundos > 0 ? ` · caduca en ${Math.ceil(segundos / 60)} min` : ''}
-      </p>
-      <p className="text-[11px] text-gray-400 flex items-center justify-center gap-1">
-        <Check className="h-3 w-3" />La foto aparecerá aquí sola, sin recargar
-      </p>
+      <img src={sesion?.qr} alt="Código QR para tomar la foto"
+        className="h-40 w-40 shrink-0 rounded-lg border border-gray-100" />
+
+      <div className="min-w-0 flex-1 space-y-2.5">
+        <p className="text-sm text-gray-600">
+          Escanea el código con la cámara del teléfono, o copia el enlace y mándalo.
+        </p>
+
+        {/* El enlace, además del QR. El QR solo sirve si tienes la pantalla
+            delante; para pedirle la foto a alguien que no está aquí hace falta
+            algo que se pueda pegar en un mensaje. */}
+        <div className="flex items-center gap-1.5">
+          <input
+            readOnly
+            value={sesion?.url ?? ''}
+            onFocus={(e) => e.currentTarget.select()}
+            className="min-w-0 flex-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[11px] text-gray-600"
+          />
+          <Button variant="outline" size="sm" className="shrink-0"
+            onClick={() => {
+              if (sesion?.url) void navigator.clipboard.writeText(sesion.url);
+              setCopiado(true);
+              setTimeout(() => setCopiado(false), 1800);
+            }}>
+            {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+
+        <p className="flex items-center gap-1.5 text-xs text-gray-400">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Esperando la foto{segundos > 0 ? ` · caduca en ${Math.ceil(segundos / 60)} min` : ''}
+        </p>
+
+        {/* Caduca en minutos, así que hay que poder rehacerlo sin cerrar el
+            diálogo: si el padre tarda, el enlace ya no sirve. */}
+        <Button variant="outline" size="sm" onClick={() => setIntento((i) => i + 1)}>
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />Generar otro enlace
+        </Button>
+      </div>
     </div>
   );
 }

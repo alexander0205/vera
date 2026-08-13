@@ -11,6 +11,10 @@ import { fmtFechaHora, fmtFechaCorta } from '@/lib/utils/format';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { ModalHeader } from '@/components/ui/modal-header';
+import { NativeSelect } from '@/components/ui/native-select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   ArrowLeft, Download, FileText, RefreshCw, XCircle,
@@ -37,6 +41,7 @@ import { EntityHistory } from '@/components/entity-history';
 import { StickyNote, History as HistoryIcon } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useVolver } from '@/lib/hooks/useVolver';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
 import { useSecuencia } from '../nueva/hooks/useSecuencia';
 import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
@@ -377,6 +382,9 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   const router   = useRouter();
   const docId    = params.id as string;
   const ui       = DOC_UI[variant];
+  // A esta pantalla se llega desde muchos sitios —la ficha de un estudiante,
+  // cuentas por cobrar, el buscador—, así que el listado es solo el respaldo.
+  const volver   = useVolver(ui.backHref);
 
   const [factura, setFactura] = useState<FacturaDetalle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -809,7 +817,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-center">
           <XCircle className="h-12 w-12 mx-auto mb-3 text-red-400" />
           <p className="font-medium">{error ?? 'Documento no encontrado'}</p>
-          <Button variant="outline" className="mt-4" onClick={() => router.push(ui.backHref)}>
+          <Button variant="outline" className="mt-4" onClick={volver}>
             Volver a {ui.backLabel.toLowerCase()}
           </Button>
         </div>
@@ -894,11 +902,9 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       {/* ─── Header ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={ui.backHref}>
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">{ui.backLabel}</span>
-            </Link>
+          <Button variant="ghost" size="sm" onClick={volver}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            <span className="hidden sm:inline">{ui.backLabel}</span>
           </Button>
           <div className="flex flex-col">
             <div className="flex items-center gap-2 flex-wrap">
@@ -1831,7 +1837,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
           type="button"
           variant="outline"
           className="text-gray-600 h-11 sm:h-9 w-full sm:w-auto"
-          onClick={() => router.push(ui.backHref)}
+          onClick={volver}
         >
           {esBorrador ? 'Cancelar' : 'Volver'}
         </Button>
@@ -2054,10 +2060,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
       {/* Enviar a DGII */}
       <Dialog open={showEnviarDgii} onOpenChange={setShowEnviarDgii}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Enviar a la DGII</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-4">
+          {/* El párrafo que antes iba suelto bajo el título es el subtítulo:
+              así el modal abre con una sola voz y no con dos bloques de texto. */}
+          <ModalHeader
+            title="Enviar a la DGII"
+            subtitle="Se asigna un e-NCF de tu secuencia activa y se envía el comprobante."
+          />
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-4">
             {enviandoDgiiError && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 space-y-2">
                 <div className="flex gap-2">
@@ -2082,54 +2091,50 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 )}
               </div>
             )}
-            <p className="text-sm text-gray-700">
-              Selecciona el tipo de comprobante fiscal para emitir esta factura a la DGII.
-              Se asignará un e-NCF de tu secuencia activa.
-            </p>
             <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-gray-600">Tipo de comprobante (e-CF)</label>
+              <Label htmlFor="dgii-tipo">Tipo de comprobante (e-CF)</Label>
               {esNota ? (
                 // El tipo de una nota es intrínseco al documento (e33 débito / e34
                 // crédito): no se puede cambiar al emitir. Se muestra fijo.
-                <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 flex items-center justify-between">
+                <div className="flex h-10 w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700">
                   <span>{TIPOS_EMIT_DGII.find(t => t.value === factura.tipoEcf)?.label ?? `e${factura.tipoEcf}`}</span>
                   <span className="text-[10px] uppercase tracking-wide text-gray-400">fijo</span>
                 </div>
               ) : (
-                <select
+                <NativeSelect
+                  id="dgii-tipo"
                   value={dgiiTipoEcf}
                   onChange={e => setDgiiTipoEcf(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
                   {/* El tipo propio del documento siempre visible: aunque aún no exista
                       secuencia (el server devuelve un error claro indicando crearla). */}
                   {TIPOS_EMIT_DGII.filter(t => tipoVisible(t.value) || t.value === factura.tipoEcf).map(t => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
-                </select>
+                </NativeSelect>
               )}
               {dgiiRegla && (
-                <p className="text-[11px] text-gray-500 leading-snug">{dgiiRegla.descripcion}</p>
+                <p className="text-xs leading-snug text-gray-500">{dgiiRegla.descripcion}</p>
               )}
             </div>
 
             {/* ─── Código de modificación (notas 33/34) ───────────────────── */}
             {(dgiiTipoEcf === '33' || dgiiTipoEcf === '34') && (
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-gray-600">
-                  Código de modificación<span className="text-red-500 ml-0.5">*</span>
-                </label>
-                <select
+                <Label htmlFor="dgii-codmod">
+                  Código de modificación<span className="ml-0.5 text-red-500">*</span>
+                </Label>
+                <NativeSelect
+                  id="dgii-codmod"
                   value={dgiiCodMod}
                   onChange={e => setDgiiCodMod(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
                 >
                   <option value="">Selecciona el motivo…</option>
                   {Object.entries(COD_MODIFICACION_LABEL).map(([code, label]) => (
                     <option key={code} value={code}>{code} — {label}</option>
                   ))}
-                </select>
-                <p className="text-[11px] text-gray-500 leading-snug">
+                </NativeSelect>
+                <p className="text-xs leading-snug text-gray-500">
                   Por qué esta nota modifica el comprobante original — lo exige la DGII.
                 </p>
               </div>
@@ -2143,20 +2148,22 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               dgiiRegla.requiereRazonSocial ||
               (dgiiTipoEcf === '32' && (parseFloat(factura.montos.montoTotalDOP) || 0) >= 250000)
             ) && (
-              <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-gray-700">
+              // Sin tarjeta gris alrededor: metía una caja dentro de la caja y
+              // hundía los dos campos que más importan. Se separa con una línea.
+              <div className="space-y-3 border-t border-gray-100 pt-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900">
                     {dgiiRegla.compradorLabel}
                     {(dgiiRegla.requiereRncComprador || dgiiRegla.requiereRazonSocial) && (
-                      <span className="text-red-500 ml-0.5">*</span>
+                      <span className="ml-0.5 text-red-500">*</span>
                     )}
-                  </label>
+                  </p>
                   {factura.comprador.rnc && (
-                    <span className="text-[10px] text-gray-400">guardado en factura</span>
+                    <span className="shrink-0 text-xs text-gray-400">guardado en factura</span>
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] text-gray-600">{dgiiRegla.rncLabel}</label>
+                  <Label>{dgiiRegla.rncLabel}</Label>
                   <RncSearch
                     value={tempRnc ? `${tempRnc}${tempRazon ? ` · ${tempRazon}` : ''}` : ''}
                     onSelect={(r) => { setTempRnc(r.rnc); setTempRazon(r.nombre); }}
@@ -2165,13 +2172,13 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] text-gray-600">Razón social / nombre</label>
-                  <input
+                  <Label htmlFor="dgii-razon">Razón social / nombre</Label>
+                  <Input
+                    id="dgii-razon"
                     type="text"
                     value={tempRazon}
                     onChange={e => setTempRazon(e.target.value)}
                     placeholder="Nombre o razón social"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
               </div>
@@ -2220,37 +2227,43 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
             {/* Numeración — próximo e-NCF, editable para resolver colisiones de secuencia */}
             {dgiiTipoEcf !== 'sin-ncf' && (
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-gray-600">Próximo e-NCF</label>
+              <div className="space-y-1.5 border-t border-gray-100 pt-4">
+                <Label htmlFor="dgii-ncf">Próximo e-NCF</Label>
                 {seqInfo == null ? (
-                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                  <p className="flex items-center gap-1 text-xs text-gray-400">
                     <Loader2 className="h-3 w-3 animate-spin" /> Cargando numeración…
                   </p>
                 ) : seqInfo.sinSecuencia ? (
                   <p className="text-xs text-red-600">
                     No hay secuencia activa para e{dgiiTipoEcf}.{' '}
-                    <Link href="/dashboard/secuencias" className="underline font-medium">Crea una</Link>.
+                    <Link href="/dashboard/secuencias" className="font-medium underline">Crea una</Link>.
                   </p>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2">
+                    {/* El e-NCF completo y el número que lo genera, en la misma
+                        línea. Antes el campo ocupaba todo el ancho para un dato
+                        de un dígito, y parecía el control principal del modal
+                        cuando casi nadie lo toca. */}
+                    <div className="flex items-center gap-3">
                       <span className="font-mono text-sm font-semibold text-gray-900">
                         E{dgiiTipoEcf}{(ncfNum || '0').padStart(10, '0')}
                       </span>
+                      <Input
+                        id="dgii-ncf"
+                        type="number"
+                        value={ncfNum}
+                        onChange={e => setNcfNum(e.target.value)}
+                        aria-label="Siguiente número de e-NCF"
+                        className="w-24"
+                        style={{ width: '6rem' }}
+                      />
                       {seqInfo.disponibles >= 0 && (
-                        <span className="text-[11px] text-gray-400">{seqInfo.disponibles} disponibles</span>
+                        <span className="whitespace-nowrap text-xs text-gray-400">
+                          {seqInfo.disponibles} disponibles
+                        </span>
                       )}
                     </div>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={ncfNum}
-                      onChange={e => setNcfNum(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      aria-label="Siguiente número de e-NCF"
-                    />
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs leading-snug text-gray-400">
                       Si la DGII reporta el e-NCF como ya emitido, sube el siguiente número. No puede ser menor al actual.
                     </p>
                   </>
@@ -2258,13 +2271,16 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               </div>
             )}
 
-            <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            {/* El aviso ya no es un bloque amarillo: la advertencia de verdad
+                está en el botón, que dice lo que hace. Aquí solo queda la nota
+                al pie, del tamaño de una nota al pie. */}
+            <p className="flex gap-2 border-t border-gray-100 pt-4 text-xs leading-snug text-gray-500">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
               <span>
-                Esta acción consume un número de la secuencia activa para el tipo seleccionado
-                y envía el comprobante a la DGII. No se puede deshacer.
+                Consume un número de la secuencia activa y envía el comprobante a la DGII.
+                No se puede deshacer.
               </span>
-            </div>
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEnviarDgii(false)} disabled={enviandoDgii}>
@@ -2273,7 +2289,6 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <Button
               onClick={handleEnviarDgii}
               disabled={enviandoDgii || !dgiiValidacion.ok}
-              className="bg-teal-600 hover:bg-teal-700"
             >
               {enviandoDgii
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>

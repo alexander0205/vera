@@ -61,6 +61,9 @@ export type AuditAction =
   | 'MONEDERO_LIMITE'
   // Cobranza — acciones hacia el cliente, deben quedar trazadas
   | 'RECORDATORIOS_COBRO_ENVIADOS'
+  // El mensaje de prueba de los canales de aviso. También sale hacia afuera y
+  // cuesta dinero (el SMS), así que se traza igual que un envío de verdad.
+  | 'ESCOLAR_AVISO_PRUEBA'
   // WhatsApp (crm-escolar)
   | 'WHATSAPP_CONECTAR';
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { CapturaFoto } from '@/components/fotos/CapturaFoto';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,8 +11,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { NativeSelect } from '@/components/ui/native-select';
-import { ModalHeaderIcon } from '@/components/ui/modal-header-icon';
-import { Plus, Pencil, X, Loader2, Search, Link2, Building2, Camera, User, AlertTriangle } from 'lucide-react';
+import { ModalHeader } from '@/components/ui/modal-header';
+import { Plus, Pencil, X, Loader2, Camera, User, Wallet } from 'lucide-react';
 
 export interface TutorVinculo {
   id: number;
@@ -19,12 +20,11 @@ export interface TutorVinculo {
   nombre: string;
   documento: string | null;
   telefono: string | null;
+  /** Por donde el colegio le escribe de verdad. */
+  whatsapp: string | null;
   email: string | null;
   imagen: string | null;
-  clientId: number | null;
-  clienteRazonSocial: string | null;
   relacion: string;
-  responsablePago: boolean;
 }
 
 interface TutorTeam {
@@ -32,13 +32,10 @@ interface TutorTeam {
   nombre: string;
   documento: string | null;
   telefono: string | null;
+  whatsapp: string | null;
   email: string | null;
   imagen: string | null;
-  clientId: number | null;
-  clienteRazonSocial: string | null;
 }
-
-interface Cliente { id: number; razonSocial: string; rnc: string | null; email: string | null; telefono: string | null; }
 
 const RELACIONES = [
   { value: 'padre', label: 'Padre' },
@@ -48,7 +45,7 @@ const RELACIONES = [
   { value: 'otro', label: 'Otro' },
 ];
 
-const EMPTY_NUEVO = { nombre: '', documento: '', telefono: '', email: '', direccion: '', imagen: '' };
+const EMPTY_NUEVO = { nombre: '', documento: '', telefono: '', whatsapp: '', email: '', direccion: '', imagen: '' };
 
 const IMG_MAX_BYTES = 800_000; // ~800KB, mismo tope que logo/producto.
 
@@ -76,12 +73,49 @@ function TutorAvatar({ nombre, imagen, size = 'md' }: { nombre: string; imagen: 
 }
 
 interface Props {
-  estudianteId: number;
+  /**
+   * El alumno al que se atan los tutores. `null` = todavía no existe (el alta
+   * de estudiante): entonces el tutor SÍ se crea de verdad —vive en el team, no
+   * en el alumno— pero el vínculo se queda en el aire y lo entrega
+   * `onVincularBorrador` para que el formulario lo mande junto con el alta.
+   */
+  estudianteId: number | null;
   tutores: TutorVinculo[];
   onChange: () => void;
+  /**
+   * Convertir a este tutor en el responsable de pago.
+   *
+   * El tutor no es un cliente, pero muchas veces es la misma persona: esto
+   * evita volver a teclear su cédula y su teléfono en Contactos, que es como se
+   * acaba con dos fichas del mismo padre escritas distinto.
+   */
+  onHacerResponsable?: (t: TutorVinculo) => void;
+  /**
+   * La cédula/RNC del responsable de pago del alumno.
+   *
+   * Sirve para decir en la tabla cuál de estos tutores ES el que paga. Casi
+   * siempre lo es uno de ellos —el padre o la madre—, pero como el responsable
+   * vive en Contactos y el tutor aquí, la fila no lo decía y el mismo señor
+   * aparecía dos veces en la pantalla sin ninguna relación aparente.
+   *
+   * Se comparan solo los dígitos: el mismo documento está escrito con guiones
+   * en un sitio y sin ellos en el otro.
+   */
+  responsableDocumento?: string | null;
+  /** Solo en borrador: un tutor recién elegido o creado. */
+  onVincularBorrador?: (vinculo: TutorVinculo) => void;
+  /** Solo en borrador: quitar uno de la lista antes de guardar. */
+  onQuitarBorrador?: (tutorId: number) => void;
 }
 
-export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
+export function TutoresPanel({
+  estudianteId, tutores, onChange, onHacerResponsable, responsableDocumento,
+  onVincularBorrador, onQuitarBorrador,
+}: Props) {
+  const borrador = estudianteId == null;
+  const docResponsable = (responsableDocumento ?? '').replace(/\D/g, '');
+  const esResponsable = (t: TutorVinculo) =>
+    docResponsable.length >= 7 && (t.documento ?? '').replace(/\D/g, '') === docResponsable;
   const [tutoresTeam, setTutoresTeam] = useState<TutorTeam[]>([]);
   const [showForm, setShowForm]       = useState(false);
   const [editVinculo, setEditVinculo] = useState<TutorVinculo | null>(null);
@@ -89,18 +123,11 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
   const [tutorSeleccionado, setTutorSeleccionado] = useState('');
   const [nuevo, setNuevo]             = useState(EMPTY_NUEVO);
   const [relacion, setRelacion]       = useState('tutor');
-  const [responsablePago, setResponsablePago] = useState(false);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [imgError, setImgError]       = useState<string | null>(null);
   const [quitarTarget, setQuitarTarget] = useState<TutorVinculo | null>(null);
   const [quitando, setQuitando]       = useState(false);
-
-  // Vínculo opcional con un contacto/cliente (para el comprobante fiscal).
-  const [clienteVinculado, setClienteVinculado] = useState<Cliente | null>(null);
-  const [clienteQuery, setClienteQuery] = useState('');
-  const [clienteResultados, setClienteResultados] = useState<Cliente[]>([]);
-  const [buscandoCliente, setBuscandoCliente] = useState(false);
 
   const cargarTutoresTeam = useCallback(async () => {
     const data = await fetch('/api/administracion-escolar/tutores').then((r) => r.json());
@@ -108,37 +135,6 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
   }, []);
 
   useEffect(() => { if (showForm) cargarTutoresTeam(); }, [showForm, cargarTutoresTeam]);
-
-  // Búsqueda de clientes con debounce (al crear/editar datos del tutor, sin cliente ya elegido).
-  const editandoDatos = editVinculo != null || modoNuevo;
-  useEffect(() => {
-    if (!showForm || !editandoDatos || clienteVinculado) return;
-    const q = clienteQuery.trim();
-    if (!q) { setClienteResultados([]); return; }
-    setBuscandoCliente(true);
-    const t = setTimeout(async () => {
-      try {
-        const data = await fetch(`/api/clientes?q=${encodeURIComponent(q)}`).then((r) => r.json());
-        setClienteResultados(data.clientes ?? []);
-      } finally {
-        setBuscandoCliente(false);
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [clienteQuery, showForm, editandoDatos, clienteVinculado]);
-
-  function elegirCliente(c: Cliente) {
-    setClienteVinculado(c);
-    setClienteResultados([]);
-    setClienteQuery('');
-    // Prellenar datos vacíos del tutor con los del cliente.
-    setNuevo((f) => ({
-      ...f,
-      nombre: f.nombre.trim() || c.razonSocial,
-      telefono: f.telefono.trim() || (c.telefono ?? ''),
-      email: f.email.trim() || (c.email ?? ''),
-    }));
-  }
 
   async function handleImagen(file: File) {
     if (!file.type.startsWith('image/')) { setImgError('Solo se aceptan imágenes'); return; }
@@ -158,10 +154,6 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     setTutorSeleccionado('');
     setNuevo(EMPTY_NUEVO);
     setRelacion('tutor');
-    setResponsablePago(false);
-    setClienteVinculado(null);
-    setClienteQuery('');
-    setClienteResultados([]);
     setError(null); setImgError(null);
     setShowForm(true);
   }
@@ -170,29 +162,20 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     setEditVinculo(v);
     setNuevo({
       nombre: v.nombre, documento: v.documento ?? '', telefono: v.telefono ?? '',
-      email: v.email ?? '', direccion: '', imagen: v.imagen ?? '',
+      whatsapp: v.whatsapp ?? '', email: v.email ?? '', direccion: '', imagen: v.imagen ?? '',
     });
     setRelacion(v.relacion);
-    setResponsablePago(v.responsablePago);
-    setClienteVinculado(v.clientId
-      ? { id: v.clientId, razonSocial: v.clienteRazonSocial ?? '', rnc: null, email: null, telefono: null }
-      : null);
-    setClienteQuery('');
-    setClienteResultados([]);
     setError(null); setImgError(null);
     setShowForm(true);
   }
 
   async function handleGuardar() {
-    // El responsable de pago es el contacto fiscal → exige cliente vinculado.
-    if (responsablePago) {
-      const tieneCliente = (!editVinculo && !modoNuevo)
-        ? tutorPreview?.clientId != null   // tutor existente: ya debe tener cliente
-        : clienteVinculado != null;        // nuevo/editar: se vincula aquí
-      if (!tieneCliente) {
-        setError('El responsable de pago debe estar vinculado a un contacto/cliente (es quien recibe las facturas).');
-        return;
-      }
+    // La cédula identifica a la persona y es lo que impide que la misma madre
+    // entre dos veces: la base tiene un único por (colegio, documento). Sin
+    // ella, el año que viene se crea otra fila y el histórico queda partido.
+    if ((editVinculo || modoNuevo) && !nuevo.documento.trim()) {
+      setError('La cédula del tutor es obligatoria.');
+      return;
     }
     setSaving(true);
     setError(null);
@@ -204,7 +187,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
         const res = await fetch(`/api/administracion-escolar/tutores/${editVinculo.tutorId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...nuevo, clientId: clienteVinculado?.id ?? null }),
+          body: JSON.stringify(nuevo),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? 'Error actualizando tutor');
@@ -214,7 +197,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
         const res = await fetch('/api/administracion-escolar/tutores', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...nuevo, clientId: clienteVinculado?.id ?? null }),
+          body: JSON.stringify(nuevo),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? 'Error creando tutor');
@@ -224,10 +207,29 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
         tutorId = parseInt(tutorSeleccionado);
       }
 
+      // Sin alumno todavía no hay a qué atarlo: el vínculo se devuelve y lo
+      // guarda el formulario del alta. El id va en negativo porque aún no
+      // existe la fila y hace falta algo único para pintar la lista.
+      if (borrador) {
+        onVincularBorrador?.({
+          id: -tutorId,
+          tutorId,
+          nombre: (editVinculo || modoNuevo) ? nuevo.nombre.trim() : (tutorPreview?.nombre ?? ''),
+          documento: (editVinculo || modoNuevo) ? (nuevo.documento || null) : (tutorPreview?.documento ?? null),
+          telefono: (editVinculo || modoNuevo) ? (nuevo.telefono || null) : (tutorPreview?.telefono ?? null),
+          whatsapp: (editVinculo || modoNuevo) ? (nuevo.whatsapp || null) : (tutorPreview?.whatsapp ?? null),
+          email: (editVinculo || modoNuevo) ? (nuevo.email || null) : (tutorPreview?.email ?? null),
+          imagen: (editVinculo || modoNuevo) ? (nuevo.imagen || null) : (tutorPreview?.imagen ?? null),
+          relacion,
+        });
+        setShowForm(false);
+        return;
+      }
+
       const res2 = await fetch(`/api/administracion-escolar/estudiantes/${estudianteId}/tutores`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tutorId, relacion, responsablePago }),
+        body: JSON.stringify({ tutorId, relacion }),
       });
       const data2 = await res2.json();
       if (!res2.ok) throw new Error(data2.error ?? 'Error asociando tutor');
@@ -245,6 +247,11 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
     if (!quitarTarget) return;
     setQuitando(true);
     try {
+      if (borrador) {
+        onQuitarBorrador?.(quitarTarget.tutorId);
+        setQuitarTarget(null);
+        return;
+      }
       await fetch(`/api/administracion-escolar/estudiantes/${estudianteId}/tutores/${quitarTarget.tutorId}`, {
         method: 'DELETE',
       });
@@ -258,7 +265,8 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">Tutores</h2>
+        {!borrador && <h2 className="text-base font-semibold text-gray-900">Tutores</h2>}
+        {borrador && <span className="text-sm text-gray-500">Al menos uno, y marca quién paga</span>}
         <Button size="sm" variant="outline" onClick={abrirNuevo}>
           <Plus className="h-4 w-4 mr-1" />Agregar tutor
         </Button>
@@ -275,9 +283,9 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
               <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
                 <th className="px-3 py-2 font-medium">Tutor</th>
                 <th className="px-3 py-2 font-medium">Relación</th>
-                <th className="px-3 py-2 font-medium">Teléfono</th>
-                <th className="px-3 py-2 font-medium">Email</th>
-                <th className="px-3 py-2 font-medium">Responsable</th>
+                {!borrador && <th className="px-3 py-2 font-medium">Teléfono</th>}
+                {!borrador && <th className="px-3 py-2 font-medium">Email</th>}
+                {!borrador && <th className="px-3 py-2 font-medium">WhatsApp</th>}
                 <th className="px-3 py-2 font-medium text-right">Acciones</th>
               </tr>
             </thead>
@@ -290,12 +298,14 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-gray-900 truncate">{t.nombre}</span>
-                          {t.clientId && (
-                            <Link href={`/dashboard/clientes/${t.clientId}/editar`}
-                              className="inline-flex items-center gap-1 text-[11px] text-zero-700 hover:text-zero-900 hover:underline shrink-0"
-                              title={`Editar contacto: ${t.clienteRazonSocial}`}>
-                              <Link2 className="h-3 w-3" />Contacto
-                            </Link>
+                          {/* El que paga, dicho donde se le mira. */}
+                          {/* Un <span> y no el Badge (que es un Chip de MUI):
+                              dentro de una celda estrecha el Chip parte la
+                              etiqueta en dos líneas y se monta sobre el nombre. */}
+                          {esResponsable(t) && (
+                            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-zero-200 bg-zero-50 px-2 py-0.5 text-[10px] font-medium text-zero-700">
+                              <Wallet className="h-3 w-3" />Responsable de pago
+                            </span>
                           )}
                         </div>
                         {t.documento && <span className="text-xs text-gray-400">Cédula: {t.documento}</span>}
@@ -303,15 +313,20 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-gray-600 capitalize">{t.relacion}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{t.telefono ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{t.email ?? '—'}</td>
-                  <td className="px-3 py-2.5">
-                    {t.responsablePago
-                      ? <Badge className="bg-zero-50 text-zero-700 border-zero-200">Pago</Badge>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
+                  {!borrador && <td className="px-3 py-2.5 text-gray-600">{t.telefono ?? '—'}</td>}
+                  {!borrador && <td className="px-3 py-2.5 text-gray-600">{t.email ?? '—'}</td>}
+                  {!borrador && <td className="px-3 py-2.5 text-gray-600">{t.whatsapp ?? '—'}</td>}
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex justify-end gap-1">
+                      {/* Al que ya paga no se le ofrece: pulsarlo no haría nada
+                          y deja pensando si se hizo algo. */}
+                      {onHacerResponsable && !esResponsable(t) && (
+                        <Button variant="ghost" size="sm" title="Hacer responsable de pago"
+                          onClick={() => onHacerResponsable(t)}>
+                          <Wallet className="h-3.5 w-3.5 text-gray-400" />
+                          <span className="ml-1 hidden text-xs sm:inline">Hacer responsable</span>
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => abrirEdicion(t)} title="Editar tutor">
                         <Pencil className="h-3.5 w-3.5 text-gray-400" />
                       </Button>
@@ -330,8 +345,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
       {/* Modal agregar/editar tutor */}
       <Dialog open={showForm} onOpenChange={(o: boolean) => { if (!o) setShowForm(false); }}>
         <DialogContent className="max-w-md">
-          <ModalHeaderIcon icon={User}
-            title={editVinculo ? `Editar — ${editVinculo.nombre}` : 'Agregar tutor'}
+          <ModalHeader title={editVinculo ? `Editar — ${editVinculo.nombre}` : 'Agregar tutor'}
             subtitle="Vincula un responsable de pago al estudiante." />
           <div className="space-y-4 px-6 py-4">
             {error && (
@@ -360,7 +374,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                   <option value="" disabled>Selecciona un tutor</option>
                   {disponibles.map((t) => (
                     <option key={t.id} value={String(t.id)}>
-                      {t.nombre}{t.clientId ? ` · ${t.clienteRazonSocial}` : ''}
+                      {t.nombre}{t.documento ? ` · ${t.documento}` : ''}
                     </option>
                   ))}
                 </NativeSelect>
@@ -372,10 +386,8 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                       <p className="font-semibold text-gray-900 truncate">{tutorPreview.nombre}</p>
                       <p className="text-xs text-gray-500">Cédula: {tutorPreview.documento || '—'}</p>
                       {tutorPreview.telefono && <p className="text-xs text-gray-500">{tutorPreview.telefono}</p>}
-                      {tutorPreview.clientId && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-zero-700 mt-0.5">
-                          <Link2 className="h-3 w-3" />{tutorPreview.clienteRazonSocial}
-                        </span>
+                      {tutorPreview.whatsapp && (
+                        <p className="text-xs text-gray-500">WhatsApp: {tutorPreview.whatsapp}</p>
                       )}
                     </div>
                   </div>
@@ -383,46 +395,30 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
               </div>
             ) : (
               <>
-                {/* Vínculo opcional con un contacto/cliente existente */}
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5">
-                    <Building2 className="h-3.5 w-3.5 text-gray-400" />Contacto / cliente (para facturar)
-                  </Label>
-                  {clienteVinculado ? (
-                    <div className="flex items-center justify-between gap-2 border border-zero-200 bg-zero-50 rounded-lg px-3 py-2">
-                      <span className="text-sm font-medium text-zero-800 truncate">{clienteVinculado.razonSocial}</span>
-                      <button onClick={() => setClienteVinculado(null)}
-                        className="text-zero-600 hover:text-zero-800 shrink-0">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <Input className="pl-8" placeholder="Buscar cliente (opcional)…"
-                        value={clienteQuery} onChange={(e) => setClienteQuery(e.target.value)} />
-                      {(buscandoCliente || clienteResultados.length > 0) && (
-                        <div className="absolute z-10 left-0 right-0 mt-1 border border-gray-200 bg-white rounded-lg shadow-sm max-h-40 overflow-y-auto">
-                          {buscandoCliente ? (
-                            <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-zero-600" /></div>
-                          ) : clienteResultados.map((c) => (
-                            <button key={c.id} onClick={() => elegirCliente(c)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors">
-                              <p className="font-medium text-gray-900">{c.razonSocial}</p>
-                              <p className="text-xs text-gray-400">{c.rnc ?? c.email ?? '—'}</p>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
                 {/* Foto + datos del tutor */}
                 <div className="flex gap-3">
-                  <ImagenTutorBox imagen={nuevo.imagen}
-                    onPick={handleImagen}
-                    onClear={() => setNuevo((f) => ({ ...f, imagen: '' }))} />
+                  {/* Con el tutor ya guardado se usa el mismo componente de QR
+                      que el estudiante: quien toma la foto está delante del
+                      padre, con el teléfono en la mano, no delante del PC.
+                      Al CREAR todavía no hay id al que colgar la foto, así que
+                      ahí sigue el selector de archivo: el QR necesita saber a
+                      quién se la está tomando. */}
+                  {editVinculo ? (
+                    <div className="space-y-1.5">
+                      <Label>Foto</Label>
+                      <CapturaFoto
+                        entidad="tutor"
+                        entidadId={editVinculo.tutorId}
+                        nombre={editVinculo.nombre}
+                        tamano={92}
+                        forma="cuadrada"
+                      />
+                    </div>
+                  ) : (
+                    <ImagenTutorBox imagen={nuevo.imagen}
+                      onPick={handleImagen}
+                      onClear={() => setNuevo((f) => ({ ...f, imagen: '' }))} />
+                  )}
                   <div className="flex-1 space-y-3">
                     <div className="space-y-1.5">
                       <Label>Nombre *</Label>
@@ -430,18 +426,27 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
                         onChange={(e) => setNuevo((f) => ({ ...f, nombre: e.target.value }))} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Cédula</Label>
+                      <Label>Cédula *</Label>
                       <Input value={nuevo.documento} placeholder="000-0000000-0"
+                        error={!!error && !nuevo.documento.trim()}
                         onChange={(e) => setNuevo((f) => ({ ...f, documento: e.target.value }))} />
                     </div>
                   </div>
                 </div>
                 {imgError && <p className="text-xs text-red-600">{imgError}</p>}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label>Teléfono</Label>
-                    <Input value={nuevo.telefono}
+                    <Input value={nuevo.telefono} placeholder="809-000-0000"
                       onChange={(e) => setNuevo((f) => ({ ...f, telefono: e.target.value }))} />
+                  </div>
+                  {/* Aparte del teléfono a propósito: en muchas casas el fijo y
+                      el número por el que contestan no son el mismo, y los
+                      avisos del colegio salen por WhatsApp. */}
+                  <div className="space-y-1.5">
+                    <Label>WhatsApp</Label>
+                    <Input value={nuevo.whatsapp} placeholder="809-000-0000"
+                      onChange={(e) => setNuevo((f) => ({ ...f, whatsapp: e.target.value }))} />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Email</Label>
@@ -452,21 +457,11 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
               </>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Relación</Label>
-                <NativeSelect value={relacion} onChange={(e) => setRelacion(e.target.value)}>
-                  {RELACIONES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </NativeSelect>
-              </div>
-              <div className="flex items-end pb-2">
-                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                  <input type="checkbox" checked={responsablePago}
-                    onChange={(e) => setResponsablePago(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-zero-600 focus:ring-zero-500" />
-                  Responsable de pago
-                </label>
-              </div>
+            <div className="space-y-1.5">
+              <Label>Relación</Label>
+              <NativeSelect value={relacion} onChange={(e) => setRelacion(e.target.value)}>
+                {RELACIONES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </NativeSelect>
             </div>
           </div>
           <DialogFooter>
@@ -481,7 +476,7 @@ export function TutoresPanel({ estudianteId, tutores, onChange }: Props) {
       {/* Confirmar quitar */}
       <Dialog open={!!quitarTarget} onOpenChange={(o: boolean) => { if (!o) setQuitarTarget(null); }}>
         <DialogContent className="max-w-sm">
-          <ModalHeaderIcon icon={AlertTriangle} tono="amber" title="¿Quitar tutor?" />
+          <ModalHeader title="¿Quitar tutor?" />
           <p className="text-sm text-gray-700 px-6 py-2">
             Vas a desvincular a <strong>{quitarTarget?.nombre}</strong> de este estudiante. El tutor no se elimina del sistema.
           </p>

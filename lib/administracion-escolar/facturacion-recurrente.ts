@@ -7,8 +7,56 @@ import {
   adminEscolarMatriculas,
   adminEscolarPeriodos,
 } from '@/lib/db/schema';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull } from 'drizzle-orm';
 import { mesPerteneceAlPeriodo } from './periodo-utils';
+
+/**
+ * ¿La mensualidad de ese mes ya se facturó a mano?
+ *
+ * La recurrente y el botón "Facturar" de la ficha llegan al mismo sitio por
+ * caminos distintos, y hasta ahora no se miraban: si la secretaria facturaba
+ * octubre el día 20, el cron del 25 emitía OTRA factura de octubre. La segunda
+ * ni siquiera podía engancharse al cargo —`reflejarFacturaRecurrenteEnCargo` no
+ * secuestra un cargo ya facturado— así que quedaba suelta, cobrándole dos veces
+ * al padre sin que nada avisara.
+ *
+ * Se mira el CARGO y no las facturas del período recurrente porque la factura
+ * manual no lleva `origenRecurrenteId`: por ahí son invisibles la una para la
+ * otra. El cargo del mes es lo único que las dos tocan.
+ */
+export async function mesYaFacturadoAMano(
+  facturaRecurrenteId: number,
+  periodo: string,
+): Promise<boolean> {
+  const [anio, mes] = periodo.split('-').map(Number);
+  if (!Number.isInteger(anio) || !Number.isInteger(mes)) return false;
+
+  const [matricula] = await db
+    .select({ id: adminEscolarMatriculas.id, teamId: adminEscolarMatriculas.teamId })
+    .from(adminEscolarMatriculas)
+    .where(eq(adminEscolarMatriculas.facturaRecurrenteId, facturaRecurrenteId))
+    .limit(1);
+  // Recurrente no escolar: no hay cargo que mirar y no hay nada que bloquear.
+  if (!matricula) return false;
+
+  const [yaFacturado] = await db
+    .select({ id: adminEscolarCargos.id })
+    .from(adminEscolarCargos)
+    .innerJoin(adminEscolarConceptosPago, and(
+      eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
+      eq(adminEscolarConceptosPago.teamId, matricula.teamId),
+    ))
+    .where(and(
+      eq(adminEscolarCargos.matriculaId, matricula.id),
+      eq(adminEscolarCargos.mes, mes),
+      eq(adminEscolarCargos.anio, anio),
+      eq(adminEscolarConceptosPago.tipo, 'mensualidad'),
+      isNotNull(adminEscolarCargos.ecfDocumentId),
+    ))
+    .limit(1);
+
+  return !!yaFacturado;
+}
 
 /**
  * Cada documento generado por una recurrente escolar crea (o completa) el

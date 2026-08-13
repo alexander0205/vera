@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -14,6 +13,7 @@ import Collapse from '@mui/material/Collapse';
 import { ArrowLeft, Copy, Check, ChevronDown, ChevronRight, AlertTriangle, Loader2, PackagePlus } from 'lucide-react';
 import { fmtFechaCorta } from '@/lib/utils/format';
 import { usePermissions } from '@/lib/hooks/usePermissions';
+import { useVolver } from '@/lib/hooks/useVolver';
 import type { RecepcionEcfDto } from '@/lib/ecf-api/client';
 import ModalRegistrarCompra from '../_modal-registrar-compra';
 
@@ -120,6 +120,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 export default function CompraDetallePage() {
   const { id } = useParams<{ id: string }>();
   const { can, isLoading: permLoading } = usePermissions();
+  const volver = useVolver('/dashboard/compras');
   const [showEntrada, setShowEntrada] = useState(false);
 
   const { data, isLoading, error } = useSWR<RecepcionEcfDto>(
@@ -150,11 +151,9 @@ export default function CompraDetallePage() {
     const msg = (error as { error?: string } | null)?.error ?? 'No se pudo cargar el detalle.';
     return (
       <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Link href="/dashboard/compras" style={{ textDecoration: 'none' }}>
-          <Button variant="text" startIcon={<ArrowLeft size={16} />} sx={{ textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
-            Volver a Compras
-          </Button>
-        </Link>
+        <Button onClick={volver} variant="text" startIcon={<ArrowLeft size={16} />} sx={{ alignSelf: 'flex-start', textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
+          Volver a Compras
+        </Button>
         <Alert severity="error" icon={<AlertTriangle size={16} />} sx={{ borderRadius: '8px' }}>{msg}</Alert>
       </Box>
     );
@@ -166,11 +165,9 @@ export default function CompraDetallePage() {
   return (
     <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
       {/* Back */}
-      <Link href="/dashboard/compras" style={{ textDecoration: 'none' }}>
-        <Button variant="text" startIcon={<ArrowLeft size={16} />} sx={{ textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
-          Volver a Compras
-        </Button>
-      </Link>
+      <Button onClick={volver} variant="text" startIcon={<ArrowLeft size={16} />} sx={{ alignSelf: 'flex-start', textTransform: 'none', color: '#6b7280', '&:hover': { color: '#374151' } }}>
+        Volver a Compras
+      </Button>
 
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>

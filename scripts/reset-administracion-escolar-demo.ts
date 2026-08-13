@@ -114,11 +114,11 @@ async function seedCleanSchool(tx: Tx) {
   const productId = Object.fromEntries(products.map((product) => [product.nombre, product.id]));
 
   const concepts = await tx<{ id: number; nombre: string }[]>`
-    INSERT INTO admin_escolar_conceptos_pago (team_id, nombre, tipo, recurrente, product_id, activo)
+    INSERT INTO admin_escolar_conceptos_pago (team_id, nombre, tipo, frecuencia, product_id, activo)
     VALUES
-      (${TEAM_ID}, 'Mensualidad', 'mensualidad', true, ${productId['Mensualidad escolar 2026-2027']}, true),
-      (${TEAM_ID}, 'Inscripción', 'inscripcion', false, ${productId['Inscripción escolar 2026-2027']}, true),
-      (${TEAM_ID}, 'Uniforme escolar', 'uniforme', false, ${productId['Uniforme escolar 2026-2027']}, true)
+      (${TEAM_ID}, 'Mensualidad', 'mensualidad', 'mensual', ${productId['Mensualidad escolar 2026-2027']}, true),
+      (${TEAM_ID}, 'Inscripción', 'inscripcion', 'unico', ${productId['Inscripción escolar 2026-2027']}, true),
+      (${TEAM_ID}, 'Uniforme escolar', 'uniforme', 'unico', ${productId['Uniforme escolar 2026-2027']}, true)
     RETURNING id, nombre
   `;
   const conceptId = Object.fromEntries(concepts.map((concept) => [concept.nombre, concept.id]));

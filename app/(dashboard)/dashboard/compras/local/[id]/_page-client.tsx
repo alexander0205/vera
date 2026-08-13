@@ -7,6 +7,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
+import { useVolver } from '@/lib/hooks/useVolver';
 
 interface CompraItem {
   id:             number;
@@ -75,6 +76,7 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
   const { data, isLoading } = useSWR<{ compra?: CompraDetalle; error?: string }>(
     `/api/compras/local/${compraId}`, fetcher,
   );
+  const volver = useVolver('/dashboard/compras');
 
   const compra = data?.compra;
 
@@ -91,9 +93,10 @@ export default function CompraLocalDetalleClient({ compraId }: { compraId: numbe
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box
-        component={Link}
-        href="/dashboard/compras"
-        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#6b7280', textDecoration: 'none', alignSelf: 'flex-start', '&:hover': { color: '#374151' } }}
+        component="button"
+        type="button"
+        onClick={volver}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', p: 0, textDecoration: 'none', alignSelf: 'flex-start', '&:hover': { color: '#374151' } }}
       >
         <ArrowLeft style={{ width: 16, height: 16 }} /> Compras
       </Box>

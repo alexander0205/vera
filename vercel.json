@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/escolar-devengo",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/escolar-avisos",
+      "schedule": "0,15,30,45 12-15 * * *"
     }
   ]
 }

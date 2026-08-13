@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarConceptosPago, adminEscolarConceptoPrecios, adminEscolarCargos,
-  adminEscolarMatriculas, products,
+  adminEscolarConceptoCuotas, adminEscolarMatriculas, products,
 } from '@/lib/db/schema';
 import { invalidarEstructura } from '@/lib/cache/escolar';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { camposCiclo } from '@/lib/administracion-escolar/ciclo-cobro';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNotNull, notInArray } from 'drizzle-orm';
 
 const TIPOS = ['inscripcion', 'mensualidad', 'uniforme', 'actividad', 'otro'];
 
@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { teamId } = auth;
   const { id } = await params;
   const body = await req.json();
-  const { nombre, tipo, recurrente, activo, productId } = body;
+  const { nombre, tipo, activo, productId } = body;
 
   if (productId !== undefined && productId !== null) {
     const [p] = await db.select({ id: products.id }).from(products)
@@ -30,7 +30,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .set({
       ...(nombre !== undefined ? { nombre: nombre.trim() } : {}),
       ...(tipo !== undefined ? { tipo: TIPOS.includes(tipo) ? tipo : 'otro' } : {}),
-      ...(recurrente !== undefined ? { recurrente } : {}),
       ...(activo !== undefined ? { activo } : {}),
       ...(productId !== undefined ? { productId } : {}),
       ...camposCiclo(body),
@@ -39,6 +38,66 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .where(and(eq(adminEscolarConceptosPago.id, parseInt(id)), eq(adminEscolarConceptosPago.teamId, teamId)))
     .returning();
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+
+  // La cuota del pago único se llama como el concepto, y esa etiqueta se copió
+  // el día que se generó el calendario. Sin esto, renombrar "Inscripción" a
+  // "Inscripción 2027" dejaba la cuota —y el recibo que ve el padre— con el
+  // nombre viejo, sin ninguna señal de que algo quedó atrás.
+  //
+  // Solo las que todavía no se facturaron: la etiqueta de una cuota ya cobrada
+  // es lo que el padre tiene en su recibo, y reescribirla cambiaría por detrás
+  // el concepto de una deuda que ya existe.
+  if (row.frecuencia === 'unico' && nombre !== undefined) {
+    // `isNotNull` no es decorativo: `NOT IN (…, NULL)` en SQL no devuelve
+    // NADA, así que un solo cargo viejo sin `cuota_id` haría que no se
+    // renombrara ninguna cuota y el fallo pasaría por "no hizo falta".
+    const yaFacturadas = db.select({ id: adminEscolarCargos.cuotaId })
+      .from(adminEscolarCargos)
+      .where(and(
+        eq(adminEscolarCargos.teamId, teamId),
+        eq(adminEscolarCargos.conceptoId, row.id),
+        isNotNull(adminEscolarCargos.cuotaId),
+      ));
+    await db.update(adminEscolarConceptoCuotas)
+      .set({ etiqueta: row.nombre, updatedAt: new Date() })
+      .where(and(
+        eq(adminEscolarConceptoCuotas.conceptoId, row.id),
+        eq(adminEscolarConceptoCuotas.teamId, teamId),
+        notInArray(adminEscolarConceptoCuotas.id, yaFacturadas),
+      ));
+  }
+
+  /**
+   * Apagar «se cobra varias veces al año» tiene que llevarse el calendario.
+   *
+   * Antes solo cambiaba la columna `frecuencia` y las cuotas se quedaban ahí.
+   * El motor de cobro las sigue leyendo —para él, tener cuotas ES tener
+   * calendario—, así que un concepto marcado "una sola vez" seguía cobrándose
+   * en la fecha del calendario viejo en vez del día de la matrícula. Un colegio
+   * que apagaba la recurrencia de "Inscripción" veía el cargo aparecer en
+   * septiembre, sin ninguna pista de por qué.
+   *
+   * Las ya facturadas NO se tocan: esa cuota es la deuda que un padre ya tiene,
+   * y borrar la fila dejaría su cargo apuntando a algo que no existe. Se
+   * conservan aunque desentonen; lo que estorba es el calendario futuro.
+   */
+  if (row.frecuencia === 'unico' && body.frecuencia !== undefined) {
+    const facturadas = db.select({ id: adminEscolarCargos.cuotaId })
+      .from(adminEscolarCargos)
+      .where(and(
+        eq(adminEscolarCargos.teamId, teamId),
+        eq(adminEscolarCargos.conceptoId, row.id),
+        // Sin esto, `NOT IN (…, NULL)` no devuelve NADA y no se borraría ninguna.
+        isNotNull(adminEscolarCargos.cuotaId),
+      ));
+    await db.delete(adminEscolarConceptoCuotas)
+      .where(and(
+        eq(adminEscolarConceptoCuotas.conceptoId, row.id),
+        eq(adminEscolarConceptoCuotas.teamId, teamId),
+        notInArray(adminEscolarConceptoCuotas.id, facturadas),
+      ));
+  }
+
   invalidarEstructura(teamId);
   return NextResponse.json({ concepto: row });
 }

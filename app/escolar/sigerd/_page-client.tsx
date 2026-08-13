@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -303,18 +304,24 @@ export default function SigerdPageClient() {
 function ResumenDatos() {
   const { data: estado, mutate } = useSWR<EstadoObtener>(CLAVE_ESTADO_SIGERD, traerEstado);
   const [borrando, setBorrando] = useState(false);
+  /**
+   * Confirmación propia, no `window.confirm`: en el navegador embebido de la
+   * app devuelve `false` al instante y sin enseñar nada, así que este botón
+   * —que borra TODO lo importado— no hacía absolutamente nada.
+   */
+  const [confirmando, setConfirmando] = useState(false);
+  const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
 
   async function eliminar() {
-    if (!confirm('¿Eliminar los datos guardados de SIGERD (estudiantes, secciones y personal)? Esta acción no se puede deshacer.')) return;
     setBorrando(true);
     try {
       const r = await fetch('/api/sigerd/obtener', { method: 'DELETE' });
       // Se revalida en vez de vaciar a mano: así la otra tarjeta que lee la
       // misma clave también se entera de que ya no hay datos.
-      if (r.ok) await mutate();
-      else alert('No se pudieron eliminar los datos.');
+      if (r.ok) { setConfirmando(false); setErrorBorrado(null); await mutate(); }
+      else setErrorBorrado('No se pudieron eliminar los datos.');
     } catch {
-      alert('No se pudieron eliminar los datos.');
+      setErrorBorrado('No se pudieron eliminar los datos.');
     } finally {
       setBorrando(false);
     }
@@ -356,13 +363,34 @@ function ResumenDatos() {
         <Button
           variant="outline"
           size="sm"
-          onClick={eliminar}
+          onClick={() => setConfirmando(true)}
           disabled={borrando}
           className="text-destructive hover:text-destructive"
         >
           {borrando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1.5 h-4 w-4" />}
           Eliminar datos guardados
         </Button>
+
+        <ConfirmDialog
+          open={confirmando}
+          onOpenChange={(o: boolean) => { if (!o && !borrando) { setConfirmando(false); setErrorBorrado(null); } }}
+          title="Eliminar los datos de SIGERD"
+          description={
+            <>
+              Se borran los estudiantes, las secciones y el personal traídos del
+              portal. No se puede deshacer: para recuperarlos hay que volver a
+              conectarse y sincronizar.
+              {errorBorrado && (
+                <span className="mt-2 block rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                  {errorBorrado}
+                </span>
+              )}
+            </>
+          }
+          confirmLabel="Eliminar"
+          destructive
+          loading={borrando}
+          onConfirm={() => void eliminar()} />
       </CardContent>
     </Card>
   );

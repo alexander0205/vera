@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarCargos, adminEscolarEstudianteTutores, adminEscolarTutores, ecfDocuments } from '@/lib/db/schema';
+import { adminEscolarCargos, adminEscolarEstudiantes, ecfDocuments } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { eq, and } from 'drizzle-orm';
 
@@ -53,24 +53,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Una factura escolar debe pertenecer al cliente del tutor responsable.
       // Sin este guard, un ID de factura válido del mismo team podía quedar
       // enlazado accidentalmente al cargo de otro estudiante/tutor.
+      // El responsable de pago es un CONTACTO del alumno
+      // (`facturar_a_client_id`). Leerlo del tutor con la casilla
+      // `responsable_pago` —que dejó de marcarse al separarse tutor y
+      // responsable— hacía que NINGUNA factura se pudiera enlazar a un cargo.
       const [responsable] = await tx
-        .select({ clientId: adminEscolarTutores.clientId })
-        .from(adminEscolarEstudianteTutores)
-        .innerJoin(adminEscolarTutores, and(
-          eq(adminEscolarEstudianteTutores.tutorId, adminEscolarTutores.id),
-          eq(adminEscolarTutores.teamId, teamId),
-        ))
+        .select({ clientId: adminEscolarEstudiantes.facturarAClientId })
+        .from(adminEscolarEstudiantes)
         .where(and(
-          eq(adminEscolarEstudianteTutores.teamId, teamId),
-          eq(adminEscolarEstudianteTutores.estudianteId, cargo.estudianteId),
-          eq(adminEscolarEstudianteTutores.responsablePago, true),
+          eq(adminEscolarEstudiantes.teamId, teamId),
+          eq(adminEscolarEstudiantes.id, cargo.estudianteId),
         ))
         .limit(1);
       if (!responsable?.clientId) {
-        throw new HttpError(400, 'El estudiante no tiene un tutor responsable vinculado a un contacto');
+        throw new HttpError(400, 'El estudiante no tiene responsable de pago asignado');
       }
       if (factura.clientId !== responsable.clientId) {
-        throw new HttpError(400, 'La factura pertenece a un contacto distinto al tutor responsable del estudiante');
+        throw new HttpError(400, 'La factura pertenece a un contacto distinto al responsable de pago del estudiante');
       }
 
       // Solo vincula. El cobro se hace luego en la factura; el saldo/estado del

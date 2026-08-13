@@ -12,6 +12,7 @@ import Tab from '@mui/material/Tab';
 import Chip from '@mui/material/Chip';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { fmtFechaCorta, fmtDOP } from '@/lib/utils/format';
+import { useVolver } from '@/lib/hooks/useVolver';
 import AlmacenesPosSection from './_almacenes-pos';
 
 interface Producto {
@@ -244,6 +245,8 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
     `/api/productos/${productoId}/maestros`, fetcher,
   );
 
+  const volver = useVolver('/dashboard/productos');
+
   const producto = prodData?.producto;
   const ventas    = ventasData?.ventas ?? [];
   const compras   = comprasData?.compras ?? [];
@@ -328,8 +331,8 @@ export default function ProductoDetalleClient({ productoId, posHabilitado = fals
 
   return (
     <Box component="section" sx={{ p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <MuiLink component={Link} href="/dashboard/productos"
-        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#6b7280', textDecoration: 'none', alignSelf: 'flex-start', '&:hover': { color: '#374151' } }}>
+      <MuiLink component="button" type="button" onClick={volver}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', p: 0, textDecoration: 'none', alignSelf: 'flex-start', '&:hover': { color: '#374151' } }}>
         <ArrowLeft style={{ width: 16, height: 16 }} /> Productos
       </MuiLink>
 

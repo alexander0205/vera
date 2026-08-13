@@ -6,7 +6,7 @@ import {
   adminEscolarConceptosPago, adminEscolarConceptoPrecios, products,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
-import { agruparProductos, raizConcepto } from '@/lib/administracion-escolar/agrupar-productos';
+import { cachearPorTag, invalidarEstructura, tagEstructura } from '@/lib/cache/escolar';
 
 const TIPOS_OBJ = new Set(['servicio', 'grado', 'seccion']);
 
@@ -23,32 +23,53 @@ export async function GET(req: NextRequest) {
   const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:ver');
   if (!auth.ok) return auth.response;
   const t = auth.teamId;
+  const pedidoUrl = Number(new URL(req.url).searchParams.get('periodoId')) || 0;
 
+  // Siete consultas para pintar una pantalla que casi nunca cambia: el año
+  // escolar, la estructura entera, los conceptos, las tarifas y el catálogo de
+  // productos. Se sirve de caché hasta que alguien toque algo, y cualquier
+  // escritura de estructura o tarifas lo invalida.
+  const datos = await cachearPorTag(
+    () => leer(t, pedidoUrl),
+    ['escolar', 'concepto-precios', String(t), String(pedidoUrl)],
+    [tagEstructura(t)],
+  )();
+  return NextResponse.json(datos);
+}
+
+/** La lectura de verdad, aparte para poder envolverla en caché. */
+async function leer(t: number, pedido: number) {
   const periodos = await db
     .select({ id: adminEscolarPeriodos.id, nombre: adminEscolarPeriodos.nombre, activo: adminEscolarPeriodos.activo })
     .from(adminEscolarPeriodos)
     .where(eq(adminEscolarPeriodos.teamId, t))
     .orderBy(desc(adminEscolarPeriodos.id));
 
-  const pedido = Number(new URL(req.url).searchParams.get('periodoId')) || 0;
   const periodo = periodos.find((p) => p.id === pedido)
     ?? periodos.find((p) => p.activo)
     ?? periodos[0];
 
   if (!periodo) {
-    return NextResponse.json({
+    return {
       periodos: [], periodo: null, servicios: [], grados: [], secciones: [],
-      conceptos: [], precios: [], productos: [], sugerencias: [],
-    });
+      conceptos: [], precios: [], productos: [],
+    };
   }
 
   const [servicios, conceptos, precios, productos] = await Promise.all([
     db.select({ id: adminEscolarServicios.id, nombre: adminEscolarServicios.nombre, tanda: adminEscolarServicios.tanda, orden: adminEscolarServicios.orden })
       .from(adminEscolarServicios)
       .where(and(eq(adminEscolarServicios.teamId, t), eq(adminEscolarServicios.periodoId, periodo.id)))
-      .orderBy(asc(adminEscolarServicios.orden)),
-    db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre, tipo: adminEscolarConceptosPago.tipo, recurrente: adminEscolarConceptosPago.recurrente })
-      .from(adminEscolarConceptosPago).where(eq(adminEscolarConceptosPago.teamId, t)).orderBy(asc(adminEscolarConceptosPago.nombre)),
+      // El nombre desempata en los tres niveles: dos filas con el mismo
+      // `orden` —un empate heredado, o algo recién creado— saldrían en orden de
+      // la base, que puede cambiar entre dos lecturas y hace bailar la lista.
+      .orderBy(asc(adminEscolarServicios.orden), asc(adminEscolarServicios.nombre)),
+    // Por `orden` y no por nombre: es el que el colegio arregló a mano en la
+    // pestaña Conceptos, y verlos en otro sitio en otro orden obliga a buscar
+    // dos veces el mismo concepto.
+    db.select({ id: adminEscolarConceptosPago.id, nombre: adminEscolarConceptosPago.nombre, tipo: adminEscolarConceptosPago.tipo, frecuencia: adminEscolarConceptosPago.frecuencia, orden: adminEscolarConceptosPago.orden })
+      .from(adminEscolarConceptosPago).where(eq(adminEscolarConceptosPago.teamId, t))
+      .orderBy(asc(adminEscolarConceptosPago.orden), asc(adminEscolarConceptosPago.nombre)),
     db.select().from(adminEscolarConceptoPrecios)
       .where(and(eq(adminEscolarConceptoPrecios.teamId, t), eq(adminEscolarConceptoPrecios.periodoId, periodo.id))),
     db.select({ id: products.id, nombre: products.nombre, referencia: products.referencia, precio: products.precio })
@@ -60,24 +81,19 @@ export async function GET(req: NextRequest) {
   const idsServicio = new Set(servicios.map((s) => s.id));
   const grados = (await db
     .select({ id: adminEscolarGrados.id, servicioId: adminEscolarGrados.servicioId, nombre: adminEscolarGrados.nombre, orden: adminEscolarGrados.orden })
-    .from(adminEscolarGrados).where(eq(adminEscolarGrados.teamId, t)).orderBy(asc(adminEscolarGrados.orden))
+    .from(adminEscolarGrados).where(eq(adminEscolarGrados.teamId, t))
+    .orderBy(asc(adminEscolarGrados.orden), asc(adminEscolarGrados.nombre))
   ).filter((g) => idsServicio.has(g.servicioId));
 
   const idsGrado = new Set(grados.map((g) => g.id));
   const secciones = (await db
-    .select({ id: adminEscolarCursos.id, gradoId: adminEscolarCursos.gradoId, nombre: adminEscolarCursos.nombre })
-    .from(adminEscolarCursos).where(eq(adminEscolarCursos.teamId, t)).orderBy(asc(adminEscolarCursos.nombre))
+    .select({ id: adminEscolarCursos.id, gradoId: adminEscolarCursos.gradoId, nombre: adminEscolarCursos.nombre, orden: adminEscolarCursos.orden })
+    .from(adminEscolarCursos).where(eq(adminEscolarCursos.teamId, t))
+    .orderBy(asc(adminEscolarCursos.orden), asc(adminEscolarCursos.nombre))
   ).filter((s) => idsGrado.has(s.gradoId));
 
-  // Asistente: lo que el colegio ya factura y todavía no es un concepto.
-  const sugerencias = agruparProductos(
-    productos.filter((p) => !NO_ES_CARGO.test(p.nombre)),
-    new Set(conceptos.map((c) => raizConcepto(c.nombre))),
-  );
 
-  return NextResponse.json({
-    periodos, periodo, servicios, grados, secciones, conceptos, precios, productos, sugerencias,
-  });
+  return { periodos, periodo, servicios, grados, secciones, conceptos, precios, productos };
 }
 
 /**
@@ -151,6 +167,7 @@ export async function POST(req: NextRequest) {
       set: { montoCentavos, ...(prodId != null ? { productId: prodId } : {}), updatedAt: new Date() },
     })
     .returning();
+  invalidarEstructura(t);
   return NextResponse.json({ precio: row });
 }
 
@@ -164,36 +181,6 @@ export async function DELETE(req: NextRequest) {
     .where(and(eq(adminEscolarConceptoPrecios.id, id), eq(adminEscolarConceptoPrecios.teamId, auth.teamId)))
     .returning({ id: adminEscolarConceptoPrecios.id });
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+  invalidarEstructura(auth.teamId);
   return NextResponse.json({ ok: true });
-}
-
-/** Crea de un tirón los conceptos que el colegio ya factura. */
-export async function PUT(req: NextRequest) {
-  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:configurar');
-  if (!auth.ok) return auth.response;
-  const t = auth.teamId;
-  const { nombres } = await req.json();
-  if (!Array.isArray(nombres) || nombres.length === 0) {
-    return NextResponse.json({ error: 'Nada que traer' }, { status: 400 });
-  }
-
-  const existentes = await db.select({ nombre: adminEscolarConceptosPago.nombre })
-    .from(adminEscolarConceptosPago).where(eq(adminEscolarConceptosPago.teamId, t));
-  const ya = new Set(existentes.map((c) => c.nombre.trim().toLowerCase()));
-
-  const aCrear = (nombres as unknown[])
-    .map((n) => String(n).trim())
-    .filter((n) => n && !ya.has(n.toLowerCase()));
-  if (aCrear.length === 0) return NextResponse.json({ conceptos: [] });
-
-  const creados = await db.insert(adminEscolarConceptosPago).values(
-    aCrear.map((nombre) => ({
-      teamId: t,
-      nombre,
-      // La colegiatura es lo único que se cobra mes a mes; lo demás es de una vez.
-      tipo: /colegiatura|mensualidad/i.test(nombre) ? 'mensualidad' : 'otro',
-      recurrente: /colegiatura|mensualidad/i.test(nombre),
-    })),
-  ).returning();
-  return NextResponse.json({ conceptos: creados });
 }

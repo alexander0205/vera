@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
   Box,
   Typography,
@@ -25,6 +24,7 @@ import { TIPO_ECF_REGLAS } from '@/lib/ecf/types';
 import { describirMora } from '@/lib/cobranza/mora-calculo';
 import { useProximamenteDialog } from '@/components/proximamente-dialog';
 import { useTiposDisponibles } from '@/lib/hooks/useTiposDisponibles';
+import { useVolver } from '@/lib/hooks/useVolver';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 
 import { SectionCard } from '../../facturas/nueva/sections/SectionCard';
@@ -194,6 +194,7 @@ interface Props {
 
 export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan, contextoEscolar }: Props) {
   const router = useRouter();
+  const volver = useVolver('/dashboard/facturas-recurrentes');
   const empresa = initialPerfil;
   const isEdit = Boolean(initialPlan);
   const { tipoVisible, enProduccion } = useTiposDisponibles();
@@ -598,8 +599,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
         {/* Back nav */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
           <Button
-            component={Link}
-            href="/dashboard/facturas-recurrentes"
+            onClick={volver}
             variant="text"
             size="small"
             startIcon={<ArrowLeft size={16} />}
@@ -1320,7 +1320,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
             loading={loading}
             primaryLabel={isEdit ? 'Guardar cambios' : 'Guardar y activar suscripción'}
             loadingPrimaryLabel="Guardando…"
-            onCancelar={() => router.push('/dashboard/facturas-recurrentes')}
+            onCancelar={volver}
           />
         </Box>
       </Box>

@@ -16,24 +16,58 @@ import Typography from '@mui/material/Typography';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  GraduationCap, Users, ClipboardList, Receipt, Wallet, Settings, FileText, DownloadCloud, Contact, ClipboardCheck,
+  Users, ClipboardList, Receipt, Wallet, Settings, Contact, ClipboardCheck, FileText, BellRing,
+  LayoutDashboard,
 } from 'lucide-react';
 
 const RAIL = 68;
 const OPEN = 224;
 
-type Item = { href: string; label: string; icon: typeof Users };
+type Item = { href: string; label: string; icon: typeof Users; oculto?: boolean };
 
+// El orden lo manda cuánto se usa cada pantalla, y después a quién mira.
+// Matriculación y Estudiantes van pegadas porque se salta de una a otra todo el
+// día: la matrícula ES el alumno inscrito en un curso, con sus padres detrás.
+//
+// `oculto` deja la entrada fuera del menú SIN borrar la pantalla: sigue viva y
+// alcanzable por URL. Es para lo que todavía no se va a usar, y quitarle el
+// sitio en el menú es más honesto que enseñar una sección vacía. Volver a
+// enseñarla es borrar la marca.
 const ITEMS: Item[] = [
-  { href: '/escolar/estudiantes',   label: 'Estudiantes',    icon: Users },
-  { href: '/escolar/personal',      label: 'Personal',       icon: Contact },
-  { href: '/escolar/condicion-academica', label: 'Condición académica', icon: ClipboardCheck },
-  { href: '/escolar/matriculas',    label: 'Matrículas',     icon: ClipboardList },
-  { href: '/escolar/cargos',        label: 'Cargos y deudas', icon: Receipt },
+  // El panorama va primero aunque no sea la más usada: la abre el dueño, no la
+  // secretaria, y quien entra a mirar cómo va el dinero no tiene por qué saber
+  // que eso se deduce de «Cargos». Las demás siguen ordenadas por uso diario.
+  { href: '/escolar/dashboard',     label: 'Panorama',       icon: LayoutDashboard },
+  // Matriculación va después: es la pantalla que más se abre. Inscribir a un
+  // alumno es el trabajo diario del colegio; consultarlo, lo de después.
+  { href: '/escolar/matriculas',    label: 'Matriculación',  icon: ClipboardList },
+  { href: '/escolar/estudiantes',   label: 'Estudiantes y padres', icon: Users },
+  // Se mudó de Configuración: el checklist de qué papel se pide (antes una
+  // pestaña ahí) ahora vive junto al constructor de formularios propios, y
+  // ambos se usan bastante más seguido que una pestaña de configuración.
+  //
+  // "Documentos" a secas y no "Documentos y formularios": el rail abierto mide
+  // 224 px y el texto va con `nowrap`, así que la etiqueta larga se cortaba a
+  // media palabra ("Documentos y formular"). Dentro, las pestañas Requeridos y
+  // Formularios dicen lo que hay; el menú solo tiene que llevarte hasta ahí.
+  { href: '/escolar/documentos',    label: 'Documentos', icon: FileText },
+  { href: '/escolar/condicion-academica', label: 'Condición académica', icon: ClipboardCheck, oculto: true },
+  { href: '/escolar/personal',      label: 'Personal',       icon: Contact, oculto: true },
+  { href: '/escolar/cargos',        label: 'Cargos y deudas', icon: Receipt, oculto: true },
+  // Las familias que pagan. Va antes de Pagos porque la pregunta llega en ese
+  // orden: primero quién debe, después qué entró.
+  { href: '/escolar/responsables',  label: 'Responsables',   icon: Contact },
   { href: '/escolar/pagos',         label: 'Pagos',          icon: Wallet },
-  { href: '/escolar/sigerd',        label: 'SIGERD',         icon: DownloadCloud },
+  // Los recordatorios de cobro se mandan solos, y eso es justo el problema:
+  // sin una pantalla que lo enseñe, nadie se entera de que a tres familias no
+  // les llegó nada. Va junto a Pagos porque es la otra mitad de cobrar.
+  { href: '/escolar/avisos',        label: 'Avisos',         icon: BellRing },
+  // SIGERD se fue a Configuración: se usa al montar el colegio y una vez al
+  // año, y aquí ocupaba el sitio de algo que se abre a diario.
   { href: '/escolar/configuracion', label: 'Configuración',  icon: Settings },
 ];
+
+const VISIBLES = ITEMS.filter((it) => !it.oculto);
 
 /**
  * `variant`:
@@ -80,7 +114,7 @@ export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawe
         <RailBrand modulo="escolar" />
 
         <Box sx={{ flex: 1, overflowY: 'auto', px: 1.25, py: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {ITEMS.map(it => {
+          {VISIBLES.map(it => {
             const active = pathname.startsWith(it.href);
             return (
               <Box

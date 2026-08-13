@@ -8,6 +8,7 @@ import { WebVitals } from './(dashboard)/dashboard/_web-vitals';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { MuiProviders } from '@/components/mui-providers';
 import { ScriptTapaLlegada } from '@/components/loader-llegada';
+import { RastreadorDeNavegacion } from '@/lib/hooks/useVolver';
 
 export const metadata: Metadata = {
   title: 'Zero — Facturación Electrónica República Dominicana',
@@ -66,6 +67,10 @@ export default function RootLayout({
         {/* Antes que nada: si se viene de otro módulo, tapa la pantalla ya,
             sin esperar a que React hidrate. */}
         <ScriptTapaLlegada />
+        {/* Lleva la cuenta de las navegaciones dentro de la app para que los
+            botones de volver puedan retroceder por el historial en vez de
+            empujar siempre su ruta fija. No pinta nada. */}
+        <RastreadorDeNavegacion />
         <WebVitals />
         <AppRouterCacheProvider>
           <MuiProviders>
