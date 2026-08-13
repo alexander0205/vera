@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, desc, inArray } from 'drizzle-orm';
+import { and, eq, desc, inArray, isNotNull } from 'drizzle-orm';
 import { requirePermission } from '@/lib/auth/api-guard';
 import { db } from '@/lib/db/drizzle';
 import { ecfDocuments, pagosRecibidos, users, comandas, mesas, cajaTurnos } from '@/lib/db/schema';
@@ -53,6 +53,9 @@ export async function GET(req: NextRequest) {
   const condiciones = [
     eq(ecfDocuments.teamId, teamId),
     eq(ecfDocuments.turnoCajaId, turnoId),
+    // Un turno puede contener un cobro de Facturación; tipoOrden solo lo
+    // estampa el POS y evita clasificar esas facturas como recibos POS.
+    isNotNull(ecfDocuments.tipoOrden),
     ...(tipoOrdenFiltro ? [eq(ecfDocuments.tipoOrden, tipoOrdenFiltro)] : []),
   ];
 

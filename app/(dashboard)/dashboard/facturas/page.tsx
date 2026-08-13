@@ -96,6 +96,7 @@ interface Doc {
   createdByName?: string | null;
   dependienteNombre?: string | null;
   turnoCajaId?: number | null;
+  tipoOrden?: string | null;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -223,7 +224,7 @@ export default function FacturasPage() {
           >
             {doc.codigo ?? `#${doc.id}`}
           </Typography>
-          {doc.turnoCajaId != null && (
+          {doc.tipoOrden != null && (
             <Chip
               icon={<Store style={{ width: 11, height: 11 }} />}
               label="POS"

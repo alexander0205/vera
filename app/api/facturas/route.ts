@@ -120,8 +120,10 @@ export async function GET(req: NextRequest) {
         )`,
         createdByName:     users.name,
         dependienteNombre: ecfDocuments.dependienteNombre,
-        // Ventas del POS traen turno de caja: se resaltan en el listado.
+        // Un turno concilia el cobro, pero no identifica el origen: Facturación
+        // también puede cobrar mientras hay turno abierto. `tipoOrden` es POS.
         turnoCajaId:       ecfDocuments.turnoCajaId,
+        tipoOrden:         ecfDocuments.tipoOrden,
       })
       .from(ecfDocuments)
       .leftJoin(users, eq(users.id, ecfDocuments.createdBy))
