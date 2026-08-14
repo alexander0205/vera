@@ -57,6 +57,7 @@ export interface MatriculaEditable {
   estudianteNombre?: string | null;
   periodoId: number;
   cursoId: number;
+  documentoListaId?: number | null;
   fechaInscripcion: string | null;
   estado: string;
   codigoMatricula: string | null;
@@ -139,8 +140,10 @@ export function MatriculaDialog({
   const [periodos, setPeriodos] = useState<Periodo[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [estudiantes, setEstudiantes] = useState<EstudianteOpcion[]>([]);
+  /** Los listados de documentos que el colegio tenga configurados. */
+  const [listasDoc, setListasDoc] = useState<{ id: number; nombre: string; documentos: number }[]>([]);
   const [form, setForm] = useState({
-    estudianteId: '', periodoId: '', cursoId: '',
+    estudianteId: '', periodoId: '', cursoId: '', documentoListaId: '',
     codigoMatricula: '', fechaInscripcion: hoy(), notas: '', estado: 'activa',
   });
   /**
@@ -170,11 +173,19 @@ export function MatriculaDialog({
       estudianteFijoId != null ? Promise.resolve({ estudiantes: [] }) :
         fetch('/api/administracion-escolar/estudiantes/opciones').then((r) => r.json()),
     ];
-    const [p, c, e] = await Promise.all(pide);
+    const [p, c, e, l] = await Promise.all([
+      ...pide,
+      // Si el colegio no configuró ninguno, el selector no se enseña: un
+      // desplegable con una sola opción vacía solo confunde.
+      fetch('/api/administracion-escolar/documentos/listas')
+        .then((r) => (r.ok ? r.json() : { listas: [] }))
+        .catch(() => ({ listas: [] })),
+    ]);
     const lista: Periodo[] = p.periodos ?? [];
     setPeriodos(lista);
     setCursos(c.cursos ?? []);
     setEstudiantes(e.estudiantes ?? []);
+    setListasDoc(l.listas ?? []);
     return lista.find((x) => x.activo) ?? null;
   }, [estudianteFijoId]);
 
@@ -190,6 +201,7 @@ export function MatriculaDialog({
         estudianteId: String(matricula.estudianteId ?? estudianteFijoId ?? ''),
         periodoId: String(matricula.periodoId),
         cursoId: String(matricula.cursoId),
+        documentoListaId: matricula.documentoListaId ? String(matricula.documentoListaId) : '',
         fechaInscripcion: matricula.fechaInscripcion ?? hoy(),
         estado: matricula.estado,
         codigoMatricula: matricula.codigoMatricula ?? '',
@@ -199,7 +211,7 @@ export function MatriculaDialog({
     } else {
       setForm({
         estudianteId: estudianteFijoId != null ? String(estudianteFijoId) : '',
-        periodoId: '', cursoId: '',
+        periodoId: '', cursoId: '', documentoListaId: '',
         fechaInscripcion: hoy(), estado: 'activa',
         codigoMatricula: codigoSugerido ?? '', notas: '',
       });
@@ -288,6 +300,7 @@ export function MatriculaDialog({
             ...(editando ? {} : { estudianteId: Number(form.estudianteId) }),
             periodoId: Number(form.periodoId),
             cursoId: Number(form.cursoId),
+            documentoListaId: form.documentoListaId ? Number(form.documentoListaId) : null,
             codigoMatricula: form.codigoMatricula || null,
             fechaInscripcion: form.fechaInscripcion || null,
             notas: form.notas || null,
@@ -380,6 +393,25 @@ export function MatriculaDialog({
               valor={form.cursoId}
               onChange={(v) => setForm((f) => ({ ...f, cursoId: v }))}
             />
+
+            {/* Qué papeles se le piden a esta familia. Se elige a mano porque
+                el colegio sabe cuál toca —«este viene de traslado»— y ninguna
+                regla automática acierta en los casos raros, que son justo los
+                que se atascan en recepción. */}
+            {listasDoc.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Documentos que se le piden</Label>
+                <NativeSelect value={form.documentoListaId}
+                  onChange={(e) => setForm((f) => ({ ...f, documentoListaId: e.target.value }))}>
+                  <option value="">Ninguno por ahora</option>
+                  {listasDoc.map((l) => (
+                    <option key={l.id} value={String(l.id)}>
+                      {l.nombre}{l.documentos === 0 ? ' — vacío' : ` (${l.documentos})`}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

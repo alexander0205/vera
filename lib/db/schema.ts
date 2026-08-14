@@ -1994,6 +1994,12 @@ export const adminEscolarMatriculas = pgTable('admin_escolar_matriculas', {
   estudianteId:     integer('estudiante_id').notNull().references(() => adminEscolarEstudiantes.id),
   periodoId:        integer('periodo_id').notNull().references(() => adminEscolarPeriodos.id),
   cursoId:          integer('curso_id').notNull().references(() => adminEscolarCursos.id),
+  /**
+   * Qué papeles se le pidieron a esta familia. Lo elige quien matricula.
+   * Nulo en las matrículas anteriores a los listados: su checklist sale por el
+   * camino viejo (nivel + tipo) hasta que alguien le asigne uno.
+   */
+  documentoListaId: integer('documento_lista_id'),
   codigoMatricula:  varchar('codigo_matricula', { length: 40 }),
   fechaInscripcion: date('fecha_inscripcion'),
   /** Condición académica final de SIGERD (Promovido/Reprobado/Aplazado…). Nullable. */
@@ -2268,13 +2274,19 @@ export const adminEscolarCanales = pgTable('admin_escolar_canales', {
 export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados', {
   id:      serial('id').primaryKey(),
   teamId:  integer('team_id').notNull().references(() => teams.id),
-  cargoId: integer('cargo_id').notNull().references(() => adminEscolarCargos.id),
-  /** al-emitir | antes-vencer | al-vencer: los tres momentos de la factura. */
-  tipo:    varchar('tipo', { length: 12 }).notNull(),
+  /** De qué cuota. NULL en los avisos que no son de cobro. */
+  cargoId: integer('cargo_id').references(() => adminEscolarCargos.id),
+  /** De qué matrícula, cuando el aviso es del expediente y no de una cuota:
+   *  el enlace para subir documentos, un formulario mandado a la familia. */
+  matriculaId: integer('matricula_id').references(() => adminEscolarMatriculas.id, { onDelete: 'cascade' }),
+  /** al-emitir | antes-vencer | al-vencer (cobro) · documentos | formulario. */
+  tipo:    varchar('tipo', { length: 20 }).notNull(),
   /** Días respecto al hito del `tipo`: 5 = cinco días antes. */
   offsetDias: smallint('offset_dias').notNull(),
   canal:   varchar('canal', { length: 12 }).notNull(),
   destino: varchar('destino', { length: 200 }),
+  /** Qué se mandó, en palabras: «Acta de nacimiento», «Ficha de datos». */
+  detalle: varchar('detalle', { length: 200 }),
   enviadoAt: timestamp('enviado_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('admin_escolar_avisos_unico').on(t.cargoId, t.tipo, t.offsetDias, t.canal),
@@ -2360,15 +2372,43 @@ export type NewAdminEscolarConceptoPago = typeof adminEscolarConceptosPago.$infe
 export type AdminEscolarCargo      = typeof adminEscolarCargos.$inferSelect;
 export type NewAdminEscolarCargo   = typeof adminEscolarCargos.$inferInsert;
 /**
+ * Un listado de documentos con nombre.
+ *
+ * El colegio arma los que necesite —«Admisión inicial», «Traslado de otro
+ * centro», «Reinscripción»— y al matricular se elige uno. Antes esto se
+ * deducía cruzando el nivel del alumno con el tipo de inscripción, y salían
+ * doce listas casi iguales que nadie mantenía. Quien recibe a la familia no
+ * piensa en ese cruce: piensa «este viene de traslado».
+ */
+export const adminEscolarDocumentoListas = pgTable('admin_escolar_documento_listas', {
+  id:        serial('id').primaryKey(),
+  teamId:    integer('team_id').notNull().references(() => teams.id),
+  nombre:    varchar('nombre', { length: 120 }).notNull(),
+  orden:     smallint('orden').notNull().default(0),
+  activo:    boolean('activo').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_doc_listas_team_idx').on(t.teamId, t.orden),
+]);
+
+/**
  * Lo que el colegio le EXIGE a la familia al matricular.
  *
- * Se guarda el `nivel` por nombre y no el id del servicio porque los servicios
- * cuelgan de un período: hay un "Primario · Matutina" por año escolar, y un id
- * obligaría a rehacer la configuración cada agosto.
+ * `listaId` es el dueño real desde 0129. `nivel` y `tipoInscripcion` se quedan
+ * por las filas viejas —y porque la columna del tipo es NOT NULL— pero ya no
+ * deciden qué se pide: eso lo dice el listado elegido en la matrícula.
  */
 export const adminEscolarDocumentosRequeridos = pgTable('admin_escolar_documentos_requeridos', {
   id:              serial('id').primaryKey(),
   teamId:          integer('team_id').notNull().references(() => teams.id),
+  listaId:         integer('lista_id').references(() => adminEscolarDocumentoListas.id, { onDelete: 'cascade' }),
+  /** Puesto = se le pide SOLO a esa matrícula, no al listado entero. Es el
+   *  caso suelto: la carta del pediatra, el permiso de viaje. */
+  matriculaId:     integer('matricula_id').references(() => adminEscolarMatriculas.id, { onDelete: 'cascade' }),
+  /** El renglón no es un papel que se sube, sino un formulario que la familia
+   *  contesta por un enlace. */
+  formularioId:    integer('formulario_id').references(() => adminEscolarFormularios.id, { onDelete: 'set null' }),
   /** NULL = vale para todos los niveles. */
   nivel:           varchar('nivel', { length: 60 }),
   /** 'nuevo' | 'reinscripcion' */
@@ -2556,8 +2596,17 @@ export const adminEscolarFormularioRespuestas = pgTable('admin_escolar_formulari
   estudianteId:     integer('estudiante_id').references(() => adminEscolarEstudiantes.id, { onDelete: 'set null' }),
   matriculaId:      integer('matricula_id').references(() => adminEscolarMatriculas.id, { onDelete: 'set null' }),
   datos:            jsonb('datos').notNull().default({}),
-  /** 'pendiente' | 'aplicada' | 'rechazada' */
+  /** 'borrador' | 'pendiente' | 'aplicada' | 'rechazada'.
+   *  'borrador' es una ficha a medio llenar: NO cuenta como respuesta y no
+   *  debe aparecerle al colegio en la bandeja. */
   estado:           varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  /** Llave del enlace de continuación (`/f/<slug>/r/<token>`). 32 bytes al
+   *  azar en base64url. NULL en las respuestas enviadas de una sentada. */
+  token:            varchar('token', { length: 43 }),
+  /** Por qué paso iba, para devolverlo donde lo dejó y no al principio. */
+  pagina:           integer('pagina').notNull().default(0),
+  /** Cuándo se envió de verdad. NULL mientras sea borrador. */
+  enviadoEn:        timestamp('enviado_en'),
   aplicadaEn:       timestamp('aplicada_en'),
   aplicadaPor:      integer('aplicada_por').references(() => users.id),
   motivo:           text('motivo'),
@@ -2565,8 +2614,10 @@ export const adminEscolarFormularioRespuestas = pgTable('admin_escolar_formulari
   ip:               varchar('ip', { length: 60 }),
   userAgent:        text('user_agent'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('admin_escolar_form_resp_form_idx').on(t.formularioId, t.createdAt),
+  uniqueIndex('admin_escolar_form_resp_token_idx').on(t.token),
   index('admin_escolar_form_resp_estudiante_idx').on(t.estudianteId),
   index('admin_escolar_form_resp_pendientes_idx').on(t.teamId, t.estado),
 ]);

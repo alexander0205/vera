@@ -235,17 +235,20 @@ interface AvisoProgramado {
 interface AvisoEnviado {
   id: number;
   enviadoAt: string;
-  /** al-emitir | al-vencer | antes-mora */
+  /** al-emitir | al-vencer | antes-mora (cobro) · documentos | formulario. */
   tipo: string;
   canal: string;
   /** El correo o número al que salió, tal como estaba ese día. */
   destino: string | null;
-  cargoId: number;
+  /** Qué se mandó, en palabras, cuando el aviso no es de cobro. */
+  detalle: string | null;
+  /** NULL en los avisos del expediente: no cuelgan de ninguna cuota. */
+  cargoId: number | null;
   concepto: string | null;
   mes: number | null;
-  anio: number;
-  montoCentavos: number;
-  saldoCentavos: number;
+  anio: number | null;
+  montoCentavos: number | null;
+  saldoCentavos: number | null;
 }
 
 interface PagoSuelto {
@@ -1172,6 +1175,9 @@ function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, a
   const enviadosPorCargo = useMemo(() => {
     const m = new Map<number, Set<string>>();
     for (const a of avisos) {
+      // Los avisos del expediente no cuelgan de ninguna cuota: nada que marcar
+      // en la columna de canales de un cargo.
+      if (a.cargoId == null) continue;
       const s = m.get(a.cargoId) ?? new Set<string>();
       s.add(a.canal);
       m.set(a.cargoId, s);
@@ -3286,7 +3292,11 @@ function AvisosEstudiante({ avisos, programados }: {
                 <th className="px-3 py-2 font-medium">{filtro === 'mes' ? 'Cuándo sale' : 'Cuándo salió'}</th>
                 <th className="px-3 py-2 font-medium">Aviso</th>
                 <th className="px-3 py-2 font-medium">Canal</th>
-                <th className="px-3 py-2 font-medium">Por qué cobro</th>
+                {/* Neutro: aquí caen los avisos de cobro y los del expediente,
+                    y «por qué cobro» dejaba en falso a los segundos. */}
+                <th className="px-3 py-2 font-medium">
+                  {filtro === 'mes' ? 'Por qué cobro' : 'Sobre qué'}
+                </th>
                 <th className="px-3 py-2 font-medium">{filtro === 'mes' ? 'Monto' : 'A dónde fue'}</th>
               </tr>
             </thead>
@@ -3316,11 +3326,20 @@ function AvisosEstudiante({ avisos, programados }: {
                   <td className="px-3 py-2.5 text-gray-800">{AVISO_TEXTO[a.tipo] ?? a.tipo}</td>
                   <td className="px-3 py-2.5"><CanalChip canal={a.canal} /></td>
                   <td className="px-3 py-2.5">
-                    <span className="text-gray-900">{a.concepto ?? 'Sin concepto'}</span>
-                    <span className="block text-xs text-gray-400">
-                      {a.mes ? `${MESES[a.mes]} ${a.anio}` : a.anio} · {fmtDOP(a.montoCentavos)}
-                      {a.saldoCentavos === 0 ? ' · ya pagado' : ''}
-                    </span>
+                    {/* No todo aviso es de cobro: el enlace de documentos y los
+                        formularios cuelgan de la matrícula, no de una cuota, y
+                        no tienen concepto ni monto que enseñar. */}
+                    {a.cargoId == null ? (
+                      <span className="text-gray-900">{a.detalle ?? 'Expediente'}</span>
+                    ) : (
+                      <>
+                        <span className="text-gray-900">{a.concepto ?? 'Sin concepto'}</span>
+                        <span className="block text-xs text-gray-400">
+                          {a.mes ? `${MESES[a.mes]} ${a.anio}` : a.anio} · {fmtDOP(a.montoCentavos ?? 0)}
+                          {a.saldoCentavos === 0 ? ' · ya pagado' : ''}
+                        </span>
+                      </>
+                    )}
                   </td>
                   {/* El destino tal como estaba ese día: el teléfono de hoy
                       puede ser otro, y la constancia es de entonces. */}
@@ -3394,6 +3413,9 @@ const AVISO_TEXTO: Record<string, string> = {
   'al-emitir': 'Factura nueva',
   'al-vencer': 'Venció hoy',
   'antes-mora': 'Antes del recargo',
+  // Los del expediente: no son cobros.
+  documentos: 'Enlace de documentos',
+  formulario: 'Formulario',
 };
 
 const CANAL_META: Record<string, { label: string; icon: typeof Mail }> = {

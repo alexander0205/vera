@@ -13,7 +13,7 @@
  * ficha y ellas no se separen el día que cambie una columna.
  */
 
-import { and, desc, eq, gt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarAvisosEnviados,
@@ -392,8 +392,11 @@ export async function pagosSueltosDeEstudiante(teamId: number, dependienteId: nu
  * la hora, por qué canal y a qué número o correo salió — el destino tal como
  * estaba ese día, no el de hoy, que puede ser otro.
  *
- * Se ata al CARGO, así que cada aviso dice de qué cobro hablaba. Un aviso
- * suelto, sin cargo detrás, no existe: el motor solo escribe sobre deuda.
+ * Casi todos cuelgan de un CARGO, y por eso dicen de qué cobro hablaban. Pero
+ * no todos: al enlace para subir documentos y a los formularios que se le
+ * mandan a la familia no hay cuota que atarlos, y cuelgan de la matrícula. Los
+ * dos van juntos aquí a propósito — cuando la familia dice «a mí no me
+ * mandaron nada», la secretaria abre UNA pantalla, no dos.
  */
 export function avisosDeEstudiante(teamId: number, estudianteId: number) {
   return db
@@ -403,6 +406,7 @@ export function avisosDeEstudiante(teamId: number, estudianteId: number) {
       tipo: adminEscolarAvisosEnviados.tipo,
       canal: adminEscolarAvisosEnviados.canal,
       destino: adminEscolarAvisosEnviados.destino,
+      detalle: adminEscolarAvisosEnviados.detalle,
       cargoId: adminEscolarCargos.id,
       concepto: adminEscolarConceptosPago.nombre,
       mes: adminEscolarCargos.mes,
@@ -411,14 +415,20 @@ export function avisosDeEstudiante(teamId: number, estudianteId: number) {
       saldoCentavos: adminEscolarCargos.saldoCentavos,
     })
     .from(adminEscolarAvisosEnviados)
-    .innerJoin(adminEscolarCargos, eq(adminEscolarAvisosEnviados.cargoId, adminEscolarCargos.id))
+    // LEFT y no INNER: con INNER, un aviso sin cargo —los del expediente— se
+    // caía de la lista sin que nadie lo notara.
+    .leftJoin(adminEscolarCargos, eq(adminEscolarAvisosEnviados.cargoId, adminEscolarCargos.id))
+    .leftJoin(adminEscolarMatriculas, eq(adminEscolarAvisosEnviados.matriculaId, adminEscolarMatriculas.id))
     .leftJoin(adminEscolarConceptosPago, and(
       eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id),
       eq(adminEscolarConceptosPago.teamId, teamId),
     ))
     .where(and(
       eq(adminEscolarAvisosEnviados.teamId, teamId),
-      eq(adminEscolarCargos.estudianteId, estudianteId),
+      or(
+        eq(adminEscolarCargos.estudianteId, estudianteId),
+        eq(adminEscolarMatriculas.estudianteId, estudianteId),
+      ),
     ))
     .orderBy(desc(adminEscolarAvisosEnviados.enviadoAt))
     .limit(200);

@@ -62,6 +62,26 @@
         "tipo": "arreglo",
         "titulo": "Se ve claro por dónde NO se le puede avisar",
         "detalle": "Si a un responsable le falta el celular, el WhatsApp o el correo, ahora se marca en rojo en su ficha y el aviso se queda mientras falte alguno. El teléfono fijo ya no cuenta como vía de contacto: no recibe ni mensajes de texto ni WhatsApp."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Los formularios se guardan solos",
+        "detalle": "La familia pulsa «Comenzar» y el enlace pasa a ser suyo: lo que va escribiendo se guarda cada pocos segundos y puede dejarlo a medias y volver por el mismo enlace. Antes, cerrar el navegador a mitad de una ficha de siete pasos costaba empezar de cero."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Papeles sueltos en el expediente de un alumno",
+        "detalle": "Desde el expediente ya se le puede agregar a UN alumno un documento que no está en el listado —la carta del pediatra, el permiso de viaje—, copiar uno de los listados, o adjuntarle un formulario para que la familia lo conteste por enlace. Antes todo lo que se le pedía a un alumno había que pedírselo también a sus trescientos compañeros."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Ver lo que contestó la familia antes de aprobarlo",
+        "detalle": "Un formulario recibido se abre y se lee entero —con sus secciones, sus firmas y lo que quedó sin contestar— y se aprueba o se rechaza desde ahí mismo. Antes solo se podía aprobar a ciegas. Además el formulario se puede mandar por correo desde el expediente, y todo lo que se le manda a una familia queda en su pestaña de Avisos."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Vuelve el detalle de una cuenta por cobrar",
+        "detalle": "Pulsando cualquier fila de Cuentas por cobrar se abre el detalle que explica el saldo sin sacarte de la lista: de dónde sale, qué se pagó, qué mora se le sumó, qué alumno y qué concepto escolar hay detrás, y la gestión de cobro con promesas de pago. Estaba construido pero llevaba semanas desconectado de la pantalla. Además, las columnas que no tienen nada que enseñar —vencimiento, atraso, mora— desaparecen solas, y el saldo deja de quedar cortado."
       }
     ]
   },

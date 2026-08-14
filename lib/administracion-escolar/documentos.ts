@@ -6,9 +6,11 @@ import {
   adminEscolarCursos,
   adminEscolarGrados,
   adminEscolarServicios,
+  adminEscolarFormularios,
+  adminEscolarFormularioRespuestas,
   users,
 } from '@/lib/db/schema';
-import { and, eq, asc, inArray, sql } from 'drizzle-orm';
+import { and, eq, asc, inArray, isNull, sql } from 'drizzle-orm';
 import { listarArchivos, type ArchivoResumen } from './documentos-archivo';
 
 export type { ArchivoResumen };
@@ -150,6 +152,8 @@ export interface ContextoMatricula {
   estudianteId: number;
   nivel: string | null;
   tipo: TipoInscripcion;
+  /** El listado que se le eligió. Nulo en las matrículas anteriores a esto. */
+  listaId: number | null;
 }
 
 /**
@@ -168,6 +172,7 @@ export async function contextoDeMatricula(
       id: adminEscolarMatriculas.id,
       estudianteId: adminEscolarMatriculas.estudianteId,
       periodoId: adminEscolarMatriculas.periodoId,
+      listaId: adminEscolarMatriculas.documentoListaId,
       nivel: adminEscolarServicios.nombre,
     })
     .from(adminEscolarMatriculas)
@@ -197,6 +202,7 @@ export async function contextoDeMatricula(
     matriculaId: fila.id,
     estudianteId: fila.estudianteId,
     nivel: fila.nivel,
+    listaId: fila.listaId ?? null,
     tipo: anteriores > 0 ? 'reinscripcion' : 'nuevo',
   };
 }
@@ -216,6 +222,21 @@ export interface FilaChecklist {
   aprobadoEn: string | null;
   aprobadoPor: string | null;
   motivo: string | null;
+  /** Colgado de este alumno, no del listado del nivel. Se puede quitar. */
+  esExtra: boolean;
+  /**
+   * El renglón es un formulario, no un papel: en vez de subir un archivo, se
+   * le manda a la familia `enlace` y lo contesta. `respuestaId` aparece cuando
+   * ya lo mandó.
+   */
+  formulario: {
+    id: number;
+    nombre: string;
+    slug: string;
+    /** Enlace personal de esta familia (con su borrador ya abierto). */
+    enlace: string;
+    respuestaId: number | null;
+  } | null;
 }
 
 export interface Checklist {
@@ -234,16 +255,57 @@ export interface Checklist {
   };
 }
 
-/** Lo exigido para un nivel y tipo, ya ordenado. Incluye las filas sin nivel. */
+/**
+ * Lo que hay que entregar, ya ordenado.
+ *
+ * Con `listaId` devuelve ese listado y punto: es lo que la secretaria eligió al
+ * matricular, y una vez elegido no hay nada que deducir.
+ *
+ * Sin él —matrículas anteriores a los listados— se cae al camino viejo: todo lo
+ * activo que valga para ese nivel, deduplicado por nombre. La deduplicación
+ * hace falta porque el mismo papel puede estar guardado dos veces, una por cada
+ * tipo de inscripción, y la familia no tiene por qué ver «Acta de nacimiento»
+ * repetida en su checklist.
+ */
 export async function requeridosPara(
-  teamId: number, nivel: string | null, tipo: TipoInscripcion,
+  teamId: number, nivel: string | null, listaId?: number | null, matriculaId?: number | null,
 ) {
+  // Lo colgado de ESTE alumno va aparte y siempre al final: son los casos
+  // sueltos, y mezclarlos con el listado haría que la secretaria no distinga
+  // lo que le pide el colegio a todos de lo que se le pidió a este niño.
+  const extras = matriculaId
+    ? await db
+      .select()
+      .from(adminEscolarDocumentosRequeridos)
+      .where(and(
+        eq(adminEscolarDocumentosRequeridos.teamId, teamId),
+        eq(adminEscolarDocumentosRequeridos.matriculaId, matriculaId),
+        eq(adminEscolarDocumentosRequeridos.activo, true),
+      ))
+      .orderBy(asc(adminEscolarDocumentosRequeridos.orden), asc(adminEscolarDocumentosRequeridos.id))
+    : [];
+
+  if (listaId) {
+    const dellista = await db
+      .select()
+      .from(adminEscolarDocumentosRequeridos)
+      .where(and(
+        eq(adminEscolarDocumentosRequeridos.teamId, teamId),
+        eq(adminEscolarDocumentosRequeridos.listaId, listaId),
+        isNull(adminEscolarDocumentosRequeridos.matriculaId),
+        eq(adminEscolarDocumentosRequeridos.activo, true),
+      ))
+      .orderBy(asc(adminEscolarDocumentosRequeridos.orden), asc(adminEscolarDocumentosRequeridos.id));
+    return [...dellista, ...extras];
+  }
+
   const todos = await db
     .select()
     .from(adminEscolarDocumentosRequeridos)
     .where(and(
       eq(adminEscolarDocumentosRequeridos.teamId, teamId),
-      eq(adminEscolarDocumentosRequeridos.tipoInscripcion, tipo),
+      // Los extras de OTRAS matrículas no pintan nada aquí.
+      isNull(adminEscolarDocumentosRequeridos.matriculaId),
       eq(adminEscolarDocumentosRequeridos.activo, true),
     ))
     .orderBy(asc(adminEscolarDocumentosRequeridos.orden), asc(adminEscolarDocumentosRequeridos.id));
@@ -251,7 +313,16 @@ export async function requeridosPara(
   // El filtro por nivel se hace aquí y no en SQL: comparar sin acentos en
   // Postgres exigiría `unaccent`, que no está instalada en esta base. Son
   // decenas de filas por colegio, no miles.
-  return todos.filter((d) => d.nivel == null || mismoNivel(d.nivel, nivel));
+  const delNivel = todos.filter((d) => d.nivel == null || mismoNivel(d.nivel, nivel));
+
+  const vistos = new Set<string>();
+  const unicos = delNivel.filter((d) => {
+    const clave = d.nombre.trim().toLowerCase();
+    if (vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
+  return [...unicos, ...extras];
 }
 
 /** La lista de una matrícula con lo que ya se entregó pegado a cada renglón. */
@@ -261,7 +332,7 @@ export async function checklistDeMatricula(
   const contexto = await contextoDeMatricula(teamId, matriculaId);
   if (!contexto) return null;
 
-  const requeridos = await requeridosPara(teamId, contexto.nivel, contexto.tipo);
+  const requeridos = await requeridosPara(teamId, contexto.nivel, contexto.listaId, matriculaId);
   if (requeridos.length === 0) {
     return {
       contexto,
@@ -287,9 +358,35 @@ export async function checklistDeMatricula(
   const porRequerido = new Map(entregados.map((x) => [x.e.requeridoId, x]));
   const archivosPorEntregado = await listarArchivos(teamId, entregados.map((x) => x.e.id));
 
+  // Los renglones que son un formulario necesitan el enlace personal de esta
+  // familia: el borrador que se le abrió al adjuntarlo.
+  const idsFormulario = requeridos.map((r) => r.formularioId).filter((x): x is number => x != null);
+  const formularios = idsFormulario.length > 0
+    ? await db
+      .select({
+        id: adminEscolarFormularios.id,
+        nombre: adminEscolarFormularios.nombre,
+        slug: adminEscolarFormularios.slug,
+        token: adminEscolarFormularioRespuestas.token,
+        respuestaId: adminEscolarFormularioRespuestas.id,
+        estado: adminEscolarFormularioRespuestas.estado,
+      })
+      .from(adminEscolarFormularios)
+      .leftJoin(adminEscolarFormularioRespuestas, and(
+        eq(adminEscolarFormularioRespuestas.formularioId, adminEscolarFormularios.id),
+        eq(adminEscolarFormularioRespuestas.matriculaId, matriculaId),
+      ))
+      .where(and(
+        eq(adminEscolarFormularios.teamId, teamId),
+        inArray(adminEscolarFormularios.id, idsFormulario),
+      ))
+    : [];
+  const porFormulario = new Map(formularios.map((f) => [f.id, f]));
+
   const filas: FilaChecklist[] = requeridos.map((r) => {
     const hit = porRequerido.get(r.id);
     const e = hit?.e;
+    const f = r.formularioId ? porFormulario.get(r.formularioId) : null;
     return {
       requeridoId: r.id,
       nombre: r.nombre,
@@ -304,6 +401,19 @@ export async function checklistDeMatricula(
       aprobadoEn: e?.aprobadoEn?.toISOString() ?? null,
       aprobadoPor: hit?.aprobador ?? hit?.aprobadorEmail ?? null,
       motivo: e?.motivo ?? null,
+      esExtra: r.matriculaId != null,
+      formulario: f
+        ? {
+          id: f.id,
+          nombre: f.nombre,
+          slug: f.slug,
+          // Con borrador abierto, el enlace es el suyo y lo que escriba se le
+          // guarda. Sin él —si alguien borró la respuesta— queda el enlace
+          // general, que le abre uno nuevo al pulsar «Comenzar».
+          enlace: f.token ? `/f/${f.slug}/r/${f.token}` : `/f/${f.slug}`,
+          respuestaId: f.estado && f.estado !== 'borrador' ? f.respuestaId : null,
+        }
+        : null,
     };
   });
 

@@ -10,7 +10,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarDocumentosEntregados } from '@/lib/db/schema';
+import {
+  adminEscolarDocumentosEntregados, adminEscolarDocumentosRequeridos,
+} from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -44,9 +46,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // se aprueba —ya está resuelto por su propio camino— y un "pendiente" no
     // debería poder llegar aquí porque sin fila no hay id que mandar.
     if (!actual.archivoNombre) {
-      return NextResponse.json(
-        { error: 'No hay archivo entregado para aprobar' }, { status: 422 },
-      );
+      // Salvo que el renglón sea un formulario: ahí lo entregado no es un
+      // papel, es lo que la familia contestó. Sin esta salida, un formulario
+      // recibido se quedaba en «por aprobar» para siempre.
+      const [renglon] = await db
+        .select({ formularioId: adminEscolarDocumentosRequeridos.formularioId })
+        .from(adminEscolarDocumentosRequeridos)
+        .where(eq(adminEscolarDocumentosRequeridos.id, actual.requeridoId))
+        .limit(1);
+
+      if (!renglon?.formularioId) {
+        return NextResponse.json(
+          { error: 'No hay archivo entregado para aprobar' }, { status: 422 },
+        );
+      }
     }
     const [fila] = await db
       .update(adminEscolarDocumentosEntregados)

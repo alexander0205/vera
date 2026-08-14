@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { id } = await params;
-  const { periodoId, cursoId, fechaInscripcion, estado, codigoMatricula, notas } = await req.json();
+  const { periodoId, cursoId, documentoListaId, fechaInscripcion, estado, codigoMatricula, notas } = await req.json();
   const matriculaId = parseInt(id, 10);
   const [actual] = await db.select({ estudianteId: adminEscolarMatriculas.estudianteId, periodoId: adminEscolarMatriculas.periodoId, estado: adminEscolarMatriculas.estado })
     .from(adminEscolarMatriculas)
@@ -57,6 +57,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .set({
         ...(periodoId !== undefined ? { periodoId: Number(periodoId) } : {}),
         ...(cursoId !== undefined ? { cursoId: Number(cursoId) } : {}),
+        ...(documentoListaId !== undefined
+          ? { documentoListaId: Number(documentoListaId) || null } : {}),
         ...(fechaInscripcion !== undefined ? { fechaInscripcion: fechaInscripcion || null } : {}),
         ...(estado !== undefined && ESTADOS.includes(estado) ? { estado } : {}),
         ...(codigoMatricula !== undefined ? { codigoMatricula: codigoMatricula?.trim() || null } : {}),

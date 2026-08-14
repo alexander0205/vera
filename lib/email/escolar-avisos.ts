@@ -140,3 +140,75 @@ export async function enviarEnlaceDocumentosEmail(opts: EnlaceDocumentosEmail & 
   });
   assertSent(res, `enviarEnlaceDocumentosEmail(${opts.email})`);
 }
+
+// ── Formulario mandado a una familia ────────────────────────────────────────
+
+export interface EnlaceFormularioEmail {
+  colegio: string;
+  tutor: string | null;
+  estudiante: string;
+  /** Cómo se llama el formulario: es lo que la familia va a reconocer. */
+  formulario: string;
+  url: string;
+}
+
+/**
+ * Arma el asunto y el cuerpo del correo con el que se le manda un formulario a
+ * la familia.
+ *
+ * Deliberadamente NO promete un plazo: a diferencia del enlace de documentos,
+ * el del formulario no caduca solo —es el borrador de esa familia, y caducarlo
+ * significaría tirar lo que ya llevaba escrito—.
+ */
+export function armarEnlaceFormularioEmail(opts: EnlaceFormularioEmail): { asunto: string; html: string } {
+  const colegio = escapar(opts.colegio);
+  const estudiante = escapar(opts.estudiante);
+  const formulario = escapar(opts.formulario);
+  const saludo = opts.tutor ? `Hola, ${escapar(opts.tutor.split(' ')[0])}:` : 'Hola:';
+
+  const asunto = `${opts.colegio} — ${opts.formulario}`;
+
+  const html = `
+      <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:8px;">
+        <p style="margin:0 0 4px;font-size:13px;color:#6b7280;">${colegio}</p>
+        <h1 style="margin:0 0 16px;font-size:20px;color:#111;">${formulario}</h1>
+
+        <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#111;">
+          ${saludo} para completar el expediente de <b>${estudiante}</b> necesitamos que
+          contestes este formulario.
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
+          <tr><td style="border-radius:8px;background:#2a45c4;">
+            <a href="${opts.url}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:600;color:#fff;text-decoration:none;">
+              Contestar el formulario
+            </a>
+          </td></tr>
+        </table>
+
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;">
+          No hace falta terminarlo de una sola vez ni crear ninguna cuenta: lo que vayas
+          escribiendo se guarda solo, y puedes volver por este mismo enlace cuando quieras.
+        </p>
+
+        <p style="margin:0;font-size:12px;line-height:1.6;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:14px;">
+          Si el botón no funciona, copia esta dirección en tu navegador:<br>
+          <span style="color:#6b7280;word-break:break-all;">${opts.url}</span><br><br>
+          Este enlace es personal de ${estudiante}: no lo compartas.
+        </p>
+      </div>
+    `;
+
+  return { asunto, html };
+}
+
+export async function enviarEnlaceFormularioEmail(opts: EnlaceFormularioEmail & { email: string }) {
+  const { asunto, html } = armarEnlaceFormularioEmail(opts);
+  const res = await resend.emails.send({
+    from: 'Zero <noreply@zero.com.do>',
+    to: opts.email,
+    subject: asunto,
+    html,
+  });
+  assertSent(res, `enviarEnlaceFormularioEmail(${opts.email})`);
+}

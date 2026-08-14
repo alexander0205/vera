@@ -22,6 +22,7 @@ import {
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 import { checklistDeMatricula, contextoDeMatricula, requeridosPara } from '@/lib/administracion-escolar/documentos';
 import { enviarEnlaceDocumentosEmail } from '@/lib/email/escolar-avisos';
+import { registrarAvisoExpediente } from '@/lib/administracion-escolar/avisos-expediente';
 import { crearEnlace, enlacesVivos, DIAS_VIGENCIA_ENLACE } from '@/lib/administracion-escolar/documentos-enlace';
 import { origenPublico } from '@/lib/http/origen-publico';
 import { rateLimitDb } from '@/lib/rate-limit';
@@ -71,7 +72,11 @@ export async function POST(req: NextRequest) {
     if (!Number.isInteger(requeridoId) || requeridoId <= 0) {
       return NextResponse.json({ error: 'requeridoId inválido' }, { status: 400 });
     }
-    const requeridos = await requeridosPara(auth.teamId, contexto.nivel, contexto.tipo);
+    // Con el listado elegido y los extras de ESTA matrícula: si no, un
+    // documento colgado solo de este alumno no podría enlazarse, y el enlace
+    // se generaba contra la lista deducida por nivel y no contra la que la
+    // secretaria eligió al matricular.
+    const requeridos = await requeridosPara(auth.teamId, contexto.nivel, contexto.listaId, matriculaId);
     const requerido = requeridos.find((r) => r.id === requeridoId);
     if (!requerido) {
       return NextResponse.json({ error: 'Ese documento no se exige en esta matrícula' }, { status: 404 });
@@ -122,6 +127,17 @@ export async function POST(req: NextRequest) {
       dias: DIAS_VIGENCIA_ENLACE,
     });
     enviadoA = email;
+
+    // Que quede constancia: el día que la familia diga «a mí no me mandaron
+    // nada», esto es lo que la secretaria abre.
+    await registrarAvisoExpediente({
+      teamId: auth.teamId,
+      matriculaId,
+      tipo: 'documentos',
+      canal: 'correo',
+      destino: email,
+      detalle: nombreDocumento ?? 'Expediente completo',
+    });
   }
 
   return NextResponse.json({

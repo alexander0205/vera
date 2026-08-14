@@ -13,7 +13,7 @@
 //    `isPreview`, y aquí esa red no existe todavía. En vista previa se acepta
 //    el archivo en el momento (sin subirlo) para poder ver el campo funcionando.
 //  - `configuracion` deja fuera `crearProspecto` (no hay leads en Zero).
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Alert, Box, Button, CircularProgress, Divider, FormControlLabel, Checkbox,
   Radio, RadioGroup, Stack, TextField, ToggleButton, ToggleButtonGroup,
@@ -28,19 +28,12 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import SignaturePad from './SignaturePad';
 import type { ICampo } from '@/lib/administracion-escolar/formularios';
+// La MISMA regla que usa el servidor al recibir el envío: con dos copias, la
+// pantalla y la API acaban discrepando sobre qué es un campo vacío.
+import { isCampoVacio } from '@/lib/administracion-escolar/formularios-validacion';
+export { isCampoVacio };
 
 /** ¿Está vacío el valor de un campo? Maneja objetos para los campos compuestos. */
-export function isCampoVacio(tipo: string, val: unknown): boolean {
-  if (val === undefined || val === null || val === '') return true;
-  if (Array.isArray(val)) return val.length === 0;
-  if (typeof val === 'number') return false;
-  if (typeof val === 'object') {
-    const v = val as Record<string, unknown>;
-    if (tipo === 'archivo') return !v.key;
-    return Object.values(v).every((x) => !x);
-  }
-  return false;
-}
 
 interface RendererFormulario {
   id: number;
@@ -86,6 +79,20 @@ interface FormularioRendererProps {
   formulario: RendererFormulario;
   isPreview?: boolean;
   onSuccess?: () => void;
+  /**
+   * El slug de la página pública. Es lo que decide a dónde va el envío: la
+   * ruta pública no lleva sesión y se identifica por slug, no por id — así el
+   * id interno del formulario no viaja en una URL que se manda por WhatsApp.
+   */
+  slug?: string;
+  /**
+   * Token del borrador. Con él, todo lo que se escribe se guarda solo cada
+   * pocos segundos y el envío cierra ESA ficha en vez de crear otra.
+   */
+  token?: string;
+  /** Lo ya guardado, para retomar donde se dejó. */
+  initialDatos?: Record<string, unknown>;
+  initialPagina?: number;
 }
 
 function CampoRenderer({
@@ -192,6 +199,7 @@ function CampoRenderer({
       </Typography>
 
       {ayuda && <Typography variant="caption">{ayuda}</Typography>}
+
 
       {(campo.tipo === 'text' || campo.tipo === 'email' || campo.tipo === 'phone' || campo.tipo === 'number') && (
         <TextField
@@ -467,19 +475,73 @@ export default function FormularioRenderer({
   formulario,
   isPreview = false,
   onSuccess,
+  slug,
+  token,
+  initialDatos,
+  initialPagina = 0,
 }: FormularioRendererProps) {
-  const [datos, setDatos] = useState<Record<string, unknown>>({});
+  const [datos, setDatos] = useState<Record<string, unknown>>(initialDatos ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [pagina, setPagina] = useState(0);
+  const [pagina, setPagina] = useState(initialPagina);
   const [idioma, setIdioma] = useState<'es' | 'en'>('es');
+  const [guardado, setGuardado] = useState<'limpio' | 'guardando' | 'guardado' | 'error'>('limpio');
 
   const color = formulario.configuracion?.colorPrimario || '#2563eb';
   const bilingue = !!formulario.configuracion?.bilingue;
 
   const t = (es: string, enText: string) => (idioma === 'en' ? enText : es);
+
+  // ─── Guardado automático del borrador ──────────────────────────────────────
+  //
+  // Sin esto, una ficha de siete pasos contestada en el teléfono se pierde
+  // entera en cuanto se cierra el navegador. El envío es lo excepcional; lo
+  // normal es que la familia la deje a medias y vuelva.
+
+  const autoguarda = !!(token && slug && !isPreview);
+  // El handler de «se va de la página» necesita lo último escrito, y no puede
+  // depender de que React haya vuelto a renderizar.
+  const ultimo = useRef({ datos, pagina });
+  ultimo.current = { datos, pagina };
+  // Lo que se leyó del servidor. Mientras nada cambie respecto a esto no hay
+  // nada que guardar: si no, con solo abrir el enlace ya se dispara un
+  // guardado —y en desarrollo React monta dos veces, así que se disparaba
+  // siempre—.
+  const cargado = useRef(JSON.stringify({ datos: initialDatos ?? {}, pagina: initialPagina }));
+
+  const guardar = useCallback(async (keepalive = false) => {
+    if (!autoguarda) return;
+    try {
+      const res = await fetch(`/api/formularios-publicos/${slug}/borrador/${token}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ultimo.current),
+        keepalive,
+      });
+      setGuardado(res.ok ? 'guardado' : 'error');
+    } catch {
+      setGuardado('error');
+    }
+  }, [autoguarda, slug, token]);
+
+  useEffect(() => {
+    if (!autoguarda) return;
+    if (JSON.stringify({ datos, pagina }) === cargado.current) return;
+    setGuardado('guardando');
+    const id = setTimeout(() => { void guardar(); }, 2000);
+    return () => clearTimeout(id);
+  }, [datos, pagina, autoguarda, guardar]);
+
+  // Cerrar la pestaña o cambiar de app no puede costar los dos segundos de
+  // espera: en el teléfono, eso es media pantalla de respuestas.
+  useEffect(() => {
+    if (!autoguarda) return;
+    const alOcultar = () => { if (document.visibilityState === 'hidden') void guardar(true); };
+    document.addEventListener('visibilitychange', alOcultar);
+    return () => document.removeEventListener('visibilitychange', alOcultar);
+  }, [autoguarda, guardar]);
 
   const NO_INPUT = ['heading', 'paragraph', 'divider', 'imagen', 'salto_pagina'];
 
@@ -512,9 +574,28 @@ export default function FormularioRenderer({
     }
   };
 
+  /**
+   * Lleva la vista al primer campo que falta.
+   *
+   * En una ficha de siete pasos, el campo vacío puede estar cuatro pantallazos
+   * más arriba: marcarlo en rojo y dejar al padre buscándolo es lo mismo que no
+   * decirle nada.
+   */
+  const irAlPrimerError = (errs: Record<string, string>) => {
+    if (typeof document === 'undefined') return;
+    const primero = camposPagina.find((c) => errs[c.id]);
+    if (!primero) return;
+    requestAnimationFrame(() => {
+      const el = document.getElementById(primero.id)
+        ?? document.querySelector(`[data-campo="${primero.id}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      (el as HTMLElement | null)?.focus?.();
+    });
+  };
+
   const irSiguiente = () => {
     const errs = validarCampos(camposPagina);
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    if (Object.keys(errs).length > 0) { setErrors(errs); irAlPrimerError(errs); return; }
     setErrors({});
     setPagina((p) => Math.min(p + 1, paginas.length - 1));
     scrollTop();
@@ -528,10 +609,9 @@ export default function FormularioRenderer({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // El envío de respuestas (página pública /f/[slug]) es trabajo futuro:
-    // aquí solo se ejercita desde la vista previa del constructor, que nunca
-    // debe pegarle a la red.
-    if (isPreview) return;
+    // La vista previa del constructor nunca manda nada: es para mirar cómo
+    // queda, no para llenar la bandeja de respuestas con pruebas del colegio.
+    if (isPreview || !slug) return;
 
     const allErrors = validarCampos(formulario.campos);
     if (Object.keys(allErrors).length > 0) {
@@ -549,12 +629,15 @@ export default function FormularioRenderer({
         ? await getRecaptchaToken()
         : null;
 
-      const res = await fetch(`/api/administracion-escolar/formularios/${formulario.id}/respuestas`, {
+      const res = await fetch(`/api/formularios-publicos/${slug}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           datos,
           captchaToken,
+          // Cierra el borrador que se venía guardando en vez de crear una
+          // respuesta nueva al lado.
+          token,
           referrer: typeof window !== 'undefined' ? window.location.href : '',
         }),
       });
@@ -599,10 +682,11 @@ export default function FormularioRenderer({
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit}>
-      <Box component="span" data-form-top />
+    <form onSubmit={handleSubmit}>
+      {/* Ancla para volver arriba al fallar la validación. */}
+      <span data-form-top />
       {/* Honeypot anti-spam */}
-      <Box component="input" type="text" name="__hp" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
+      <input type="text" name="__hp" style={{ display: 'none' }} tabIndex={-1} autoComplete="off" />
 
       {/* Selector de idioma (formularios bilingües) */}
       {bilingue && (
@@ -626,7 +710,20 @@ export default function FormularioRenderer({
         <Box sx={{ mb: 3 }}>
           <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
             <Typography variant="caption">{t('Paso', 'Step')} {pagina + 1} {t('de', 'of')} {paginas.length}</Typography>
-            <Typography variant="caption">{Math.round(((pagina + 1) / paginas.length) * 100)}%</Typography>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              {/* Que se vea que no hace falta terminar de una sentada. */}
+              {autoguarda && guardado !== 'limpio' && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: guardado === 'error' ? 'error.main' : 'text.secondary' }}
+                >
+                  {guardado === 'guardando' && t('Guardando…', 'Saving…')}
+                  {guardado === 'guardado' && t('Guardado', 'Saved')}
+                  {guardado === 'error' && t('Sin guardar — revisa tu conexión', 'Not saved — check your connection')}
+                </Typography>
+              )}
+              <Typography variant="caption">{Math.round(((pagina + 1) / paginas.length) * 100)}%</Typography>
+            </Stack>
           </Stack>
           <LinearProgress
             variant="determinate"
@@ -636,9 +733,26 @@ export default function FormularioRenderer({
         </Box>
       )}
 
+      {/* El resumen, antes de la primera pregunta. Sin él, pulsar «Seguir» con
+          un campo vacío no cambiaba nada en pantalla: el botón parecía roto y
+          quien llena el formulario cerraba la pestaña. */}
+      {Object.values(errors).some(Boolean) && (
+        <Alert severity="error" sx={{ mb: 2.5 }}>
+          {(() => {
+            const faltan = camposPagina.filter((c) => errors[c.id]);
+            return faltan.length === 1
+              ? t(`Falta «${faltan[0].label}».`, `«${faltan[0].label}» is missing.`)
+              : t(
+                  `Faltan ${faltan.length} campos obligatorios en este paso.`,
+                  `${faltan.length} required fields are missing on this step.`,
+                );
+          })()}
+        </Alert>
+      )}
+
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', columnGap: 2, rowGap: 2.5 }}>
         {camposPagina.map((campo) => (
-          <Box key={campo.id} sx={{ gridColumn: spanFor(campo) }}>
+          <Box key={campo.id} data-campo={campo.id} sx={{ gridColumn: spanFor(campo) }}>
             <CampoRenderer
               campo={campo}
               value={datos[campo.id]}
@@ -703,6 +817,6 @@ export default function FormularioRenderer({
           )}
         </Stack>
       </Box>
-    </Box>
+    </form>
   );
 }

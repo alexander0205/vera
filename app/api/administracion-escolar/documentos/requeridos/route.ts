@@ -75,6 +75,9 @@ export async function POST(req: NextRequest) {
 
   const [fila] = await db.insert(adminEscolarDocumentosRequeridos).values({
     teamId: auth.teamId,
+    // El listado al que pertenece. Sin él el documento no lo pide nadie: la
+    // matrícula elige un listado, no un nivel.
+    listaId: Number.isInteger(Number(body?.listaId)) ? Number(body.listaId) : null,
     nivel: body?.nivel ? String(body.nivel).trim() : null,
     tipoInscripcion: tipo,
     nombre,
