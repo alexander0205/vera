@@ -69,14 +69,18 @@ export function ModuleHeader({
    */
   breakpointMenu?: 'md' | 'lg';
 }) {
-  const { data: userSwr } = useSWR<UserInfo | null>('/api/user', fetcher, {
+  const { data: userSwr, isLoading: userCargando } = useSWR<UserInfo | null>('/api/user', fetcher, {
     revalidateOnFocus: false, revalidateOnReconnect: false,
   });
-  const { data: empresaData, mutate: mutateEmpresa } = useSWR<{
+  const { data: empresaData, isLoading: empresaCargando, mutate: mutateEmpresa } = useSWR<{
     teams?: Team[]; activeTeamId?: number | null;
   }>('/api/empresa/list', fetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
 
   const user = userProp ?? userSwr ?? null;
+  // `userProp` llega ya resuelto (o `null` mientras carga) desde el layout que
+  // monta el header, así que no sirve para saber si terminó de cargar: se usa
+  // el propio isLoading de este hook, que SWR deduplica con el del layout.
+  const datosListos = !userCargando && !empresaCargando;
   const teams = empresaData?.teams ?? [];
   const activeTeamId = empresaData?.activeTeamId ?? teams[0]?.id ?? null;
   // El contador de turno no debe ni consultar si la empresa no tiene caja.
@@ -91,7 +95,7 @@ export function ModuleHeader({
     <>
       {/* Sostiene el loader un momento tras aterrizar de otro módulo, para que
           no se vea la pantalla montarse a pedazos. */}
-      <LoaderLlegada />
+      <LoaderLlegada datosListos={datosListos} />
       <GlobalSearch />
       <AppBar
         position="static"

@@ -23,7 +23,7 @@
  * y el tapado se retira. Así la cobertura es continua.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ZeroLoader } from '@/components/zero-loader';
 
 const CLAVE = 'zero:abriendo-modulo';
@@ -59,8 +59,32 @@ export function ScriptTapaLlegada() {
   );
 }
 
-export function LoaderLlegada({ esperaMs = 1000 }: { esperaMs?: number }) {
+export function LoaderLlegada({
+  esperaMs = 1000,
+  datosListos,
+}: {
+  esperaMs?: number;
+  /**
+   * Si el usuario y la empresa activa (los mismos /api/user y
+   * /api/empresa/list que arman el sidebar y el header) ya llegaron. `undefined`
+   * = el que llama no tiene esa noción y el loader se comporta como antes.
+   *
+   * Sin esto, la primera entrada al sistema (login, recarga completa) no
+   * anotaba nada en sessionStorage —no hubo salto entre módulos— así que el
+   * loader no se mostraba y se veía el sidebar sin plan y el header vacío
+   * un instante, hasta que SWR resolvía y todo se repintaba de golpe.
+   */
+  datosListos?: boolean;
+}) {
   const [nombre, setNombre] = useState<string | null>(null);
+  // Una vez que los datos llegaron por primera vez, nunca más se vuelve a
+  // tapar por esta razón: revalidaciones de fondo no deben ocultar la
+  // pantalla que el usuario ya está viendo.
+  const yaListoAlgunaVez = useRef(datosListos === true);
+
+  useEffect(() => {
+    if (datosListos) yaListoAlgunaVez.current = true;
+  }, [datosListos]);
 
   useEffect(() => {
     let anotado: string | null = null;
@@ -90,14 +114,18 @@ export function LoaderLlegada({ esperaMs = 1000 }: { esperaMs?: number }) {
     if (!nombre) document.documentElement.removeAttribute(ATRIBUTO);
   }, [nombre]);
 
+  const cargaInicialPendiente = !yaListoAlgunaVez.current && datosListos === false;
+  const abriendoModulo = !!nombre;
+
   return (
     <ZeroLoader
-      open={!!nombre}
-      subtitulo={nombre ? `Abriendo ${nombre}` : undefined}
-      // Sin retardo: aquí ya se sabe que hubo un salto entre módulos, así que
-      // no hay que esperar a ver si tarda — la pausa es a propósito.
-      retardoMs={0}
-      duracionMinimaMs={esperaMs}
+      open={abriendoModulo || cargaInicialPendiente}
+      subtitulo={abriendoModulo ? `Abriendo ${nombre}` : undefined}
+      // Cambio de módulo: ya se sabe que hubo un salto, sin retardo. Carga
+      // inicial: se deja el antirrebote por defecto de ZeroLoader (retardoMs
+      // ~400ms) para que una carga rapidísima no llegue ni a parpadear.
+      retardoMs={abriendoModulo ? 0 : undefined}
+      duracionMinimaMs={abriendoModulo ? esperaMs : undefined}
     />
   );
 }
