@@ -105,6 +105,12 @@ export interface DataTableProps<T> {
   renderExpanded?: (row: T) => React.ReactNode;
   /** Si devuelve false, esa fila no despliega ni muestra chevron. */
   rowExpandable?: (row: T) => boolean;
+  /**
+   * Qué hacer al pulsar la fila. Gana sobre desplegar y sobre `rowHref`: si la
+   * pantalla define una acción propia para la fila, es la que el usuario
+   * espera. El chevron sigue desplegando por su cuenta.
+   */
+  onRowClick?:    (row: T) => void;
   /** Estilos extra por fila — para marcar urgencia sin tener que leer la celda. */
   rowSx?:         (row: T) => object;
   /** Clases extra por fila. Mismo fin que `rowSx`, para quien use Tailwind. */
@@ -161,6 +167,7 @@ export function DataTable<T>({
   rowHref,
   renderExpanded,
   rowExpandable,
+  onRowClick,
   rowSx,
   rowClassName,
   defaultSort,
@@ -299,10 +306,13 @@ export function DataTable<T>({
         // La fila entera responde: si tiene contenido debajo lo despliega, y
         // si no, navega. El chevron sigue ahí como señal de que hay algo, pero
         // acertarle a un botón de 20px era pedir puntería.
-        onClick={href || puedeAbrir ? (e) => {
+        onClick={href || puedeAbrir || onRowClick ? (e) => {
           // Los clics que nacen en un checkbox, botón o enlace son suyos.
           const target = e.target as HTMLElement;
           if (target.closest('input,button,a,[role="menuitem"]')) return;
+          // La acción propia de la pantalla manda: para desplegar está el
+          // chevron, que va en su celda y no llega hasta aquí.
+          if (onRowClick) { onRowClick(row); return; }
           // Desplegar gana sobre navegar: si hay hijas, el clic las abre.
           if (puedeAbrir) { alternarFila(id); return; }
           // Navegación del cliente: `window.location` recargaba la app entera
@@ -310,7 +320,7 @@ export function DataTable<T>({
           if (href) router.push(href);
         } : undefined}
         sx={{
-          cursor:  href || puedeAbrir ? 'pointer' : 'default',
+          cursor:  href || puedeAbrir || onRowClick ? 'pointer' : 'default',
           // Opaco a propósito, no `undefined`: la celda de acciones va fija
           // al borde derecho heredando este color, y con la fila transparente
           // el contenido se vería pasar por debajo al desplazar.

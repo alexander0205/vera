@@ -78,7 +78,7 @@ export function DetallePanel({
             component={Link}
             href={`/dashboard/facturas/${actual.id}`}
             sx={{
-              fontSize: '0.75rem', fontFamily: 'monospace', color: '#3658e1',
+              fontSize: '0.75rem', fontFamily: 'monospace', color: 'primary.main',
               display: 'inline-flex', alignItems: 'center', gap: 0.5,
               textDecoration: 'none', '&:hover': { textDecoration: 'underline' },
             }}

@@ -22,13 +22,13 @@ const CANAL_LABEL: Record<CanalContacto, string> = {
 const TIPO_UI: Record<TipoEventoCobranza, {
   Icon: React.ComponentType<{ style?: React.CSSProperties }>; label: string; punto: string;
 }> = {
-  contacto: { Icon: Phone,      label: 'Contacto',        punto: '#6366f1' },
+  contacto: { Icon: Phone,      label: 'Contacto',        punto: '#3658e1' },
   nota:     { Icon: StickyNote, label: 'Nota interna',    punto: '#9ca3af' },
-  promesa:  { Icon: HandCoins,  label: 'Promesa de pago', punto: '#8b5cf6' },
+  promesa:  { Icon: HandCoins,  label: 'Promesa de pago', punto: '#5b73ec' },
 };
 
 const ESTADO_PROMESA_UI: Record<string, { label: string; bg: string; fg: string; border: string }> = {
-  pendiente:  { label: 'Pendiente',  bg: '#ede9fe', fg: '#6d28d9', border: '#ddd6fe' },
+  pendiente:  { label: 'Pendiente',  bg: '#eef2fe', fg: '#2a45c4', border: '#c7d2fc' },
   cumplida:   { label: 'Cumplida',   bg: '#d1fae5', fg: '#047857', border: '#a7f3d0' },
   incumplida: { label: 'Incumplida', bg: '#fee2e2', fg: '#b91c1c', border: '#fecaca' },
 };
@@ -195,8 +195,8 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
 
           {/* Promesa vigente, destacada */}
           {data?.promesaActiva && (
-            <Box sx={{ border: '1px solid #ddd6fe', bgcolor: '#f5f3ff', borderRadius: '8px', p: 1.5, mb: 1.5 }}>
-              <Typography sx={{ fontSize: '0.875rem', color: '#5b21b6' }}>
+            <Box sx={{ border: '1px solid #ddd6fe', bgcolor: '#eef2fe', borderRadius: '8px', p: 1.5, mb: 1.5 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: '#253a9e' }}>
                 Prometió pagar el {fmtFechaCorta(data.promesaActiva.promesaFecha!)}
                 {data.promesaActiva.promesaMonto ? ` · ${fmtDOP(data.promesaActiva.promesaMonto)}` : ''}
               </Typography>
@@ -291,7 +291,10 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
               onClick={registrar}
               disabled={guardando}
               startIcon={guardando ? <Loader2 className="animate-spin" style={{ width: 12, height: 12 }} /> : undefined}
-              sx={{ bgcolor: '#111827', '&:hover': { bgcolor: '#1f2937' }, fontSize: '0.75rem' }}
+              // Sin `bgcolor` a mano: negro no es un color de Zero. El botón
+              // toma el azul de la marca del tema, como el resto de acciones
+              // principales de la aplicación.
+              sx={{ fontSize: '0.75rem' }}
             >
               Registrar {TIPO_UI[tipo].label.toLowerCase()}
             </Button>
@@ -330,7 +333,7 @@ export function GestionCobro({ docId, onCambio }: { docId: number; onCambio?: ()
                       )}
                     </Box>
                     {ev.tipo === 'promesa' && ev.promesaFecha && (
-                      <Typography sx={{ fontSize: '0.75rem', color: '#6d28d9', mt: 0.25 }}>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#2a45c4', mt: 0.25 }}>
                         Prometió el {fmtFechaCorta(ev.promesaFecha)}
                         {ev.promesaMonto ? ` · ${fmtDOP(ev.promesaMonto)}` : ''}
                       </Typography>
