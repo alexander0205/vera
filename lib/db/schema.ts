@@ -967,6 +967,71 @@ export const anulacionesNcf = pgTable('anulaciones_ncf', {
   index('anulncf_team_estado_idx').on(t.teamId, t.estado),
 ]);
 
+// ─── Zero Tickets ───────────────────────────────────────────────────────────
+
+export const tickets = pgTable('tickets', {
+  id:                 serial('id').primaryKey(),
+  teamId:             integer('team_id').notNull().references(() => teams.id),
+  userId:             integer('user_id').notNull().references(() => users.id),
+  assignedAgentId:    integer('assigned_agent_id').references(() => users.id),
+  status:             varchar('status', { length: 20 }).notNull().default('esperando'), // esperando | abierto | cerrado
+  lastMessageAt:      timestamp('last_message_at').notNull().defaultNow(),
+  lastReadByUserAt:   timestamp('last_read_by_user_at'),
+  lastReadByAgentAt:  timestamp('last_read_by_agent_at'),
+  userTypingUntil:    timestamp('user_typing_until'),
+  agentTypingUntil:   timestamp('agent_typing_until'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+  closedAt:           timestamp('closed_at'),
+});
+
+export const ticketMessages = pgTable('ticket_messages', {
+  id:          serial('id').primaryKey(),
+  ticketId:    integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  senderType:  varchar('sender_type', { length: 10 }).notNull(), // user | agent | system
+  senderId:    integer('sender_id').references(() => users.id),
+  messageType: varchar('message_type', { length: 20 }).notNull().default('text'), // text | screenshot_request
+  content:     text('content'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
+export const ticketAttachments = pgTable('ticket_attachments', {
+  id:            serial('id').primaryKey(),
+  messageId:     integer('message_id').notNull().references(() => ticketMessages.id, { onDelete: 'cascade' }),
+  fileName:      varchar('file_name', { length: 255 }).notNull(),
+  mimeType:      varchar('mime_type', { length: 100 }).notNull(),
+  fileSizeBytes: integer('file_size_bytes').notNull(),
+  kind:          varchar('kind', { length: 10 }).notNull(), // image | video | file
+  storage:       varchar('storage', { length: 10 }).notNull(), // s3 | db
+  s3Key:         varchar('s3_key', { length: 500 }),
+  dataBase64:    text('data_base64'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
+export const agentPresence = pgTable('agent_presence', {
+  userId:      integer('user_id').primaryKey().references(() => users.id),
+  isAvailable: boolean('is_available').notNull().default(false),
+  lastSeenAt:  timestamp('last_seen_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const ticketsRelations = relations(tickets, ({ one, many }) => ({
+  team: one(teams, { fields: [tickets.teamId], references: [teams.id] }),
+  user: one(users, { fields: [tickets.userId], references: [users.id] }),
+  assignedAgent: one(users, { fields: [tickets.assignedAgentId], references: [users.id] }),
+  messages: many(ticketMessages),
+}));
+
+export const ticketMessagesRelations = relations(ticketMessages, ({ one, many }) => ({
+  ticket: one(tickets, { fields: [ticketMessages.ticketId], references: [tickets.id] }),
+  sender: one(users, { fields: [ticketMessages.senderId], references: [users.id] }),
+  attachments: many(ticketAttachments),
+}));
+
+export const ticketAttachmentsRelations = relations(ticketAttachments, ({ one }) => ({
+  message: one(ticketMessages, { fields: [ticketAttachments.messageId], references: [ticketMessages.id] }),
+}));
+
 // ─── Relaciones ───────────────────────────────────────────────────────────────
 
 export const teamsRelations = relations(teams, ({ many }) => ({
@@ -981,6 +1046,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
   categorias: many(categorias),
   facturasRecurrentes: many(facturasRecurrentes),
   impresoras: many(impresoras),
+  tickets: many(tickets),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
