@@ -25,7 +25,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     .returning();
 
   const now = new Date();
-  await db.update(tickets).set({ lastMessageAt: now, updatedAt: now }).where(eq(tickets.id, ticketId));
+  await db.update(tickets).set({ lastMessageAt: now, updatedAt: now, lastReadByAgentAt: now }).where(eq(tickets.id, ticketId));
 
   return NextResponse.json({ message: msg });
 }

@@ -22,9 +22,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .returning();
 
   const now = new Date();
+
+  const [current] = await db.select({ assignedAgentId: tickets.assignedAgentId }).from(tickets).where(eq(tickets.id, ticketId)).limit(1);
+
+  // Si nadie lo tomó todavía, responder implica tomarlo — si no, el cliente
+  // sigue viendo el banner de "esperando agente" después de ya recibir respuesta.
+  const claimFields = current && current.assignedAgentId === null
+    ? { assignedAgentId: user.id, status: 'abierto' }
+    : {};
+
   await db
     .update(tickets)
-    .set({ lastMessageAt: now, updatedAt: now, lastReadByAgentAt: now })
+    .set({ lastMessageAt: now, updatedAt: now, lastReadByAgentAt: now, ...claimFields })
     .where(eq(tickets.id, ticketId));
 
   return NextResponse.json({ message: msg });
