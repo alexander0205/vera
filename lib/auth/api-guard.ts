@@ -15,6 +15,7 @@ import { getUser, getTeamIdForUser, getTeamRoleForUser } from '@/lib/db/queries'
 import { type Permission } from '@/lib/config/roles';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { userHasModule, type ModuleKey } from '@/lib/auth/modules';
+import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
 
 type SessionUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 
@@ -29,7 +30,23 @@ export interface AuthErr {
   response: NextResponse;
 }
 
-export async function requirePermission(permission: Permission): Promise<AuthOk | AuthErr> {
+export interface GuardOpts {
+  /**
+   * Exige además que la suscripción esté viva. Va en las rutas que CREAN
+   * VALOR: emitir, cobrar, matricular, sumar un usuario.
+   *
+   * Es opt-in y no automático a propósito — aplicarlo siempre gatearía también
+   * los GET, y quien está en solo-lectura tiene que poder consultar su cartera
+   * y bajarse su información. Ese es justamente el trato: ve todo, no crea
+   * nada. Ver lib/suscripcion/guard.ts.
+   */
+  escritura?: boolean;
+}
+
+export async function requirePermission(
+  permission: Permission,
+  opts: GuardOpts = {},
+): Promise<AuthOk | AuthErr> {
   /**
    * Los tres a la vez, no en fila.
    *
@@ -57,6 +74,11 @@ export async function requirePermission(permission: Permission): Promise<AuthOk 
     return { ok: false, response: NextResponse.json({ error: 'Sin permiso' }, { status: 403 }) };
   }
 
+  if (opts.escritura) {
+    const bloqueo = await bloquearSiSoloLectura(teamId);
+    if (bloqueo) return { ok: false, response: bloqueo };
+  }
+
   return { ok: true, user, teamId, teamRole };
 }
 
@@ -68,8 +90,9 @@ export async function requirePermission(permission: Permission): Promise<AuthOk 
 export async function requireModuleAndPermission(
   mod: ModuleKey,
   permission: Permission,
+  opts: GuardOpts = {},
 ): Promise<AuthOk | AuthErr> {
-  const auth = await requirePermission(permission);
+  const auth = await requirePermission(permission, opts);
   if (!auth.ok) return auth;
 
   // El permiso ya se comprobó arriba; esto solo añade «¿el colegio tiene el

@@ -356,6 +356,18 @@ export interface OpcionesDespacho {
   limite?: number;
   /** Espera entre mensaje y mensaje. Es lo que reparte la tanda en el tiempo. */
   pausaMs?: number;
+  /**
+   * Cuántos mensajes le quedan a cada canal en su cuota MENSUAL del plan.
+   * Infinity o ausente = sin tope.
+   *
+   * No confundir con `limite`, que es el presupuesto de ESTA corrida y solo
+   * reparte la ráfaga en el tiempo: lo que no entra hoy sale en un rato. Esto
+   * es dinero — cada WhatsApp y cada SMS nos los factura el proveedor — y lo
+   * que no entra aquí no sale hasta el mes que viene. Por eso se cuenta por
+   * canal y no en un solo saco: que se agote el SMS no debe callar el
+   * WhatsApp. El correo nunca lleva tope. Ver lib/suscripcion/cuota-avisos.ts.
+   */
+  restantePorCanal?: Partial<Record<Canal, number>>;
   enviar: {
     correo: (destino: string, texto: string, p: AvisoPendiente) => Promise<void>;
     whatsapp: (destino: string, texto: string) => Promise<void>;
@@ -379,6 +391,11 @@ export async function despachar(
   const limite = opts.limite ?? Infinity;
   const pausaMs = opts.pausaMs ?? 0;
   let salidos = 0;
+
+  // Copia local: se va descontando mensaje a mensaje dentro de la tanda. Sin
+  // esto habría que releer la base en cada envío para saber si ya se pasó, o
+  // —peor— confiar en el conteo del principio y mandar de más.
+  const restante: Partial<Record<Canal, number>> = { ...opts.restantePorCanal };
 
   // En simulacro hay que consultar lo ya enviado a mano. El envío real no lo
   // necesita —el índice único lo resuelve al insertar— pero un simulacro que
@@ -406,6 +423,22 @@ export async function despachar(
     const { largo, corto } = redactar(p, opts.colegio);
 
     for (const canal of p.canales) {
+      // Cuota del mes agotada en este canal: se salta el canal, NO el aviso.
+      // El mismo recordatorio sigue saliendo por los canales que le queden —
+      // normalmente el correo, que no lleva tope. Se anota como fallo a
+      // propósito: un tope que corta callado se lee después como «no había
+      // nada que mandar», y nadie se entera de que el colegio necesita
+      // más cupo.
+      const quedan = restante[canal];
+      if (quedan !== undefined && quedan <= 0) {
+        hechos.push({
+          cargoId: p.fila.cargoId, aviso: p.aviso, canal,
+          destino: destinoDelCanal(p.fila, canal),
+          ok: false, error: `Cuota mensual de ${canal} agotada`,
+        });
+        continue;
+      }
+
       const destino = destinoDelCanal(p.fila, canal);
       // Sin dato de contacto no hay nada que intentar, y anotarlo como
       // enviado escondería para siempre a un responsable sin correo.
@@ -441,6 +474,10 @@ export async function despachar(
         // Solo aquí: el correo y WhatsApp no cobran por carácter y ahí el
         // texto va con su ortografía.
         else await opts.enviar.sms(destino, aGsm7(corto));
+        // Solo se descuenta lo que de verdad salió: un envío que reventó se
+        // libera arriba para reintentarse, y cobrarle el cupo además sería
+        // castigarlo dos veces por el mismo teléfono mal escrito.
+        if (restante[canal] !== undefined) restante[canal]! -= 1;
         hechos.push({ cargoId: p.fila.cargoId, aviso: p.aviso, canal, destino, ok: true });
       } catch (err) {
         // Se suelta la reserva para que mañana se pueda reintentar. El fallo

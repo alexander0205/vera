@@ -18,6 +18,7 @@ import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import { ModuleHeader } from '@/components/module-header';
+import { BannerSuscripcion } from '@/components/banner-suscripcion';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import type { UserInfo } from '@/components/profile-dropdown';
 import type { ModuleKey } from '@/lib/config/modules';
@@ -70,6 +71,9 @@ function ShellInterno({ rail, railMovil, current, titulo, user, children }: Prop
           onFijarMenu={alternar}
           menuFijo={fijo}
         />
+        {/* Fuera del área que hace scroll: un aviso de cobro que se pierde al
+            bajar la página no sirve de nada. */}
+        <BannerSuscripcion />
         <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {children}
         </Box>

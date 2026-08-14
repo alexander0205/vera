@@ -122,11 +122,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
+  // Matricular genera los cargos del año: es crear deuda cobrable, no un
+  // ajuste de configuración. Va con el gate de escritura.
+  const auth = await requireModuleAndPermission(
+    'escolar', 'administracion-escolar:gestionar', { escritura: true },
+  );
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const {
-    estudianteId, periodoId, cursoId, codigoMatricula, fechaInscripcion, estado, notas,
+    estudianteId, periodoId, cursoId, documentoListaId, codigoMatricula, fechaInscripcion, estado, notas,
     becaTipo, becaValor, becaMotivo,
     /**
      * Ids de los conceptos que la secretaria dejó marcados en el panel. Se
@@ -176,6 +180,9 @@ export async function POST(req: NextRequest) {
         estudianteId: estudianteIdOk,
         periodoId:    periodoIdOk,
         cursoId:      cursoIdOk,
+        // Qué papeles se le piden a esta familia. Lo elige quien matricula: el
+        // colegio sabe si viene de traslado, y ninguna regla lo adivina.
+        documentoListaId: Number(documentoListaId) || null,
         codigoMatricula: codigoMatricula?.trim() || null,
         fechaInscripcion: fechaInscripcion || null,
         estado: estadoNorm,

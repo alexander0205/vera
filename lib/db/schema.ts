@@ -51,6 +51,24 @@ export const teams = pgTable('teams', {
   planName: varchar('plan_name', { length: 50 }),
   subscriptionStatus: varchar('subscription_status', { length: 20 }),
 
+  // ── Ciclo de vida de la suscripción (migración 0133) ──────────────────────
+  // El estado de Stripe dice QUÉ pasa; estas cuatro fechas dicen DESDE CUÁNDO,
+  // que es lo que decide si todavía queda prueba, si la gracia por el cobro
+  // fallido sigue viva, y hasta qué día sirve lo ya pagado. Se derivan en el
+  // webhook para no llamar a Stripe en cada carga de página.
+  // Ver lib/suscripcion/estado.ts.
+  trialEnd:           timestamp('trial_end'),
+  periodoFin:         timestamp('periodo_fin'),
+  /** Cuándo falló el PRIMER cobro. No se toca en los reintentos: si se
+   *  reiniciara con cada uno, la mora nunca se agotaría. */
+  morosoDesde:        timestamp('moroso_desde'),
+  cancelarAlFin:      boolean('cancelar_al_fin').notNull().default(false),
+  /** Adicionales contratados sobre el plan (hoy solo 'pos'). Ver ADDONS. */
+  adicionales:        jsonb('adicionales').notNull().default([]),
+  /** Cuándo se le avisó que quedó en solo lectura. Evita repetir el correo
+   *  cada día del barrido; se limpia al reactivar (migración 0135). */
+  avisoSoloLecturaEn: timestamp('aviso_solo_lectura_en'),
+
   // ── EmiteDO — datos fiscales del negocio ──────────────────────────────────
   rnc: varchar('rnc', { length: 11 }),
   razonSocial: varchar('razon_social', { length: 255 }),

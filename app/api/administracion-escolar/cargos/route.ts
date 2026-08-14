@@ -75,7 +75,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireModuleAndPermission('escolar', 'administracion-escolar:gestionar');
+  // Un cargo es deuda que después se cobra con una factura: escritura.
+  const auth = await requireModuleAndPermission(
+    'escolar', 'administracion-escolar:gestionar', { escritura: true },
+  );
   if (!auth.ok) return auth.response;
   const { teamId } = auth;
   const { estudianteId, matriculaId, periodoId, conceptoId, mes, anio, montoCentavos, fechaVencimiento } = await req.json();

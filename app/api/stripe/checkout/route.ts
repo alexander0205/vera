@@ -105,7 +105,8 @@ export async function GET(request: NextRequest) {
 
     // Determinar plan usando la config central
     const planDef  = getPlanByPriceId(priceData.id);
-    const planName = planDef.name;
+    // La CLAVE, no el nombre. Ver getPlan en lib/config/plans.ts.
+    const planName = planDef.key;
 
     // Actualizar el team con los datos de Stripe
     await db

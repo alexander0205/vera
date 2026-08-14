@@ -3,12 +3,13 @@ import { checkoutAction } from '@/lib/payments/actions';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import Alert from '@mui/material/Alert';
-import { Check, AlertCircle } from 'lucide-react';
-import { SubmitButton } from './submit-button';
-import { PLANS, getPlanPriceId, type PlanDef } from '@/lib/config/plans';
+import { AlertCircle } from 'lucide-react';
+import {
+  PLANS, LINEAS_PRODUCTO, planesDeLinea, getPlanPriceId,
+} from '@/lib/config/plans';
+import { PRUEBA } from '@/lib/config/suscripcion';
 import { SiteHeader } from '@/components/site-header';
-import Link from 'next/link';
+import { Lineas, type PlanDeLinea } from './_lineas';
 
 export default function PricingPage({
   searchParams,
@@ -30,6 +31,18 @@ async function PricingPageInner({
   const isNew        = welcome === '1';
   const isNewCompany = new_company === '1';
 
+  // Los precios y los priceId se resuelven AQUÍ, en el servidor: getPlanPriceId
+  // lee process.env, que en el cliente no existe. Antes cada tarjeta lo pedía
+  // por su cuenta y por eso la parrilla tenía que ser un Server Component.
+  const porLinea: Record<string, PlanDeLinea[]> = Object.fromEntries(
+    LINEAS_PRODUCTO.map(linea => [
+      linea.key,
+      planesDeLinea(linea.key).map(({ plan, precio }) => ({
+        plan, precio, priceId: getPlanPriceId(plan.key),
+      })),
+    ]),
+  );
+
   return (
     <Box component="main">
       <SiteHeader />
@@ -41,7 +54,7 @@ async function PricingPageInner({
             <Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1e40af' }}>Empresa creada — elige su plan</Typography>
               <Typography sx={{ fontSize: '0.75rem', color: '#1d4ed8', mt: 0.25 }}>
-                Cada empresa tiene su propio plan. Todos incluyen <strong>15 días de prueba gratis</strong>.
+                Cada empresa tiene su propio plan. Todos incluyen <strong>{PRUEBA.dias} días de prueba gratis</strong>.
               </Typography>
             </Box>
           </Box>
@@ -53,7 +66,7 @@ async function PricingPageInner({
             <Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#2a45c4' }}>¡Cuenta creada! Elige tu plan para empezar</Typography>
               <Typography sx={{ fontSize: '0.75rem', color: '#3658e1', mt: 0.25 }}>
-                Todos los planes incluyen <strong>15 días de prueba gratis</strong>. Cancela cuando quieras.
+                Todos los planes incluyen <strong>{PRUEBA.dias} días de prueba gratis</strong>. Cancela cuando quieras.
               </Typography>
             </Box>
           </Box>
@@ -64,28 +77,27 @@ async function PricingPageInner({
             <AlertCircle size={20} color="#d97706" style={{ marginTop: 2, flexShrink: 0 }} />
             <Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#92400e' }}>Necesitas un plan para acceder al dashboard</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#b45309', mt: 0.25 }}>Elige un plan y empieza con 15 días de prueba gratis.</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#b45309', mt: 0.25 }}>Elige un plan y empieza con {PRUEBA.dias} días de prueba gratis.</Typography>
             </Box>
           </Box>
         )}
 
-        <Box sx={{ textAlign: 'center', mb: 6 }}>
+        <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Typography variant="h3" sx={{ fontWeight: 700, color: '#111827', mb: 2 }}>Planes y precios</Typography>
           <Typography sx={{ color: '#6b7280', fontSize: '1.125rem' }}>
-            Precios en dólares (USD). Prueba 15 días gratis. Sin contratos. Cancela cuando quieras.
+            Precios en dólares (USD). Prueba {PRUEBA.dias} días gratis. Sin contratos. Cancela cuando quieras.
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 3 }}>
-          {PLANS.map(plan => <PricingCard key={plan.key} plan={plan} />)}
-        </Box>
+        <Lineas porLinea={porLinea} checkoutAction={checkoutAction} />
 
         <Box sx={{ textAlign: 'center', mt: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 500 }}>
-            ✓ 15 días de prueba gratis en todos los planes — sin tarjeta de crédito
+            ✓ {PRUEBA.dias} días de prueba gratis en todos los planes
+            {PRUEBA.pideTarjeta ? '' : ' — sin tarjeta de crédito'}
           </Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af' }}>
-            ¿Necesitas más de 800 comprobantes o integración personalizada?{' '}
+            ¿Tu colegio pasa de {topeEstudiantesMaximo()} estudiantes, o necesitas una integración a medida?{' '}
             <Box component="a" href="mailto:hola@zero.com.do" sx={{ color: '#3658e1', textDecoration: 'underline' }}>Contáctanos</Box>
           </Typography>
         </Box>
@@ -94,62 +106,7 @@ async function PricingPageInner({
   );
 }
 
-function PricingCard({ plan }: { plan: PlanDef }) {
-  const priceId  = getPlanPriceId(plan.key);
-  const destacado = plan.ui.highlighted;
-
-  return (
-    <Box sx={{
-      position: 'relative', display: 'flex', flexDirection: 'column', p: 4,
-      borderRadius: '16px', border: '1px solid',
-      ...(destacado
-        ? { borderColor: '#3658e1', bgcolor: '#3658e1', color: '#fff', boxShadow: '0 20px 40px rgba(13,148,136,0.3)' }
-        : { borderColor: '#e5e7eb', bgcolor: '#fff' }),
-    }}>
-      {destacado && (
-        <Box sx={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', bgcolor: '#f97316', color: '#fff', fontSize: '0.75rem', fontWeight: 600, px: 1.5, py: 0.5, borderRadius: '99px', whiteSpace: 'nowrap' }}>
-          Más popular
-        </Box>
-      )}
-
-      <Box sx={{ mb: 3 }}>
-        <Typography sx={{ fontSize: '1.25rem', fontWeight: 700, mb: 0.5, color: destacado ? '#fff' : '#111827' }}>{plan.name}</Typography>
-        <Typography sx={{ fontSize: '0.875rem', mb: 2, color: destacado ? '#e0e7fd' : '#6b7280' }}>{plan.ui.description}</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-          <Typography sx={{ fontSize: '2.25rem', fontWeight: 700, color: destacado ? '#fff' : '#111827' }}>${plan.price}</Typography>
-          <Typography sx={{ fontSize: '0.875rem', color: destacado ? '#e0e7fd' : '#6b7280' }}>USD/mes</Typography>
-        </Box>
-        <Typography sx={{ fontSize: '0.75rem', mt: 0.5, color: destacado ? '#e0e7fd' : '#9ca3af' }}>
-          15 días gratis, luego ${plan.price}/mes
-        </Typography>
-      </Box>
-
-      <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1.5, mb: 4, flex: 1 }}>
-        {plan.ui.marketingFeatures.map((feature, i) => (
-          <Box component="li" key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-            <Check size={16} color={destacado ? '#e0e7fd' : '#3658e1'} style={{ marginTop: 2, flexShrink: 0 }} />
-            <Typography sx={{ fontSize: '0.875rem', color: destacado ? '#eef2fe' : '#4b5563' }}>{feature}</Typography>
-          </Box>
-        ))}
-      </Box>
-
-      {priceId ? (
-        <form action={checkoutAction}>
-          <input type="hidden" name="priceId" value={priceId} />
-          <SubmitButton destacado={destacado} label="Empezar prueba gratis" />
-        </form>
-      ) : (
-        <Link href="/sign-up" style={{ textDecoration: 'none' }}>
-          <Box sx={{
-            display: 'block', textAlign: 'center', py: 1.25, px: 2, borderRadius: '99px', fontSize: '0.875rem', fontWeight: 500, transition: 'background 0.15s',
-            ...(destacado
-              ? { bgcolor: '#fff', color: '#2a45c4', '&:hover': { bgcolor: '#eef2fe' } }
-              : { bgcolor: '#3658e1', color: '#fff', '&:hover': { bgcolor: '#2a45c4' } }),
-          }}>
-            Empezar prueba gratis
-          </Box>
-        </Link>
-      )}
-    </Box>
-  );
+/** El tramo escolar más alto del catálogo. Arriba de ahí se cotiza a mano. */
+function topeEstudiantesMaximo(): number {
+  return Math.max(...PLANS.map(p => p.limits.estudiantes));
 }

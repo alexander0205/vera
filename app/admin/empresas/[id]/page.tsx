@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
 import Link from 'next/link';
-import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight, CreditCard } from 'lucide-react';
 import { ConfirmButton } from './confirm-button';
 import EcfApiSection from './_ecf-section';
 import { RoleSelect } from './_role-select';
@@ -26,6 +26,16 @@ import {
   MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS, sanitizeModules,
   withDependencies, dependentsOf, isBaseModule, withBaseModules, type ModuleKey,
 } from '@/lib/config/modules';
+import { BILLING_ENABLED } from '@/lib/config/billing';
+import { getTeamModules } from '@/lib/auth/modules';
+import { PLANS, getPlan } from '@/lib/config/plans';
+import { PlanSelect } from './_plan-select';
+
+/** -1 en el catálogo significa «sin tope»; 0 en estudiantes, «no aplica». */
+function limiteTexto(n: number): string {
+  if (n < 0) return 'Ilimitado';
+  return String(n);
+}
 
 // ─── Server Action: invitar usuario ──────────────────────────────────────────
 
@@ -155,10 +165,55 @@ async function toggleCajaHabilitada(formData: FormData) {
   revalidatePath(`/admin/empresas/${teamId}`);
 }
 
+// ─── Server Action: asignar plan a la empresa ────────────────────────────────
+//
+// Es la ÚNICA vía para poner un plan sin pasar por Stripe, y hace falta por
+// dos razones: las 22 empresas que ya existen nunca compraron nada (nacieron
+// antes del billing) y hay que darles el suyo, y de vez en cuando toca sostener
+// a un cliente mientras se arregla un pago.
+//
+// Marca `subscription_status = 'admin'`, que el ciclo de vida trata como acceso
+// concedido por nosotros: no caduca y ningún webhook lo pisa. Ver
+// lib/suscripcion/estado.ts.
+
+async function asignarPlan(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId  = parseInt(formData.get('teamId') as string);
+  const planKey = (formData.get('plan') as string ?? '').trim();
+  if (isNaN(teamId)) return;
+
+  // Cadena vacía = quitarle el plan. Se valida contra el catálogo para que un
+  // POST a mano no pueda dejar un plan_name que después no resuelva a nada.
+  const valido = planKey === '' || PLANS.some(p => p.key === planKey);
+  if (!valido) return;
+
+  await db.update(teams).set({
+    planName: planKey || null,
+    // 'admin' solo mientras no haya una suscripción de Stripe de por medio:
+    // si la empresa YA paga, cambiarle el estado le rompería el ciclo real.
+    subscriptionStatus: planKey ? 'admin' : null,
+    updatedAt: new Date(),
+  }).where(eq(teams.id, teamId));
+
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
 // ─── Server Action: toggle módulo del producto (facturación/pos) ─────────────
-// Escribe modulosHabilitados directamente (override manual del admin de
-// plataforma). Cuando el billing por módulo esté activo, la fuente normal es
-// Stripe y esto pasa a editar modulosOverride; por ahora es el único camino.
+//
+// A qué columna escribe depende de si el billing está encendido:
+//
+//  · apagado → modulosHabilitados. Los módulos son nuestros y esta columna es
+//    la fuente de verdad; nadie más opina.
+//  · encendido → modulosOverride. La fuente normal pasa a ser el plan, y esta
+//    pantalla queda para la excepción: regalar un módulo, montar una demo,
+//    sostener a un cliente mientras se arregla un pago.
+//
+// Escribir siempre en modulosHabilitados con el billing encendido sería un
+// toggle que se ve moverse en pantalla y no cambia nada, porque getTeamModules
+// leería el plan por encima. Ver la jerarquía en lib/auth/modules.ts.
 
 async function toggleModulo(formData: FormData) {
   'use server';
@@ -173,9 +228,17 @@ async function toggleModulo(formData: FormData) {
   // se apagan: apagar administración dejaría al dueño sin acceso a su empresa.
   if (isBaseModule(modulo) && !habilitar) return;
 
-  const [t] = await db.select({ mods: teams.modulosHabilitados }).from(teams).where(eq(teams.id, teamId)).limit(1);
+  const [t] = await db
+    .select({ mods: teams.modulosHabilitados, override: teams.modulosOverride })
+    .from(teams).where(eq(teams.id, teamId)).limit(1);
   if (!t) return;
-  const current = sanitizeModules(t.mods);
+
+  // Con billing encendido se parte del override si ya existe; si no, de lo que
+  // hay habilitado hoy, para que el primer clic no le apague al cliente todo
+  // lo que ya tenía.
+  const current = sanitizeModules(
+    BILLING_ENABLED && t.override != null ? t.override : t.mods,
+  );
   // Activar arrastra dependencias (escolar cobra con facturas → necesita
   // Facturación); desactivar arrastra a los que dependen de él, si no el
   // módulo dependiente queda encendido pero roto.
@@ -186,7 +249,7 @@ async function toggleModulo(formData: FormData) {
   // Compat legacy: posHabilitado sigue reflejando el módulo pos hasta retirar
   // su último consumidor.
   await db.update(teams).set({
-    modulosHabilitados: next,
+    ...(BILLING_ENABLED ? { modulosOverride: next } : { modulosHabilitados: next }),
     ...(modulo === 'pos' ? { posHabilitado: habilitar } : {}),
   }).where(eq(teams.id, teamId));
   revalidatePath(`/admin/empresas/${teamId}`);
@@ -289,6 +352,11 @@ export default async function EmpresaDetailPage({
 
   const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
   if (!team) notFound();
+
+  // Lo que la empresa ve DE VERDAD, no lo que dice una columna suelta: con el
+  // billing encendido los módulos salen del plan, y pintar modulosHabilitados
+  // aquí mostraría un toggle apagado sobre un módulo que el cliente sí tiene.
+  const modulosActivos = await getTeamModules(teamId);
 
   const members = await db
     .select({ id: users.id, name: users.name, email: users.email, role: teamMembers.role, joinedAt: teamMembers.joinedAt })
@@ -395,8 +463,41 @@ export default async function EmpresaDetailPage({
           <Item label="Dirección"    value={team.direccion} />
           <Item label="Teléfono"     value={team.telefono} />
           <Item label="Email fact."  value={team.emailFacturacion} />
-          <Item label="Plan"         value={team.planName ?? 'Sin plan'} />
         </Box>
+      </Box>
+
+      {/* Plan de la empresa */}
+      <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <CreditCard style={{ width: 16, height: 16, color: '#9ca3af' }} />
+          <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Plan</Typography>
+        </Box>
+
+        <form action={asignarPlan} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <input type="hidden" name="teamId" value={teamId} />
+          <Box sx={{ minWidth: 260 }}>
+            <PlanSelect current={team.planName ?? ''} />
+          </Box>
+          <Button type="submit" variant="outlined" size="small" disableElevation
+            sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
+            Guardar plan
+          </Button>
+        </form>
+
+        <Typography variant="caption" sx={{ color: '#9ca3af', display: 'block', mt: 1.5 }}>
+          {team.stripeSubscriptionId
+            ? 'Esta empresa tiene suscripción en Stripe. Cambiar el plan aquí NO cobra ni avisa a Stripe — úsalo solo para corregir.'
+            : 'Sin suscripción en Stripe: el plan queda como acceso concedido por nosotros y no caduca.'}
+        </Typography>
+
+        {team.planName && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2,1fr)', md: 'repeat(4,1fr)' }, gap: '12px 24px', mt: 2, pt: 2, borderTop: '1px solid #f3f4f6' }}>
+            <Item label="Comprobantes/mes" value={limiteTexto(getPlan(team.planName).limits.docs)} />
+            <Item label="Usuarios"         value={limiteTexto(getPlan(team.planName).limits.users)} />
+            <Item label="Estudiantes"      value={limiteTexto(getPlan(team.planName).limits.estudiantes)} />
+            <Item label="Precio"           value={`US$${getPlan(team.planName).price}/mes`} />
+          </Box>
+        )}
       </Box>
 
       {/* Módulos del equipo */}
@@ -410,11 +511,10 @@ export default async function EmpresaDetailPage({
             aquí solo: Administración Escolar no se vende por Stripe, así que
             este toggle es su ÚNICA vía de activación. */}
         {MODULES.map(mod => {
-          const mods = Array.isArray(team.modulosHabilitados) ? (team.modulosHabilitados as string[]) : [];
           // Los módulos base los tiene toda empresa: se muestran siempre activos
           // y sin botón, no hay nada que decidir sobre ellos.
           const base = isBaseModule(mod);
-          const activo = base || mods.includes(mod);
+          const activo = base || modulosActivos.includes(mod);
           const label = MODULE_LABELS[mod];
           const desc = MODULE_DESCRIPTIONS[mod];
           return (

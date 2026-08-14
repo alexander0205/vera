@@ -17,6 +17,7 @@ import { descontarInventario } from '@/lib/inventario/descuento';
 import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
 import { getPlan, PLANS } from '@/lib/config/plans';
+import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
 import { eq, and, sql, isNull, gte, desc, inArray } from 'drizzle-orm';
 import { userCanForTeam } from '@/lib/auth/permissions';
 import { validarPreciosDeCatalogo } from '@/lib/facturas/precio-guard';
@@ -243,6 +244,13 @@ export async function POST(request: NextRequest) {
     if (!await userCanForTeam(teamId, user.platformRole, m?.role, 'facturas:crear')) {
       return NextResponse.json({ error: 'Sin permiso para crear facturas' }, { status: 403 });
     }
+
+    // ── Gate: suscripción viva ────────────────────────────────────────────────
+    // Antes del límite del plan y antes del borrador: en solo-lectura no se
+    // crea NADA, ni siquiera un borrador. El límite de comprobantes pregunta
+    // "¿te queda cupo?"; esto pregunta "¿tienes plan?", que es lo primero.
+    const bloqueo = await bloquearSiSoloLectura(teamId);
+    if (bloqueo) return bloqueo;
 
     const body = await request.json();
     const modoPrevio = body?.modo ?? 'emitir';

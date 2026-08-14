@@ -3,12 +3,43 @@ import { stripe } from '@/lib/payments/stripe';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTeamByStripeCustomerId, updateTeamSubscription } from '@/lib/db/queries';
-import { getPlanByPriceId } from '@/lib/config/plans';
+import { getPlanByPriceId, FREE_PLAN } from '@/lib/config/plans';
 import { syncModulesFromSubscription } from '@/lib/payments/modulos';
+import { MORA } from '@/lib/config/suscripcion';
+import {
+  destinatarioDeSuscripcion, type DestinatarioSuscripcion,
+} from '@/lib/suscripcion/destinatario';
+import {
+  enviarCobroFallido, enviarPruebaPorVencer, enviarCancelacionProgramada,
+} from '@/lib/email/suscripcion';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+
+/**
+ * Manda un correo de suscripción sin poder tumbar el webhook.
+ *
+ * Un fallo de Resend NO debe devolverle un 500 a Stripe: Stripe reintentaría
+ * el evento, y el reintento volvería a aplicar el cambio de plan que ya se
+ * aplicó. Perder un correo es molesto; procesar dos veces un cambio de
+ * suscripción corrompe el estado. Por eso se traga el error y se loguea.
+ */
+async function avisar(
+  teamId: number,
+  enviar: (d: DestinatarioSuscripcion) => Promise<void>,
+): Promise<void> {
+  try {
+    const destinatario = await destinatarioDeSuscripcion(teamId);
+    if (!destinatario) {
+      console.warn(`[webhook] team ${teamId} sin destinatario para el aviso`);
+      return;
+    }
+    await enviar(destinatario);
+  } catch (err) {
+    console.error(`[webhook] no se pudo avisar al team ${teamId}:`, err);
+  }
+}
 
 export async function POST(request: NextRequest) {
   const payload   = await request.text();
@@ -43,7 +74,10 @@ export async function POST(request: NextRequest) {
         });
 
         const priceId = subscription.items.data[0]?.price?.id ?? '';
-        const planName = getPlanByPriceId(priceId).name;
+        // La CLAVE, no el nombre: `getPlan` resuelve por clave y «Avanzado» no
+        // es `colegio-avanzado`. Guardar el nombre dejaba a cinco de los ocho
+        // planes cayendo a FREE_PLAN justo después de pagar.
+        const planName = getPlanByPriceId(priceId).key;
 
         // Find or create team link by customerId
         let team = await getTeamByStripeCustomerId(customerId);
@@ -110,27 +144,48 @@ export async function POST(request: NextRequest) {
         }
 
         const priceId  = subscription.items.data[0]?.price?.id ?? '';
-        const planName = getPlanByPriceId(priceId).name;
+        // La CLAVE, no el nombre: `getPlan` resuelve por clave y «Avanzado» no
+        // es `colegio-avanzado`. Guardar el nombre dejaba a cinco de los ocho
+        // planes cayendo a FREE_PLAN justo después de pagar.
+        const planName = getPlanByPriceId(priceId).key;
         const status   = subscription.status;
 
-        if (status === 'active' || status === 'trialing') {
+        if (status === 'active' || status === 'trialing' || status === 'past_due') {
+          // past_due CONSERVA el plan. Es el estado de «se me venció la
+          // tarjeta», y quien decide si todavía puede trabajar es la gracia de
+          // MORA.diasGracia, no esta línea. Ponerlo en 'Gratis' aquí lo dejaba
+          // sin módulos y con cupo cero el mismo día del primer cobro fallido,
+          // que es justo lo que la gracia existe para evitar.
           await updateTeamSubscription(team.id, {
             stripeSubscriptionId: subscription.id,
             stripeProductId: (subscription.items.data[0]?.price?.product as string) ?? null,
             planName,
             subscriptionStatus: status,
           });
-        } else if (status === 'canceled' || status === 'unpaid' || status === 'past_due') {
+        } else if (status === 'canceled' || status === 'unpaid') {
           await updateTeamSubscription(team.id, {
             stripeSubscriptionId: subscription.id,
             stripeProductId: null,
-            planName: 'Gratis',
+            planName: FREE_PLAN.key,
             subscriptionStatus: status,
           });
         }
 
         // Billing por módulo: deriva modulosHabilitados de los items/estado.
         await syncModulesFromSubscription(team.id, subscription);
+
+        // Cancelación recién programada. Se compara contra lo que había en la
+        // fila ANTES de sincronizar: `subscription.updated` llega por muchos
+        // motivos —renovación, cambio de precio, actualización de tarjeta— y
+        // sin esta comparación se mandaría el correo de cancelación en cada
+        // uno de ellos.
+        const acabaDeCancelar = subscription.cancel_at_period_end && !team.cancelarAlFin;
+        const finPeriodo = subscription.items.data[0]?.current_period_end;
+        if (acabaDeCancelar && finPeriodo) {
+          await avisar(team.id, d => enviarCancelacionProgramada({
+            ...d, activoHasta: new Date(finPeriodo * 1000),
+          }));
+        }
 
         console.log(`[webhook] subscription updated — team ${team.id} → ${planName} (${status})`);
         break;
@@ -150,7 +205,7 @@ export async function POST(request: NextRequest) {
         await updateTeamSubscription(team.id, {
           stripeSubscriptionId: null,
           stripeProductId: null,
-          planName: 'Gratis',
+          planName: FREE_PLAN.key,
           subscriptionStatus: 'canceled',
         });
 
@@ -169,13 +224,72 @@ export async function POST(request: NextRequest) {
 
         if (!team) break;
 
-        // Mark subscription as past_due but keep planName so they can fix payment
+        // ¿Es el PRIMER fallo? Se mira antes de escribir, porque después de
+        // el UPDATE ya no se distingue: Stripe reintenta la tarjeta varias
+        // veces y manda este evento en cada intento. Un correo por reintento
+        // convierte un aviso útil en spam nuestro.
+        const primerFallo = team.morosoDesde == null;
+
+        // Se conserva el planName para que pueda entrar a arreglar el pago.
+        //
+        // `morosoDesde` se escribe SOLO si estaba vacío. Stripe reintenta la
+        // tarjeta varias veces durante la semana y cada intento fallido manda
+        // otro invoice.payment_failed; sobrescribirlo movería el arranque de la
+        // gracia hacia adelante en cada reintento y la mora no vencería nunca.
+        // Se limpia al volver a cobrar bien (ver fechasDelCiclo).
         await db
           .update(teams)
-          .set({ subscriptionStatus: 'past_due', updatedAt: new Date() })
+          .set({
+            subscriptionStatus: 'past_due',
+            morosoDesde: sql`COALESCE(${teams.morosoDesde}, NOW())`,
+            updatedAt: new Date(),
+          })
           .where(eq(teams.id, team.id));
 
-        console.log(`[webhook] payment failed — team ${team.id} marked past_due`);
+        if (primerFallo) {
+          await avisar(team.id, d => enviarCobroFallido({ ...d, diasDeGracia: MORA.diasGracia }));
+        }
+
+        console.log(`[webhook] payment failed — team ${team.id} marked past_due (primero: ${primerFallo})`);
+        break;
+      }
+
+      // ── Cobro exitoso ─────────────────────────────────────────────────────────
+      // Cierra la mora en cuanto el dinero entra. Sin esto había que esperar a
+      // que llegara un `subscription.updated`, y mientras tanto una empresa que
+      // YA PAGÓ seguía viendo el banner de «actualiza tu tarjeta» y contando
+      // los días de una gracia que ya no le aplicaba.
+      case 'invoice.payment_succeeded': {
+        const invoice    = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+        const team       = await getTeamByStripeCustomerId(customerId);
+
+        if (!team || team.morosoDesde == null) break;
+
+        await db
+          .update(teams)
+          .set({ morosoDesde: null, subscriptionStatus: 'active', updatedAt: new Date() })
+          .where(eq(teams.id, team.id));
+
+        console.log(`[webhook] payment succeeded — team ${team.id} sale de mora`);
+        break;
+      }
+
+      // ── La prueba se acaba ────────────────────────────────────────────────────
+      // Stripe lo manda tres días antes. Es el ÚNICO aviso que llega antes de
+      // perder el acceso: el banner solo lo ve quien entra, y quien está a
+      // punto de no pagar es justo el que no está entrando.
+      case 'customer.subscription.trial_will_end': {
+        const subscription = event.data.object as Stripe.Subscription;
+        const team = await getTeamByStripeCustomerId(subscription.customer as string);
+        if (!team || !subscription.trial_end) break;
+
+        const venceEl = new Date(subscription.trial_end * 1000);
+        const dias = Math.max(1, Math.ceil((venceEl.getTime() - Date.now()) / 86_400_000));
+
+        await avisar(team.id, d => enviarPruebaPorVencer({ ...d, diasRestantes: dias, venceEl }));
+
+        console.log(`[webhook] trial_will_end — team ${team.id}, ${dias} días`);
         break;
       }
 

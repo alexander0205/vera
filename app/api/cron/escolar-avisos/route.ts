@@ -10,6 +10,9 @@ import { canalesDelColegio } from '@/lib/administracion-escolar/canales';
 import { enviarAvisoCobroEmail } from '@/lib/email/escolar-avisos';
 import { enviarWhatsApp } from '@/lib/whatsapp/enviar';
 import { enviarSms } from '@/lib/sms/enviar';
+import { cuotaAvisos } from '@/lib/suscripcion/cuota-avisos';
+import { equiposConProcesosVivos } from '@/lib/suscripcion/procesos';
+import { AL_CANCELAR } from '@/lib/config/suscripcion';
 
 /**
  * Los recordatorios de cobro del módulo escolar.
@@ -69,6 +72,15 @@ export async function GET(req: NextRequest) {
       .map((t) => [t.id, t.name]),
   );
 
+  // Cada WhatsApp y cada SMS nos los factura el proveedor. Un colegio que
+  // canceló no debe seguir generando esa factura —ni mandando recordatorios de
+  // cobro a nombre de un cliente que ya no lo es—. No se le apaga su
+  // configuración de canales: al reactivar, los avisos vuelven como estaban.
+  const conProcesos = AL_CANCELAR.cortarAvisos
+    ? await equiposConProcesosVivos(equipos)
+    : null;
+  const cortados: number[] = [];
+
   const resumen: {
     teamId: number; colegio: string; candidatos: number;
     pendientes: number; envios: EnvioHecho[];
@@ -82,6 +94,10 @@ export async function GET(req: NextRequest) {
 
   for (const teamId of equipos) {
     if (presupuesto <= 0 && !dryRun) break;
+    if (conProcesos && !conProcesos.has(teamId)) {
+      cortados.push(teamId);
+      continue;
+    }
     // El interruptor maestro del colegio se lee UNA vez por colegio, no por
     // cargo: es la misma respuesta para los cientos de filas de abajo.
     const canales = await canalesDelColegio(teamId);
@@ -89,11 +105,17 @@ export async function GET(req: NextRequest) {
     const pendientes: AvisoPendiente[] = filas.flatMap((f) => avisosDeHoy(f, hoy, canales));
     const colegio = nombres.get(teamId) ?? 'Tu colegio';
 
+    // Lo que le queda al colegio de su cuota MENSUAL de WhatsApp y SMS. Es un
+    // conteo por colegio y no de la corrida: el presupuesto de arriba reparte
+    // la ráfaga en el tiempo, esto es lo que compró.
+    const cuota = await cuotaAvisos(teamId);
+
     const envios = await despachar(pendientes, {
       dryRun,
       colegio,
       limite: presupuesto,
       pausaMs,
+      restantePorCanal: cuota.restante,
       enviar: {
         correo: (destino, texto, p) => enviarAvisoCobroEmail({
           email: destino,
@@ -114,7 +136,26 @@ export async function GET(req: NextRequest) {
     resumen.push({ teamId, colegio, candidatos: filas.length, pendientes: pendientes.length, envios });
   }
 
-  const fallos = resumen.flatMap((r) => r.envios).filter((e) => !e.ok);
+  // Los cortados por cuota se cuentan aparte de los fallos de contacto. Son
+  // dos problemas distintos con dos dueños distintos: uno lo arregla la
+  // secretaria corrigiendo un teléfono, el otro lo arreglamos nosotros
+  // vendiéndole un tramo mayor. Mezclados, el segundo no se ve nunca.
+  const todos = resumen.flatMap((r) => r.envios);
+  const sinCupo = todos.filter((e) => !e.ok && e.error?.startsWith('Cuota mensual'));
+  const fallos = todos.filter((e) => !e.ok && !e.error?.startsWith('Cuota mensual'));
+
+  if (sinCupo.length > 0) {
+    console.warn('[cron.escolar-avisos] avisos NO enviados por cuota agotada', {
+      hoy,
+      total: sinCupo.length,
+      porColegio: resumen
+        .map((r) => ({
+          colegio: r.colegio,
+          n: r.envios.filter((e) => e.error?.startsWith('Cuota mensual')).length,
+        }))
+        .filter((x) => x.n > 0),
+    });
+  }
   // Los fallos se cuentan aparte en la respuesta y se registran: el más común
   // es un tutor sin correo o con un teléfono que no normaliza, y eso hay que
   // ir a corregirlo a mano en la ficha. Si solo se contaran los éxitos, la
@@ -126,7 +167,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const enviados = resumen.flatMap((r) => r.envios).filter((e) => e.ok).length;
+  const enviados = todos.filter((e) => e.ok).length;
   return NextResponse.json({
     hoy,
     dryRun,
@@ -138,6 +179,11 @@ export async function GET(req: NextRequest) {
     avisos: resumen.reduce((n, r) => n + r.pendientes, 0),
     enviados,
     fallidos: fallos.length,
+    sinCupo: sinCupo.length,
+    // Colegios que hoy no recibieron nada por no tener plan vivo. Va explícito
+    // para que un cero de enviados se pueda distinguir de «no había nada que
+    // mandar».
+    sinPlan: cortados.length,
     resumen,
   });
 }

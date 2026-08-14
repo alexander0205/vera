@@ -13,10 +13,12 @@ import {
   } from 'lucide-react';
 import { GlobalSearch } from '@/components/global-search';
 import { ModuleHeader } from '@/components/module-header';
+import { BannerSuscripcion } from '@/components/banner-suscripcion';
 import { RailModulos } from '@/components/rail-modulos';
 import { RailBrand } from '@/components/rail-brand';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import { planHasFeature } from '@/lib/plans';
+import { planColorMui } from '@/lib/config/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { BILLING_ENABLED } from '@/lib/config/billing';
@@ -247,14 +249,10 @@ function teamHasPlan(t: Team) {
   return true;
 }
 
-function planColor(planName: string | null): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {
-  const p = planName?.toLowerCase();
-  if (!p) return 'default';
-  if (p === 'pro')      return 'secondary';
-  if (p === 'business') return 'primary';
-  if (p === 'starter')  return 'info';
-  return 'default';
-}
+// El tono sale del catálogo (lib/config/plans), no de una lista de nombres:
+// la versión anterior comparaba contra 'starter'/'business' y dejó de pintar
+// nada el día que esos planes dejaron de existir.
+const planColor = planColorMui;
 
 // ─── Profile Dropdown ─────────────────────────────────────────────────────────
 
@@ -819,6 +817,10 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
           onSwitchEmpresa={handleSwitch}
           breakpointMenu="lg"
         />
+
+        {/* Fuera del área que hace scroll: un aviso de cobro que se pierde al
+            bajar la página no sirve de nada. */}
+        <BannerSuscripcion />
 
         {/* Page content */}
         <Box

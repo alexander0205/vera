@@ -27,6 +27,7 @@ import {
   agregarArchivo, listarArchivos, ArchivoInvalidoError, DemasiadosArchivosError,
 } from '@/lib/administracion-escolar/documentos-archivo';
 import { rateLimitDb } from '@/lib/rate-limit';
+import { portalFamiliasAbierto } from '@/lib/suscripcion/procesos';
 
 /** Solo el nombre de pila. Ni apellidos, ni cédula, ni fecha de nacimiento:
  *  basta para que el padre sepa que el enlace es del hijo correcto. */
@@ -46,7 +47,24 @@ async function abrir(token: string): Promise<
   { ok: true; enlace: EnlaceResuelto } | { ok: false; response: NextResponse }
 > {
   const res = await resolverEnlace(token);
-  if (res.ok) return { ok: true, enlace: res.enlace };
+  if (res.ok) {
+    // El colegio dejó de ser cliente: el enlace deja de abrir. Si no, el
+    // portal sigue recibiendo actas de nacimiento y cédulas de menores a
+    // nombre de una empresa que ya no tiene cuenta con nosotros —y nadie del
+    // otro lado las va a revisar. Mismo 410 que un enlace revocado: hacia
+    // afuera es lo mismo, «esto ya no está activo», y el motivo interno de la
+    // empresa no es asunto de la familia.
+    if (!(await portalFamiliasAbierto(res.enlace.teamId))) {
+      return {
+        ok: false,
+        response: NextResponse.json({
+          error: 'Este enlace ya no está activo. Pídele otro al colegio.',
+          estado: 'revocado',
+        }, { status: 410 }),
+      };
+    }
+    return { ok: true, enlace: res.enlace };
+  }
   // Token desconocido y token mal formado dan lo mismo: desde fuera no se
   // distingue si existió alguna vez.
   if (res.motivo === 'invalido') {

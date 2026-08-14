@@ -1,7 +1,20 @@
+/**
+ * Mi suscripción — lo que el cliente ve de su plan.
+ *
+ * TODO sale del catálogo (lib/config/plans.ts) y del estado real de la
+ * suscripción. Nada escrito a mano: la versión anterior tenía la tabla
+ * comparativa y la lista de planes en literales, y se quedó meses ofreciendo
+ * «Starter $15» y «Business $35» —planes que ya no existían— mientras marcaba
+ * como no-pagador a cualquiera con un plan de verdad.
+ *
+ * Se muestran los límites que APLICAN a este plan, no una rejilla fija: a una
+ * ferretería no le importa el tope de estudiantes y a un colegio no le importa
+ * un tope de comprobantes que tiene en ilimitado.
+ */
+
 import { notFound, redirect } from 'next/navigation';
-import { BILLING_ENABLED } from '@/lib/config/billing';
 import Link from 'next/link';
-import { CreditCard, Zap, AlertCircle, TrendingUp } from 'lucide-react';
+import { CreditCard, Zap, AlertCircle, TrendingUp, Users, GraduationCap, MessageSquare, Smartphone } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -11,16 +24,38 @@ import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 import LinearProgress from '@mui/material/LinearProgress';
 import Divider from '@mui/material/Divider';
-import { getTeamIdForUser, getTeamProfile, getMonthlyEcfCount, getPlanLimit } from '@/lib/db/queries';
-import { getPlan, PLANS, getPlanPriceId } from '@/lib/config/plans';
-import { customerPortalAction } from '@/lib/payments/actions';
-import { stripe } from '@/lib/payments/stripe';
 import { count, eq, and, gte } from 'drizzle-orm';
-import { ecfDocuments } from '@/lib/db/schema';
+
+import { BILLING_ENABLED } from '@/lib/config/billing';
+import { getTeamIdForUser, getTeamProfile, getMonthlyEcfCount } from '@/lib/db/queries';
+import {
+  getPlan, PLANS, getPlanPriceId, planesDeFamilia, precioTotal, type PlanDef,
+} from '@/lib/config/plans';
+import { evaluarLimite, PRUEBA } from '@/lib/config/suscripcion';
+import { getSuscripcion } from '@/lib/suscripcion/queries';
+import { cuotaAvisos } from '@/lib/suscripcion/cuota-avisos';
+import { estadoDelTramo } from '@/lib/suscripcion/tramo';
+import { customerPortalAction, checkoutAction } from '@/lib/payments/actions';
+import { stripe } from '@/lib/payments/stripe';
+import { ecfDocuments, teamMembers } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { TIPOS_ECF } from '@/lib/ecf/types';
-import { PlanSwitcher } from './_plan-switcher';
 import { ChangePlan } from './_change-plan';
+
+// ─── Un límite, listo para pintar ─────────────────────────────────────────────
+
+interface Medidor {
+  clave: string;
+  etiqueta: string;
+  icono: React.ReactNode;
+  usado: number;
+  /** -1 = sin tope. */
+  tope: number;
+  /** Qué se dice debajo de la barra. */
+  nota: string;
+}
+
+const ICONO = { width: 14, height: 14 } as const;
 
 export default async function SuscripcionPage() {
   // Producto en desarrollo: planes y suscripción no se le muestran al usuario;
@@ -33,7 +68,7 @@ export default async function SuscripcionPage() {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [team, usadoEsteMes, usagePorTipo] = await Promise.all([
+  const [team, usadoEsteMes, usagePorTipo, suscripcion, miembros, tramo] = await Promise.all([
     getTeamProfile(teamId),
     getMonthlyEcfCount(teamId),
     db
@@ -41,82 +76,42 @@ export default async function SuscripcionPage() {
       .from(ecfDocuments)
       .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, startOfMonth)))
       .groupBy(ecfDocuments.tipoEcf),
+    getSuscripcion(teamId),
+    db.select({ n: count() }).from(teamMembers).where(eq(teamMembers.teamId, teamId)),
+    estadoDelTramo(teamId),
   ]);
-
-  // Buscar si hay un downgrade programado via Subscription Schedule
-  let pendingPlan: { name: string; effectiveDate: string } | null = null;
-  if (team?.stripeCustomerId && team?.stripeSubscriptionId) {
-    try {
-      const schedules = await stripe.subscriptionSchedules.list({
-        customer: team.stripeCustomerId,
-      });
-      const schedule = schedules.data.find(s => {
-        const subId = typeof s.subscription === 'string' ? s.subscription : s.subscription?.id;
-        return subId === team.stripeSubscriptionId && s.status === 'active';
-      });
-      if (schedule && schedule.phases.length >= 2) {
-        const nextPhase   = schedule.phases[schedule.phases.length - 1];
-        const nextPriceId = typeof nextPhase.items[0]?.price === 'string'
-          ? nextPhase.items[0].price
-          : (nextPhase.items[0]?.price as { id: string } | null)?.id ?? '';
-        const nextPlanDef = getPlan(
-          PLANS.find(p => p.priceEnvKey && process.env[p.priceEnvKey] === nextPriceId)?.key ?? ''
-        );
-        const endDate = schedule.phases[0]?.end_date;
-        if (nextPlanDef.key !== 'free' && endDate) {
-          pendingPlan = {
-            name:          nextPlanDef.name,
-            effectiveDate: new Date(endDate * 1000).toISOString(),
-          };
-        }
-      }
-    } catch {
-      // Si Stripe falla, continuamos sin info de pending
-    }
-  }
-
-  // Price IDs para pasar al cliente (leer env vars solo en server)
-  const priceIds = Object.fromEntries(
-    PLANS.map(p => [p.key, getPlanPriceId(p.key)])
-  );
 
   if (!team) redirect('/sign-in');
 
-  const planName   = team.planName ?? 'Sin plan';
-  const planKey    = planName.toLowerCase();
-  const subStatus  = team.subscriptionStatus ?? null;
-  const isPaid     = ['starter', 'business', 'pro'].includes(planKey);
-  const isTrialing = subStatus === 'trialing';
-  const limite     = getPlanLimit(planName, subStatus);
-  const isIlimitado = limite < 0;
-  const usoPct     = isIlimitado ? 0 : limite > 0 ? Math.min(100, Math.round((usadoEsteMes / limite) * 100)) : 100;
+  const planDef = getPlan(team.planName);
+  const sinPlan = planDef.key === 'free';
 
-  const planDef   = getPlan(planKey);
-  const planPrice = planDef.price > 0 ? `$${planDef.price} USD/mes` : 'Gratis';
-
-  const statusLabel: Record<string, { label: string; bgcolor: string; color: string }> = {
-    active:   { label: 'Activa',         bgcolor: '#ecfdf5', color: '#065f46' },
-    trialing: { label: '15 días gratis', bgcolor: '#eff6ff', color: '#1e40af' },
-    canceled: { label: 'Cancelada',      bgcolor: '#fef2f2', color: '#991b1b' },
-    unpaid:   { label: 'Sin pago',       bgcolor: '#fef2f2', color: '#991b1b' },
-    past_due: { label: 'Vencida',        bgcolor: '#fff7ed', color: '#9a3412' },
-  };
-
-  const statusInfo = subStatus
-    ? (statusLabel[subStatus] ?? { label: subStatus, bgcolor: '#f3f4f6', color: '#374151' })
+  // Los avisos solo se consultan si el plan los tarifa: preguntar por ellos en
+  // un plan de e-CF sería un COUNT sobre una tabla escolar que no le importa.
+  const cuota = planDef.limits.whatsappMensajes >= 0 || planDef.limits.smsMensajes >= 0
+    ? await cuotaAvisos(teamId)
     : null;
 
-  const COMPARE_ROWS = [
-    { feature: 'Comprobantes/mes', starter: '200',      business: '800',      pro: 'Ilimitados' },
-    { feature: 'Usuarios',          starter: '1',        business: '3',        pro: 'Ilimitados' },
-    { feature: 'Facturas e-CF',     starter: '✓',        business: '✓',        pro: '✓' },
-    { feature: 'Clientes y prods.', starter: '—',        business: '✓',        pro: '✓' },
-    { feature: 'Cotizaciones',      starter: '—',        business: '✓',        pro: '✓' },
-    { feature: 'Reportes DGII',     starter: '—',        business: '✓',        pro: '✓' },
-    { feature: 'API REST',          starter: '—',        business: '—',        pro: '✓' },
-    { feature: 'Webhooks',          starter: '—',        business: '—',        pro: '✓' },
-    { feature: 'Precio/mes',        starter: '$15',      business: '$35',      pro: '$65' },
-  ];
+  const pendingPlan = await downgradeProgramado(team);
+
+  // Price IDs para el cliente (las env vars solo se leen en el servidor).
+  const priceIds = Object.fromEntries(PLANS.map(p => [p.key, getPlanPriceId(p.key)]));
+
+  // Solo los planes de SU línea. Ofrecerle a una ferretería el tramo escolar
+  // de US$500 no es vender más, es ruido; y el cambio de familia no va por
+  // autoservicio de todos modos (CAMBIO_PLAN.permiteCambiarDeFamilia).
+  const planesOfrecidos = planesDeFamilia(planDef.familia);
+
+  const medidores = construirMedidores({
+    planDef,
+    docs: usadoEsteMes,
+    usuarios: miembros[0]?.n ?? 0,
+    estudiantes: tramo?.estudiantes ?? 0,
+    whatsapp: cuota?.porCanal.whatsapp.usado ?? 0,
+    sms: cuota?.porCanal.sms.usado ?? 0,
+  });
+
+  const docsLim = evaluarLimite('docs', usadoEsteMes, planDef.limits.docs, 0);
 
   return (
     // mx auto: con la columna de 800px anclada a la izquierda quedaba medio
@@ -127,12 +122,21 @@ export default async function SuscripcionPage() {
           Suscripción
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-          Gestiona tu plan y uso mensual de comprobantes.
+          Tu plan, tu consumo del mes y tu facturación.
         </Typography>
       </Box>
 
-      {/* Dev switcher */}
-      <PlanSwitcher currentPlan={planKey} />
+      {/* Estado del ciclo de vida — lo mismo que dice el banner del sistema.
+          Sale del mismo objeto que usa el guard del servidor, así que lo que
+          el cliente lee y lo que el sistema hace no pueden contradecirse. */}
+      {suscripcion.avisar && suscripcion.mensaje && (
+        <Alert
+          severity={suscripcion.puedeEscribir ? 'warning' : 'error'}
+          sx={{ borderRadius: '12px', mb: 2 }}
+        >
+          {suscripcion.mensaje}
+        </Alert>
+      )}
 
       {/* Plan actual */}
       <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
@@ -144,131 +148,90 @@ export default async function SuscripcionPage() {
 
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>{planName}</Typography>
-              {statusInfo && (
-                <Chip
-                  label={statusInfo.label}
-                  size="small"
-                  sx={{ bgcolor: statusInfo.bgcolor, color: statusInfo.color, fontWeight: 600, height: 22, fontSize: '0.6875rem', '& .MuiChip-label': { px: 1.25 } }}
-                />
-              )}
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                {sinPlan ? 'Sin plan' : planDef.name}
+              </Typography>
+              <EstadoChip estado={suscripcion.estado} dias={suscripcion.diasRestantes} />
             </Box>
-            {isPaid && (
+            {!sinPlan && (
               <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                {isTrialing ? `Gratis → ${planPrice}` : planPrice}
+                US${precioTotal(planDef.key, adicionalesDe(team))}/mes
               </Typography>
             )}
           </Box>
 
-          {team.stripeSubscriptionId && (
-            <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-              ID suscripción: <Box component="span" sx={{ fontFamily: 'monospace' }}>{team.stripeSubscriptionId}</Box>
-            </Typography>
+          {/* Medidores — uno por límite que APLICA a este plan. */}
+          {medidores.length > 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {medidores.map(m => <Barra key={m.clave} medidor={m} />)}
+            </Box>
           )}
 
-          {/* Barra de uso */}
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <TrendingUp style={{ width: 14, height: 14 }} />
-                Comprobantes este mes
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: !isIlimitado && usoPct >= 90 ? 'error.main' : 'text.primary' }}>
-                {usadoEsteMes} {isIlimitado ? '/ ∞' : `/ ${isTrialing ? '30 (trial)' : limite}`}
-              </Typography>
-            </Box>
-            <LinearProgress
-              variant="determinate"
-              value={isIlimitado ? 40 : usoPct}
-              sx={{
-                height: 8, borderRadius: 4, bgcolor: 'grey.100',
-                '& .MuiLinearProgress-bar': {
-                  borderRadius: 4,
-                  bgcolor: isIlimitado ? '#3658e1' : usoPct >= 90 ? 'error.main' : usoPct >= 70 ? 'warning.main' : '#3658e1',
-                  opacity: isIlimitado ? 0.4 : 1,
-                },
-              }}
-            />
-            <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
-              {isIlimitado
-                ? 'Comprobantes ilimitados en tu plan.'
-                : limite > 0 && usadoEsteMes < limite
-                  ? `Quedan ${limite - usadoEsteMes} comprobantes disponibles este mes.`
-                  : 'Has alcanzado el límite mensual de tu plan.'}
-            </Typography>
-          </Box>
-
           {/* Acciones */}
-          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-            {isPaid && team.stripeCustomerId ? (
-              <form action={customerPortalAction}>
-                <MuiButton type="submit" variant="outlined" color="primary"
-                  sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-                  Gestionar suscripción
-                </MuiButton>
-              </form>
-            ) : (
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+            {!sinPlan && team.stripeCustomerId ? (
+              <>
+                <form action={customerPortalAction}>
+                  <MuiButton type="submit" variant="outlined" color="primary"
+                    sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
+                    Tarjeta y facturas
+                  </MuiButton>
+                </form>
+                {/* Cancelar VISIBLE, aunque lleve al mismo sitio.
+                    La cancelación vive dentro del portal de Stripe, y con el
+                    botón de arriba como única puerta nadie que quiera irse la
+                    encuentra: «tarjeta y facturas» no se lee como «darme de
+                    baja». Esconder la salida no retiene a nadie — solo hace
+                    que escriban a soporte, molestos, para preguntar cómo. */}
+                <form action={customerPortalAction}>
+                  <MuiButton type="submit" variant="text"
+                    sx={{ textTransform: 'none', fontWeight: 500, color: 'text.secondary', fontSize: '0.8125rem' }}>
+                    Cancelar suscripción
+                  </MuiButton>
+                </form>
+              </>
+            ) : sinPlan ? (
+              // Sin plan sí tiene sentido mandarlo a /pricing: no hay nada que
+              // gestionar todavía. Con plan, los planes están justo abajo y un
+              // botón que se lleva al usuario fuera solo estorba.
               <Link href="/pricing" style={{ textDecoration: 'none' }}>
                 <MuiButton variant="contained" color="primary" disableElevation
                   startIcon={<Zap style={{ width: 16, height: 16 }} />}
                   sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-                  Ver planes — desde $15/mes
+                  Ver planes — desde US${precioMinimo()}/mes
                 </MuiButton>
               </Link>
-            )}
+            ) : null}
           </Box>
         </CardContent>
       </Card>
 
-      {/* Cambiar plan */}
-      {isPaid && team.stripeSubscriptionId && (
-        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
-          <CardContent sx={{ p: '20px !important' }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <TrendingUp style={{ width: 16, height: 16, color: '#3658e1' }} />
-              Cambiar plan
-            </Typography>
-            <ChangePlan
-              plans={PLANS}
-              currentPlan={planDef}
-              priceIds={priceIds}
-              pendingPlan={pendingPlan}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Tabla comparativa */}
+      {/* Cambiar plan — SIEMPRE visible.
+          Antes solo salía con una suscripción viva en Stripe, así que a quien
+          tuviera el plan asignado por nosotros —o a quien nunca compró— la
+          pantalla de su plan no le ofrecía cambiarlo: solo un botón que lo
+          echaba a /pricing. Sin suscripción cada plan lleva a contratar; con
+          ella, a subir o bajar. */}
       <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
         <CardContent sx={{ p: '20px !important' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', mb: 2 }}>
-            Comparativa de planes
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <TrendingUp style={{ width: 16, height: 16, color: '#3658e1' }} />
+            {team.stripeSubscriptionId ? 'Cambiar plan' : 'Planes disponibles'}
           </Typography>
-          {/* Header */}
-          <Box sx={{ display: 'flex', mb: 0.5 }}>
-            <Box sx={{ flex: 1 }} />
-            {['Starter', 'Business', 'Pro'].map((col, i) => (
-              <Typography key={col} variant="caption" sx={{ width: 80, textAlign: 'center', fontWeight: 700, color: ['starter', 'business', 'pro'][i] === planKey ? 'primary.main' : 'text.secondary' }}>
-                {col}
-              </Typography>
-            ))}
-          </Box>
-          <Divider />
-          {COMPARE_ROWS.map((row, i) => (
-            <Box key={row.feature}>
-              <Box sx={{ display: 'flex', alignItems: 'center', py: 1.25 }}>
-                <Typography variant="body2" sx={{ flex: 1, color: 'text.secondary' }}>{row.feature}</Typography>
-                {(['starter', 'business', 'pro'] as const).map(col => (
-                  <Typography key={col} variant="caption" sx={{ width: 80, textAlign: 'center', fontWeight: col === planKey ? 700 : 400, color: col === planKey ? 'primary.main' : 'text.secondary' }}>
-                    {row[col]}
-                  </Typography>
-                ))}
-              </Box>
-              {i < COMPARE_ROWS.length - 1 && <Divider />}
-            </Box>
-          ))}
+          <ChangePlan
+            plans={planesOfrecidos}
+            currentPlan={planDef}
+            priceIds={priceIds}
+            pendingPlan={pendingPlan}
+            tieneSuscripcion={Boolean(team.stripeSubscriptionId)}
+            checkoutAction={checkoutAction}
+          />
         </CardContent>
       </Card>
+
+      {/* Comparativa — generada del catálogo, con una columna por plan de su
+          línea. Antes era una tabla a mano y por eso envejeció mal. */}
+      <Comparativa planes={planesOfrecidos} actual={planDef} />
 
       {/* Uso por tipo */}
       {usagePorTipo.length > 0 && (
@@ -289,14 +252,14 @@ export default async function SuscripcionPage() {
         </Card>
       )}
 
-      {/* Alerta límite */}
-      {!isIlimitado && limite > 0 && usadoEsteMes >= limite && (
+      {/* Tope de comprobantes alcanzado */}
+      {docsLim.bloqueado && (
         <Alert
           severity="error"
           icon={<AlertCircle style={{ width: 18, height: 18 }} />}
           sx={{ borderRadius: '12px' }}
-          action={planKey !== 'pro' ? (
-            <Link href="/pricing" style={{ textDecoration: 'none' }}>
+          action={siguientePlan(planDef) ? (
+            <Link href="#cambiar-plan" style={{ textDecoration: 'none' }}>
               <MuiButton size="small" color="error" startIcon={<Zap style={{ width: 12, height: 12 }} />}
                 sx={{ textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}>
                 Ver planes →
@@ -305,13 +268,244 @@ export default async function SuscripcionPage() {
           ) : undefined}
         >
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            Has alcanzado el límite de {isTrialing ? '30 (trial)' : limite} comprobantes
+            Llegaste a los {planDef.limits.docs} comprobantes de tu plan este mes
           </Typography>
           <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
-            {planKey === 'pro' ? 'Contacta soporte para un plan Enterprise.' : 'Actualiza tu plan para emitir más comprobantes.'}
+            {siguientePlan(planDef)
+              ? `Con ${siguientePlan(planDef)!.name} emites ${limiteTexto(siguientePlan(planDef)!.limits.docs)}.`
+              : 'Escríbenos para ajustar tu plan.'}
           </Typography>
         </Alert>
       )}
     </Box>
   );
+}
+
+// ─── Piezas ───────────────────────────────────────────────────────────────────
+
+function limiteTexto(n: number): string {
+  return n < 0 ? 'ilimitados' : String(n);
+}
+
+/** El más barato del catálogo. Se calcula para que no envejezca al cambiar precios. */
+function precioMinimo(): number {
+  return Math.min(...PLANS.map(p => p.price));
+}
+
+/** El siguiente plan con más cupo de comprobantes. null si ya está en el tope. */
+function siguientePlan(actual: PlanDef): PlanDef | null {
+  return planesDeFamilia(actual.familia).find(
+    p => p.limits.docs < 0 || p.limits.docs > actual.limits.docs,
+  ) ?? null;
+}
+
+function adicionalesDe(team: { adicionales?: unknown }): string[] {
+  return Array.isArray(team.adicionales)
+    ? team.adicionales.filter((a): a is string => typeof a === 'string')
+    : [];
+}
+
+/**
+ * Los medidores que tienen sentido para este plan. Un tope en -1 no se pinta:
+ * una barra de progreso sobre algo ilimitado no informa de nada.
+ */
+function construirMedidores(d: {
+  planDef: PlanDef;
+  docs: number; usuarios: number; estudiantes: number; whatsapp: number; sms: number;
+}): Medidor[] {
+  const L = d.planDef.limits;
+  const todos: Medidor[] = [
+    {
+      clave: 'docs', etiqueta: 'Comprobantes este mes', icono: <TrendingUp style={ICONO} />,
+      usado: d.docs, tope: L.docs,
+      nota: `Quedan ${Math.max(0, L.docs - d.docs)} este mes.`,
+    },
+    {
+      clave: 'usuarios', etiqueta: 'Usuarios', icono: <Users style={ICONO} />,
+      usado: d.usuarios, tope: L.users,
+      // Nunca se expulsa a nadie por un cambio de plan: lo que se corta es
+      // agregar. Ver puedeAgregarUsuario.
+      nota: d.usuarios >= L.users
+        ? 'Para agregar más necesitas un plan mayor. Los actuales se quedan.'
+        : `Puedes agregar ${L.users - d.usuarios} más.`,
+    },
+    {
+      clave: 'estudiantes', etiqueta: 'Estudiantes activos', icono: <GraduationCap style={ICONO} />,
+      usado: d.estudiantes, tope: L.estudiantes,
+      nota: 'El tramo se elige por cuántos estudiantes tienes.',
+    },
+    {
+      clave: 'whatsapp', etiqueta: 'Avisos por WhatsApp', icono: <MessageSquare style={ICONO} />,
+      usado: d.whatsapp, tope: L.whatsappMensajes,
+      nota: 'Se reinicia el día 1 de cada mes.',
+    },
+    {
+      clave: 'sms', etiqueta: 'Avisos por SMS', icono: <Smartphone style={ICONO} />,
+      usado: d.sms, tope: L.smsMensajes,
+      nota: 'Se reinicia el día 1 de cada mes. El correo no tiene tope.',
+    },
+  ];
+  return todos.filter(m => m.tope >= 0);
+}
+
+function Barra({ medidor }: { medidor: Medidor }) {
+  const { usado, tope } = medidor;
+  const pct = tope > 0 ? Math.min(100, Math.round((usado / tope) * 100)) : 100;
+  const color = pct >= 100 ? 'error.main' : pct >= 80 ? 'warning.main' : '#3658e1';
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {medidor.icono}
+          {medidor.etiqueta}
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: 700, color: pct >= 100 ? 'error.main' : 'text.primary' }}>
+          {usado} / {tope}
+        </Typography>
+      </Box>
+      <LinearProgress
+        variant="determinate"
+        value={pct}
+        sx={{
+          height: 8, borderRadius: 4, bgcolor: 'grey.100',
+          '& .MuiLinearProgress-bar': { borderRadius: 4, bgcolor: color },
+        }}
+      />
+      <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
+        {medidor.nota}
+      </Typography>
+    </Box>
+  );
+}
+
+function EstadoChip({ estado, dias }: { estado: string; dias: number | null }) {
+  const mapa: Record<string, { label: string; bgcolor: string; color: string }> = {
+    'activa':            { label: 'Activa',                          bgcolor: '#ecfdf5', color: '#065f46' },
+    'prueba':            { label: `Prueba · ${dias ?? PRUEBA.dias} días`, bgcolor: '#eff6ff', color: '#1e40af' },
+    'prueba-por-vencer': { label: `Prueba · ${dias} ${dias === 1 ? 'día' : 'días'}`, bgcolor: '#fffbeb', color: '#92400e' },
+    'mora':              { label: 'Pago pendiente',                   bgcolor: '#fff7ed', color: '#9a3412' },
+    'solo-lectura':      { label: 'Solo lectura',                     bgcolor: '#fef2f2', color: '#991b1b' },
+    'cerrada':           { label: 'Sin acceso',                       bgcolor: '#fef2f2', color: '#991b1b' },
+    'sin-billing':       { label: 'Activa',                           bgcolor: '#ecfdf5', color: '#065f46' },
+  };
+  const info = mapa[estado];
+  if (!info) return null;
+  return (
+    <Chip
+      label={info.label}
+      size="small"
+      sx={{ bgcolor: info.bgcolor, color: info.color, fontWeight: 600, height: 22, fontSize: '0.6875rem', '& .MuiChip-label': { px: 1.25 } }}
+    />
+  );
+}
+
+/**
+ * Tabla comparativa generada del catálogo.
+ *
+ * Las filas son los límites del modelo, no una lista de funciones: todos los
+ * planes traen todas las funciones (decisión del negocio), así que una fila de
+ * palomitas idénticas no diría nada. Lo que cambia entre planes son los topes.
+ */
+function Comparativa({ planes, actual }: { planes: PlanDef[]; actual: PlanDef }) {
+  const filas: { etiqueta: string; valor: (p: PlanDef) => string }[] = [
+    { etiqueta: 'Comprobantes/mes', valor: p => limiteTexto(p.limits.docs) },
+    { etiqueta: 'Usuarios',         valor: p => limiteTexto(p.limits.users) },
+    ...(planes.some(p => p.limits.estudiantes >= 0)
+      ? [{ etiqueta: 'Estudiantes', valor: (p: PlanDef) => limiteTexto(p.limits.estudiantes) }]
+      : []),
+    ...(planes.some(p => p.limits.whatsappMensajes >= 0)
+      ? [{ etiqueta: 'Avisos WhatsApp/mes', valor: (p: PlanDef) => limiteTexto(p.limits.whatsappMensajes) }]
+      : []),
+    ...(planes.some(p => p.limits.smsMensajes >= 0)
+      ? [{ etiqueta: 'Avisos SMS/mes', valor: (p: PlanDef) => limiteTexto(p.limits.smsMensajes) }]
+      : []),
+    { etiqueta: 'Precio/mes', valor: p => `US$${p.price}` },
+  ];
+
+  return (
+    <Card id="cambiar-plan" elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', mb: 2 }}>
+      <CardContent sx={{ p: '20px !important' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', mb: 2 }}>
+          Comparativa de planes
+        </Typography>
+
+        {/* La tabla scrollea sola: con cuatro tramos de colegio no entra en un
+            teléfono, y sin esto el que se desplazaba era el body entero. */}
+        <Box sx={{ overflowX: 'auto' }}>
+          <Box sx={{ minWidth: 420 }}>
+            <Box sx={{ display: 'flex', mb: 0.5 }}>
+              <Box sx={{ flex: 1, minWidth: 130 }} />
+              {planes.map(p => (
+                <Typography key={p.key} variant="caption"
+                  sx={{ width: 80, textAlign: 'center', fontWeight: 700, color: p.key === actual.key ? 'primary.main' : 'text.secondary' }}>
+                  {p.name}
+                </Typography>
+              ))}
+            </Box>
+            <Divider />
+            {filas.map((fila, i) => (
+              <Box key={fila.etiqueta}>
+                <Box sx={{ display: 'flex', alignItems: 'center', py: 1.25 }}>
+                  <Typography variant="body2" sx={{ flex: 1, minWidth: 130, color: 'text.secondary' }}>
+                    {fila.etiqueta}
+                  </Typography>
+                  {planes.map(p => (
+                    <Typography key={p.key} variant="caption"
+                      sx={{ width: 80, textAlign: 'center', fontWeight: p.key === actual.key ? 700 : 400, color: p.key === actual.key ? 'primary.main' : 'text.secondary' }}>
+                      {fila.valor(p)}
+                    </Typography>
+                  ))}
+                </Box>
+                {i < filas.length - 1 && <Divider />}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+
+        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 2 }}>
+          Todos los planes incluyen el sistema completo: contabilidad, inventario,
+          caja, roles y reportes 606/607.
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Downgrade programado en Stripe ───────────────────────────────────────────
+
+/**
+ * Si hay una bajada de plan esperando al fin del período, cuál y cuándo.
+ *
+ * Es la única consulta a Stripe de la página. Si falla se devuelve null y la
+ * pantalla se pinta igual: no poder decir «tienes un cambio programado» no
+ * justifica dejar al cliente sin ver su plan.
+ */
+async function downgradeProgramado(
+  team: { stripeCustomerId?: string | null; stripeSubscriptionId?: string | null },
+): Promise<{ name: string; effectiveDate: string } | null> {
+  if (!team.stripeCustomerId || !team.stripeSubscriptionId) return null;
+
+  try {
+    const schedules = await stripe.subscriptionSchedules.list({ customer: team.stripeCustomerId });
+    const schedule = schedules.data.find(s => {
+      const subId = typeof s.subscription === 'string' ? s.subscription : s.subscription?.id;
+      return subId === team.stripeSubscriptionId && s.status === 'active';
+    });
+    if (!schedule || schedule.phases.length < 2) return null;
+
+    const nextPhase   = schedule.phases[schedule.phases.length - 1];
+    const nextPriceId = typeof nextPhase.items[0]?.price === 'string'
+      ? nextPhase.items[0].price
+      : (nextPhase.items[0]?.price as { id: string } | null)?.id ?? '';
+    const nextPlanDef = getPlan(
+      PLANS.find(p => p.priceEnvKey && process.env[p.priceEnvKey] === nextPriceId)?.key ?? '',
+    );
+    const endDate = schedule.phases[0]?.end_date;
+    if (nextPlanDef.key === 'free' || !endDate) return null;
+
+    return { name: nextPlanDef.name, effectiveDate: new Date(endDate * 1000).toISOString() };
+  } catch {
+    return null;
+  }
 }

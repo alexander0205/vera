@@ -15,9 +15,10 @@
 import type Stripe from 'stripe';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { teams, type Team } from '@/lib/db/schema';
+import { teams, users, type Team } from '@/lib/db/schema';
 import { stripe } from '@/lib/payments/stripe';
 import { MODULES, sanitizeModules, type ModuleKey } from '@/lib/config/modules';
+import { ADDONS } from '@/lib/config/plans';
 
 export const MODULE_PRICE_IDS: Record<ModuleKey, string> = {
   facturacion: process.env.STRIPE_PRICE_MODULO_FACTURACION ?? '',
@@ -60,9 +61,72 @@ export function modulesFromSubscription(subscription: Stripe.Subscription): Modu
 }
 
 /**
- * Deriva y persiste modulosHabilitados desde la suscripción.
+ * Adicionales contratados, leídos de los items de la suscripción.
  *
- * Reglas:
+ * Un adicional y un "módulo facturable" son el mismo item de Stripe visto
+ * desde dos épocas del producto: el POS se vende hoy como el adicional de
+ * US$9 sobre cualquier plan de la línea e-CF, y comparte el price
+ * (STRIPE_PRICE_MODULO_POS) con el esquema anterior de billing por módulo.
+ * Por eso esto lee la misma env que MODULE_PRICE_IDS en vez de una nueva:
+ * dos nombres para el mismo precio terminarían desincronizados.
+ */
+export function addonsFromSubscription(subscription: Stripe.Subscription): string[] {
+  const activos = new Set<string>();
+  for (const item of subscription.items.data) {
+    const priceId = item.price?.id ?? '';
+    if (!priceId) continue;
+    for (const addon of ADDONS) {
+      if (process.env[addon.priceEnvKey] === priceId) activos.add(addon.key);
+    }
+  }
+  return [...activos];
+}
+
+/** Segundos de época de Stripe → Date. null cuando el campo no viene. */
+function aFecha(segundos: number | null | undefined): Date | null {
+  return segundos ? new Date(segundos * 1000) : null;
+}
+
+/**
+ * Las fechas del ciclo de vida, sacadas de la suscripción.
+ *
+ * Stripe las tiene todas, pero preguntárselas en cada carga de página sería un
+ * viaje de red para pintar un banner. Se copian aquí, en el webhook, que es
+ * exactamente cuando cambian. Ver migración 0133.
+ */
+function fechasDelCiclo(subscription: Stripe.Subscription) {
+  const status = subscription.status;
+
+  // `morosoDesde` marca el PRIMER fallo, no el último intento. Stripe reintenta
+  // la tarjeta varias veces durante la semana y cada reintento vuelve a poner
+  // past_due: si se reescribiera en cada uno, el reloj de la gracia se
+  // reiniciaría solo y no se agotaría nunca. Por eso aquí solo se LIMPIA (al
+  // volver a cobrar bien); ponerlo es cosa del evento invoice.payment_failed,
+  // que es el único que sabe cuál fue el primero.
+  const alDia = status === 'active' || status === 'trialing';
+
+  return {
+    trialEnd:      aFecha(subscription.trial_end),
+    periodoFin:    aFecha(subscription.items.data[0]?.current_period_end),
+    cancelarAlFin: Boolean(subscription.cancel_at_period_end),
+    // Al volver a estar al día se limpian las dos marcas. La del aviso de
+    // solo-lectura también: si no, quien se cae una segunda vez meses después
+    // no recibiría el correo, porque el sistema seguiría creyendo que ya se
+    // lo mandó.
+    ...(alDia ? { morosoDesde: null, avisoSoloLecturaEn: null } : {}),
+  };
+}
+
+/**
+ * Deriva y persiste desde la suscripción: los adicionales SIEMPRE, y
+ * modulosHabilitados solo cuando hay billing por módulo configurado.
+ *
+ * Los adicionales van aparte y primero porque son la vía viva: con el billing
+ * encendido, getTeamModules arma la lista con `plan + adicionales` y no mira
+ * modulosHabilitados. Un colegio que contrata el POS necesita que su addon
+ * quede escrito aunque este deploy no tenga el billing por módulo montado.
+ *
+ * Para modulosHabilitados (esquema anterior, aún vivo con el billing apagado):
  *  - Sin billing por módulo configurado, o suscripción sin items de módulo
  *    (solo plan clásico) → no tocar nada (los módulos se administran manual).
  *  - active/trialing → módulos = items de módulo de la suscripción,
@@ -74,6 +138,20 @@ export async function syncModulesFromSubscription(
   teamId: number,
   subscription: Stripe.Subscription,
 ): Promise<void> {
+  const vigente = subscription.status === 'active'
+    || subscription.status === 'trialing'
+    || subscription.status === 'past_due';
+
+  await db.update(teams)
+    .set({
+      // Al perder la suscripción los adicionales se caen: son items de esa
+      // suscripción y sin ella no hay nada contratado.
+      adicionales: vigente ? addonsFromSubscription(subscription) : [],
+      ...fechasDelCiclo(subscription),
+      updatedAt: new Date(),
+    })
+    .where(eq(teams.id, teamId));
+
   if (!moduleBillingEnabled()) return;
   const subMods = modulesFromSubscription(subscription);
   if (subMods.length === 0) return; // suscripción de plan clásico — no opina sobre módulos
@@ -142,15 +220,27 @@ export async function activarModulo(
     return { ok: true };
   }
 
+  // El correo de quien está comprando, para no pedírselo en el checkout
+  // teniéndolo ya. Va condicional porque Stripe rechaza `customer` y
+  // `customer_email` juntos. Ver createCheckoutSession.
+  const [actor] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, actorUserId))
+    .limit(1);
+
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [{ price: priceId, quantity: 1 }],
     mode: 'subscription',
     success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.BASE_URL}/dashboard/configuracion`,
-    customer: team.stripeCustomerId || undefined,
+    ...(team.stripeCustomerId
+      ? { customer: team.stripeCustomerId }
+      : actor?.email ? { customer_email: actor.email } : {}),
     client_reference_id: `${actorUserId}:${team.id}`,
     allow_promotion_codes: true,
+    locale: 'es',
   });
   return { checkoutUrl: session.url! };
 }

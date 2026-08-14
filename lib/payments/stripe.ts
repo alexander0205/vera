@@ -1,30 +1,31 @@
 import Stripe from 'stripe';
 import { redirect } from 'next/navigation';
 import { Team } from '@/lib/db/schema';
-import {
-  getTeamByStripeCustomerId,
-  getUser,
-  updateTeamSubscription
-} from '@/lib/db/queries';
-import { getPlanByPriceId } from '@/lib/config/plans';
+import { getUser } from '@/lib/db/queries';
+import { getPlanByPriceId, ADDONS, addonIncluido } from '@/lib/config/plans';
+import { PRUEBA } from '@/lib/config/suscripcion';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-04-30.basil'
 });
 
-// Plan definitions — sourced from env
-export const PLAN_STARTER_PRICE_ID  = process.env.STRIPE_PRICE_STARTER  ?? '';
-export const PLAN_INVOICE_PRICE_ID  = process.env.STRIPE_PRICE_INVOICE  ?? '';
-export const PLAN_BUSINESS_PRICE_ID = process.env.STRIPE_PRICE_BUSINESS ?? '';
-export const PLAN_PRO_PRICE_ID      = process.env.STRIPE_PRICE_PRO      ?? '';
-
+// Los cuatro price IDs del esquema anterior (starter/invoice/business/pro) se
+// quitaron: no los leía nadie y apuntaban a planes que ya no existen en el
+// catálogo. Los de hoy salen de PLANS, cada uno con su priceEnvKey.
 
 export async function createCheckoutSession({
   team,
-  priceId
+  priceId,
+  addons = [],
 }: {
   team: Team | null;
   priceId: string;
+  /**
+   * Adicionales que van en la MISMA suscripción, como items aparte. Es lo que
+   * hace real la línea "Zero POS + ERP": el plan y el POS son dos precios de
+   * Stripe, y el cliente ve la suma.
+   */
+  addons?: string[];
 }) {
   const user = await getUser();
 
@@ -32,160 +33,162 @@ export async function createCheckoutSession({
     redirect(`/sign-up?redirect=checkout&priceId=${priceId}`);
   }
 
+  // Se filtran los que el plan YA incluye: al tramo de colegio no se le cobra
+  // el POS aparte, que su precio ya lo trae.
+  const planDelPrecio = getPlanByPriceId(priceId);
+  const itemsAddon = ADDONS
+    .filter(a => addons.includes(a.key) && !addonIncluido(planDelPrecio.key, a.key))
+    .map(a => process.env[a.priceEnvKey])
+    .filter((p): p is string => Boolean(p))
+    .map(price => ({ price, quantity: 1 }));
+
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [
       {
         price: priceId,
         quantity: 1
-      }
+      },
+      ...itemsAddon,
     ],
     mode: 'subscription',
     success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.BASE_URL}/pricing`,
-    customer: team.stripeCustomerId || undefined,
+    // Cliente ya conocido en Stripe, o su correo si es la primera compra.
+    //
+    // Los dos NO pueden ir juntos: Stripe rechaza la sesión si recibe
+    // `customer` y `customer_email` a la vez. Y sin ninguno de los dos, el
+    // checkout abre pidiendo el correo a alguien que lleva media hora con la
+    // sesión iniciada — un campo de más justo en el paso donde más gente se
+    // cae, para preguntar un dato que ya tenemos.
+    ...(team.stripeCustomerId
+      ? { customer: team.stripeCustomerId }
+      : { customer_email: user.email }),
     client_reference_id: `${user.id}:${team.id}`, // "userId:teamId" para el webhook
     allow_promotion_codes: true,
+    locale: 'es',
     subscription_data: {
-      trial_period_days: 15,
-    }
+      // Los días salen de la configuración, no de un literal aquí: el mismo
+      // número se muestra en la pantalla de precios y se usa para contar
+      // cuándo avisar. Con dos copias, un día dejan de coincidir.
+      trial_period_days: PRUEBA.dias,
+    },
+    // Sin tarjeta para empezar la prueba (PRUEBA.pideTarjeta). Es el filtro
+    // más caro que hay en la entrada del embudo, y Alegra tampoco la pide.
+    ...(PRUEBA.pideTarjeta
+      ? {}
+      : { payment_method_collection: 'if_required' as const }),
   });
 
   redirect(session.url!);
 }
 
+/**
+ * El portal de Stripe: tarjeta, facturas y cancelar. NADA de cambiar de plan.
+ *
+ * El cambio de plan se sacó a propósito. El portal ofrecía solo los precios de
+ * UN producto —el que el cliente tuviera contratado— así que con ocho planes
+ * repartidos en dos familias no había forma de cambiarse de verdad; y, sobre
+ * todo, aplicaba la bajada sin mirar nada. Un colegio de 442 estudiantes podía
+ * bajarse al tramo de 300 en dos clics, dentro de una pantalla de Stripe donde
+ * no tenemos dónde decirle que eso rompe su matrícula.
+ *
+ * Esa validación vive en nuestro /api/stripe/change-plan (ver
+ * lib/suscripcion/cambio-plan.ts). El portal queda para lo que Stripe hace
+ * mejor que nosotros y no queremos tocar: los datos de tarjeta, que así nunca
+ * pasan por nuestro servidor.
+ */
 export async function createCustomerPortalSession(team: Team) {
-  if (!team.stripeCustomerId || !team.stripeProductId) {
+  // Ya no se exige stripeProductId: hacía falta solo para armar la lista de
+  // precios del cambio de plan, que aquí no va. Pedirlo dejaba fuera del
+  // portal —y por tanto sin poder actualizar su tarjeta— a quien tuviera la
+  // columna vacía por un webhook viejo.
+  if (!team.stripeCustomerId) {
     redirect('/pricing');
   }
 
-  let configuration: Stripe.BillingPortal.Configuration;
-  const configurations = await stripe.billingPortal.configurations.list();
-
-  if (configurations.data.length > 0) {
-    configuration = configurations.data[0];
-  } else {
-    const product = await stripe.products.retrieve(team.stripeProductId);
-    if (!product.active) {
-      throw new Error("Team's product is not active in Stripe");
-    }
-
-    const prices = await stripe.prices.list({
-      product: product.id,
-      active: true
-    });
-    if (prices.data.length === 0) {
-      throw new Error("No active prices found for the team's product");
-    }
-
-    configuration = await stripe.billingPortal.configurations.create({
-      business_profile: {
-        headline: 'Manage your subscription'
-      },
-      features: {
-        subscription_update: {
-          enabled: true,
-          default_allowed_updates: ['price', 'quantity', 'promotion_code'],
-          proration_behavior: 'create_prorations',
-          products: [
-            {
-              product: product.id,
-              prices: prices.data.map((price) => price.id)
-            }
-          ]
-        },
-        subscription_cancel: {
-          enabled: true,
-          mode: 'at_period_end',
-          cancellation_reason: {
-            enabled: true,
-            options: [
-              'too_expensive',
-              'missing_features',
-              'switched_service',
-              'unused',
-              'other'
-            ]
-          }
-        },
-        payment_method_update: {
-          enabled: true
-        }
-      }
-    });
-  }
+  const configuration = await portalConfiguration();
 
   return stripe.billingPortal.sessions.create({
     customer: team.stripeCustomerId,
-    return_url: `${process.env.BASE_URL}/dashboard`,
-    configuration: configuration.id
+    return_url: `${process.env.BASE_URL}/dashboard/suscripcion`,
+    configuration: configuration.id,
+    locale: 'es',
   });
 }
 
-export async function handleSubscriptionChange(
-  subscription: Stripe.Subscription
-) {
-  const customerId = subscription.customer as string;
-  const subscriptionId = subscription.id;
-  const status = subscription.status;
+/** Se crea una vez y se reusa mientras viva el proceso. */
+let portalCacheada: Stripe.BillingPortal.Configuration | null = null;
 
-  const team = await getTeamByStripeCustomerId(customerId);
+/**
+ * La configuración del portal, buscada por su metadata y no por «la primera
+ * de la lista».
+ *
+ * Antes se tomaba `configurations.data[0]`, que es la que Stripe devuelva de
+ * primera: cualquier configuración creada a mano en el panel —o la de otro
+ * entorno— se colaba y el cliente veía un portal que nadie diseñó. Con la
+ * marca en metadata se encuentra la nuestra, y si cambia la versión se crea
+ * una nueva sin pisar la anterior.
+ */
+const PORTAL_VERSION = 'zero-v2';
 
-  if (!team) {
-    console.error('Team not found for Stripe customer:', customerId);
-    return;
+async function portalConfiguration(): Promise<Stripe.BillingPortal.Configuration> {
+  if (portalCacheada) return portalCacheada;
+
+  const existentes = await stripe.billingPortal.configurations.list({ limit: 100 });
+  const mia = existentes.data.find(
+    c => c.active && c.metadata?.zero_portal === PORTAL_VERSION,
+  );
+  if (mia) {
+    portalCacheada = mia;
+    return mia;
   }
 
-  if (status === 'active' || status === 'trialing') {
-    const priceId = subscription.items.data[0]?.price?.id ?? '';
-    const planDef = getPlanByPriceId(priceId);
-    await updateTeamSubscription(team.id, {
-      stripeSubscriptionId: subscriptionId,
-      stripeProductId: (subscription.items.data[0]?.price?.product as string) ?? null,
-      planName: planDef.name,
-      subscriptionStatus: status
-    });
-  } else if (status === 'canceled' || status === 'unpaid') {
-    await updateTeamSubscription(team.id, {
-      stripeSubscriptionId: null,
-      stripeProductId: null,
-      planName: null,
-      subscriptionStatus: status
-    });
-  }
-}
-
-export async function getStripePrices() {
-  const prices = await stripe.prices.list({
-    expand: ['data.product'],
-    active: true,
-    type: 'recurring'
+  portalCacheada = await stripe.billingPortal.configurations.create({
+    metadata: { zero_portal: PORTAL_VERSION },
+    business_profile: {
+      headline: 'Zero — tu suscripción',
+    },
+    features: {
+      // Lo que el portal SÍ hace.
+      payment_method_update: { enabled: true },
+      invoice_history:       { enabled: true },
+      customer_update: {
+        enabled: true,
+        // Datos de la factura, no de la suscripción. El correo y la dirección
+        // fiscal los cambia él; el plan, no.
+        allowed_updates: ['email', 'address', 'name', 'tax_id'],
+      },
+      subscription_cancel: {
+        enabled: true,
+        // Al fin del período, nunca en seco: el mes ya está cobrado y cortarlo
+        // el mismo día sería quedarse con dinero por un servicio no prestado.
+        mode: 'at_period_end',
+        cancellation_reason: {
+          enabled: true,
+          options: [
+            'too_expensive',
+            'missing_features',
+            'switched_service',
+            'unused',
+            'other',
+          ],
+        },
+      },
+      // Y lo que NO: el cambio de plan va por nuestra pantalla, que valida.
+      subscription_update: { enabled: false },
+    },
   });
 
-  return prices.data.map((price) => ({
-    id: price.id,
-    productId:
-      typeof price.product === 'string' ? price.product : price.product.id,
-    unitAmount: price.unit_amount,
-    currency: price.currency,
-    interval: price.recurring?.interval,
-    trialPeriodDays: price.recurring?.trial_period_days
-  }));
+  return portalCacheada;
 }
 
-export async function getStripeProducts() {
-  const products = await stripe.products.list({
-    active: true,
-    expand: ['data.default_price']
-  });
-
-  return products.data.map((product) => ({
-    id: product.id,
-    name: product.name,
-    description: product.description,
-    defaultPriceId:
-      typeof product.default_price === 'string'
-        ? product.default_price
-        : product.default_price?.id
-  }));
-}
+// Aquí vivían `handleSubscriptionChange`, `getStripePrices` y
+// `getStripeProducts`, del starter. Ninguna la llamaba nadie: el webhook hace
+// su propio trabajo y los precios salen de PLANS.
+//
+// `handleSubscriptionChange` además guardaba `planName: null` al cancelar, y
+// duplicaba una lógica que ya vive —correcta y probada— en el webhook. Un
+// duplicado dormido de la ruta crítica es exactamente cómo vuelve un bug: el
+// día que alguien lo conecte «porque ya estaba», reintroduce el problema sin
+// que nadie lo note.

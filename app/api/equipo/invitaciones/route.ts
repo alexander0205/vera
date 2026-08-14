@@ -10,8 +10,9 @@ import { teamMembers, users, invitations, teams } from '@/lib/db/schema';
 import { eq, and, count } from 'drizzle-orm';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
 import { sendInvitationEmail } from '@/lib/email';
-import { planUserLimit } from '@/lib/plans';
 import { listTeamRoles } from '@/lib/auth/permissions';
+import { puedeAgregarUsuario } from '@/lib/config/plans';
+import { bloquearSiSoloLectura } from '@/lib/suscripcion/guard';
 
 const inviteSchema = z.object({
   // Normalizamos aquí: el email se guarda en minúsculas para que todas las
@@ -44,6 +45,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Sin permiso para invitar miembros' }, { status: 403 });
     }
 
+    // Sin plan vivo no se suma gente al equipo. Va antes del límite de
+    // usuarios porque son dos preguntas distintas y en este orden: primero
+    // "¿tienes plan?", después "¿te queda cupo en él?".
+    const bloqueo = await bloquearSiSoloLectura(teamId);
+    if (bloqueo) return bloqueo;
+
     // Verificar límite de usuarios del plan
     const [teamData] = await db
       .select({ planName: teams.planName, name: teams.name })
@@ -51,19 +58,19 @@ export async function POST(req: NextRequest) {
       .where(eq(teams.id, teamId))
       .limit(1);
 
-    const limit = planUserLimit(teamData?.planName);
-    if (limit > 0) {
-      const [{ value: memberCount }] = await db
-        .select({ value: count() })
-        .from(teamMembers)
-        .where(eq(teamMembers.teamId, teamId));
+    // Quien ya está por encima del tope se queda; lo que se corta es AGREGAR.
+    // Ver puedeAgregarUsuario en lib/config/plans.ts.
+    const [{ value: memberCount }] = await db
+      .select({ value: count() })
+      .from(teamMembers)
+      .where(eq(teamMembers.teamId, teamId));
 
-      if (memberCount >= limit) {
-        return NextResponse.json(
-          { error: `Tu plan ${teamData?.planName ?? ''} solo permite ${limit} usuario(s). Actualiza tu plan para agregar más.` },
-          { status: 403 }
-        );
-      }
+    const chequeo = puedeAgregarUsuario(teamData?.planName, memberCount);
+    if (!chequeo.permitido) {
+      return NextResponse.json(
+        { error: chequeo.motivo, code: 'LIMITE_USUARIOS', limite: chequeo.limite, actuales: memberCount },
+        { status: 403 },
+      );
     }
 
     const body = await req.json();
