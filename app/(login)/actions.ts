@@ -28,24 +28,8 @@ import {
 } from '@/lib/auth/middleware';
 import { rateLimit } from '@/lib/rate-limit';
 import { BILLING_ENABLED } from '@/lib/config/billing';
-
-async function logActivity(
-  teamId: number | null | undefined,
-  userId: number,
-  type: ActivityType,
-  ipAddress?: string
-) {
-  if (teamId === null || teamId === undefined) {
-    return;
-  }
-  const newActivity: NewActivityLog = {
-    teamId,
-    userId,
-    action: type,
-    ipAddress: ipAddress || ''
-  };
-  await db.insert(activityLogs).values(newActivity);
-}
+import { darDeAlta } from '@/lib/auth/alta';
+import { logActivity } from '@/lib/db/actividad';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255).trim().toLowerCase(),
@@ -146,14 +130,19 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 });
 
 const signUpSchema = z.object({
+  name: z.string().trim().min(1, 'Escribe tu nombre completo.').max(100),
   email: z.string().email().trim().toLowerCase(),
   password: z.string().min(8),
+  terms: z.string().optional().refine(
+    (v) => v === 'on',
+    { message: 'Debes aceptar los Términos y Condiciones y el Tratamiento de tus datos personales.' },
+  ),
   inviteId: z.string().optional(), // legacy (integer id) — kept for compat
   inviteToken: z.string().optional(), // new secure token
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { email, password, inviteId, inviteToken } = data;
+  const { name, email, password, inviteId, inviteToken } = data;
 
   // Rate limit signup by IP — 5/min — defensa contra creación masiva de cuentas
   const reqHeadersSignup = await headers();
@@ -163,113 +152,22 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return { error: 'Demasiados intentos de registro. Intenta en 1 minuto.', email, password };
   }
 
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  if (existingUser.length > 0) {
-    return {
-      error: 'No se pudo crear el usuario. Intenta de nuevo.',
-      email,
-      password
-    };
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  const newUser: NewUser = {
+  // El alta es la MISMA que la de Google (lib/auth/alta.ts): crear usuario,
+  // resolver invitación o empresa nueva, sembrar roles y apuntar la bitácora.
+  // Escrita dos veces, el día que se arregle un fallo en una la otra se queda
+  // con él.
+  const alta = await darDeAlta({
+    name,
     email,
-    passwordHash,
-    platformRole: 'member', // Solo el seed crea platform admins
-  };
+    passwordHash: await hashPassword(password),
+    inviteId,
+    inviteToken,
+  });
 
-  const [createdUser] = await db.insert(users).values(newUser).returning();
+  if (!alta.ok) return { error: alta.error, email, password };
 
-  if (!createdUser) {
-    return {
-      error: 'No se pudo crear el usuario. Intenta de nuevo.',
-      email,
-      password
-    };
-  }
-
-  let teamId: number;
-  let userRole: string;
-  let createdTeam: typeof teams.$inferSelect | null = null;
-
-  if (inviteToken || inviteId) {
-    // Check if there's a valid invitation — prefer token, fall back to legacy id
-    // Also enforce expiresAt > now (no aceptar invitaciones expiradas)
-    const [invitation] = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          inviteToken
-            ? eq(invitations.token, inviteToken)
-            : eq(invitations.id, parseInt(inviteId!)),
-          eq(invitations.email, email),
-          eq(invitations.status, 'pending'),
-          gt(invitations.expiresAt, new Date()),
-        )
-      )
-      .limit(1);
-
-    if (invitation) {
-      teamId = invitation.teamId;
-      userRole = invitation.role;
-
-      await db
-        .update(invitations)
-        .set({ status: 'accepted' })
-        .where(eq(invitations.id, invitation.id));
-
-      await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
-
-      [createdTeam] = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.id, teamId))
-        .limit(1);
-    } else {
-      return { error: 'La invitación no es válida o ya venció.', email, password };
-    }
-  } else {
-    // Create a new team if there's no invitation
-    const newTeam: NewTeam = {
-      name: `${email}'s Team`
-    };
-
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
-
-    if (!createdTeam) {
-      return {
-        error: 'No se pudo crear la empresa. Intenta de nuevo.',
-        email,
-        password
-      };
-    }
-
-    teamId = createdTeam.id;
-    userRole = 'owner';
-
-    await seedSystemRoles(teamId);
-    await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
-  }
-
-  const newTeamMember: NewTeamMember = {
-    userId: createdUser.id,
-    teamId: teamId,
-    role: userRole
-  };
-
-  await Promise.all([
-    db.insert(teamMembers).values(newTeamMember),
-    logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
-    setSession(createdUser)
-  ]);
+  const { usuario: createdUser, equipo: createdTeam } = alta;
+  await setSession(createdUser);
 
   const redirectTo = formData.get('redirect') as string | null;
   if (redirectTo === 'checkout') {

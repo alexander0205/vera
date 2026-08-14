@@ -32,6 +32,13 @@ export const users = pgTable('users', {
   // 2FA
   twoFactorSecret: text('two_factor_secret'),
   twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
+  // Cuándo aceptó Términos y Condiciones + Tratamiento de datos personales.
+  // NULL en cuentas creadas antes de que este check existiera.
+  termsAcceptedAt: timestamp('terms_accepted_at'),
+  // El `sub` de Google, no su correo: el correo de una cuenta de Workspace se
+  // puede cambiar y esto tiene que seguir apuntando a la misma persona.
+  // NULL en todo el que entra con contraseña.
+  googleId: varchar('google_id', { length: 64 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
