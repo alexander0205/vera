@@ -24,6 +24,10 @@ export async function GET() {
       userEmail: users.email,
       assignedAgentId: tickets.assignedAgentId,
       assignedAgentName: agentUsers.name,
+      // Subquery correlacionada — usar nombre literal de tabla (tickets.id), no
+      // ${tickets.id}. Drizzle interpola ${tickets.id} como un parámetro FIJO
+      // (tomado de la primera fila), no como referencia de columna por fila,
+      // causando que todas las filas devuelvan el mismo lastMessage.
       lastMessage: sql<string>`(
         SELECT content FROM ticket_messages
         WHERE ticket_messages.ticket_id = tickets.id
