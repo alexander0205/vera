@@ -128,6 +128,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const lineas = JSON.parse(doc.lineasJson) as Array<Record<string, unknown>>;
       const items = lineas.map((i) => ({
         productoId:             i.productoId ? Number(i.productoId) : null,
+        // La talla que se vendió. Sin ella, anular devolvía las unidades al
+        // total del producto y a NINGUNA talla: el total subía y la suma de las
+        // tallas se quedaba corta, o sea stock que no existe en ningún estante.
+        variantId:              i.variantId ? Number(i.variantId) : null,
         cantidadItem:           i.cantidadItem ? Number(i.cantidadItem) : 1,
         indicadorBienoServicio: (i.indicadorBienoServicio === 1 || i.indicadorBienoServicio === '1' ? 1 : 2) as 1 | 2,
       }));

@@ -1185,7 +1185,7 @@ function Venta({
         </Box>
 
         {/* Carrito — panel fijo en escritorio, hoja deslizable en móvil */}
-        <Box sx={{ display: { xs: 'none', md: 'flex' }, width: { md: '100%' } }}>
+        <Box sx={{ display: { xs: 'none', md: 'flex' }, minHeight: 0, width: { md: '100%' } }}>
           <CarritoPanel
             carrito={carrito}
             totales={totales}
@@ -1226,8 +1226,11 @@ function Venta({
 
       {carritoMovilAbierto && (
         <Box sx={{ position: 'fixed', inset: 0, zIndex: 40, display: { xs: 'flex', md: 'none' }, flexDirection: 'column', bgcolor: 'rgba(0,0,0,0.45)' }} onClick={() => setCarritoMovilAbierto(false)}>
-          <Box sx={{ mt: 'auto', maxHeight: '85vh', borderRadius: '16px 16px 0 0', bgcolor: '#fff', p: 1.5 }} onClick={(e) => e.stopPropagation()}>
-            <Box sx={{ mb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* La hoja se queda en 85vh y REPARTE esa altura: cabecera fija y el
+              panel ocupando el resto. Antes el panel crecía dentro de la hoja
+              y el botón de cobrar quedaba por debajo del borde del teléfono. */}
+          <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', maxHeight: '85vh', minHeight: 0, borderRadius: '16px 16px 0 0', bgcolor: '#fff', p: 1.5 }} onClick={(e) => e.stopPropagation()}>
+            <Box sx={{ mb: 0.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box component="span" sx={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}>Tu carrito</Box>
               <IconButton onClick={() => setCarritoMovilAbierto(false)} size="small" sx={{ color: '#9ca3af' }}><X style={{ width: 18, height: 18 }} /></IconButton>
             </Box>
@@ -1372,8 +1375,13 @@ function CarritoPanel({
   }
 
   return (
-    <Box sx={{ display: 'flex', width: '100%', flexDirection: 'column', borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 1.5 }}>
-      <Box sx={{ mb: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+    // `height: 100%` + `minHeight: 0` es lo que hace que el panel se ajuste a
+    // la pantalla en vez de crecer con el carrito. Sin ellos, con ocho líneas
+    // el total y el botón de cobrar se iban por debajo del borde y no había
+    // scroll que los alcanzara: el cajero veía la lista y ningún sitio donde
+    // cobrar. Lo que se desplaza es la LISTA; la cabecera y el pie se quedan.
+    <Box sx={{ display: 'flex', height: '100%', minHeight: 0, width: '100%', flexDirection: 'column', overflow: 'hidden', borderRadius: '12px', border: '1px solid #e5e7eb', bgcolor: '#fff', p: 1.5 }}>
+      <Box sx={{ mb: 1.5, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
           <Box>
             <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Lista de precio</Typography>
@@ -1445,7 +1453,10 @@ function CarritoPanel({
           <Percent style={{ width: 14, height: 14 }} /> Descuento
         </ButtonBase>
       </Box>
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+      {/* `minHeight: 0` no es cosmético: sin él un hijo flex se niega a
+          encoger por debajo de su contenido, así que la lista empujaba al pie
+          fuera de la pantalla en vez de llevarse el scroll. */}
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {carrito.length === 0 ? (
           <Typography sx={{ py: 4, textAlign: 'center', fontSize: 14, color: '#9ca3af' }}>Toca productos para agregarlos</Typography>
         ) : (
@@ -1471,7 +1482,9 @@ function CarritoPanel({
         )}
       </Box>
 
-      <Box sx={{ mt: 1.5, borderTop: '1px solid #f3f4f6', pt: 1.5 }}>
+      {/* El pie —totales y Cobrar— nunca se desplaza ni se encoge: es lo que
+          el cajero necesita tener siempre a mano, con dos ítems o con veinte. */}
+      <Box sx={{ mt: 1.5, flexShrink: 0, borderTop: '1px solid #f3f4f6', pt: 1.5 }}>
         {descuentoAplicado && (
           <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '8px', bgcolor: '#ecfdf5', px: 1.25, py: 0.75, fontSize: 12, color: '#047857' }}>
             <Box component="span">Descuento {descuentoAplicado.pct}% ({descuentoAplicado.ids.size} {descuentoAplicado.ids.size === 1 ? 'ítem' : 'ítems'})</Box>

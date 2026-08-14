@@ -33,6 +33,11 @@ const REQUIERE_NOTA_CREDITO = ['ACEPTADO', 'ACEPTADO_CONDICIONAL'];
 
 const itemSchema = z.object({
   productoId:             z.number().int().positive().nullable().optional(),
+  // La talla vendida. No estaba en el esquema, así que al agregar una línea a
+  // un recibo ya cobrado se perdía: el recibo salía sin decir qué talla y, al
+  // anularlo después, la unidad no sabía a cuál volver.
+  variantId:              z.number().int().positive().nullable().optional(),
+  variantNombre:          z.string().nullable().optional(),
   nombreItem:             z.string().min(1),
   referencia:             z.string().optional(),
   cantidadItem:           z.number().positive(),
@@ -129,6 +134,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const lineasNuevas = itemsNuevos.map((it, i) => ({
     id: maxId + i + 1,
     productoId: it.productoId ?? 0,
+    // Mismo par de campos que escribe la venta del POS, para que una línea
+    // agregada al editar sea indistinguible de una vendida de primera.
+    variantId: it.variantId ?? null,
+    variantNombre: it.variantNombre ?? null,
     nombreItem: it.nombreItem,
     referencia: it.referencia ?? '',
     descripcionItem: '',
@@ -196,6 +205,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       teamId, user.id, id, doc.encf,
       itemsNuevos.map((it) => ({
         productoId: it.productoId ?? null,
+        // Qué talla entra y cuál sale: editar un recibo es un descuento y una
+        // devolución a la vez, y las dos tienen que ir a la variante correcta.
+        variantId: it.variantId ?? null,
         cantidadItem: it.cantidadItem,
         indicadorBienoServicio: indBien(it.indicadorBienoServicio),
       })),
@@ -209,6 +221,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       teamId, user.id, id, doc.encf,
       quitadas.map((l) => ({
         productoId: Number(l.productoId) || null,
+        variantId: Number(l.variantId) || null,
         cantidadItem: Number(l.cantidadItem) || 0,
         indicadorBienoServicio: indBien((l.indicadorBienoServicio as string | number) ?? '2'),
       })),

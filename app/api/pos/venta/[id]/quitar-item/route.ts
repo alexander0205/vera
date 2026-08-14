@@ -161,6 +161,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     teamId, user.id, id, doc.encf,
     [{
       productoId: Number(quitada.productoId) || null,
+      variantId: Number(quitada.variantId) || null,
       cantidadItem: Number(quitada.cantidadItem) || 0,
       indicadorBienoServicio: indBien((quitada.indicadorBienoServicio as string | number) ?? '2'),
     }],
