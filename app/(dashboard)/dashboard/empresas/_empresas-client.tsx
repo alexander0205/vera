@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { planChipColors } from '@/lib/config/plans';
 import { useRouter } from 'next/navigation';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { ZeroLoader } from '@/components/zero-loader';
@@ -49,10 +50,9 @@ function planBadge(planName: string | null, status: string | null): { label: str
     return { label: `${planName} · Trial`, bgcolor: '#fffbeb', color: '#92400e', border: '#fde68a' };
   if (s === 'canceled' || s === 'unpaid')
     return { label: `${planName} · Cancelado`, bgcolor: '#fef2f2', color: '#991b1b', border: '#fca5a5' };
-  const plan = planName.toLowerCase();
-  if (plan === 'pro')      return { label: planName, bgcolor: '#faf5ff', color: '#7c3aed', border: '#ddd6fe' };
-  if (plan === 'business') return { label: planName, bgcolor: '#eef2fe', color: '#2a45c4', border: '#c7d2fc' };
-  return { label: planName, bgcolor: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
+  // Los colores salen del escalón del plan dentro de su familia, no de una
+  // lista de nombres que envejece con cada cambio de catálogo.
+  return { label: planName, ...planChipColors(planName) };
 }
 
 function hasActivePlan(planName: string | null, status: string | null) {

@@ -41,7 +41,7 @@ async function seed() {
       direccion: TEST_CONTRIBUYENTE.direccion,
       // Plan de prueba: sin esto el límite de docs del plan Gratis bloquea
       // la emisión (403) antes de llegar a la lógica que los E2E validan.
-      planName: 'Starter',
+      planName: 'negocio',
       subscriptionStatus: 'trialing',
     })
     .returning();

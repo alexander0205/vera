@@ -15,12 +15,13 @@ import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
+import { getPlan, planChipColors } from '@/lib/config/plans';
 
-const PLAN_BADGE: Record<string, { label: string; bgcolor: string; color: string }> = {
-  starter:  { label: 'Starter',  bgcolor: '#eff6ff', color: '#1d4ed8' },
-  business: { label: 'Business', bgcolor: '#eef2fe', color: '#3658e1' },
-  pro:      { label: 'Pro',      bgcolor: '#faf5ff', color: '#7c3aed' },
-};
+// El badge sale del catálogo: etiqueta con getPlan(), colores con
+// planChipColors(). La tabla que había aquí listaba planes que ya no existen.
+function planBadge(planKey: string) {
+  return { label: getPlan(planKey).name, ...planChipColors(planKey) };
+}
 
 function getInitials(name: string | null, email: string) {
   if (name) return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -72,7 +73,7 @@ export default function PerfilPage() {
   }
 
   const planKey = (team?.planName ?? '').toLowerCase();
-  const planBadge = PLAN_BADGE[planKey];
+  const badge = planKey ? planBadge(planKey) : null;
   const isTrialing = team?.subscriptionStatus === 'trialing';
 
   return (
@@ -134,10 +135,10 @@ export default function PerfilPage() {
 
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>{user?.email}</Typography>
 
-              {planBadge && (
+              {badge && (
                 <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Chip label={planBadge.label} size="small"
-                    sx={{ bgcolor: planBadge.bgcolor, color: planBadge.color, height: 22, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }} />
+                  <Chip label={badge.label} size="small"
+                    sx={{ bgcolor: badge.bgcolor, color: badge.color, height: 22, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 1 } }} />
                   {isTrialing && (
                     <Typography variant="caption" sx={{ color: '#2563eb', fontWeight: 600 }}>· Prueba gratis</Typography>
                   )}

@@ -24,6 +24,7 @@ import Chip from '@mui/material/Chip';
 import InputBase from '@mui/material/InputBase';
 import Divider from '@mui/material/Divider';
 import { Building2, Check, ChevronDown, Plus, Search } from 'lucide-react';
+import { planColorMui, getPlan } from '@/lib/config/plans';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { ZeroLoader } from '@/components/zero-loader';
 import type { Team } from '@/lib/db/schema';
@@ -40,14 +41,10 @@ function teamHasPlan(t: Team) {
   return true;
 }
 
-function planColor(planName: string | null): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' {
-  const p = planName?.toLowerCase();
-  if (!p) return 'default';
-  if (p === 'pro')      return 'secondary';
-  if (p === 'business') return 'primary';
-  if (p === 'starter')  return 'info';
-  return 'default';
-}
+// El tono sale del catálogo (lib/config/plans), no de una lista de nombres:
+// la versión anterior comparaba contra 'starter'/'business' y dejó de pintar
+// nada el día que esos planes dejaron de existir.
+const planColor = planColorMui;
 
 /** Lo que el loader se queda puesto DESPUÉS de que la navegación termine. */
 const ESPERA_TRAS_CARGAR_MS = 1000;
@@ -199,7 +196,11 @@ export function CompanySwitcher({
         </Typography>
         {BILLING_ENABLED && active && teamHasPlan(active) && active.planName && (
           <Chip
-            label={active.planName}
+            // El NOMBRE del plan, no lo que hay en la columna: `plan_name`
+            // guarda la clave interna ('colegio-avanzado') y pintarla cruda
+            // le enseña al cliente un identificador nuestro en vez de
+            // «Avanzado».
+            label={getPlan(active.planName).name}
             size="small"
             color={planColor(active.planName)}
             sx={{ height: 18, fontSize: '0.625rem', fontWeight: 700, display: { xs: 'none', sm: 'flex' } }}

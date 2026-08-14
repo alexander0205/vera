@@ -10,6 +10,7 @@
  */
 
 import { BILLING_ENABLED } from '@/lib/config/billing';
+import { MODULES_BASE, type ModuleKey } from '@/lib/config/modules';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,11 +24,12 @@ export type Feature =
   | 'productos'
   | 'cotizaciones'
   | 'facturas-recurrentes'
-  | 'inventario-avanzado'   // almacenes, categorías, listas de precios, vendedores
+  | 'inventario-avanzado'    // almacenes, categorías, listas de precios, vendedores
   | 'reportes'
   | 'actividad'
-  | 'api-keys'
-  | 'webhooks'
+  | 'contabilidad-avanzada'  // libro diario, mayor, balances, activos fijos, cierre
+  | 'roles-usuarios'         // roles a medida y permisos por usuario
+  | 'caja'                   // turnos, cuadre y cierre de caja
   | 'impresoras';
 
 export interface PlanLimits {
@@ -37,11 +39,38 @@ export interface PlanLimits {
   users: number;
   /** Comprobantes durante el período de prueba (trial) */
   trialDocs: number;
+  /**
+   * Tope de estudiantes del tramo escolar. -1 = no aplica (planes de e-CF).
+   * Es la dimensión POR LA QUE SE COBRA el módulo colegio: el tramo se elige
+   * por cuántos estudiantes tiene el colegio, no por consumo.
+   */
+  estudiantes: number;
+  /** Avisos de WhatsApp a padres por mes. -1 = no aplica. */
+  whatsappMensajes: number;
+  /**
+   * Avisos por SMS al mes. -1 = no aplica.
+   *
+   * El modelo comercial solo puso número al WhatsApp, pero el SMS también se
+   * paga por unidad —y más caro— así que sin tope un colegio con los tres
+   * canales encendidos nos deja una factura abierta. Va igualado al de
+   * WhatsApp: es el mismo recordatorio por otra vía, y el volumen que el
+   * modelo consideró razonable es ese. Si se decide otro número, se cambia
+   * aquí y el sistema entero lo respeta.
+   */
+  smsMensajes: number;
 }
+
+/**
+ * Dos líneas de producto que NO se mezclan: un negocio cualquiera compra
+ * `ecf`; un colegio compra `colegio`, que ya incluye la facturación completa.
+ */
+export type FamiliaPlan = 'ecf' | 'colegio';
 
 export interface PlanDef {
   /** Clave interna (lowercase). Es lo que se guarda en teams.plan_name (lowercase). */
   key: string;
+  /** A qué línea de producto pertenece. */
+  familia: FamiliaPlan;
   /** Nombre de display. Debe coincidir con lo que envía Stripe en el webhook. */
   name: string;
   /** Precio en USD/mes (0 para planes gratuitos/sin plan) */
@@ -49,6 +78,17 @@ export interface PlanDef {
   /** Nombre de la variable de entorno con el Price ID de Stripe */
   priceEnvKey: string;
   limits: PlanLimits;
+  /**
+   * Módulos que incluye el plan (teams.modulos_habilitados).
+   *
+   * NO es lo mismo que `features`: una feature es una sección DENTRO de
+   * Facturación (cotizaciones, inventario…); un módulo es un espacio propio
+   * con su nav y su gate — Facturación, POS, Escolar, Administración.
+   *
+   * Los tramos de colegio traen POS porque la cafetería del colegio ES un
+   * punto de venta: Andrés Bello ya vende ahí con su "Almacén de cafetería".
+   */
+  modulos: ModuleKey[];
   /** Features habilitadas en este plan. Ausente = bloqueada. */
   features: Feature[];
   ui: {
@@ -67,131 +107,116 @@ export interface PlanDef {
 // El orden aquí determina el orden en la pricing page
 
 export const PLANS: PlanDef[] = [
+  // ── Línea 1 · Facturación Electrónica e-CF ─────────────────────────────────
+  // Posicionada entre el facturador gratuito de la DGII (150 e-CF/mes, sin
+  // multiusuario) y Alegra Premium (~US$60/mes).
   {
-    key:         'starter',
-    name:        'Starter',
-    price:       15,
-    priceEnvKey: 'STRIPE_PRICE_STARTER',
-    limits: {
-      docs:      200,
-      users:     1,
-      trialDocs: 30,
-    },
-    features: [],   // acceso base: facturas + notas de crédito únicamente
+    key: 'emprendedor', familia: 'ecf',
+    modulos: [...MODULES_BASE],
+    name: 'Emprendedor', price: 9, priceEnvKey: 'STRIPE_PRICE_EMPRENDEDOR',
+    limits: { docs: 50, users: 1, trialDocs: -1, estudiantes: -1, whatsappMensajes: -1, smsMensajes: -1 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description:       'Para freelancers y negocios unipersonales',
-      badgeColor:        'bg-blue-50 text-blue-700 border-blue-200',
-      highlighted:       false,
-      marketingFeatures: [
-        '200 comprobantes/mes',
-        '1 usuario',
-        'Facturas electrónicas (e-CF)',
-        'Notas de crédito',
-        'Gestión de empresa',
-        'Soporte por email',
-      ],
+      description: 'Para quien está empezando a facturar',
+      badgeColor: 'bg-gray-100 text-gray-700 border-gray-200',
+      highlighted: false,
+      marketingFeatures: ['50 comprobantes e-CF al mes', '1 usuario', 'Sistema completo: contabilidad, inventario, caja y reportes 606/607'],
     },
   },
   {
-    key:         'invoice',
-    name:        'Invoice',
-    price:       17,
-    priceEnvKey: 'STRIPE_PRICE_INVOICE',
-    limits: {
-      docs:      -1,   // ilimitado
-      users:     2,
-      trialDocs: 30,
-    },
-    features: [
-      'clientes',
-      'productos',
-    ],
+    key: 'negocio', familia: 'ecf',
+    modulos: [...MODULES_BASE],
+    name: 'Negocio', price: 19, priceEnvKey: 'STRIPE_PRICE_NEGOCIO',
+    limits: { docs: 200, users: 3, trialDocs: -1, estudiantes: -1, whatsappMensajes: -1, smsMensajes: -1 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description:       'Solo facturación electrónica ilimitada',
-      badgeColor:        'bg-orange-50 text-orange-700 border-orange-200',
-      highlighted:       false,
-      marketingFeatures: [
-        'Comprobantes ilimitados',
-        'Hasta 2 usuarios',
-        'Facturas electrónicas (e-CF)',
-        'Notas de crédito',
-        'Gestión de clientes y productos',
-        'Configuración de empresa',
-        'Soporte por email',
-      ],
+      description: 'Para el negocio en crecimiento',
+      badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+      highlighted: true,
+      marketingFeatures: ['200 comprobantes e-CF al mes', '3 usuarios', 'Sistema completo: contabilidad, inventario, caja y reportes 606/607'],
     },
   },
   {
-    key:         'business',
-    name:        'Business',
-    price:       35,
-    priceEnvKey: 'STRIPE_PRICE_BUSINESS',
-    limits: {
-      docs:      800,
-      users:     3,
-      trialDocs: 30,
-    },
-    features: [
-      'clientes',
-      'productos',
-      'cotizaciones',
-      'facturas-recurrentes',
-      'inventario-avanzado',
-      'reportes',
-      'actividad',
-    ],
+    key: 'pro', familia: 'ecf',
+    modulos: [...MODULES_BASE],
+    name: 'Pro', price: 35, priceEnvKey: 'STRIPE_PRICE_PRO',
+    limits: { docs: 500, users: 5, trialDocs: -1, estudiantes: -1, whatsappMensajes: -1, smsMensajes: -1 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description:       'Para PyMEs en crecimiento',
-      badgeColor:        'bg-zero-50 text-zero-700 border-zero-200',
-      highlighted:       true,
-      marketingFeatures: [
-        '800 comprobantes/mes',
-        'Hasta 3 usuarios',
-        'Todo lo de Starter +',
-        'Clientes y productos',
-        'Cotizaciones',
-        'Facturas recurrentes',
-        'Inventario (almacenes, categorías, listas de precios)',
-        'Reportes DGII (606, 607, 608, 609)',
-        'Registro de actividad',
-      ],
+      description: 'Para el negocio consolidado',
+      badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
+      highlighted: false,
+      marketingFeatures: ['500 comprobantes e-CF al mes', '5 usuarios', 'Sistema completo: contabilidad, inventario, caja y reportes 606/607'],
     },
   },
   {
-    key:         'pro',
-    name:        'Pro',
-    price:       65,
-    priceEnvKey: 'STRIPE_PRICE_PRO',
-    limits: {
-      docs:      -1,   // ilimitado
-      users:     -1,   // ilimitado
-      trialDocs: 30,
-    },
-    features: [
-      'clientes',
-      'productos',
-      'cotizaciones',
-      'facturas-recurrentes',
-      'inventario-avanzado',
-      'reportes',
-      'actividad',
-      'api-keys',
-      'webhooks',
-      'impresoras',
-    ],
+    key: 'multisucursal', familia: 'ecf',
+    modulos: [...MODULES_BASE],
+    name: 'Multi-sucursal', price: 65, priceEnvKey: 'STRIPE_PRICE_MULTISUCURSAL',
+    limits: { docs: -1, users: 8, trialDocs: -1, estudiantes: -1, whatsappMensajes: -1, smsMensajes: -1 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description:       'Para empresas con alto volumen',
-      badgeColor:        'bg-purple-50 text-purple-700 border-purple-200',
-      highlighted:       false,
-      marketingFeatures: [
-        'Comprobantes ilimitados',
-        'Usuarios ilimitados',
-        'Todo lo de Business +',
-        'API REST',
-        'Webhooks',
-        'Integración con impresoras fiscales',
-        'Soporte prioritario',
-      ],
+      description: 'Sin tope de comprobantes, para varias sucursales',
+      badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
+      highlighted: false,
+      marketingFeatures: ['Comprobantes e-CF ilimitados', '8 usuarios', 'Sistema completo: contabilidad, inventario, caja y reportes 606/607'],
+    },
+  },
+
+  // ── Línea 2 · Facturación + Módulo Colegio ─────────────────────────────────
+  // Se cobra POR TRAMO DE ESTUDIANTES, no por consumo. Los cuatro llevan
+  // e-CF ILIMITADO: un colegio de 441 alumnos emite ~1,000 comprobantes en el
+  // mes de inscripción, así que cualquier tope lo dejaría sin facturar.
+  {
+    key: 'colegio-basico', familia: 'colegio',
+    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    name: 'Básico', price: 135, priceEnvKey: 'STRIPE_PRICE_COLEGIO_BASICO',
+    limits: { docs: -1, users: 2, trialDocs: -1, estudiantes: 150, whatsappMensajes: 300, smsMensajes: 300 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
+    ui: {
+      description: 'Hasta 150 estudiantes',
+      badgeColor: 'bg-gray-100 text-gray-700 border-gray-200',
+      highlighted: false,
+      marketingFeatures: ['Hasta 150 estudiantes', 'e-CF ilimitados', '2 usuarios', '300 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '8 horas de implementación'],
+    },
+  },
+  {
+    key: 'colegio-intermedio', familia: 'colegio',
+    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    name: 'Intermedio', price: 237, priceEnvKey: 'STRIPE_PRICE_COLEGIO_INTERMEDIO',
+    limits: { docs: -1, users: 3, trialDocs: -1, estudiantes: 300, whatsappMensajes: 675, smsMensajes: 675 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
+    ui: {
+      description: 'De 151 a 300 estudiantes',
+      badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+      highlighted: true,
+      marketingFeatures: ['Hasta 300 estudiantes', 'e-CF ilimitados', '3 usuarios', '675 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '10.5 horas de implementación'],
+    },
+  },
+  {
+    key: 'colegio-avanzado', familia: 'colegio',
+    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    name: 'Avanzado', price: 350, priceEnvKey: 'STRIPE_PRICE_COLEGIO_AVANZADO',
+    limits: { docs: -1, users: 5, trialDocs: -1, estudiantes: 500, whatsappMensajes: 1200, smsMensajes: 1200 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
+    ui: {
+      description: 'De 301 a 500 estudiantes',
+      badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
+      highlighted: false,
+      marketingFeatures: ['Hasta 500 estudiantes', 'e-CF ilimitados', '5 usuarios', '1,200 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '14 horas de implementación'],
+    },
+  },
+  {
+    key: 'colegio-institucional', familia: 'colegio',
+    modulos: [...MODULES_BASE, 'escolar', 'pos'],
+    name: 'Institucional', price: 500, priceEnvKey: 'STRIPE_PRICE_COLEGIO_INSTITUCIONAL',
+    limits: { docs: -1, users: 9, trialDocs: -1, estudiantes: 800, whatsappMensajes: 1950, smsMensajes: 1950 },
+    features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
+    ui: {
+      description: 'De 501 a 800 estudiantes',
+      badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
+      highlighted: false,
+      marketingFeatures: ['Hasta 800 estudiantes', 'e-CF ilimitados', '9 usuarios', '1,950 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '19 horas de implementación'],
     },
   },
 ];
@@ -201,12 +226,14 @@ export const PLANS: PlanDef[] = [
 
 export const FREE_PLAN: PlanDef = {
   key:         'free',
+  familia:     'ecf',
+  modulos:     [...MODULES_BASE],
   name:        'Gratis',
   price:       0,
   priceEnvKey: '',
   // users: 1 → el propietario. Sin plan activo el negocio existe pero no puede
   // invitar a nadie más (antes 0 hacía que el contador mostrara "1/0 usuarios").
-  limits: { docs: 0, users: 1, trialDocs: 0 },
+  limits: { docs: 0, users: 1, trialDocs: 0, estudiantes: -1, whatsappMensajes: -1, smsMensajes: -1 },
   features:    [],
   ui: {
     description:       'Sin plan activo',
@@ -218,10 +245,26 @@ export const FREE_PLAN: PlanDef = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Obtiene la definición de un plan por su clave (case-insensitive). */
+/**
+ * Definición de un plan por su clave o por su nombre (case-insensitive).
+ *
+ * Acepta las dos formas a propósito. Lo correcto es guardar la CLAVE en
+ * `teams.plan_name`, y eso hace ahora todo el código; pero durante un tiempo
+ * el checkout y el webhook guardaron el NOMBRE, y ahí se caían cinco de los
+ * ocho planes: «Multi-sucursal» no es la clave `multisucursal`, y «Avanzado»
+ * no es `colegio-avanzado`. Sin coincidencia, esta función devolvía FREE_PLAN
+ * —cero comprobantes, sin módulos, solo lectura— a un colegio que acababa de
+ * pagar US$350.
+ *
+ * Buscar también por nombre repara esas filas sin migración y sin que nadie
+ * se quede fuera mientras tanto.
+ */
 export function getPlan(key: string | null | undefined): PlanDef {
-  const k = (key ?? '').toLowerCase();
-  return PLANS.find(p => p.key === k) ?? FREE_PLAN;
+  const k = (key ?? '').trim().toLowerCase();
+  if (!k) return FREE_PLAN;
+  return PLANS.find(p => p.key === k)
+    ?? PLANS.find(p => p.name.toLowerCase() === k)
+    ?? FREE_PLAN;
 }
 
 /**
@@ -249,7 +292,7 @@ export function planHasFeature(
 
 /**
  * Límite de comprobantes/mes para un plan.
- * @param planKey  - Clave del plan (e.g. 'starter')
+ * @param planKey  - Clave del plan (e.g. 'negocio')
  * @param trialing - Si true, devuelve el límite de trial
  * @returns Número de docs permitidos. -1 = ilimitado, 0 = sin acceso.
  */
@@ -289,4 +332,225 @@ export function getPlanPriceLabel(planKey: string): string {
   const plan = getPlan(planKey);
   if (plan.price === 0) return 'Gratis';
   return `$${plan.price} USD/mes`;
+}
+
+// ─── Familias y tramos ────────────────────────────────────────────────────────
+
+/** Planes de una línea de producto, en orden de precio. */
+export function planesDeFamilia(familia: FamiliaPlan): PlanDef[] {
+  return PLANS.filter(p => p.familia === familia);
+}
+
+/**
+ * Tramo escolar que le toca a un colegio por su cantidad de estudiantes.
+ *
+ * Devuelve null si se pasa del tope del tramo más alto (800): ahí no hay plan
+ * de catálogo y toca cotizar a mano. Es mejor que caerse al tramo más caro
+ * calladamente y cobrar de menos.
+ */
+export function tramoPorEstudiantes(estudiantes: number): PlanDef | null {
+  return planesDeFamilia('colegio')
+    .find(p => estudiantes <= p.limits.estudiantes) ?? null;
+}
+
+/** Tope de estudiantes del plan. -1 = no aplica (planes de e-CF). */
+export function getPlanEstudiantesLimit(planKey: string | null | undefined): number {
+  if (!BILLING_ENABLED) return -1;
+  return getPlan(planKey).limits.estudiantes;
+}
+
+/** Tope de avisos de WhatsApp al mes. -1 = no aplica / ilimitado. */
+export function getPlanWhatsappLimit(planKey: string | null | undefined): number {
+  if (!BILLING_ENABLED) return -1;
+  return getPlan(planKey).limits.whatsappMensajes;
+}
+
+/**
+ * ¿Se puede agregar UN usuario más?
+ *
+ * Regla del negocio: quien YA está por encima del tope se queda —no se expulsa
+ * a nadie por un cambio de plan— pero no puede seguir agregando. Por eso la
+ * pregunta es "¿puedo sumar uno?" y no "¿estoy dentro del límite?": los dos
+ * colegios grandes tienen 7 usuarios contra topes de 3 y 5, y con la segunda
+ * pregunta habría que sacarles gente.
+ */
+export function puedeAgregarUsuario(
+  planKey: string | null | undefined,
+  usuariosActuales: number,
+): { permitido: boolean; limite: number; motivo?: string } {
+  const limite = getPlanUserLimit(planKey);
+  if (limite === -1) return { permitido: true, limite };
+  if (usuariosActuales < limite) return { permitido: true, limite };
+  const plan = getPlan(planKey);
+  return {
+    permitido: false,
+    limite,
+    motivo: usuariosActuales > limite
+      ? `Tu plan ${plan.name} incluye ${limite} usuarios y ya tienes ${usuariosActuales}. Puedes conservar los que están, pero para agregar más necesitas un plan mayor.`
+      : `Tu plan ${plan.name} incluye ${limite} usuarios y ya los estás usando todos.`,
+  };
+}
+
+/**
+ * Módulos que le corresponden a un team por su plan.
+ *
+ * Con billing apagado devuelve null: los módulos los administramos a mano
+ * desde /admin y ninguna suscripción debe opinar. Esto es lo que impide que
+ * un webhook le apague el POS a un colegio al que se lo habilitamos nosotros.
+ */
+export function modulosDelPlan(
+  planKey: string | null | undefined,
+  addonsActivos: string[] = [],
+): ModuleKey[] | null {
+  if (!BILLING_ENABLED) return null;
+  const delPlan = getPlan(planKey).modulos;
+  const delAddon = ADDONS.filter(a => addonsActivos.includes(a.key)).map(a => a.modulo);
+  return [...new Set<ModuleKey>([...delPlan, ...delAddon])];
+}
+
+// ─── Adicionales (add-ons) ────────────────────────────────────────────────────
+
+export interface AddonDef {
+  key: string;
+  /** Módulo que desbloquea al contratarlo. */
+  modulo: ModuleKey;
+  name: string;
+  /** USD/mes que se SUMAN al precio del plan. */
+  price: number;
+  /** Variable con el Price ID de Stripe. Reusa el nombre que ya existía en
+   *  lib/payments/modulos.ts para no tener dos nombres del mismo precio. */
+  priceEnvKey: string;
+  /** Familias donde ya viene incluido: ahí no se ofrece ni se cobra aparte. */
+  incluidoEn: FamiliaPlan[];
+  descripcion: string;
+}
+
+/**
+ * Un adicional es un módulo que se contrata SUELTO sobre cualquier plan de la
+ * familia e-CF. En los tramos de colegio el POS ya viene dentro (la cafetería),
+ * así que ahí no se ofrece — cobrarlo dos veces sería el error obvio.
+ */
+export const ADDONS: AddonDef[] = [
+  {
+    key: 'pos',
+    modulo: 'pos',
+    name: 'Punto de Venta',
+    price: 9,
+    priceEnvKey: 'STRIPE_PRICE_MODULO_POS',
+    incluidoEn: ['colegio'],
+    descripcion: 'Caja registradora, turnos e inventario por almacén.',
+  },
+];
+
+/** Adicionales que TIENE SENTIDO ofrecerle a este plan (los no incluidos ya). */
+export function addonsDisponibles(planKey: string | null | undefined): AddonDef[] {
+  const plan = getPlan(planKey);
+  return ADDONS.filter(a => !a.incluidoEn.includes(plan.familia) && !plan.modulos.includes(a.modulo));
+}
+
+/** ¿Este plan ya trae el adicional sin cargo? */
+export function addonIncluido(planKey: string | null | undefined, addonKey: string): boolean {
+  const plan = getPlan(planKey);
+  const addon = ADDONS.find(a => a.key === addonKey);
+  if (!addon) return false;
+  return addon.incluidoEn.includes(plan.familia) || plan.modulos.includes(addon.modulo);
+}
+
+/** Total mensual: plan + adicionales contratados (los incluidos no suman). */
+export function precioTotal(planKey: string | null | undefined, addonsActivos: string[] = []): number {
+  const plan = getPlan(planKey);
+  const extra = ADDONS
+    .filter(a => addonsActivos.includes(a.key) && !addonIncluido(planKey, a.key))
+    .reduce((s, a) => s + a.price, 0);
+  return plan.price + extra;
+}
+
+// ─── Líneas comerciales ───────────────────────────────────────────────────────
+
+/**
+ * Cómo se le presentan los planes al cliente: tres líneas, no dos.
+ *
+ * "Zero POS + ERP" NO es una familia aparte en los datos — es la misma familia
+ * `ecf` con el adicional de POS ya sumado. Se modela así a propósito: duplicar
+ * los cuatro planes solo para mostrarlos con POS obligaría a mantener los
+ * precios en dos sitios, y el día que suba el Pro habría que acordarse de los
+ * dos. Aquí el precio se calcula.
+ */
+export interface LineaProducto {
+  key: string;
+  nombre: string;
+  descripcion: string;
+  familia: FamiliaPlan;
+  /** Adicionales que la línea trae de fábrica (se suman al precio). */
+  addons: string[];
+}
+
+export const LINEAS_PRODUCTO: LineaProducto[] = [
+  {
+    key: 'erp',
+    nombre: 'Zero ERP',
+    descripcion: 'Facturación electrónica, contabilidad completa, inventario y compras.',
+    familia: 'ecf',
+    addons: [],
+  },
+  {
+    key: 'pos-erp',
+    nombre: 'Zero POS + ERP',
+    descripcion: 'Todo el ERP más el punto de venta: caja, turnos y stock por almacén.',
+    familia: 'ecf',
+    addons: ['pos'],
+  },
+  {
+    key: 'erp-colegio',
+    nombre: 'Zero ERP Colegio',
+    descripcion: 'Todo el ERP, el punto de venta de la cafetería y la gobernanza del colegio.',
+    familia: 'colegio',
+    addons: [],
+  },
+];
+
+// ─── Color del plan en la UI ──────────────────────────────────────────────────
+
+/**
+ * El tono del chip de un plan, DERIVADO de su escalón dentro de su familia.
+ *
+ * Antes cada pantalla tenía su propio `if (plan === 'business')`, y cuando el
+ * catálogo cambió esas listas se quedaron atrás: los chips de plan se pintaron
+ * grises durante meses porque ningún plan real se llamaba ya así. Calculado
+ * desde PLANS no puede desincronizarse.
+ */
+const TONOS_MUI = ['info', 'primary', 'secondary', 'success'] as const;
+export type TonoPlan = (typeof TONOS_MUI)[number] | 'default';
+
+export function planColorMui(planKey: string | null | undefined): TonoPlan {
+  const plan = getPlan(planKey);
+  if (plan.key === 'free') return 'default';
+  const i = planesDeFamilia(plan.familia).findIndex(p => p.key === plan.key);
+  return i < 0 ? 'default' : TONOS_MUI[Math.min(i, TONOS_MUI.length - 1)];
+}
+
+/** Colores del chip en hex, para las pantallas que no usan la paleta de MUI. */
+const CHIP_HEX = [
+  { bgcolor: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }, // escalón 1
+  { bgcolor: '#eef2fe', color: '#2a45c4', border: '#c7d2fc' }, // 2 — marca
+  { bgcolor: '#faf5ff', color: '#7c3aed', border: '#ddd6fe' }, // 3
+  { bgcolor: '#ecfdf5', color: '#047857', border: '#a7f3d0' }, // 4
+] as const;
+
+export function planChipColors(planKey: string | null | undefined) {
+  const plan = getPlan(planKey);
+  const gris = { bgcolor: '#f3f4f6', color: '#374151', border: '#e5e7eb' };
+  if (plan.key === 'free') return gris;
+  const i = planesDeFamilia(plan.familia).findIndex(p => p.key === plan.key);
+  return i < 0 ? gris : CHIP_HEX[Math.min(i, CHIP_HEX.length - 1)];
+}
+
+/** Planes de una línea, con el precio que de verdad paga el cliente. */
+export function planesDeLinea(lineaKey: string): { plan: PlanDef; precio: number }[] {
+  const linea = LINEAS_PRODUCTO.find(l => l.key === lineaKey);
+  if (!linea) return [];
+  return planesDeFamilia(linea.familia).map(plan => ({
+    plan,
+    precio: precioTotal(plan.key, linea.addons),
+  }));
 }
