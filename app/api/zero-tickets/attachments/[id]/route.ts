@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return new NextResponse(buffer, {
     headers: {
       'Content-Type': attachment.mimeType,
-      'Content-Disposition': `inline; filename="${attachment.fileName}"`,
+      'Content-Disposition': `inline; filename="${attachment.fileName.replace(/["\r\n]/g, '')}"`,
       'Cache-Control': 'private, max-age=3600',
     },
   });

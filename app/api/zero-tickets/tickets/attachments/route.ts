@@ -21,6 +21,14 @@ export async function POST(req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo activo' }, { status: 400 });
 
+  const contentLength = req.headers.get('content-length');
+  if (contentLength) {
+    const declaredBytes = parseInt(contentLength, 10);
+    if (!Number.isNaN(declaredBytes) && declaredBytes > MAX_BYTES + 1024 * 1024) {
+      return NextResponse.json({ error: 'Archivo muy grande (máx 15MB)' }, { status: 400 });
+    }
+  }
+
   const form = await req.formData();
   const file = form.get('file');
   if (!(file instanceof File)) return NextResponse.json({ error: 'Falta el archivo' }, { status: 400 });
@@ -38,36 +46,46 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const ext = file.name.split('.').pop() ?? 'bin';
 
-  const [msg] = await db
-    .insert(ticketMessages)
-    .values({ ticketId: ticket.id, senderType: 'user', senderId: user.id, content: null })
-    .returning();
-
-  if (s3Disponible()) {
-    const key = construirKeyTicket(teamId, ext);
+  // Sube a S3 (o prepara el base64) ANTES de tocar la base de datos: si esto
+  // falla, no queremos ningún registro huérfano de ticketMessages.
+  const usarS3 = s3Disponible();
+  const key = usarS3 ? construirKeyTicket(teamId, ext) : null;
+  if (usarS3 && key) {
     await subirAdjuntoTicket(key, buffer, file.type);
-    await db.insert(ticketAttachments).values({
-      messageId: msg.id,
-      fileName: file.name,
-      mimeType: file.type,
-      fileSizeBytes: file.size,
-      kind: kindDeMime(file.type),
-      storage: 's3',
-      s3Key: key,
-    });
-  } else {
-    await db.insert(ticketAttachments).values({
-      messageId: msg.id,
-      fileName: file.name,
-      mimeType: file.type,
-      fileSizeBytes: file.size,
-      kind: kindDeMime(file.type),
-      storage: 'db',
-      dataBase64: buffer.toString('base64'),
-    });
   }
 
-  await db.update(tickets).set({ lastMessageAt: new Date(), updatedAt: new Date() }).where(eq(tickets.id, ticket.id));
+  const msg = await db.transaction(async (tx) => {
+    const [msg] = await tx
+      .insert(ticketMessages)
+      .values({ ticketId: ticket.id, senderType: 'user', senderId: user.id, content: null })
+      .returning();
+
+    if (usarS3 && key) {
+      await tx.insert(ticketAttachments).values({
+        messageId: msg.id,
+        fileName: file.name,
+        mimeType: file.type,
+        fileSizeBytes: file.size,
+        kind: kindDeMime(file.type),
+        storage: 's3',
+        s3Key: key,
+      });
+    } else {
+      await tx.insert(ticketAttachments).values({
+        messageId: msg.id,
+        fileName: file.name,
+        mimeType: file.type,
+        fileSizeBytes: file.size,
+        kind: kindDeMime(file.type),
+        storage: 'db',
+        dataBase64: buffer.toString('base64'),
+      });
+    }
+
+    await tx.update(tickets).set({ lastMessageAt: new Date(), updatedAt: new Date() }).where(eq(tickets.id, ticket.id));
+
+    return msg;
+  });
 
   return NextResponse.json({ ok: true, messageId: msg.id });
 }
