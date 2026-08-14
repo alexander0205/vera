@@ -20,7 +20,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancelar',
   onConfirm,
   loading = false,
-  confirmClassName = 'bg-teal-600 hover:bg-teal-700 text-white',
+  confirmClassName = 'bg-zero-600 hover:bg-zero-700 text-white',
   /**
    * `destructive` pinta el botón en rojo. Hace falta como prop y no basta con
    * mandar clases por `confirmClassName`: el botón es MUI por debajo y sus

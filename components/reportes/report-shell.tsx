@@ -78,11 +78,11 @@ export function KpiCard({
   label: string;
   value: string;
   sub?: string;
-  tone?: 'default' | 'teal' | 'amber' | 'red' | 'emerald';
+  tone?: 'default' | 'marca' | 'amber' | 'red' | 'emerald';
 }) {
   const toneColor = {
     default: '#111827',
-    teal: '#2a45c4',
+    marca: '#2a45c4',   // Zero 700
     amber: '#d97706',
     red: '#dc2626',
     emerald: '#059669',

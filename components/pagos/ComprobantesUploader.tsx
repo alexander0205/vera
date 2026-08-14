@@ -161,7 +161,7 @@ export default function ComprobantesUploader({
   }
 
   const marco = arrastrando
-    ? 'border-teal-500 bg-teal-50 border-dashed'
+    ? 'border-zero-500 bg-zero-50 border-dashed'
     : obligatorio
       ? 'border-amber-300 bg-amber-50/60'
       : 'border-gray-200 bg-gray-50/60';
@@ -189,9 +189,9 @@ export default function ComprobantesUploader({
       onDrop={onDrop}
     >
       {arrastrando && (
-        <div className="absolute inset-0 z-10 rounded-lg bg-teal-50/90 flex flex-col items-center justify-center gap-1 pointer-events-none">
-          <Upload className="h-5 w-5 text-teal-600" />
-          <span className="text-xs font-medium text-teal-700">Suelta aquí el comprobante</span>
+        <div className="absolute inset-0 z-10 rounded-lg bg-zero-50/90 flex flex-col items-center justify-center gap-1 pointer-events-none">
+          <Upload className="h-5 w-5 text-zero-600" />
+          <span className="text-xs font-medium text-zero-700">Suelta aquí el comprobante</span>
         </div>
       )}
 
@@ -262,7 +262,7 @@ export default function ComprobantesUploader({
               onClick={() => inputArchivo.current?.click()}
               disabled={subiendo}
               title="Elegir archivo (o arrastra, o pega con Ctrl+V)"
-              className="h-[64px] w-[70px] rounded-lg border border-dashed border-teal-300 bg-white text-teal-600 flex flex-col items-center justify-center gap-1 hover:bg-teal-50 disabled:opacity-50"
+              className="h-[64px] w-[70px] rounded-lg border border-dashed border-zero-300 bg-white text-zero-600 flex flex-col items-center justify-center gap-1 hover:bg-zero-50 disabled:opacity-50"
             >
               {subiendo
                 ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -276,7 +276,7 @@ export default function ComprobantesUploader({
               onClick={() => inputCamara.current?.click()}
               disabled={subiendo}
               title="Tomar foto con la cámara"
-              className="h-[64px] w-[70px] rounded-lg border border-dashed border-teal-300 bg-white text-teal-600 flex flex-col items-center justify-center gap-1 hover:bg-teal-50 disabled:opacity-50 sm:hidden"
+              className="h-[64px] w-[70px] rounded-lg border border-dashed border-zero-300 bg-white text-zero-600 flex flex-col items-center justify-center gap-1 hover:bg-zero-50 disabled:opacity-50 sm:hidden"
             >
               <Camera className="h-4 w-4" />
               <span className="text-[9px]">Foto</span>

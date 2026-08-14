@@ -351,7 +351,7 @@ export default function ConfiguracionPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
       </div>
     );
   }
@@ -371,7 +371,7 @@ export default function ConfiguracionPage() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-teal-600 hover:bg-teal-700 sm:min-w-[130px] w-full sm:w-auto"
+            className="bg-zero-600 hover:bg-zero-700 sm:min-w-[130px] w-full sm:w-auto"
           >
             {saving ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>
@@ -385,7 +385,7 @@ export default function ConfiguracionPage() {
       </div>
 
       {!canManage && (
-        <div className="flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 text-sm text-sky-700">
+        <div className="flex items-center gap-2 bg-zero-50 border border-zero-200 rounded-xl px-4 py-3 text-sm text-zero-700">
           <Lock className="h-4 w-4 shrink-0" />
           Solo lectura — tu rol puede ver la configuración pero no modificarla.
         </div>
@@ -401,7 +401,7 @@ export default function ConfiguracionPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-teal-600" />
+            <Building2 className="h-4 w-4 text-zero-600" />
             Datos fiscales
           </CardTitle>
         </CardHeader>
@@ -459,7 +459,7 @@ export default function ConfiguracionPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-teal-600" />
+            <ImageIcon className="h-4 w-4 text-zero-600" />
             Logo de la empresa
           </CardTitle>
         </CardHeader>
@@ -478,7 +478,7 @@ export default function ConfiguracionPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <PenLine className="h-4 w-4 text-teal-600" />
+            <PenLine className="h-4 w-4 text-zero-600" />
             Firma autorizada
           </CardTitle>
         </CardHeader>
@@ -497,7 +497,7 @@ export default function ConfiguracionPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Palette className="h-4 w-4 text-teal-600" />
+            <Palette className="h-4 w-4 text-zero-600" />
             Color de marca
           </CardTitle>
         </CardHeader>
@@ -556,7 +556,7 @@ export default function ConfiguracionPage() {
       <Card className="border-dashed">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Eye className="h-4 w-4 text-teal-600" />
+            <Eye className="h-4 w-4 text-zero-600" />
             Previsualización del encabezado
           </CardTitle>
         </CardHeader>
@@ -597,7 +597,7 @@ export default function ConfiguracionPage() {
       {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-teal-600" />
+            <AlertCircle className="h-4 w-4 text-zero-600" />
             Plazo de pago
           </CardTitle>
         </CardHeader>
@@ -629,7 +629,7 @@ export default function ConfiguracionPage() {
       {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="h-4 w-4 text-teal-600" />
+            <FileText className="h-4 w-4 text-zero-600" />
             Términos y condiciones
           </CardTitle>
         </CardHeader>
@@ -639,7 +639,7 @@ export default function ConfiguracionPage() {
             no repetirlo cada vez. En cada documento lo puedes editar o borrar.
           </p>
           <textarea
-            className="w-full min-h-[120px] text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus-visible:ring-2 focus:ring-teal-500 focus:border-transparent placeholder:text-gray-300 disabled:bg-gray-50"
+            className="w-full min-h-[120px] text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus-visible:ring-2 focus:ring-zero-500 focus:border-transparent placeholder:text-gray-300 disabled:bg-gray-50"
             placeholder="Ej: Pago a 30 días. Transferencias a la cuenta 000000001 del Banco Popular."
             value={terminosDefault}
             onChange={e => setTerminosDefault(e.target.value.slice(0, 2000))}
@@ -656,7 +656,7 @@ export default function ConfiguracionPage() {
       {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-teal-600" />
+            <CreditCard className="h-4 w-4 text-zero-600" />
             Métodos que obligan facturar a la DGII
           </CardTitle>
         </CardHeader>
@@ -686,8 +686,8 @@ export default function ConfiguracionPage() {
                         ? prev.filter(v => v !== m.value)
                         : [...prev, m.value],
                     )}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                      activo ? 'bg-teal-600' : 'bg-gray-200'
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                      activo ? 'bg-zero-600' : 'bg-gray-200'
                     }`}
                   >
                     <span
@@ -715,7 +715,7 @@ export default function ConfiguracionPage() {
       {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Paperclip className="h-4 w-4 text-teal-600" />
+            <Paperclip className="h-4 w-4 text-zero-600" />
             Métodos que exigen comprobante
           </CardTitle>
         </CardHeader>
@@ -746,8 +746,8 @@ export default function ConfiguracionPage() {
                         ? prev.filter(v => v !== m.value)
                         : [...prev, m.value],
                     )}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                      activo ? 'bg-teal-600' : 'bg-gray-200'
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                      activo ? 'bg-zero-600' : 'bg-gray-200'
                     }`}
                   >
                     <span
@@ -762,7 +762,7 @@ export default function ConfiguracionPage() {
           </div>
 
           {metodosExigeComprobante.length > 0 && (
-            <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-800">
+            <div className="rounded-lg bg-zero-50 border border-zero-200 px-4 py-3 text-xs text-zero-800">
               <strong>Activo:</strong> los cobros con{' '}
               {metodosExigeComprobante.map(v => METODOS_PAGO.find(m => m.value === v)?.label ?? v).join(', ')}{' '}
               no se podrán registrar sin adjuntar el comprobante.
@@ -775,7 +775,7 @@ export default function ConfiguracionPage() {
       {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-teal-600" />
+            <AlertCircle className="h-4 w-4 text-zero-600" />
             Recargo por mora
           </CardTitle>
           <p className="text-sm text-gray-500 mt-1">Cobra un extra cuando la factura se paga tarde.</p>
@@ -784,7 +784,7 @@ export default function ConfiguracionPage() {
 
           {/* Toggle Activado */}
           <div className={`flex items-center justify-between rounded-xl border px-4 py-3.5 transition-colors ${
-            recargoActivo ? 'border-teal-200 bg-teal-50/60' : 'border-gray-200'
+            recargoActivo ? 'border-zero-200 bg-zero-50/60' : 'border-gray-200'
           }`}>
             <div className="flex items-center gap-3">
               <button
@@ -792,8 +792,8 @@ export default function ConfiguracionPage() {
                 role="switch"
                 aria-checked={recargoActivo}
                 onClick={() => setRecargoActivo(v => !v)}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                  recargoActivo ? 'bg-teal-600' : 'bg-gray-200'
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                  recargoActivo ? 'bg-zero-600' : 'bg-gray-200'
                 }`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
@@ -801,7 +801,7 @@ export default function ConfiguracionPage() {
                 }`} />
               </button>
               <div>
-                <p className={`text-sm font-semibold ${recargoActivo ? 'text-teal-700' : 'text-gray-500'}`}>
+                <p className={`text-sm font-semibold ${recargoActivo ? 'text-zero-700' : 'text-gray-500'}`}>
                   {recargoActivo ? 'Activado' : 'Desactivado'}
                 </p>
                 <p className="text-xs text-gray-500">
@@ -820,7 +820,7 @@ export default function ConfiguracionPage() {
               {/* Sección 1: ¿Cuánto cobrar? */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">1</span>
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-zero-100 text-zero-700 text-xs font-semibold">1</span>
                   ¿Cuánto cobrar?
                 </h3>
                 <div className="space-y-1.5 md:max-w-sm">
@@ -869,7 +869,7 @@ export default function ConfiguracionPage() {
               {/* Sección 2: ¿Cuándo empezar? */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">2</span>
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-zero-100 text-zero-700 text-xs font-semibold">2</span>
                   ¿Cuándo empezar?
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -905,7 +905,7 @@ export default function ConfiguracionPage() {
                             onClick={() => setRecargoPeriodicidad(String(opt.dias))}
                             className={`rounded-lg border px-3 py-2 text-xs transition-colors ${
                               activo
-                                ? 'border-teal-600 bg-teal-50 text-teal-700 font-medium'
+                                ? 'border-zero-600 bg-zero-50 text-zero-700 font-medium'
                                 : 'border-gray-200 text-gray-600 hover:border-gray-300'
                             }`}
                           >
@@ -938,7 +938,7 @@ export default function ConfiguracionPage() {
               {/* Sección 3: ¿Poner límites? (opcional) */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-teal-100 text-teal-700 text-xs font-semibold">3</span>
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-zero-100 text-zero-700 text-xs font-semibold">3</span>
                   ¿Poner límites al recargo?
                   <span className="text-xs font-normal text-gray-400">(opcional)</span>
                 </h3>
@@ -1005,7 +1005,7 @@ export default function ConfiguracionPage() {
                 }).map((paso, i) => (
                   <li key={i} className="flex gap-3">
                     <div className="flex flex-col items-center">
-                      <span className="mt-0.5 h-2 w-2 rounded-full bg-teal-500 shrink-0" />
+                      <span className="mt-0.5 h-2 w-2 rounded-full bg-zero-500 shrink-0" />
                       {i < 3 && <span className="flex-1 w-px bg-gray-200 my-1" />}
                     </div>
                     <div className="min-w-0 -mt-1">
@@ -1013,7 +1013,7 @@ export default function ConfiguracionPage() {
                       <p className="text-[11px] text-gray-500">{paso.fecha}</p>
                       <p className="text-xs text-gray-600 mt-0.5">{paso.detalle}</p>
                       {paso.monto && (
-                        <p className="text-xs font-semibold text-teal-700 mt-0.5">= {paso.monto}</p>
+                        <p className="text-xs font-semibold text-zero-700 mt-0.5">= {paso.monto}</p>
                       )}
                     </div>
                   </li>
@@ -1027,9 +1027,9 @@ export default function ConfiguracionPage() {
           </div>
 
           {/* Resumen de tu configuración */}
-          <div className="rounded-xl border border-teal-100 bg-teal-50/50 px-4 py-3.5">
+          <div className="rounded-xl border border-zero-100 bg-zero-50/50 px-4 py-3.5">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-3">
-              <CheckCircle className="h-4 w-4 text-teal-600" />
+              <CheckCircle className="h-4 w-4 text-zero-600" />
               Resumen de tu configuración
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -1080,7 +1080,7 @@ export default function ConfiguracionPage() {
       {canManage && <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-teal-600" />
+            <Wallet className="h-4 w-4 text-zero-600" />
             Cuadre de Caja
           </CardTitle>
         </CardHeader>
@@ -1104,8 +1104,8 @@ export default function ConfiguracionPage() {
               role="switch"
               aria-checked={cajaHabilitada}
               onClick={() => setCajaHabilitada(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                cajaHabilitada ? 'bg-teal-600' : 'bg-gray-200'
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                cajaHabilitada ? 'bg-zero-600' : 'bg-gray-200'
               }`}
             >
               <span
@@ -1182,7 +1182,7 @@ export default function ConfiguracionPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg bg-teal-50 border border-teal-200 px-4 py-3 text-xs text-teal-700">
+              <div className="rounded-lg bg-zero-50 border border-zero-200 px-4 py-3 text-xs text-zero-700">
                 <strong>Activo:</strong> El módulo "Caja" aparecerá en el menú lateral. Cada cajero
                 debe abrir su turno antes de emitir o cobrar. Los cierres con descuadre requieren
                 aprobación de un admin u owner.
@@ -1242,8 +1242,8 @@ export default function ConfiguracionPage() {
             <button
               type="button" role="switch" aria-checked={alertaMetodoPagoActivo}
               onClick={() => setAlertaMetodoPagoActivo(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                alertaMetodoPagoActivo ? 'bg-teal-600' : 'bg-gray-200'
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                alertaMetodoPagoActivo ? 'bg-zero-600' : 'bg-gray-200'
               }`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${alertaMetodoPagoActivo ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -1273,8 +1273,8 @@ export default function ConfiguracionPage() {
             <button
               type="button" role="switch" aria-checked={posHabilitado}
               onClick={() => setPosHabilitado(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                posHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                posHabilitado ? 'bg-zero-600' : 'bg-gray-200'
               }`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -1292,8 +1292,8 @@ export default function ConfiguracionPage() {
               <button
                 type="button" role="switch" aria-checked={posEscolarHabilitado}
                 onClick={() => setPosEscolarHabilitado(v => !v)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${
-                  posEscolarHabilitado ? 'bg-teal-600' : 'bg-gray-200'
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zero-500 focus:ring-offset-2 ${
+                  posEscolarHabilitado ? 'bg-zero-600' : 'bg-gray-200'
                 }`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${posEscolarHabilitado ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -1314,7 +1314,7 @@ export default function ConfiguracionPage() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-teal-600 hover:bg-teal-700 min-w-[160px]"
+            className="bg-zero-600 hover:bg-zero-700 min-w-[160px]"
           >
             {saving ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando…</>

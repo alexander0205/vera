@@ -40,7 +40,7 @@ export default async function PorUsuarioPagoPage({
       exportHref={`/api/reportes/export?report=por-usuario-pago&desde=${d0}&hasta=${d1}`}
     >
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, gap: 1.5, mb: 3 }}>
-        <KpiCard label="Total cobrado" value={fmtDOP(total)} tone="teal" />
+        <KpiCard label="Total cobrado" value={fmtDOP(total)} tone="marca" />
         <KpiCard label="Usuarios" value={String(filas.length)} />
         <KpiCard label="Top cobrador" value={filas[0]?.nombre ?? '—'} sub={filas[0] ? fmtDOP(filas[0].totalCents) : undefined} />
       </Box>

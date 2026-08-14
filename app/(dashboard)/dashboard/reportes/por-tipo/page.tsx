@@ -41,7 +41,7 @@ export default async function PorTipoPage({
       exportHref={`/api/reportes/export?report=por-tipo&desde=${d0}&hasta=${d1}`}
     >
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
-        <KpiCard label="Total facturado" value={fmtDOP(total)} tone="teal" />
+        <KpiCard label="Total facturado" value={fmtDOP(total)} tone="marca" />
         <KpiCard label="Tipos usados" value={String(filas.length)} />
         <KpiCard label="Tipo principal" value={filas[0]?.nombre ?? '—'} sub={filas[0] ? fmtDOP(filas[0].ingresosCents) : undefined} />
         <KpiCard label="Facturas" value={String(filas.reduce((s, f) => s + f.numFacturas, 0))} />

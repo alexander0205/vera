@@ -191,7 +191,7 @@ export default function FacturasPage() {
         // todas las filas y se comía media columna. El completo, en el tooltip.
         <Link
           href={`/dashboard/facturas/${doc.id}`}
-          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-teal-700 underline decoration-teal-200 underline-offset-2 hover:decoration-teal-600"
+          className="block whitespace-nowrap font-mono text-xs font-semibold leading-tight tabular-nums text-zero-700 underline decoration-zero-200 underline-offset-2 hover:decoration-zero-600"
           title={doc.codigo ?? `#${doc.id}`}
         >
           {/* El código corto es de esta rama; el sello POS viene de la del
@@ -455,7 +455,7 @@ export default function FacturasPage() {
           icon: FileText,
           title: 'No se encontraron comprobantes',
           cta: canCrear ? (
-            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-teal-600 hover:underline">
+            <Link href="/dashboard/facturas/nueva" className="inline-flex items-center gap-1 text-sm text-zero-600 hover:underline">
               <Plus className="h-4 w-4" /> Emitir primer comprobante
             </Link>
           ) : undefined,
@@ -476,7 +476,7 @@ export default function FacturasPage() {
             )}
             {canCrear && (
               <Link href="/dashboard/facturas/nueva"
-                className="flex items-center gap-1.5 bg-teal-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-teal-700 font-medium transition-colors">
+                className="flex items-center gap-1.5 bg-zero-600 text-white text-sm px-4 py-1.5 rounded-lg hover:bg-zero-700 font-medium transition-colors">
                 <Plus className="h-4 w-4" /> Nueva Factura
               </Link>
             )}

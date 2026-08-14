@@ -51,7 +51,7 @@ export default async function PorClientePage({
       exportHref={`/api/reportes/export?report=por-cliente&desde=${d0}&hasta=${d1}`}
     >
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
-        <KpiCard label="Total facturado" value={fmtDOP(total)} tone="teal" />
+        <KpiCard label="Total facturado" value={fmtDOP(total)} tone="marca" />
         <KpiCard label="Clientes" value={String(filas.length)} />
         <KpiCard label="Cliente top" value={filas[0]?.cliente ?? '—'} sub={filas[0] ? fmtDOP(filas[0].ingresosCents) : undefined} />
         <KpiCard label="Ticket prom." value={ticketProm > 0 ? fmtDOP(ticketProm) : '—'} />

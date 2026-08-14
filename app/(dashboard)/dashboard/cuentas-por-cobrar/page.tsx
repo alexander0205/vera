@@ -125,7 +125,7 @@ export default function CuentasPorCobrarPage() {
           <Link
             href={`/dashboard/facturas/${c.id}`}
             title={c.codigo ?? `Factura #${c.id}`}
-            className="whitespace-nowrap font-mono text-xs font-medium text-teal-600 hover:underline"
+            className="whitespace-nowrap font-mono text-xs font-medium text-zero-600 hover:underline"
           >
             {c.codigo ? fmtCodigoCorto(c.codigo) : `#${c.id}`}
           </Link>
@@ -305,7 +305,7 @@ export default function CuentasPorCobrarPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setHistoricaModal(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-teal-300 text-gray-700 hover:text-teal-700 text-sm font-medium rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 hover:border-zero-300 text-gray-700 hover:text-zero-700 text-sm font-medium rounded-lg transition-colors"
             title="Importar factura previa al uso de Zero (no va a DGII)"
           >
             <Archive className="h-4 w-4" />
@@ -646,7 +646,7 @@ function PagoModal({
               value={fecha}
               onChange={e => setFecha(e.target.value)}
               required
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
             />
           </div>
 
@@ -696,7 +696,7 @@ function PagoModal({
             <button
               type="submit"
               disabled={guardando || !valido}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+              className="px-4 py-2 bg-zero-600 hover:bg-zero-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
             >
               {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
               Registrar pago
@@ -763,7 +763,7 @@ function ResumenPago({
         <button
           type="button"
           onClick={onListo}
-          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg"
+          className="px-4 py-2 bg-zero-600 hover:bg-zero-700 text-white text-sm font-medium rounded-lg"
         >
           Listo
         </button>
@@ -853,7 +853,7 @@ function HistoricaModal({
                 onChange={e => setEncf(e.target.value.toUpperCase())}
                 placeholder="B01000000001 (opcional)"
                 maxLength={40}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500 font-mono"
               />
               <p className="text-[10px] text-gray-400 mt-1">Si lo dejas vacío se genera automáticamente.</p>
             </div>
@@ -865,7 +865,7 @@ function HistoricaModal({
                 onChange={e => setRnc(e.target.value)}
                 placeholder="131988032"
                 maxLength={20}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
           </div>
@@ -879,7 +879,7 @@ function HistoricaModal({
               required
               placeholder="Razón social del cliente"
               maxLength={255}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
             />
           </div>
 
@@ -892,7 +892,7 @@ function HistoricaModal({
                 value={fechaEmision}
                 onChange={e => setFechaEmision(e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
             <div>
@@ -902,7 +902,7 @@ function HistoricaModal({
                 value={fechaLimite}
                 onChange={e => setFechaLimite(e.target.value)}
                 required
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
           </div>
@@ -919,7 +919,7 @@ function HistoricaModal({
                 onChange={e => setMontoDOP(e.target.value)}
                 required
                 placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
             </div>
             <div>
@@ -931,7 +931,7 @@ function HistoricaModal({
                 value={yaPagadoDOP}
                 onChange={e => setYaPagadoDOP(e.target.value)}
                 placeholder="0.00"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
               />
               <p className="text-[10px] text-gray-400 mt-1">Abonos previos al sistema.</p>
             </div>
@@ -945,7 +945,7 @@ function HistoricaModal({
               rows={2}
               maxLength={1000}
               placeholder="Factura preimpresa serie B01 julio 2025, etc."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zero-500"
             />
           </div>
 
@@ -967,7 +967,7 @@ function HistoricaModal({
             <button
               type="submit"
               disabled={guardando}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+              className="px-4 py-2 bg-zero-600 hover:bg-zero-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
             >
               {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
               Agregar cuenta

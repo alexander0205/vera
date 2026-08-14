@@ -190,7 +190,7 @@ export function MatriculaFicha<T extends MatriculaFila>({ matricula: m, onEditar
                 Este período · {totales.cargos} cargo{totales.cargos !== 1 ? 's' : ''}
               </p>
               <TotalRow icon={Receipt} tone="gray" label="Facturado" value={fmtDOP(totales.facturado)} />
-              <TotalRow icon={HandCoins} tone="teal" label="Pagado" value={fmtDOP(totales.pagado)} />
+              <TotalRow icon={HandCoins} tone="verde" label="Pagado" value={fmtDOP(totales.pagado)} />
               <TotalRow icon={AlertTriangle} tone="red" label="Pendiente" value={fmtDOP(totales.pendiente)}
                 muted={totales.pendiente === 0} />
             </div>
@@ -237,7 +237,7 @@ function Dato({ label, valor, destacado }: { label: string; valor: string; desta
 
 const TONES = {
   gray:  { box: 'bg-gray-100 text-gray-600',  val: 'text-gray-900' },
-  teal:  { box: 'bg-zero-100 text-zero-700',  val: 'text-zero-700' },
+  verde:  { box: 'bg-zero-100 text-zero-700',  val: 'text-zero-700' },
   red:   { box: 'bg-red-100 text-red-600',    val: 'text-red-600' },
   amber: { box: 'bg-amber-100 text-amber-700', val: 'text-amber-700' },
 } as const;

@@ -199,7 +199,7 @@ export default function CotizacionDetallePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
       </div>
     );
   }
@@ -262,7 +262,7 @@ export default function CotizacionDetallePage() {
             <p className="text-xs text-gray-500 mt-0.5">
               Emitida: {fmtDate(cot.fechaEmision)}
               {cot.fechaVencimiento && (
-                <> · Válida hasta: <span className="text-teal-700 font-medium">{fmtDate(cot.fechaVencimiento)}</span></>
+                <> · Válida hasta: <span className="text-zero-700 font-medium">{fmtDate(cot.fechaVencimiento)}</span></>
               )}
             </p>
           </div>
@@ -335,7 +335,7 @@ export default function CotizacionDetallePage() {
                   className="flex items-center gap-2 cursor-pointer"
                   disabled={converting}
                 >
-                  <FileCheck className="h-4 w-4 text-teal-600" />
+                  <FileCheck className="h-4 w-4 text-zero-600" />
                   {converting ? 'Convirtiendo…' : 'Convertir a factura'}
                 </DropdownMenuItem>
               )}
@@ -437,7 +437,7 @@ export default function CotizacionDetallePage() {
           {/* Resumen */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-teal-600" />
+              <FileText className="h-4 w-4 text-zero-600" />
               Resumen
             </h2>
             <div className="space-y-2 text-sm">
@@ -471,7 +471,7 @@ export default function CotizacionDetallePage() {
               {cot.fechaVencimiento && (
                 <div className="flex justify-between gap-3">
                   <dt className="text-gray-500">Vencimiento</dt>
-                  <dd className="text-teal-700 font-medium">{fmtDate(cot.fechaVencimiento)}</dd>
+                  <dd className="text-zero-700 font-medium">{fmtDate(cot.fechaVencimiento)}</dd>
                 </div>
               )}
             </dl>
@@ -483,7 +483,7 @@ export default function CotizacionDetallePage() {
               href={`/api/pdf/cotizacion/${cot.id}`}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center gap-2 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
+              className="flex items-center justify-center gap-2 text-sm font-medium text-zero-700 hover:text-zero-800 border border-zero-200 hover:bg-zero-50 rounded-lg py-2 transition-colors"
             >
               <FileText className="h-4 w-4" />
               Ver PDF
@@ -498,7 +498,7 @@ export default function CotizacionDetallePage() {
             </Button>
             {puedeConvertir && (
               <Button
-                className="w-full bg-teal-600 hover:bg-teal-700 text-sm"
+                className="w-full bg-zero-600 hover:bg-zero-700 text-sm"
                 onClick={() => setShowConfirmConvert(true)}
                 disabled={converting}
               >
@@ -539,7 +539,7 @@ export default function CotizacionDetallePage() {
               pantallas chicas la columna cae al final y el botón no se veía. */}
           {puedeConvertir && (
             <Button
-              className="bg-teal-600 hover:bg-teal-700 h-11 sm:h-9 flex-1 sm:flex-none"
+              className="bg-zero-600 hover:bg-zero-700 h-11 sm:h-9 flex-1 sm:flex-none"
               onClick={() => setShowConfirmConvert(true)}
               disabled={converting}
             >
@@ -558,7 +558,7 @@ export default function CotizacionDetallePage() {
         title="Convertir a factura"
         description={<>Se creará un <strong>borrador de factura</strong> a partir de esta cotización ({cot.numero}) y se abrirá para completarla. La cotización se conserva.</>}
         confirmLabel="Convertir"
-        icon={<FileCheck className="h-5 w-5 text-teal-600" />}
+        icon={<FileCheck className="h-5 w-5 text-zero-600" />}
         loading={converting}
         onConfirm={handleConvertir}
       />
@@ -576,7 +576,7 @@ export default function CotizacionDetallePage() {
                 value={emailTo}
                 onChange={(e) => setEmailTo(e.target.value)}
                 placeholder="cliente@dominio.com"
-                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-zero-500 focus:ring-1 focus:ring-zero-500 outline-none"
               />
             </label>
             <p className="text-xs text-gray-500">
@@ -590,7 +590,7 @@ export default function CotizacionDetallePage() {
             <Button
               onClick={handleSendEmail}
               disabled={sendingEmail || !emailTo}
-              className="bg-teal-600 hover:bg-teal-700"
+              className="bg-zero-600 hover:bg-zero-700"
             >
               {sendingEmail
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>

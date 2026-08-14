@@ -246,7 +246,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
         {loadingDetalle ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-teal-600" />
+            <Loader2 className="h-6 w-6 animate-spin text-zero-600" />
           </div>
         ) : (
         <div className="grid grid-cols-1 gap-6 py-2 md:grid-cols-[1fr_260px]">
@@ -271,7 +271,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                         onClick={() => setForm((f) => ({ ...f, tipo: t.value }))}
                         className={`flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium transition-colors ${
                           isSelected
-                            ? 'bg-teal-100 border-teal-300 text-teal-800'
+                            ? 'bg-zero-100 border-zero-300 text-zero-800'
                             : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                         }`}>
                         {isSelected && <Check className="h-3.5 w-3.5" />}
@@ -381,7 +381,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
             {/* Control de inventario — solo bienes sin variantes */}
             {form.tipo === 'bien' && !tieneVariantes && !usaVariantesNuevas && (
-              <div className="space-y-3 border border-dashed border-teal-200 rounded-lg p-4 bg-teal-50/30">
+              <div className="space-y-3 border border-dashed border-zero-200 rounded-lg p-4 bg-zero-50/30">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-800">Controlar inventario</p>
@@ -389,7 +389,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                   </div>
                   <button type="button"
                     onClick={() => setForm(f => ({ ...f, controlaInventario: !f.controlaInventario }))}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.controlaInventario ? 'bg-zero-600' : 'bg-gray-200'}`}>
                     <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.controlaInventario ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
                 </div>
@@ -416,7 +416,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                       </div>
                       <button type="button"
                         onClick={() => setForm(f => ({ ...f, permiteVentaSinStock: !f.permiteVentaSinStock }))}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${form.permiteVentaSinStock ? 'bg-zero-600' : 'bg-gray-200'}`}>
                         <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${form.permiteVentaSinStock ? 'translate-x-4' : 'translate-x-0'}`} />
                       </button>
                     </div>
@@ -429,7 +429,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
             <div>
               <button type="button"
                 onClick={() => setShowAvanzado((v) => !v)}
-                className="flex items-center gap-1.5 text-sm text-teal-700 hover:text-teal-900 font-medium">
+                className="flex items-center gap-1.5 text-sm text-zero-700 hover:text-zero-900 font-medium">
                 {showAvanzado ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 Mostrar formulario avanzado
               </button>
@@ -478,7 +478,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => { onClose(); setShowAvanzado(false); }} disabled={saving}>Cancelar</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleGuardar} disabled={saving || loadingDetalle}>
+          <Button className="bg-zero-600 hover:bg-zero-700" onClick={handleGuardar} disabled={saving || loadingDetalle}>
             {saving
               ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Guardando…</>
               : (esEdicion ? 'Guardar cambios' : 'Crear ítem')}

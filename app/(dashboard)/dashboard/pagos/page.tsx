@@ -322,7 +322,7 @@ export default function PagosPage() {
             <Link
               href={`/dashboard/facturas/${p.docId}`}
               title={`${p.comprobantes} comprobante${p.comprobantes > 1 ? 's' : ''}`}
-              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-teal-50 text-teal-700 text-[11px] font-medium hover:bg-teal-100"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-zero-50 text-zero-700 text-[11px] font-medium hover:bg-zero-100"
             >
               <Paperclip className="h-3 w-3" />
               {p.comprobantes}

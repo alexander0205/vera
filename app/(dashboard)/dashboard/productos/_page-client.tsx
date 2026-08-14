@@ -224,7 +224,7 @@ export default function ProductosPage() {
           title: search ? 'Sin resultados para esa búsqueda' : 'Sin productos o servicios registrados',
           hint: search ? undefined : 'Crea tu catálogo para agilizar la emisión de facturas',
           cta: search ? undefined : (
-            <Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={abrirNuevo}>
+            <Button className="bg-zero-600 hover:bg-zero-700" size="sm" onClick={abrirNuevo}>
               <Plus className="h-4 w-4 mr-1" />Nuevo ítem
             </Button>
           ),
@@ -235,7 +235,7 @@ export default function ProductosPage() {
               <Upload className="h-4 w-4 mr-2" />
               Importar CSV
             </Button>
-            <Button className="bg-teal-600 hover:bg-teal-700" onClick={abrirNuevo}>
+            <Button className="bg-zero-600 hover:bg-zero-700" onClick={abrirNuevo}>
               <Plus className="h-4 w-4 mr-2" />
               Nuevo ítem
             </Button>

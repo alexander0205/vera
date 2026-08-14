@@ -100,7 +100,27 @@
 
 @layer utilities {
   body {
-    font-family: "Manrope", Arial, Helvetica, sans-serif;
+    /* Inter, la del cuerpo. Antes decía "Manrope", que no se carga en ninguna
+       parte: hoy no se nota porque el tema de MUI gana por especificidad, pero
+       el día que dejara de ganar toda la aplicación caería a Arial. */
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer base {
+  /* Sora en los títulos de pantalla.
+     La intención estaba escrita desde el principio —«Inter para el cuerpo,
+     Sora para títulos y marca»— pero solo se había aplicado a la marca: el
+     login, el rail y el cargador. El resto del sistema titulaba en Inter, así
+     que la tipografía de marca no existía dentro de la aplicación.
+     Solo el título de la pantalla (h1 y los h4/h5 de MUI, que es como se
+     titulan las páginas aquí). Los subtítulos de tarjeta siguen en Inter: en
+     bloques pequeños y repetidos, Sora cansa. */
+  h1,
+  .MuiTypography-h4,
+  .MuiTypography-h5 {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 

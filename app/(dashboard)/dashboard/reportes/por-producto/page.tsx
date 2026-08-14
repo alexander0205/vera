@@ -53,7 +53,7 @@ export default async function PorProductoPage({
       exportHref={`/api/reportes/export?report=por-producto&desde=${d0}&hasta=${d1}`}
     >
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
-        <KpiCard label="Ingresos (base)" value={fmtDOP(totalIngresos)} sub="sin ITBIS" tone="teal" />
+        <KpiCard label="Ingresos (base)" value={fmtDOP(totalIngresos)} sub="sin ITBIS" tone="marca" />
         <KpiCard label="Productos vendidos" value={String(filas.length)} />
         <KpiCard label="Núcleo Pareto (80%)" value={String(nucleoA)} sub="productos clase A" tone="amber" />
         <KpiCard label="Top producto" value={filas[0] ? fmtDOP(filas[0].ingresosCents) : '—'} sub={filas[0]?.nombre} />

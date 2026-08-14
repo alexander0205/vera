@@ -132,7 +132,7 @@ export function EstudianteFicha({ estudiante: e }: Props) {
         ) : (
           <div className="space-y-2">
             <TotalRow icon={Receipt} tone="gray" label="Deuda total" value={fmtDOP(totales.deuda)} />
-            <TotalRow icon={HandCoins} tone="teal" label="Pago total" value={fmtDOP(totales.pagado)} />
+            <TotalRow icon={HandCoins} tone="verde" label="Pago total" value={fmtDOP(totales.pagado)} />
             <TotalRow icon={AlertTriangle} tone="red" label="Pendiente total" value={fmtDOP(totales.pendiente)}
               muted={totales.pendiente === 0} />
           </div>
@@ -161,7 +161,7 @@ function MiniCard({ label, value, accent, capitalize }: { label: string; value: 
 
 const TONES = {
   gray: { box: 'bg-gray-100 text-gray-600', val: 'text-gray-900' },
-  teal: { box: 'bg-zero-100 text-zero-700', val: 'text-zero-700' },
+  verde: { box: 'bg-zero-100 text-zero-700', val: 'text-zero-700' },
   red:  { box: 'bg-red-100 text-red-600', val: 'text-red-600' },
 } as const;
 

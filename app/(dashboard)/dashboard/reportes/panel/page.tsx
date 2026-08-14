@@ -40,7 +40,7 @@ export default async function PanelPage({
     >
       {/* KPIs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5, mb: 3 }}>
-        <KpiCard label="Ingresos netos" value={fmtDOP(kpis.ingresosCents)} sub={`${kpis.numFacturas} facturas`} tone="teal" />
+        <KpiCard label="Ingresos netos" value={fmtDOP(kpis.ingresosCents)} sub={`${kpis.numFacturas} facturas`} tone="marca" />
         <KpiCard label="Base imponible" value={fmtDOP(kpis.baseCents)} sub="sin ITBIS" />
         <KpiCard label="ITBIS del período" value={fmtDOP(kpis.itbisCents)} sub="débito fiscal" tone="amber" />
         <KpiCard label="Ticket promedio" value={fmtDOP(kpis.ticketPromedioCents)} />

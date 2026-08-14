@@ -218,14 +218,14 @@ function EstadoDgiiCard({
   return (
     <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <header className="flex items-center gap-2 px-4 pt-4 pb-3 md:px-5">
-        <CheckCircle className="h-4 w-4 text-teal-600 shrink-0" aria-hidden="true" />
+        <CheckCircle className="h-4 w-4 text-zero-600 shrink-0" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-gray-900 flex-1">Estado DGII</h2>
         {factura.estado !== 'BORRADOR' && factura.estado !== 'ANULADO' && (
           <button
             type="button"
             onClick={onConsultar}
             disabled={consultarStatus === 'loading'}
-            className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1 disabled:opacity-50"
+            className="text-xs text-zero-600 hover:text-zero-800 flex items-center gap-1 disabled:opacity-50"
           >
             <RefreshCw className={`h-3 w-3 ${consultarStatus === 'loading' ? 'animate-spin' : ''}`} />
             Consultar
@@ -288,7 +288,7 @@ function EstadoDgiiCard({
             href={verUrl}
             target="_blank"
             rel="noreferrer"
-            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800 border border-teal-200 hover:bg-teal-50 rounded-lg py-2 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-zero-700 hover:text-zero-800 border border-zero-200 hover:bg-zero-50 rounded-lg py-2 transition-colors"
           >
             Ver en DGII <ArrowLeft className="h-3.5 w-3.5 rotate-[135deg]" />
           </a>
@@ -814,7 +814,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-zero-600" />
       </div>
     );
   }
@@ -1024,7 +1024,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 }}
                 className="flex items-center gap-2 cursor-pointer"
               >
-                <Printer className="h-4 w-4 text-teal-600" />
+                <Printer className="h-4 w-4 text-zero-600" />
                 <div>
                   <p className="text-sm font-medium">Imprimir (predeterminada)</p>
                   <p className="text-xs text-gray-400 truncate max-w-[180px]">{printerLabel}</p>
@@ -1051,7 +1051,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   rel="noreferrer"
                   className="flex items-center gap-2 cursor-pointer"
                 >
-                  <Ticket className="h-4 w-4 text-teal-600" />
+                  <Ticket className="h-4 w-4 text-zero-600" />
                   <div>
                     <p className="text-sm font-medium">Factura pequeña (80mm)</p>
                     <p className="text-xs text-gray-400">PDF tirilla térmica</p>
@@ -1134,7 +1134,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-credito/nueva?padreId=${factura.id}`}
-                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                      className="flex items-center gap-2 cursor-pointer text-zero-700"
                     >
                       <Plus className="h-4 w-4" />
                       Crear nota de crédito
@@ -1143,7 +1143,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   <DropdownMenuItem asChild>
                     <Link
                       href={`/dashboard/notas-debito/nueva?padreId=${factura.id}`}
-                      className="flex items-center gap-2 cursor-pointer text-teal-700"
+                      className="flex items-center gap-2 cursor-pointer text-zero-700"
                     >
                       <Plus className="h-4 w-4" />
                       Crear nota de débito
@@ -1203,7 +1203,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
         <div className={`rounded-xl p-3 text-sm flex gap-2 mb-4 ${
           pollingStatus === 'error'
             ? 'bg-red-50 border border-red-200 text-red-700'
-            : 'bg-teal-50 border border-teal-200 text-teal-700'
+            : 'bg-zero-50 border border-zero-200 text-zero-700'
         }`}>
           {pollingStatus === 'error'
             ? <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -1252,19 +1252,19 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Banner: si es NC/ND, link a la factura que modifica */}
           {factura.notaOrigen && (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
-              <p className="text-sm text-teal-900">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-zero-200 bg-zero-50 px-4 py-3">
+              <p className="text-sm text-zero-900">
                 {factura.tipoEcf === '34' ? 'Nota de crédito' : 'Nota de débito'} sobre la factura{' '}
                 <span className="font-semibold font-mono">{factura.notaOrigen.codigo ?? factura.notaOrigen.encf}</span>
                 {factura.codigoModificacion != null && (
-                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-teal-200 text-teal-800">
+                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-white border border-zero-200 text-zero-800">
                     {factura.codigoModificacion} — {COD_MODIFICACION_LABEL[factura.codigoModificacion] ?? 'Modificación'}
                   </span>
                 )}
               </p>
               <Link
                 href={`/dashboard/facturas/${factura.notaOrigen.id}`}
-                className="text-sm font-medium text-teal-700 hover:text-teal-800 whitespace-nowrap"
+                className="text-sm font-medium text-zero-700 hover:text-zero-800 whitespace-nowrap"
               >
                 Ver factura →
               </Link>
@@ -1273,15 +1273,15 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
           {/* Banner: NC del modelo nuevo → generó saldo a favor (no descontó la factura) */}
           {factura.tipoEcf === '34' && factura.creditoGeneradoCents != null && (
-            <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+            <div className="rounded-xl border border-zero-200 bg-zero-50 px-4 py-3">
               {factura.creditoGeneradoCents > 0 ? (
-                <p className="text-sm text-violet-900">
+                <p className="text-sm text-zero-900">
                   Esta nota generó <span className="font-semibold">{fmtDOP(factura.creditoGeneradoCents / 100)}</span> de
                   saldo a favor del cliente — <span className="font-medium">no descontó la factura original</span>.
                   El cliente puede usarlo para pagar otras facturas.
                 </p>
               ) : (
-                <p className="text-sm text-violet-900">
+                <p className="text-sm text-zero-900">
                   Esta nota no generó saldo a favor: la factura original no tenía pagos registrados
                   (solo se acredita lo que el cliente ya pagó).
                 </p>
@@ -1399,8 +1399,8 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                     {ncAplicadoDOP > 0 && (
                       <tr>
                         <td colSpan={4} />
-                        <td className="py-1 px-2 text-right text-xs text-teal-700">Notas de crédito</td>
-                        <td className="py-1 px-2 text-right tabular-nums text-teal-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
+                        <td className="py-1 px-2 text-right text-xs text-zero-700">Notas de crédito</td>
+                        <td className="py-1 px-2 text-right tabular-nums text-zero-700 whitespace-nowrap">−{fmtDOP(ncAplicadoDOP)}</td>
                         <td />
                       </tr>
                     )}
@@ -1421,7 +1421,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="w-full border-dashed text-teal-700 border-teal-300 hover:bg-teal-50"
+                  className="w-full border-dashed text-zero-700 border-zero-300 hover:bg-zero-50"
                   asChild
                 >
                   <Link href={`/dashboard/facturas/${factura.id}/editar`}>
@@ -1620,7 +1620,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <TabsContent value="notas">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <StickyNote className="h-4 w-4 text-teal-600" />
+                  <StickyNote className="h-4 w-4 text-zero-600" />
                   <h3 className="text-sm font-semibold text-gray-900">Notas</h3>
                 </div>
                 <EntityNotes entityType="factura" entityId={factura.id} />
@@ -1630,7 +1630,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <TabsContent value="historia">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 md:p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <HistoryIcon className="h-4 w-4 text-teal-600" />
+                  <HistoryIcon className="h-4 w-4 text-zero-600" />
                   <h3 className="text-sm font-semibold text-gray-900">Historia de la factura</h3>
                 </div>
                 <EntityHistory docId={factura.id} encf={factura.encf} />
@@ -1659,7 +1659,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 <Button
                   onClick={() => handleResetEmision(false)}
                   disabled={reseteando}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white h-9 text-sm disabled:opacity-50"
+                  className="w-full bg-zero-600 hover:bg-zero-700 text-white h-9 text-sm disabled:opacity-50"
                 >
                   Cancelar y reintentar con e-NCF nuevo
                 </Button>
@@ -1716,11 +1716,11 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 {factura.ncsAsociadas.map(nc => (
                   <li key={nc.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 pb-2 last:pb-0">
                     <div className="min-w-0 flex-1">
-                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-teal-700 hover:underline truncate block">
+                      <Link href={`/dashboard/facturas/${nc.id}`} className="font-mono text-zero-700 hover:underline truncate block">
                         {nc.encf && !nc.encf.startsWith('BOR-') ? nc.encf : (nc.codigo ?? `Sin comprobante #${nc.id}`)}
                       </Link>
                       <div className="text-[10px] text-gray-500 mt-0.5 flex gap-1.5 flex-wrap items-center">
-                        <span className={nc.tipoEcf === '34' ? 'text-teal-700 font-medium' : 'text-orange-700 font-medium'}>
+                        <span className={nc.tipoEcf === '34' ? 'text-zero-700 font-medium' : 'text-orange-700 font-medium'}>
                           {nc.tipoEcf === '34' ? 'Crédito' : 'Débito'}
                         </span>
                         {(nc.razonModificacion || nc.codigoModificacion != null) && (
@@ -1735,7 +1735,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                         <span>{fmtDate(nc.fechaEmision)}</span>
                       </div>
                     </div>
-                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-teal-700' : 'text-gray-800'}`}>
+                    <span className={`font-mono shrink-0 ${nc.tipoEcf === '34' ? 'text-zero-700' : 'text-gray-800'}`}>
                       {nc.tipoEcf === '34' ? '−' : ''}RD$ {nc.montoTotalDOP}
                     </span>
                   </li>
@@ -1875,7 +1875,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 <Button
                   type="button"
                   variant="outline"
-                  className="text-teal-700 border-teal-300 hover:bg-teal-50 h-11 sm:h-9 w-full sm:w-auto"
+                  className="text-zero-700 border-zero-300 hover:bg-zero-50 h-11 sm:h-9 w-full sm:w-auto"
                   asChild
                 >
                   <Link href={`/dashboard/facturas/${factura.id}/editar`}>
@@ -1891,7 +1891,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               {canEmitir && (
                 <Button
                   type="button"
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  className="bg-zero-600 hover:bg-zero-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   onClick={triggerEnviarDgii}
                 >
                   <Send className="h-4 w-4 mr-1.5" />
@@ -1904,7 +1904,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-11 sm:h-9 w-full sm:w-auto"
+                  className="bg-zero-600 hover:bg-zero-700 text-white h-11 sm:h-9 w-full sm:w-auto"
                   disabled={esFinal && factura.estado === 'ANULADO'}
                 >
                   Acciones
@@ -2046,7 +2046,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 value={emailTo}
                 onChange={(e) => setEmailTo(e.target.value)}
                 placeholder="cliente@dominio.com"
-                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                className="mt-1 w-full h-9 px-3 text-sm rounded-md border border-gray-300 focus:border-zero-500 focus:ring-1 focus:ring-zero-500 outline-none"
               />
             </label>
           </div>
@@ -2057,7 +2057,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             <Button
               onClick={handleSendEmail}
               disabled={sendingEmail || !emailTo}
-              className="bg-teal-600 hover:bg-teal-700"
+              className="bg-zero-600 hover:bg-zero-700"
             >
               {sendingEmail
                 ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando…</>
@@ -2327,7 +2327,7 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
             </div>
             <div className="flex flex-col gap-2 pt-2">
               <Button
-                className="bg-teal-600 hover:bg-teal-700 text-white"
+                className="bg-zero-600 hover:bg-zero-700 text-white"
                 onClick={() => {
                   setShowPagoMissingAlert(false);
                   document.querySelector('[data-pago-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });

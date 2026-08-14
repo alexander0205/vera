@@ -50,7 +50,7 @@ export default async function CuentasPorCobrarPage() {
       exportHref={`/api/reportes/export?report=cuentas-por-cobrar`}
     >
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(6, 1fr)' }, gap: 1.5, mb: 3 }}>
-        <KpiCard label="Total por cobrar" value={fmtDOP(aging.totalCents)} tone="teal" />
+        <KpiCard label="Total por cobrar" value={fmtDOP(aging.totalCents)} tone="marca" />
         <KpiCard label="Por vencer" value={fmtDOP(aging.buckets.porVencer)} />
         <KpiCard label="0-30 días" value={fmtDOP(aging.buckets['0-30'])} />
         <KpiCard label="31-60 días" value={fmtDOP(aging.buckets['31-60'])} tone="amber" />

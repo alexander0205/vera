@@ -113,10 +113,10 @@ function RecurrenteHijos({ recurrenteId }: { recurrenteId: number }) {
           <Link
             key={g.id}
             href={`/dashboard/facturas/${g.id}`}
-            className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 hover:border-teal-300 hover:bg-white transition-colors"
+            className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 hover:border-zero-300 hover:bg-white transition-colors"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <span className="font-mono text-xs font-semibold text-teal-700 truncate">
+              <span className="font-mono text-xs font-semibold text-zero-700 truncate">
                 {g.codigo ?? (g.encf && !g.encf.startsWith('BOR-') ? g.encf : `#${g.id}`)}
               </span>
               <span className="text-[11px] text-gray-400 whitespace-nowrap hidden sm:inline">{fmtFechaCorta(g.fechaEmision)}</span>
@@ -150,7 +150,7 @@ function RecurrenteHijos({ recurrenteId }: { recurrenteId: number }) {
     <div className="py-1">
       <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-          <RefreshCw className="h-4 w-4 text-teal-600 shrink-0" />
+          <RefreshCw className="h-4 w-4 text-zero-600 shrink-0" />
           <span className="text-sm font-semibold text-gray-900">Facturas generadas</span>
         </div>
         <div className="p-4">{contenido}</div>

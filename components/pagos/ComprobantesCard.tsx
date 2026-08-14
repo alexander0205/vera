@@ -36,7 +36,7 @@ export function ComprobantesCard({ docId }: { docId: number }) {
   return (
     <div className="mt-3 rounded-xl border border-gray-200 bg-white">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-        <Paperclip className="h-4 w-4 text-teal-600" />
+        <Paperclip className="h-4 w-4 text-zero-600" />
         <span className="text-sm font-semibold text-gray-900">
           Comprobantes {adjuntos.length > 0 && `(${adjuntos.length})`}
         </span>

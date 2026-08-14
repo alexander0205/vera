@@ -1365,7 +1365,7 @@ function PeriodoDetalle({ grupo, planes, cobro, facturasSueltas, pagosSueltos, a
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <PeriodoStat icon={Receipt} label="Facturado" value={fmtDOP(total)} detail="Total del período" tone="blue" />
-        <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="teal" />
+        <PeriodoStat icon={Wallet} label="Pagado" value={fmtDOP(pagado)} detail="Total del período" tone="verde" />
         <PeriodoStat icon={AlertTriangle} label="Pendiente" value={fmtDOP(saldo)} detail="Saldo por pagar" tone="red" />
         <PeriodoStat
           icon={CalendarDays}
@@ -1893,14 +1893,14 @@ function PeriodoStat({ icon: Icon, label, value, detail, tone }: {
   label: string;
   value: string;
   detail: string;
-  tone: 'blue' | 'teal' | 'red' | 'gray';
+  tone: 'blue' | 'verde' | 'red' | 'gray';
 }) {
   // El color no decora: es lo que hace que "pendiente" salte antes que
   // "facturado" cuando se abre la ficha. La cuarta tarjeta se queda en gris a
   // propósito — es una fecha, no dinero, y teñirla la pondría al mismo nivel.
   const estilos = {
     blue: { caja: 'border-blue-200 bg-blue-50/60', icono: 'text-blue-600' },
-    teal: { caja: 'border-emerald-200 bg-emerald-50/60', icono: 'text-emerald-600' },
+    verde: { caja: 'border-emerald-200 bg-emerald-50/60', icono: 'text-emerald-600' },
     red:  { caja: 'border-red-200 bg-red-50/60', icono: 'text-red-600' },
     gray: { caja: 'border-gray-200 bg-white', icono: 'text-gray-500' },
   }[tone];
