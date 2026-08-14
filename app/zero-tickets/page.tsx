@@ -86,31 +86,41 @@ export default function ZeroTicketsPage() {
   async function toggleAvailable() {
     const next = !available;
     setAvailable(next);
-    await fetch('/api/zero-tickets/agent/presence', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ available: next }),
-    });
-    await loadPresence();
+    try {
+      await fetch('/api/zero-tickets/agent/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ available: next }),
+      });
+    } finally {
+      await loadPresence();
+    }
   }
 
   async function claim(id: number) {
-    await fetch(`/api/zero-tickets/agent/tickets/${id}/claim`, { method: 'POST' });
+    const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/claim`, { method: 'POST' });
+    if (res.status === 409) {
+      window.alert('Este ticket ya fue tomado por otro agente.');
+    } else if (!res.ok) {
+      window.alert('No se pudo tomar el ticket. Intentá de nuevo.');
+    }
     await loadTickets();
   }
 
   async function toggleStatus(id: number, currentStatus: string) {
     const nextStatus = currentStatus === 'cerrado' ? 'abierto' : 'cerrado';
-    await fetch(`/api/zero-tickets/agent/tickets/${id}/status`, {
+    const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus }),
     });
+    if (!res.ok) window.alert('No se pudo actualizar el estado del ticket.');
     await loadTickets();
   }
 
   async function requestScreenshot(id: number) {
-    await fetch(`/api/zero-tickets/agent/tickets/${id}/request-screenshot`, { method: 'POST' });
+    const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/request-screenshot`, { method: 'POST' });
+    if (!res.ok) window.alert('No se pudo pedir la captura.');
     await loadMessages(id);
   }
 
