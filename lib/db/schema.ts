@@ -2414,6 +2414,10 @@ export const adminEscolarDocumentosRequeridos = pgTable('admin_escolar_documento
   /** 'nuevo' | 'reinscripcion' */
   tipoInscripcion: varchar('tipo_inscripcion', { length: 20 }).notNull(),
   nombre:          varchar('nombre', { length: 160 }).notNull(),
+  /** Lo que la familia necesita saber para no mandarlo mal: «original con
+   *  sello», «las dos caras», «foto reciente, fondo blanco». Se le enseña a
+   *  ella —en el enlace y en el correo—, no al colegio. */
+  ayuda:           varchar('ayuda', { length: 300 }),
   /** 'requerido' | 'si_aplica' — "si aplica" NO es opcional: hay que resolverlo. */
   exigencia:       varchar('exigencia', { length: 20 }).notNull().default('requerido'),
   cantidad:        smallint('cantidad').notNull().default(1),

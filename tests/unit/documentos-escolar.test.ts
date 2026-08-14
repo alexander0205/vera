@@ -9,7 +9,7 @@ function fila(exigencia: Exigencia, estado: EstadoDocumento): FilaChecklist {
     requeridoId: 1, nombre: 'x', exigencia, cantidad: 1, orden: 0,
     entregadoId: null, estado, archivos: [],
     subidoEn: null, subidoFamilia: false, aprobadoEn: null, aprobadoPor: null, motivo: null,
-    esExtra: false, formulario: null,
+    esExtra: false, formulario: null, ayuda: null,
   };
 }
 

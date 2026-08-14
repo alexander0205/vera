@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { FileCheck, Loader2, Plus, Trash2, AlertTriangle, Copy, Pencil } from 'lucide-react';
+import { FileCheck, Loader2, Plus, Trash2, AlertTriangle, Copy, Pencil, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 /**
@@ -37,6 +37,7 @@ interface DocumentoRequerido {
   nombre: string;
   exigencia: 'requerido' | 'si_aplica';
   cantidad: number;
+  ayuda: string | null;
   orden: number;
   activo: boolean;
 }
@@ -180,6 +181,56 @@ export function DocumentosPanel() {
     }
   }
 
+  /**
+   * Sube o baja un documento dentro de su listado.
+   *
+   * Manda la lista COMPLETA de ids en su nuevo orden, que es lo que la API ya
+   * espera: con dos personas tocando la pantalla, mandar «sube este» deja el
+   * orden dependiendo de quién guardó último.
+   */
+  const [sembrando, setSembrando] = useState(false);
+
+  /**
+   * Trae la lista que dictó el colegio.
+   *
+   * `sembrarDocumentos` existía en el servidor desde el principio y ningún
+   * botón la llamaba: los listados nacían vacíos y había que teclear diez
+   * documentos uno a uno. Es idempotente por (nivel, tipo, nombre).
+   */
+  async function sembrar() {
+    setSembrando(true);
+    try {
+      const r = await llamar(API_DOCS, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sembrar: true }),
+      }) as { creados?: number };
+      toast.success(r.creados
+        ? `${r.creados} documento(s) traídos. Repártelos por listado y ajusta lo que haga falta.`
+        : 'Ya estaban todos.');
+      await docsSWR.mutate();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo traer la lista');
+    } finally {
+      setSembrando(false);
+    }
+  }
+
+  async function moverDoc(indice: number, direccion: -1 | 1) {
+    const destino = indice + direccion;
+    if (destino < 0 || destino >= delListado.length) return;
+    const ids = delListado.map((d) => d.id);
+    [ids[indice], ids[destino]] = [ids[destino], ids[indice]];
+    try {
+      await llamar(`${API_DOCS}/${ids[0]}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orden: ids }),
+      });
+      await docsSWR.mutate();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo reordenar');
+    }
+  }
+
   async function borrarDoc() {
     if (!porBorrarDoc) return;
     try {
@@ -292,21 +343,64 @@ export function DocumentosPanel() {
               </div>
 
               {delListado.length === 0 ? (
-                <div className="flex items-start gap-2.5 bg-amber-50 px-4 py-3">
+                <div className="flex flex-wrap items-start gap-2.5 bg-amber-50 px-4 py-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  <p className="text-xs text-amber-900">
+                  <p className="min-w-[220px] flex-1 text-xs text-amber-900">
                     Este listado está vacío. Si se elige al matricular, esa familia
                     entra sin entregar nada.
                   </p>
+                  {/* La semilla llevaba escrita desde el principio y no la
+                      llamaba ningún botón: llenar un listado a mano son diez
+                      documentos escritos uno a uno. Es idempotente, así que
+                      pulsarlo dos veces no duplica nada. */}
+                  <Button size="sm" variant="outline" disabled={sembrando}
+                    onClick={() => void sembrar()}>
+                    {sembrando
+                      ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                    Traer los documentos habituales
+                  </Button>
                 </div>
               ) : (
                 <ul>
-                  {delListado.map((d) => (
+                  {delListado.map((d, i) => (
                     <li key={d.id}
                       className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 last:border-b-0 hover:bg-gray-50/60">
-                      <span className="min-w-0 flex-1 truncate text-sm text-gray-900" title={d.nombre}>
-                        {d.nombre}
-                      </span>
+                      {/* Subir y bajar: el orden es el que verá la familia, y
+                          hasta ahora era el de creación y punto. */}
+                      <div className="flex shrink-0 flex-col">
+                        <button type="button" aria-label={`Subir ${d.nombre}`} title="Subir"
+                          disabled={i === 0}
+                          onClick={() => void moverDoc(i, -1)}
+                          className="rounded p-0.5 text-gray-300 transition-colors hover:text-gray-600 disabled:opacity-30">
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" aria-label={`Bajar ${d.nombre}`} title="Bajar"
+                          disabled={i === delListado.length - 1}
+                          onClick={() => void moverDoc(i, 1)}
+                          className="rounded p-0.5 text-gray-300 transition-colors hover:text-gray-600 disabled:opacity-30">
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-gray-900" title={d.nombre}>{d.nombre}</p>
+                        {/* La instrucción para la FAMILIA. Se edita aquí mismo
+                            porque escribirla es parte de definir el documento:
+                            «acta de nacimiento» sin decir «original con sello»
+                            se cumple mandando una foto de una fotocopia. */}
+                        <input
+                          defaultValue={d.ayuda ?? ''}
+                          placeholder="Instrucción para la familia (opcional): «original con sello», «las dos caras»…"
+                          aria-label={`Instrucción de ${d.nombre}`}
+                          maxLength={300}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v !== (d.ayuda ?? '')) void cambiarDoc(d, { ayuda: v });
+                          }}
+                          className="mt-0.5 w-full border-0 bg-transparent p-0 text-xs text-gray-500 placeholder:text-gray-300 focus:outline-none focus:ring-0"
+                        />
+                      </div>
 
                       <div className="w-32 shrink-0">
                         <NativeSelect value={d.exigencia} aria-label={`Exigencia de ${d.nombre}`}

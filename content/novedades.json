@@ -82,6 +82,21 @@
         "tipo": "mejora",
         "titulo": "Vuelve el detalle de una cuenta por cobrar",
         "detalle": "Pulsando cualquier fila de Cuentas por cobrar se abre el detalle que explica el saldo sin sacarte de la lista: de dónde sale, qué se pagó, qué mora se le sumó, qué alumno y qué concepto escolar hay detrás, y la gestión de cobro con promesas de pago. Estaba construido pero llevaba semanas desconectado de la pantalla. Además, las columnas que no tienen nada que enseñar —vencimiento, atraso, mora— desaparecen solas, y el saldo deja de quedar cortado."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Quién debe qué documentos, en una sola pantalla",
+        "detalle": "Documentos abre en Seguimiento: la lista de quién tiene el expediente incompleto y qué le falta, ordenada por lo más atrasado. Se eligen varias familias y se les reclama por correo de una vez, cada una con su propio enlace. Antes había que entrar alumno por alumno, así que con cuatrocientas matrículas no se reclamaba."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "El colegio deja de tener que acordarse",
+        "detalle": "Un recordatorio semanal le escribe solo a las familias con documentos pendientes, sin repetirle a la misma antes de siete días y con un tope por colegio. Viene apagado: se enciende a propósito."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Instrucciones en cada documento",
+        "detalle": "Cada documento puede llevar una nota para la familia —«original con sello», «las dos caras»— que se ve en el enlace donde sube los papeles. Y «Fotos 2x2 ×3» ya no se puede dar por bueno con una sola foto."
       }
     ]
   },

@@ -30,6 +30,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
 interface Documento {
   requeridoId: number;
   nombre: string;
+  ayuda: string | null;
   exigencia: string;
   cantidad: number;
   entregado: boolean;
@@ -197,6 +198,8 @@ function TarjetaDocumento({ d, destacado, subiendo, onFoto, onArchivo }: {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-medium text-gray-900">{d.nombre}</p>
+          {/* Antes del estado: es lo que hay que leer ANTES de sacar la foto. */}
+          {d.ayuda && <p className="mt-0.5 text-xs text-gray-600">{d.ayuda}</p>}
           <p className="mt-0.5 text-xs text-gray-500">
             {d.rechazado
               ? 'El colegio pidió que lo mandes otra vez.'

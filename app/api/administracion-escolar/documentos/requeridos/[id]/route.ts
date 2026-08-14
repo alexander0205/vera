@@ -37,6 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .set({
       ...(body?.nombre !== undefined ? { nombre: String(body.nombre).trim() } : {}),
       ...(body?.exigencia !== undefined ? { exigencia: String(body.exigencia) } : {}),
+      ...(body?.ayuda !== undefined ? { ayuda: String(body.ayuda).trim() || null } : {}),
       ...(body?.cantidad !== undefined
         ? { cantidad: Math.max(1, Math.min(20, Number(body.cantidad) || 1)) } : {}),
       ...(body?.nivel !== undefined

@@ -210,6 +210,8 @@ export async function contextoDeMatricula(
 export interface FilaChecklist {
   requeridoId: number;
   nombre: string;
+  /** Lo que hay que saber para no mandarlo mal. Va a la familia. */
+  ayuda: string | null;
   exigencia: Exigencia;
   cantidad: number;
   orden: number;
@@ -390,6 +392,7 @@ export async function checklistDeMatricula(
     return {
       requeridoId: r.id,
       nombre: r.nombre,
+      ayuda: r.ayuda,
       exigencia: r.exigencia as Exigencia,
       cantidad: r.cantidad,
       orden: r.orden,

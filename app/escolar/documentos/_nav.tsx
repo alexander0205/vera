@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileCheck, FileEdit } from 'lucide-react';
+import { FileCheck, FileEdit, ListChecks } from 'lucide-react';
 
 /**
  * Sub-navegación de Documentos y formularios, con rutas de verdad — mismo
@@ -16,6 +16,10 @@ import { FileCheck, FileEdit } from 'lucide-react';
  * hace falta, el otro arma cómo se recoge.
  */
 export const TABS = [
+  // Primero el seguimiento y no la configuración: definir los listados se hace
+  // una vez en agosto; mirar quién debe qué, todos los días.
+  { href: '/escolar/documentos/seguimiento', label: 'Seguimiento', icon: ListChecks,
+    hint: 'Quién tiene el expediente incompleto y qué le falta.' },
   { href: '/escolar/documentos/requeridos', label: 'Requeridos', icon: FileCheck,
     hint: 'Qué papeles se piden al matricular, por nivel y tipo de inscripción.' },
   { href: '/escolar/documentos/formularios', label: 'Formularios', icon: FileEdit,

@@ -68,7 +68,12 @@ async function renglones(enlace: EnlaceResuelto) {
   const contexto = await contextoDeMatricula(enlace.teamId, enlace.matriculaId);
   if (!contexto) return null;
 
-  let requeridos = await requeridosPara(enlace.teamId, contexto.nivel, contexto.tipo);
+  // Con el listado elegido y los papeles colgados de ESTA matrícula: sin ellos
+  // la familia veía la lista deducida por nivel —no la que la secretaria eligió
+  // al matricular— y nunca los documentos que se le pidieron solo a su hijo.
+  let requeridos = await requeridosPara(
+    enlace.teamId, contexto.nivel, contexto.listaId, enlace.matriculaId,
+  );
   if (enlace.requeridoId != null) {
     requeridos = requeridos.filter((r) => r.id === enlace.requeridoId);
   }
@@ -95,6 +100,9 @@ async function renglones(enlace: EnlaceResuelto) {
     return {
       requeridoId: r.id,
       nombre: r.nombre,
+      // Lo que evita que mande una copia cuando se pide el original, y con ello
+      // el viaje de vuelta.
+      ayuda: r.ayuda,
       exigencia: r.exigencia,
       cantidad: r.cantidad,
       // Al padre no se le enseña "recibido/aprobado/rechazado": eso es la cocina

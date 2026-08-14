@@ -81,6 +81,10 @@ export async function POST(req: NextRequest) {
     nivel: body?.nivel ? String(body.nivel).trim() : null,
     tipoInscripcion: tipo,
     nombre,
+    // Lo que se le explica a la FAMILIA. Vacío se guarda como NULL y no como
+    // cadena vacía: así «no tiene instrucciones» y «tiene una en blanco» no
+    // son dos cosas distintas en la base.
+    ayuda: String(body?.ayuda ?? '').trim() || null,
     exigencia,
     cantidad: Math.max(1, Math.min(20, Number(body?.cantidad) || 1)),
     orden: ultimo + 1,

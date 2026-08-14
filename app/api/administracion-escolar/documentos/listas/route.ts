@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { adminEscolarDocumentoListas, adminEscolarDocumentosRequeridos } from '@/lib/db/schema';
+import { adminEscolarDocumentoListas,
+  adminEscolarMatriculas, adminEscolarDocumentosRequeridos } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 
 /**
@@ -137,6 +138,17 @@ export async function DELETE(req: NextRequest) {
       eq(adminEscolarDocumentosRequeridos.activo, true),
     ));
 
+  // Y a cuántas familias les afecta. Quitar un listado que 34 matrículas ya
+  // tienen elegido no es lo mismo que quitar uno recién creado, y quien lo
+  // pulsa merece saber cuál de las dos cosas está haciendo.
+  const [matriculas] = await db
+    .select({ n: sql<number>`COUNT(*)::int` })
+    .from(adminEscolarMatriculas)
+    .where(and(
+      eq(adminEscolarMatriculas.teamId, auth.teamId),
+      eq(adminEscolarMatriculas.documentoListaId, id),
+    ));
+
   await db.update(adminEscolarDocumentoListas)
     .set({ activo: false, updatedAt: new Date() })
     .where(and(
@@ -146,8 +158,15 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    aviso: enUso.n > 0
-      ? `Listado quitado. Sus ${enUso.n} documento(s) se conservan por si lo vuelves a necesitar.`
-      : 'Listado quitado.',
+    aviso: [
+      'Listado quitado.',
+      enUso.n > 0 ? `Sus ${enUso.n} documento(s) se conservan por si lo vuelves a necesitar.` : null,
+      // Sus matrículas NO se quedan sin checklist: los documentos siguen
+      // activos y colgando del listado, solo deja de poder elegirse al
+      // matricular de aquí en adelante.
+      matriculas.n > 0
+        ? `${matriculas.n} matrícula(s) lo tienen elegido y siguen pidiendo lo mismo; solo deja de ofrecerse al matricular.`
+        : null,
+    ].filter(Boolean).join(' '),
   });
 }

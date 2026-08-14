@@ -8,10 +8,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import {
   adminEscolarDocumentosEntregados, adminEscolarDocumentosRequeridos,
+  adminEscolarDocumentoArchivos,
 } from '@/lib/db/schema';
 import { requireModuleAndPermission } from '@/lib/auth/api-guard';
 
@@ -49,16 +50,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Salvo que el renglón sea un formulario: ahí lo entregado no es un
       // papel, es lo que la familia contestó. Sin esta salida, un formulario
       // recibido se quedaba en «por aprobar» para siempre.
-      const [renglon] = await db
+      const [esFormulario] = await db
         .select({ formularioId: adminEscolarDocumentosRequeridos.formularioId })
         .from(adminEscolarDocumentosRequeridos)
         .where(eq(adminEscolarDocumentosRequeridos.id, actual.requeridoId))
         .limit(1);
 
-      if (!renglon?.formularioId) {
+      if (!esFormulario?.formularioId) {
         return NextResponse.json(
           { error: 'No hay archivo entregado para aprobar' }, { status: 422 },
         );
+      }
+    }
+
+    // «Fotos 2x2 ×3» pedía tres y se daba por bueno con una: la cantidad se
+    // enseñaba en pantalla y no la comprobaba nadie. Se cuenta lo que hay de
+    // verdad en la tabla de archivos, no el nombre suelto de la fila.
+    const [renglon] = await db
+      .select({
+        cantidad: adminEscolarDocumentosRequeridos.cantidad,
+        nombre: adminEscolarDocumentosRequeridos.nombre,
+        formularioId: adminEscolarDocumentosRequeridos.formularioId,
+      })
+      .from(adminEscolarDocumentosRequeridos)
+      .where(eq(adminEscolarDocumentosRequeridos.id, actual.requeridoId))
+      .limit(1);
+
+    if (renglon && !renglon.formularioId && renglon.cantidad > 1) {
+      const [{ n }] = await db
+        .select({ n: sql<number>`COUNT(*)::int` })
+        .from(adminEscolarDocumentoArchivos)
+        .where(eq(adminEscolarDocumentoArchivos.entregadoId, actual.id));
+      if (n < renglon.cantidad) {
+        return NextResponse.json({
+          error: `«${renglon.nombre}» pide ${renglon.cantidad} y solo hay ${n}. Pídele el resto a la familia o baja la cantidad en Configuración.`,
+        }, { status: 422 });
       }
     }
     const [fila] = await db
