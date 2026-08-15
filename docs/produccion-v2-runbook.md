@@ -287,12 +287,77 @@ El formulario de integración con la DGII se mudó a `/integracion` y sigue
 funcionando. El lazo del titular sale con el encuadre corregido
 (`61.5 128.4 305.6 171.8`), no con el que lo recortaba.
 
-## Fase 5 · Dominios
+## Fase 5 · Dominios — HECHA (2026-08-15)
 
-Según [`despliegue-subdominios.md`](./despliegue-subdominios.md): `zero.com.do`
-al sitio público, `app.` a entrar/registrarse/cuenta, y `facturacion.`, `pos.`,
-`colegio.` a sus módulos. Los CNAME se ponen en midominio.do, que no tiene API
-— van a mano.
+Los seis en pie y comprobados uno por uno sobre HTTPS real:
+
+| dominio | | |
+|---|---|---|
+| `zero.com.do` | 200 | sitio público |
+| `www.zero.com.do` | 308 | → ápice |
+| `app.zero.com.do` | 307 | → `/sign-in` |
+| `facturacion.zero.com.do` | 307 | → `/dashboard` |
+| `pos.zero.com.do` | 307 | → `/pos` |
+| `colegio.zero.com.do` | 307 | → `/escolar` |
+
+`pos.`, `facturacion.` y `colegio.` funcionan **por prefijo**, sin variable de
+entorno: `moduleForHost` los reconoce por el nombre. El único que necesitaba
+configuración era `app.`.
+
+### Variables puestas
+
+```
+APP_HOST                     app.zero.com.do
+SESSION_COOKIE_DOMAIN        .zero.com.do
+NEXT_PUBLIC_FACTURACION_URL  https://facturacion.zero.com.do/dashboard
+NEXT_PUBLIC_POS_URL          https://pos.zero.com.do/pos
+NEXT_PUBLIC_ESCOLAR_URL      https://colegio.zero.com.do/escolar
+```
+
+El punto delante de `.zero.com.do` es lo que hace que la sesión valga en todos
+los subdominios; sin él la cookie es host-only y entrar en `facturacion.` no
+te deja entrado en `pos.`.
+
+Las `NEXT_PUBLIC_*` se incrustan en el build, así que **poner la variable no
+basta: hay que volver a compilar y desplegar.**
+
+### La comprobación que de verdad importaba
+
+`APP_HOST` se puso **después** de confirmar que `app.zero.com.do` responde, no
+antes. En cuanto esa variable existe, todo `/sign-in` de cualquier host se va
+allí; ponerla con el dominio aún sin resolver habría dejado fuera a todos los
+clientes, incluido quien tendría que entrar a arreglarlo.
+
+Verificado tras el despliegue:
+
+```
+facturacion.zero.com.do/sign-in → 1 salto → app.zero.com.do/sign-in (200)
+```
+
+Un salto, sin bucle, y la página sirve. Igual desde `pos.`, `colegio.` y el
+ápice. En `app.` responden 200 `/sign-in`, `/sign-up`, `/forgot-password` y
+`/bienvenida`; `/cuenta` manda a `/sign-in` por no haber sesión, que es lo
+correcto.
+
+### Google OAuth
+
+El login cambió de dominio, y Google valida el `redirect_uri` contra su lista.
+Comprobado en vivo: `app.zero.com.do/api/auth/google` manda a Google con
+`redirect_uri=https://app.zero.com.do/api/auth/google/callback` y Google
+responde con la pantalla de identificación, no con `redirect_uri_mismatch`.
+Ese URI ya estaba registrado.
+
+### Gotcha del DNS
+
+El TTL negativo de la zona es **38.400 s (casi 11 horas)**. Un resolvedor que
+preguntó por `app.` antes de que existiera se guarda el «no existe» todo ese
+rato. Durante la puesta en marcha, `app.zero.com.do` falló desde esta máquina
+en 0,001 s —tiempo de caché local, no de red— mientras ya funcionaba para el
+resto del mundo. Para comprobarlo sin caché:
+
+```bash
+curl --resolve app.zero.com.do:443:$(dig +short @1.1.1.1 app.zero.com.do A | tail -1) https://app.zero.com.do/
+```
 
 ## Fase 6 · Comprobar en producción
 
