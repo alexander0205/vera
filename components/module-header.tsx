@@ -15,6 +15,7 @@
  * una sola vez. Cada módulo solo dice cuál es.
  */
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
@@ -22,8 +23,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
-import { Menu as MenuIcon, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { GlobalSearch } from '@/components/global-search';
+import { Menu as MenuIcon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { GlobalSearch, MS_FOCO } from '@/components/global-search';
 import { ModuleSwitcher } from '@/components/module-switcher';
 import { LoaderLlegada } from '@/components/loader-llegada';
 import { CompanySwitcher } from '@/components/company-switcher';
@@ -33,6 +34,57 @@ import type { ModuleKey } from '@/lib/config/modules';
 import type { Team } from '@/lib/db/schema';
 
 const fetcher = (url: string) => fetch(url).then(r => (r.ok ? r.json() : null));
+
+/**
+ * MODO FOCO — props de un bloque que se aparta mientras el buscador está abierto.
+ *
+ * Se anima `max-width` + `opacity` en vez de sacar el bloque del DOM: si se
+ * desmonta, la barra da un salto seco y el campo aparece de golpe en vez de
+ * crecer. Animando, el hueco que dejan los vecinos ES el que gana el campo, y
+ * las dos cosas se leen como un solo movimiento.
+ *
+ * `inert` (React 19) saca del orden de tabulación TODO lo que hay dentro, no
+ * solo el contenedor: tabulando desde el buscador el foco se iba a un
+ * conmutador de empresa invisible y no había forma de saber dónde estabas.
+ * `aria-hidden` hace lo propio con el lector de pantalla.
+ *
+ * El margen negativo come el `gap` de la barra: sin él, un bloque de ancho cero
+ * seguía dejando su separación y quedaban ocho píxeles de aire por cada uno.
+ *
+ * @param anchoMax  Tope al que vuelve el bloque al cerrar. Solo tiene que ser
+ *                  mayor que su contenido real: el ancho de verdad lo pone el
+ *                  contenido, esto solo destapa o tapa el hueco.
+ * @param encogible Si en móvil puede ceder ancho. El bloque de empresa+módulos
+ *                  mide 424 px y a 375 desbordaba la barra entera —el icono de
+ *                  buscar y el avatar se salían de la pantalla—; el avatar, en
+ *                  cambio, son 40 px que no se tocan.
+ */
+function apartar(oculto: boolean, anchoMax: number, encogible = false) {
+  return {
+    'aria-hidden': oculto || undefined,
+    inert: oculto || undefined,
+    sx: {
+      display:       'flex',
+      alignItems:    'center',
+      gap:           1,
+      minWidth:      0,
+      flexShrink:    encogible ? { xs: 1, sm: 0 } : 0,
+      // Que el apretón lo repartan los de dentro. Sin esto, el conmutador de
+      // empresa se planta en su ancho natural, el de módulos se le monta
+      // encima y el recorte del bloque parte la palabra por la mitad.
+      ...(encogible ? { '& > *': { minWidth: 0 } } : {}),
+      overflow:      'hidden',
+      whiteSpace:    'nowrap',
+      opacity:       oculto ? 0 : 1,
+      maxWidth:      oculto ? 0 : anchoMax,
+      ml:            oculto ? -1 : 0,
+      pointerEvents: oculto ? 'none' : 'auto',
+      transition:    `opacity ${MS_FOCO}ms ease, max-width ${MS_FOCO}ms ease, margin-left ${MS_FOCO}ms ease`,
+      // Quien pidió que no le muevan la pantalla: aparece y desaparece, sin viaje.
+      '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+    },
+  } as const;
+}
 
 export function ModuleHeader({
   current,
@@ -76,6 +128,9 @@ export function ModuleHeader({
     teams?: Team[]; activeTeamId?: number | null;
   }>('/api/empresa/list', fetcher, { revalidateOnFocus: false, revalidateOnReconnect: false });
 
+  // Modo foco: mientras el buscador está abierto, la barra se aparta para él.
+  const [buscadorAbierto, setBuscadorAbierto] = useState(false);
+
   const user = userProp ?? userSwr ?? null;
   // `userProp` llega ya resuelto (o `null` mientras carga) desde el layout que
   // monta el header, así que no sirve para saber si terminó de cargar: se usa
@@ -96,7 +151,6 @@ export function ModuleHeader({
       {/* Sostiene el loader un momento tras aterrizar de otro módulo, para que
           no se vea la pantalla montarse a pedazos. */}
       <LoaderLlegada datosListos={datosListos} />
-      <GlobalSearch />
       <AppBar
         position="static"
         elevation={0}
@@ -110,6 +164,25 @@ export function ModuleHeader({
         }}
       >
         <Toolbar variant="dense" sx={{ height: 56, minHeight: 56, gap: 1, px: { xs: 1.5, sm: 2 } }}>
+          {/*
+            Bloque izquierdo, agrupado y sin encoger… de `sm` para arriba.
+
+            Suelto en la barra, cada pieza era un item de flex encogible: al
+            darle al buscador un hueco elástico, el navegador repartía la falta
+            de sitio entre TODOS y el conmutador de empresa acababa recortado a
+            media palabra. Agrupado y sin encoger, quien cede cuando no hay
+            sitio es siempre el centro.
+
+            Aquí van solo la hamburguesa, el fijar-menú y el título: cuatro
+            docenas de píxeles que nunca ceden. Lo que sí cede en móvil es el
+            bloque de empresa+módulos que va justo detrás.
+          */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexShrink: 0 }}>
+          {/*
+            La hamburguesa y el fijar-menú NO se apartan en modo foco: son la
+            única forma de abrir la navegación en móvil, y esconder la salida
+            del menú mientras se busca deja al usuario sin por dónde salir.
+          */}
           {/* Hamburguesa móvil */}
           {onAbrirMenu && (
             <IconButton
@@ -147,55 +220,51 @@ export function ModuleHeader({
               {titulo}
             </Typography>
           )}
-
-          <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={handleSwitch} />
-
-          <ModuleSwitcher current={current} />
-
-          {/* Turno de caja — solo cuando queda poco para el límite */}
-          {cajaHabilitada && <TurnoCountdown />}
-
-          <Box sx={{ flex: 1 }} />
-
-          <Box
-            component="button"
-            onClick={() => document.querySelector<HTMLButtonElement>('#global-search-trigger')?.click()}
-            aria-label="Buscar"
-            sx={{
-              display:      { xs: 'none', sm: 'flex' },
-              alignItems:   'center',
-              gap:          1,
-              fontSize:     '0.875rem',
-              color:        'text.secondary',
-              px:           1.25,
-              py:           0.75,
-              borderRadius: '8px',
-              bgcolor:      'transparent',
-              border:       'none',
-              cursor:       'pointer',
-              transition:   'all 0.15s',
-              '&:hover':    { bgcolor: 'grey.50', color: 'text.primary' },
-            }}
-          >
-            <Search style={{ width: 16, height: 16 }} />
-            <Box component="span" sx={{ display: { xs: 'none', md: 'block' } }}>Buscar</Box>
-            <Box
-              component="kbd"
-              sx={{
-                display:      { xs: 'none', md: 'block' },
-                fontSize:     '0.6875rem',
-                bgcolor:      'grey.100',
-                borderRadius: '4px',
-                px:           0.75,
-                py:           0.25,
-                fontFamily:   'monospace',
-              }}
-            >
-              ⌘K
-            </Box>
           </Box>
 
-          <ProfileDropdown user={user} />
+          {/* Modo foco: empresa, módulos y turno se apartan mientras se busca. */}
+          <Box {...apartar(buscadorAbierto, 560, true)}>
+            <CompanySwitcher teams={teams} activeTeamId={activeTeamId} onSwitch={handleSwitch} />
+
+            <ModuleSwitcher current={current} />
+
+            {/* Turno de caja — solo cuando queda poco para el límite */}
+            {cajaHabilitada && <TurnoCountdown />}
+          </Box>
+
+          {/*
+            El buscador, en medio y no en la esquina.
+
+            Este hueco se come TODO lo que queda entre el bloque de la izquierda
+            y el perfil, y el campo lo llena hasta su tope (ANCHO_BUSCADOR en
+            components/global-search.tsx). No se centra contra la ventana con
+            posición absoluta a propósito: el bloque de la izquierda cambia de
+            ancho según el módulo (título + empresa + módulos + turno de caja) y
+            a 1024 px se solaparían.
+
+            `minWidth: 0` es lo que le permite encogerse en pantallas estrechas
+            en vez de empujar al conmutador de empresa fuera de la barra: es el
+            primero de la barra en ceder.
+
+            En `xs` deja de ser elástico: ahí dentro no hay un campo sino un
+            icono de 34 px, y con `flex: 1` el hueco se comía todo el sobrante y
+            luego lo devolvía aplastado a cero, dejando el icono fuera de la
+            pantalla. Ancho de su contenido y pegado a la derecha con `ml: auto`.
+          */}
+          <Box sx={{
+            flex: { xs: '0 0 auto', sm: 1 },
+            minWidth: 0,
+            ml: { xs: 'auto', sm: 0 },
+            display: 'flex',
+            justifyContent: 'center',
+            px: { xs: 0, sm: 1 },
+          }}>
+            <GlobalSearch onAbiertoChange={setBuscadorAbierto} />
+          </Box>
+
+          <Box {...apartar(buscadorAbierto, 56)}>
+            <ProfileDropdown user={user} />
+          </Box>
         </Toolbar>
       </AppBar>
     </>
