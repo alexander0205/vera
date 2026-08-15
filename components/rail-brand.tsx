@@ -104,26 +104,30 @@ export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey }) {
           // cambia el tamaño del logo.
           height: '100%',
           display: 'flex', alignItems: 'center',
-          // Abierto: 26px a la izquierda, que es donde empiezan los iconos del
-          // menú — la lista lleva `px: 1.5` (12) y cada item `px: 1.75` (14).
-          // Sin ese número el logo arranca pegado al borde y se ve desalineado
-          // con todo lo de abajo.
-          pl: '26px', pr: 1,
-          '& .marca-abierta': { display: 'block' },
-          '& .marca-cerrada': { display: 'none' },
 
-          // Cerrado: el símbolo centrado en los 68px del rail. Alinearlo a los
-          // 26 de la izquierda lo dejaba pegado a un lado, porque ahí ya no hay
-          // texto que lo acompañe — solo él.
-          [`@container (max-width: ${UMBRAL}px)`]: {
-            justifyContent: 'center',
-            pl: 0, pr: 0,
-            '& .marca-abierta': { display: 'none' },
-            // `mx: auto` además del justifyContent: con el símbolo a 60px en un
-            // rail de 68 no sobra casi nada, y basta con que un relleno herede
-            // de algún sitio para que se vaya a un lado. Los márgenes
-            // automáticos lo centran aunque el relleno no llegue a cero.
-            '& .marca-cerrada': { display: 'block', mx: 'auto' },
+          // ── Por defecto, el rail CERRADO ──────────────────────────────────
+          //
+          // La regla base describe el estado estrecho y la consulta añade el
+          // ancho, no al revés. Escrito al derecho —relleno de 26 en la base y
+          // `pl: 0` dentro de la consulta— el centrado depende de que un
+          // override llegue a cero, y basta con que algo herede unos píxeles
+          // para que el símbolo se vaya a un lado dentro de un rail donde solo
+          // sobran 8. Así el caso delicado es el que no necesita deshacer nada.
+          justifyContent: 'center',
+          px: 0,
+          '& .marca-abierta': { display: 'none' },
+          '& .marca-cerrada': { display: 'block' },
+
+          // ── Rail ABIERTO ──────────────────────────────────────────────────
+          // 26px a la izquierda, que es donde empiezan los iconos del menú: la
+          // lista lleva `px: 1.5` (12) y cada item `px: 1.75` (14). Sin ese
+          // número el logo arranca pegado al borde y se ve desalineado con
+          // todo lo de abajo.
+          [`@container (min-width: ${UMBRAL + 1}px)`]: {
+            justifyContent: 'flex-start',
+            pl: '26px', pr: 1,
+            '& .marca-abierta': { display: 'block' },
+            '& .marca-cerrada': { display: 'none' },
           },
         }}
       >

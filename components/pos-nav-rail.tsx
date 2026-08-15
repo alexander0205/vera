@@ -4,40 +4,36 @@
  * PosNavRail — navegación propia del módulo Punto de Venta.
  *
  * Es una navegación distinta a la de Facturación (esa vive en el dashboard
- * layout). Rail de solo-iconos que se expande al pasar el mouse, igual patrón
- * que el sidebar del dashboard: colapsado 68px, hover → 224px flotando sobre
- * el contenido, labels con .nav-text. CSS-only, animado, sin re-render.
+ * layout), pero se ve y se comporta IGUAL: el armazón, la escala de color, la
+ * tipografía y el orden por uso salen de `components/rail`. Aquí solo queda la
+ * lista de secciones del POS.
  *
- * Items: Vender (POS), Terminales, y las entidades COMPARTIDas (Productos y
+ * Items: Vender (POS), Terminales, y las entidades COMPARTIDAS (Productos y
  * Contactos — mismas tablas que Facturación). Abajo, volver a Facturación.
  */
 
-import Box from '@mui/material/Box';
-import { RailBrand } from '@/components/rail-brand';
-import { RailModulos } from '@/components/rail-modulos';
-import { useNavFijo } from '@/lib/hooks/useNavFijo';
-import Typography from '@mui/material/Typography';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { RailArmazon } from '@/components/rail/RailArmazon';
+import { RailSecciones } from '@/components/rail/RailSecciones';
+import type { RailSeccion } from '@/components/rail/tipos';
 import {
-  Store, Clock, Wallet, Undo2, Users, Package, Settings, FileText, ReceiptText, } from 'lucide-react';
-
-const RAIL = 68;
-const OPEN = 224;
-
-type Item = { href: string; label: string; icon: typeof Store; shared?: boolean };
+  Store, Clock, Wallet, Undo2, Users, Package, Settings, ReceiptText,
+} from 'lucide-react';
 
 // Navegación del módulo POS. Todo vive bajo /pos (shell del POS) para no saltar
 // a Facturación. Contactos e Inventario son entidades COMPARTIDAS (mismas tablas).
-const ITEMS: Item[] = [
-  { href: '/pos',              label: 'Vender',              icon: Store },
-  { href: '/pos/historial',    label: 'Historial',           icon: ReceiptText },
-  { href: '/pos/turnos',       label: 'Turnos',              icon: Clock },
-  { href: '/pos/caja',         label: 'Gestión de efectivo', icon: Wallet },
-  { href: '/pos/devoluciones', label: 'Devoluciones',        icon: Undo2 },
-  { href: '/pos/contactos',    label: 'Contactos',           icon: Users,   shared: true },
-  { href: '/pos/inventario',   label: 'Inventario',          icon: Package, shared: true },
-  { href: '/pos/configuracion', label: 'Configuración',      icon: Settings },
+//
+// Los `id` van con prefijo del módulo porque los contadores del orden por uso
+// viven en un solo localStorage para todo el producto: un 'configuracion' a
+// secas sumaría las visitas del POS a la Configuración de Facturación.
+const SECCIONES: RailSeccion[] = [
+  { tipo: 'item', id: 'pos-vender',        href: '/pos',              label: 'Vender',              icon: Store, exact: true },
+  { tipo: 'item', id: 'pos-historial',     href: '/pos/historial',    label: 'Historial',           icon: ReceiptText },
+  { tipo: 'item', id: 'pos-turnos',        href: '/pos/turnos',       label: 'Turnos',              icon: Clock },
+  { tipo: 'item', id: 'pos-caja',          href: '/pos/caja',         label: 'Gestión de efectivo', icon: Wallet },
+  { tipo: 'item', id: 'pos-devoluciones',  href: '/pos/devoluciones', label: 'Devoluciones',        icon: Undo2 },
+  { tipo: 'item', id: 'pos-contactos',     href: '/pos/contactos',    label: 'Contactos',           icon: Users,   shared: true },
+  { tipo: 'item', id: 'pos-inventario',    href: '/pos/inventario',   label: 'Inventario',          icon: Package, shared: true },
+  { tipo: 'item', id: 'pos-configuracion', href: '/pos/configuracion', label: 'Configuración',      icon: Settings },
 ];
 
 /**
@@ -50,83 +46,9 @@ const ITEMS: Item[] = [
  * pasar el mouse — o sea, en una pantalla táctil quedaban solo los iconos.
  */
 export function PosNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
-  const pathname = usePathname();
-  // El cajón móvil va siempre abierto; en escritorio manda la preferencia
-  // "menú fijo". Ambos casos usan la misma rama: ancho completo, texto visible
-  // y sin expansión por hover.
-  const { fijo } = useNavFijo();
-  const abierto = variant === 'drawer' || fijo;
-
   return (
-    <Box
-      component="aside"
-      sx={{
-        width: abierto ? OPEN : RAIL,
-        flexShrink: 0,
-        display: abierto ? 'block' : { xs: 'none', lg: 'block' },
-        position: 'relative',
-        height: '100%',
-      }}
-    >
-      <Box
-        sx={{
-          position: abierto ? 'static' : 'absolute', top: 0, left: 0, height: '100%',
-          width: abierto ? OPEN : RAIL, overflow: 'hidden', zIndex: 40,
-          bgcolor: '#2a45c4', display: 'flex', flexDirection: 'column',
-          transition: 'width 0.2s ease, box-shadow 0.2s ease',
-          '& .nav-text': {
-            opacity: abierto ? 1 : 0,
-            transition: 'opacity 0.12s ease',
-            whiteSpace: 'nowrap',
-          },
-          ...(abierto ? {} : {
-            '&:hover': { width: OPEN, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
-            '&:hover .nav-text': { opacity: 1 },
-          }),
-        }}
-      >
-        <RailBrand modulo="pos" />
-
-        {/* Items */}
-        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.25, py: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {ITEMS.map(it => {
-            const active = it.href === '/pos' ? pathname === '/pos' : pathname.startsWith(it.href);
-            return (
-              <Box
-                key={it.href}
-                component={Link}
-                href={it.href}
-                sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.5, px: 1.75, py: 1.25,
-                  borderRadius: '10px', textDecoration: 'none',
-                  // 15px y no 14: en un menú de veinte entradas el texto se lee
-                  // de reojo, y medio punto se nota.
-                  fontSize: '0.9375rem', lineHeight: 1.3,
-                  fontWeight: active ? 600 : 500,
-                  // El activo va en blanco sólido sobre un fondo bien marcado;
-                  // antes el contraste entre activo e inactivo era tan corto que
-                  // había que buscar dónde estabas.
-                  color: active ? '#fff' : 'rgba(224,231,253,0.78)',
-                  bgcolor: active ? 'rgba(255,255,255,0.22)' : 'transparent',
-                  transition: 'background-color 0.15s, color 0.15s',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' },
-                }}
-              >
-                <it.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
-                <Box component="span" className="nav-text" sx={{ flex: 1 }}>{it.label}</Box>
-                {it.shared && (
-                  <Box component="span" className="nav-text" sx={{ fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', px: 0.625, py: '1px', borderRadius: '4px', bgcolor: 'rgba(255,255,255,0.16)', color: 'rgba(224,231,253,0.95)' }}>
-                    Compartido
-                  </Box>
-                )}
-              </Box>
-            );
-          })}
-
-          {/* Al final de la lista de items, no anclado al pie. */}
-          <RailModulos current="pos" />
-        </Box>
-      </Box>
-    </Box>
+    <RailArmazon modulo="pos" variant={variant}>
+      <RailSecciones secciones={SECCIONES} />
+    </RailArmazon>
   );
 }

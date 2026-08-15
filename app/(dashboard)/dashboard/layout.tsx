@@ -1,28 +1,27 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
 import {
   LayoutDashboard, Users, Package,
-  Settings, Activity, Shield, Menu as MenuIcon, Plus, ChevronDown,
-  TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
-  Printer, X, Search, UserCircle, AlertCircle, Zap,
-  PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, BookOpen,
+  Settings, Plus,
+  TrendingDown, BarChart3, CreditCard,
+  Search, AlertCircle, Zap,
+  ShoppingCart, Wallet, BookOpen,
   } from 'lucide-react';
 import { ModuleHeader } from '@/components/module-header';
 import { BannerSuscripcion } from '@/components/banner-suscripcion';
-import { RailModulos } from '@/components/rail-modulos';
-import { RailBrand } from '@/components/rail-brand';
+import { RailArmazon } from '@/components/rail/RailArmazon';
+import { RailSecciones, EnlaceSeccion } from '@/components/rail/RailSecciones';
+import { ANCHO_ABIERTO, FUENTE_SECCION, TINTA } from '@/components/rail/estilos';
+import type { RailGrupo, RailItem, RailSeccion } from '@/components/rail/tipos';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
-import { useOrdenNav, registrarVisitaNav } from '@/lib/hooks/useOrdenNav';
-import { planHasFeature } from '@/lib/plans';
-import { planColorMui } from '@/lib/config/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { BILLING_ENABLED } from '@/lib/config/billing';
-import { ProfileDropdown, getInitials, type UserInfo } from '@/components/profile-dropdown';
+import { type UserInfo } from '@/components/profile-dropdown';
 
 // MUI imports
 import Box from '@mui/material/Box';
@@ -30,33 +29,14 @@ import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
-import Paper from '@mui/material/Paper';
-import Collapse from '@mui/material/Collapse';
-import Menu from '@mui/material/Menu';
-import useMediaQuery from '@mui/material/useMediaQuery';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// La forma de una lista de menú es la misma en los cuatro módulos y vive en
+// components/rail/tipos. Aquí solo se le ponen los nombres de siempre.
 
-type NavGroup = {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  children: { href: string; label: string; plusHref?: string; shared?: boolean }[];
-};
-
-type NavItem = {
-  id: string;
-  href: string;
-  icon: React.ElementType;
-  label: string;
-  exact?: boolean;
-};
-
-/** Una entrada de la lista reordenable: o lleva a un sitio, o abre un submenú.
- *  Las dos cuentan visitas y las dos pueden cambiar de sitio con el uso. */
-type NavSeccion =
-  | ({ tipo: 'item' } & NavItem)
-  | ({ tipo: 'grupo' } & NavGroup);
+type NavGroup   = RailGrupo;
+type NavItem    = RailItem;
+type NavSeccion = RailSeccion;
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
@@ -236,16 +216,6 @@ function canAccessHref(
 
 interface Team     { id: number; razonSocial: string | null; rnc: string | null; planName: string | null; subscriptionStatus: string | null; role: string; logo: string | null; cajaHabilitada: boolean | null; posHabilitado: boolean | null; habilitacionCompletadoAt: string | Date | null; }
 
-function useOutsideClick(ref: React.RefObject<HTMLElement | null>, cb: () => void) {
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) cb();
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [ref, cb]);
-}
-
 function teamHasPlan(t: Team) {
   // Producto en desarrollo: sin billing no existe el concepto de "empresa sin
   // plan", así que nada bloquea la navegación. Ver lib/config/billing.
@@ -258,63 +228,25 @@ function teamHasPlan(t: Team) {
   return true;
 }
 
-// El tono sale del catálogo (lib/config/plans), no de una lista de nombres:
-// la versión anterior comparaba contra 'starter'/'business' y dejó de pintar
-// nada el día que esos planes dejaron de existir.
-const planColor = planColorMui;
-
-// ─── Profile Dropdown ─────────────────────────────────────────────────────────
-
-
 // ─── Sidebar Content ──────────────────────────────────────────────────────────
 
-const SIDEBAR_WIDTH = 264; // 224 se quedaba corto: "Balance de comprobación" y
-                           // "Activar facturación electrónica" salían cortados
-const RAIL_WIDTH = 68;   // ancho colapsado (solo iconos) del sidebar desktop
-
-/**
- * Escala gris→blanco del menú. Antes todo el texto era blanco casi puro y la
- * barra azul se veía maciza; ahora el peso lo pone la tipografía y el color se
- * limita a marcar jerarquía: en reposo gris, al pasar por encima casi blanco,
- * y blanco puro solo donde estás. Los iconos son de lucide y pintan con
- * `currentColor`, así que siguen la misma escala sin tocarlos.
- */
-const TINTA = {
-  reposo: 'rgba(203,213,225,0.72)',
-  hover:  'rgba(248,250,252,0.96)',
-  activa: '#ffffff',
-  tenue:  'rgba(203,213,225,0.5)',   // rótulos, atajos y metadatos
-};
-
-/** Sora (la tipografía de marca) para las secciones: a 14px con peso 600 marca
- *  mucho más que Inter y le da al menú el aire de barra de aplicación. Los
- *  hijos se quedan en Inter, que aguanta mejor las listas largas. */
-const FUENTE_SECCION = {
-  fontFamily:    'var(--font-display)',
-  fontSize:      '0.875rem',
-  letterSpacing: '-0.005em',
-};
-
-/** Cuánto hay que dejar el puntero encima de un grupo para que se despliegue.
- *  Medio segundo es muchísimo más de lo que dura cruzar el menú en diagonal
- *  hacia un ítem de más abajo, así que de camino no se abre nada. */
-const RETARDO_HOVER_MS = 500;
-
-/** Apertura del submenú. Por debajo de 200ms se percibe como un salto y por
- *  encima de 350ms se hace lenta; el chevron gira con esta misma duración para
- *  que no vayan a destiempo. */
-const DURACION_DESPLIEGUE_MS = 240;
-const CURVA_DESPLIEGUE = 'cubic-bezier(0.25, 0.8, 0.3, 1)'; // salida suave
+// Los anchos, la escala de color (TINTA), la tipografía (FUENTE_SECCION) y los
+// tiempos de los desplegables son los MISMOS en los cuatro módulos y viven en
+// components/rail/estilos. Este archivo dejó de tener su copia el día que el
+// rediseño de aquí no llegó a POS, Escolar ni Administración.
 
 function SidebarContent({
   teams,
   activeTeamId,
   dgiiHabilitado,
+  variant,
   onClose,
 }: {
   teams: Team[];
   activeTeamId: number | null;
   dgiiHabilitado: boolean;
+  /** 'rail' = columna que se expande al pasar el mouse; 'drawer' = cajón móvil. */
+  variant?: 'rail' | 'drawer';
   onClose?: () => void;
 }) {
   const pathname    = usePathname();
@@ -334,11 +266,6 @@ function SidebarContent({
     (href: string) => canAccessHref(href, permSet, role),
     [permSet, role],
   );
-
-  // Todos los items siempre habilitados
-  function isEnabled(_href: string): boolean {
-    return true;
-  }
 
   // Grupo Caja — solo visible si cajaHabilitada y el rol tiene caja:ver
   const cajaCandidatos: NavGroup['children'] = [
@@ -428,102 +355,33 @@ function SidebarContent({
   // Sin permiso de contabilidad no hay de qué colgarlo; cierra la lista.
   if (!seccionesBase.some(s => s.id === 'reportes')) empujarItem('reportes');
 
-  const secciones = useOrdenNav(seccionesBase.map(s => s.id))
-    .map(id => seccionesBase.find(s => s.id === id))
-    .filter((s): s is NavSeccion => s !== undefined);
-
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 
-  // Sección donde estás ahora mismo. Sirve para dos cosas: abrir su grupo sin
-  // que haya que pedirlo, y sumarle la visita que alimenta el orden por uso.
-  const seccionActual = secciones.find(s =>
-    s.tipo === 'grupo'
-      ? s.children.some(c => pathname.startsWith(c.href))
-      : isActive(s.href, s.exact),
-  ) ?? null;
-  const grupoActivo = seccionActual?.tipo === 'grupo' ? seccionActual.id : null;
-
-  const idSeccionActual = seccionActual?.id ?? null;
-  useEffect(() => {
-    if (idSeccionActual) registrarVisitaNav(idSeccionActual);
-  }, [idSeccionActual]);
-
-  // ── Un solo desplegable abierto a la vez ──────────────────────────────────
-  // Reglas, en una línea: se abre al dejar el puntero encima medio segundo o
-  // con un clic; se cierra SOLO si lo cierras tú o si abres otro. Sacar el
-  // ratón no cierra nada — cerrar por salir convierte el menú en un parpadeo
-  // mientras bajas hacia el ítem que ibas a pulsar.
-  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(() => grupoActivo);
-
-  // El grupo donde estás se abre solo, o el ítem en el que te encuentras
-  // quedaría escondido dentro de un grupo cerrado. Depende de `grupoActivo` y
-  // no de `pathname` porque los permisos llegan después del primer render y el
-  // grupo puede aparecer tarde. Si la ruta nueva no cuelga de ningún grupo no
-  // se cierra nada: lo que abriste sigue abierto.
-  useEffect(() => {
-    if (grupoActivo) setGrupoAbierto(grupoActivo);
-  }, [grupoActivo]);
-
-  // Solo puede haber una apertura en cola, la del grupo que tiene el puntero
-  // encima ahora mismo.
-  const pendienteRef = useRef<{ id: string; reloj: ReturnType<typeof setTimeout> } | null>(null);
-
-  const cancelarPendiente = useCallback(() => {
-    if (pendienteRef.current) clearTimeout(pendienteRef.current.reloj);
-    pendienteRef.current = null;
-  }, []);
-
-  // Un reloj vivo después de desmontar intentaría tocar el estado de un
-  // componente que ya no existe.
-  useEffect(() => cancelarPendiente, [cancelarPendiente]);
-
-  const programarApertura = (id: string) => {
-    cancelarPendiente();
-    const reloj = setTimeout(() => {
-      pendienteRef.current = null;
-      setGrupoAbierto(id);
-    }, RETARDO_HOVER_MS);
-    pendienteRef.current = { id, reloj };
-  };
-
-  // El clic es la vía rápida —no espera el medio segundo— y también la única
-  // forma de cerrar. Enter y Espacio sobre el botón llegan aquí como clic, así
-  // que el teclado abre y cierra igual que el ratón.
-  const alternarGrupo = (id: string) => {
-    cancelarPendiente();
-    setGrupoAbierto(prev => (prev === id ? null : id));
-  };
-
-  // Sin animación cuando el sistema pide menos movimiento.
-  const sinMovimiento = useMediaQuery('(prefers-reduced-motion: reduce)');
-  const duracion = sinMovimiento ? 0 : DURACION_DESPLIEGUE_MS;
-
   return (
-    <Box
-      sx={{
-        width:    SIDEBAR_WIDTH,
-        height:   '100%',
-        display:  'flex',
-        flexDirection: 'column',
-        bgcolor:  '#2a45c4',
-        overflow: 'hidden',
-      }}
+    <RailArmazon
+      modulo="facturacion"
+      variant={variant}
+      // La versión lleva a Novedades: ver el número y querer saber qué cambió es
+      // el mismo gesto. Evita un item más en el menú para algo que se mira de
+      // vez en cuando.
+      pie={
+        <Typography
+          component={Link}
+          href="/dashboard/novedades"
+          onClick={onClose}
+          title="Ver qué hay de nuevo"
+          className="nav-text"
+          sx={{
+            fontSize: '0.6875rem', fontWeight: 500, color: TINTA.tenue, whiteSpace: 'nowrap',
+            textDecoration: 'none', transition: 'color 0.15s',
+            '&:hover': { color: TINTA.hover },
+          }}
+        >
+          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
+        </Typography>
+      }
     >
-      <RailBrand modulo="facturacion" />
-
-      {/* Nav */}
-      <Box
-        sx={{
-          flex: 1, overflowY: 'auto', px: 1.5, py: 1.5,
-          display: 'flex', flexDirection: 'column', gap: 0.25,
-          // Sin esto los ítems se aplastan unos milímetros en cuanto la lista
-          // no cabe, y con un desplegable abierto el menú entero se mueve
-          // aunque no haya cambiado nada por encima. Que sobre → que scrollee.
-          '& > *': { flexShrink: 0 },
-        }}
-      >
-
         {/* Sin plan — bloquear nav */}
         {!hasPlan && (
           <Box className="nav-children" sx={{ mx: 0.5, mt: 0.5, mb: 1.5, borderRadius: '12px', bgcolor: 'rgba(245,158,11,0.2)', border: '1px solid rgba(251,191,36,0.3)', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -617,241 +475,37 @@ function SidebarContent({
           </Box>
         </Box>
 
-        {/* Activar facturación electrónica — clavado arriba mientras haga falta */}
+        {/* Activar facturación electrónica — clavado arriba mientras haga falta.
+            Fuera de la lista reordenable, pero con la MISMA pieza que sus
+            secciones: si diverge, se nota que es un pegote. */}
         {habilitacionCta && (
-          <Box
-            component={Link}
-            href={habilitacionCta.href}
-            onClick={onClose}
+          <EnlaceSeccion
+            item={habilitacionCta}
+            activo={isActive(habilitacionCta.href)}
+            onNavegar={onClose}
+            tamanoIcono={17}
             sx={{
-              display:     'flex',
-              alignItems:  'center',
-              gap:         1.25,
-              px:          1.5,
-              py:          1,
-              mb:          0.5,
-              borderRadius: '10px',
-              color:       isActive(habilitacionCta.href) ? TINTA.activa : TINTA.reposo,
-              bgcolor:     isActive(habilitacionCta.href) ? 'rgba(255,255,255,0.18)' : 'transparent',
-              ...FUENTE_SECCION,
+              gap: 1.25,
+              px:  1.5,
+              py:  1,
+              mb:  0.5,
               // Un punto menos que el resto: es la única etiqueta larga del
               // menú y a 14px se corta incluso con la barra ya ensanchada.
-              fontSize:    '0.8125rem',
-              fontWeight:  600,
-              textDecoration: 'none',
-              overflow:    'hidden',
-              transition:  'all 0.15s',
-              '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: TINTA.hover },
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              bgcolor: isActive(habilitacionCta.href) ? 'rgba(255,255,255,0.18)' : 'transparent',
+              boxShadow: 'none',
             }}
-          >
-            <habilitacionCta.icon style={{ width: 17, height: 17, flexShrink: 0 }} />
-            <Box component="span" className="nav-text" sx={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{habilitacionCta.label}</Box>
-          </Box>
+          />
         )}
 
         <Divider sx={{ my: 0.75, borderColor: 'rgba(255,255,255,0.14)' }} />
 
-        {/* Secciones — el orden lo pone useOrdenNav (uso de los últimos días),
-            no el orden en que están escritas arriba. */}
-        {secciones.map(seccion => {
-          if (seccion.tipo === 'item') {
-            const active = isActive(seccion.href, seccion.exact);
-            return (
-              <Box
-                key={seccion.id}
-                component={Link}
-                href={seccion.href}
-                onClick={onClose}
-                sx={{
-                  display:     'flex',
-                  alignItems:  'center',
-                  gap:         1.5,
-                  px:          1.75,
-                  py:          1.25,
-                  borderRadius: '10px',
-                  ...FUENTE_SECCION,
-                  lineHeight:  1.3,
-                  fontWeight:  active ? 700 : 600,
-                  color:       active ? TINTA.activa : TINTA.reposo,
-                  bgcolor:     active ? 'rgba(255,255,255,0.22)' : 'transparent',
-                  boxShadow:   active ? 'inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
-                  textDecoration: 'none',
-                  transition:  'background-color 0.15s, color 0.15s',
-                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: TINTA.hover },
-                }}
-              >
-                <seccion.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
-                <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>{seccion.label}</Box>
-              </Box>
-            );
-          }
-
-          const group       = seccion;
-          const groupActive = group.children.some(c => pathname.startsWith(c.href));
-          const isOpen      = grupoAbierto === group.id;
-          const idPanel     = `nav-grupo-${group.id}`;
-
-          return (
-            <Box
-              key={group.id}
-              onPointerEnter={e => {
-                // En táctil y con lápiz no existe "pasar por encima": ahí manda
-                // el tap, que llega como click. Filtrar por pointerType evita
-                // que el menú se abra solo al arrastrar el dedo por la pantalla.
-                if (e.pointerType !== 'mouse' || isOpen) return;
-                programarApertura(group.id);
-              }}
-              // Salir cancela la apertura EN COLA, nada más: lo que ya está
-              // abierto se queda abierto.
-              onPointerLeave={e => {
-                if (e.pointerType === 'mouse' && pendienteRef.current?.id === group.id) cancelarPendiente();
-              }}
-            >
-              <Box
-                component="button"
-                data-cabecera-grupo
-                aria-expanded={isOpen}
-                aria-controls={idPanel}
-                onClick={() => alternarGrupo(group.id)}
-                sx={{
-                  display:     'flex',
-                  alignItems:  'center',
-                  gap:         1.5,
-                  width:       '100%',
-                  px:          1.75,
-                  py:          1.25,
-                  borderRadius: '10px',
-                  ...FUENTE_SECCION,
-                  lineHeight:  1.3,
-                  fontWeight:  groupActive ? 700 : 600,
-                  color:       groupActive || isOpen ? TINTA.activa : TINTA.reposo,
-                  bgcolor:     groupActive ? 'rgba(255,255,255,0.16)' : 'transparent',
-                  border:      'none',
-                  cursor:      'pointer',
-                  transition:  'background-color 0.15s, color 0.15s',
-                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: TINTA.hover },
-                }}
-              >
-                <group.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
-                <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>{group.label}</Box>
-                <Box
-                  component="span"
-                  className="nav-text"
-                  sx={{
-                    display: 'flex', opacity: 0.65,
-                    transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
-                    // Misma duración y misma curva que la altura del submenú:
-                    // si giran a distinto ritmo se nota enseguida.
-                    transition: `transform ${duracion}ms ${CURVA_DESPLIEGUE}`,
-                  }}
-                >
-                  <ChevronDown style={{ width: 15, height: 15 }} />
-                </Box>
-              </Box>
-
-              <Collapse className="nav-children" in={isOpen} timeout={duracion} easing={CURVA_DESPLIEGUE}>
-                <Box id={idPanel} sx={{ ml: 3, pl: 1, borderLeft: '1px solid rgba(255,255,255,0.18)', mt: 0.25, mb: 0.5 }}>
-                  {group.children.map(child => {
-                    const active = pathname.startsWith(child.href);
-                    return (
-                      <Box
-                        key={child.href}
-                        sx={{ display: 'flex', alignItems: 'center', '&:hover .plus-btn': { opacity: 1 } }}
-                      >
-                        <Box
-                          component={Link}
-                          href={child.href}
-                          onClick={onClose}
-                          sx={{
-                            flex:        1,
-                            minWidth:    0,
-                            py:          1,
-                            px:          1.5,
-                            borderRadius: '8px',
-                            fontSize:    '0.8125rem',
-                            lineHeight:  1.35,
-                            fontWeight:  active ? 700 : 500,
-                            color:       active ? TINTA.activa : TINTA.reposo,
-                            bgcolor:     active ? 'rgba(255,255,255,0.18)' : 'transparent',
-                            textDecoration: 'none',
-                            transition:  'all 0.15s',
-                            whiteSpace:  'nowrap',
-                            overflow:    'hidden',
-                            textOverflow: 'ellipsis',
-                            display:     'flex',
-                            alignItems:  'center',
-                            gap:         0.75,
-                            '&:hover':   { color: TINTA.hover, bgcolor: 'rgba(255,255,255,0.08)' },
-                          }}
-                        >
-                          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{child.label}</Box>
-                          {child.shared && (
-                            <Box
-                              component="span"
-                              title="Compartido con Facturación — mismos productos y contactos en ambos módulos"
-                              sx={{ flexShrink: 0, fontSize: '0.5625rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', px: 0.625, py: '1px', borderRadius: '4px', bgcolor: 'rgba(255,255,255,0.16)', color: 'rgba(224,231,253,0.95)' }}
-                            >
-                              Compartido
-                            </Box>
-                          )}
-                        </Box>
-                        {child.plusHref && can(child.plusHref) && (
-                          <Box
-                            component={Link}
-                            href={child.plusHref}
-                            onClick={onClose}
-                            className="plus-btn"
-                            title="Nuevo"
-                            sx={{
-                              opacity:     0,
-                              p:           0.5,
-                              borderRadius: '4px',
-                              color:       TINTA.tenue,
-                              transition:  'all 0.15s',
-                              display:     'flex',
-                              '&:hover':   { bgcolor: 'rgba(255,255,255,0.2)', color: TINTA.activa },
-                            }}
-                          >
-                            <Plus style={{ width: 12, height: 12 }} />
-                          </Box>
-                        )}
-                      </Box>
-                    );
-                  })}
-                </Box>
-              </Collapse>
-            </Box>
-          );
-        })}
-
-        {/* Al final de la lista que hace scroll —no anclado al pie— y FUERA del
-            orden por uso: es "irse a otro producto", no una sección más de
-            Facturación, así que se queda siempre en el mismo sitio. Mismo
-            componente y misma fuente de datos que en los otros 3 menús: los
-            módulos que la empresa tiene y el rol puede ver. */}
-        <RailModulos current="facturacion" />
-      </Box>
-
-      {/* La versión lleva a Novedades: ver el número y querer saber qué cambió es
-          el mismo gesto. Evita un item más en el menú para algo que se mira de
-          vez en cuando. */}
-      <Box sx={{ px: 2, py: 1.25, borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-        <Typography
-          component={Link}
-          href="/dashboard/novedades"
-          onClick={onClose}
-          title="Ver qué hay de nuevo"
-          className="nav-text"
-          sx={{
-            fontSize: '0.6875rem', fontWeight: 500, color: TINTA.tenue, whiteSpace: 'nowrap',
-            textDecoration: 'none', transition: 'color 0.15s',
-            '&:hover': { color: TINTA.hover },
-          }}
-        >
-          Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
-        </Typography>
-      </Box>
-    </Box>
+        {/* Secciones — misma pieza que en POS, Escolar y Administración
+            (components/rail). El orden lo pone useOrdenNav: el uso de los
+            últimos días, no el orden en que están escritas arriba. */}
+        <RailSecciones secciones={seccionesBase} onNavegar={onClose} puedeVer={can} />
+    </RailArmazon>
   );
 }
 
@@ -923,33 +577,9 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
 
       {/* Arquitectura idéntica al Punto de Venta: rail full-height a la izquierda
           (mismo menú que se abre/cierra al pasar el mouse) + columna de contenido
-          (header + página) a la derecha. */}
-      <Box
-          component="aside"
-          sx={{ width: navFijo ? SIDEBAR_WIDTH : RAIL_WIDTH, flexShrink: 0, display: { xs: 'none', lg: 'block' }, position: 'relative' }}
-        >
-          <Box
-            sx={{
-              position:   'absolute',
-              top:        0,
-              left:       0,
-              height:     '100%',
-              width:      navFijo ? SIDEBAR_WIDTH : RAIL_WIDTH,
-              overflow:   'hidden',
-              zIndex:     40,
-              transition: 'width 0.2s ease, box-shadow 0.2s ease',
-              '& .nav-text':      { opacity: navFijo ? 1 : 0, transition: 'opacity 0.12s ease' },
-              '& .nav-children':  { display: navFijo ? 'block' : 'none' },
-              ...(navFijo ? {} : {
-                '&:hover':               { width: SIDEBAR_WIDTH, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
-                '&:hover .nav-text':     { opacity: 1 },
-                '&:hover .nav-children': { display: 'block' },
-              }),
-            }}
-          >
-            <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} />
-          </Box>
-        </Box>
+          (header + página) a la derecha. El armazón —ancho, plegado y hover— lo
+          pone RailArmazon, el mismo de los otros tres módulos. */}
+      <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} />
 
       {/* Mobile Drawer */}
       <Drawer
@@ -959,10 +589,10 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', lg: 'none' },
-          '& .MuiDrawer-paper': { width: SIDEBAR_WIDTH, boxSizing: 'border-box', border: 'none' },
+          '& .MuiDrawer-paper': { width: ANCHO_ABIERTO, boxSizing: 'border-box', border: 'none' },
         }}
       >
-        <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} onClose={() => setMobileOpen(false)} />
+        <SidebarContent teams={teams} activeTeamId={activeTeamId} dgiiHabilitado={dgiiHabilitado} variant="drawer" onClose={() => setMobileOpen(false)} />
       </Drawer>
 
       {/* Columna de contenido: header (barra) + página */}
