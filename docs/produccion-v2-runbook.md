@@ -117,12 +117,36 @@ las seis migraciones escolares corren sobre tablas vacías.
 
 Comprobación: 1.232 columnas antes → 1.259 después, 0 columnas perdidas.
 
-## Fase 2 · Planes a las 22 empresas
+## Fase 2 · Planes a las 22 empresas — HECHA (2026-08-15)
 
-El SQL está en [`prod-planes-existentes.md`](./prod-planes-existentes.md).
-Depende de la decisión 0.1. Incluye poner `subscription_status = 'admin'` en
-las 8 filas que lo tienen NULL: con el cobro encendido, un NULL cae en «tu
-empresa no tiene un plan activo» y se queda sin emitir.
+Corrida con el mismo método: pasada en seco con `ROLLBACK`, comprobación, y
+luego `COMMIT`. Resultado: 22 con `multisucursal`, 21 con `["pos"]`, 22 con
+acceso `admin`, 2 con override.
+
+| | |
+|---|---|
+| Todas | `multisucursal` — e-CF sin tope, 8 usuarios |
+| Yomalia (19) | `multisucursal` con `adicionales = []`, **sin POS** |
+| Yisrael Technology (2) y Andrés Bello (9) | + `modulos_override` con `escolar` |
+| Las 8 filas con estado NULL | pasadas a `admin` |
+
+**Hoy no cambia nada visible**: con el cobro apagado los módulos siguen
+saliendo de `modulos_habilitados`. Esto es lo que evita que el día que se
+encienda `BILLING_ENABLED` las 22 caigan a «Gratis, 0 comprobantes».
+
+### Sobre la decisión 0.1 — resuelta
+
+Se consultó producción antes de decidir: **Andrés Bello tiene el módulo
+escolar encendido y CERO datos escolares** — 0 estudiantes, 0 matrículas, 0
+períodos, 0 grados, 0 conceptos, 0 cargos, 0 tutores, 0 pagos. Con 579
+comprobantes y 603 clientes, es un cliente de facturación con un menú
+encendido de sobra, no un colegio operando.
+
+Así que el override no le «salva» nada: le mantiene un menú que da a una
+pantalla vacía. Cuesta cero y no cambia su pantalla, que es la razón de
+ponerlo. Ponerlos en un tramo de colegio habría sido cobrarles US$135–500 al
+mes por un módulo que no han tocado. Eso se vende cuando vayan a cargar los
+estudiantes; ese día pasan a `colegio-*` y se quita el override.
 
 ## Fase 3 · Stripe live — HECHA (2026-08-14)
 
