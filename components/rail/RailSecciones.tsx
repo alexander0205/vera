@@ -14,6 +14,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { MODULE_HOME, type ModuleKey } from '@/lib/config/modules';
 import Box from '@mui/material/Box';
 import Collapse from '@mui/material/Collapse';
 import { ChevronDown, Plus } from 'lucide-react';
@@ -106,9 +107,22 @@ export function EnlaceSeccion({
 
 export function RailSecciones({
   secciones,
+  modulo,
   onNavegar,
   puedeVer,
 }: {
+  /**
+   * El módulo de este rail, para saber qué es «la raíz».
+   *
+   * En los subdominios de módulo el proxy sirve la portada por REWRITE, así
+   * que la barra del navegador dice `/` aunque se esté viendo `/pos`.
+   * `usePathname()` devuelve esa `/`, y sin esto ningún ítem quedaba marcado
+   * justo en la pantalla por la que entra todo el mundo.
+   *
+   * Va como prop y no leyendo `location`: es el mismo valor en el servidor y
+   * en el cliente, así que no puede producir un desajuste de hidratación.
+   */
+  modulo: ModuleKey;
   /** Las secciones EN SU ORDEN POR DEFECTO: el que ve quien entra por primera
    *  vez, y el que rompe los empates cuando dos se usan lo mismo. */
   secciones: RailSeccion[];
@@ -117,7 +131,10 @@ export function RailSecciones({
   /** Gate del atajo "+" de un hijo. Sin él, todos los atajos se muestran. */
   puedeVer?: (href: string) => boolean;
 }) {
-  const pathname = usePathname();
+  const rutaNavegador = usePathname();
+  // En la portada de un subdominio de módulo, la ruta efectiva es la del
+  // módulo aunque el navegador diga `/`.
+  const pathname = rutaNavegador === '/' ? MODULE_HOME[modulo] : rutaNavegador;
   const esActiva = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
 

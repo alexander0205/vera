@@ -259,7 +259,10 @@ export function ModuleHeader({
             justifyContent: 'center',
             px: { xs: 0, sm: 1 },
           }}>
-            <GlobalSearch onAbiertoChange={setBuscadorAbierto} />
+            {/* `current` y no la URL: en los subdominios el proxy sirve la portada
+                por rewrite y la ruta es `/`, así que deducirlo de ahí caía
+                siempre a facturación. */}
+            <GlobalSearch modulo={current ?? undefined} onAbiertoChange={setBuscadorAbierto} />
           </Box>
 
           <Box {...apartar(buscadorAbierto, 56)}>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
 import {
-  moduleForHost, esHostApp, esRutaDeCuenta, moduloDeRuta, hostDeModulo,
+  moduleForHost, esHostApp, esRutaDeCuenta, moduloDeRuta, hostDeModulo, MODULE_HOME,
 } from '@/lib/config/modules';
 
 const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar'];
@@ -14,14 +14,30 @@ const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar'];
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get('session');
-  const isProtectedRoute = protectedRoutes.some(p => pathname.startsWith(p));
+
+  const hostActual = request.headers.get('host');
+  const mod = moduleForHost(hostActual);
+
+  /**
+   * La ruta que se va a SERVIR, que no siempre es la que pide el navegador.
+   *
+   * En los subdominios de módulo la raíz se sirve por rewrite: el navegador
+   * pide `/` y se le entrega `/pos`. Comparar el guard contra `/` dejaba la
+   * portada del POS, del panel y de colegios fuera de `protectedRoutes` —la
+   * pantalla por la que entra todo el mundo—, y la única defensa que quedaba
+   * era el guard de la propia página.
+   *
+   * Ese guard funciona (se comprobó: sin sesión el cuerpo llega vacío y con
+   * un REDIRECT dentro), pero una capa que se apaga sola cuando cambia el
+   * routing no es una capa. Resolver la ruta efectiva ANTES de mirar los
+   * permisos deja el proxy comprobando lo que de verdad se va a servir.
+   */
+  const rutaServida = mod && pathname === '/' ? MODULE_HOME[mod] : pathname;
+  const isProtectedRoute = protectedRoutes.some(p => rutaServida.startsWith(p));
 
   if (isProtectedRoute && !sessionCookie) {
     return NextResponse.redirect(new URL('/sign-in', request.url));
   }
-
-  const hostActual = request.headers.get('host');
-  const mod = moduleForHost(hostActual);
 
   // ── Entrar, registrarse y configurar la cuenta viven en app.zero.com.do ──
   //
@@ -69,9 +85,21 @@ export async function proxy(request: NextRequest) {
   // Home del módulo según el host. Solo se toca la raíz (y /dashboard exacto
   // en el host POS) — las rutas profundas quedan protegidas por los guards de
   // página/módulo, no por el proxy.
+  //
+  // La raíz va por REWRITE y no por redirect: `pos.zero.com.do` sirve el POS
+  // sin que la barra acabe en `pos.zero.com.do/pos`, que era repetir el nombre
+  // del módulo dos veces. El `/dashboard` del host POS sí sigue siendo un
+  // redirect — ahí el usuario pidió otra cosa y hay que llevarlo, no
+  // disimularlo.
+  //
+  // El precio del rewrite: para el navegador la ruta es `/`, así que
+  // `usePathname()` devuelve `/` y no `/pos`. Quien resalta el menú o decide
+  // el módulo del buscador ya no puede deducirlo de la URL, y por eso ahora se
+  // lo pasamos como prop (ver `RailSecciones` y `GlobalSearch`). Sin esa parte
+  // el rewrite deja el menú sin nada marcado al entrar.
   if (mod === 'pos') {
     if (pathname === '/') {
-      return NextResponse.redirect(new URL('/pos', request.url));
+      return NextResponse.rewrite(new URL('/pos', request.url));
     }
     if (pathname === '/dashboard') {
       // Post-login genérico apunta a /dashboard; en el host POS el destino es /pos.
@@ -79,11 +107,14 @@ export async function proxy(request: NextRequest) {
     }
   } else if (mod === 'facturacion') {
     if (pathname === '/') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.rewrite(new URL('/dashboard', request.url));
     }
   } else if (mod === 'escolar') {
     // colegio.zero.com.do — el módulo se llama `escolar` por dentro.
-    if (pathname === '/' || pathname === '/dashboard') {
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/escolar', request.url));
+    }
+    if (pathname === '/dashboard') {
       return NextResponse.redirect(new URL('/escolar', request.url));
     }
   } else if (esHostApp(hostActual) && pathname === '/') {

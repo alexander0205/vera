@@ -199,6 +199,7 @@ function Encabezado({ children }: { children: React.ReactNode }) {
 }
 
 export function GlobalSearch({
+  modulo: moduloProp,
   /**
    * Avisa al header de que se entró o salió del modo foco, para que aparte a
    * los vecinos (empresa, módulos, avatar). Tiene que ser estable —el `set` de
@@ -206,6 +207,18 @@ export function GlobalSearch({
    */
   onAbiertoChange,
 }: {
+  /**
+   * En qué módulo estamos, dicho por quien lo sabe.
+   *
+   * Antes salía siempre de la URL, y en los subdominios el proxy sirve la
+   * portada por rewrite: la ruta es `/` y la deducción caía al default,
+   * `facturacion`. Entrar al POS y que el buscador ofreciera primero facturas
+   * es justo lo contrario de lo que se pidió.
+   *
+   * Se sigue mirando la URL cuando no llega la prop, para las pantallas que
+   * montan el buscador sin shell.
+   */
+  modulo?: ModuleKey;
   onAbiertoChange?: (abierto: boolean) => void;
 } = {}) {
   const router = useRouter();
@@ -220,7 +233,7 @@ export function GlobalSearch({
   const navegandoRef = useRef(false);
   const [caja, setCaja] = useState<CajaAnclaje | null>(null);
 
-  const modulo = moduloDeRuta(pathname ?? '');
+  const modulo = moduloProp ?? moduloDeRuta(pathname ?? '');
 
   /**
    * Mide el campo para colgarle el desplegable con SU mismo borde izquierdo y

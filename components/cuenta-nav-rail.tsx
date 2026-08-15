@@ -41,7 +41,7 @@ const SECCIONES: RailSeccion[] = [
 export function CuentaNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   return (
     <RailArmazon modulo="administracion" variant={variant}>
-      <RailSecciones secciones={SECCIONES} />
+      <RailSecciones secciones={SECCIONES} modulo="administracion" />
     </RailArmazon>
   );
 }

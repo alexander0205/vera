@@ -79,7 +79,7 @@ const VISIBLES: RailSeccion[] = SECCIONES.filter(s => !s.oculto);
 export function EscolarNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   return (
     <RailArmazon modulo="escolar" variant={variant}>
-      <RailSecciones secciones={VISIBLES} />
+      <RailSecciones secciones={VISIBLES} modulo="escolar" />
     </RailArmazon>
   );
 }

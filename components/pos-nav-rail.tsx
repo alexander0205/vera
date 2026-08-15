@@ -48,7 +48,7 @@ const SECCIONES: RailSeccion[] = [
 export function PosNavRail({ variant = 'rail' }: { variant?: 'rail' | 'drawer' } = {}) {
   return (
     <RailArmazon modulo="pos" variant={variant}>
-      <RailSecciones secciones={SECCIONES} />
+      <RailSecciones secciones={SECCIONES} modulo="pos" />
     </RailArmazon>
   );
 }

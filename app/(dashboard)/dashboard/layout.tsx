@@ -249,7 +249,11 @@ function SidebarContent({
   variant?: 'rail' | 'drawer';
   onClose?: () => void;
 }) {
-  const pathname    = usePathname();
+  const rutaNavegador = usePathname();
+  // En facturacion.zero.com.do el proxy sirve el panel por rewrite, así que la
+  // barra dice `/` aunque se esté viendo `/dashboard`. Sin normalizarlo, nada
+  // quedaba marcado en el menú justo al entrar.
+  const pathname    = rutaNavegador === '/' ? '/dashboard' : rutaNavegador;
   const activeTeam  = teams.find(t => t.id === activeTeamId) ?? teams[0];
   const role        = activeTeam?.role;
   const cajaHabilitada = activeTeam?.cajaHabilitada ?? false;
@@ -504,7 +508,7 @@ function SidebarContent({
         {/* Secciones — misma pieza que en POS, Escolar y Administración
             (components/rail). El orden lo pone useOrdenNav: el uso de los
             últimos días, no el orden en que están escritas arriba. */}
-        <RailSecciones secciones={seccionesBase} onNavegar={onClose} puedeVer={can} />
+        <RailSecciones secciones={seccionesBase} modulo="facturacion" onNavegar={onClose} puedeVer={can} />
     </RailArmazon>
   );
 }
