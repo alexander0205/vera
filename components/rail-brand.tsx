@@ -30,14 +30,6 @@ import { LogoZero } from '@/components/marca-zero';
 import { Isotipo } from '@/lib/marca/isotipo';
 
 /**
- * Por debajo de este ancho, la cabecera enseña el ícono en vez del logotipo.
- *
- * Abierta mide ~230px y cerrada ~34, así que 120 separa los dos casos con
- * holgura de sobra por los dos lados.
- */
-const UMBRAL = 120;
-
-/**
  * Alto del bloque de marca. Tiene que ser EXACTAMENTE el del header.
  *
  * El rail y la barra superior se tocan en la esquina, así que sus dos líneas
@@ -76,28 +68,26 @@ export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey }) {
         borderBottom: '1px solid rgba(255,255,255,0.1)',
         flexShrink: 0,
         overflow: 'hidden',
-
-        /**
-         * Consulta de CONTENEDOR, no de ventana.
-         *
-         * Cuál de los dos se ve depende de si el rail está abierto, y ese dato
-         * vive en cada uno de los cuatro raíles, no aquí. Se podía pedir por
-         * props o añadir una clase inversa a `.nav-text` en los cuatro
-         * archivos; las dos formas obligan a tocar código ajeno y a que nadie
-         * se olvide de mantenerlo sincronizado.
-         *
-         * Esta caja mide lo que mide el rail. Declarándola contenedor, sus
-         * hijos responden a su ancho y la decisión se queda entera aquí
-         * dentro. Si mañana aparece un quinto rail, funciona sin tocarlo.
-         *
-         * El alineado va en el HIJO y no aquí porque un contenedor no puede
-         * consultarse a sí mismo: la regla que centra tiene que aplicarse a
-         * algo que esté por debajo del que se mide.
-         */
-        containerType: 'inline-size',
       }}
     >
+      {/**
+       * Aquí se describe SOLO el rail abierto. Quién decide lo contrario es
+       * `RailArmazon`, por la clase `marca-caja`, igual que ya hace con
+       * `.nav-text` y `.nav-children`.
+       *
+       * Esto empezó como una consulta de contenedor sobre esta misma caja, y
+       * no podía funcionar: el contenido del rail mide SIEMPRE los 264 del
+       * estado abierto y es la caja de fuera la que recorta a 68 —está escrito
+       * en la cabecera de `RailArmazon`—, así que la consulta leía 264 tanto
+       * plegado como desplegado. Siempre ganaba el logotipo horizontal, y el
+       * recorte a 68 dejaba a la vista el trozo del medio: el símbolo cortado
+       * que se veía en el rail cerrado.
+       *
+       * La lección es que el ancho aquí no es un dato: hay que preguntárselo a
+       * quien recorta.
+       */}
       <Box
+        className="marca-caja"
         sx={{
           // Alto completo del bloque: es lo que centra la marca en vertical
           // sin depender de un relleno que habría que recalcular cada vez que
@@ -105,30 +95,14 @@ export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey }) {
           height: '100%',
           display: 'flex', alignItems: 'center',
 
-          // ── Por defecto, el rail CERRADO ──────────────────────────────────
-          //
-          // La regla base describe el estado estrecho y la consulta añade el
-          // ancho, no al revés. Escrito al derecho —relleno de 26 en la base y
-          // `pl: 0` dentro de la consulta— el centrado depende de que un
-          // override llegue a cero, y basta con que algo herede unos píxeles
-          // para que el símbolo se vaya a un lado dentro de un rail donde solo
-          // sobran 8. Así el caso delicado es el que no necesita deshacer nada.
-          justifyContent: 'center',
-          px: 0,
-          '& .marca-abierta': { display: 'none' },
-          '& .marca-cerrada': { display: 'block' },
-
-          // ── Rail ABIERTO ──────────────────────────────────────────────────
           // 26px a la izquierda, que es donde empiezan los iconos del menú: la
           // lista lleva `px: 1.5` (12) y cada item `px: 1.75` (14). Sin ese
           // número el logo arranca pegado al borde y se ve desalineado con
           // todo lo de abajo.
-          [`@container (min-width: ${UMBRAL + 1}px)`]: {
-            justifyContent: 'flex-start',
-            pl: '26px', pr: 1,
-            '& .marca-abierta': { display: 'block' },
-            '& .marca-cerrada': { display: 'none' },
-          },
+          justifyContent: 'flex-start',
+          pl: '26px', pr: 1,
+          '& .marca-abierta': { display: 'block' },
+          '& .marca-cerrada': { display: 'none' },
         }}
       >
         {/* Abierto: el logotipo horizontal en blanco sobre el azul del rail. */}

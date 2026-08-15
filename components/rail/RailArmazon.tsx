@@ -106,6 +106,38 @@ export function RailArmazon({
             '&:hover':               { width: ANCHO_ABIERTO, boxShadow: '6px 0 28px rgba(0,0,0,0.22)' },
             '&:hover .nav-text':     { opacity: 1 },
             '&:hover .nav-children': { display: 'block' },
+
+            /**
+             * La marca se entera por aquí, y tiene que ser por aquí.
+             *
+             * `RailBrand` no puede decidirlo solo: el contenido mide SIEMPRE
+             * los 264 del estado abierto y es ESTA caja la que recorta a 68,
+             * así que cualquier medida tomada ahí dentro da «abierto» en los
+             * dos casos. Lo que se veía plegado era el logotipo horizontal
+             * recortado a 68 —el símbolo partido— en vez del isotipo.
+             *
+             * Plegado: el símbolo suelto y centrado. `pl: 0` es imprescindible;
+             * con los 26 de la izquierda no queda nada que centrar en 68px.
+             */
+            // `&&` y no `&`: duplica la clase para PESAR MÁS. `RailBrand` se
+            // renderiza aquí dentro, así que Emotion inyecta su regla después
+            // que la nuestra; con una sola clase cada lado empatan a (0,2,0) y
+            // gana el que va último — el suyo. Con `&&` esto sube a (0,3,0) y
+            // deja de depender del orden de montaje, que no controlamos.
+            // `width: ANCHO_RAIL` no es de adorno: la caja de marca es hija
+            // del contenido, que mide 264 SIEMPRE. Sin fijarle el ancho, un
+            // `justifyContent: center` centra dentro de 264 y deja el símbolo
+            // en x≈132 — fuera de la columna visible de 68, o sea invisible.
+            // Centrar exige primero acotar el sitio donde se centra.
+            '&& .marca-caja':    { justifyContent: 'center', pl: 0, pr: 0, width: ANCHO_RAIL },
+            '&& .marca-abierta': { display: 'none' },
+            '&& .marca-cerrada': { display: 'block' },
+
+            // Al desplegarse con el mouse vuelve el logotipo, alineado con los
+            // iconos de abajo igual que en el estado fijo.
+            '&&:hover .marca-caja':    { justifyContent: 'flex-start', pl: '26px', pr: 1, width: '100%' },
+            '&&:hover .marca-abierta': { display: 'block' },
+            '&&:hover .marca-cerrada': { display: 'none' },
           }),
         }}
       >
