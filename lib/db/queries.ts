@@ -302,8 +302,14 @@ export async function getDashboardStats(teamId: number) {
 async function computeDashboardStats(teamId: number) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const seisMesesAtras = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const noAnulado = sql`${ecfDocuments.estado} <> 'ANULADO'`;
 
-  const [facturasTotal, facturasMes, montoMesRows, secuenciasRows, teamRow] =
+  const [
+    facturasTotal, facturasMes, montoMesRows, montoMesAnteriorRows,
+    secuenciasRows, teamRow, serieMesesRows, porTipoRows, topClientesRows,
+  ] =
     await Promise.all([
       // Total de documentos
       db
@@ -324,13 +330,17 @@ async function computeDashboardStats(teamId: number) {
       db
         .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
         .from(ecfDocuments)
-        .where(
-          and(
-            eq(ecfDocuments.teamId, teamId),
-            gte(ecfDocuments.createdAt, startOfMonth),
-            sql`${ecfDocuments.estado} <> 'ANULADO'`
-          )
-        ),
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, startOfMonth), noAnulado)),
+      // Ingresos del mes anterior — referencia para el % de variación.
+      db
+        .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
+        .from(ecfDocuments)
+        .where(and(
+          eq(ecfDocuments.teamId, teamId),
+          gte(ecfDocuments.createdAt, startOfPrevMonth),
+          lt(ecfDocuments.createdAt, startOfMonth),
+          noAnulado,
+        )),
       // Secuencias disponibles
       db
         .select()
@@ -342,6 +352,46 @@ async function computeDashboardStats(teamId: number) {
         .from(teams)
         .where(eq(teams.id, teamId))
         .limit(1),
+      // Serie de ingresos de los últimos 6 meses (incluye el actual) — alimenta
+      // el mini-gráfico de tendencia del panel.
+      db
+        .select({
+          mes:   sql<string>`to_char(date_trunc('month', ${ecfDocuments.createdAt}), 'YYYY-MM')`,
+          monto: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, seisMesesAtras), noAnulado))
+        .groupBy(sql`date_trunc('month', ${ecfDocuments.createdAt})`)
+        .orderBy(sql`date_trunc('month', ${ecfDocuments.createdAt})`),
+      // Desglose por tipo de comprobante, este mes.
+      db
+        .select({
+          tipo:  ecfDocuments.tipoEcf,
+          count: count(),
+          monto: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        })
+        .from(ecfDocuments)
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, startOfMonth), noAnulado))
+        .groupBy(ecfDocuments.tipoEcf)
+        .orderBy(desc(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0)`)),
+      // Top 5 clientes del mes por monto facturado.
+      db
+        .select({
+          cliente: ecfDocuments.razonSocialComprador,
+          rnc:     ecfDocuments.rncComprador,
+          monto:   sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+          count:   count(),
+        })
+        .from(ecfDocuments)
+        .where(and(
+          eq(ecfDocuments.teamId, teamId),
+          gte(ecfDocuments.createdAt, startOfMonth),
+          noAnulado,
+          sql`${ecfDocuments.razonSocialComprador} is not null and ${ecfDocuments.razonSocialComprador} <> ''`,
+        ))
+        .groupBy(ecfDocuments.razonSocialComprador, ecfDocuments.rncComprador)
+        .orderBy(desc(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0)`))
+        .limit(5),
     ]);
 
   const secuenciasDisponibles = secuenciasRows.reduce((acc, s) => {
@@ -349,14 +399,27 @@ async function computeDashboardStats(teamId: number) {
     return acc + Math.max(0, disponibles);
   }, 0);
 
+  const montoMesCentavos = Number(montoMesRows[0]?.total ?? 0);
+  const montoMesAnteriorCentavos = Number(montoMesAnteriorRows[0]?.total ?? 0);
+  const variacionMes = montoMesAnteriorCentavos > 0
+    ? ((montoMesCentavos - montoMesAnteriorCentavos) / montoMesAnteriorCentavos) * 100
+    : null; // sin base del mes anterior no hay % que mostrar, no es 0% de verdad
+
   return {
     facturasTotal: facturasTotal[0]?.total ?? 0,
     facturasMes: facturasMes[0]?.total ?? 0,
-    montoMesCentavos: Number(montoMesRows[0]?.total ?? 0),
+    montoMesCentavos,
+    montoMesAnteriorCentavos,
+    variacionMes,
     secuenciasDisponibles,
     plan: teamRow[0]?.planName ?? 'Gratis',
     rnc: teamRow[0]?.rnc ?? null,
     tieneCertificado: !!teamRow[0]?.certP12Ciphered,
+    serieMeses: serieMesesRows.map(r => ({ mes: r.mes, montoCentavos: Number(r.monto) })),
+    porTipo: porTipoRows.map(r => ({ tipo: r.tipo, count: r.count, montoCentavos: Number(r.monto) })),
+    topClientes: topClientesRows.map(r => ({
+      cliente: r.cliente ?? 'Sin nombre', rnc: r.rnc, montoCentavos: Number(r.monto), count: r.count,
+    })),
   };
 }
 

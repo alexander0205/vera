@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
-  FileText, Plus, Hash, AlertTriangle, TrendingUp, Package, Users,
+  FileText, Plus, Hash, AlertTriangle, TrendingUp, TrendingDown, Package, Users,
+  ArrowUpRight, ArrowDownRight, Wallet2, BarChart3,
 } from 'lucide-react';
 import { getTeamIdForUser, getDashboardStats, getEcfDocuments, getCuentasPorCobrar, getUser, getTeamRoleForUser } from '@/lib/db/queries';
 import { getUserModules } from '@/lib/auth/modules';
@@ -17,6 +18,9 @@ import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
 import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
+
+const NOMBRE_MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const rd = (centavos: number) => `RD$${(centavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
 
 const ESTADO_CHIP: Record<string, { label: string; color: 'success' | 'warning' | 'error' | 'default' | 'info' | 'primary' | 'secondary'; variant?: 'filled' | 'outlined' }> = {
   ACEPTADO:             { label: 'Aceptado',    color: 'success'  },
@@ -123,9 +127,10 @@ export default async function DashboardPage() {
         {[
           {
             label: 'Ingresos del mes',
-            icon:  TrendingUp,
+            icon:  stats.variacionMes != null && stats.variacionMes < 0 ? TrendingDown : TrendingUp,
             value: `RD$${(stats.montoMesCentavos / 100).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`,
             sub:   `${stats.facturasMes} comprobante${stats.facturasMes !== 1 ? 's' : ''}`,
+            deltaPct: stats.variacionMes,
             color: '#3658e1',
             bg:    '#eef2fe',
           },
@@ -134,6 +139,7 @@ export default async function DashboardPage() {
             icon:  FileText,
             value: stats.facturasTotal.toLocaleString('es-DO'),
             sub:   'documentos e-CF',
+            deltaPct: null as number | null,
             color: '#7c3aed',
             bg:    '#faf5ff',
           },
@@ -142,6 +148,7 @@ export default async function DashboardPage() {
             icon:  Hash,
             value: stats.secuenciasDisponibles.toLocaleString('es-DO'),
             sub:   'disponibles',
+            deltaPct: null as number | null,
             color: '#0369a1',
             bg:    '#f0f9ff',
           },
@@ -173,12 +180,194 @@ export default async function DashboardPage() {
               <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', lineHeight: 1.2 }}>
                 {stat.value}
               </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}>
-                {stat.sub}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {stat.sub}
+                </Typography>
+                {stat.deltaPct != null && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, color: stat.deltaPct >= 0 ? 'success.main' : 'error.main' }}>
+                    {stat.deltaPct >= 0
+                      ? <ArrowUpRight style={{ width: 13, height: 13 }} />
+                      : <ArrowDownRight style={{ width: 13, height: 13 }} />}
+                    <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                      {Math.abs(stat.deltaPct).toFixed(0)}% vs mes anterior
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
             </CardContent>
           </Card>
         ))}
+      </Box>
+
+      {/* Tendencia + desglose por tipo + top clientes + cuentas por cobrar */}
+      <Box
+        sx={{
+          display:             'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '1.3fr 1fr' },
+          gap:                 2,
+          mb:                  3,
+        }}
+      >
+        {/* Tendencia de ingresos, últimos 6 meses */}
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+          <Box sx={{ px: 3, pt: 2.5, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <BarChart3 style={{ width: 16, height: 16, color: '#6b7280' }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'text.primary' }}>
+              Tendencia de ingresos
+            </Typography>
+          </Box>
+          <Divider />
+          <Box sx={{ px: 3, py: 2.5 }}>
+            {stats.serieMeses.every(m => m.montoCentavos === 0) ? (
+              <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', py: 2 }}>
+                Sin ingresos registrados en los últimos 6 meses.
+              </Typography>
+            ) : (
+              (() => {
+                const max = Math.max(...stats.serieMeses.map(m => m.montoCentavos), 1);
+                return (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1.5, height: 140 }}>
+                    {stats.serieMeses.map(m => {
+                      const [y, mo] = m.mes.split('-');
+                      const esActual = Number(mo) - 1 === new Date().getMonth() && Number(y) === new Date().getFullYear();
+                      const alturaPct = Math.max(4, (m.montoCentavos / max) * 100);
+                      return (
+                        <Box key={m.mes} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, height: '100%', justifyContent: 'flex-end' }}>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.6875rem', fontWeight: 600 }}>
+                            {m.montoCentavos > 0 ? rd(m.montoCentavos).replace('RD$', '').split('.')[0] : ''}
+                          </Typography>
+                          <Box
+                            sx={{
+                              width: '100%',
+                              maxWidth: 40,
+                              height: `${alturaPct}%`,
+                              borderRadius: '6px 6px 2px 2px',
+                              bgcolor: esActual ? 'primary.main' : '#c7d2fe',
+                              transition: 'height 0.2s',
+                            }}
+                          />
+                          <Typography variant="caption" sx={{ color: esActual ? 'primary.main' : 'text.secondary', fontWeight: esActual ? 700 : 500, fontSize: '0.75rem' }}>
+                            {NOMBRE_MES[Number(mo) - 1]}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                );
+              })()
+            )}
+          </Box>
+        </Card>
+
+        {/* Cuentas por cobrar — resumen */}
+        <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+          <Box sx={{ px: 3, pt: 2.5, pb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Wallet2 style={{ width: 16, height: 16, color: '#6b7280' }} />
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                Cuentas por cobrar
+              </Typography>
+            </Box>
+            <Link href="/dashboard/cuentas-por-cobrar" style={{ textDecoration: 'none' }}>
+              <MuiButton variant="text" size="small" sx={{ color: 'primary.main', fontWeight: 600 }}>Ver todas →</MuiButton>
+            </Link>
+          </Box>
+          <Divider />
+          {ar.totales.count === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4, px: 3 }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                No hay cuentas pendientes de cobro.
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ px: 3, py: 2.5, display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Total pendiente</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary' }}>{rd(ar.totales.pendiente)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>{ar.totales.count} factura{ar.totales.count !== 1 ? 's' : ''} en cartera</Typography>
+              </Box>
+              {ar.totales.countVencidas > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', pt: 1, mt: 0.5, borderTop: '1px solid #f3f4f6' }}>
+                  <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 600 }}>
+                    {ar.totales.countVencidas} vencida{ar.totales.countVencidas !== 1 ? 's' : ''}
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: 'error.main' }}>{rd(ar.totales.vencido)}</Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Card>
+
+        {/* Desglose por tipo de comprobante, este mes */}
+        {stats.porTipo.length > 0 && (
+          <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+            <Box sx={{ px: 3, pt: 2.5, pb: 1.5 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                Por tipo de comprobante — este mes
+              </Typography>
+            </Box>
+            <Divider />
+            <Box>
+              {stats.porTipo.map((t, i) => (
+                <Box
+                  key={t.tipo}
+                  sx={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    px: 3, py: 1.5, borderBottom: i < stats.porTipo.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                    <Chip label={t.count} size="small" sx={{ fontWeight: 700, height: 22, minWidth: 32 }} />
+                    <Typography variant="body2" noWrap sx={{ color: 'text.primary' }}>
+                      {TIPOS_ECF[t.tipo as keyof typeof TIPOS_ECF] ?? t.tipo}
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', flexShrink: 0, ml: 2 }}>
+                    {rd(t.montoCentavos)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Card>
+        )}
+
+        {/* Top 5 clientes del mes */}
+        {stats.topClientes.length > 0 && (
+          <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+            <Box sx={{ px: 3, pt: 2.5, pb: 1.5 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                Top clientes — este mes
+              </Typography>
+            </Box>
+            <Divider />
+            <Box>
+              {stats.topClientes.map((c, i) => (
+                <Box
+                  key={`${c.cliente}-${c.rnc ?? i}`}
+                  sx={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2,
+                    px: 3, py: 1.5, borderBottom: i < stats.topClientes.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: 'text.primary' }}>
+                      {c.cliente}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      {c.count} comprobante{c.count !== 1 ? 's' : ''}
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary', flexShrink: 0 }}>
+                    {rd(c.montoCentavos)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Card>
+        )}
       </Box>
 
       {/* Recent invoices */}
