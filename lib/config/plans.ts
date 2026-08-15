@@ -150,13 +150,32 @@ export const PLANS: PlanDef[] = [
     },
   },
   {
+    /**
+     * La CLAVE sigue diciendo `multisucursal` y el nombre ya no.
+     *
+     * No es un descuido. La clave es un identificador interno: está escrita en
+     * `plan_name` de las 22 empresas de producción, en el nombre de la
+     * variable `STRIPE_PRICE_MULTISUCURSAL` y en la metadata del precio de
+     * Stripe. Cambiarla obliga a mover las tres cosas a la vez, y si el código
+     * llega antes que los datos, `getPlan()` no encuentra la clave, cae a
+     * FREE_PLAN y deja a todo el mundo con cero comprobantes — que es
+     * exactamente el fallo que ya pasó una vez.
+     *
+     * Todo ese riesgo, para cambiar algo que ningún usuario ve. El nombre sí
+     * lo ve, y ese es el que estaba mal.
+     */
     key: 'multisucursal', familia: 'ecf',
     modulos: [...MODULES_BASE],
-    name: 'Multi-sucursal', price: 65, priceEnvKey: 'STRIPE_PRICE_MULTISUCURSAL',
+    // «Multi-sucursal» prometía gestión de sucursales, que el sistema NO tiene:
+    // `sucursal` es un texto que se le pone a una secuencia y sale impreso en
+    // la factura, nada más. Lo que de verdad distingue a este plan es ser el
+    // único sin tope de comprobantes, y así el nombre concuerda con el ∞ que
+    // la página de precios ya pinta en su fila.
+    name: 'Ilimitado', price: 65, priceEnvKey: 'STRIPE_PRICE_MULTISUCURSAL',
     limits: { docs: -1, users: 8, trialDocs: -1, estudiantes: -1, whatsappMensajes: -1, smsMensajes: -1 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description: 'Sin tope de comprobantes, para varias sucursales',
+      description: 'Sin tope de comprobantes, para cuando facturar mucho es lo normal',
       badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
       highlighted: false,
       marketingFeatures: ['Comprobantes e-CF ilimitados', '8 usuarios', 'Sistema completo: contabilidad, inventario, caja y reportes 606/607'],
@@ -251,7 +270,7 @@ export const FREE_PLAN: PlanDef = {
  * Acepta las dos formas a propósito. Lo correcto es guardar la CLAVE en
  * `teams.plan_name`, y eso hace ahora todo el código; pero durante un tiempo
  * el checkout y el webhook guardaron el NOMBRE, y ahí se caían cinco de los
- * ocho planes: «Multi-sucursal» no es la clave `multisucursal`, y «Avanzado»
+ * ocho planes: «Ilimitado» no es la clave `multisucursal`, y «Avanzado»
  * no es `colegio-avanzado`. Sin coincidencia, esta función devolvía FREE_PLAN
  * —cero comprobantes, sin módulos, solo lectura— a un colegio que acababa de
  * pagar US$350.

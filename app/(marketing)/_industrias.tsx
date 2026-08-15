@@ -33,7 +33,6 @@ const TABLA: Record<string, [string, [boolean, boolean, boolean]][]> = {
     ['Punto de venta con turnos', [false, true, false]],
     ['Inventario y almacenes', [true, true, false]],
     ['Compras y gastos', [true, false, false]],
-    ['Multi-sucursal', [false, false, false]],
     ['Contabilidad y reportes 606/607', [true, false, false]],
     ['Todo en un solo sistema', [false, false, false]],
   ],

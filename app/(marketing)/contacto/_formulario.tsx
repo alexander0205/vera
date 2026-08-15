@@ -20,12 +20,12 @@ import { CONTACTO, Cheque, IconoWhatsApp, Iconos } from '../_piezas';
 type Perfil = 'pyme' | 'colegio';
 
 const TAMANOS: Record<Perfil, string[]> = {
-  pyme: ['1 a 3 usuarios', '4 a 8 usuarios', 'Más de 8', 'Varias sucursales'],
+  pyme: ['1 a 3 usuarios', '4 a 8 usuarios', 'Más de 8'],
   colegio: ['Hasta 150 estudiantes', '151 a 300', '301 a 500', 'Más de 500'],
 };
 
 const TEMAS: Record<Perfil, string[]> = {
-  pyme: ['Facturación electrónica', 'Punto de venta', 'Inventario', 'Contabilidad', 'Multi-sucursal', 'Migrar desde Excel'],
+  pyme: ['Facturación electrónica', 'Punto de venta', 'Inventario', 'Contabilidad', 'Migrar desde Excel'],
   colegio: ['Cuotas y matrículas', 'Cobro automático a padres', 'Recordatorios por WhatsApp', 'Portal de padres', 'Contabilidad', 'Migrar desde Excel'],
 };
 

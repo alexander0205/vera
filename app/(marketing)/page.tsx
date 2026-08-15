@@ -76,7 +76,7 @@ const CAMBIOS = [
   },
   {
     titulo: 'Escala sin techo',
-    detalle: 'De un usuario a varias sucursales, con facturas sin tope en los planes altos.',
+    detalle: 'De un usuario a ocho, con facturas sin tope en los planes altos.',
     icono: Iconos.escudo,
   },
 ];

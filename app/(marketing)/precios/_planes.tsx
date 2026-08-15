@@ -139,7 +139,7 @@ export function Planes({ lineas, diasPrueba }: { lineas: LineaVista[]; diasPrueb
 
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           {([
-            { clave: 'pyme', titulo: 'Soy una pyme', detalle: 'Comercio, servicios o negocio con varias sucursales', icono: Iconos.tienda },
+            { clave: 'pyme', titulo: 'Soy una pyme', detalle: 'Comercio, servicios o negocio que factura', icono: Iconos.tienda },
             { clave: 'colegio', titulo: 'Soy un colegio', detalle: 'Institución educativa con matrículas y cuotas', icono: Iconos.colegio },
           ] as const).map(q => {
             const on = perfil === q.clave;
