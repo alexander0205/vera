@@ -121,6 +121,25 @@ export function evaluarSuscripcion(
     );
   }
 
+  // ── Prueba terminada sin tarjeta ──────────────────────────────────────────
+  // `paused` es lo que Stripe deja cuando se acaba una prueba y no hay método
+  // de pago (`trial_settings.end_behavior: pause`). NO es «sin plan»: el plan
+  // está elegido y la suscripción existe — solo falta la tarjeta.
+  //
+  // Sin esta rama caía al final del archivo y se le decía «tu empresa no tiene
+  // un plan activo, elige uno», a alguien que ya eligió. Además de ser falso,
+  // lo mandaba a escoger plan otra vez en vez de a pagar el que tiene.
+  if (status === 'paused') {
+    return trasElVencimiento(
+      team.trialEnd ?? ahora,
+      SOLO_LECTURA.diasTrasPrueba,
+      ahora,
+      cancelacionPendiente,
+      'Se acabó tu prueba. Puedes consultar y descargar tu información; agrega tu método de pago para volver a emitir.',
+      'Se acabó tu prueba. Agrega tu método de pago para reactivar Zero.',
+    );
+  }
+
   // ── Mora ──────────────────────────────────────────────────────────────────
   // Se entra por el estado de Stripe, pero el reloj es `morosoDesde`: Stripe
   // reintenta la tarjeta varias veces y cada reintento vuelve a marcar

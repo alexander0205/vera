@@ -171,10 +171,21 @@ export default async function SuscripcionPage() {
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
             {!sinPlan && team.stripeCustomerId ? (
               <>
+                {/* Cuando ya NO puede escribir, pagar es lo único que importa
+                    en esta pantalla, y tiene que verse como tal.
+                    «Tarjeta y facturas» en botón secundario se lee como un
+                    ajuste, no como «paga aquí»: a alguien cuya prueba acaba de
+                    vencer le queda la sensación de que no hay forma de pagar,
+                    aunque el botón esté delante. Mismo destino, otro peso. */}
                 <form action={customerPortalAction}>
-                  <MuiButton type="submit" variant="outlined" color="primary"
+                  <MuiButton
+                    type="submit"
+                    variant={suscripcion.puedeEscribir ? 'outlined' : 'contained'}
+                    color="primary"
+                    disableElevation
+                    startIcon={suscripcion.puedeEscribir ? undefined : <CreditCard style={{ width: 16, height: 16 }} />}
                     sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-                    Tarjeta y facturas
+                    {suscripcion.puedeEscribir ? 'Tarjeta y facturas' : 'Agregar mi método de pago'}
                   </MuiButton>
                 </form>
                 {/* Cancelar VISIBLE, aunque lleve al mismo sitio.

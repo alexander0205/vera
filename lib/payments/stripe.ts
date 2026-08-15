@@ -244,3 +244,37 @@ export async function crearSuscripcionDePrueba({
 
   return { customerId, subscription };
 }
+
+/**
+ * ¿Este cliente tiene una tarjeta guardada?
+ *
+ * Se pregunta a Stripe en vez de deducirlo del estado de la suscripción, que
+ * es lo que parece obvio y no lo es: en `trialing` puede no haber tarjeta —de
+ * hecho lo normal es que no la haya, porque la prueba no la pide— y en `mora`
+ * sí la hay, solo que no cobra. Atarlo al estado acaba diciéndole «agrega tu
+ * tarjeta» a quien ya la tiene y callándoselo a quien no.
+ *
+ * Devuelve null si no se pudo averiguar. Quien llame decide qué hacer con la
+ * duda; lo que NO puede pasar es que una pantalla se caiga porque Stripe tardó.
+ */
+export async function tieneMetodoDePago(customerId: string | null): Promise<boolean | null> {
+  if (!customerId) return null;
+  try {
+    const cliente = await stripe.customers.retrieve(customerId, {
+      expand: ['invoice_settings.default_payment_method'],
+    });
+    if (cliente.deleted) return null;
+
+    if (cliente.invoice_settings?.default_payment_method) return true;
+
+    // Sin método por defecto todavía puede haber tarjetas guardadas: Stripe
+    // solo marca una por defecto cuando algo se lo pide.
+    const tarjetas = await stripe.paymentMethods.list({
+      customer: customerId, type: 'card', limit: 1,
+    });
+    return tarjetas.data.length > 0;
+  } catch (e) {
+    console.error('[stripe] no se pudo comprobar el método de pago de', customerId, e);
+    return null;
+  }
+}
