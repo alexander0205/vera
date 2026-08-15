@@ -30,13 +30,14 @@ import { BILLING_ENABLED } from '@/lib/config/billing';
 import { getTeamIdForUser, getTeamProfile, getMonthlyEcfCount } from '@/lib/db/queries';
 import {
   getPlan, PLANS, getPlanPriceId, planesDeFamilia, precioTotal, type PlanDef,
+  ADDONS, addonIncluido, familiasOfrecibles, LINEAS_PRODUCTO,
 } from '@/lib/config/plans';
 import { evaluarLimite, PRUEBA } from '@/lib/config/suscripcion';
 import { getSuscripcion } from '@/lib/suscripcion/queries';
 import { cuotaAvisos } from '@/lib/suscripcion/cuota-avisos';
 import { estadoDelTramo } from '@/lib/suscripcion/tramo';
 import { customerPortalAction, checkoutAction } from '@/lib/payments/actions';
-import { stripe } from '@/lib/payments/stripe';
+import { stripe, tieneMetodoDePago } from '@/lib/payments/stripe';
 import { ecfDocuments, teamMembers } from '@/lib/db/schema';
 import { db } from '@/lib/db/drizzle';
 import { TIPOS_ECF } from '@/lib/ecf/types';
@@ -113,6 +114,26 @@ export default async function SuscripcionPage() {
 
   const docsLim = evaluarLimite('docs', usadoEsteMes, planDef.limits.docs, 0);
 
+  // Adicionales que SE COBRAN aparte. Los que el plan ya incluye —el POS en
+  // los tramos de colegio— no suman al precio y listarlos sería mentir sobre
+  // la factura.
+  const extrasFacturados = ADDONS.filter(
+    a => adicionalesDe(team).includes(a.key) && !addonIncluido(planDef.key, a.key),
+  );
+
+  const enPrueba = suscripcion.estado === 'prueba' || suscripcion.estado === 'prueba-por-vencer';
+  const diasDePrueba = suscripcion.diasRestantes ?? 0;
+  const urgente = suscripcion.estado === 'prueba-por-vencer';
+  // `null` = no se pudo preguntar a Stripe. Se trata como «no tiene», que es
+  // el lado seguro: enseñar el botón de más se arregla con un clic; esconderlo
+  // deja a alguien sin saber cómo pagar.
+  const tieneTarjeta = (await tieneMetodoDePago(team.stripeCustomerId)) === true;
+
+  // La otra línea comercial, solo si el salto es seguro (ver familiasOfrecibles).
+  const otrasLineas = familiasOfrecibles(planDef.familia)
+    .map(fam => ({ fam, planes: planesDeFamilia(fam) }))
+    .filter(l => l.planes.length > 0);
+
   return (
     // mx auto: con la columna de 800px anclada a la izquierda quedaba medio
     // viewport vacío en pantallas anchas. Centrada se lee como página de ajustes.
@@ -154,11 +175,62 @@ export default async function SuscripcionPage() {
               <EstadoChip estado={suscripcion.estado} dias={suscripcion.diasRestantes} />
             </Box>
             {!sinPlan && (
-              <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                US${precioTotal(planDef.key, adicionalesDe(team))}/mes
-              </Typography>
+              /* El total y de qué está hecho.
+                 Antes solo se veía «US$74/mes» junto a un plan que la lista de
+                 abajo marca a US$65. La diferencia son los adicionales, y sin
+                 decirlo la pantalla se contradice a sí misma a nueve dólares de
+                 distancia — que es justo el tipo de duda que acaba en soporte. */
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                  US${precioTotal(planDef.key, adicionalesDe(team))}/mes
+                </Typography>
+                {extrasFacturados.length > 0 && (
+                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                    US${planDef.price} {planDef.name}
+                    {extrasFacturados.map(a => ` + US$${a.price} ${a.name}`)}
+                  </Typography>
+                )}
+              </Box>
             )}
           </Box>
+
+          {/* La prueba, con su reloj a la vista.
+              El chip de al lado del nombre decía «Prueba · 12 días» y con eso
+              se daba por informado al usuario. No basta: en una pastilla de 22
+              píxeles no cabe lo único que de verdad quiere saber —qué pasa el
+              día que se acabe— y por eso preguntaba. Aquí se dice entero, y el
+              botón de poner la tarjeta queda al lado de la frase que explica
+              por qué hace falta, no perdido entre acciones. */}
+          {enPrueba && (
+            <Box sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 1.5, p: 2, borderRadius: '10px',
+              bgcolor: urgente ? '#fffbeb' : '#f5f8ff',
+              border: `1px solid ${urgente ? '#fde68a' : '#dbe4fe'}`,
+            }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: urgente ? '#92400e' : '#1e40af' }}>
+                  {diasDePrueba === 1
+                    ? 'Te queda 1 día de prueba'
+                    : `Te quedan ${diasDePrueba} días de prueba`}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                  {tieneTarjeta
+                    ? `Cuando termine, se cobra US$${precioTotal(planDef.key, adicionalesDe(team))} al mes. Puedes cambiar de plan o cancelar antes.`
+                    : 'Al terminar podrás consultar y descargar tu información, pero no emitir. Agrega tu tarjeta para seguir sin cortes.'}
+                </Typography>
+              </Box>
+              {!tieneTarjeta && (
+                <form action={customerPortalAction}>
+                  <MuiButton type="submit" variant="contained" color="primary" disableElevation
+                    startIcon={<CreditCard style={{ width: 15, height: 15 }} />}
+                    sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    Agregar tarjeta
+                  </MuiButton>
+                </form>
+              )}
+            </Box>
+          )}
 
           {/* Medidores — uno por límite que APLICA a este plan. */}
           {medidores.length > 0 && (
@@ -239,6 +311,42 @@ export default async function SuscripcionPage() {
           />
         </CardContent>
       </Card>
+
+      {/* La OTRA línea comercial.
+          Va en su propia tarjeta y no mezclada con los cuatro de arriba: no es
+          un plan más caro, es otro producto. Un comercio que abre un colegio
+          antes no tenía por dónde enterarse de que esto existe —veía cuatro
+          planes de facturación y ninguna señal— y la venta se perdía por
+          proteger un caso que no era el suyo (ver `familiasOfrecibles`). */}
+      {otrasLineas.map(({ fam, planes }) => {
+        const linea = LINEAS_PRODUCTO.find(l => l.familia === fam);
+        const desde = Math.min(...planes.map(p => p.price));
+        return (
+          <Card key={fam} elevation={0} sx={{ border: '1px solid #dbe4fe', bgcolor: '#f8faff', borderRadius: '12px', mb: 2 }}>
+            <CardContent sx={{ p: '20px !important' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <GraduationCap style={{ width: 16, height: 16, color: '#3658e1' }} />
+                {linea?.nombre ?? 'Otra línea'}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, mb: 2 }}>
+                {linea?.descripcion} Desde US${desde}/mes, según cuántos estudiantes tengas.
+              </Typography>
+              <ChangePlan
+                plans={planes}
+                currentPlan={planDef}
+                priceIds={priceIds}
+                pendingPlan={pendingPlan}
+                tieneSuscripcion={Boolean(team.stripeSubscriptionId)}
+                checkoutAction={checkoutAction}
+              />
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 1.5 }}>
+                Al contratarlo se te abren la gobernanza del colegio y el punto
+                de venta de la cafetería, y conservas todo lo que ya tienes.
+              </Typography>
+            </CardContent>
+          </Card>
+        );
+      })}
 
       {/* Comparativa — generada del catálogo, con una columna por plan de su
           línea. Antes era una tabla a mano y por eso envejeció mal. */}

@@ -368,6 +368,27 @@ export function planesDeFamilia(familia: FamiliaPlan): PlanDef[] {
 }
 
 /**
+ * ¿Puede saltar de familia por autoservicio, y hacia dónde?
+ *
+ * `CAMBIO_PLAN.permiteCambiarDeFamilia` estaba en `false` y cerraba las dos
+ * direcciones. El motivo era bueno pero solo vale para UNA:
+ *
+ *   colegio → e-CF   pierde el módulo escolar CON LOS ESTUDIANTES DENTRO.
+ *                    Eso no se hace con un botón; se habla.
+ *   e-CF → colegio   gana el módulo escolar y el POS. No pierde nada.
+ *
+ * Cerrando las dos, un comercio que abre un colegio no tenía forma de
+ * contratarlo desde su propia pantalla de suscripción: veía cuatro planes de
+ * facturación y ninguna señal de que la línea de colegios existe. Perder una
+ * venta por proteger un caso que no es el suyo.
+ *
+ * Devuelve las familias que se le pueden OFRECER además de la suya.
+ */
+export function familiasOfrecibles(desde: FamiliaPlan): FamiliaPlan[] {
+  return desde === 'ecf' ? ['colegio'] : [];
+}
+
+/**
  * Tramo escolar que le toca a un colegio por su cantidad de estudiantes.
  *
  * Devuelve null si se pasa del tope del tramo más alto (800): ahí no hay plan
