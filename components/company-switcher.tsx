@@ -148,7 +148,9 @@ export function CompanySwitcher({
     onSwitch?.(teamId);
     startTransition(() => {
       if (BILLING_ENABLED && (!target || !teamHasPlan(target))) {
-        router.push('/pricing?reason=no-plan');
+        // A la pantalla de suscripción, no a /pricing: es donde de verdad se
+        // elige y se abre la prueba. Mismo destino que el redirect del banner.
+        router.push('/dashboard/suscripcion');
       } else {
         router.push('/dashboard');
         router.refresh();

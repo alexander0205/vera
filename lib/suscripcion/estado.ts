@@ -20,6 +20,13 @@ import { PRUEBA, SOLO_LECTURA, MORA } from '@/lib/config/suscripcion';
  * `mora`            — falló el cobro pero la gracia sigue viva. Acceso completo.
  * `solo-lectura`    — se acabó la prueba o la gracia. Entra y ve; no crea nada.
  * `cerrada`         — se acabó también el solo-lectura, o canceló hace rato.
+ * `sin-plan`        — nunca hubo suscripción. Entra y ve; no crea nada.
+ *
+ * `sin-plan` y `solo-lectura` cortan lo mismo, pero son historias distintas y
+ * la UI las cuenta distinto: a quien SE LE VENCIÓ algo se le enseña cuál era
+ * su plan y cómo reactivarlo; a quien NUNCA TUVO no se le puede enseñar «tu
+ * plan» — se le enseña el selector y nada más. Mezclarlos fue lo que hizo a
+ * la pantalla decir «Ilimitado US$74» y «no tienes plan activo» a la vez.
  */
 export type EstadoSuscripcion =
   | 'sin-billing'
@@ -28,7 +35,8 @@ export type EstadoSuscripcion =
   | 'activa'
   | 'mora'
   | 'solo-lectura'
-  | 'cerrada';
+  | 'cerrada'
+  | 'sin-plan';
 
 /** Lo que hace falta de un team para decidir. Nada más. */
 export interface TeamSuscripcion {
@@ -218,7 +226,7 @@ export function evaluarSuscripcion(
   // que nunca compraron y las que quedaron con el estado a medias
   // (`incomplete`, `incomplete_expired`, o el NULL de una fila vieja).
   return {
-    estado: 'solo-lectura',
+    estado: 'sin-plan',
     puedeEscribir: false,
     diasRestantes: null,
     avisar: true,
@@ -270,5 +278,5 @@ function trasElVencimiento(
  * sin arrastrar el objeto entero.
  */
 export function permiteEscritura(estado: EstadoSuscripcion): boolean {
-  return estado !== 'solo-lectura' && estado !== 'cerrada';
+  return estado !== 'solo-lectura' && estado !== 'cerrada' && estado !== 'sin-plan';
 }

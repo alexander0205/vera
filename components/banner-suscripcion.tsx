@@ -13,8 +13,10 @@
  * que intente.
  */
 
+import { useEffect } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import { AlertTriangle, Clock, CreditCard } from 'lucide-react';
 import { BILLING_ENABLED } from '@/lib/config/billing';
@@ -41,10 +43,18 @@ const TONOS: Record<string, { fondo: string; borde: string; texto: string; icono
 };
 
 function tonoDe(estado: EstadoSuscripcion): keyof typeof TONOS {
-  if (estado === 'solo-lectura' || estado === 'cerrada') return 'cortado';
+  if (estado === 'solo-lectura' || estado === 'cerrada' || estado === 'sin-plan') return 'cortado';
   if (estado === 'mora' || estado === 'prueba-por-vencer') return 'urgente';
   return 'aviso';
 }
+
+/**
+ * Adonde SÍ se puede estar sin plan: la pantalla donde se elige, la
+ * comparación de precios y la cuenta. Todo lo demás redirige al selector —
+ * sin plan no hay con qué trabajar, y dejarlo pasear por un dashboard que le
+ * va a rechazar cada acción es peor que llevarlo directo a resolverlo.
+ */
+const RUTAS_SIN_PLAN = ['/dashboard/suscripcion', '/pricing', '/cuenta'];
 
 export function BannerSuscripcion() {
   // Con el billing apagado no se pide nada: ni el request suelto por página.
@@ -53,6 +63,15 @@ export function BannerSuscripcion() {
     fetcher,
     { revalidateOnFocus: false, revalidateOnReconnect: false, refreshInterval: 0 },
   );
+
+  const pathname = usePathname();
+  const router = useRouter();
+  const debeElegirPlan =
+    data?.estado === 'sin-plan' && !RUTAS_SIN_PLAN.some(r => pathname.startsWith(r));
+
+  useEffect(() => {
+    if (debeElegirPlan) router.replace('/dashboard/suscripcion');
+  }, [debeElegirPlan, router]);
 
   if (!data?.avisar || !data.mensaje) return null;
 

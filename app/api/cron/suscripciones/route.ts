@@ -1,23 +1,32 @@
 /**
- * Barrido diario de suscripciones.
+ * Barrido diario de suscripciones. Hace dos cosas:
  *
- * Existe por un caso que Stripe NO avisa: pasar a solo lectura. Ese cambio no
- * es un evento suyo, es el calendario — se venció la prueba, o se agotó la
- * gracia de mora. El estado se deriva solo (lib/suscripcion/estado.ts), así
- * que la app ya se comporta bien sin este cron; lo que falta sin él es
- * DECÍRSELO al cliente, y quien está a punto de perder el acceso es
- * justamente el que no está entrando a ver el banner.
+ * 1. AVISA el paso a solo lectura. Es el caso que Stripe no notifica: no es un
+ *    evento suyo, es el calendario — se venció la prueba, o se agotó la gracia
+ *    de mora. El estado se deriva solo (lib/suscripcion/estado.ts), así que la
+ *    app ya se comporta bien sin este cron; lo que falta sin él es DECÍRSELO
+ *    al cliente, y quien está a punto de perder el acceso es justamente el que
+ *    no está entrando a ver el banner.
+ *
+ * 2. RECONCILIA contra Stripe. Un webhook perdido —caída, secret rotado, bug—
+ *    deja la fila desincronizada para siempre, porque nada la vuelve a tocar
+ *    hasta el próximo evento de ESA empresa. Esta pasada le pregunta a Stripe
+ *    por cada empresa con cliente y reescribe lo que haga falta. Con pocas
+ *    decenas de empresas es un puñado de requests; si algún día son miles,
+ *    esto es lo que hay que trocear.
  *
  * Es idempotente: `aviso_solo_lectura_en` marca que ya se mandó, así que
- * correrlo dos veces el mismo día no manda dos correos.
+ * correrlo dos veces el mismo día no manda dos correos; y la reconciliación
+ * escribe lo mismo que ya hay cuando no hay drift.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { and, eq, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { evaluarSuscripcion } from '@/lib/suscripcion/estado';
+import { sincronizarConStripe } from '@/lib/payments/sincronizar';
 import { destinatarioDeSuscripcion } from '@/lib/suscripcion/destinatario';
 import { enviarSoloLectura } from '@/lib/email/suscripcion';
 
@@ -35,6 +44,34 @@ export async function GET(req: NextRequest) {
   }
 
   const ahora = new Date();
+
+  // ── Reconciliación contra Stripe ──────────────────────────────────────────
+  // Antes de evaluar nada: si un webhook se perdió, lo que hay en la base está
+  // viejo, y avisar sobre datos viejos es avisar mal. 'admin' queda fuera
+  // (acceso manual, Stripe no opina) y sin customer no hay a quién preguntar.
+  const conCliente = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(
+      isNotNull(teams.stripeCustomerId),
+      or(isNull(teams.subscriptionStatus), ne(teams.subscriptionStatus, 'admin')),
+    ));
+
+  let reconciliadas = 0;
+  const driftFallos: { teamId: number; error: string }[] = [];
+  // En serie a propósito: son pocas empresas y la API de Stripe tiene rate
+  // limit; un Promise.all aquí es la forma de estrenarlo.
+  for (const t of conCliente) {
+    try {
+      const r = await sincronizarConStripe(t.id);
+      if (r.aplicado) reconciliadas++;
+    } catch (err) {
+      driftFallos.push({ teamId: t.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  if (driftFallos.length > 0) {
+    console.warn('[cron.suscripciones] reconciliación con fallos', driftFallos);
+  }
 
   // Solo las que tienen un reloj corriendo. Una empresa sin prueba ni mora no
   // puede cambiar de estado por el paso del tiempo, así que no se mira.
@@ -97,6 +134,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
+    reconciliadas,
+    reconciliacionFallos: driftFallos.length,
     revisadas: candidatas.length,
     avisados: avisados.length,
     teams: avisados,

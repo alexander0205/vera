@@ -93,8 +93,11 @@ function aFecha(segundos: number | null | undefined): Date | null {
  * Stripe las tiene todas, pero preguntárselas en cada carga de página sería un
  * viaje de red para pintar un banner. Se copian aquí, en el webhook, que es
  * exactamente cuando cambian. Ver migración 0133.
+ *
+ * Exportada para `sincronizarConStripe`: la reconciliación escribe las mismas
+ * fechas por el mismo camino, o el resync y el webhook se separarían.
  */
-function fechasDelCiclo(subscription: Stripe.Subscription) {
+export function fechasDelCiclo(subscription: Stripe.Subscription) {
   const status = subscription.status;
 
   // `morosoDesde` marca el PRIMER fallo, no el último intento. Stripe reintenta
@@ -251,6 +254,8 @@ export async function activarModulo(
       ? { customer: team.stripeCustomerId }
       : actor?.email ? { customer_email: actor.email } : {}),
     client_reference_id: `${actorUserId}:${team.id}`,
+    // Mismo marcado que el checkout principal: la suscripción sabe de quién es.
+    subscription_data: { metadata: { teamId: String(team.id), origen: 'modulo' } },
     allow_promotion_codes: true,
     locale: 'es',
   });

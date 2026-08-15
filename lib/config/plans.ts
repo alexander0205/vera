@@ -353,6 +353,15 @@ export function getPlanPriceId(planKey: string): string {
   return process.env[plan.priceEnvKey] ?? '';
 }
 
+/**
+ * Un tope, en palabras. Vive junto al catálogo porque la convención `-1 =
+ * ilimitado` es suya: cada pantalla que la traduzca por su cuenta es una
+ * pantalla que un día enseña «-1 usuarios».
+ */
+export function limiteTexto(n: number): string {
+  return n < 0 ? 'ilimitados' : n.toLocaleString('es-DO');
+}
+
 /** Precio formateado para mostrar en UI (ej: "$15 USD/mes") */
 export function getPlanPriceLabel(planKey: string): string {
   const plan = getPlan(planKey);

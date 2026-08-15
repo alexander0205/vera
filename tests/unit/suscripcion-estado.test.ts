@@ -144,11 +144,21 @@ describe('cancelación', () => {
 });
 
 describe('casos de borde', () => {
-  it('sin plan (fila vieja, NULL): entra y ve, no crea', () => {
+  it('nunca tuvo suscripción: sin-plan, no solo-lectura', () => {
+    // La distinción importa para la UI: a quien se le VENCIÓ algo se le enseña
+    // su plan apagado; a quien nunca tuvo se le enseña solo el selector.
     const s = evaluarSuscripcion(
       team({ planName: null, subscriptionStatus: null }), HOY,
     );
-    expect(s.estado).toBe('solo-lectura');
+    expect(s.estado).toBe('sin-plan');
+    expect(s.puedeEscribir).toBe(false);
+  });
+
+  it('checkout abandonado a medias (incomplete): también sin-plan', () => {
+    const s = evaluarSuscripcion(
+      team({ subscriptionStatus: 'incomplete' }), HOY,
+    );
+    expect(s.estado).toBe('sin-plan');
     expect(s.puedeEscribir).toBe(false);
   });
 
@@ -165,7 +175,7 @@ describe('casos de borde', () => {
     for (const st of ['activa', 'prueba', 'prueba-por-vencer', 'mora', 'sin-billing'] as const) {
       expect(permiteEscritura(st)).toBe(true);
     }
-    for (const st of ['solo-lectura', 'cerrada'] as const) {
+    for (const st of ['solo-lectura', 'cerrada', 'sin-plan'] as const) {
       expect(permiteEscritura(st)).toBe(false);
     }
   });

@@ -4,9 +4,10 @@ import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users, invitations, activityLogs, ActivityType } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
+import { sincronizarConStripe } from '@/lib/payments/sincronizar';
 import { sendInvitationEmail } from '@/lib/email';
 import Link from 'next/link';
-import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight, CreditCard } from 'lucide-react';
+import { Building2, Mail, Users, Clock, AlertTriangle, ToggleLeft, ToggleRight, CreditCard, RefreshCw } from 'lucide-react';
 import { ConfirmButton } from './confirm-button';
 import EcfApiSection from './_ecf-section';
 import { RoleSelect } from './_role-select';
@@ -190,14 +191,45 @@ async function asignarPlan(formData: FormData) {
   const valido = planKey === '' || PLANS.some(p => p.key === planKey);
   if (!valido) return;
 
+  // 'admin' solo mientras no haya una suscripción de Stripe de por medio: si
+  // la empresa YA paga, aquí solo se corrige la etiqueta del plan y su estado
+  // real no se toca — el comentario lo prometía y el código no lo cumplía:
+  // ponía 'admin' siempre, y una corrección de etiqueta a una empresa pagando
+  // le desconectaba el ciclo de vida real de Stripe.
+  const [fila] = await db
+    .select({ subId: teams.stripeSubscriptionId })
+    .from(teams)
+    .where(eq(teams.id, teamId))
+    .limit(1);
+  const tieneStripe = Boolean(fila?.subId);
+
   await db.update(teams).set({
     planName: planKey || null,
-    // 'admin' solo mientras no haya una suscripción de Stripe de por medio:
-    // si la empresa YA paga, cambiarle el estado le rompería el ciclo real.
-    subscriptionStatus: planKey ? 'admin' : null,
+    ...(tieneStripe ? {} : { subscriptionStatus: planKey ? 'admin' : null }),
     updatedAt: new Date(),
   }).where(eq(teams.id, teamId));
 
+  revalidatePath(`/admin/empresas/${teamId}`);
+}
+
+// ─── Server Action: resincronizar contra Stripe ──────────────────────────────
+//
+// Reescribe la fila con lo que Stripe diga AHORA: plan, estado, fechas y
+// adicionales. Es el botón de «no me cuadra lo que veo»: un webhook perdido, un
+// cambio hecho a mano en el dashboard de Stripe, una migración a medias — en
+// vez de adivinar cuál columna quedó vieja, se copia todo de la fuente.
+// No toca cuentas 'admin' ni empresas sin cliente en Stripe con estado ya
+// vacío; ver lib/payments/sincronizar.ts.
+
+async function resincronizarStripe(formData: FormData) {
+  'use server';
+  const admin = await getUser();
+  if (!admin || admin.platformRole !== 'admin') redirect('/dashboard');
+
+  const teamId = parseInt(formData.get('teamId') as string);
+  if (isNaN(teamId)) return;
+
+  await sincronizarConStripe(teamId);
   revalidatePath(`/admin/empresas/${teamId}`);
 }
 
@@ -473,20 +505,32 @@ export default async function EmpresaDetailPage({
           <Typography variant="body2" sx={{ fontWeight: 600, color: '#374151' }}>Plan</Typography>
         </Box>
 
-        <form action={asignarPlan} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <input type="hidden" name="teamId" value={teamId} />
-          <Box sx={{ minWidth: 260 }}>
-            <PlanSelect current={team.planName ?? ''} />
-          </Box>
-          <Button type="submit" variant="outlined" size="small" disableElevation
-            sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
-            Guardar plan
-          </Button>
-        </form>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <form action={asignarPlan} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <input type="hidden" name="teamId" value={teamId} />
+            <Box sx={{ minWidth: 260 }}>
+              <PlanSelect current={team.planName ?? ''} />
+            </Box>
+            <Button type="submit" variant="outlined" size="small" disableElevation
+              sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
+              Guardar plan
+            </Button>
+          </form>
+          {team.stripeCustomerId && team.subscriptionStatus !== 'admin' && (
+            <form action={resincronizarStripe}>
+              <input type="hidden" name="teamId" value={teamId} />
+              <Button type="submit" variant="outlined" size="small" disableElevation
+                startIcon={<RefreshCw style={{ width: 13, height: 13 }} />}
+                sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 500, fontSize: '0.8125rem' }}>
+                Sincronizar con Stripe
+              </Button>
+            </form>
+          )}
+        </Box>
 
         <Typography variant="caption" sx={{ color: '#9ca3af', display: 'block', mt: 1.5 }}>
           {team.stripeSubscriptionId
-            ? 'Esta empresa tiene suscripción en Stripe. Cambiar el plan aquí NO cobra ni avisa a Stripe — úsalo solo para corregir.'
+            ? 'Esta empresa tiene suscripción en Stripe. Cambiar el plan aquí NO cobra ni avisa a Stripe — úsalo solo para corregir. «Sincronizar» reescribe la fila con lo que Stripe diga ahora.'
             : 'Sin suscripción en Stripe: el plan queda como acceso concedido por nosotros y no caduca.'}
         </Typography>
 

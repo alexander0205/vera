@@ -65,6 +65,11 @@ export async function createCheckoutSession({
       ? { customer: team.stripeCustomerId }
       : { customer_email: user.email }),
     client_reference_id: `${user.id}:${team.id}`, // "userId:teamId" para el webhook
+    // La suscripción nace sabiendo de quién es. El client_reference_id viaja
+    // en la SESIÓN y muere con ella; esto queda grabado en la suscripción,
+    // visible desde el dashboard de Stripe y utilizable si algún día el
+    // customer se desvincula del team.
+    subscription_data: { metadata: { teamId: String(team.id), origen: 'checkout' } },
     allow_promotion_codes: true,
     locale: 'es',
     // SIN `trial_period_days` a propósito.
