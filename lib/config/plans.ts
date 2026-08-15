@@ -150,28 +150,14 @@ export const PLANS: PlanDef[] = [
     },
   },
   {
-    /**
-     * La CLAVE sigue diciendo `multisucursal` y el nombre ya no.
-     *
-     * No es un descuido. La clave es un identificador interno: está escrita en
-     * `plan_name` de las 22 empresas de producción, en el nombre de la
-     * variable `STRIPE_PRICE_MULTISUCURSAL` y en la metadata del precio de
-     * Stripe. Cambiarla obliga a mover las tres cosas a la vez, y si el código
-     * llega antes que los datos, `getPlan()` no encuentra la clave, cae a
-     * FREE_PLAN y deja a todo el mundo con cero comprobantes — que es
-     * exactamente el fallo que ya pasó una vez.
-     *
-     * Todo ese riesgo, para cambiar algo que ningún usuario ve. El nombre sí
-     * lo ve, y ese es el que estaba mal.
-     */
-    key: 'multisucursal', familia: 'ecf',
+    key: 'ilimitado', familia: 'ecf',
     modulos: [...MODULES_BASE],
     // «Multi-sucursal» prometía gestión de sucursales, que el sistema NO tiene:
     // `sucursal` es un texto que se le pone a una secuencia y sale impreso en
     // la factura, nada más. Lo que de verdad distingue a este plan es ser el
     // único sin tope de comprobantes, y así el nombre concuerda con el ∞ que
     // la página de precios ya pinta en su fila.
-    name: 'Ilimitado', price: 65, priceEnvKey: 'STRIPE_PRICE_MULTISUCURSAL',
+    name: 'Ilimitado', price: 65, priceEnvKey: 'STRIPE_PRICE_ILIMITADO',
     limits: { docs: -1, users: 8, trialDocs: -1, estudiantes: -1, whatsappMensajes: -1, smsMensajes: -1 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
@@ -270,17 +256,38 @@ export const FREE_PLAN: PlanDef = {
  * Acepta las dos formas a propósito. Lo correcto es guardar la CLAVE en
  * `teams.plan_name`, y eso hace ahora todo el código; pero durante un tiempo
  * el checkout y el webhook guardaron el NOMBRE, y ahí se caían cinco de los
- * ocho planes: «Ilimitado» no es la clave `multisucursal`, y «Avanzado»
- * no es `colegio-avanzado`. Sin coincidencia, esta función devolvía FREE_PLAN
- * —cero comprobantes, sin módulos, solo lectura— a un colegio que acababa de
- * pagar US$350.
+ * ocho planes: «Ilimitado» no es la clave `ilimitado` si lo que se guardó fue
+ * «Multi-sucursal», y «Avanzado» no es `colegio-avanzado`. Sin coincidencia,
+ * esta función devolvía FREE_PLAN —cero comprobantes, sin módulos, solo
+ * lectura— a un colegio que acababa de pagar US$350.
  *
  * Buscar también por nombre repara esas filas sin migración y sin que nadie
  * se quede fuera mientras tanto.
  */
+
+/**
+ * Claves que un plan tuvo antes y que siguen apareciendo en datos viejos.
+ *
+ * `multisucursal` se renombró a `ilimitado` cuando se vio que el nombre
+ * prometía una gestión de sucursales que el sistema no tiene. Renombrar una
+ * clave es peligroso justo por esto: vive en `teams.plan_name` de empresas
+ * reales y en la metadata de Stripe, y el código se despliega antes de que los
+ * datos cambien. Sin este mapa, entre un despliegue y el UPDATE habría una
+ * ventana en la que `getPlan('multisucursal')` no encuentra nada, cae a
+ * FREE_PLAN y deja a todo el mundo con cero comprobantes.
+ *
+ * No se quita cuando los datos se migren. Cuesta una línea y cubre lo que no
+ * controlamos: una suscripción de Stripe con la clave vieja en su metadata, un
+ * respaldo que se restaure, una fila que se creara mientras tanto.
+ */
+const CLAVES_ANTIGUAS: Record<string, string> = {
+  multisucursal: 'ilimitado',
+};
+
 export function getPlan(key: string | null | undefined): PlanDef {
-  const k = (key ?? '').trim().toLowerCase();
-  if (!k) return FREE_PLAN;
+  const bruta = (key ?? '').trim().toLowerCase();
+  if (!bruta) return FREE_PLAN;
+  const k = CLAVES_ANTIGUAS[bruta] ?? bruta;
   return PLANS.find(p => p.key === k)
     ?? PLANS.find(p => p.name.toLowerCase() === k)
     ?? FREE_PLAN;
