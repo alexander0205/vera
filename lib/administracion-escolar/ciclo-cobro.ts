@@ -29,23 +29,35 @@ export type Aviso = 'al-emitir' | 'al-vencer' | 'antes-mora';
 export type Canal = 'correo' | 'whatsapp' | 'sms';
 
 /**
- * Por qué canal sale cada aviso. Fijo en código, no configurable, y la razón
- * no es de producto sino de plataforma:
+ * Por qué canal sale cada aviso. Fijo en código, no configurable.
  *
- * - WhatsApp solo deja escribir dentro de las 24 horas siguientes a la última
- *   respuesta del tutor. Sirve para el primero, que es informativo y da igual
- *   si se cae; no puede sostener los dos que tienen dinero detrás.
- * - El SMS llega siempre pero se paga por mensaje, así que se reserva para
- *   esos dos: el que le ahorra el recargo al padre y el que le dice que ya lo
- *   tiene. Son los únicos que justifican el gasto.
  * - El correo llega a los tres porque no cuesta nada y queda como constancia.
+ * - El SMS se reserva para los dos que tienen dinero detrás: el que le ahorra
+ *   el recargo al padre y el que le dice que ya lo tiene. Se paga por mensaje,
+ *   y son los únicos que justifican el gasto.
+ * - WhatsApp va también a los tres. Antes solo al primero, y el motivo era
+ *   real: la API únicamente deja escribir dentro de las 24 horas siguientes a
+ *   la última respuesta del tutor, así que fuera de esa ventana devuelve 422 y
+ *   el mensaje no sale. No hay plantillas —`enviarMensaje` manda `{to, text}`
+ *   y nada más—, así que eso no se puede sortear.
+ *
+ *   Pero ese razonamiento se equivocaba de conclusión: trataba a WhatsApp como
+ *   si fuera el ÚNICO portador del aviso, y en `al-vencer` y `antes-mora` el
+ *   SMS ya va y siempre llega. El WhatsApp ahí no sustituye a nadie, se suma —
+ *   y cuando el tutor escribió hace poco, que es lo normal en un colegio con
+ *   grupo activo, llega por el canal que de verdad lee.
+ *
+ *   Un intento fuera de ventana no cuesta nada: el envío que revienta libera
+ *   su reserva y NO descuenta del tope («solo se descuenta lo que de verdad
+ *   salió», más abajo en avisos.ts). Lo peor que pasa es una línea de error en
+ *   el historial junto a un SMS entregado.
  *
  * Dejarlo elegir sería dejar al colegio configurar un cobro que no sale.
  */
 export const CANALES_DEL_AVISO: Record<Aviso, readonly Canal[]> = {
   'al-emitir':  ['correo', 'whatsapp'],
-  'al-vencer':  ['correo', 'sms'],
-  'antes-mora': ['correo', 'sms'],
+  'al-vencer':  ['correo', 'whatsapp', 'sms'],
+  'antes-mora': ['correo', 'whatsapp', 'sms'],
 };
 
 export function camposCiclo(body: Record<string, unknown>) {
