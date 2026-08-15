@@ -191,3 +191,26 @@ export const RUTAS_DE_CUENTA = [
 export function esRutaDeCuenta(pathname: string): boolean {
   return RUTAS_DE_CUENTA.some(r => pathname === r || pathname.startsWith(`${r}/`));
 }
+
+/**
+ * A qué módulo pertenece una ruta. El reverso de `MODULE_HOME`.
+ *
+ * `administracion` se queda fuera aposta: vive en el host de la cuenta y no
+ * tiene subdominio propio, así que devolverlo mandaría `/cuenta` a ninguna
+ * parte.
+ *
+ * Esto existe porque tras entrar, `redirect('/dashboard')` es una ruta
+ * RELATIVA: deja al usuario en el host donde entró, que es `app.`. El panel de
+ * facturación acababa sirviéndose en app.zero.com.do, un host que solo debería
+ * tener entrar, registrarse y cuenta. Resolverlo en el proxy y no en el
+ * `redirect` cubre además los marcadores viejos y los enlaces de los correos,
+ * que apuntan a rutas y no saben de hosts.
+ */
+export function moduloDeRuta(pathname: string): ModuleKey | null {
+  for (const mod of MODULES) {
+    if (mod === 'administracion') continue;
+    const home = MODULE_HOME[mod];
+    if (pathname === home || pathname.startsWith(`${home}/`)) return mod;
+  }
+  return null;
+}

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
-import { moduleForHost, esHostApp, esRutaDeCuenta } from '@/lib/config/modules';
+import {
+  moduleForHost, esHostApp, esRutaDeCuenta, moduloDeRuta, hostDeModulo,
+} from '@/lib/config/modules';
 
 const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar'];
 
@@ -38,6 +40,30 @@ export async function proxy(request: NextRequest) {
     destino.host = appHost;
     destino.protocol = 'https:';
     return NextResponse.redirect(destino);
+  }
+
+  // ── Y al revés: las rutas de módulo NO viven en app.zero.com.do ──────────
+  //
+  // Simétrico al bloque de arriba y por el mismo motivo. Tras entrar,
+  // `redirect('/dashboard')` es una ruta RELATIVA, así que dejaba al usuario
+  // en el host donde entró: el panel de facturación acababa sirviéndose en
+  // app.zero.com.do, que solo debería tener entrar, registrarse y cuenta.
+  //
+  // Se arregla aquí y no en el `redirect` de la acción de login porque hay
+  // más puertas que esa —el final del onboarding, un marcador viejo, el
+  // enlace de un correo— y todas apuntan a rutas, que no saben de hosts.
+  //
+  // Igual que arriba, todo depende de que el host de destino esté configurado
+  // y sea distinto del actual: sin `FACTURACION_HOST` esto no hace nada, y
+  // nunca se redirige a sí mismo.
+  if (esHostApp(hostActual)) {
+    const destino = hostDeModulo(moduloDeRuta(pathname));
+    if (destino && destino !== hostActual) {
+      const url = new URL(request.url);
+      url.host = destino;
+      url.protocol = 'https:';
+      return NextResponse.redirect(url);
+    }
   }
 
   // Home del módulo según el host. Solo se toca la raíz (y /dashboard exacto
