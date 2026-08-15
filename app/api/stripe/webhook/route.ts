@@ -150,12 +150,19 @@ export async function POST(request: NextRequest) {
         const planName = getPlanByPriceId(priceId).key;
         const status   = subscription.status;
 
-        if (status === 'active' || status === 'trialing' || status === 'past_due') {
+        if (status === 'active' || status === 'trialing' || status === 'past_due' || status === 'paused') {
           // past_due CONSERVA el plan. Es el estado de «se me venció la
           // tarjeta», y quien decide si todavía puede trabajar es la gracia de
           // MORA.diasGracia, no esta línea. Ponerlo en 'Gratis' aquí lo dejaba
           // sin módulos y con cupo cero el mismo día del primer cobro fallido,
           // que es justo lo que la gracia existe para evitar.
+          //
+          // `paused` es lo que Stripe pone cuando se acaba la prueba sin
+          // tarjeta (`trial_settings.end_behavior: pause`), y conserva el plan
+          // por la misma razón: durante los días de solo-lectura hay que poder
+          // seguir enseñándole CUÁL era su plan mientras decide si paga. Sin
+          // esta rama caía entre las dos y no se actualizaba nada — funcionaba
+          // de casualidad, que es como se rompe al primer cambio.
           await updateTeamSubscription(team.id, {
             stripeSubscriptionId: subscription.id,
             stripeProductId: (subscription.items.data[0]?.price?.product as string) ?? null,

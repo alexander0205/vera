@@ -19,6 +19,8 @@ import { getTeamIdForUser, getUser } from '@/lib/db/queries';
 import { validatedAction } from '@/lib/auth/middleware';
 import { planSugerido, type LineaKey } from '@/lib/onboarding/deducir';
 import { PRUEBA } from '@/lib/config/suscripcion';
+import { LINEAS_PRODUCTO } from '@/lib/config/plans';
+import { crearSuscripcionDePrueba } from '@/lib/payments/stripe';
 
 const LINEAS = ['erp', 'pos-erp', 'erp-colegio'] as const;
 
@@ -120,7 +122,48 @@ export const terminar = validatedAction(esquemaFinal, async (data) => {
   }
 
   const ahora = new Date();
-  const finPrueba = new Date(ahora.getTime() + PRUEBA.dias * 86_400_000);
+
+  /**
+   * La prueba la abre STRIPE, no nosotros.
+   *
+   * Antes aquí se escribía `trial_end = hoy + 15` y punto: Stripe no sabía que
+   * ese cliente existía. Con eso, el aviso de «se te acaba la prueba» que el
+   * webhook maneja no llegaba nunca —Stripe no puede avisar del fin de algo
+   * que ignora— y quien después ponía tarjeta en el checkout recibía otros 15
+   * días encima.
+   *
+   * Si Stripe falla NO se cae el alta. La cuenta ya está creada y el
+   * onboarding es obligatorio: devolver un error aquí deja a esa persona
+   * encerrada sin plan y sin poder repetir. Se abre la prueba en local con las
+   * mismas fechas y se registra el fallo; el `stripe_customer_id` vacío es la
+   * señal de a quién hay que reconciliar.
+   */
+  const linea = LINEAS_PRODUCTO.find(l => l.key === datos.linea);
+  const priceId = process.env[plan.priceEnvKey];
+
+  let customerId: string | null = null;
+  let subscriptionId: string | null = null;
+  let finPrueba = new Date(ahora.getTime() + PRUEBA.dias * 86_400_000);
+
+  if (priceId) {
+    try {
+      const r = await crearSuscripcionDePrueba({
+        team: equipo,
+        email: usuario?.email ?? '',
+        priceId,
+        addons: linea?.addons ?? [],
+      });
+      customerId = r.customerId;
+      subscriptionId = r.subscription.id;
+      // El reloj de Stripe manda. Si el nuestro y el suyo se separan aunque
+      // sea por segundos, un día el aviso sale el día después del corte.
+      if (r.subscription.trial_end) finPrueba = new Date(r.subscription.trial_end * 1000);
+    } catch (e) {
+      console.error('[onboarding] Stripe no pudo abrir la prueba del team', equipo.id, e);
+    }
+  } else {
+    console.error('[onboarding] sin price id para el plan', plan.key, '— prueba solo local');
+  }
 
   await db.update(teams).set({
     // La CLAVE del plan, no su nombre: `getPlan()` resuelve por clave, y
@@ -130,6 +173,8 @@ export const terminar = validatedAction(esquemaFinal, async (data) => {
     subscriptionStatus: 'trialing',
     trialEnd: finPrueba,
     periodoFin: finPrueba,
+    ...(customerId ? { stripeCustomerId: customerId } : {}),
+    ...(subscriptionId ? { stripeSubscriptionId: subscriptionId } : {}),
     onboardingPaso: 4,
     onboardingCompletadoEn: ahora,
     updatedAt: new Date(),

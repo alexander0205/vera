@@ -67,17 +67,14 @@ export async function createCheckoutSession({
     client_reference_id: `${user.id}:${team.id}`, // "userId:teamId" para el webhook
     allow_promotion_codes: true,
     locale: 'es',
-    subscription_data: {
-      // Los días salen de la configuración, no de un literal aquí: el mismo
-      // número se muestra en la pantalla de precios y se usa para contar
-      // cuándo avisar. Con dos copias, un día dejan de coincidir.
-      trial_period_days: PRUEBA.dias,
-    },
-    // Sin tarjeta para empezar la prueba (PRUEBA.pideTarjeta). Es el filtro
-    // más caro que hay en la entrada del embudo, y Alegra tampoco la pide.
-    ...(PRUEBA.pideTarjeta
-      ? {}
-      : { payment_method_collection: 'if_required' as const }),
+    // SIN `trial_period_days` a propósito.
+    //
+    // La prueba se abre UNA sola vez, al terminar el onboarding
+    // (`crearSuscripcionDePrueba`). Cuando esto lo tenía también, quien pasaba
+    // por el onboarding y luego venía aquí a poner tarjeta recibía OTROS 15
+    // días: treinta gratis, y encima el webhook pisaba nuestro `trial_end` con
+    // el de Stripe. Aquí se llega para empezar a pagar, no para volver a
+    // probar.
   });
 
   redirect(session.url!);
@@ -192,3 +189,58 @@ async function portalConfiguration(): Promise<Stripe.BillingPortal.Configuration
 // duplicado dormido de la ruta crítica es exactamente cómo vuelve un bug: el
 // día que alguien lo conecte «porque ya estaba», reintroduce el problema sin
 // que nadie lo note.
+
+/**
+ * Abre la prueba en Stripe al terminar el onboarding.
+ *
+ * Antes esto se resolvía escribiendo `trial_end = hoy + 15` en nuestra fila y
+ * ya: Stripe no se enteraba de que ese cliente existía. Dos consecuencias que
+ * no se ven hasta que muerden — el manejador de `trial_will_end` del webhook
+ * era código muerto para todo el que se registrara solo, y quien luego pasaba
+ * por el checkout recibía OTROS 15 días.
+ *
+ * Ahora el reloj es de Stripe y hay uno solo.
+ *
+ * Sin tarjeta: `payment_method_collection` no aplica a suscripciones creadas
+ * por API, y lo que permite abrir una prueba sin método de pago es declarar
+ * qué pasa cuando termine — eso es `trial_settings.end_behavior`.
+ *
+ * Se elige `pause` y no `cancel` por una razón concreta: al cancelar, Stripe
+ * borra la suscripción y nuestro webhook baja el plan a Gratis el mismo día en
+ * que vence la prueba. Pero nuestra ventana de solo-lectura necesita seguir
+ * sabiendo QUÉ plan tenía para enseñárselo mientras decide. Con `pause` la
+ * suscripción sobrevive, poner la tarjeta la reanuda sin crear nada nuevo, y
+ * el corte de acceso lo sigue decidiendo `trial_end` como hasta ahora.
+ */
+export async function crearSuscripcionDePrueba({
+  team, email, priceId, addons = [],
+}: {
+  team: Team;
+  email: string;
+  priceId: string;
+  addons?: string[];
+}): Promise<{ customerId: string; subscription: Stripe.Subscription }> {
+  const customerId = team.stripeCustomerId
+    ?? (await stripe.customers.create({
+      email,
+      name: team.razonSocial ?? team.name,
+      metadata: { teamId: String(team.id), rnc: team.rnc ?? '' },
+    })).id;
+
+  const planDelPrecio = getPlanByPriceId(priceId);
+  const itemsAddon = ADDONS
+    .filter(a => addons.includes(a.key) && !addonIncluido(planDelPrecio.key, a.key))
+    .map(a => process.env[a.priceEnvKey])
+    .filter((p): p is string => Boolean(p))
+    .map(price => ({ price }));
+
+  const subscription = await stripe.subscriptions.create({
+    customer: customerId,
+    items: [{ price: priceId }, ...itemsAddon],
+    trial_period_days: PRUEBA.dias,
+    trial_settings: { end_behavior: { missing_payment_method: 'pause' } },
+    metadata: { teamId: String(team.id), origen: 'onboarding' },
+  });
+
+  return { customerId, subscription };
+}
