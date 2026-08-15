@@ -18,7 +18,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Fade from '@mui/material/Fade';
 import Portal from '@mui/material/Portal';
-import { IsotipoZero } from '@/components/marca-zero';
+import { LogoZero } from '@/components/marca-zero';
 import { citaAleatoria, type CitaCarga } from '@/lib/config/frases-carga';
 
 /**
@@ -109,25 +109,13 @@ export function ZeroLoader({
           textAlign: 'center',
         }}
       >
-        {/* Logo */}
-        <Box
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 1.5,
-            animation: 'zeroLoaderPulse 1.6s ease-in-out infinite',
-            '@keyframes zeroLoaderPulse': {
-              '0%, 100%': { opacity: 1, transform: 'scale(1)' },
-              '50%':      { opacity: 0.72, transform: 'scale(0.97)' },
-            },
-            '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
-          }}
-        >
-          <IsotipoZero lado={48} />
-          <Typography variant="h4" sx={{ fontWeight: 700, fontFamily: 'var(--font-display)', color: 'text.primary', letterSpacing: '-0.02em' }}>
-            Zero
-          </Typography>
-        </Box>
+        {/* El logotipo de verdad, quieto.
+            Antes esto era el isotipo con la palabra «Zero» escrita al lado en
+            una Typography: un logo rehecho a mano que no coincidía con el de la
+            marca ni en proporción ni en espaciado. Y latía, que en una pantalla
+            de espera es un adorno: quien mira ya sabe que está esperando, y el
+            movimiento se lo dice la barra de abajo. */}
+        <LogoZero alto={36} />
 
         {/* Cita + autor. Alto reservado para que nada salte al aparecer. */}
         <Box sx={{ minHeight: 96, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

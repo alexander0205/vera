@@ -6,17 +6,17 @@ import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
 import {
   LayoutDashboard, Users, Package,
-  Settings, Activity, Shield, Menu as MenuIcon, Plus, ChevronDown, ChevronRight,
+  Settings, Activity, Shield, Menu as MenuIcon, Plus, ChevronDown,
   TrendingDown, BarChart3, CreditCard, Building2, Check, LogOut,
-  Printer, X, ChevronUp, Search, UserCircle, AlertCircle, Zap,
+  Printer, X, Search, UserCircle, AlertCircle, Zap,
   PanelLeftClose, PanelLeftOpen, ShoppingCart, Wallet, BookOpen,
   } from 'lucide-react';
-import { GlobalSearch } from '@/components/global-search';
 import { ModuleHeader } from '@/components/module-header';
 import { BannerSuscripcion } from '@/components/banner-suscripcion';
 import { RailModulos } from '@/components/rail-modulos';
 import { RailBrand } from '@/components/rail-brand';
 import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
+import { useOrdenNav, registrarVisitaNav } from '@/lib/hooks/useOrdenNav';
 import { planHasFeature } from '@/lib/plans';
 import { planColorMui } from '@/lib/config/plans';
 import { userCan, type Permission } from '@/lib/config/roles';
@@ -33,6 +33,7 @@ import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
 import Collapse from '@mui/material/Collapse';
 import Menu from '@mui/material/Menu';
+import useMediaQuery from '@mui/material/useMediaQuery';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,19 +45,20 @@ type NavGroup = {
 };
 
 type NavItem = {
+  id: string;
   href: string;
   icon: React.ElementType;
   label: string;
   exact?: boolean;
 };
 
-// ─── Nav config ───────────────────────────────────────────────────────────────
+/** Una entrada de la lista reordenable: o lleva a un sitio, o abre un submenú.
+ *  Las dos cuentan visitas y las dos pueden cambiar de sitio con el uso. */
+type NavSeccion =
+  | ({ tipo: 'item' } & NavItem)
+  | ({ tipo: 'grupo' } & NavGroup);
 
-/** Grupos del nav abiertos/cerrados. Se recuerda entre recargas: quien
- *  cierra Contabilidad porque no la usa no quiere volver a cerrarla cada
- *  vez que entra. En localStorage, no sessionStorage — es una preferencia,
- *  no un contexto de navegación. */
-const NAV_GRUPOS_KEY = 'zero:nav-grupos';
+// ─── Nav config ───────────────────────────────────────────────────────────────
 
 const GROUPS: NavGroup[] = [
   {
@@ -134,10 +136,17 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
-const TOP_ITEMS: NavItem[] = [
-  { href: '/dashboard',          icon: LayoutDashboard, label: 'Inicio',    exact: true },
-  { href: '/dashboard/clientes', icon: Users,           label: 'Contactos' },
-  { href: '/dashboard/reportes', icon: BarChart3,       label: 'Reportes'  },
+/** Secciones sin submenú. Van en la MISMA lista que los grupos: para el
+ *  usuario "Contactos" y "Contabilidad" son dos entradas del menú, y el orden
+ *  por uso no tendría sentido si vivieran en dos listas separadas.
+ *
+ *  Reportes ya no sale arriba junto a Contactos: se mira DESPUÉS de cerrar los
+ *  números, no antes de empezar el día, así que baja a debajo de Contabilidad
+ *  (ver `seccionesBase`). */
+const ITEMS: NavItem[] = [
+  { id: 'dashboard', href: '/dashboard',          icon: LayoutDashboard, label: 'Dashboard', exact: true },
+  { id: 'contactos', href: '/dashboard/clientes', icon: Users,           label: 'Contactos' },
+  { id: 'reportes',  href: '/dashboard/reportes', icon: BarChart3,       label: 'Reportes'  },
 ];
 
 // ─── Permission gating ──────────────────────────────────────────────────────
@@ -259,8 +268,43 @@ const planColor = planColorMui;
 
 // ─── Sidebar Content ──────────────────────────────────────────────────────────
 
-const SIDEBAR_WIDTH = 224;
+const SIDEBAR_WIDTH = 264; // 224 se quedaba corto: "Balance de comprobación" y
+                           // "Activar facturación electrónica" salían cortados
 const RAIL_WIDTH = 68;   // ancho colapsado (solo iconos) del sidebar desktop
+
+/**
+ * Escala gris→blanco del menú. Antes todo el texto era blanco casi puro y la
+ * barra azul se veía maciza; ahora el peso lo pone la tipografía y el color se
+ * limita a marcar jerarquía: en reposo gris, al pasar por encima casi blanco,
+ * y blanco puro solo donde estás. Los iconos son de lucide y pintan con
+ * `currentColor`, así que siguen la misma escala sin tocarlos.
+ */
+const TINTA = {
+  reposo: 'rgba(203,213,225,0.72)',
+  hover:  'rgba(248,250,252,0.96)',
+  activa: '#ffffff',
+  tenue:  'rgba(203,213,225,0.5)',   // rótulos, atajos y metadatos
+};
+
+/** Sora (la tipografía de marca) para las secciones: a 14px con peso 600 marca
+ *  mucho más que Inter y le da al menú el aire de barra de aplicación. Los
+ *  hijos se quedan en Inter, que aguanta mejor las listas largas. */
+const FUENTE_SECCION = {
+  fontFamily:    'var(--font-display)',
+  fontSize:      '0.875rem',
+  letterSpacing: '-0.005em',
+};
+
+/** Cuánto hay que dejar el puntero encima de un grupo para que se despliegue.
+ *  Medio segundo es muchísimo más de lo que dura cruzar el menú en diagonal
+ *  hacia un ítem de más abajo, así que de camino no se abre nada. */
+const RETARDO_HOVER_MS = 500;
+
+/** Apertura del submenú. Por debajo de 200ms se percibe como un salto y por
+ *  encima de 350ms se hace lenta; el chevron gira con esta misma duración para
+ *  que no vayan a destiempo. */
+const DURACION_DESPLIEGUE_MS = 240;
+const CURVA_DESPLIEGUE = 'cubic-bezier(0.25, 0.8, 0.3, 1)'; // salida suave
 
 function SidebarContent({
   teams,
@@ -314,7 +358,7 @@ function SidebarContent({
   // flag propio en teams: manda `modules` (empresa ∩ rol), así que mientras
   // cargan los permisos NO se muestra — es opt-in y la mayoría no lo tiene.
 
-  // Filtrar TOP_ITEMS + GROUPS por permisos del rol activo.
+  // Filtrar ITEMS + GROUPS por permisos del rol activo.
   // Grupos sin hijos accesibles se omiten completamente.
   // Para platform admin, activeTeam.role ya es 'admin' (via getUserTeams), que
   // tiene todos los permisos en ROLES. Por eso aquí no necesitamos pasar platformRole.
@@ -330,12 +374,17 @@ function SidebarContent({
   // mueve a Configuración, su ubicación permanente. Nunca aparece en los dos
   // lugares a la vez. dgiiHabilitado viene de /api/habilitacion/ambiente-actual
   // (lectura en vivo del ambiente en ecf-api) — ver DashboardLayout.
-  const habilitacionTopItem: NavItem = { href: '/dashboard/habilitacion', icon: Zap, label: 'Activar facturación electrónica' };
+  // Se queda FUERA de la lista reordenable y clavado arriba: es un aviso con
+  // fecha de caducidad, no una sección. Si el orden por uso lo mandara al
+  // fondo, dejaría de cumplir su único trabajo.
+  const habilitacionCta: NavItem | null =
+    !dgiiHabilitado && can('/dashboard/habilitacion')
+      ? { id: 'habilitacion', href: '/dashboard/habilitacion', icon: Zap, label: 'Activar facturación electrónica' }
+      : null;
 
-  const topItemsVisibles  = [
-    ...TOP_ITEMS,
-    ...(!dgiiHabilitado ? [habilitacionTopItem] : []),
-  ].filter(item => can(item.href));
+  const itemsVisibles = new Map(
+    ITEMS.filter(i => can(i.href)).map(i => [i.id, { tipo: 'item' as const, ...i }]),
+  );
   const staticGroupsVis   = GROUPS
     .filter(g => !(sinFacturacion && FACTURACION_ONLY_GROUPS.has(g.id)))
     .map(g => ({
@@ -360,57 +409,95 @@ function SidebarContent({
       ];
   const groupsVisibles    = conCaja.filter((g): g is NavGroup => g !== null);
 
-  // Grupo que contiene la ruta actual. Siempre termina abierto: si no, el ítem
-  // en el que estás quedaría escondido dentro de un grupo cerrado.
-  const grupoActivo = groupsVisibles.find(
-    g => g.children.some(c => pathname.startsWith(c.href)),
-  )?.id ?? null;
+  // ── La lista de secciones, en su orden POR DEFECTO ────────────────────────
+  // Este es el orden que ve quien entra por primera vez, y el que rompe los
+  // empates cuando dos secciones se usan lo mismo. El orden que se acaba
+  // pintando sale de useOrdenNav (abajo).
+  const seccionesBase: NavSeccion[] = [];
+  const empujarItem = (id: string) => {
+    const item = itemsVisibles.get(id);
+    if (item) seccionesBase.push(item);
+  };
 
-  // Arranca solo con el grupo activo. Lo guardado se lee DESPUÉS del primer
-  // render: tocar localStorage mientras se renderiza rompe la hidratación,
-  // porque el servidor no lo tiene y pinta otra cosa.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(
-    () => (grupoActivo ? { [grupoActivo]: true } : {}),
-  );
-  const leidoDelDisco = useRef(false);
+  empujarItem('dashboard');
+  empujarItem('contactos');
+  for (const g of groupsVisibles) {
+    seccionesBase.push({ tipo: 'grupo', ...g });
+    if (g.id === 'contabilidad') empujarItem('reportes');
+  }
+  // Sin permiso de contabilidad no hay de qué colgarlo; cierra la lista.
+  if (!seccionesBase.some(s => s.id === 'reportes')) empujarItem('reportes');
 
-  useEffect(() => {
-    try {
-      const crudo = localStorage.getItem(NAV_GRUPOS_KEY);
-      const guardado = crudo ? (JSON.parse(crudo) as Record<string, boolean>) : {};
-      setOpenGroups(grupoActivo ? { ...guardado, [grupoActivo]: true } : guardado);
-    } catch {
-      // Storage bloqueado (modo privado, permisos): se queda con el default.
-    }
-    leidoDelDisco.current = true;
-    // Solo al montar: a partir de ahí manda lo que el usuario toque.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Al navegar a otra sección, su grupo se abre. Depende de `grupoActivo` y no
-  // de `pathname`: así, si cierras a mano el grupo en el que estás, se queda
-  // cerrado —moverte dentro de él no lo vuelve a abrir de un salto—.
-  useEffect(() => {
-    if (!grupoActivo) return;
-    setOpenGroups(prev => (prev[grupoActivo] ? prev : { ...prev, [grupoActivo]: true }));
-  }, [grupoActivo]);
-
-  // Se persiste el estado completo, no solo el último clic, para que abrir dos
-  // grupos y recargar los devuelva a los dos.
-  useEffect(() => {
-    if (!leidoDelDisco.current) return;
-    try {
-      localStorage.setItem(NAV_GRUPOS_KEY, JSON.stringify(openGroups));
-    } catch {
-      // Sin persistencia el nav sigue funcionando, solo no recuerda.
-    }
-  }, [openGroups]);
-
-  const toggleGroup = (id: string) =>
-    setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
+  const secciones = useOrdenNav(seccionesBase.map(s => s.id))
+    .map(id => seccionesBase.find(s => s.id === id))
+    .filter((s): s is NavSeccion => s !== undefined);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
+
+  // Sección donde estás ahora mismo. Sirve para dos cosas: abrir su grupo sin
+  // que haya que pedirlo, y sumarle la visita que alimenta el orden por uso.
+  const seccionActual = secciones.find(s =>
+    s.tipo === 'grupo'
+      ? s.children.some(c => pathname.startsWith(c.href))
+      : isActive(s.href, s.exact),
+  ) ?? null;
+  const grupoActivo = seccionActual?.tipo === 'grupo' ? seccionActual.id : null;
+
+  const idSeccionActual = seccionActual?.id ?? null;
+  useEffect(() => {
+    if (idSeccionActual) registrarVisitaNav(idSeccionActual);
+  }, [idSeccionActual]);
+
+  // ── Un solo desplegable abierto a la vez ──────────────────────────────────
+  // Reglas, en una línea: se abre al dejar el puntero encima medio segundo o
+  // con un clic; se cierra SOLO si lo cierras tú o si abres otro. Sacar el
+  // ratón no cierra nada — cerrar por salir convierte el menú en un parpadeo
+  // mientras bajas hacia el ítem que ibas a pulsar.
+  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(() => grupoActivo);
+
+  // El grupo donde estás se abre solo, o el ítem en el que te encuentras
+  // quedaría escondido dentro de un grupo cerrado. Depende de `grupoActivo` y
+  // no de `pathname` porque los permisos llegan después del primer render y el
+  // grupo puede aparecer tarde. Si la ruta nueva no cuelga de ningún grupo no
+  // se cierra nada: lo que abriste sigue abierto.
+  useEffect(() => {
+    if (grupoActivo) setGrupoAbierto(grupoActivo);
+  }, [grupoActivo]);
+
+  // Solo puede haber una apertura en cola, la del grupo que tiene el puntero
+  // encima ahora mismo.
+  const pendienteRef = useRef<{ id: string; reloj: ReturnType<typeof setTimeout> } | null>(null);
+
+  const cancelarPendiente = useCallback(() => {
+    if (pendienteRef.current) clearTimeout(pendienteRef.current.reloj);
+    pendienteRef.current = null;
+  }, []);
+
+  // Un reloj vivo después de desmontar intentaría tocar el estado de un
+  // componente que ya no existe.
+  useEffect(() => cancelarPendiente, [cancelarPendiente]);
+
+  const programarApertura = (id: string) => {
+    cancelarPendiente();
+    const reloj = setTimeout(() => {
+      pendienteRef.current = null;
+      setGrupoAbierto(id);
+    }, RETARDO_HOVER_MS);
+    pendienteRef.current = { id, reloj };
+  };
+
+  // El clic es la vía rápida —no espera el medio segundo— y también la única
+  // forma de cerrar. Enter y Espacio sobre el botón llegan aquí como clic, así
+  // que el teclado abre y cierra igual que el ratón.
+  const alternarGrupo = (id: string) => {
+    cancelarPendiente();
+    setGrupoAbierto(prev => (prev === id ? null : id));
+  };
+
+  // Sin animación cuando el sistema pide menos movimiento.
+  const sinMovimiento = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const duracion = sinMovimiento ? 0 : DURACION_DESPLIEGUE_MS;
 
   return (
     <Box
@@ -426,7 +513,16 @@ function SidebarContent({
       <RailBrand modulo="facturacion" />
 
       {/* Nav */}
-      <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+      <Box
+        sx={{
+          flex: 1, overflowY: 'auto', px: 1.5, py: 1.5,
+          display: 'flex', flexDirection: 'column', gap: 0.25,
+          // Sin esto los ítems se aplastan unos milímetros en cuanto la lista
+          // no cabe, y con un desplegable abierto el menú entero se mueve
+          // aunque no haya cambiado nada por encima. Que sobre → que scrollee.
+          '& > *': { flexShrink: 0 },
+        }}
+      >
 
         {/* Sin plan — bloquear nav */}
         {!hasPlan && (
@@ -462,19 +558,19 @@ function SidebarContent({
               px:          1.5,
               py:          1,
               mb:          0.5,
-              borderRadius: '8px',
-              bgcolor:     'rgba(255,255,255,0.15)',
+              borderRadius: '10px',
+              bgcolor:     'rgba(255,255,255,0.16)',
               color:       '#ffffff',
-              fontSize:    '0.875rem',
-              fontWeight:  600,
+              ...FUENTE_SECCION,
+              fontWeight:  700,
               textDecoration: 'none',
               transition:  'background-color 0.15s',
               ...(hasPlan
-                ? { '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' } }
+                ? { '&:hover': { bgcolor: 'rgba(255,255,255,0.26)' } }
                 : { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' }),
             }}
           >
-            <Plus style={{ width: 16, height: 16, flexShrink: 0 }} />
+            <Plus style={{ width: 17, height: 17, flexShrink: 0 }} />
             <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>Nueva Factura</Box>
           </Box>
         )}
@@ -491,17 +587,18 @@ function SidebarContent({
             px:          1.5,
             py:          1,
             mb:          0.5,
-            borderRadius: '8px',
-            color:       'rgba(224,231,253,0.8)',
-            fontSize:    '0.875rem',
+            borderRadius: '10px',
+            color:       TINTA.reposo,
+            ...FUENTE_SECCION,
+            fontWeight:  600,
             cursor:      'pointer',
             bgcolor:     'transparent',
             border:      'none',
             transition:  'all 0.15s',
-            '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+            '&:hover':   { bgcolor: 'rgba(255,255,255,0.1)', color: TINTA.hover },
           }}
         >
-          <Search style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <Search style={{ width: 17, height: 17, flexShrink: 0 }} />
           <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>Buscar...</Box>
           <Box
             component="kbd"
@@ -509,6 +606,7 @@ function SidebarContent({
             sx={{
               fontSize:    '0.6875rem',
               bgcolor:     'rgba(255,255,255,0.1)',
+              color:       TINTA.tenue,
               borderRadius: '4px',
               px:          0.75,
               py:          0.25,
@@ -519,81 +617,140 @@ function SidebarContent({
           </Box>
         </Box>
 
-        {/* Top items */}
-        {topItemsVisibles.map(item => {
-          const active = isActive(item.href, item.exact);
-          return (
-            <Box
-              key={item.href}
-              component={Link}
-              href={item.href}
-              onClick={onClose}
-              sx={{
-                display:     'flex',
-                alignItems:  'center',
-                gap:         1.5,
-                px:          1.75,
-                py:          1.25,
-                borderRadius: '10px',
-                fontSize:    '0.9375rem',
-                lineHeight:  1.3,
-                fontWeight:  active ? 600 : 500,
-                color:       active ? '#ffffff' : 'rgba(224,231,253,0.78)',
-                bgcolor:     active ? 'rgba(255,255,255,0.22)' : 'transparent',
-                textDecoration: 'none',
-                transition:  'background-color 0.15s, color 0.15s',
-                '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: '#ffffff' },
-              }}
-            >
-              <item.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
-              <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>{item.label}</Box>
-            </Box>
-          );
-        })}
+        {/* Activar facturación electrónica — clavado arriba mientras haga falta */}
+        {habilitacionCta && (
+          <Box
+            component={Link}
+            href={habilitacionCta.href}
+            onClick={onClose}
+            sx={{
+              display:     'flex',
+              alignItems:  'center',
+              gap:         1.25,
+              px:          1.5,
+              py:          1,
+              mb:          0.5,
+              borderRadius: '10px',
+              color:       isActive(habilitacionCta.href) ? TINTA.activa : TINTA.reposo,
+              bgcolor:     isActive(habilitacionCta.href) ? 'rgba(255,255,255,0.18)' : 'transparent',
+              ...FUENTE_SECCION,
+              // Un punto menos que el resto: es la única etiqueta larga del
+              // menú y a 14px se corta incluso con la barra ya ensanchada.
+              fontSize:    '0.8125rem',
+              fontWeight:  600,
+              textDecoration: 'none',
+              overflow:    'hidden',
+              transition:  'all 0.15s',
+              '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: TINTA.hover },
+            }}
+          >
+            <habilitacionCta.icon style={{ width: 17, height: 17, flexShrink: 0 }} />
+            <Box component="span" className="nav-text" sx={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{habilitacionCta.label}</Box>
+          </Box>
+        )}
 
-        <Divider sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.15)' }} />
+        <Divider sx={{ my: 0.75, borderColor: 'rgba(255,255,255,0.14)' }} />
 
-        {/* Groups */}
-        {groupsVisibles.map(group => {
-          const groupActive = group.children.some(c => pathname.startsWith(c.href));
-          const isOpen      = openGroups[group.id] ?? false;
-
-          return (
-            <Box key={group.id}>
+        {/* Secciones — el orden lo pone useOrdenNav (uso de los últimos días),
+            no el orden en que están escritas arriba. */}
+        {secciones.map(seccion => {
+          if (seccion.tipo === 'item') {
+            const active = isActive(seccion.href, seccion.exact);
+            return (
               <Box
-                component="button"
-                onClick={() => toggleGroup(group.id)}
+                key={seccion.id}
+                component={Link}
+                href={seccion.href}
+                onClick={onClose}
                 sx={{
                   display:     'flex',
                   alignItems:  'center',
-                  gap:         1,
+                  gap:         1.5,
+                  px:          1.75,
+                  py:          1.25,
+                  borderRadius: '10px',
+                  ...FUENTE_SECCION,
+                  lineHeight:  1.3,
+                  fontWeight:  active ? 700 : 600,
+                  color:       active ? TINTA.activa : TINTA.reposo,
+                  bgcolor:     active ? 'rgba(255,255,255,0.22)' : 'transparent',
+                  boxShadow:   active ? 'inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
+                  textDecoration: 'none',
+                  transition:  'background-color 0.15s, color 0.15s',
+                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: TINTA.hover },
+                }}
+              >
+                <seccion.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
+                <Box component="span" className="nav-text" sx={{ whiteSpace: 'nowrap' }}>{seccion.label}</Box>
+              </Box>
+            );
+          }
+
+          const group       = seccion;
+          const groupActive = group.children.some(c => pathname.startsWith(c.href));
+          const isOpen      = grupoAbierto === group.id;
+          const idPanel     = `nav-grupo-${group.id}`;
+
+          return (
+            <Box
+              key={group.id}
+              onPointerEnter={e => {
+                // En táctil y con lápiz no existe "pasar por encima": ahí manda
+                // el tap, que llega como click. Filtrar por pointerType evita
+                // que el menú se abra solo al arrastrar el dedo por la pantalla.
+                if (e.pointerType !== 'mouse' || isOpen) return;
+                programarApertura(group.id);
+              }}
+              // Salir cancela la apertura EN COLA, nada más: lo que ya está
+              // abierto se queda abierto.
+              onPointerLeave={e => {
+                if (e.pointerType === 'mouse' && pendienteRef.current?.id === group.id) cancelarPendiente();
+              }}
+            >
+              <Box
+                component="button"
+                data-cabecera-grupo
+                aria-expanded={isOpen}
+                aria-controls={idPanel}
+                onClick={() => alternarGrupo(group.id)}
+                sx={{
+                  display:     'flex',
+                  alignItems:  'center',
+                  gap:         1.5,
                   width:       '100%',
                   px:          1.75,
                   py:          1.25,
                   borderRadius: '10px',
-                  fontSize:    '0.9375rem',
+                  ...FUENTE_SECCION,
                   lineHeight:  1.3,
-                  fontWeight:  groupActive ? 600 : 500,
-                  color:       groupActive ? '#ffffff' : 'rgba(224,231,253,0.78)',
-                  bgcolor:     'transparent',
+                  fontWeight:  groupActive ? 700 : 600,
+                  color:       groupActive || isOpen ? TINTA.activa : TINTA.reposo,
+                  bgcolor:     groupActive ? 'rgba(255,255,255,0.16)' : 'transparent',
                   border:      'none',
                   cursor:      'pointer',
-                  transition:  'all 0.15s',
-                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: '#ffffff' },
+                  transition:  'background-color 0.15s, color 0.15s',
+                  '&:hover':   { bgcolor: 'rgba(255,255,255,0.12)', color: TINTA.hover },
                 }}
               >
                 <group.icon style={{ width: 19, height: 19, flexShrink: 0 }} />
                 <Box component="span" className="nav-text" sx={{ flex: 1, textAlign: 'left', whiteSpace: 'nowrap' }}>{group.label}</Box>
-                <Box component="span" className="nav-text" sx={{ display: 'flex' }}>
-                  {isOpen
-                    ? <ChevronUp style={{ width: 14, height: 14, opacity: 0.7 }} />
-                    : <ChevronRight style={{ width: 14, height: 14, opacity: 0.7 }} />
-                  }
+                <Box
+                  component="span"
+                  className="nav-text"
+                  sx={{
+                    display: 'flex', opacity: 0.65,
+                    transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                    // Misma duración y misma curva que la altura del submenú:
+                    // si giran a distinto ritmo se nota enseguida.
+                    transition: `transform ${duracion}ms ${CURVA_DESPLIEGUE}`,
+                  }}
+                >
+                  <ChevronDown style={{ width: 15, height: 15 }} />
                 </Box>
               </Box>
 
-              <Collapse className="nav-children" in={isOpen} timeout="auto">
-                <Box sx={{ ml: 3, pl: 1, borderLeft: '1px solid rgba(255,255,255,0.2)', mt: 0.25, mb: 0.5 }}>
+              <Collapse className="nav-children" in={isOpen} timeout={duracion} easing={CURVA_DESPLIEGUE}>
+                <Box id={idPanel} sx={{ ml: 3, pl: 1, borderLeft: '1px solid rgba(255,255,255,0.18)', mt: 0.25, mb: 0.5 }}>
                   {group.children.map(child => {
                     const active = pathname.startsWith(child.href);
                     return (
@@ -611,10 +768,10 @@ function SidebarContent({
                             py:          1,
                             px:          1.5,
                             borderRadius: '8px',
-                            fontSize:    '0.875rem',
-                            lineHeight:  1.3,
-                            fontWeight:  active ? 600 : 500,
-                            color:       active ? '#ffffff' : 'rgba(224,231,253,0.72)',
+                            fontSize:    '0.8125rem',
+                            lineHeight:  1.35,
+                            fontWeight:  active ? 700 : 500,
+                            color:       active ? TINTA.activa : TINTA.reposo,
                             bgcolor:     active ? 'rgba(255,255,255,0.18)' : 'transparent',
                             textDecoration: 'none',
                             transition:  'all 0.15s',
@@ -624,7 +781,7 @@ function SidebarContent({
                             display:     'flex',
                             alignItems:  'center',
                             gap:         0.75,
-                            '&:hover':   { color: '#ffffff', bgcolor: 'rgba(255,255,255,0.08)' },
+                            '&:hover':   { color: TINTA.hover, bgcolor: 'rgba(255,255,255,0.08)' },
                           }}
                         >
                           <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{child.label}</Box>
@@ -649,10 +806,10 @@ function SidebarContent({
                               opacity:     0,
                               p:           0.5,
                               borderRadius: '4px',
-                              color:       'rgba(224,231,253,0.7)',
+                              color:       TINTA.tenue,
                               transition:  'all 0.15s',
                               display:     'flex',
-                              '&:hover':   { bgcolor: 'rgba(255,255,255,0.2)', color: '#ffffff' },
+                              '&:hover':   { bgcolor: 'rgba(255,255,255,0.2)', color: TINTA.activa },
                             }}
                           >
                             <Plus style={{ width: 12, height: 12 }} />
@@ -667,10 +824,11 @@ function SidebarContent({
           );
         })}
 
-        {/* Justo después de Configuración, dentro de la lista que hace scroll —
-            no anclado al pie. Mismo componente y misma fuente de datos que en
-            los otros 3 menús: los módulos que la empresa tiene y el rol puede
-            ver. Antes acá había enlaces sueltos a POS y Escolar a mano. */}
+        {/* Al final de la lista que hace scroll —no anclado al pie— y FUERA del
+            orden por uso: es "irse a otro producto", no una sección más de
+            Facturación, así que se queda siempre en el mismo sitio. Mismo
+            componente y misma fuente de datos que en los otros 3 menús: los
+            módulos que la empresa tiene y el rol puede ver. */}
         <RailModulos current="facturacion" />
       </Box>
 
@@ -685,9 +843,9 @@ function SidebarContent({
           title="Ver qué hay de nuevo"
           className="nav-text"
           sx={{
-            fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
+            fontSize: '0.6875rem', fontWeight: 500, color: TINTA.tenue, whiteSpace: 'nowrap',
             textDecoration: 'none', transition: 'color 0.15s',
-            '&:hover': { color: 'rgba(224,231,253,0.9)' },
+            '&:hover': { color: TINTA.hover },
           }}
         >
           Zero v{process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0'} · Novedades
@@ -758,7 +916,10 @@ function DashboardLayoutInterno({ children }: { children: React.ReactNode }) {
 
   return (
     <Box sx={{ display: 'flex', height: '100dvh', bgcolor: 'grey.50', overflow: 'hidden' }}>
-      <GlobalSearch />
+      {/* El buscador ya NO se monta aquí: vive dentro de ModuleHeader, en el
+          centro de la barra superior. Montarlo también aquí dejaba dos botones
+          con el mismo `id="global-search-trigger"` y el del menú lateral abría
+          el modal del componente equivocado. */}
 
       {/* Arquitectura idéntica al Punto de Venta: rail full-height a la izquierda
           (mismo menú que se abre/cierra al pasar el mouse) + columna de contenido

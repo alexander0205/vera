@@ -42,8 +42,9 @@ export function RailModulos({ current }: { current: ModuleKey | null }) {
         className="nav-text"
         sx={{
           px: 1.5, mb: 0.25, fontSize: '0.6875rem', fontWeight: 700,
-          textTransform: 'uppercase', letterSpacing: '0.06em',
-          color: 'rgba(224,231,253,0.6)', whiteSpace: 'nowrap',
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+          fontFamily: 'var(--font-display)',
+          color: 'rgba(203,213,225,0.5)', whiteSpace: 'nowrap',
         }}
       >
         Módulos
@@ -61,10 +62,11 @@ export function RailModulos({ current }: { current: ModuleKey | null }) {
             // vista parece que la pantalla de carga va y viene.
             onClick={() => anunciarCambioDeModulo(MODULE_LABELS[m])}
             sx={{
-              display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
-              borderRadius: '8px', fontSize: '0.875rem', textDecoration: 'none',
-              color: 'rgba(224,231,253,0.85)', transition: 'all 0.15s',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff' },
+              display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 1,
+              borderRadius: '10px', fontSize: '0.875rem', textDecoration: 'none',
+              fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.005em',
+              color: 'rgba(203,213,225,0.72)', transition: 'all 0.15s',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.12)', color: 'rgba(248,250,252,0.96)' },
             }}
           >
             <Icono style={{ width: 18, height: 18, flexShrink: 0 }} />
