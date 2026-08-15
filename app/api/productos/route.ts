@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { visibleEnFacturacion } from '@/lib/productos/visibilidad';
+import { banderasPorTipo } from '@/lib/productos/donde-se-vende';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { products, productVariants, productVariantAlmacenStock, almacenes } from '@/lib/db/schema';
@@ -141,7 +142,7 @@ export async function POST(req: NextRequest) {
 
   // Default inteligente: un servicio no se muestra en el mostrador salvo que
   // se marque explícito; un bien sí. El usuario puede sobreescribir.
-  const visiblePosFinal = visiblePos ?? (tipo === 'bien');
+  const visiblePosFinal = visiblePos ?? banderasPorTipo(tipo).visiblePos;
 
   // Solo un bien puede llevar variantes; en servicios se ignoran.
   const conVariantes = tipo === 'bien' && !!variants && variants.length > 0;

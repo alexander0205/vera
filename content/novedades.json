@@ -97,6 +97,16 @@
         "tipo": "mejora",
         "titulo": "Instrucciones en cada documento",
         "detalle": "Cada documento puede llevar una nota para la familia —«original con sello», «las dos caras»— que se ve en el enlace donde sube los papeles. Y «Fotos 2x2 ×3» ya no se puede dar por bueno con una sola foto."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "La caja ya no ofrece mensualidades ni recargos",
+        "detalle": "En el punto de venta salían cobros que no son de mostrador —matrícula, mensualidad y hasta un «recargo por mora» de RD$0.00 que al tocarlo emitía un comprobante en cero. Ahora un servicio nace fuera de la caja y solo entra si lo pones tú, desde «¿Dónde se vende?» en la ficha del producto; los bienes siguen apareciendo como siempre. Ese mismo desplegable ya se guarda al editar: antes lo cambiabas y el producto seguía igual."
+      },
+      {
+        "tipo": "nuevo",
+        "titulo": "Elige tu plan y empieza gratis, sin tarjeta",
+        "detalle": "Si tu empresa todavía no tiene un plan, el sistema te lleva directo a elegirlo: los planes de facturación empiezan con 15 días de prueba y los de colegio con 30, sin pedir tarjeta. Lo que tu empresa ya tiene registrado —clientes, comprobantes, estudiantes— se conserva tal cual. Y tu suscripción ahora se mantiene sincronizada con el sistema de cobros aunque un aviso se pierda por el camino."
       }
     ]
   },

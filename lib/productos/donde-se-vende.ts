@@ -46,3 +46,19 @@ export function desdeBanderas(p: { visiblePos?: boolean | null; visibleFacturaci
 export function defaultPorTipo(tipo: string | null | undefined): DondeSeVende {
   return tipo === 'bien' ? 'ambos' : 'facturacion';
 }
+
+/**
+ * Las dos banderas que le tocan a un ítem por su naturaleza, cuando nadie
+ * respondió la pregunta.
+ *
+ * Existe porque la columna `visible_pos` no puede tener un DEFAULT correcto en
+ * SQL: el valor bueno depende de `tipo`, y un DEFAULT no mira otras columnas.
+ * La 0139 dejó el default en `false` (la dirección segura: falta un botón, no
+ * sobra un comprobante) y este helper es el que pone el valor de verdad. Toda
+ * ruta que inserte en `products` —alta manual, importadores, servicios de
+ * sistema— debe pasar por acá en vez de confiar en el default, o el producto
+ * nace escondido sin que nadie lo haya decidido.
+ */
+export function banderasPorTipo(tipo: string | null | undefined) {
+  return aBanderas(defaultPorTipo(tipo));
+}

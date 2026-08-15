@@ -113,6 +113,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   const {
     nombre, descripcion, referencia, codigoBarras, precio, tasaItbis, tipo, activo,
     unidadMedida, costo, stockActual, stockMinimo, controlaInventario, permiteVentaSinStock,
+    visiblePos, visibleFacturacion,
     categoriaId, imagen, variantAtributos, variants,
   } = parsed.data;
 
@@ -147,6 +148,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       ...(stockMinimo          !== undefined && { stockMinimo }),
       ...(controlaInventario   !== undefined && { controlaInventario }),
       ...(permiteVentaSinStock !== undefined && { permiteVentaSinStock }),
+      // Estas dos estaban en el esquema de validación y NO en el update: el
+      // formulario mandaba «¿dónde se vende?», la API la daba por buena y la
+      // tiraba. Editar un producto para sacarlo de la caja no hacía nada, y por
+      // eso 334 de 335 productos de producción seguían con visible_pos = true
+      // pese a que el desplegable lleva meses en pantalla.
+      ...(visiblePos           !== undefined && { visiblePos }),
+      ...(visibleFacturacion   !== undefined && { visibleFacturacion }),
       ...(categoriaId          !== undefined && { categoriaId }),
       ...(imagen               !== undefined && { imagen }),
       updatedAt: new Date(),

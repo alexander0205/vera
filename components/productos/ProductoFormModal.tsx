@@ -17,7 +17,7 @@ import {
   VariantesEditorEdit, type VariantesEditPayload, type VariantesEditInitial,
 } from '@/components/productos/VariantesEditorEdit';
 import {
-  OPCIONES_DONDE_SE_VENDE, aBanderas, desdeBanderas, type DondeSeVende,
+  OPCIONES_DONDE_SE_VENDE, aBanderas, desdeBanderas, defaultPorTipo, type DondeSeVende,
 } from '@/lib/productos/donde-se-vende';
 
 // ─── Constantes / helpers (movidos desde productos/_page-client) ─────────────
@@ -48,14 +48,23 @@ const TIPOS_ITEM: { value: string; label: string; disabled?: boolean }[] = [
   { value: 'combo',    label: 'Combo', disabled: true },
 ];
 
+/** Con qué tipo se abre el alta. El default de «¿dónde se vende?» lo sigue. */
+const EMPTY_TIPO = 'servicio';
+
 const EMPTY_FORM = {
   nombre: '', descripcion: '', referencia: '', codigoBarras: '',
-  precio: '', tasaItbis: 'exento', tipo: 'servicio', unidad: 'Unidad',
+  precio: '', tasaItbis: 'exento', tipo: EMPTY_TIPO, unidad: 'Unidad',
   costo: '', stockActual: '', stockMinimo: '',
   controlaInventario: false, permiteVentaSinStock: true,
   categoriaId: '', imagen: '',
   // "¿Dónde se vende?" — se guarda como visiblePos/visibleFacturacion.
-  donde: 'ambos' as DondeSeVende,
+  //
+  // Sale del tipo, no de un literal. Estaba fijo en 'ambos' mientras el tipo
+  // arranca en 'servicio': la combinación por defecto era «servicio que además
+  // va a la caja», y como el formulario SIEMPRE manda las dos banderas, el
+  // default por tipo de /api/productos nunca llegaba a ejecutarse. Así fue como
+  // mensualidades y matrículas terminaron en la grilla de la cafetería.
+  donde: defaultPorTipo(EMPTY_TIPO) as DondeSeVende,
 };
 
 interface Categoria { id: number; nombre: string; }
@@ -80,6 +89,9 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
   const [opError, setOpError]     = useState<string | null>(null);
   const [showAvanzado, setShowAvanzado] = useState(false);
   const [categorias, setCategorias]     = useState<Categoria[]>([]);
+  // ¿El usuario ya contestó «¿dónde se vende?» a mano? Mientras no, el default
+  // sigue al tipo; en cuanto contesta, manda él.
+  const [tocóDonde, setTocóDonde]       = useState(false);
 
   // Variantes en CREAR (o convertir un bien simple): payload cartesiano.
   const [variantesNuevas, setVariantesNuevas] = useState<VariantesPayload>({ activo: false, variantAtributos: [], variants: [] });
@@ -154,6 +166,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
     setOpError(null);
     setShowAvanzado(false);
     setVariantesEdit(null);
+    setTocóDonde(false);
     if (productoId == null) {
       setForm(EMPTY_FORM);
       setVariantesInit(null);
@@ -163,6 +176,19 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
       cargarDetalle(productoId);
     }
   }, [open, productoId, cargarDetalle]);
+
+  /**
+   * Cambiar el tipo arrastra el «¿dónde se vende?» mientras el usuario no haya
+   * contestado esa pregunta él mismo. Mismo criterio que components/shared/
+   * producto-dialog.tsx: elegir «Producto» y que el desplegable siguiera
+   * diciendo «Solo en Facturación» obliga a corregir a mano algo que el sistema
+   * ya sabe; y en el otro sentido, un servicio que se queda en «En los dos»
+   * porque antes se tocó «Producto» es justo cómo se cuela una mensualidad en la
+   * caja. Si el usuario ya eligió, no se le mueve nada.
+   */
+  function cambiarTipo(tipo: string) {
+    setForm((f) => ({ ...f, tipo, donde: tocóDonde ? f.donde : defaultPorTipo(tipo) }));
+  }
 
   async function handleGuardar() {
     if (!form.nombre.trim()) { setOpError('El nombre es obligatorio'); return; }
@@ -268,7 +294,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
                     }
                     return (
                       <button key={t.value} type="button"
-                        onClick={() => setForm((f) => ({ ...f, tipo: t.value }))}
+                        onClick={() => cambiarTipo(t.value)}
                         className={`flex items-center gap-1.5 px-4 py-2 rounded-full border text-sm font-medium transition-colors ${
                           isSelected
                             ? 'bg-zero-100 border-zero-300 text-zero-800'
@@ -313,7 +339,7 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
             <div className="space-y-1.5">
               <Label>¿Dónde se vende?</Label>
               <Select value={form.donde}
-                onValueChange={(v) => setForm((f) => ({ ...f, donde: v as DondeSeVende }))}>
+                onValueChange={(v) => { setTocóDonde(true); setForm((f) => ({ ...f, donde: v as DondeSeVende })); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {OPCIONES_DONDE_SE_VENDE.map((o) => (

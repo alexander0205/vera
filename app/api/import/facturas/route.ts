@@ -20,6 +20,7 @@ import { ecfDocuments, clients, products } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireImport, readUpload, ImportError } from '@/lib/import/server';
 import { registrarPago } from '@/lib/db/queries';
+import { banderasPorTipo } from '@/lib/productos/donde-se-vende';
 import {
   decodeBuffer, parseCsv, pick, normKey, toCents, toIsoDate, isPlaceholderRnc,
   type ImportRow, type ImportResult,
@@ -164,6 +165,12 @@ export async function POST(req: NextRequest) {
           tasaItbis: 'exento',
           tipo: 'servicio',
           activo: 'true',
+          // Estos productos no los pidió nadie: se inventan para poder enganchar
+          // la línea de una factura histórica que se está importando. Salen de
+          // Facturación, que es de donde vienen, y no de la caja: aparecer en la
+          // grilla del POS por el mero hecho de haber importado el histórico es
+          // ruido que el comerciante no sabe de dónde salió.
+          ...banderasPorTipo('servicio'),
         }));
         for (let i = 0; i < productValues.length; i += 500) {
           await db.insert(products).values(productValues.slice(i, i + 500));
