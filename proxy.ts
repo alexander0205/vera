@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
-import { moduleForHost } from '@/lib/config/modules';
+import { moduleForHost, esHostApp, esRutaDeCuenta } from '@/lib/config/modules';
 
 const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar'];
 
@@ -18,10 +18,31 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/sign-in', request.url));
   }
 
+  const hostActual = request.headers.get('host');
+  const mod = moduleForHost(hostActual);
+
+  // ── Entrar, registrarse y configurar la cuenta viven en app.zero.com.do ──
+  //
+  // Todo esto está condicionado a que APP_HOST exista. Sin esa variable el
+  // bloque entero no hace nada y la aplicación se comporta como siempre: es lo
+  // que permite subir este código a producción sin mover nada, y encender los
+  // subdominios después cambiando solo el entorno.
+  //
+  // La comparación contra `hostActual` no es de adorno: sin ella, un APP_HOST
+  // mal escrito —que `esHostApp()` no reconociera— produciría una redirección
+  // a sí mismo en bucle, y un bucle en /sign-in deja fuera a TODO el mundo,
+  // incluido quien tendría que entrar a arreglarlo.
+  const appHost = process.env.APP_HOST;
+  if (appHost && esRutaDeCuenta(pathname) && !esHostApp(hostActual) && hostActual !== appHost) {
+    const destino = new URL(request.url);
+    destino.host = appHost;
+    destino.protocol = 'https:';
+    return NextResponse.redirect(destino);
+  }
+
   // Home del módulo según el host. Solo se toca la raíz (y /dashboard exacto
   // en el host POS) — las rutas profundas quedan protegidas por los guards de
   // página/módulo, no por el proxy.
-  const mod = moduleForHost(request.headers.get('host'));
   if (mod === 'pos') {
     if (pathname === '/') {
       return NextResponse.redirect(new URL('/pos', request.url));
@@ -34,6 +55,16 @@ export async function proxy(request: NextRequest) {
     if (pathname === '/') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
+  } else if (mod === 'escolar') {
+    // colegio.zero.com.do — el módulo se llama `escolar` por dentro.
+    if (pathname === '/' || pathname === '/dashboard') {
+      return NextResponse.redirect(new URL('/escolar', request.url));
+    }
+  } else if (esHostApp(hostActual) && pathname === '/') {
+    // En el host de la cuenta la raíz no es un panel: es entrar o administrar.
+    // Sin sesión, el guard de arriba ya habría mandado a /sign-in en las rutas
+    // protegidas; aquí se decide para la raíz, que no lo es.
+    return NextResponse.redirect(new URL(sessionCookie ? '/cuenta' : '/sign-in', request.url));
   }
 
   // Pasar el pathname como header para que los Server Components puedan leerlo

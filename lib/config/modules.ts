@@ -115,8 +115,13 @@ export function withBaseModules(mods: readonly ModuleKey[]): ModuleKey[] {
 
 /**
  * Módulo que sirve un hostname (routing de subdominios en proxy.ts).
- * Match exacto contra POS_HOST/FACTURACION_HOST, o por prefijo del hostname
- * ("pos." / "facturacion.") — así pos.localhost:3000 funciona en dev.
+ * Match exacto contra POS_HOST/FACTURACION_HOST/COLEGIO_HOST, o por prefijo
+ * del hostname — así pos.localhost:3000 funciona en dev.
+ *
+ * `colegio.` es el nombre comercial y `escolar.` el interno. Se aceptan los
+ * dos: el módulo se llama `escolar` en todo el código y renombrarlo tocaría
+ * permisos, rutas y base de datos para no ganar nada. El que se publica es
+ * colegio.zero.com.do.
  */
 export function moduleForHost(hostHeader: string | null | undefined): ModuleKey | null {
   if (!hostHeader) return null;
@@ -124,9 +129,65 @@ export function moduleForHost(hostHeader: string | null | undefined): ModuleKey 
   const hostname = host.split(':')[0];
   if (process.env.POS_HOST && host === process.env.POS_HOST) return 'pos';
   if (process.env.FACTURACION_HOST && host === process.env.FACTURACION_HOST) return 'facturacion';
+  if (process.env.COLEGIO_HOST && host === process.env.COLEGIO_HOST) return 'escolar';
   if (process.env.ESCOLAR_HOST && host === process.env.ESCOLAR_HOST) return 'escolar';
   if (hostname.startsWith('pos.')) return 'pos';
   if (hostname.startsWith('facturacion.')) return 'facturacion';
+  if (hostname.startsWith('colegio.')) return 'escolar';
   if (hostname.startsWith('escolar.')) return 'escolar';
   return null;
+}
+
+/**
+ * ¿Este host es el de la cuenta? (`app.zero.com.do`)
+ *
+ * Ahí viven entrar, registrarse, verificar el correo, el onboarding y la
+ * administración de la cuenta. Separarlo tiene una ventaja concreta y no
+ * estética: Google exige un redirect URI por host, y con el login centralizado
+ * es UNO en vez de cuatro.
+ */
+export function esHostApp(hostHeader: string | null | undefined): boolean {
+  if (!hostHeader) return false;
+  const host = hostHeader.toLowerCase();
+  if (process.env.APP_HOST && host === process.env.APP_HOST) return true;
+  return host.split(':')[0].startsWith('app.');
+}
+
+/**
+ * A qué host pertenece cada módulo, para armar enlaces entre subdominios.
+ *
+ * Devuelve null si ese módulo no tiene host propio configurado, y entonces
+ * quien llame debe quedarse en el host actual. Eso es lo que permite subir
+ * este código sin que cambie nada: **sin las variables de entorno puestas,
+ * todo sigue navegando dentro del mismo dominio, como hoy.**
+ */
+export function hostDeModulo(modulo: ModuleKey | null): string | null {
+  switch (modulo) {
+    case 'pos':         return process.env.POS_HOST ?? null;
+    case 'facturacion': return process.env.FACTURACION_HOST ?? null;
+    case 'escolar':     return process.env.COLEGIO_HOST ?? process.env.ESCOLAR_HOST ?? null;
+    default:            return null;
+  }
+}
+
+/**
+ * Rutas que solo viven en el host de la cuenta.
+ *
+ * Prefijos, no rutas exactas: `/bienvenida` no tiene hijos hoy pero
+ * `/reset-password/<token>` sí, y una lista de rutas exactas se queda corta el
+ * día que alguien añada un paso.
+ */
+export const RUTAS_DE_CUENTA = [
+  '/sign-in',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/verifica-tu-correo',
+  '/completar-registro',
+  '/bienvenida',
+  '/cuenta',
+] as const;
+
+export function esRutaDeCuenta(pathname: string): boolean {
+  return RUTAS_DE_CUENTA.some(r => pathname === r || pathname.startsWith(`${r}/`));
 }
