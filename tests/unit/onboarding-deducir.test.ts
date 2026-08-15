@@ -53,8 +53,8 @@ describe('tramoPorFacturas', () => {
   });
 
   it('quien pasa del tope más alto va al plan sin tope', () => {
-    expect(tramoPorFacturas(5000)?.key).toBe('multisucursal');
-    expect(tramoPorFacturas(1_000_000)?.key).toBe('multisucursal');
+    expect(tramoPorFacturas(5000)?.key).toBe('ilimitado');
+    expect(tramoPorFacturas(1_000_000)?.key).toBe('ilimitado');
   });
 
   it('el límite es inclusivo: 50 facturas caben en el plan de 50', () => {

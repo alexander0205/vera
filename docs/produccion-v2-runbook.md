@@ -43,7 +43,7 @@ desde el PR #50.
 Ninguna la puedo tomar yo.
 
 **0.1 — Colegio Andrés Bello (id 9).** Hoy tiene el módulo escolar encendido y
-579 comprobantes emitidos. `multisucursal` es de la familia e-CF y no incluye
+579 comprobantes emitidos. `ilimitado` es de la familia e-CF y no incluye
 `escolar`, así que al encender el cobro lo perdería. Dos salidas:
 
 - `modulos_override` — se lo sostenemos a mano, sin suscripción que no compró
@@ -120,13 +120,14 @@ Comprobación: 1.232 columnas antes → 1.259 después, 0 columnas perdidas.
 ## Fase 2 · Planes a las 22 empresas — HECHA (2026-08-15)
 
 Corrida con el mismo método: pasada en seco con `ROLLBACK`, comprobación, y
-luego `COMMIT`. Resultado: 22 con `multisucursal`, 21 con `["pos"]`, 22 con
+luego `COMMIT`. Resultado: 22 con `ilimitado` —entonces `multisucursal`, ver
+abajo—, 21 con `["pos"]`, 22 con
 acceso `admin`, 2 con override.
 
 | | |
 |---|---|
-| Todas | `multisucursal` — e-CF sin tope, 8 usuarios |
-| Yomalia (19) | `multisucursal` con `adicionales = []`, **sin POS** |
+| Todas | `ilimitado` — e-CF sin tope, 8 usuarios |
+| Yomalia (19) | `ilimitado` con `adicionales = []`, **sin POS** |
 | Yisrael Technology (2) y Andrés Bello (9) | + `modulos_override` con `escolar` |
 | Las 8 filas con estado NULL | pasadas a `admin` |
 

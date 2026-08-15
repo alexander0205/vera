@@ -12,14 +12,14 @@ para que quede el rastro de qué se le concedió a quién y por qué.
 
 | Empresa | Plan | POS |
 |---|---|---|
-| Todas | `multisucursal` — e-CF **sin tope**, 8 usuarios | sí |
-| Yomalia (id 19) | `multisucursal` | **no**, por instrucción expresa |
+| Todas | `ilimitado` — e-CF **sin tope**, 8 usuarios | sí |
+| Yomalia (id 19) | `ilimitado` | **no**, por instrucción expresa |
 
 Nadie paga por esto. Las 14 empresas reales llevan `subscription_status =
 'admin'`, que en `lib/suscripcion/estado.ts` devuelve acceso abierto sin pasar
 por Stripe y sin caducar. Es una concesión, no una suscripción.
 
-## Por qué `multisucursal` y no otro
+## Por qué `ilimitado` y no otro
 
 Es el único plan de la familia e-CF con `docs: -1`. Cualquier otro les pondría
 un techo mensual de comprobantes que hoy no tienen, y a Andrés Bello (579
@@ -27,7 +27,7 @@ emitidos) o Yisrael Kids (395) se les notaría el primer mes.
 
 ## La clave, no el nombre
 
-Se escribe `multisucursal`, **no** `Multi-sucursal`. `getPlan()` resuelve por
+Se escribe `ilimitado`, **no** `Ilimitado`. `getPlan()` resuelve por
 clave; guardar el nombre display fue el bug que dejó a 5 de 8 planes cayendo a
 Gratis después de pagar. Hoy hay un fallback por nombre que lo repara, pero eso
 es una red, no una excusa para volver a escribirlo mal.
@@ -40,7 +40,7 @@ BEGIN;
 
 -- ── 1 · Todas menos Yomalia: facturación sin tope + punto de venta ─────────
 UPDATE teams
-   SET plan_name   = 'multisucursal',
+   SET plan_name   = 'ilimitado',
        adicionales = '["pos"]'::jsonb
  WHERE id <> 19;
 
@@ -49,12 +49,12 @@ UPDATE teams
 -- Hoy tiene exactamente `facturacion` + `administracion`, así que esto le
 -- sube el techo de comprobantes y no le cambia ni una pantalla.
 UPDATE teams
-   SET plan_name   = 'multisucursal',
+   SET plan_name   = 'ilimitado',
        adicionales = '[]'::jsonb
  WHERE id = 19;
 
 -- ── 3 · Los dos que ya tienen el módulo escolar encendido ─────────────────
--- `multisucursal` es de la familia e-CF y NO incluye `escolar`. Con el billing
+-- `ilimitado` es de la familia e-CF y NO incluye `escolar`. Con el billing
 -- encendido, `getTeamModules` arma la lista desde el plan y estos dos
 -- perderían el módulo que hoy ven.
 --
@@ -81,7 +81,7 @@ UPDATE teams
  WHERE subscription_status IS NULL;
 
 -- ── Comprobación antes de confirmar ───────────────────────────────────────
--- Esperado: 22 filas, todas `multisucursal`; `["pos"]` en todas menos la 19;
+-- Esperado: 22 filas, todas `ilimitado`; `["pos"]` en todas menos la 19;
 -- `admin` en las 22; override solo en 2 y 9.
 SELECT id, left(name, 38) AS empresa, plan_name, adicionales,
        subscription_status AS estado, modulos_override AS override
@@ -90,3 +90,17 @@ SELECT id, left(name, 38) AS empresa, plan_name, adicionales,
 
 COMMIT;
 ```
+
+---
+
+## Nota — el renombrado del 2026-08-15
+
+Este SQL se corrió con la clave `multisucursal`, que era como se llamaba
+entonces. Ese mismo día el plan pasó a `ilimitado`, porque «Multi-sucursal»
+prometía una gestión de sucursales que el sistema no tiene: aquí `sucursal` es
+un texto que se le pone a una secuencia y sale impreso en la factura.
+
+Las 22 filas se migraron con `UPDATE teams SET plan_name = 'ilimitado' WHERE
+plan_name = 'multisucursal'`, y el documento se actualizó para que lo de arriba
+se pueda volver a correr tal cual. La clave vieja sigue resolviendo por
+`CLAVES_ANTIGUAS` en `lib/config/plans.ts`.

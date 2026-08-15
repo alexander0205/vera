@@ -4,7 +4,7 @@
  * Este archivo existe por un fallo concreto: el checkout y el webhook
  * guardaban `planDef.name` en `teams.plan_name`, y `getPlan()` resuelve por
  * `key`. Para tres planes daba igual («Pro» es la clave `pro`), pero para los
- * otros cinco no: «Multi-sucursal» no es `multisucursal` y «Avanzado» no es
+ * otros cinco no: «Ilimitado» no es `multisucursal` y «Avanzado» no es
  * `colegio-avanzado`.
  *
  * El resultado era que un colegio pagaba US$350, Stripe confirmaba, y el
@@ -38,7 +38,10 @@ describe('ida y vuelta de plan_name', () => {
 
   it('no distingue mayúsculas ni espacios de sobra', () => {
     expect(getPlan('  COLEGIO-AVANZADO ').key).toBe('colegio-avanzado');
-    expect(getPlan('Multi-Sucursal').key).toBe('multisucursal');
+    expect(getPlan('ILIMITADO').key).toBe('ilimitado');
+    // La clave vieja también, y por el mismo camino: CLAVES_ANTIGUAS se
+    // consulta después de normalizar. Ver tests/unit/plan-alias.test.ts.
+    expect(getPlan('  MultiSucursal '.toLowerCase().trim()).key).toBe('ilimitado');
   });
 
   it('lo desconocido, vacío o nulo cae al plan sin suscripción', () => {
