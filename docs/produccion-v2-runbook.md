@@ -265,10 +265,27 @@ en el runbook anterior es solo del `.env` local, no llegó a producción.) El
 webhook de Stripe se movió a ese mismo dominio, para que no haya dos
 canónicos.
 
-**El proyecto `emitedo-v2` no tiene repo enlazado**: no despliega solo. Los
-commits de la rama `v2` NO están en producción hasta que se haga
-`vercel deploy --prod` a mano. Hoy `/precios` y `/contacto` dan 404 en v2
-porque el sitio público todavía no se ha desplegado.
+**El proyecto `emitedo-v2` no tiene repo enlazado**: no despliega solo. Cada
+subida va a mano, y conviene hacerla en dos tiempos —`vercel build --prod`
+primero y `vercel deploy --prebuilt --prod` después— para que un fallo de
+compilación se vea antes de tocar producción, no después.
+
+### Desplegado el 2026-08-15
+
+Todo lo de la rama `v2` está en producción. Comprobado sobre el dominio real:
+
+| ruta | antes | ahora |
+|---|---|---|
+| `/` | portada de integración | **sitio público** |
+| `/precios` · `/contacto` | 404 | **200** |
+| `/sign-in` · `/sign-up` | 200 | 200 |
+| `/privacidad` · `/terminos` | — | **200** |
+| `/dashboard` | 307 a login | 307 a login |
+| `/api/stripe/webhook` | 405 a GET | 405 a GET (es POST) |
+
+El formulario de integración con la DGII se mudó a `/integracion` y sigue
+funcionando. El lazo del titular sale con el encuadre corregido
+(`61.5 128.4 305.6 171.8`), no con el que lo recortaba.
 
 ## Fase 5 · Dominios
 
