@@ -8,80 +8,137 @@
  * rail está pegado al header, se leía como una sola barra con cuatro marcas
  * distintas — el usuario notaba que "el nav cambia" al moverse entre módulos.
  *
- * Ahora la marca es UNA: el isotipo y «Zero». Nada más.
+ * Ahora van los archivos de marca, no reconstrucciones:
+ *
+ *   · rail abierto  → el logotipo horizontal en blanco
+ *   · rail cerrado  → el ícono de aplicación (cuadro azul con el símbolo)
  *
  * Por aquí pasaron antes el nombre interno del módulo —«GOBERNANZA DE
- * COLEGIOS», que ni cabía— y luego el de la línea comercial —«ZERO ERP», «ZERO
- * COLEGIOS»—. Los dos sobran por el mismo motivo: el módulo en el que estás ya
- * está escrito a dos centímetros, en el conmutador del header. Repetirlo aquí
- * era decir dos veces lo mismo y, de paso, hacer que la marca cambiara de
- * ancho al saltar de módulo.
+ * COLEGIOS», que ni cabía—, el de la línea comercial, y el símbolo con la
+ * palabra «ZERO» escrita al lado en un Typography. Ese último era un logo
+ * rehecho a mano, y por eso costó tres intentos cuadrar sus proporciones: el
+ * símbolo trae aire dentro de su lienzo y las mayúsculas de Sora miden 0,771
+ * del cuerpo. El archivo de marca ya trae todo eso resuelto.
  *
  * `modulo` se queda en las props aunque ya no se pinte: los cuatro rails lo
  * pasan, y quitarlo obliga a tocar los cuatro para no ganar nada.
  */
 
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import { type ModuleKey } from '@/lib/config/modules';
+import { LogoZero } from '@/components/marca-zero';
 import { Isotipo } from '@/lib/marca/isotipo';
 
 /**
- * Cuerpo de la letra y lado del isotipo.
+ * Por debajo de este ancho, la cabecera enseña el ícono en vez del logotipo.
  *
- * No son el mismo número a propósito. El símbolo trae aire dentro de su
- * lienzo: la tinta ocupa poco más de la mitad de la caja en vertical, así que
- * igualarlo al cuerpo de la letra lo dejaría visiblemente más bajo que las
- * mayúsculas. La proporción está puesta para que el trazo del símbolo y el
- * alto de la «Z» midan lo mismo EN PANTALLA, que es lo que se ve — no lo que
- * dice la hoja de estilos.
- *
- * Y son grandes a propósito. Con la marca pequeña, el bloque quedaba como un
- * logo suelto flotando en una banda vacía de 264px: sobraba más de la mitad
- * del ancho. Llenarlo del todo con la palabra «ZERO» pediría una letra de 60px
- * —peor todavía—, así que se sube hasta donde la marca se lee como cabecera y
- * no como adorno. El hueco que queda es el sitio natural del control de
- * plegar, que hoy vive en la barra de arriba.
+ * Abierta mide ~230px y cerrada ~34, así que 120 separa los dos casos con
+ * holgura de sobra por los dos lados.
  */
-const CUERPO_TEXTO = 34;
-const LADO_ISOTIPO = 44;
+const UMBRAL = 120;
+
+/**
+ * Alto del bloque de marca. Tiene que ser EXACTAMENTE el del header.
+ *
+ * El rail y la barra superior se tocan en la esquina, así que sus dos líneas
+ * inferiores se leen como una sola. Con el alto dependiendo del contenido, el
+ * bloque medía una cosa con el logotipo y otra con el símbolo — la marca
+ * saltaba al plegar el menú y la línea nunca cuadraba con la del header.
+ *
+ * 56 sale de `components/module-header.tsx` (`height: 56, minHeight: 56` en su
+ * Toolbar). Si allí cambia, aquí también.
+ */
+const ALTO_HEADER = 56;
+
+/**
+ * Que el símbolo mida LO MISMO abierto y cerrado, para que plegar el menú no
+ * se sienta como un salto.
+ *
+ * Los dos archivos encuadran distinto, y es la única razón de que los números
+ * no coincidan. Medido en el navegador:
+ *
+ *  · En `zero-horizontal-*.svg` el símbolo llena TODO el alto del lienzo
+ *    (proporción 1,0). Un `alto` de 24 dibuja un símbolo de 24.
+ *  · En el `Isotipo` suelto la tinta es solo 0,40 de su caja. Un `size` de 24
+ *    dibujaría un símbolo de 9,6 — menos de la mitad.
+ *
+ * De ahí el factor 2,5. Si algún día se recorta el margen del isotipo, este
+ * número deja de valer y hay que volver a medirlo.
+ */
+const ALTO_MARCA = 24;
+const LADO_ISOTIPO = ALTO_MARCA * 2.5;
 
 export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey }) {
   return (
     <Box
       sx={{
-        // Menos aire arriba y abajo: con la marca pequeña, el relleno de 16px
-        // convertía la cabecera en una banda alta y medio vacía. Ahora manda
-        // el alto de la marca.
-        px: 2, py: 1.25,
+        height: ALTO_HEADER,
         borderBottom: '1px solid rgba(255,255,255,0.1)',
-        display: 'flex', alignItems: 'center', gap: 1.25,
         flexShrink: 0,
+        overflow: 'hidden',
+
+        /**
+         * Consulta de CONTENEDOR, no de ventana.
+         *
+         * Cuál de los dos se ve depende de si el rail está abierto, y ese dato
+         * vive en cada uno de los cuatro raíles, no aquí. Se podía pedir por
+         * props o añadir una clase inversa a `.nav-text` en los cuatro
+         * archivos; las dos formas obligan a tocar código ajeno y a que nadie
+         * se olvide de mantenerlo sincronizado.
+         *
+         * Esta caja mide lo que mide el rail. Declarándola contenedor, sus
+         * hijos responden a su ancho y la decisión se queda entera aquí
+         * dentro. Si mañana aparece un quinto rail, funciona sin tocarlo.
+         *
+         * El alineado va en el HIJO y no aquí porque un contenedor no puede
+         * consultarse a sí mismo: la regla que centra tiene que aplicarse a
+         * algo que esté por debajo del que se mide.
+         */
+        containerType: 'inline-size',
       }}
     >
-      {/* El isotipo suelto en blanco, no el cuadro de la app.
-          `zero-app-blanco.svg` es el ícono de aplicación: un cuadro blanco con
-          el símbolo recortado dentro. Sobre el azul del rail eso metía una
-          pastilla blanca que competía con el nombre.
-
-          Componente y no <img>: los trazos vienen inline, así que toma el
-          color por prop y no hay una petición más para 2 KB de SVG. */}
-      <Box sx={{ display: 'flex', flexShrink: 0 }} aria-hidden>
-        <Isotipo size={LADO_ISOTIPO} color="#ffffff" />
-      </Box>
-
-      {/* nav-text: el rail lo oculta cuando está colapsado a solo iconos. */}
-      <Typography
-        className="nav-text"
+      <Box
         sx={{
-          color: '#fff', fontWeight: 800, fontSize: `${CUERPO_TEXTO}px`,
-          fontFamily: 'var(--font-display)',
-          textTransform: 'uppercase', letterSpacing: '0.04em',
-          lineHeight: 1, whiteSpace: 'nowrap',
+          // Alto completo del bloque: es lo que centra la marca en vertical
+          // sin depender de un relleno que habría que recalcular cada vez que
+          // cambia el tamaño del logo.
+          height: '100%',
+          display: 'flex', alignItems: 'center',
+          // Abierto: 26px a la izquierda, que es donde empiezan los iconos del
+          // menú — la lista lleva `px: 1.5` (12) y cada item `px: 1.75` (14).
+          // Sin ese número el logo arranca pegado al borde y se ve desalineado
+          // con todo lo de abajo.
+          pl: '26px', pr: 1,
+          '& .marca-abierta': { display: 'block' },
+          '& .marca-cerrada': { display: 'none' },
+
+          // Cerrado: el símbolo centrado en los 68px del rail. Alinearlo a los
+          // 26 de la izquierda lo dejaba pegado a un lado, porque ahí ya no hay
+          // texto que lo acompañe — solo él.
+          [`@container (max-width: ${UMBRAL}px)`]: {
+            justifyContent: 'center',
+            pl: 0, pr: 0,
+            '& .marca-abierta': { display: 'none' },
+            // `mx: auto` además del justifyContent: con el símbolo a 60px en un
+            // rail de 68 no sobra casi nada, y basta con que un relleno herede
+            // de algún sitio para que se vaya a un lado. Los márgenes
+            // automáticos lo centran aunque el relleno no llegue a cero.
+            '& .marca-cerrada': { display: 'block', mx: 'auto' },
+          },
         }}
       >
-        Zero
-      </Typography>
+        {/* Abierto: el logotipo horizontal en blanco sobre el azul del rail. */}
+        <LogoZero tono="blanco" alto={ALTO_MARCA} className="marca-abierta" />
+
+        {/* Cerrado: el símbolo suelto, sin el cuadro del ícono de aplicación —
+            sobre el azul, aquella pastilla blanca pesaba más que los iconos del
+            menú que tiene debajo. El Box es porque `Isotipo` no acepta
+            className; `lineHeight: 0` evita el hueco que el SVG deja debajo al
+            comportarse como texto. */}
+        <Box className="marca-cerrada" sx={{ lineHeight: 0 }}>
+          <Isotipo size={LADO_ISOTIPO} color="#ffffff" />
+        </Box>
+      </Box>
     </Box>
   );
 }
