@@ -72,7 +72,16 @@ export async function proxy(request: NextRequest) {
   // Igual que arriba, todo depende de que el host de destino esté configurado
   // y sea distinto del actual: sin `FACTURACION_HOST` esto no hace nada, y
   // nunca se redirige a sí mismo.
-  if (esHostApp(hostActual)) {
+  // Y no solo desde `app.`: CADA ruta de módulo va a su host, venga de donde
+  // venga. `pos.zero.com.do/dashboard/suscripcion` servía la pantalla de
+  // suscripción —que es de Facturación— desde el host del punto de venta,
+  // porque la regla de abajo solo mira `/dashboard` EXACTO y esta ruta tiene
+  // cola. Cualquier enlace, marcador o correo con una ruta profunda entraba
+  // por la puerta equivocada.
+  //
+  // `destino !== hostActual` es lo que evita el bucle y lo que hace que un
+  // host sin configurar no haga nada.
+  {
     const destino = hostDeModulo(moduloDeRuta(pathname));
     if (destino && destino !== hostActual) {
       const url = new URL(request.url);
