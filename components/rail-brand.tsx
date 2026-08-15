@@ -28,6 +28,9 @@ import Box from '@mui/material/Box';
 import { type ModuleKey } from '@/lib/config/modules';
 import { LogoZero } from '@/components/marca-zero';
 import { Isotipo } from '@/lib/marca/isotipo';
+// Del archivo suelto y no del barril `@/components/rail`: ese reexporta
+// RailArmazon, que importa este archivo, y el ciclo rompe el build.
+import { ANCHO_RAIL } from '@/components/rail/estilos';
 
 /**
  * Alto del bloque de marca. Tiene que ser EXACTAMENTE el del header.
@@ -59,6 +62,29 @@ const ALTO_HEADER = 56;
  */
 const ALTO_MARCA = 24;
 const LADO_ISOTIPO = ALTO_MARCA * 2.5;
+
+/**
+ * La sangría del logotipo abierto, para que el símbolo NO SE MUEVA al plegar.
+ *
+ * Antes iba a 26px, alineado con los iconos del menú. Pero el símbolo mide
+ * 42,7 de ancho (24 de alto por la proporción 305,6/171,8 del lazo), así que
+ * a 26 termina en 68,7 — justo fuera de los 68 del rail plegado. Nunca podían
+ * coincidir: al plegar, el símbolo tenía que saltar hacia dentro.
+ *
+ * Centrado en la columna arranca en (68 − 42,7) / 2 = 12,6, y esa es la ÚNICA
+ * x donde cabe entero y es la misma en los dos estados. Poniéndola también en
+ * el logotipo abierto, plegar deja de mover nada: el símbolo se queda donde
+ * está y lo único que pasa es que la palabra «zero» se descubre a su lado.
+ *
+ * El precio es que la marca ya no arranca en la misma vertical que los iconos
+ * de abajo. Es deliberado: entre alinear con los iconos —que se nota mirando
+ * fijo— y que el logo salte cada vez que se abre el menú —que se nota siempre—,
+ * gana lo segundo. Calculado y no escrito a mano para que siga siendo cierto
+ * si cambia `ALTO_MARCA`.
+ */
+const PROPORCION_SIMBOLO = 305.6 / 171.8;
+const ANCHO_SIMBOLO = ALTO_MARCA * PROPORCION_SIMBOLO;
+export const SANGRIA_MARCA = (ANCHO_RAIL - ANCHO_SIMBOLO) / 2;
 
 export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey }) {
   return (
@@ -95,12 +121,11 @@ export function RailBrand({ modulo: _modulo }: { modulo: ModuleKey }) {
           height: '100%',
           display: 'flex', alignItems: 'center',
 
-          // 26px a la izquierda, que es donde empiezan los iconos del menú: la
-          // lista lleva `px: 1.5` (12) y cada item `px: 1.75` (14). Sin ese
-          // número el logo arranca pegado al borde y se ve desalineado con
-          // todo lo de abajo.
+          // La sangría sale calculada (ver SANGRIA_MARCA): es la x donde el
+          // símbolo queda centrado en la columna plegada, y por eso es la única
+          // que sirve también aquí sin que la marca salte al plegar.
           justifyContent: 'flex-start',
-          pl: '26px', pr: 1,
+          pl: `${SANGRIA_MARCA}px`, pr: 1,
           '& .marca-abierta': { display: 'block' },
           '& .marca-cerrada': { display: 'none' },
         }}

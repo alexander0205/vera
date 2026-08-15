@@ -16,7 +16,7 @@
  */
 
 import Box from '@mui/material/Box';
-import { RailBrand } from '@/components/rail-brand';
+import { RailBrand, SANGRIA_MARCA } from '@/components/rail-brand';
 import { RailModulos } from '@/components/rail-modulos';
 import { useNavFijo } from '@/lib/hooks/useNavFijo';
 import type { ModuleKey } from '@/lib/config/modules';
@@ -135,7 +135,7 @@ export function RailArmazon({
 
             // Al desplegarse con el mouse vuelve el logotipo, alineado con los
             // iconos de abajo igual que en el estado fijo.
-            '&&:hover .marca-caja':    { justifyContent: 'flex-start', pl: '26px', pr: 1, width: '100%' },
+            '&&:hover .marca-caja':    { justifyContent: 'flex-start', pl: `${SANGRIA_MARCA}px`, pr: 1, width: '100%' },
             '&&:hover .marca-abierta': { display: 'block' },
             '&&:hover .marca-cerrada': { display: 'none' },
           }),
