@@ -138,9 +138,15 @@ export async function syncModulesFromSubscription(
   teamId: number,
   subscription: Stripe.Subscription,
 ): Promise<void> {
+  // `paused` cuenta como vigente. Es lo que Stripe pone cuando se acaba la
+  // prueba sin tarjeta, y en ese momento la empresa entra en solo-lectura: el
+  // acceso de ESCRITURA lo corta `bloquearSiSoloLectura`, no esta función.
+  // Quitarle además los adicionales le apagaba el POS de la cafetería a un
+  // colegio que todavía puede —y debe— consultar su cartera.
   const vigente = subscription.status === 'active'
     || subscription.status === 'trialing'
-    || subscription.status === 'past_due';
+    || subscription.status === 'past_due'
+    || subscription.status === 'paused';
 
   await db.update(teams)
     .set({
@@ -167,8 +173,14 @@ export async function syncModulesFromSubscription(
 
   const status = subscription.status;
   let next: ModuleKey[];
-  if (status === 'active' || status === 'trialing' || status === 'past_due') {
+  if (status === 'active' || status === 'trialing' || status === 'past_due' || status === 'paused') {
     // past_due: gracia — banner en UI, sin corte inmediato.
+    //
+    // paused: se acabó la prueba sin tarjeta. Los módulos SE QUEDAN. Sin esta
+    // rama, a un colegio se le caía «escolar» el día que vencía la prueba y
+    // dejaba de ver a sus propios estudiantes — justo lo contrario de lo que
+    // promete el modo solo-lectura, que es poder consultar, imprimir y
+    // exportar. Lo que se corta es escribir, y de eso se encarga el guard.
     next = Array.from(new Set<ModuleKey>(['facturacion', ...subMods, ...manuales]));
   } else {
     next = Array.from(new Set<ModuleKey>(['facturacion', ...manuales]));
