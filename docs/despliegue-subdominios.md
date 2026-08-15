@@ -21,6 +21,13 @@ eso sin ganar nada.
 Marketing sí va aparte, y es lo único que se gana de verdad separando: una
 landing no tiene por qué descargar el bundle de un ERP.
 
+> **Estado hoy:** el sitio público ya existe y vive DENTRO de este proyecto, en
+> `app/(marketing)` — `/`, `/precios` y `/contacto`. Funciona sin sesión y sin
+> base de datos, así que no depende de nada del ERP; lo que todavía no está
+> hecho es sacarlo a su propio despliegue. Mientras siga aquí, apuntar
+> `zero.com.do` a este proyecto ya sirve: los subdominios de la app se llevan su
+> raíz antes (ver `proxy.ts`) y lo que queda en `/` es marketing.
+
 ## Antes de empezar: dos decisiones sin cerrar
 
 **1. ¿`facturacion.zero.com.do` se queda en v1 o pasa a v2?**

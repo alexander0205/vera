@@ -26,5 +26,56 @@ export function Isotipo({ size = 512, color = '#ffffff' }: { size?: number; colo
   );
 }
 
+/**
+ * El lazo SIN el aire del lienzo cuadrado.
+ *
+ * `Isotipo` dibuja el símbolo centrado en 428×428 porque de ahí salen los
+ * íconos de la PWA, que necesitan ese margen. Puesto en línea dentro de un
+ * titular o estirado de fondo, ese margen se ve como un hueco.
+ *
+ * El encuadre sale de MEDIR los trazos, no de copiar un número. Antes decía
+ * 280 de ancho —tomado del manual— y con eso el lazo salía cortado por la
+ * derecha: se le comían 26 unidades, el 8% del símbolo, y el lazo de la
+ * derecha aparecía aplastado dentro de cualquier titular.
+ *
+ * `getBBox()` sobre los trazos reales da x 61,83 → 366,76 (304,93 de ancho) e
+ * y 128,61 → 299,97 (171,36 de alto). Centrado exacto dentro del lienzo de
+ * 428,58: los dos centros dan 214,29. Redondeado hacia fuera y manteniendo esa
+ * simetría, con un pelo de aire para que el antialias no muerda el borde.
+ *
+ * Si algún día se rehace el símbolo, esto se vuelve a medir; no se estima.
+ */
+const ENCUADRE_LAZO = '61.5 128.4 305.6 171.8';
+export const PROPORCION_LAZO = 305.6 / 171.8;
+
+export function LazoZero({
+  alto = 24,
+  color = AZUL_ZERO,
+  className,
+  titulo,
+}: {
+  alto?: number;
+  color?: string;
+  className?: string;
+  /** Texto accesible. Sin él el lazo es decorativo y se oculta del lector. */
+  titulo?: string;
+}) {
+  return (
+    <svg
+      viewBox={ENCUADRE_LAZO}
+      height={alto}
+      width={alto * PROPORCION_LAZO}
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      role={titulo ? 'img' : undefined}
+      aria-hidden={titulo ? undefined : true}
+    >
+      {titulo ? <title>{titulo}</title> : null}
+      {TRAZOS.map((d) => <path key={d.slice(0, 24)} d={d} fill={color} />)}
+      <polygon points={POLIGONO} fill={color} />
+    </svg>
+  );
+}
+
 /** Azul corporativo. Se repite aquí para que los generadores de íconos no dependan del CSS. */
 export const AZUL_ZERO = '#3658e1';

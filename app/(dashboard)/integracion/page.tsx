@@ -1,11 +1,20 @@
+/**
+ * Integración de e-CF con la DGII — la vieja portada de la aplicación.
+ *
+ * Vivía en `/` hasta que la raíz pasó a ser el sitio público de marketing
+ * (`app/(marketing)`). Se mudó en vez de borrarse porque el formulario que
+ * tiene detrás —«quiero conectar MI sistema con la DGII»— es una oferta
+ * distinta de la del sitio comercial, y sigue llegando al mismo buzón por
+ * `/api/contacto`.
+ */
+
 import { SiteHeader } from '@/components/site-header';
 import { ContactoForm } from '@/components/contacto-form';
-import { Receipt } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { LogoZero } from '@/components/marca-zero';
 
-export default function HomePage() {
+export default function IntegracionPage() {
   return (
     <Box component="main" sx={{ minHeight: '100vh', background: 'linear-gradient(to bottom, #fff, #f9fafb)' }}>
       <SiteHeader />

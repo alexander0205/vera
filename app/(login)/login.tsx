@@ -69,8 +69,13 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
           <Isotipo size={840} color="#ffffff" />
         </div>
 
+        {/* El logo vuelve al inicio. Es lo primero que se toca cuando alguien
+            llega aquí por error o quiere ver qué es Zero antes de registrarse,
+            y hasta ahora no llevaba a ningún lado. */}
         <div className="relative">
-          <LogoZero tono="blanco" alto={32} />
+          <Link href="/" aria-label="Ir al inicio" className="inline-block">
+            <LogoZero tono="blanco" alto={32} />
+          </Link>
         </div>
 
         <div className="relative my-auto max-w-lg">
