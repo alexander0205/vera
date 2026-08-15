@@ -7,6 +7,7 @@ import {
   teams,
   users,
   clients,
+  products,
   sequences,
   ecfDocuments,
   pagosRecibidos,
@@ -309,6 +310,7 @@ async function computeDashboardStats(teamId: number) {
   const [
     facturasTotal, facturasMes, montoMesRows, montoMesAnteriorRows,
     secuenciasRows, teamRow, serieMesesRows, porTipoRows, topClientesRows,
+    clientesRows, productosRows,
   ] =
     await Promise.all([
       // Total de documentos
@@ -392,6 +394,11 @@ async function computeDashboardStats(teamId: number) {
         .groupBy(ecfDocuments.razonSocialComprador, ecfDocuments.rncComprador)
         .orderBy(desc(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0)`))
         .limit(5),
+      // Los dos de abajo son para los PRIMEROS PASOS, no para el panel con
+      // datos: una empresa recién creada necesita saber qué le falta, y lo que
+      // le falta es exactamente tener con qué facturar y a quién.
+      db.select({ total: count() }).from(clients).where(eq(clients.teamId, teamId)),
+      db.select({ total: count() }).from(products).where(eq(products.teamId, teamId)),
     ]);
 
   const secuenciasDisponibles = secuenciasRows.reduce((acc, s) => {
@@ -420,6 +427,8 @@ async function computeDashboardStats(teamId: number) {
     topClientes: topClientesRows.map(r => ({
       cliente: r.cliente ?? 'Sin nombre', rnc: r.rnc, montoCentavos: Number(r.monto), count: r.count,
     })),
+    clientes:  clientesRows[0]?.total ?? 0,
+    productos: productosRows[0]?.total ?? 0,
   };
 }
 

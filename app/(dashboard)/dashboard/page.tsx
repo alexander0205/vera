@@ -8,6 +8,7 @@ import { getTeamIdForUser, getDashboardStats, getEcfDocuments, getCuentasPorCobr
 import { getUserModules } from '@/lib/auth/modules';
 import { TIPOS_ECF } from '@/lib/ecf/types';
 import { OnboardingChecklist } from '@/components/onboarding-checklist';
+import { PrimerosPasos } from '@/components/primeros-pasos';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import MuiButton from '@mui/material/Button';
@@ -50,6 +51,10 @@ export default async function DashboardPage() {
     getCuentasPorCobrar(teamId),
   ]);
 
+  // Sin un solo comprobante no hay nada que resumir: lo que toca no es un
+  // panel de ceros, son los primeros pasos.
+  const sinFacturar = stats.facturasTotal === 0;
+
   return (
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1200 }}>
       {/* Page header */}
@@ -77,6 +82,27 @@ export default async function DashboardPage() {
         </Link>
       </Box>
 
+      {/*
+        Empresa que todavía no ha emitido nada: en vez del panel entero en cero
+        —y del aviso rojo de secuencias, que dice «roto» cuando lo que pasa es
+        que no ha empezado— se le enseña qué hacer y en qué orden.
+
+        El corte es `facturasTotal === 0` y no «le falta algo de la lista»: en
+        cuanto hay una factura hay historia que resumir, y el panel de verdad
+        vale más que los pasos. Lo que quede pendiente a partir de ahí lo
+        recoge el OnboardingChecklist, que sí se puede cerrar.
+      */}
+      {sinFacturar ? (
+        <PrimerosPasos
+          estado={{
+            tieneCertificado:      stats.tieneCertificado,
+            secuenciasDisponibles: stats.secuenciasDisponibles,
+            productos:             stats.productos,
+            clientes:              stats.clientes,
+          }}
+        />
+      ) : (
+      <>
       <OnboardingChecklist />
 
       {/* Alert: no sequences */}
@@ -513,6 +539,8 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </Box>
+      </>
+      )}
     </Box>
   );
 }
