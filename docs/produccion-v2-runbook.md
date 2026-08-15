@@ -61,10 +61,32 @@ v2 con el cobro apagado y encenderlo después — de hecho es lo más seguro.
 
 ---
 
-## Fase 1 · Base de datos
+## Fase 1 · Base de datos — HECHA (2026-08-15)
 
-Las 10 migraciones, en orden, con `psql`. El journal de drizzle solo llega a
-0004: esto se corre a mano.
+Las 10 corridas en una sola transacción, después de una pasada idéntica
+terminada en `ROLLBACK` para ver si algo chocaba con los datos reales. No
+chocó: los únicos avisos fueron `DROP CONSTRAINT IF EXISTS` sobre
+restricciones que no existían.
+
+| | antes | después |
+|---|---|---|
+| columnas | 1.232 | 1.262 |
+| tablas | 105 | 106 |
+| empresas | 22 | 22 |
+
+Datos intactos: 22 empresas, 39 usuarios, 1.142 comprobantes, 1.216 clientes,
+325 productos, 99 secuencias. Y **22 de 22 con `onboarding_completado_en`**,
+que era lo que podía dejar a todo el mundo fuera.
+
+Comparado columna a columna contra la copia de referencia: cero faltantes. Las
+4 que la copia tiene de más (`mora_porcentaje` y `mora_dias_gracia` en
+`ecf_documents` y `facturas_recurrentes`) las eliminó la migración 0081 y
+`schema.ts` no las declara — **la copia es la atrasada, no producción**.
+
+### Lo que se corrió
+
+Las 10, en orden, con `psql`. El journal de drizzle solo llega a 0004: esto se
+corre a mano.
 
 ```
 0129_documento_listas
@@ -138,16 +160,22 @@ Las 4 del catálogo viejo eliminadas (`STARTER`, `PRO`, `INVOICE`, `BUSINESS`),
 los 9 precios live puestos, y las tres llaves cambiadas a live. Verificado
 leyendo los 12 valores de vuelta con `vercel env pull`.
 
-> **`vercel env add` escribe VACÍO en esta versión del CLI (54.14.0).**
-> Ni con `--value` ni por stdin: la variable se crea, aparece en `env ls` como
-> «Encrypted», y su valor es `""`. Se detectó porque las variables viejas sí se
-> leían de vuelta y las nuevas no — si todas hubieran salido vacías, habría
-> parecido que el cifrado impide leerlas y se habría dado por bueno.
+> **Lo que escribe `vercel env add` (CLI 54.14.0) no se puede leer de vuelta.**
+> Ni con `--value` ni por stdin: la variable se crea, sale en `env ls` como
+> «Encrypted», y `env pull` la devuelve vacía. No sé si el CLI guarda vacío o
+> la marca como *sensitive* —las dos cosas se ven igual desde fuera— y no hace
+> falta saberlo: en los dos casos no sirve.
 >
-> Lo que sí funciona: la API REST (`POST /v10/projects/<id>/env`) con el token
-> de `~/Library/Application Support/com.vercel.cli/auth.json`.
+> Lo que sí funciona y sí se puede comprobar: la API REST
+> (`POST /v10/projects/<id>/env` con `type: 'encrypted'`), usando el token de
+> `~/Library/Application Support/com.vercel.cli/auth.json`. Hay un ayudante en
+> el scratchpad de esa sesión (`venv.py`).
 >
-> **Verificar siempre con `env pull`, nunca dar por hecho que se escribió.**
+> Se detectó porque las variables VIEJAS sí se leían y las nuevas no. Si todas
+> hubieran salido vacías, habría parecido que el cifrado impide leerlas y se
+> habría dado por bueno.
+>
+> **Verificar siempre con `env pull`. Nunca dar por hecho que se escribió.**
 
 ### Ojo con lo que esto cambia
 
@@ -164,13 +192,21 @@ precio, o condicionar esa llamada a `BILLING_ENABLED`.
 
 ### Lo que falta
 
-**Copiar de v1**, que lleva meses funcionando con ellas:
+**Puestas y verificadas** (2026-08-15): `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `NEXT_PUBLIC_SOPORTE_WHATSAPP`.
+
+**Las 7 de v1 NO se pueden copiar.** Están marcadas como *sensitive* en el
+proyecto de v1, así que Vercel no devuelve su valor — ni por CLI ni por API, a
+nadie. Tampoco están en ningún `.env` local. Hay que sacarlas de su origen
+(consola de AWS para las de S3) y ponerlas a mano:
 
 ```
 S3_COMPROBANTES_BUCKET  S3_COMPROBANTES_KEY_ID  S3_COMPROBANTES_PREFIX
 S3_COMPROBANTES_REGION  S3_COMPROBANTES_SECRET
 HABILITACION_ALERT_EMAIL  SLACK_WEBHOOK_URL
 ```
+
+Sin las de S3 se cae adjuntar el comprobante al cobrar.
 
 **Nuevas de esta versión**:
 
@@ -188,6 +224,27 @@ NEXT_PUBLIC_BILLING_ENABLED                   decisión 0.3
 **Revisar**: `BASE_URL` y `NEXT_PUBLIC_APP_URL`. En el `.env` local apuntan a
 `http://10.0.0.63:3000`, una IP muerta. Si ese valor llegó a producción, los
 enlaces de los correos y el retorno del checkout van a ninguna parte.
+
+## Estado real de los dominios (medido 2026-08-15)
+
+| dominio | DNS | HTTP | qué es |
+|---|---|---|---|
+| `facturacion-v2.zero.com.do` | resuelve | 200 | **v2, ya en pie** |
+| `facturacion.zero.com.do` | resuelve | 200 | v1, clientes vivos |
+| `emitedo-v2.vercel.app` | resuelve | 200 | v2 por su URL de Vercel |
+| `zero.com.do` | **no existe** | — | el sitio público no tiene dónde vivir |
+| `app.zero.com.do` | **no existe** | — | entrar/registrarse |
+
+`BASE_URL` y `NEXT_PUBLIC_APP_URL` en v2 ya apuntan a
+`facturacion-v2.zero.com.do`, correcto. (La IP muerta `10.0.0.63` que aparecía
+en el runbook anterior es solo del `.env` local, no llegó a producción.) El
+webhook de Stripe se movió a ese mismo dominio, para que no haya dos
+canónicos.
+
+**El proyecto `emitedo-v2` no tiene repo enlazado**: no despliega solo. Los
+commits de la rama `v2` NO están en producción hasta que se haga
+`vercel deploy --prod` a mano. Hoy `/precios` y `/contacto` dan 404 en v2
+porque el sitio público todavía no se ha desplegado.
 
 ## Fase 5 · Dominios
 
