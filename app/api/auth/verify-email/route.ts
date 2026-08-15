@@ -22,5 +22,9 @@ export async function GET(req: NextRequest) {
     db.update(emailVerificationTokens).set({ usedAt: new Date() }).where(eq(emailVerificationTokens.id, record[0].id)),
   ]);
 
-  return NextResponse.redirect(new URL('/dashboard?verified=1', req.url));
+  // A /bienvenida y no al panel: quien acaba de verificar viene del registro y
+  // todavía no ha hecho el onboarding. Mandarlo al panel solo hace que el muro
+  // lo rebote acto seguido, y esa redirección de más se ve como un parpadeo.
+  // Si ya lo hizo, /bienvenida lo devuelve al panel por su cuenta.
+  return NextResponse.redirect(new URL('/bienvenida?verificado=1', req.url));
 }

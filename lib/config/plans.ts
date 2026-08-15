@@ -483,6 +483,27 @@ export interface LineaProducto {
   familia: FamiliaPlan;
   /** Adicionales que la línea trae de fábrica (se suman al precio). */
   addons: string[];
+  /**
+   * La frase que va primero, en grande: el problema que se le quita de encima.
+   *
+   * Deliberadamente SIN porcentajes ni cifras. «Los colegios pierden un 30%»
+   * sin fuente es la clase de dato que el cliente no se cree, y si se lo cree
+   * y luego no le cuadra, nos lo reclama. Nombrar POR DÓNDE se va el dinero es
+   * más específico que cualquier número inventado.
+   */
+  gancho: string;
+  /**
+   * Lo que la línea le RESUELVE al cliente, en su idioma.
+   *
+   * No confundir con `PlanDef.limits`, que son topes («hasta 300
+   * estudiantes», «3 usuarios»): eso es una ficha técnica y no le dice a nadie
+   * por qué debería pagar. Aquí van los trabajos que deja de hacer a mano.
+   *
+   * Regla al escribir esto: solo lo que el sistema HACE de verdad. Una
+   * promesa de más aquí es una decepción en la segunda semana y una baja en
+   * la cuarta.
+   */
+  vende: string[];
 }
 
 export const LINEAS_PRODUCTO: LineaProducto[] = [
@@ -492,6 +513,13 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Facturación electrónica, contabilidad completa, inventario y compras.',
     familia: 'ecf',
     addons: [],
+    gancho: 'Deja de perseguir lo que te deben y de armar los 606 a mano.',
+    vende: [
+      'Emites e-CF ante la DGII sin salir del sistema ni pagar un tercero',
+      'Sabes al instante quién te debe, cuánto y desde cuándo',
+      'Contabilidad, inventario y compras en el mismo sitio, cuadrando solos',
+      'Los reportes 606 y 607 salen armados, no se arman a mano',
+    ],
   },
   {
     key: 'pos-erp',
@@ -499,6 +527,13 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Todo el ERP más el punto de venta: caja, turnos y stock por almacén.',
     familia: 'ecf',
     addons: ['pos'],
+    gancho: 'Lo que se vende, se descuenta del inventario y se factura en el mismo acto.',
+    vende: [
+      'Cobras en mostrador con caja, turnos y cuadre al cerrar',
+      'El inventario baja solo con cada venta, por almacén',
+      'La factura con su comprobante fiscal sale al cobrar, sin un segundo paso',
+      'Y detrás, el ERP completo: contabilidad, compras y cuentas por cobrar',
+    ],
   },
   {
     key: 'erp-colegio',
@@ -506,6 +541,17 @@ export const LINEAS_PRODUCTO: LineaProducto[] = [
     descripcion: 'Todo el ERP, el punto de venta de la cafetería y la gobernanza del colegio.',
     familia: 'colegio',
     addons: [],
+    // Un colegio no pierde plata de golpe: la pierde en goteo, y las tres vías
+    // por las que se va son exactamente las tres que el sistema cierra. Por eso
+    // el texto empieza por el dinero y no por las funciones — el director no
+    // compra «gestión de matrículas», compra dejar de perder lo que ya trabajó.
+    gancho: 'Un colegio no pierde el dinero de golpe: se le va en cuotas que nadie reclamó y en moras que nunca se aplicaron.',
+    vende: [
+      'La mora se aplica sola el día que vence, en vez de perderse por no acordarse de cobrarla',
+      'Nadie deja de pagar por olvido: el aviso sale por WhatsApp, SMS y correo antes de vencer, el día del vencimiento y antes del recargo',
+      'Sabes en todo momento quién debe, cuánto y desde cuándo, sin armar la hoja aparte',
+      'Cada mensualidad se factura sola, con su comprobante fiscal ante la DGII',
+    ],
   },
 ];
 

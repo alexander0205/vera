@@ -39,6 +39,10 @@ export const users = pgTable('users', {
   // puede cambiar y esto tiene que seguir apuntando a la misma persona.
   // NULL en todo el que entra con contraseña.
   googleId: varchar('google_id', { length: 64 }),
+  // WhatsApp de quien abre la cuenta, pedido en el onboarding. En el usuario y
+  // no en la empresa: es la persona con la que se habla, y una persona puede
+  // tener varias empresas.
+  telefono: varchar('telefono', { length: 30 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
@@ -81,6 +85,13 @@ export const teams = pgTable('teams', {
   razonSocial: varchar('razon_social', { length: 255 }),
   nombreComercial: varchar('nombre_comercial', { length: 255 }),
   direccion: varchar('direccion', { length: 500 }),
+
+  // Onboarding. NULL en `onboarding_completado_en` = todavía no pasó por él y
+  // el muro lo manda allí; las empresas anteriores a la migración 0138 nacen
+  // marcadas para que el muro no las eche de su propio sistema.
+  onboardingCompletadoEn: timestamp('onboarding_completado_en'),
+  onboardingPaso: smallint('onboarding_paso').notNull().default(1),
+  onboardingDatos: jsonb('onboarding_datos'),
   provincia: varchar('provincia', { length: 100 }),
   municipio: varchar('municipio', { length: 100 }),
   actividadEconomica: varchar('actividad_economica', { length: 20 }),

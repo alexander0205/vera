@@ -2,6 +2,7 @@ import { EscolarNavRail } from '@/components/escolar-nav-rail';
 import { ModuleShell } from '@/components/module-shell';
 import { requireModule, requirePermission } from '@/lib/auth/page-guard';
 import { getUser } from '@/lib/db/queries';
+import { exigirOnboarding } from '@/lib/onboarding/muro';
 
 export const metadata = { title: 'Zero Administración Escolar' };
 
@@ -17,6 +18,7 @@ export const metadata = { title: 'Zero Administración Escolar' };
  * requirePermission encima de este.
  */
 export default async function EscolarLayout({ children }: { children: React.ReactNode }) {
+  await exigirOnboarding();
   await requireModule('escolar', '/dashboard');
   await requirePermission('administracion-escolar:ver');
   const user = await getUser();

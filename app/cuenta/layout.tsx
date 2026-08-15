@@ -1,6 +1,7 @@
 import { CuentaNavRail } from '@/components/cuenta-nav-rail';
 import { ModuleShell } from '@/components/module-shell';
 import { getUser } from '@/lib/db/queries';
+import { exigirOnboarding } from '@/lib/onboarding/muro';
 
 export const metadata = { title: 'Zero Administración' };
 
@@ -14,6 +15,7 @@ export const metadata = { title: 'Zero Administración' };
  * "Administración" y ponerlo dos veces al lado se leía como un error.
  */
 export default async function CuentaLayout({ children }: { children: React.ReactNode }) {
+  await exigirOnboarding();
   const user = await getUser();
 
   return (

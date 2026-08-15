@@ -30,6 +30,7 @@ import { rateLimit } from '@/lib/rate-limit';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { darDeAlta } from '@/lib/auth/alta';
 import { logActivity } from '@/lib/db/actividad';
+import { mandarVerificacion } from '@/lib/auth/verificacion';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255).trim().toLowerCase(),
@@ -169,15 +170,20 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { usuario: createdUser, equipo: createdTeam } = alta;
   await setSession(createdUser);
 
+  // Quien entra con contraseña todavía no ha demostrado que el correo es suyo,
+  // así que se le manda el enlace y el muro lo para hasta que lo abra. Por
+  // Google esto no pasa: llega verificado de origen.
+  await mandarVerificacion(createdUser);
+
   const redirectTo = formData.get('redirect') as string | null;
   if (redirectTo === 'checkout') {
     const priceId = formData.get('priceId') as string;
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  // Con billing activo se elige plan de prueba; mientras el producto está en
-  // desarrollo no hay pricing que mostrar y se entra directo al dashboard.
-  redirect(BILLING_ENABLED ? '/pricing?welcome=1' : '/dashboard');
+  // A la sala de espera del correo. De ahí, cuando verifique, sale al
+  // onboarding — no a la parrilla de ocho planes a ver si adivina.
+  redirect('/verifica-tu-correo');
 });
 
 export async function signOut() {

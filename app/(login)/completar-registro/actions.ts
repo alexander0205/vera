@@ -62,5 +62,8 @@ export const completarRegistro = validatedAction(esquema, async (data) => {
 
   await setSession(alta.usuario);
 
-  redirect(BILLING_ENABLED ? '/pricing?welcome=1' : '/dashboard');
+  // Google y contraseña desembocan en el mismo sitio: el onboarding. Que dos
+  // formas de registrarse acaben en pantallas distintas es como se cuelan las
+  // empresas a medio configurar.
+  redirect('/bienvenida');
 });

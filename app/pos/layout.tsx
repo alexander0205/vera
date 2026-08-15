@@ -1,6 +1,7 @@
 import { PosNavRail } from '@/components/pos-nav-rail';
 import { ModuleShell } from '@/components/module-shell';
 import { getUser } from '@/lib/db/queries';
+import { exigirOnboarding } from '@/lib/onboarding/muro';
 
 export const metadata = { title: 'Zero Punto de Venta' };
 
@@ -15,6 +16,7 @@ export const metadata = { title: 'Zero Punto de Venta' };
  * es otra cosa: esa opera la venta, esta ubica al usuario en el sistema.
  */
 export default async function PosLayout({ children }: { children: React.ReactNode }) {
+  await exigirOnboarding();
   const user = await getUser();
 
   return (
