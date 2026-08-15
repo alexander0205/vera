@@ -29,11 +29,14 @@ import {
 } from '@/lib/db/schema';
 import { getPlan, type PlanDef } from '@/lib/config/plans';
 import { MODULES_BASE, MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
-import { CAMBIO_PLAN, type MotivoCambio } from '@/lib/config/suscripcion';
+import {
+  CAMBIO_PLAN,
+  type MotivoCambio, type NivelDeCambio, type RiesgoDeCambio,
+} from '@/lib/config/suscripcion';
 
-// El tipo vive en lib/config/suscripcion (client-safe) porque la pantalla de
-// planes también lo necesita y este archivo es server-only.
-export type { MotivoCambio };
+// Los tipos viven en lib/config/suscripcion (client-safe) porque la pantalla de
+// planes también los necesita y este archivo es server-only.
+export type { MotivoCambio, NivelDeCambio, RiesgoDeCambio };
 
 export interface Veredicto {
   /** ¿Se puede proceder? False solo si hay al menos un bloqueo. */
@@ -97,7 +100,23 @@ export async function validarCambioDePlan(
     .filter(m => !conservaPorAdicional.has(m));
 
   // ── Cambio de familia ─────────────────────────────────────────────────────
-  if (actual.familia !== nuevo.familia && !CAMBIO_PLAN.permiteCambiarDeFamilia) {
+  //
+  // El bloqueo es DIRECCIONAL, y antes no lo era. `permiteCambiarDeFamilia`
+  // era un booleano que cerraba los dos sentidos, y solo uno es peligroso:
+  //
+  //   colegio → e-CF   se apaga el módulo escolar CON LOS ESTUDIANTES DENTRO,
+  //                    sus cuentas por cobrar y sus avisos. Eso no se hace con
+  //                    un botón.
+  //   e-CF → colegio   se GANA el módulo escolar y el POS de la cafetería. No
+  //                    se pierde nada: el tramo lo marcan los estudiantes, y
+  //                    quien viene de e-CF tiene cero.
+  //
+  // Cerrar los dos dejaba a un colegio que factura con nosotros sin forma de
+  // contratar el producto para colegios desde su propia pantalla: veía el plan
+  // marcado «No disponible» y ahí se acababa. `familiasOfrecibles()` en
+  // plans.ts ya describía esta asimetría; esto es la otra mitad, que faltaba.
+  const bajaDeColegio = actual.familia === 'colegio' && nuevo.familia !== 'colegio';
+  if (actual.familia !== nuevo.familia && bajaDeColegio && !CAMBIO_PLAN.permiteCambiarDeFamilia) {
     bloqueos.push({
       gravedad: 'bloquea',
       clave: 'cambio-de-familia',
@@ -281,4 +300,67 @@ async function datosDentroDelModulo(teamId: number, mod: ModuleKey): Promise<num
   }
 
   return 0;
+}
+
+// ─── El riesgo, para pintarlo ANTES del clic ─────────────────────────────────
+
+/**
+ * El riesgo de cambiarse a CADA plan que se le ofrece, calculado de una vez.
+ *
+ * Esto existía ya, pero solo se consultaba al pulsar «Contratar»: el usuario
+ * descubría que perdería 442 estudiantes cuando ya había decidido. Calcularlo
+ * para todos los planes de la lista permite enseñarlo en la propia tarjeta —
+ * un chip y una línea— y dejar el detalle largo para el diálogo.
+ *
+ * Es una consulta por plan y son cuatro u ocho. Se lanzan a la vez y cada una
+ * son unos pocos COUNT sobre índices; es más barato que la ida y vuelta que se
+ * ahorraba antes haciéndolo tarde.
+ */
+export async function riesgosDeCambio(
+  teamId: number,
+  planActualKey: string | null | undefined,
+  planesDestino: readonly PlanDef[],
+  adicionalesActuales: string[] = [],
+  /**
+   * ¿Marcar como «actual» el plan que coincide en clave con el contratado?
+   *
+   * Falso cuando los destinos pertenecen a OTRA línea comercial. «Negocio» sin
+   * el Punto de Venta comparte clave con «Negocio» con él —son el mismo plan
+   * del catálogo— pero no son lo mismo para el cliente: US$19 contra US$28 y
+   * un módulo de diferencia. Pintar ahí «Plan actual» escondería justo lo que
+   * cambiaría si se pasa a esa línea.
+   */
+  marcarActual = true,
+): Promise<Record<string, RiesgoDeCambio>> {
+  const actual = getPlan(planActualKey);
+
+  const veredictos = await Promise.all(
+    planesDestino.map(async p => {
+      if (marcarActual && p.key === actual.key) return [p.key, null] as const;
+      return [p.key, await validarCambioDePlan(teamId, planActualKey, p.key, adicionalesActuales)] as const;
+    }),
+  );
+
+  const salida: Record<string, RiesgoDeCambio> = {};
+  for (const [clave, v] of veredictos) {
+    if (!v) {
+      salida[clave] = {
+        nivel: 'actual', resumen: 'Es lo que tienes contratado hoy.',
+        bloqueos: [], avisos: [], modulosQueSePierden: [],
+      };
+      continue;
+    }
+    // El resumen es el motivo MÁS GRAVE, no una lista. En una tarjeta solo
+    // cabe una línea, y si se resume «3 avisos» el usuario tiene que abrir para
+    // saber si le importa — que es justo el clic que esto viene a evitar.
+    const peor = v.bloqueos[0] ?? v.avisos[0] ?? null;
+    salida[clave] = {
+      nivel: v.bloqueos.length > 0 ? 'bloquea' : v.avisos.length > 0 ? 'avisa' : 'ok',
+      resumen: peor?.mensaje ?? 'Solo sumas. No se pierde nada.',
+      bloqueos: v.bloqueos,
+      avisos: v.avisos,
+      modulosQueSePierden: v.modulosQueSePierden,
+    };
+  }
+  return salida;
 }

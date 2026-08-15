@@ -18,7 +18,7 @@ import Typography from '@mui/material/Typography';
 import { Check } from 'lucide-react';
 import { SubmitButton } from './submit-button';
 import { LINEAS_PRODUCTO, type PlanDef } from '@/lib/config/plans';
-import { PRUEBA } from '@/lib/config/suscripcion';
+import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 
 /** Un plan ya resuelto en el servidor: con su precio de línea y su priceId. */
 export interface PlanDeLinea {
@@ -122,7 +122,7 @@ function Card({
           <Typography sx={{ fontSize: '0.875rem', color: destacado ? '#e0e7fd' : '#6b7280' }}>USD/mes</Typography>
         </Box>
         <Typography sx={{ fontSize: '0.75rem', mt: 0.5, color: destacado ? '#e0e7fd' : '#9ca3af' }}>
-          {PRUEBA.dias} días gratis, luego ${precio}/mes
+          {diasDePrueba(plan.familia)} días gratis, luego ${precio}/mes
         </Typography>
       </Box>
 

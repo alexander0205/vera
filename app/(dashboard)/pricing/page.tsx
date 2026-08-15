@@ -7,7 +7,7 @@ import { AlertCircle } from 'lucide-react';
 import {
   PLANS, LINEAS_PRODUCTO, planesDeLinea, getPlanPriceId,
 } from '@/lib/config/plans';
-import { PRUEBA } from '@/lib/config/suscripcion';
+import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { SiteHeader } from '@/components/site-header';
 import { Lineas, type PlanDeLinea } from './_lineas';
 
@@ -54,7 +54,7 @@ async function PricingPageInner({
             <Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#1e40af' }}>Empresa creada — elige su plan</Typography>
               <Typography sx={{ fontSize: '0.75rem', color: '#1d4ed8', mt: 0.25 }}>
-                Cada empresa tiene su propio plan. Todos incluyen <strong>{PRUEBA.dias} días de prueba gratis</strong>.
+                Cada empresa tiene su propio plan. Todos incluyen <strong>prueba gratis</strong>: {diasDePrueba('ecf')} días en facturación y {diasDePrueba('colegio')} en colegios.
               </Typography>
             </Box>
           </Box>
@@ -66,7 +66,7 @@ async function PricingPageInner({
             <Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#2a45c4' }}>¡Cuenta creada! Elige tu plan para empezar</Typography>
               <Typography sx={{ fontSize: '0.75rem', color: '#3658e1', mt: 0.25 }}>
-                Todos los planes incluyen <strong>{PRUEBA.dias} días de prueba gratis</strong>. Cancela cuando quieras.
+                Todos los planes incluyen <strong>prueba gratis</strong> — {diasDePrueba('ecf')} días en facturación, {diasDePrueba('colegio')} en colegios. Cancela cuando quieras.
               </Typography>
             </Box>
           </Box>
@@ -77,7 +77,7 @@ async function PricingPageInner({
             <AlertCircle size={20} color="#d97706" style={{ marginTop: 2, flexShrink: 0 }} />
             <Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#92400e' }}>Necesitas un plan para acceder al dashboard</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: '#b45309', mt: 0.25 }}>Elige un plan y empieza con {PRUEBA.dias} días de prueba gratis.</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: '#b45309', mt: 0.25 }}>Elige un plan y empieza con tu prueba gratis: {diasDePrueba('ecf')} días en facturación, {diasDePrueba('colegio')} en colegios.</Typography>
             </Box>
           </Box>
         )}
@@ -85,7 +85,7 @@ async function PricingPageInner({
         <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Typography variant="h3" sx={{ fontWeight: 700, color: '#111827', mb: 2 }}>Planes y precios</Typography>
           <Typography sx={{ color: '#6b7280', fontSize: '1.125rem' }}>
-            Precios en dólares (USD). Prueba {PRUEBA.dias} días gratis. Sin contratos. Cancela cuando quieras.
+            Precios en dólares (USD). Prueba gratis de {diasDePrueba('ecf')} días, {diasDePrueba('colegio')} en colegios. Sin contratos. Cancela cuando quieras.
           </Typography>
         </Box>
 
@@ -93,7 +93,7 @@ async function PricingPageInner({
 
         <Box sx={{ textAlign: 'center', mt: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Typography sx={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 500 }}>
-            ✓ {PRUEBA.dias} días de prueba gratis en todos los planes
+            ✓ Prueba gratis en todos los planes: {diasDePrueba('ecf')} días, {diasDePrueba('colegio')} en colegios
             {PRUEBA.pideTarjeta ? '' : ' — sin tarjeta de crédito'}
           </Typography>
           <Typography sx={{ fontSize: '0.875rem', color: '#9ca3af' }}>

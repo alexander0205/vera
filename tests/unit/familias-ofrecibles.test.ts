@@ -22,3 +22,23 @@ describe('familiasOfrecibles — el salto de línea es asimétrico', () => {
     }
   });
 });
+
+/**
+ * La otra mitad de la asimetría, la que vive en el validador.
+ *
+ * `familiasOfrecibles` decía que subir a colegio es seguro mientras
+ * `validarCambioDePlan` lo bloqueaba: la pantalla ofrecía el plan y el
+ * veredicto lo marcaba «No disponible». Dos verdades distintas sobre lo mismo,
+ * y la que ganaba era la que dejaba al colegio sin poder contratar.
+ */
+describe('el bloqueo de familia también es direccional', () => {
+  it('las dos mitades dicen lo mismo: desde e-CF se puede subir', () => {
+    // Si esto se rompe, es que alguien volvió a poner el booleano de antes y
+    // la pantalla vuelve a ofrecer algo que el veredicto rechaza.
+    expect(familiasOfrecibles('ecf')).toContain('colegio');
+  });
+
+  it('y desde colegio no se baja, que es el sentido que sí duele', () => {
+    expect(familiasOfrecibles('colegio')).toHaveLength(0);
+  });
+});

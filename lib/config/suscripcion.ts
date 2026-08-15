@@ -21,11 +21,29 @@ import type { ModuleKey } from '@/lib/config/modules';
 
 export const PRUEBA = {
   /**
-   * Días de prueba. Debe coincidir con `trial_period_days` del checkout —
-   * Stripe es quien de verdad cuenta, esto es lo que le decimos y lo que
-   * mostramos en pantalla.
+   * Días de prueba POR FAMILIA. Debe coincidir con `trial_period_days` del
+   * checkout — Stripe es quien de verdad cuenta, esto es lo que le decimos y
+   * lo que mostramos en pantalla. Si los dos se separan gana Stripe, y el
+   * cliente se queda fuera antes de lo que le prometimos.
+   *
+   * No son el mismo número, y la diferencia no es comercial:
+   *
+   * · **e-CF, 15 días.** Emites una factura el primer día y ya sabes si te
+   *   sirve. Más tiempo no enseña nada nuevo.
+   *
+   * · **Colegio, 30.** Lo que se vende ahí es el CICLO MENSUAL: la mensualidad
+   *   que se emite sola, la mora que entra el día que toca, y los tres avisos
+   *   colgados de esas fechas. Con 15 días no se ve un ciclo completo —
+   *   literalmente no se puede comprobar lo que se compra. Y montar el colegio
+   *   es cargar estudiantes, grados, tutores y conceptos: los propios planes
+   *   reservan de 8 a 19 horas de implementación.
+   *
+   * `PRUEBA.dias` se queda como el valor de e-CF para que las pantallas que
+   * no saben de qué familia hablan sigan diciendo algo cierto (la portada, por
+   * ejemplo, anuncia el plan desde el que se entra).
    */
   dias: 15,
+  diasPorFamilia: { ecf: 15, colegio: 30 } as Record<string, number>,
 
   /**
    * Cuántos días antes de que expire se le avisa. El aviso sale una vez por
@@ -43,6 +61,17 @@ export const PRUEBA = {
    */
   pideTarjeta: false,
 } as const;
+
+/**
+ * Días de prueba que le tocan a un plan.
+ *
+ * Recibe la FAMILIA y no la clave del plan a propósito: los cuatro tramos de
+ * colegio comparten los 30 días, y hacerlo por plan invitaría a que alguien
+ * los pusiera distintos sin querer.
+ */
+export function diasDePrueba(familia: string | null | undefined): number {
+  return PRUEBA.diasPorFamilia[familia ?? ''] ?? PRUEBA.dias;
+}
 
 // ─── Qué pasa cuando se acaba y no pagan ──────────────────────────────────────
 
@@ -215,6 +244,31 @@ export interface MotivoCambio {
   mensaje: string;
   /** Qué tiene que hacer para desbloquearlo. null cuando solo es un aviso. */
   comoResolver: string | null;
+}
+
+/**
+ * Los cuatro niveles con los que la pantalla de planes pinta cada tarjeta.
+ *
+ * `actual` es el contratado; los otros tres salen del veredicto.
+ */
+export type NivelDeCambio = 'actual' | 'bloquea' | 'avisa' | 'ok';
+
+/**
+ * El riesgo de cambiarse a un plan, listo para pintar ANTES del clic.
+ *
+ * Vive aquí por el mismo motivo que `MotivoCambio`: lo calcula
+ * `lib/suscripcion/cambio-plan.ts`, que es server-only, y lo pinta un
+ * componente cliente. Declararlo dos veces es garantizar que un día dejen de
+ * coincidir.
+ */
+export interface RiesgoDeCambio {
+  nivel: NivelDeCambio;
+  /** Una línea, la más grave. Es lo que cabe en la tarjeta. */
+  resumen: string;
+  /** Todo el detalle, para el diálogo de confirmación. */
+  bloqueos: MotivoCambio[];
+  avisos: MotivoCambio[];
+  modulosQueSePierden: ModuleKey[];
 }
 
 export const CAMBIO_PLAN = {

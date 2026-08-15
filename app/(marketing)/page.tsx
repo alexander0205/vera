@@ -9,7 +9,6 @@
 
 import Link from 'next/link';
 import { PLANS, ADDONS, planesDeFamilia } from '@/lib/config/plans';
-import { PRUEBA } from '@/lib/config/suscripcion';
 import { LazoZero } from '@/lib/marca/isotipo';
 import {
   Contenedor, Flecha, Iconos, LazoDeFondo, LlamadoFinal,
@@ -143,7 +142,13 @@ export default function PortadaMarketing() {
             </p>
 
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              {/* La acción principal es ENTRAR, no pedir una cita. Hay prueba
+              {/* Sin número de días: ya no hay uno solo. Son 15 en facturación
+                  y 30 en colegios, y la portada no sabe todavía quién está
+                  mirando. Poner «15» aquí le quitaría la mitad a un colegio, y
+                  poner «30» prometería de más a un comercio. El detalle vive en
+                  la página de precios, que sí distingue por línea.
+
+                  La acción principal es ENTRAR, no pedir una cita. Hay prueba
                   autoservicio: quien llega aquí puede estar facturando hoy sin
                   hablar con nadie, y mandarlo a un formulario de demo era pedirle
                   que esperara por algo que no necesita esperar. La demo sigue
@@ -152,7 +157,7 @@ export default function PortadaMarketing() {
                 href="/sign-up"
                 className="flex h-[52px] items-center rounded-[13px] bg-zero-600 px-7 font-[family-name:var(--font-display)] text-[15px] font-semibold text-white shadow-[0_14px_30px_-10px_rgba(54,88,225,.8)] transition hover:bg-zero-700"
               >
-                Empieza gratis {PRUEBA.dias} días
+                Empieza gratis
               </Link>
               <Link
                 href="/precios"

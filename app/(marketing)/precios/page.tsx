@@ -17,7 +17,7 @@ import {
   ADDONS, LINEAS_PRODUCTO, planesDeLinea, type Feature, type PlanDef,
 } from '@/lib/config/plans';
 import { MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
-import { PRUEBA } from '@/lib/config/suscripcion';
+import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { Contenedor, IconoWhatsApp, Iconos, LazoDeFondo, LlamadoFinal, TarjetasContacto } from '../_piezas';
 import { Acordeon, type Pregunta } from '../_acordeon';
 import { Planes, type Celda, type Grupo, type LineaVista, type PlanVista } from './_planes';
@@ -226,6 +226,10 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
     descripcion: linea.descripcion,
     gancho: linea.gancho,
     esColegio,
+    // De la familia de la línea: 15 en e-CF, 30 en colegio. Es el mismo número
+    // que `crearSuscripcionDePrueba` le pasa a Stripe como `trial_period_days`,
+    // así que la página no puede prometer una cosa y el cobro contar otra.
+    diasPrueba: diasDePrueba(linea.familia),
     conPos,
     planes,
     grupos: gruposDeLinea(defs, conPos, esColegio),
@@ -276,7 +280,7 @@ const FAQS: Pregunta[] = [
   },
   {
     pregunta: '¿Hay período de prueba?',
-    respuesta: `Sí, ${PRUEBA.dias} días. Si al terminar no se activa la suscripción, la empresa entra en solo lectura durante unos días —puedes entrar, consultar y exportar todo— antes de cerrarse. Nunca se corta en seco.`,
+    respuesta: `Sí: ${diasDePrueba('ecf')} días en los planes de facturación y ${diasDePrueba('colegio')} en los de colegio. Un colegio necesita ver un ciclo de cobro entero —la mensualidad que se emite sola, la mora que entra el día que toca y los avisos colgados de esas fechas— y en dos semanas no cabe. Si al terminar no se activa la suscripción, la empresa entra en solo lectura durante unos días —puedes entrar, consultar y exportar todo— antes de cerrarse. Nunca se corta en seco.`,
   },
   {
     pregunta: '¿Mis datos son míos?',
@@ -311,7 +315,7 @@ export default function PreciosPage() {
           layout. */}
       <section className="relative bg-gradient-to-b from-[#f5f7fe] to-white to-[58%] pt-14">
         <LazoDeFondo arriba={470} />
-        <Planes lineas={lineas} diasPrueba={PRUEBA.dias} />
+        <Planes lineas={lineas} />
       </section>
 
       {/* ── Adicionales ───────────────────────────────────────────────────── */}

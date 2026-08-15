@@ -13,7 +13,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Cabecera, Seccion, Definiciones } from '../_piezas';
-import { PRUEBA, MORA, SOLO_LECTURA } from '@/lib/config/suscripcion';
+import { PRUEBA, diasDePrueba, MORA, SOLO_LECTURA } from '@/lib/config/suscripcion';
 
 export const metadata: Metadata = {
   title: 'Términos y Condiciones · Zero',
@@ -59,7 +59,8 @@ export default function TerminosPage() {
 
       <Seccion n={3} titulo="Prueba gratis">
         <p>
-          La prueba dura <strong>{PRUEBA.dias} días</strong> y{' '}
+          La prueba dura <strong>{diasDePrueba('ecf')} días</strong> en los planes de
+          facturación y <strong>{diasDePrueba('colegio')} días</strong> en los de colegio, y{' '}
           {PRUEBA.pideTarjeta ? 'pide tarjeta al empezar' : <strong>no pide tarjeta</strong>}.
           Durante ese tiempo tienes el plan completo. Te avisamos antes de que se acabe.
         </p>

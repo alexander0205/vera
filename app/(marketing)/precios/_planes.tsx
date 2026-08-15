@@ -58,6 +58,14 @@ export type LineaVista = {
   gancho: string;
   esColegio: boolean;
   conPos: boolean;
+  /**
+   * Días de prueba de ESTA línea, no del producto.
+   *
+   * Eran un número único para las ocho tarjetas, y dejaron de serlo: 15 en
+   * facturación y 30 en colegio. Un número global aquí le prometería a un
+   * colegio la mitad de lo que Stripe le va a dar.
+   */
+  diasPrueba: number;
   planes: PlanVista[];
   grupos: Grupo[];
 };
@@ -92,7 +100,7 @@ function PintaCelda({ celda, destacada }: { celda: Celda; destacada: boolean }) 
 
 // ─── Componente ──────────────────────────────────────────────────────────────
 
-export function Planes({ lineas, diasPrueba }: { lineas: LineaVista[]; diasPrueba: number }) {
+export function Planes({ lineas }: { lineas: LineaVista[] }) {
   const negocio = lineas.filter(l => !l.esColegio);
   const colegio = lineas.filter(l => l.esColegio);
 
@@ -267,7 +275,7 @@ export function Planes({ lineas, diasPrueba }: { lineas: LineaVista[]; diasPrueb
                         : 'border-[1.5px] border-[#dce1f0] bg-white text-[#102a72] hover:border-zero-600 hover:text-zero-600'
                   }`}
                 >
-                  {esColegio ? 'Solicitar demo' : `Empieza gratis ${diasPrueba} días`}
+                  {esColegio ? 'Solicitar demo' : `Empieza gratis ${linea.diasPrueba} días`}
                 </Link>
 
                 <div className={`mt-5 text-[11px] font-semibold uppercase tracking-[.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>
@@ -288,7 +296,7 @@ export function Planes({ lineas, diasPrueba }: { lineas: LineaVista[]; diasPrueb
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
           {[
-            `${diasPrueba} días de prueba`,
+            `${linea.diasPrueba} días de prueba`,
             'Sin contrato mínimo',
             'Facturas certificadas ante la DGII',
             'Soporte en español',

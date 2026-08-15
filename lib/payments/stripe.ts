@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { Team } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 import { getPlanByPriceId, ADDONS, addonIncluido } from '@/lib/config/plans';
-import { PRUEBA } from '@/lib/config/suscripcion';
+import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-04-30.basil'
@@ -237,7 +237,11 @@ export async function crearSuscripcionDePrueba({
   const subscription = await stripe.subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }, ...itemsAddon],
-    trial_period_days: PRUEBA.dias,
+    // De la FAMILIA del precio, no de una constante suelta: 15 días en e-CF y
+    // 30 en colegio. Este número es el que de verdad cuenta —Stripe es quien
+    // lleva el reloj—, así que si alguna pantalla dijera otra cosa, la que
+    // miente es la pantalla.
+    trial_period_days: diasDePrueba(planDelPrecio.familia),
     trial_settings: { end_behavior: { missing_payment_method: 'pause' } },
     metadata: { teamId: String(team.id), origen: 'onboarding' },
   });
@@ -276,5 +280,90 @@ export async function tieneMetodoDePago(customerId: string | null): Promise<bool
   } catch (e) {
     console.error('[stripe] no se pudo comprobar el método de pago de', customerId, e);
     return null;
+  }
+}
+
+/** Una fila del historial de cobros, ya traducida a lo que la pantalla pinta. */
+export interface CobroDelHistorial {
+  id: string;
+  /** Epoch en segundos. El formato se decide al pintar, no aquí. */
+  fecha: number;
+  concepto: string;
+  /** Segunda línea: el desglose, o por qué falló. */
+  detalle: string | null;
+  montoCentavos: number;
+  moneda: string;
+  estado: 'pagada' | 'fallida' | 'abierta' | 'sin-cobro';
+  /** El PDF que aloja Stripe. null cuando no hay factura que descargar. */
+  pdfUrl: string | null;
+  /** La página de Stripe para pagar una que quedó abierta. */
+  urlDePago: string | null;
+}
+
+/**
+ * El historial de cobros de una empresa.
+ *
+ * Sale de las facturas de Stripe y NO de nuestra base a propósito: Stripe es
+ * quien cobró, y es el único que sabe de los reintentos, los prorrateos y los
+ * rechazos. Guardar una copia nuestra sería mantener dos versiones de la verdad
+ * sobre dinero, y la nuestra siempre iría por detrás.
+ *
+ * Ojo con lo que esto NO es: aquí no hay NCF. Un cobro de suscripción no emite
+ * comprobante fiscal dominicano — el webhook no crea ningún e-CF y no hay nada
+ * en el sistema que lo haga. Lo que se descarga es la factura de Stripe. Decir
+ * «Factura de Crédito Fiscal» en esta pantalla sería prometer un documento que
+ * el cliente no puede llevar a su contador.
+ *
+ * Devuelve [] si no se pudo preguntar: una pantalla de ajustes no se cae porque
+ * Stripe tarde.
+ */
+export async function historialDeCobros(
+  customerId: string | null,
+  limite = 24,
+): Promise<CobroDelHistorial[]> {
+  if (!customerId) return [];
+  try {
+    const facturas = await stripe.invoices.list({
+      customer: customerId,
+      limit: limite,
+    });
+
+    return facturas.data.map(f => {
+      // `amount_due` y no `amount_paid`: una rechazada se debe y no se pagó, y
+      // enseñarla en cero haría creer que no se intentó cobrar nada.
+      const centavos = f.amount_due ?? 0;
+      const estado: CobroDelHistorial['estado'] =
+        f.status === 'paid'          ? (centavos === 0 ? 'sin-cobro' : 'pagada')
+        : f.status === 'open'        ? 'abierta'
+        : f.status === 'uncollectible' || f.status === 'void' ? 'fallida'
+        : 'abierta';
+
+      // La descripción de las líneas es lo que compone «US$65 Ilimitado + US$9
+      // Punto de venta»: Stripe la arma sola con los precios del período.
+      const lineas = f.lines?.data ?? [];
+      const detalle = lineas.length > 1
+        ? lineas.map(l => l.description).filter(Boolean).join(' · ')
+        : (lineas[0]?.description ?? null);
+
+      // La tarjeta con la que se cobró NO se saca por fila. En Stripe v18
+      // `invoice.charge` ya no existe y llegar a la marca y los últimos cuatro
+      // dígitos son dos expansiones (payments → payment_intent →
+      // payment_method): dos llamadas más por pantalla para repetir un dato que
+      // el bloque de Cobro ya enseña una vez, arriba.
+      return {
+        id: f.id ?? `factura-${f.created}`,
+        fecha: f.created,
+        concepto: f.lines?.data[0]?.description ?? 'Suscripción',
+        detalle: detalle === f.lines?.data[0]?.description ? null : detalle,
+        montoCentavos: centavos,
+        moneda: (f.currency ?? 'usd').toUpperCase(),
+        estado,
+        pdfUrl: f.invoice_pdf ?? null,
+        urlDePago: estado === 'abierta' ? (f.hosted_invoice_url ?? null) : null,
+      };
+    });
+  } catch (e) {
+    console.error('[stripe] no se pudo leer el historial de', customerId, e);
+    return [];
   }
 }

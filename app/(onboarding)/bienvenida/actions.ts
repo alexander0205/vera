@@ -18,7 +18,7 @@ import { teams, users } from '@/lib/db/schema';
 import { getTeamIdForUser, getUser } from '@/lib/db/queries';
 import { validatedAction } from '@/lib/auth/middleware';
 import { planSugerido, type LineaKey } from '@/lib/onboarding/deducir';
-import { PRUEBA } from '@/lib/config/suscripcion';
+import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import { LINEAS_PRODUCTO } from '@/lib/config/plans';
 import { crearSuscripcionDePrueba } from '@/lib/payments/stripe';
 
@@ -143,7 +143,11 @@ export const terminar = validatedAction(esquemaFinal, async (data) => {
 
   let customerId: string | null = null;
   let subscriptionId: string | null = null;
-  let finPrueba = new Date(ahora.getTime() + PRUEBA.dias * 86_400_000);
+  // Respaldo por si Stripe no responde: se calcula con los días de SU familia,
+  // los mismos que se le pedirían a Stripe. Con la constante suelta, un colegio
+  // que fallara al crear la suscripción se quedaba con 15 días en la base y 30
+  // prometidos en pantalla.
+  let finPrueba = new Date(ahora.getTime() + diasDePrueba(plan.familia) * 86_400_000);
 
   if (priceId) {
     try {

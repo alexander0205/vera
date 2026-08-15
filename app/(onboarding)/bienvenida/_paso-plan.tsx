@@ -21,7 +21,7 @@ import { terminar } from './actions';
 import type { ActionState } from '@/lib/auth/middleware';
 import { BILLING_ENABLED } from '@/lib/config/billing';
 import { LINEAS_PRODUCTO, precioTotal, type PlanDef } from '@/lib/config/plans';
-import { PRUEBA } from '@/lib/config/suscripcion';
+import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
 import type { LineaKey } from '@/lib/onboarding/deducir';
 
 const campo =
@@ -137,7 +137,7 @@ export function PasoPlan({ plan, linea, tamano, razonSocial }: {
         >
           {pending
             ? <><Loader2 className="h-4 w-4 animate-spin" /> Preparando tu cuenta…</>
-            : <>Empezar mis {PRUEBA.dias} días <ArrowRight className="h-4 w-4" /></>}
+            : <>Empezar mis {diasDePrueba(def.familia)} días <ArrowRight className="h-4 w-4" /></>}
         </button>
 
         <p className="text-center text-xs text-gray-400">
