@@ -102,8 +102,58 @@ interface DialogContentProps {
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | false;
 }
 
-function DialogContent({ children, className, style, maxWidth = 'sm' }: DialogContentProps) {
+/**
+ * ¿El className trae un ancho de Tailwind? Entonces manda ese, no el de MUI.
+ *
+ * MUI escribe `max-width` en el paper con más especificidad que una utilidad de
+ * Tailwind, así que un `max-w-3xl` en el className quedaba pisado por los
+ * 600 px del `sm` por defecto. El resultado no era un diálogo más estrecho y ya:
+ * el contenido pensado para dos columnas se aplastaba y los textos se montaban
+ * unos encima de otros.
+ *
+ * Estaba documentado en la prop `maxWidth` —«pásale false»— pero de los 38
+ * diálogos que declaran un ancho, ninguno lo hacía. Una prop que hay que
+ * recordar y nadie recuerda es un fallo del componente, no de quien lo usa: si
+ * el className pide un ancho, se aplica solo.
+ *
+ * Y no basta con soltar el `maxWidth` de MUI: Emotion inyecta sus estilos
+ * DESPUÉS de la hoja de Tailwind, así que a igual especificidad gana MUI y el
+ * diálogo se iba al ancho completo de la pantalla. Por eso el valor se lee del
+ * className y se le pasa a MUI en píxeles, que es el único que va a respetar.
+ */
+const ANCHOS_TAILWIND: Record<string, number> = {
+  xs: 320, sm: 384, md: 448, lg: 512, xl: 576,
+  '2xl': 672, '3xl': 768, '4xl': 896, '5xl': 1024, '6xl': 1152, '7xl': 1280,
+};
+
+/** Ancho por defecto de MUI (`sm`). El suelo: de acá para abajo no se toca. */
+const ANCHO_MUI_SM = 600;
+
+/**
+ * El ancho que pide el className, en píxeles. `null` si no pide ninguno.
+ *
+ * Nunca devuelve MENOS de 600px a propósito. El fallo que se está arreglando es
+ * el contenido aplastado, y eso solo lo causan los diálogos que pedían MÁS de
+ * lo que MUI les daba. Los que declaran `max-w-sm` (384px) llevan meses
+ * viéndose a 600 y así se quedan: estrecharlos ahora sería cambiar 30 pantallas
+ * que hoy funcionan para arreglar una que no.
+ */
+function anchoPedido(className?: string): number | null {
+  if (!className) return null;
+  let mayor: number | null = null;
+  for (const m of className.matchAll(/(?:^|\s|:)max-w-([\w]+)/g)) {
+    const px = ANCHOS_TAILWIND[m[1]];
+    if (px != null && (mayor == null || px > mayor)) mayor = px;
+  }
+  return mayor == null ? null : Math.max(mayor, ANCHO_MUI_SM);
+}
+
+function DialogContent({ children, className, style, maxWidth }: DialogContentProps) {
   const { open, setOpen } = React.useContext(DialogContext);
+
+  // Lo explícito gana; si no, el className decide; si tampoco, el 'sm' de antes.
+  const px = maxWidth === undefined ? anchoPedido(className) : null;
+  const anchoMui = maxWidth !== undefined ? maxWidth : (px == null ? 'sm' : false);
 
   /**
    * Cabecera y botones se quedan fijos; TODO lo demás se envuelve en una zona
@@ -146,7 +196,7 @@ function DialogContent({ children, className, style, maxWidth = 'sm' }: DialogCo
     <MuiDialog
       open={open}
       onClose={() => setOpen(false)}
-      maxWidth={maxWidth}
+      maxWidth={anchoMui}
       fullWidth
       /**
        * `disableEnforceFocus` — sin esto NINGÚN desplegable funciona dentro de
@@ -186,6 +236,9 @@ function DialogContent({ children, className, style, maxWidth = 'sm' }: DialogCo
             flexDirection: 'column',
             minHeight: 0,
             overflow: 'hidden',
+            // El ancho leído del className, en píxeles: es el único que MUI
+            // respeta (ver `anchoPedido`).
+            ...(px != null ? { maxWidth: `${px}px` } : {}),
           },
           className,
           style,
