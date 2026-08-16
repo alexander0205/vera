@@ -21,6 +21,7 @@ import { NavFijoProvider, useNavFijo } from '@/lib/hooks/useNavFijo';
 import { userCan, type Permission } from '@/lib/config/roles';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { BILLING_ENABLED } from '@/lib/config/billing';
+import { PAGOS_ONLINE_ENABLED } from '@/lib/config/pagos-online';
 import { type UserInfo } from '@/components/profile-dropdown';
 
 // MUI imports
@@ -49,8 +50,12 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/facturas',             label: 'Facturas de venta',    plusHref: '/dashboard/facturas/nueva' },
       { href: '/dashboard/cuentas-por-cobrar',   label: 'Cuentas por cobrar' },
       { href: '/dashboard/pagos',                label: 'Pagos recibidos' },
-      { href: '/dashboard/pagos/links',          label: 'Links de pago' },
-      { href: '/dashboard/pagos/pasarelas',      label: 'Pasarelas de pago' },
+      // Cobro por internet: oculto mientras no haya credenciales de producción
+      // de la pasarela. Ver lib/config/pagos-online.ts.
+      ...(PAGOS_ONLINE_ENABLED ? [
+        { href: '/dashboard/pagos/links',        label: 'Links de pago' },
+        { href: '/dashboard/pagos/pasarelas',    label: 'Pasarelas de pago' },
+      ] : []),
       { href: '/dashboard/notas-credito',        label: 'Notas de crédito',     plusHref: '/dashboard/notas-credito/nueva' },
       { href: '/dashboard/notas-debito',         label: 'Notas de débito',      plusHref: '/dashboard/notas-debito/nueva' },
       { href: '/dashboard/cotizaciones',         label: 'Cotizaciones',         plusHref: '/dashboard/cotizaciones/nueva' },
