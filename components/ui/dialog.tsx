@@ -247,7 +247,17 @@ function DialogContent({ children, className, style, maxWidth }: DialogContentPr
     >
       {fijosArriba}
       {cuerpoYaDesplaza ? cuerpo : (
-        <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+        <div
+          style={{
+            flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
+            // 24px, los mismos que `DialogHeader` (px-6) y `DialogBody` (px: 3).
+            // El contenido de los diálogos no trae padding propio —lo pone
+            // siempre el contenedor— así que sin esto los campos quedaban
+            // pegados al borde. El de abajo separa el último campo de los
+            // botones cuando el contenido llega hasta el final.
+            paddingLeft: 24, paddingRight: 24, paddingTop: 8, paddingBottom: 16,
+          }}
+        >
           {cuerpo}
         </div>
       )}
