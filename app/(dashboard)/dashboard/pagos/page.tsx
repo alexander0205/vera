@@ -32,6 +32,10 @@ interface Pago {
   notas:         string | null;
   createdAt:     string;
   turnoCajaId:   number | null;
+  /** Cuadre al que pertenece. null cuando se cobró fuera de la caja. */
+  turnoNumeroCierre?: string | null;
+  turnoAperturaAt?:   string | null;
+  turnoEstado?:       string | null;
   notaCreditoId: number | null;
   docId:         number | null;
   docCodigo:     string | null;
@@ -311,6 +315,36 @@ export default function PagosPage() {
       header: 'Registrado por',
       visibleAt: 'xl',
       render: p => <Box component="span" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>{p.registradoPor ?? p.registradoPorEmail ?? '—'}</Box>,
+    },
+    {
+      // En qué cuadre de caja cayó el cobro.
+      //
+      // Es la pregunta que aparece cada vez que una caja no cuadra, y hasta
+      // ahora solo se podía responder consultando la base de datos. «Fuera de
+      // caja» no es un hueco: significa que se cobró desde Facturación, sin
+      // turno abierto, y por eso ese dinero no aparece en ningún arqueo.
+      id: 'cuadre',
+      header: 'Cuadre',
+      visibleAt: 'xl',
+      render: p => {
+        if (!p.turnoCajaId) {
+          return (
+            <Box component="span" sx={{ fontSize: '0.72rem', color: '#9ca3af' }} title="Cobrado desde Facturación, sin turno de caja abierto">
+              Fuera de caja
+            </Box>
+          );
+        }
+        const abierto = p.turnoEstado === 'ABIERTO';
+        return (
+          <Box
+            component="span"
+            title={p.turnoAperturaAt ? `Turno abierto el ${fmtFechaCorta(p.turnoAperturaAt)}` : undefined}
+            sx={{ fontSize: '0.72rem', fontFamily: 'monospace', color: abierto ? '#047857' : '#4b5563' }}
+          >
+            {p.turnoNumeroCierre ?? (abierto ? 'Turno abierto' : `#${p.turnoCajaId}`)}
+          </Box>
+        );
+      },
     },
     {
       id: 'comprobante',

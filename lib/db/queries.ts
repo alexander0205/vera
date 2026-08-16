@@ -11,6 +11,7 @@ import {
   sequences,
   ecfDocuments,
   pagosRecibidos,
+  cajaTurnos,
 } from './schema';
 import { cookies } from 'next/headers';
 import { unstable_cache } from 'next/cache';
@@ -977,6 +978,17 @@ export async function getPagosListado(
       notas:        pagosRecibidos.notas,
       createdAt:    pagosRecibidos.createdAt,
       turnoCajaId:  pagosRecibidos.turnoCajaId,
+      // A qué cuadre de caja pertenece el cobro.
+      //
+      // El id del turno ya viajaba, pero no le dice nada a nadie: lo que el
+      // cajero reconoce es el número de cierre («CC-2026-000013») y la fecha en
+      // que abrió. Sin esto, para saber en qué cuadre cayó un pago había que
+      // consultar la base — y esa pregunta aparece cada vez que una caja no
+      // cuadra. Un cobro sin turno es uno hecho fuera de la caja (desde
+      // Facturación), y eso también hay que poder distinguirlo.
+      turnoNumeroCierre: cajaTurnos.numeroCierre,
+      turnoAperturaAt:   cajaTurnos.aperturaAt,
+      turnoEstado:       cajaTurnos.estado,
       notaCreditoId: pagosRecibidos.notaCreditoId,
       // Documento al que se aplicó el pago.
       docId:        ecfDocuments.id,
@@ -1002,6 +1014,7 @@ export async function getPagosListado(
     .from(pagosRecibidos)
     .leftJoin(ecfDocuments, eq(pagosRecibidos.ecfDocumentId, ecfDocuments.id))
     .leftJoin(users, eq(pagosRecibidos.createdBy, users.id))
+    .leftJoin(cajaTurnos, eq(pagosRecibidos.turnoCajaId, cajaTurnos.id))
     .where(and(...filtros))
     .orderBy(desc(pagosRecibidos.fechaPago), desc(pagosRecibidos.id))
     .limit(limit)

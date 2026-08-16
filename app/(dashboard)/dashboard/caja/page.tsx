@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Wallet, Clock, ArrowDownCircle, ArrowUpCircle, Plus, CheckCircle,
-  AlertTriangle, Loader2, ChevronDown, ChevronUp, Info,
+  AlertTriangle, Loader2, ChevronDown, ChevronUp, Info, Search,
 } from 'lucide-react';
+import { DetalleTurno } from '@/components/caja/DetalleTurno';
 import { toast } from 'sonner';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { METODO_PAGO_LABELS as METODO_LABELS, METODOS_PAGO, esEfectivo } from '@/lib/pagos/metodos';
@@ -391,6 +392,9 @@ export default function CajaPage() {
 
   const [showMovimiento, setShowMovimiento] = useState(false);
   const [showCierre, setShowCierre]         = useState(false);
+  // El detalle se carga bajo demanda: son varias consultas y no todo el mundo
+  // que abre la caja viene a auditar el turno.
+  const [verDetalle, setVerDetalle]         = useState(false);
   const [showMovs, setShowMovs]             = useState(false);
 
   const prevEstado = useRef<EstadoTurno | null>(null);
@@ -658,6 +662,30 @@ export default function CajaPage() {
           sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
           Solicitar cierre
         </MuiButton>
+      </Box>
+
+      {/* Ver detalle — de dónde salió cada peso del turno.
+          Los recuadros de arriba dan los totales; esto abre la lista cobro por
+          cobro con su factura y su cliente. Es lo que hay que poder mirar antes
+          de cerrar, cuando el conteo no cuadra o cuando una cifra no se
+          reconoce: sin esto la única vía era consultar la base de datos. */}
+      <Box>
+        <MuiButton
+          variant="text"
+          size="small"
+          startIcon={<Search style={{ width: 15, height: 15 }} />}
+          onClick={() => setVerDetalle(v => !v)}
+          sx={{ textTransform: 'none', fontWeight: 600, color: 'text.secondary' }}
+        >
+          {verDetalle ? 'Ocultar detalle' : 'Ver detalle del turno'}
+        </MuiButton>
+        {verDetalle && (
+          <Card elevation={0} sx={{ mt: 1, border: '1px solid #e5e7eb', borderRadius: '12px' }}>
+            <CardContent sx={{ p: '16px 20px !important' }}>
+              <DetalleTurno turnoId={turno.id} />
+            </CardContent>
+          </Card>
+        )}
       </Box>
 
       {/* Movimientos */}
