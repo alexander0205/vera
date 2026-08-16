@@ -7,11 +7,24 @@ validateEnv();
 // Versión del sistema (package.json) — expuesta al cliente para mostrar en el nav.
 const appVersion = JSON.parse(readFileSync('./package.json', 'utf8')).version ?? '0.0.0';
 
+/**
+ * `font-src` — las tipografías van embebidas como `data:` URI, y sin esta
+ * directiva caían en `default-src 'self'`, que no las admite: el navegador las
+ * bloqueaba y la interfaz se pintaba con la fuente del sistema.
+ *
+ * `connect-src` con `*.zero.com.do` — el sistema vive repartido en varios
+ * subdominios (app, facturacion, pos, colegio) y el proxy manda cada ruta al
+ * suyo. Cuando Next precarga un enlace a otro módulo —`/cuenta` desde el panel
+ * de facturación, por ejemplo— hace un fetch que termina en una redirección a
+ * otro host, y con `'self'` a secas el navegador la bloquea. No es un fallo
+ * cosmético: la precarga es la que hace que navegar entre módulos sea
+ * instantáneo.
+ */
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://api.stripe.com https://ecf-api.zero.com.do; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',
