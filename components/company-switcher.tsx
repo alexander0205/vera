@@ -220,10 +220,23 @@ export function CompanySwitcher({
         />
       </Box>
 
+      {/*
+        `autoFocus={false}` + `disableAutoFocusItem` no son cosmética: sin ellos
+        el buscador NO se puede usar. El Menu de MUI trae su propia búsqueda por
+        teclado —escribes «c» y salta al ítem que empieza por «c»— y para eso se
+        queda con el foco. Cada tecla se lo quitaba al input, así que solo
+        entraba la primera letra y el filtro se borraba solo.
+
+        El `onKeyDown` que corta la propagación va abajo, en la caja del
+        buscador: es lo que impide que las teclas lleguen al MenuList. Las tres
+        cosas hacen falta juntas.
+      */}
       <Menu
         anchorEl={anchorEl}
         open={open}
         onClose={() => { setAnchorEl(null); setSearch(''); }}
+        autoFocus={false}
+        disableAutoFocusItem
         slotProps={{
           paper: {
             elevation: 0,
@@ -240,7 +253,15 @@ export function CompanySwitcher({
         anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
       >
         {teams.length > 3 && (
-          <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box
+            sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}
+            // Las teclas mueren aquí y no llegan al MenuList, que si no se
+            // lleva el foco con su búsqueda por teclado. Ver el comentario del
+            // Menu: sin esto solo se podía escribir una letra.
+            onKeyDown={(e: React.KeyboardEvent) => {
+              if (e.key !== 'Escape') e.stopPropagation();
+            }}
+          >
             <Box sx={{
               display: 'flex', alignItems: 'center', gap: 1,
               bgcolor: 'grey.50', borderRadius: '8px', px: 1.5, py: 0.75,
@@ -253,11 +274,18 @@ export function CompanySwitcher({
                 placeholder="Buscar empresa..."
                 sx={{ flex: 1, fontSize: '0.875rem' }}
               />
+              {/* Cuántas hay. La lista se corta en el borde de la tarjeta y sin
+                  este número no hay forma de saber que abajo sigue habiendo. */}
+              <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                {search ? `${filtered.length} de ${teams.length}` : `${teams.length}`}
+              </Typography>
             </Box>
           </Box>
         )}
 
-        <Box sx={{ py: 0.5, maxHeight: 240, overflowY: 'auto' }}>
+        {/* 240px daban para cuatro empresas de 22, y la lista se cortaba en el
+            borde de la tarjeta sin nada que dijera que seguía. */}
+        <Box sx={{ py: 0.5, maxHeight: 420, overflowY: 'auto' }}>
           {filtered.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5, textAlign: 'center' }}>
               Sin resultados
