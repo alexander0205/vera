@@ -363,7 +363,11 @@ export function InventarioPageClient({ almacenId }: { almacenId?: number | null 
         emptyState={{
           icon:  Package,
           title: 'Sin movimientos de inventario',
-          hint:  'Los movimientos aparecen aquí cuando emites facturas o haces ajustes manuales',
+          // Decía solo «aparecen cuando emites facturas o haces ajustes», y en
+          // un negocio que vende servicios eso deja la pantalla vacía para
+          // siempre sin explicar por qué. Se dice la condición que de verdad
+          // manda —hace falta un producto que lleve stock— y adónde ir.
+          hint:  'Aquí se registran las entradas y salidas de stock. Solo se mueven los productos con «Controlar inventario» encendido: los servicios no llevan stock y nunca aparecen. Se activa en la ficha del producto.',
         }}
         headerActions={
           <Button

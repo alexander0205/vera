@@ -10,14 +10,14 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
-import { Loader2, Check, ChevronDown, ChevronUp, Camera, X } from 'lucide-react';
+import { Loader2, Check, ChevronDown, ChevronUp, Camera, X, FileText, Store } from 'lucide-react';
 import MaestrosProductoSection from '@/app/(dashboard)/dashboard/productos/MaestrosProductoSection';
 import { VariantesEditor, type VariantesPayload } from '@/components/productos/VariantesEditor';
 import {
   VariantesEditorEdit, type VariantesEditPayload, type VariantesEditInitial,
 } from '@/components/productos/VariantesEditorEdit';
 import {
-  OPCIONES_DONDE_SE_VENDE, aBanderas, desdeBanderas, defaultPorTipo, type DondeSeVende,
+  CANALES, aBanderas, desdeBanderas, defaultPorTipo, type DondeSeVende,
 } from '@/lib/productos/donde-se-vende';
 
 // ─── Constantes / helpers (movidos desde productos/_page-client) ─────────────
@@ -77,11 +77,19 @@ interface Categoria { id: number; nombre: string; }
  * `productoId` (null = crear) y carga el detalle + variantes él mismo, así los
  * dos callers no necesitan conocer la forma completa del producto.
  */
-export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
+export function ProductoFormModal({ open, productoId, onClose, onSaved, canalPorDefecto }: {
   open: boolean;
   productoId: number | null;
   onClose: () => void;
   onSaved: () => void;
+  /**
+   * Dónde se vende un ítem NUEVO creado desde aquí, antes de que el usuario
+   * toque nada. Lo pasa la pantalla de productos del POS: quien está creando
+   * desde la caja está creando algo para la caja, y llegar al formulario con
+   * «Punto de venta» ya marcado le ahorra el paso que casi todos olvidan —el
+   * mismo olvido que llenó la grilla de mensualidades. Sigue siendo editable.
+   */
+  canalPorDefecto?: 'pos';
 }) {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
@@ -168,14 +176,18 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
     setVariantesEdit(null);
     setTocóDonde(false);
     if (productoId == null) {
-      setForm(EMPTY_FORM);
+      // Creando desde la caja: nace marcado como Punto de venta. Se marca
+      // también `tocóDonde` para que elegir «Producto» o «Servicio» después no
+      // pise la decisión que ya tomó el sitio desde donde se abrió.
+      setForm(canalPorDefecto === 'pos' ? { ...EMPTY_FORM, donde: 'pos' as DondeSeVende } : EMPTY_FORM);
+      if (canalPorDefecto === 'pos') setTocóDonde(true);
       setVariantesInit(null);
       setVariantesNuevas({ activo: false, variantAtributos: [], variants: [] });
       setResetVariantes(n => n + 1);
     } else {
       cargarDetalle(productoId);
     }
-  }, [open, productoId, cargarDetalle]);
+  }, [open, productoId, cargarDetalle, canalPorDefecto]);
 
   /**
    * Cambiar el tipo arrastra el «¿dónde se vende?» mientras el usuario no haya
@@ -334,22 +346,63 @@ export function ProductoFormModal({ open, productoId, onClose, onSaved }: {
               </div>
             </div>
 
-            {/* Dónde se vende — una pregunta, tres respuestas. Ver
+            {/* Dónde se vende — dos casillas, no un desplegable.
+                Se ven las dos opciones de un vistazo y se marca la que toca,
+                sin abrir nada. Desmarcar las dos no se permite: un ítem que no
+                aparece en ningún lado no se puede vender. Ver
                 lib/productos/donde-se-vende.ts. */}
             <div className="space-y-1.5">
               <Label>¿Dónde se vende?</Label>
-              <Select value={form.donde}
-                onValueChange={(v) => { setTocóDonde(true); setForm((f) => ({ ...f, donde: v as DondeSeVende })); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {OPCIONES_DONDE_SE_VENDE.map((o) => (
-                    <SelectItem key={o.valor} value={o.valor}>
-                      <span className="block text-sm">{o.label}</span>
-                      <span className="block text-[11px] text-gray-400">{o.ayuda}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap gap-2">
+                {CANALES.map(({ clave, label, ayuda }) => {
+                  const Icono = clave === 'pos' ? Store : FileText;
+                  const marcado = form.donde === 'ambos' || form.donde === clave;
+                  // La última marcada no se puede quitar: se dice por qué en el
+                  // title, y así el bloqueo no se lee como un botón roto.
+                  const esLaUltima = marcado && form.donde !== 'ambos';
+                  return (
+                    <button
+                      key={clave}
+                      type="button"
+                      title={esLaUltima ? 'Tiene que venderse al menos en un sitio' : ayuda}
+                      aria-pressed={marcado}
+                      onClick={() => {
+                        if (esLaUltima) return;
+                        setTocóDonde(true);
+                        setForm((f) => ({
+                          ...f,
+                          donde: marcado
+                            ? (clave === 'pos' ? 'facturacion' : 'pos')
+                            : 'ambos',
+                        }));
+                      }}
+                      className={[
+                        'flex flex-1 min-w-[190px] items-start gap-2.5 rounded-lg border p-3 text-left transition-colors',
+                        marcado
+                          ? 'border-zero-300 bg-zero-50'
+                          : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50',
+                        esLaUltima ? 'cursor-default' : 'cursor-pointer',
+                      ].join(' ')}
+                    >
+                      <span
+                        className={[
+                          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                          marcado ? 'border-zero-600 bg-zero-600 text-white' : 'border-gray-300 bg-white',
+                        ].join(' ')}
+                      >
+                        {marcado && <Check className="h-3 w-3" strokeWidth={3} />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                          <Icono className="h-3.5 w-3.5 text-gray-400" />
+                          {label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{ayuda}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Unidad de medida */}

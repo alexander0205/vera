@@ -16,7 +16,7 @@ import { RailArmazon } from '@/components/rail/RailArmazon';
 import { RailSecciones } from '@/components/rail/RailSecciones';
 import type { RailSeccion } from '@/components/rail/tipos';
 import {
-  Store, Clock, Wallet, Undo2, Users, Package, Settings, ReceiptText,
+  Store, Clock, Wallet, Undo2, Users, Package, PackageSearch, Settings, ReceiptText,
 } from 'lucide-react';
 
 // Navegación del módulo POS. Todo vive bajo /pos (shell del POS) para no saltar
@@ -32,6 +32,10 @@ const SECCIONES: RailSeccion[] = [
   { tipo: 'item', id: 'pos-caja',          href: '/pos/caja',         label: 'Gestión de efectivo', icon: Wallet },
   { tipo: 'item', id: 'pos-devoluciones',  href: '/pos/devoluciones', label: 'Devoluciones',        icon: Undo2 },
   { tipo: 'item', id: 'pos-contactos',     href: '/pos/contactos',    label: 'Contactos',           icon: Users,   shared: true },
+  // Productos va ANTES que Inventario: es lo que se consulta a diario (¿está
+  // este artículo?, ¿a qué precio?), mientras que Inventario son movimientos de
+  // stock, que se miran de vez en cuando.
+  { tipo: 'item', id: 'pos-productos',     href: '/pos/productos',    label: 'Productos',           icon: PackageSearch, shared: true },
   { tipo: 'item', id: 'pos-inventario',    href: '/pos/inventario',   label: 'Inventario',          icon: Package, shared: true },
   { tipo: 'item', id: 'pos-configuracion', href: '/pos/configuracion', label: 'Configuración',      icon: Settings },
 ];

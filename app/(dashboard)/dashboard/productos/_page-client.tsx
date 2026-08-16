@@ -43,7 +43,15 @@ const TASA_LABELS: Record<string, string> = {
   'exento': 'Exento',
 };
 
-export default function ProductosPage() {
+/**
+ * @param canal Con 'pos' la pantalla se acota al catálogo de la caja: solo los
+ *   ítems marcados como Punto de venta, y lo que se cree aquí nace marcado así.
+ *   Es lo que se sirve en /pos/productos. Sin `canal` es el catálogo completo
+ *   del negocio, que es lo que tiene que ver Facturación —ahí SÍ se muestran
+ *   todos, o no habría forma de editar un ítem oculto ni de volver a mostrarlo.
+ */
+export default function ProductosPage({ canal }: { canal?: 'pos' } = {}) {
+  const soloPos = canal === 'pos';
   const [productos, setProductos]       = useState<Producto[]>([]);
   const [loading, setLoading]           = useState(true);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
@@ -63,13 +71,14 @@ export default function ProductosPage() {
       const params = new URLSearchParams();
       if (q)    params.set('q', q);
       if (tipo) params.set('tipo', tipo);
+      if (soloPos) params.set('canal', 'pos');
       const res  = await fetch(`/api/productos?${params}`);
       const data = await res.json();
       setProductos(data.productos ?? []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [soloPos]);
 
   // Debounce on filter change
   useEffect(() => {
@@ -202,7 +211,9 @@ export default function ProductosPage() {
         columns={columns}
         rowHref={p => `/dashboard/productos/${p.id}`}
         title="Productos y Servicios"
-        description="Catálogo de ítems para tus facturas"
+        description={soloPos
+          ? 'Lo que se vende en la caja. Un ítem aparece acá solo si está marcado como Punto de venta.'
+          : 'Catálogo de ítems para tus facturas'}
         filters={[
           { type: 'search', id: 'q', placeholder: 'Buscar por nombre o referencia…' },
           {
@@ -265,6 +276,7 @@ export default function ProductosPage() {
         productoId={editProductoId}
         onClose={() => setShowForm(false)}
         onSaved={() => cargar(search, tipoFilter)}
+        canalPorDefecto={soloPos ? 'pos' : undefined}
       />
 
       {/* ── Modal: Confirmar eliminación ──────────────────────────────────────── */}

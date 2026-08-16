@@ -19,6 +19,27 @@ export const OPCIONES_DONDE_SE_VENDE: { valor: DondeSeVende; label: string; ayud
   { valor: 'pos',         label: 'Solo en Punto de Venta', ayuda: 'No aparece al facturar. Típico de la cafetería.' },
 ];
 
+/**
+ * Los dos sitios donde se puede vender, para presentarlos como casillas.
+ *
+ * Es la MISMA información que `OPCIONES_DONDE_SE_VENDE` vista al derecho: en
+ * vez de tres respuestas cerradas, los dos canales que se marcan por separado.
+ * Con dos casillas se ven las dos opciones sin abrir nada y «los dos» deja de
+ * ser una tercera cosa que memorizar — es sencillamente tener las dos puestas.
+ *
+ * El estado de «ninguna marcada» no existe: lo impide la pantalla, que no deja
+ * quitar la última. Por eso el tipo de abajo sigue siendo de dos valores y
+ * `DondeSeVende` no necesita un cuarto.
+ */
+export const CANAL_FACTURACION = 'facturacion' as const;
+export const CANAL_POS = 'pos' as const;
+export type CanalDeVenta = typeof CANAL_FACTURACION | typeof CANAL_POS;
+
+export const CANALES: { clave: CanalDeVenta; label: string; ayuda: string }[] = [
+  { clave: CANAL_FACTURACION, label: 'Facturación',    ayuda: 'Se puede elegir al armar una factura.' },
+  { clave: CANAL_POS,         label: 'Punto de venta', ayuda: 'Sale en la grilla de la caja.' },
+];
+
 /** Las dos columnas que se guardan, a partir de la respuesta elegida. */
 export function aBanderas(donde: DondeSeVende): { visiblePos: boolean; visibleFacturacion: boolean } {
   switch (donde) {
