@@ -33,6 +33,7 @@ import { calcularEstadoPago, recalcularEstadoPago } from '@/lib/facturas/estado-
 import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
+import { registrarMovimiento } from '@/lib/caja/core';
 import { labelMetodo } from '@/lib/pagos/metodos';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
@@ -224,6 +225,52 @@ async function validarStockAgotado(
   return `No se puede guardar: los siguientes productos están agotados y no permiten venta sin stock: ${nombres}.`;
 }
 
+// ─── Gastos (43/47): dinero que SALE, no ingreso ──────────────────────────────
+// Un gasto pasa por este mismo motor que las ventas, pero su efectivo NO entra a
+// la caja: sale. Estos helpers dan ese trato — el pago del gasto no se ata al
+// turno (así `calcularEsperado` no lo suma como ingreso) y la porción en efectivo
+// se registra como movimiento GASTO, que el cierre RESTA.
+
+const esMetodoEfectivo = (m?: string | null): boolean =>
+  !!m && ['efectivo', 'cash'].includes(m.trim().toLowerCase());
+
+/** Centavos pagados en efectivo, sea pago único o split. */
+function porcionEfectivoCents(data: {
+  pagos?: Array<{ metodo: string; valor: number }>;
+  pagoRecibido?: boolean; pagoMetodo?: string; pagoValor?: number;
+}): number {
+  if (data.pagos?.length) {
+    return data.pagos
+      .filter(p => p.valor > 0 && esMetodoEfectivo(p.metodo))
+      .reduce((s, p) => s + Math.round(p.valor * 100), 0);
+  }
+  if (data.pagoRecibido && data.pagoValor && data.pagoValor > 0 && esMetodoEfectivo(data.pagoMetodo)) {
+    return Math.round(data.pagoValor * 100);
+  }
+  return 0;
+}
+
+/** Registra la salida de efectivo de un gasto como movimiento GASTO del turno. */
+async function registrarSalidaGasto(opts: {
+  teamId: number; turnoId: number | null | undefined;
+  montoCents: number; descripcion: string; userId: number;
+}): Promise<void> {
+  if (!opts.turnoId || opts.montoCents <= 0) return;
+  try {
+    await registrarMovimiento({
+      teamId:        opts.teamId,
+      turnoId:       opts.turnoId,
+      tipo:          'GASTO',
+      montoCentavos: opts.montoCents,
+      metodo:        'efectivo',
+      descripcion:   opts.descripcion,
+      createdBy:     opts.userId,
+    });
+  } catch (e) {
+    console.error('[ecf/emitir] registrar salida de gasto en caja falló', e);
+  }
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
@@ -293,6 +340,10 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // Gasto (e43 menores / e47 pagos al exterior): dinero que SALE. Su efectivo
+    // no entra a la caja como ingreso — se trata como salida (ver helpers arriba).
+    const esGasto = data.tipoEcf === '43' || data.tipoEcf === '47';
 
     // ── Gate: facturas:precio-editar ──────────────────────────────────────────
     // Sin el permiso, cada línea tiene que venir del catálogo y al precio del
@@ -734,6 +785,9 @@ export async function POST(request: NextRequest) {
         // Cuando pagoRecibido=true pero pagoValor=0 no tocamos el ledger; el método
         // se persiste en ecfDocuments.pagoMetodo (columna inline) y editar/page.tsx
         // lo recupera desde ahí como fallback.
+        // Gasto: el pago no se ata al turno (no cuenta como ingreso); la salida
+        // de efectivo va como movimiento GASTO más abajo.
+        const turnoPagoBorrador = esGasto ? null : turnoBorradorId;
         if (data.pagos?.length) {
           try {
             await db.delete(pagosRecibidos)
@@ -743,7 +797,7 @@ export async function POST(request: NextRequest) {
               ecfDocumentId: borradorId,
               fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
               createdBy:     user.id,
-              turnoCajaId:   turnoBorradorId,
+              turnoCajaId:   turnoPagoBorrador,
               pagos: data.pagos
                 .filter(p => p.valor > 0)
                 .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
@@ -761,7 +815,7 @@ export async function POST(request: NextRequest) {
               cuenta:        data.pagoCuenta || null,
               fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
               createdBy:     user.id,
-              turnoCajaId:   turnoBorradorId,
+              turnoCajaId:   turnoPagoBorrador,
             });
           } catch (e) { console.error('[editar borrador registrarPago]', e); }
         } else if (!data.pagoRecibido) {
@@ -769,6 +823,9 @@ export async function POST(request: NextRequest) {
           await db.delete(pagosRecibidos)
             .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
         }
+        // NB: no se registra movimiento GASTO al editar un borrador — los
+        // movimientos de caja son append-only y re-guardar acumularía salidas
+        // duplicadas. La salida de efectivo se registra una sola vez, al EMITIR.
 
         return NextResponse.json({
           ok:           true,
@@ -923,6 +980,11 @@ export async function POST(request: NextRequest) {
       // del padre en NC, registro de pago), cada uno 1+ round-trips a Neon. No
       // comparten datos ni tabla entre sí, así que se pueden solapar. Cada uno
       // conserva su propio catch para que un fallo no tumbe a los otros.
+      // Gasto: el pago no se ata al turno (no cuenta como ingreso). La salida de
+      // efectivo se registra UNA vez, tras este INSERT (ver abajo). En el UPDATE
+      // de un borrador existente NO se registra, para no acumular salidas al
+      // re-guardar.
+      const turnoPagoBorradorNuevo = esGasto ? null : turnoBorradorId;
       await Promise.all([
         // Descuento de stock al guardar la factura definitiva (sin-ncf). El
         // borrador real (tipo e31/e32/etc, BOR-xxx) no descuenta hasta emitirse.
@@ -944,7 +1006,7 @@ export async function POST(request: NextRequest) {
               ecfDocumentId: saved.id,
               fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
               createdBy:     user.id,
-              turnoCajaId:   turnoBorradorId,
+              turnoCajaId:   turnoPagoBorradorNuevo,
               pagos: data.pagos
                 .filter(p => p.valor > 0)
                 .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
@@ -958,10 +1020,23 @@ export async function POST(request: NextRequest) {
                   cuenta:        data.pagoCuenta || null,
                   fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
                   createdBy:     user.id,
-                  turnoCajaId:   turnoBorradorId,
+                  turnoCajaId:   turnoPagoBorradorNuevo,
                 }).catch((e) => console.error('[emitir borrador registrarPago]', e))
               : null),
       ]);
+
+      // Salida de efectivo del gasto guardado como interno (borrador nuevo): se
+      // registra una sola vez, aquí. El path de dedup ya retornó arriba, así que
+      // esto no corre para un borrador deduplicado.
+      if (esGasto) {
+        await registrarSalidaGasto({
+          teamId,
+          turnoId:     turnoBorradorId,
+          montoCents:  Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
+          descripcion: `Gasto ${saved.encf || 'interno'}`,
+          userId:      user.id,
+        });
+      }
 
       // Split: la suma de los métodos (clamped al total) es el pago reportado.
       const sumaSplit = data.pagos?.length
@@ -1297,6 +1372,9 @@ export async function POST(request: NextRequest) {
     // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
     // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
     // recalcula estado_pago). Si no, flujo single existente.
+    // Gasto: el pago NO se ata al turno (turnoCajaId null) para que no cuente como
+    // ingreso del cierre; la salida de efectivo se registra aparte como GASTO.
+    const turnoParaPago = esGasto ? null : (turnoCaja?.id ?? null);
     if (data.pagos?.length) {
       try {
         await registrarPagosSplit({
@@ -1304,7 +1382,7 @@ export async function POST(request: NextRequest) {
           ecfDocumentId: saved.id,
           fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
           createdBy:     user.id,
-          turnoCajaId:   turnoCaja?.id ?? null,
+          turnoCajaId:   turnoParaPago,
           pagos: data.pagos
             .filter(p => p.valor > 0)
             .map(p => ({ montoCentavos: Math.round(p.valor * 100), metodo: p.metodo })),
@@ -1319,10 +1397,21 @@ export async function POST(request: NextRequest) {
           metodo:        data.pagoMetodo || 'otro',
           cuenta:        data.pagoCuenta || null,
           fechaPago:     data.pagoFecha || new Date().toISOString().slice(0, 10),
-          turnoCajaId:   turnoCaja?.id ?? null,
+          turnoCajaId:   turnoParaPago,
           createdBy:     user.id,
         });
       } catch (e) { console.error('[emitir registrarPago]', e); }
+    }
+
+    // Salida de efectivo del gasto: movimiento GASTO del turno (el cierre lo resta).
+    if (esGasto) {
+      await registrarSalidaGasto({
+        teamId,
+        turnoId:     turnoCaja?.id ?? null,
+        montoCents:  Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
+        descripcion: `Gasto ${encf}`,
+        userId:      user.id,
+      });
     }
 
     // Una NC reduce el saldo del padre desde que existe → recalcular su estado.
@@ -1349,14 +1438,17 @@ export async function POST(request: NextRequest) {
     // ── Descuento automático de inventario ───────────────────────────────────
     // Fire-and-forget: si falla, el e-CF ya fue emitido y guardado.
     // Solo afecta bienes (indicadorBienoServicio === 1) con productoId conocido.
-    descontarInventario(
-      teamId,
-      user.id,
-      saved.id,
-      encf,
-      data.items,
-      data.almacenId ?? null,
-    ).catch((e) => console.error('[ecf/emitir] stock decrement failed', e));
+    // Un gasto NO es venta de stock: no descuenta inventario.
+    if (!esGasto) {
+      descontarInventario(
+        teamId,
+        user.id,
+        saved.id,
+        encf,
+        data.items,
+        data.almacenId ?? null,
+      ).catch((e) => console.error('[ecf/emitir] stock decrement failed', e));
+    }
 
     import('@/lib/webhooks').then(({ dispatchWebhook }) =>
       dispatchWebhook(teamId, 'ecf.emitido', {

@@ -157,6 +157,11 @@ export default function NuevaFacturaForm({
   // un borrador (no se cambia el tipo de un documento ya creado).
   const ocultarCategoria = !!categoriaFija || !!initialData;
 
+  // Gasto (e43/e47): primero un registro interno de salida de dinero. Emitir a
+  // la DGII es opcional (queda en el menú "Más opciones"), así que la acción
+  // primaria guarda como interno en vez de forzar la emisión fiscal.
+  const esGasto = tipoEcf === '43' || tipoEcf === '47';
+
   // Título de la pantalla según la categoría de documento.
   const tituloDoc = ({
     'nota-credito': { nuevo: 'Nueva nota de crédito', editar: 'Editar nota de crédito' },
@@ -1316,7 +1321,8 @@ export default function NuevaFacturaForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await emitir('emitir');
+    // Gasto: la acción primaria guarda como interno; emitir a DGII es opcional.
+    await emitir(esGasto ? 'borrador' : 'emitir');
   }
 
   // ─── Cmd/Ctrl + Enter → emitir ────────────────────────────────────────────
@@ -1325,14 +1331,14 @@ export default function NuevaFacturaForm({
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         if (!loading && !resultado) {
-          void emitir('emitir');
+          void emitir(esGasto ? 'borrador' : 'emitir');
         }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, resultado]);
+  }, [loading, resultado, esGasto]);
 
   // ─── Guardar NCF modal ────────────────────────────────────────────────────
   async function handleGuardarNcf() {
@@ -1914,8 +1920,8 @@ export default function NuevaFacturaForm({
             loading={loading}
             loadingPreview={loadingPreview}
             primaryBtnClass={docAccent.primaryBtnClass}
-            primaryLabel={tipoEcf === 'sin-ncf' ? 'Guardar factura' : esPadreSinNcf ? 'Guardar borrador' : 'Emitir e-CF'}
-            loadingPrimaryLabel={(tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
+            primaryLabel={esGasto ? 'Guardar gasto' : tipoEcf === 'sin-ncf' ? 'Guardar factura' : esPadreSinNcf ? 'Guardar borrador' : 'Emitir e-CF'}
+            loadingPrimaryLabel={(esGasto || tipoEcf === 'sin-ncf' || esPadreSinNcf) ? 'Guardando…' : 'Emitiendo…'}
             onVistaPrevia={handleVistaPrevia}
             onEmitir={emitir}
             onCancelar={() => {
