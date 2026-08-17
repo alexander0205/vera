@@ -74,6 +74,18 @@ export default function ZeroTicketsPage() {
   }, []);
 
   useEffect(() => {
+    if (!available) return;
+    const heartbeat = setInterval(() => {
+      fetch('/api/zero-tickets/agent/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ available: true }),
+      }).catch(() => {});
+    }, 60000);
+    return () => clearInterval(heartbeat);
+  }, [available]);
+
+  useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     if (selectedId == null) return;
     loadMessages(selectedId);
