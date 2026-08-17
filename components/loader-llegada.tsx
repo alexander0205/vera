@@ -28,6 +28,14 @@ import { ZeroLoader } from '@/components/zero-loader';
 
 const CLAVE = 'zero:abriendo-modulo';
 
+/**
+ * Tope de la carga inicial: si los datos del header no llegan en este tiempo,
+ * se revela la pantalla igual en vez de dejar el loader colgado para siempre.
+ * Muy por encima de lo normal (reconexión fría a Neon ~1.4 s); solo salta ante
+ * una petición que de verdad se cuelga.
+ */
+const TECHO_CARGA_INICIAL_MS = 12_000;
+
 /** Se llama antes de navegar; lo recoge el módulo de destino al montar. */
 export function anunciarCambioDeModulo(nombre: string) {
   try {
@@ -86,6 +94,15 @@ export function LoaderLlegada({
     if (datosListos) yaListoAlgunaVez.current = true;
   }, [datosListos]);
 
+  // Recoger el aviso está SEPARADO de la cuenta atrás que lo retira, a
+  // propósito. Antes ambos vivían en un mismo efecto: se leía sessionStorage,
+  // se borraba, se ponía el nombre y se armaba el timer. En dev, StrictMode
+  // monta el efecto dos veces (setup → cleanup → setup): el primer setup ya
+  // borró la clave, el cleanup mató el timer, y el segundo setup —sin clave que
+  // leer— salía temprano sin rearmar el timer. Quedaba `nombre` puesto y NADIE
+  // lo bajaba: el loader se trababa y solo un refresh lo soltaba. Al separar,
+  // el timer (efecto de abajo) depende solo de `nombre`, no de la clave ya
+  // consumida, así que StrictMode lo rearma bien.
   useEffect(() => {
     let anotado: string | null = null;
     try {
@@ -96,9 +113,14 @@ export function LoaderLlegada({
     } catch {
       return;
     }
-    if (!anotado) return;
+    if (anotado) setNombre(anotado);
+  }, []);
 
-    setNombre(anotado);
+  // Cuenta atrás que retira el loader de cambio de módulo. Keyed en `nombre`:
+  // cuando hay uno, se arma; StrictMode puede montar/desmontar este efecto sin
+  // perder el temporizador porque no depende de la clave de sessionStorage.
+  useEffect(() => {
+    if (!nombre) return;
     const t = setTimeout(() => {
       setNombre(null);
       // El tapado se retira A LA VEZ que el loader, no antes: si se quitara al
@@ -106,7 +128,7 @@ export function LoaderLlegada({
       document.documentElement.removeAttribute(ATRIBUTO);
     }, esperaMs);
     return () => clearTimeout(t);
-  }, [esperaMs]);
+  }, [nombre, esperaMs]);
 
   // Si no había nada anotado, el tapado no debe quedarse puesto —por ejemplo
   // si el script lo dejó y este componente se montó sin recoger nada.
@@ -114,7 +136,20 @@ export function LoaderLlegada({
     if (!nombre) document.documentElement.removeAttribute(ATRIBUTO);
   }, [nombre]);
 
-  const cargaInicialPendiente = !yaListoAlgunaVez.current && datosListos === false;
+  // Techo de la carga inicial. Por muy fría que esté la conexión, el loader no
+  // debe quedarse indefinidamente esperando `datosListos`: una petición que se
+  // cuelga (conexión fría a la DB que ni resuelve ni falla) dejaba el loader
+  // puesto hasta refrescar a mano. Pasado el tope se revela la pantalla igual —
+  // cada una trae sus propios esqueletos/spinners.
+  const [techoCarga, setTechoCarga] = useState(false);
+  useEffect(() => {
+    if (yaListoAlgunaVez.current || datosListos !== false) return;
+    const t = setTimeout(() => setTechoCarga(true), TECHO_CARGA_INICIAL_MS);
+    return () => clearTimeout(t);
+  }, [datosListos]);
+
+  const cargaInicialPendiente =
+    !yaListoAlgunaVez.current && datosListos === false && !techoCarga;
   const abriendoModulo = !!nombre;
 
   return (
