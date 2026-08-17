@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
-import { ecfDocuments, teams, teamMembers, dependientes, pagosRecibidos, products } from '@/lib/db/schema';
+import { ecfDocuments, teams, teamMembers, dependientes, pagosRecibidos, products, cajaMovimientos } from '@/lib/db/schema';
 import { descontarInventario } from '@/lib/inventario/descuento';
 import { restaurarInventario } from '@/lib/inventario/devolucion';
 import { getUser, getTeamIdForUser, getMonthlyEcfCount, getPlanLimit, registrarPago, registrarPagosSplit } from '@/lib/db/queries';
@@ -255,16 +255,18 @@ function porcionEfectivoCents(data: {
   return 0;
 }
 
-/** Registra la salida de efectivo de un gasto como movimiento GASTO del turno. */
+/** Registra la salida de efectivo de un gasto/compra como movimiento GASTO del turno. */
 async function registrarSalidaGasto(opts: {
   teamId: number; turnoId: number | null | undefined;
   montoCents: number; descripcion: string; userId: number;
+  ecfDocumentId?: number | null;
 }): Promise<void> {
   if (!opts.turnoId || opts.montoCents <= 0) return;
   try {
     await registrarMovimiento({
       teamId:        opts.teamId,
       turnoId:       opts.turnoId,
+      ecfDocumentId: opts.ecfDocumentId ?? null,
       tipo:          'GASTO',
       montoCentavos: opts.montoCents,
       metodo:        'efectivo',
@@ -273,6 +275,45 @@ async function registrarSalidaGasto(opts: {
     });
   } catch (e) {
     console.error('[ecf/emitir] registrar salida de gasto en caja falló', e);
+  }
+}
+
+/**
+ * Reconcilia la salida de caja de un gasto/compra al EDITAR su borrador. Los
+ * movimientos son append-only, así que en vez de acumular al re-guardar: borra
+ * la salida previa de ESTE documento en el turno actual (abierto) y la vuelve a
+ * crear con el efectivo vigente. Si la salida ya quedó registrada en OTRO turno
+ * (p. ej. uno cerrado ya cuadrado), no se toca ni se duplica.
+ */
+async function reconciliarSalidaBorrador(opts: {
+  teamId: number; ecfDocumentId: number; turnoActualId: number | null | undefined;
+  montoCents: number; descripcion: string; userId: number;
+}): Promise<void> {
+  try {
+    const movs = await db
+      .select({ id: cajaMovimientos.id, turnoId: cajaMovimientos.turnoId })
+      .from(cajaMovimientos)
+      .where(and(
+        eq(cajaMovimientos.ecfDocumentId, opts.ecfDocumentId),
+        eq(cajaMovimientos.tipo, 'GASTO'),
+      ));
+    const yaEnOtroTurno   = movs.some(m => m.turnoId !== opts.turnoActualId);
+    const idsTurnoActual  = movs.filter(m => m.turnoId === opts.turnoActualId).map(m => m.id);
+    if (idsTurnoActual.length) {
+      await db.delete(cajaMovimientos).where(inArray(cajaMovimientos.id, idsTurnoActual));
+    }
+    if (!yaEnOtroTurno && opts.montoCents > 0 && opts.turnoActualId) {
+      await registrarSalidaGasto({
+        teamId:        opts.teamId,
+        turnoId:       opts.turnoActualId,
+        montoCents:    opts.montoCents,
+        descripcion:   opts.descripcion,
+        userId:        opts.userId,
+        ecfDocumentId: opts.ecfDocumentId,
+      });
+    }
+  } catch (e) {
+    console.error('[ecf/emitir] reconciliar salida de gasto/compra falló', e);
   }
 }
 
@@ -839,9 +880,20 @@ export async function POST(request: NextRequest) {
           await db.delete(pagosRecibidos)
             .where(and(eq(pagosRecibidos.ecfDocumentId, borradorId), eq(pagosRecibidos.teamId, teamId)));
         }
-        // NB: no se registra movimiento GASTO al editar un borrador — los
-        // movimientos de caja son append-only y re-guardar acumularía salidas
-        // duplicadas. La salida de efectivo se registra una sola vez, al EMITIR.
+        // Gasto/compra: reconciliar la salida de caja con el efectivo vigente.
+        // A diferencia de una venta (donde el pago SÍ va al turno), aquí el
+        // documento no cuenta como ingreso; su salida se registra aparte y hay
+        // que mantenerla al día si el usuario cambia el monto o quita el pago.
+        if (esSalidaDinero) {
+          await reconciliarSalidaBorrador({
+            teamId,
+            ecfDocumentId: borradorId,
+            turnoActualId: turnoBorradorId,
+            montoCents:    Math.min(porcionEfectivoCents(data), montoCts),
+            descripcion:   `${etiquetaSalida} ${saved.encf || 'interno'}`,
+            userId:        user.id,
+          });
+        }
 
         return NextResponse.json({
           ok:           true,
@@ -1053,10 +1105,11 @@ export async function POST(request: NextRequest) {
       if (esSalidaDinero) {
         await registrarSalidaGasto({
           teamId,
-          turnoId:     turnoBorradorId,
-          montoCents:  Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
-          descripcion: `${etiquetaSalida} ${saved.encf || 'interno'}`,
-          userId:      user.id,
+          turnoId:       turnoBorradorId,
+          montoCents:    Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
+          descripcion:   `${etiquetaSalida} ${saved.encf || 'interno'}`,
+          userId:        user.id,
+          ecfDocumentId: saved.id,
         });
       }
 
@@ -1434,10 +1487,11 @@ export async function POST(request: NextRequest) {
     if (esSalidaDinero) {
       await registrarSalidaGasto({
         teamId,
-        turnoId:     turnoCaja?.id ?? null,
-        montoCents:  Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
-        descripcion: `${etiquetaSalida} ${encf}`,
-        userId:      user.id,
+        turnoId:       turnoCaja?.id ?? null,
+        montoCents:    Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
+        descripcion:   `${etiquetaSalida} ${encf}`,
+        userId:        user.id,
+        ecfDocumentId: saved.id,
       });
     }
 

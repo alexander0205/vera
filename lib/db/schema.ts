@@ -1764,6 +1764,10 @@ export const cajaMovimientos = pgTable('caja_movimientos', {
   id:            serial('id').primaryKey(),
   teamId:        integer('team_id').notNull().references(() => teams.id),
   turnoId:       integer('turno_id').notNull().references(() => cajaTurnos.id),
+  // Documento (gasto/compra) que originó la salida. Permite reconciliar el
+  // movimiento al editar el borrador. Sin .references() para evitar import
+  // circular con ecfDocuments (FK en migración 0141).
+  ecfDocumentId: integer('ecf_document_id'),
   tipo:          varchar('tipo', { length: 20 }).notNull(),
   // ENTRADA | SALIDA | GASTO | RETIRO | AJUSTE
   /** Siempre positivo en centavos; `tipo` define el signo en el cálculo. */
