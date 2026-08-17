@@ -14,6 +14,7 @@ export async function GET() {
     .select({
       id: tickets.id,
       status: tickets.status,
+      createdAt: tickets.createdAt,
       lastMessageAt: tickets.lastMessageAt,
       unread: sql<boolean>`${tickets.lastReadByAgentAt} IS NULL OR ${tickets.lastMessageAt} > ${tickets.lastReadByAgentAt}`,
       userTyping: sql<boolean>`${tickets.userTypingUntil} IS NOT NULL AND ${tickets.userTypingUntil} > NOW()`,

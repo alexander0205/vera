@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 interface TicketRow {
   id: number;
   status: string;
+  createdAt: string;
   lastMessageAt: string;
   unread: boolean;
   userTyping: boolean;
@@ -187,28 +188,59 @@ export default function ZeroTicketsPage() {
 
         <div className="flex-1 border rounded-lg bg-white overflow-y-auto">
           <div className="px-4 py-3 border-b font-bold text-gray-900">Tickets ({ticketList.length})</div>
-          {ticketList.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedId(t.id)}
-              className={`w-full text-left px-4 py-3 border-b hover:bg-gray-50 ${selectedId === t.id ? 'bg-teal-50' : ''}`}
-            >
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-sm text-gray-900 flex items-center gap-1.5">
-                  {t.unread && <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />}
-                  {t.userName ?? t.userEmail}
-                </span>
-                <span className={`text-xs ${t.status === 'esperando' ? 'text-amber-600' : t.status === 'abierto' ? 'text-teal-600' : 'text-gray-400'}`}>
-                  {t.status}
-                </span>
-              </div>
-              <div className="text-xs text-gray-500">{t.teamName}</div>
-              <div className="text-xs text-gray-600 truncate mt-1">
-                {t.userTyping ? <em>escribiendo...</em> : (t.lastMessage ?? '(sin mensajes)')}
-              </div>
-              {t.assignedAgentName && <div className="text-[10px] text-gray-400 mt-1">Agente: {t.assignedAgentName}</div>}
-            </button>
-          ))}
+          {(() => {
+            const now = Date.now();
+            const esperando = ticketList
+              .filter((t) => t.status === 'esperando')
+              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            const resto = ticketList.filter((t) => t.status !== 'esperando');
+            const sortedList = [...esperando, ...resto];
+            return sortedList.map((t) => {
+              const isEsperando = t.status === 'esperando';
+              const posicion = isEsperando ? esperando.findIndex((e) => e.id === t.id) + 1 : null;
+              const minutosEsperando = isEsperando ? (now - new Date(t.createdAt).getTime()) / 60000 : 0;
+              const waitBorderClass = !isEsperando
+                ? ''
+                : minutosEsperando > 15
+                ? 'border-l-4 border-red-500'
+                : minutosEsperando >= 5
+                ? 'border-l-4 border-amber-500'
+                : 'border-l-4 border-transparent';
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setSelectedId(t.id)}
+                  className={`w-full text-left px-4 py-3 border-b hover:bg-gray-50 ${waitBorderClass} ${selectedId === t.id ? 'bg-teal-50' : ''}`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium text-sm text-gray-900 flex items-center gap-1.5">
+                      {t.unread && <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />}
+                      {t.userName ?? t.userEmail}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      {posicion != null && (
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            minutosEsperando > 15 ? 'bg-red-100 text-red-700' : minutosEsperando >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
+                          }`}
+                        >
+                          #{posicion} en cola
+                        </span>
+                      )}
+                      <span className={`text-xs ${t.status === 'esperando' ? 'text-amber-600' : t.status === 'abierto' ? 'text-teal-600' : 'text-gray-400'}`}>
+                        {t.status}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500">{t.teamName}</div>
+                  <div className="text-xs text-gray-600 truncate mt-1">
+                    {t.userTyping ? <em>escribiendo...</em> : (t.lastMessage ?? '(sin mensajes)')}
+                  </div>
+                  {t.assignedAgentName && <div className="text-[10px] text-gray-400 mt-1">Agente: {t.assignedAgentName}</div>}
+                </button>
+              );
+            });
+          })()}
           {ticketList.length === 0 && <div className="p-4 text-sm text-gray-400">Ningún ticket todavía.</div>}
         </div>
       </div>
