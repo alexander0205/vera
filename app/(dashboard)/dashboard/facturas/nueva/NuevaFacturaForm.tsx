@@ -1837,6 +1837,7 @@ export default function NuevaFacturaForm({
                     ncfProveedor={ncfProveedor} setNcfProveedor={setNcfProveedor}
                     categoriaGasto={categoriaGasto} setCategoriaGasto={setCategoriaGasto}
                     fechaGasto={fechaGasto} setFechaGasto={setFechaGasto}
+                    tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
                   />
                 </SectionCard>
               ) : (

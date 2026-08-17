@@ -211,6 +211,7 @@ export function ItemsTable({
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                 onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
                 createLabel={crearLabel}
+                onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
               />
@@ -586,6 +587,7 @@ export function ItemsTable({
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                     onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
                     createLabel={crearLabel}
+                    onFreeText={modoGasto ? (text) => onUpdateItem(item.id, 'nombreItem', text) : undefined}
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
                   />

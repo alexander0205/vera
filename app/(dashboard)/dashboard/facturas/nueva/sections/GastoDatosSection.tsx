@@ -29,13 +29,16 @@ interface Props {
   setCategoriaGasto: (value: string) => void;
   fechaGasto: string;
   setFechaGasto: (value: string) => void;
+  /** Subtipo fiscal del gasto (e43 gastos menores / e47 pagos al exterior). */
+  tipoEcf: string;
+  onChangeTipo: (value: string) => void;
 }
 
 /** Captura propia de una compra/gasto. No reutiliza vocabulario de ventas. */
 export function GastoDatosSection({
   proveedor, setProveedor, rncProveedor, setRncProveedor,
   ncfProveedor, setNcfProveedor, categoriaGasto, setCategoriaGasto,
-  fechaGasto, setFechaGasto,
+  fechaGasto, setFechaGasto, tipoEcf, onChangeTipo,
 }: Props) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -69,7 +72,18 @@ export function GastoDatosSection({
         />
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 180px' }, gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 220px) 1fr 180px' }, gap: 1.5 }}>
+        <FormControl size="small" fullWidth>
+          <InputLabel>Tipo de comprobante</InputLabel>
+          <Select
+            label="Tipo de comprobante" value={tipoEcf}
+            onChange={(e) => onChangeTipo(e.target.value)}
+            sx={{ borderRadius: '8px', fontSize: '0.875rem' }}
+          >
+            <MenuItem value="43" sx={{ fontSize: '0.875rem' }}>e43 — Gastos menores</MenuItem>
+            <MenuItem value="47" sx={{ fontSize: '0.875rem' }}>e47 — Pagos al exterior</MenuItem>
+          </Select>
+        </FormControl>
         <FormControl size="small" fullWidth>
           <InputLabel>Categoría</InputLabel>
           <Select
