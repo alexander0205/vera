@@ -81,7 +81,7 @@ const GROUPS: NavGroup[] = [
     icon: ShoppingCart,
     children: [
       { href: '/dashboard/compras',      label: 'Facturas recibidas', plusHref: '/dashboard/compras/nueva' },
-      { href: '/dashboard/gastos/nueva', label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
+      { href: '/dashboard/gastos',       label: 'Gastos',             plusHref: '/dashboard/gastos/nueva' },
     ],
   },
   {

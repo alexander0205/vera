@@ -454,6 +454,70 @@ export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string
 }
 
 /**
+ * Listado de GASTOS (e43 menores / e47 pagos al exterior) con totales, para la
+ * pantalla propia de Gastos (independiente de la caja). Compras (e41) tiene su
+ * propia pantalla de "Facturas recibidas"; aquí no se mezclan.
+ * Los totales excluyen anulados/rechazados; la lista los muestra igual.
+ * Montos en CENTAVOS.
+ */
+export async function getGastos(teamId: number, limit = 100) {
+  const TIPOS = ['43', '47'];
+  const base = and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.tipoEcf, TIPOS));
+  const vivos = and(base, sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`);
+
+  const [docs, totRows, porCategoria] = await Promise.all([
+    db
+      .select({
+        id:            ecfDocuments.id,
+        encf:          ecfDocuments.encf,
+        tipoEcf:       ecfDocuments.tipoEcf,
+        estado:        ecfDocuments.estado,
+        estadoPago:    ecfDocuments.estadoPago,
+        proveedor:     ecfDocuments.razonSocialComprador,
+        rncProveedor:  ecfDocuments.rncComprador,
+        ncfProveedor:  ecfDocuments.ncfProveedor,
+        categoriaGasto: ecfDocuments.categoriaGasto,
+        montoTotal:    ecfDocuments.montoTotal,
+        fechaGasto:    ecfDocuments.fechaGasto,
+        fechaEmision:  ecfDocuments.fechaEmision,
+        createdAt:     ecfDocuments.createdAt,
+      })
+      .from(ecfDocuments)
+      .where(base)
+      .orderBy(desc(ecfDocuments.createdAt))
+      .limit(limit),
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        count: sql<number>`count(*)`,
+      })
+      .from(ecfDocuments)
+      .where(vivos),
+    db
+      .select({
+        categoria: ecfDocuments.categoriaGasto,
+        total:     sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        count:     sql<number>`count(*)`,
+      })
+      .from(ecfDocuments)
+      .where(vivos)
+      .groupBy(ecfDocuments.categoriaGasto)
+      .orderBy(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0) desc`),
+  ]);
+
+  return {
+    docs,
+    totalCents: Number(totRows[0]?.total ?? 0),
+    count:      Number(totRows[0]?.count ?? 0),
+    porCategoria: porCategoria.map(c => ({
+      categoria:  c.categoria ?? 'Sin categoría',
+      totalCents: Number(c.total ?? 0),
+      count:      Number(c.count ?? 0),
+    })),
+  };
+}
+
+/**
  * Reporte "Ventas generales".
  * Devuelve agregados + lista de documentos del rango.
  *
