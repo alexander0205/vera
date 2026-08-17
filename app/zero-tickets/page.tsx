@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 interface TicketRow {
   id: number;
   status: string;
+  onHold: boolean;
   createdAt: string;
   lastMessageAt: string;
   unread: boolean;
@@ -133,6 +134,16 @@ export default function ZeroTicketsPage() {
     await loadTickets();
   }
 
+  async function toggleHold(id: number, currentOnHold: boolean) {
+    const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/hold`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ onHold: !currentOnHold }),
+    });
+    if (!res.ok) window.alert('No se pudo actualizar el estado de espera del ticket.');
+    await loadTickets();
+  }
+
   async function requestScreenshot(id: number) {
     const res = await fetch(`/api/zero-tickets/agent/tickets/${id}/request-screenshot`, { method: 'POST' });
     if (!res.ok) window.alert('No se pudo pedir la captura.');
@@ -218,6 +229,11 @@ export default function ZeroTicketsPage() {
                       {t.userName ?? t.userEmail}
                     </span>
                     <span className="flex items-center gap-1.5">
+                      {t.onHold && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">
+                          ⏸ en espera
+                        </span>
+                      )}
                       {posicion != null && (
                         <span
                           className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
@@ -263,6 +279,14 @@ export default function ZeroTicketsPage() {
                 )}
                 <button onClick={() => requestScreenshot(selected.id)} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
                   Pedir captura
+                </button>
+                <button
+                  onClick={() => toggleHold(selected.id, selected.onHold)}
+                  className={`text-xs px-3 py-1.5 rounded border ${
+                    selected.onHold ? 'border-sky-600 text-sky-700 hover:bg-sky-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {selected.onHold ? 'Quitar espera' : 'En espera'}
                 </button>
                 <button
                   onClick={() => toggleStatus(selected.id, selected.status)}

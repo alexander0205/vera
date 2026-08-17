@@ -36,6 +36,7 @@ export function TicketWidget() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [onHold, setOnHold] = useState(false);
   const [agentTyping, setAgentTyping] = useState(false);
   const [espera, setEspera] = useState<Espera | null>(null);
   const [readByAgentAt, setReadByAgentAt] = useState<string | null>(null);
@@ -52,6 +53,7 @@ export function TicketWidget() {
       ticketIdRef.current = data.ticket.id;
       setMessages(data.messages);
       setStatus(data.ticket.status);
+      setOnHold(Boolean(data.ticket.onHold));
       setAgentTyping(Boolean(data.ticket.agentTyping));
       setReadByAgentAt(data.ticket.lastReadByAgentAt);
     }
@@ -221,6 +223,12 @@ export function TicketWidget() {
       {status === 'cerrado' && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#92400e', background: '#fef3c7', textAlign: 'center' }}>
           Este ticket fue cerrado. Escribe para reabrirlo.
+        </div>
+      )}
+
+      {status === 'abierto' && onHold && (
+        <div style={{ padding: '6px 10px', fontSize: 12, color: '#334155', background: '#f1f5f9', textAlign: 'center' }}>
+          Tu ticket está en espera mientras el agente investiga.
         </div>
       )}
 
