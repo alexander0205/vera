@@ -983,6 +983,7 @@ export const tickets = pgTable('tickets', {
   createdAt:          timestamp('created_at').notNull().defaultNow(),
   updatedAt:          timestamp('updated_at').notNull().defaultNow(),
   closedAt:           timestamp('closed_at'),
+  onHold:             boolean('on_hold').notNull().default(false),
 });
 
 export const ticketMessages = pgTable('ticket_messages', {
@@ -1015,6 +1016,34 @@ export const agentPresence = pgTable('agent_presence', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
 
+export const supportAgents = pgTable('support_agents', {
+  id:        serial('id').primaryKey(),
+  userId:    integer('user_id').notNull().unique().references(() => users.id),
+  active:    boolean('active').notNull().default(true),
+  addedBy:   integer('added_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const ticketRatings = pgTable('ticket_ratings', {
+  id:        serial('id').primaryKey(),
+  ticketId:  integer('ticket_id').notNull().unique().references(() => tickets.id, { onDelete: 'cascade' }),
+  agentId:   integer('agent_id').references(() => users.id),
+  rating:    integer('rating').notNull(), // 1 a 5
+  comment:   text('comment'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const cannedResponses = pgTable('canned_responses', {
+  id:        serial('id').primaryKey(),
+  label:     varchar('label', { length: 100 }).notNull(),
+  category:  varchar('category', { length: 30 }).notNull().default('general'), // saludo | espera | cierre | general
+  content:   text('content').notNull(),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const ticketsRelations = relations(tickets, ({ one, many }) => ({
   team: one(teams, { fields: [tickets.teamId], references: [teams.id] }),
   user: one(users, { fields: [tickets.userId], references: [users.id] }),
@@ -1030,6 +1059,20 @@ export const ticketMessagesRelations = relations(ticketMessages, ({ one, many })
 
 export const ticketAttachmentsRelations = relations(ticketAttachments, ({ one }) => ({
   message: one(ticketMessages, { fields: [ticketAttachments.messageId], references: [ticketMessages.id] }),
+}));
+
+export const supportAgentsRelations = relations(supportAgents, ({ one }) => ({
+  user: one(users, { fields: [supportAgents.userId], references: [users.id] }),
+  addedByUser: one(users, { fields: [supportAgents.addedBy], references: [users.id] }),
+}));
+
+export const ticketRatingsRelations = relations(ticketRatings, ({ one }) => ({
+  ticket: one(tickets, { fields: [ticketRatings.ticketId], references: [tickets.id] }),
+  agent: one(users, { fields: [ticketRatings.agentId], references: [users.id] }),
+}));
+
+export const cannedResponsesRelations = relations(cannedResponses, ({ one }) => ({
+  creator: one(users, { fields: [cannedResponses.createdBy], references: [users.id] }),
 }));
 
 // ─── Relaciones ───────────────────────────────────────────────────────────────
