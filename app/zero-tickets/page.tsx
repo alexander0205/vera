@@ -35,6 +35,24 @@ interface Message {
   attachment: Attachment | null;
 }
 
+interface CannedResponse {
+  id: number;
+  label: string;
+  category: string;
+  content: string;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const CANNED_CATEGORIES = ['saludo', 'espera', 'cierre', 'general'] as const;
+const CATEGORY_LABELS: Record<string, string> = {
+  saludo: 'Saludo',
+  espera: 'Espera',
+  cierre: 'Cierre',
+  general: 'General',
+};
+
 export default function ZeroTicketsPage() {
   const [ticketList, setTicketList] = useState<TicketRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -45,6 +63,15 @@ export default function ZeroTicketsPage() {
   const [onlineAgents, setOnlineAgents] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTypingSentRef = useRef(0);
+
+  const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([]);
+  const [showCannedDropdown, setShowCannedDropdown] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [formLabel, setFormLabel] = useState('');
+  const [formCategory, setFormCategory] = useState<string>('general');
+  const [formContent, setFormContent] = useState('');
+  const [savingCanned, setSavingCanned] = useState(false);
 
   async function loadTickets() {
     const res = await fetch('/api/zero-tickets/agent/tickets');
@@ -65,9 +92,15 @@ export default function ZeroTicketsPage() {
     }
   }
 
+  async function loadCannedResponses() {
+    const res = await fetch('/api/zero-tickets/agent/canned-responses');
+    if (res.ok) setCannedResponses((await res.json()).cannedResponses);
+  }
+
   useEffect(() => {
     loadTickets();
     loadPresence();
+    loadCannedResponses();
     const interval = setInterval(() => {
       loadTickets();
       loadPresence();
@@ -177,6 +210,59 @@ export default function ZeroTicketsPage() {
     } finally {
       setSending(false);
     }
+  }
+
+  function insertCannedResponse(cr: CannedResponse) {
+    setReply((prev) => (prev.trim() ? `${prev}\n${cr.content}` : cr.content));
+    setShowCannedDropdown(false);
+  }
+
+  function resetCannedForm() {
+    setEditingId(null);
+    setFormLabel('');
+    setFormCategory('general');
+    setFormContent('');
+  }
+
+  function startEditCanned(cr: CannedResponse) {
+    setEditingId(cr.id);
+    setFormLabel(cr.label);
+    setFormCategory(cr.category);
+    setFormContent(cr.content);
+  }
+
+  async function saveCannedResponse() {
+    const label = formLabel.trim();
+    const content = formContent.trim();
+    if (!label || !content) return;
+    setSavingCanned(true);
+    try {
+      const url = editingId
+        ? `/api/zero-tickets/agent/canned-responses/${editingId}`
+        : '/api/zero-tickets/agent/canned-responses';
+      const method = editingId ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, category: formCategory, content }),
+      });
+      if (res.ok) {
+        resetCannedForm();
+        await loadCannedResponses();
+      } else {
+        window.alert('No se pudo guardar la respuesta predeterminada.');
+      }
+    } finally {
+      setSavingCanned(false);
+    }
+  }
+
+  async function deleteCannedResponse(id: number) {
+    if (!window.confirm('¿Eliminar esta respuesta predeterminada?')) return;
+    const res = await fetch(`/api/zero-tickets/agent/canned-responses/${id}`, { method: 'DELETE' });
+    if (!res.ok) window.alert('No se pudo eliminar la respuesta predeterminada.');
+    if (editingId === id) resetCannedForm();
+    await loadCannedResponses();
   }
 
   const selected = ticketList.find((t) => t.id === selectedId);
@@ -335,21 +421,151 @@ export default function ZeroTicketsPage() {
               })}
             </div>
 
-            <div className="border-t p-3 flex gap-2">
-              <input
-                value={reply}
-                onChange={(e) => onReplyChange(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendReply()}
-                placeholder="Escribe una respuesta..."
-                className="flex-1 border rounded px-3 py-2 text-sm"
-              />
-              <button onClick={sendReply} disabled={sending} className="bg-teal-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
-                Enviar
-              </button>
+            <div className="border-t p-3">
+              <div className="flex items-center gap-2 mb-2 relative">
+                <button
+                  onClick={() => setShowCannedDropdown((v) => !v)}
+                  className="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                >
+                  Respuestas ▾
+                </button>
+                <button
+                  onClick={() => {
+                    resetCannedForm();
+                    setShowManageModal(true);
+                    setShowCannedDropdown(false);
+                  }}
+                  className="text-xs px-2.5 py-1 rounded text-gray-500 hover:underline"
+                >
+                  Gestionar
+                </button>
+                {showCannedDropdown && (
+                  <div className="absolute bottom-full left-0 mb-1 w-80 max-h-72 overflow-y-auto border rounded-lg bg-white shadow-lg z-10">
+                    {cannedResponses.length === 0 && (
+                      <div className="p-3 text-xs text-gray-400">Ninguna respuesta predeterminada todavía.</div>
+                    )}
+                    {cannedResponses.map((cr) => (
+                      <button
+                        key={cr.id}
+                        onClick={() => insertCannedResponse(cr)}
+                        className="w-full text-left px-3 py-2 border-b last:border-b-0 hover:bg-gray-50"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700">
+                            {CATEGORY_LABELS[cr.category] ?? cr.category}
+                          </span>
+                          <span className="text-sm font-medium text-gray-900">{cr.label}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 truncate mt-0.5">{cr.content}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={reply}
+                  onChange={(e) => onReplyChange(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendReply()}
+                  placeholder="Escribe una respuesta..."
+                  className="flex-1 border rounded px-3 py-2 text-sm"
+                />
+                <button onClick={sendReply} disabled={sending} className="bg-teal-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
+                  Enviar
+                </button>
+              </div>
             </div>
           </>
         )}
       </div>
+
+      {showManageModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div className="px-4 py-3 border-b flex justify-between items-center">
+              <div className="font-bold text-gray-900">Respuestas predeterminadas</div>
+              <button
+                onClick={() => {
+                  setShowManageModal(false);
+                  resetCannedForm();
+                }}
+                className="text-gray-400 hover:text-gray-600 text-sm"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {cannedResponses.length === 0 && (
+                <div className="text-sm text-gray-400">Ninguna respuesta predeterminada todavía.</div>
+              )}
+              {cannedResponses.map((cr) => (
+                <div key={cr.id} className="border rounded-lg p-3 flex justify-between items-start gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-100 text-teal-700">
+                        {CATEGORY_LABELS[cr.category] ?? cr.category}
+                      </span>
+                      <span className="text-sm font-medium text-gray-900">{cr.label}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1 whitespace-pre-wrap">{cr.content}</div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => startEditCanned(cr)} className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                      Editar
+                    </button>
+                    <button onClick={() => deleteCannedResponse(cr.id)} className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="border-t p-4 space-y-2">
+              <div className="text-sm font-medium text-gray-900">{editingId ? 'Editar respuesta' : 'Nueva respuesta'}</div>
+              <div className="flex gap-2">
+                <input
+                  value={formLabel}
+                  onChange={(e) => setFormLabel(e.target.value)}
+                  placeholder="Etiqueta (ej. Saludo inicial)"
+                  className="flex-1 border rounded px-3 py-2 text-sm"
+                />
+                <select
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  className="border rounded px-2 py-2 text-sm"
+                >
+                  {CANNED_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {CATEGORY_LABELS[c]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <textarea
+                value={formContent}
+                onChange={(e) => setFormContent(e.target.value)}
+                placeholder="Contenido de la respuesta..."
+                rows={3}
+                className="w-full border rounded px-3 py-2 text-sm"
+              />
+              <div className="flex justify-end gap-2">
+                {editingId && (
+                  <button onClick={resetCannedForm} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                    Cancelar edición
+                  </button>
+                )}
+                <button
+                  onClick={saveCannedResponse}
+                  disabled={savingCanned || !formLabel.trim() || !formContent.trim()}
+                  className="text-xs px-3 py-1.5 rounded bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {editingId ? 'Guardar cambios' : 'Agregar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
