@@ -88,6 +88,11 @@ const emitirSchema = z.object({
   // facturas sin-ncf y solo si el rol tiene 'facturas:fecha-personalizada'
   // (ver fechaEmisionCustom abajo). Para e-CF fiscal la fecha la fija la DGII.
   fechaEmision:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Campos del formulario de gastos. Son datos del comprobante recibido y no
+  // forman parte del XML que la empresa podría emitir a DGII.
+  categoriaGasto:       z.string().max(100).optional(),
+  ncfProveedor:         z.string().max(40).optional(),
+  fechaGasto:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   items:                z.array(itemSchema).min(1),
   ncfModificado:        z.string().optional(),
   codigoModificacion:   z.coerce.number().int().min(1).max(5).optional(),
@@ -745,6 +750,9 @@ export async function POST(request: NextRequest) {
             montoTotal:           montoCts,
             totalItbis:           Math.round(totales.totalItbis * 100),
             ncfModificado:        data.ncfModificado ?? null,
+            categoriaGasto:       data.categoriaGasto ?? null,
+            ncfProveedor:         data.ncfProveedor ?? null,
+            fechaGasto:           data.fechaGasto ?? null,
             // Vínculo al padre: solo sobreescribir cuando se resolvió uno
             // (no perder el vínculo si el form no lo reenvía).
             ...(padreDoc ? { origenDocumentoId: padreDoc.id } : {}),
@@ -921,6 +929,9 @@ export async function POST(request: NextRequest) {
             montoTotal:           Math.round(totales.montoTotal * 100),
             totalItbis:           Math.round(totales.totalItbis * 100),
             ncfModificado:        data.ncfModificado,
+            categoriaGasto:       data.categoriaGasto,
+            ncfProveedor:         data.ncfProveedor,
+            fechaGasto:           data.fechaGasto,
             origenDocumentoId:    padreDoc?.id ?? null,
             codigoModificacion:   data.codigoModificacion ?? null,
             razonModificacion:    data.razonModificacion || null,
@@ -1355,6 +1366,9 @@ export async function POST(request: NextRequest) {
         montoTotal:           Math.round(totales.montoTotal * 100),
         totalItbis:           Math.round(totales.totalItbis * 100),
         ncfModificado:        data.ncfModificado,
+        categoriaGasto:       data.categoriaGasto,
+        ncfProveedor:         data.ncfProveedor,
+        fechaGasto:           data.fechaGasto,
         origenDocumentoId:    padreDoc?.id ?? null,
         codigoModificacion:   data.codigoModificacion ?? null,
         razonModificacion:    data.razonModificacion || null,

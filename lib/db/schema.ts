@@ -500,6 +500,12 @@ export const ecfDocuments = pgTable('ecf_documents', {
   // Referencia para notas débito/crédito (tipos 33, 34)
   ncfModificado: varchar('ncf_modificado', { length: 13 }),
 
+  // Registro operativo de gasto: comprobante recibido del proveedor, no e-NCF
+  // emitido por la empresa. Solo se usa en 43/47 y no va al XML DGII.
+  categoriaGasto: varchar('categoria_gasto', { length: 100 }),
+  ncfProveedor:   varchar('ncf_proveedor', { length: 40 }),
+  fechaGasto:     date('fecha_gasto'),
+
   // Referencia por id al documento padre (NC/ND). Más robusta que ncfModificado:
   // sobrevive a que el padre borrador (BOR-) sea promovido a e-CF real.
   // Self-reference sin .references() para evitar import circular (FK en migración 0043).

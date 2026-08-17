@@ -178,6 +178,9 @@ export default async function EditarBorradorPage({
     // re-guardado la pise con la fecha de hoy). Custom se guarda a las 12:00,
     // así que toISOString().slice(0,10) es estable.
     fechaEmision:         doc.fechaEmision ? doc.fechaEmision.toISOString().slice(0, 10) : null,
+    categoriaGasto:       doc.categoriaGasto ?? null,
+    ncfProveedor:         doc.ncfProveedor ?? null,
+    fechaGasto:           doc.fechaGasto ?? null,
     ncfModificado:        doc.ncfModificado,
     notas:                doc.notas,
     terminosCondiciones:  doc.terminosCondiciones,

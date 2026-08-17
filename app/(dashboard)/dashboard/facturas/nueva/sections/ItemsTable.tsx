@@ -71,16 +71,21 @@ interface Props {
    * es la mitad visible, no el candado.
    */
   bloquearPrecios?: boolean;
+  /** Ajusta texto para compra/gasto sin quitar asociación opcional a inventario. */
+  modoGasto?: boolean;
 }
 
 
 export function ItemsTable({
   items, regla, buscarProductos, onSelectProducto, onCrearProductoLibre,
   onAddItem, onRemoveItem, onUpdateItem, onSelectBeneficiario, onOpenNuevoProducto,
-  showReferencia, showDescripcion, dependientes, bloquearPrecios = false,
+  showReferencia, showDescripcion, dependientes, bloquearPrecios = false, modoGasto = false,
 }: Props) {
   const { openProximamente, dialog } = useProximamenteDialog();
   const hasDeps = dependientes.length > 0;
+  const etiquetaDetalle = modoGasto ? 'Descripción / producto' : 'Producto / servicio';
+  const placeholderDetalle = modoGasto ? 'Describe gasto o busca producto de inventario...' : 'Buscar producto o servicio...';
+  const crearLabel = modoGasto ? 'Crear producto para inventario' : 'Nuevo producto';
 
   // Compute min-width for the desktop table
   const minWidth =
@@ -196,16 +201,16 @@ export function ItemsTable({
                   mb: 0.5,
                 }}
               >
-                Producto / servicio
+                {etiquetaDetalle}
               </Typography>
               <Autocomplete<Producto>
-                placeholder="Buscar producto o servicio..."
+                placeholder={placeholderDetalle}
                 value={item.nombreItem}
                 onSearch={buscarProductos}
                 onSelect={(p) => onSelectProducto(idx, p)}
                 onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                 onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
-                createLabel="Nuevo producto"
+                createLabel={crearLabel}
                 dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                 renderOption={renderProductoOption}
               />
@@ -465,7 +470,7 @@ export function ItemsTable({
                 }}
               >
                 <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                  Producto
+                  {modoGasto ? 'Detalle' : 'Producto'}
                   <Tooltip title="DGII #84 · nombreItem · máx 80 caracteres" arrow>
                     <Box component="span" sx={{ display: 'inline-flex', color: '#4b5563', cursor: 'help' }}>
                       <Info size={12} aria-hidden="true" />
@@ -574,13 +579,13 @@ export function ItemsTable({
                 {/* Producto */}
                 <TableCell sx={{ px: 2, py: 1 }}>
                   <Autocomplete<Producto>
-                    placeholder="Buscar producto o servicio..."
+                    placeholder={placeholderDetalle}
                     value={item.nombreItem}
                     onSearch={buscarProductos}
                     onSelect={(p) => onSelectProducto(idx, p)}
                     onClear={() => onUpdateItem(item.id, 'nombreItem', '')}
                     onCreate={bloquearPrecios ? undefined : () => onOpenNuevoProducto(idx)}
-                    createLabel="Nuevo producto"
+                    createLabel={crearLabel}
                     dropdownMinWidth={PRODUCTO_DROPDOWN_W}
                     renderOption={renderProductoOption}
                   />

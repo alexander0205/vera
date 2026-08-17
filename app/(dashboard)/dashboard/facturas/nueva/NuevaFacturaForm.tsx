@@ -29,6 +29,7 @@ import { FacturaOrigenSection, type FacturaResumen } from './sections/FacturaOri
 import { SectionCard } from './sections/SectionCard';
 import { AccordionSection } from './sections/AccordionSection';
 import { ClienteSection } from './sections/ClienteSection';
+import { GastoDatosSection } from './sections/GastoDatosSection';
 import { DetallesSection, MOTIVOS_NOTA } from './sections/DetallesSection';
 import { ItemsTable } from './sections/ItemsTable';
 import { ClasificacionFactura, type ClasifAsig } from './sections/ClasificacionFactura';
@@ -251,6 +252,13 @@ export default function NuevaFacturaForm({
   // re-guardar). Factura nueva → hoy.
   const [fechaEmision, setFechaEmision] = useState(
     () => initialData?.fechaEmision ?? new Date().toISOString().slice(0, 10),
+  );
+  // Datos propios de un gasto. Los nombres rnc/razón social heredados del motor
+  // se presentan como proveedor en esta ruta; no se crea ningún cliente.
+  const [categoriaGasto, setCategoriaGasto] = useState(initialData?.categoriaGasto ?? 'Materiales y suministros');
+  const [ncfProveedor, setNcfProveedor] = useState(initialData?.ncfProveedor ?? '');
+  const [fechaGasto, setFechaGasto] = useState(
+    () => initialData?.fechaGasto ?? new Date().toISOString().slice(0, 10),
   );
   // Factura NUEVA → arranca con el default del team (si hay plazo > 0 → crédito).
   // Editar borrador → respeta el tipoPago guardado.
@@ -995,6 +1003,8 @@ export default function NuevaFacturaForm({
     setPagoRecibido(false); setPagoFecha(new Date().toISOString().slice(0, 10));
     setPagoLineas([{ metodo: 'efectivo', valor: '', cuenta: '' }]);
     setComentario('');
+    setCategoriaGasto('Materiales y suministros'); setNcfProveedor('');
+    setFechaGasto(new Date().toISOString().slice(0, 10));
     setAlmacenId(null); setAlmacenNombre('');
     setListaPreciosId(null); setListaPreciosNombre('');
     setVendedorId(null); setVendedorNombre('');
@@ -1013,6 +1023,9 @@ export default function NuevaFacturaForm({
       retenciones, notas, terminosCondiciones, pieFactura, comentario,
       pagoRecibido, pagoLineas, pagoFecha,
       almacenId, listaPreciosId, vendedorId,
+      categoriaGasto: esGasto ? categoriaGasto : undefined,
+      ncfProveedor: esGasto ? ncfProveedor : undefined,
+      fechaGasto: esGasto ? fechaGasto : undefined,
       borradorId: initialData?.id ?? null,
     });
   }
@@ -1049,6 +1062,8 @@ export default function NuevaFacturaForm({
   function validar(): string | null {
     const rncFinal   = clienteSeleccionado?.rnc ?? rncManual;
     const razonFinal = clienteSeleccionado?.razonSocial ?? rncManualNombre;
+    if (esGasto && !razonFinal.trim()) return 'Indica el nombre del proveedor';
+    if (esGasto && !fechaGasto) return 'Indica la fecha del gasto';
     if (regla?.requiereRncComprador && !rncFinal.trim())
       return `El ${regla.rncLabel} es obligatorio para este tipo de comprobante`;
     if (regla?.requiereRazonSocial && !razonFinal.trim())
@@ -1414,10 +1429,10 @@ export default function NuevaFacturaForm({
             ) : esSinEcf ? (
               <>
                 <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
-                  ¡Factura guardada!
+                  ¡{esGasto ? 'Gasto guardado' : 'Factura guardada'}!
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                  Tu factura fue guardada correctamente.
+                  {esGasto ? 'Tu gasto fue registrado correctamente.' : 'Tu factura fue guardada correctamente.'}
                 </Typography>
               </>
             ) : (
@@ -1470,16 +1485,16 @@ export default function NuevaFacturaForm({
               </Box>
               {resultado.modo === 'borrador' && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">Cobro</Typography>
+                  <Typography variant="body2" color="text.secondary">{esGasto ? 'Pago' : 'Cobro'}</Typography>
                   {resultado.pagoRecibido ? (
                     <Typography variant="body2" sx={{ fontWeight: 500, color: 'success.dark' }}>
-                      ✓ Cobrado
+                      ✓ {esGasto ? 'Pagado' : 'Cobrado'}
                       {resultado.pagoMetodo ? ` · ${resultado.pagoMetodo.charAt(0).toUpperCase() + resultado.pagoMetodo.slice(1).replace('_', ' ')}` : ''}
                       {resultado.pagoValor != null ? ` · DOP ${resultado.pagoValor.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : ''}
                     </Typography>
                   ) : (
                     <Typography variant="body2" sx={{ fontWeight: 500, color: 'warning.dark' }}>
-                      ⏳ Pendiente de cobro
+                      ⏳ {esGasto ? 'Pendiente de pago' : 'Pendiente de cobro'}
                     </Typography>
                   )}
                 </Box>
@@ -1635,7 +1650,7 @@ export default function NuevaFacturaForm({
                 }}
                 sx={{ textTransform: 'none', borderRadius: '8px' }}
               >
-                Nueva {docAccent.noun}
+                {esGasto ? 'Nuevo gasto' : `Nueva ${docAccent.noun}`}
               </Button>
               <Button
                 variant="contained"
@@ -1749,19 +1764,21 @@ export default function NuevaFacturaForm({
           }}
           sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
-          <TopBar
-            showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
-            showListaPrecios={showListaPrecios} setShowListaPrecios={setShowListaPrecios}
-            showVendedor={showVendedor} setShowVendedor={setShowVendedor}
-            toggleOpcion={toggleOpcion}
-            almacenes={almacenes} listasPrecios={listasPrecios} vendedores={vendedores}
-            almacenId={almacenId} setAlmacenId={setAlmacenId} setAlmacenNombre={setAlmacenNombre}
-            listaPreciosId={listaPreciosId} setListaPreciosId={setListaPreciosId} setListaPreciosNombre={setListaPreciosNombre}
-            vendedorId={vendedorId} setVendedorId={setVendedorId} setVendedorNombre={setVendedorNombre}
-            onOpenNuevoAlmacen={() => setShowNuevoAlmacen(true)}
-            onOpenNuevaLista={() => setShowNuevaLista(true)}
-            onOpenNuevoVendedor={() => setShowNuevoVendedor(true)}
-          />
+          {!esGasto && (
+            <TopBar
+              showAlmacen={showAlmacen} setShowAlmacen={setShowAlmacen}
+              showListaPrecios={showListaPrecios} setShowListaPrecios={setShowListaPrecios}
+              showVendedor={showVendedor} setShowVendedor={setShowVendedor}
+              toggleOpcion={toggleOpcion}
+              almacenes={almacenes} listasPrecios={listasPrecios} vendedores={vendedores}
+              almacenId={almacenId} setAlmacenId={setAlmacenId} setAlmacenNombre={setAlmacenNombre}
+              listaPreciosId={listaPreciosId} setListaPreciosId={setListaPreciosId} setListaPreciosNombre={setListaPreciosNombre}
+              vendedorId={vendedorId} setVendedorId={setVendedorId} setVendedorNombre={setVendedorNombre}
+              onOpenNuevoAlmacen={() => setShowNuevoAlmacen(true)}
+              onOpenNuevaLista={() => setShowNuevaLista(true)}
+              onOpenNuevoVendedor={() => setShowNuevoVendedor(true)}
+            />
+          )}
 
           {/* ── SPLIT LAYOUT: form left, sticky sidebar right ─────────── */}
           <Box
@@ -1773,27 +1790,27 @@ export default function NuevaFacturaForm({
           >
             {/* LEFT column */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              <CompactHeader
-                empresa={empresa}
-                categoriaId={categoriaId} setCategoriaId={setCategoriaId}
-                tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
-                ocultarCategoria={ocultarCategoria}
-                mostrarCodigoTipo={!(padreNota && !padreNota.conEcfReal && !ncfModificadoValido)}
-                // Nota sobre factura sin e-CF → nunca tendrá e-NCF real: mostrar "Sin
-                // comprobante fiscal" en vez de un próximo e-NCF que no se va a usar.
-                sinComprobante={esPadreSinNcf}
-                secuencia={secuencia}
-                fechaEmision={fechaEmision}
-                puedeEditarFecha={puedeEditarFecha}
-                onChangeFecha={setFechaEmision}
-                onEditarNcf={() => {
-                  setNcfSiguienteNum('');
-                  setNcfFechaVenc(secuencia?.fechaVencimiento ? secuencia.fechaVencimiento.slice(0, 10) : '');
-                  setNcfPieFactura(secuencia?.pieDeFactura ?? '');
-                  setNcfError(null);
-                  setShowEditarNcf(true);
-                }}
-              />
+              {!esGasto && (
+                <CompactHeader
+                  empresa={empresa}
+                  categoriaId={categoriaId} setCategoriaId={setCategoriaId}
+                  tipoEcf={tipoEcf} onChangeTipo={handleChangeTipo}
+                  ocultarCategoria={ocultarCategoria}
+                  mostrarCodigoTipo={!(padreNota && !padreNota.conEcfReal && !ncfModificadoValido)}
+                  sinComprobante={esPadreSinNcf}
+                  secuencia={secuencia}
+                  fechaEmision={fechaEmision}
+                  puedeEditarFecha={puedeEditarFecha}
+                  onChangeFecha={setFechaEmision}
+                  onEditarNcf={() => {
+                    setNcfSiguienteNum('');
+                    setNcfFechaVenc(secuencia?.fechaVencimiento ? secuencia.fechaVencimiento.slice(0, 10) : '');
+                    setNcfPieFactura(secuencia?.pieDeFactura ?? '');
+                    setNcfError(null);
+                    setShowEditarNcf(true);
+                  }}
+                />
+              )}
 
               {(tipoEcf === '33' || tipoEcf === '34') && (
                 <FacturaOrigenSection
@@ -1812,44 +1829,53 @@ export default function NuevaFacturaForm({
                 />
               )}
 
-              <SectionCard number={1} title="Datos del cliente" icon={User}>
-                <ClienteSection
-                  clienteSeleccionado={clienteSeleccionado}
-                  buscarClientes={buscarClientes}
-                  onSelectCliente={seleccionarCliente}
-                  onClearCliente={limpiarCliente}
-                  onOpenNuevoCliente={() => setShowNuevoCliente(true)}
-                  regla={regla}
-                  rncManual={rncManual} rncManualNombre={rncManualNombre}
-                  setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
-                  emailManual={emailManual} setEmailManual={setEmailManual}
-                  telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
-                  tipoEcf={tipoEcf} totalDocumento={totales.total}
-                />
-              </SectionCard>
-
-              <SectionCard number={2} title="Detalles de la factura" icon={Calendar}>
-                <DetallesSection
-                  regla={regla} tipoEcf={tipoEcf}
-                  condicionPago={condicionPago} setCondicionPago={setCondicionPago}
-                  diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
-                  tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
-                  fechaLimitePago={fechaLimitePago}
-                  empresa={empresa}
-                  sinPagoRegistrado={!pagoRecibido || sumaPagos(pagoLineas) <= 0}
-                />
-                <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f3f4f6' }}>
-                  <ClasificacionFactura
-                    docId={initialData?.id}
-                    value={clasificacion}
-                    onChange={setClasificacion}
+              {esGasto ? (
+                <SectionCard number={1} title="Registro del gasto" icon={Calendar}>
+                  <GastoDatosSection
+                    proveedor={rncManualNombre} setProveedor={setRncManualNombre}
+                    rncProveedor={rncManual} setRncProveedor={setRncManual}
+                    ncfProveedor={ncfProveedor} setNcfProveedor={setNcfProveedor}
+                    categoriaGasto={categoriaGasto} setCategoriaGasto={setCategoriaGasto}
+                    fechaGasto={fechaGasto} setFechaGasto={setFechaGasto}
                   />
-                </Box>
-              </SectionCard>
+                </SectionCard>
+              ) : (
+                <>
+                  <SectionCard number={1} title="Datos del cliente" icon={User}>
+                    <ClienteSection
+                      clienteSeleccionado={clienteSeleccionado}
+                      buscarClientes={buscarClientes}
+                      onSelectCliente={seleccionarCliente}
+                      onClearCliente={limpiarCliente}
+                      onOpenNuevoCliente={() => setShowNuevoCliente(true)}
+                      regla={regla}
+                      rncManual={rncManual} rncManualNombre={rncManualNombre}
+                      setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
+                      emailManual={emailManual} setEmailManual={setEmailManual}
+                      telefonoManual={telefonoManual} setTelefonoManual={setTelefonoManual}
+                      tipoEcf={tipoEcf} totalDocumento={totales.total}
+                    />
+                  </SectionCard>
+                  <SectionCard number={2} title="Detalles de la factura" icon={Calendar}>
+                    <DetallesSection
+                      regla={regla} tipoEcf={tipoEcf}
+                      condicionPago={condicionPago} setCondicionPago={setCondicionPago}
+                      diasParaPago={diasParaPago} setDiasParaPago={setDiasParaPago}
+                      tipoIngresos={tipoIngresos} setTipoIngresos={setTipoIngresos}
+                      fechaLimitePago={fechaLimitePago}
+                      empresa={empresa}
+                      sinPagoRegistrado={!pagoRecibido || sumaPagos(pagoLineas) <= 0}
+                    />
+                    <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #f3f4f6' }}>
+                      <ClasificacionFactura docId={initialData?.id} value={clasificacion} onChange={setClasificacion} />
+                    </Box>
+                  </SectionCard>
+                </>
+              )}
 
               <SectionCard
-                number={3}
-                title="Productos y servicios"
+                number={esGasto ? 2 : 3}
+                title={esGasto ? 'Detalle e importe' : 'Productos y servicios'}
                 icon={Package}
                 actions={
                   <ColumnasToggle
@@ -1874,7 +1900,8 @@ export default function NuevaFacturaForm({
                   showReferencia={showItemRef}
                   showDescripcion={showItemDesc}
                   dependientes={dependientesCliente}
-                  bloquearPrecios={bloquearPrecios}
+                  bloquearPrecios={esGasto ? false : bloquearPrecios}
+                  modoGasto={esGasto}
                 />
                 <RetencionesSection
                   retenciones={retenciones} setRetenciones={setRetenciones}
@@ -1882,33 +1909,27 @@ export default function NuevaFacturaForm({
                 />
               </SectionCard>
 
-              <AccordionSection
-                number={4} title="Términos y condiciones" icon={ScrollText}
-                defaultOpen={terminosCondiciones.trim().length > 0}
-              >
-                <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
-              </AccordionSection>
+              {!esGasto && (
+                <AccordionSection number={4} title="Términos y condiciones" icon={ScrollText} defaultOpen={terminosCondiciones.trim().length > 0}>
+                  <Terminos terminosCondiciones={terminosCondiciones} setTerminos={setTerminos} />
+                </AccordionSection>
+              )}
 
               <AccordionSection
-                number={5} title="Notas" icon={StickyNote}
+                number={esGasto ? 3 : 5} title={esGasto ? 'Notas internas' : 'Notas'} icon={StickyNote}
                 defaultOpen={notas.trim().length > 0}
               >
                 <Notas notas={notas} setNotas={setNotas} />
               </AccordionSection>
 
-              <AccordionSection
-                number={6} title="Pie de factura" icon={FileText}
-                defaultOpen={pieFactura.trim().length > 0}
-              >
-                <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} label={docAccent.noun === 'factura' ? 'Pie de factura' : 'Pie del documento'} />
-              </AccordionSection>
-
-              <AccordionSection
-                number={7} title="Comentario" icon={MessageSquare}
-                defaultOpen={comentario.trim().length > 0}
-              >
-                <Comentarios comentario={comentario} setComentario={setComentario} />
-              </AccordionSection>
+              {!esGasto && (<>
+                <AccordionSection number={6} title="Pie de factura" icon={FileText} defaultOpen={pieFactura.trim().length > 0}>
+                  <PieFactura pieFactura={pieFactura} setPieFactura={setPieFactura} label={docAccent.noun === 'factura' ? 'Pie de factura' : 'Pie del documento'} />
+                </AccordionSection>
+                <AccordionSection number={7} title="Comentario" icon={MessageSquare} defaultOpen={comentario.trim().length > 0}>
+                  <Comentarios comentario={comentario} setComentario={setComentario} />
+                </AccordionSection>
+              </>)}
 
               {/* Sección 8 Pago movida al sidebar derecho (ResumenSidebar) */}
             </Box>
@@ -1943,7 +1964,7 @@ export default function NuevaFacturaForm({
             onEmitir={emitir}
             onCancelar={() => {
               try { localStorage.removeItem(draftKey); } catch {}
-              router.push('/dashboard/facturas');
+              router.push(esGasto ? '/dashboard/gastos/nueva' : '/dashboard/facturas');
             }}
           />
         </Box>

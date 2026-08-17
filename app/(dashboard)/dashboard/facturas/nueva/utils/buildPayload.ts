@@ -37,6 +37,10 @@ export interface BuildPayloadInput {
   almacenId: number | null;
   listaPreciosId: number | null;
   vendedorId: number | null;
+  /** Campos operativos del registro de gasto; no se mandan al XML DGII. */
+  categoriaGasto?: string;
+  ncfProveedor?: string;
+  fechaGasto?: string;
   /** ID del borrador existente — indica al API que haga UPDATE en vez de INSERT */
   borradorId?: number | null;
 }
@@ -48,7 +52,7 @@ export function buildPayload(input: BuildPayloadInput) {
     codigoModificacion, fechaNcfModificado, razonModificacion, origenDocumentoId, tipoIngresos,
     retenciones, notas, terminosCondiciones, pieFactura, comentario,
     pagoRecibido, pagoLineas = [], pagoFecha,
-    almacenId, listaPreciosId, vendedorId, borradorId,
+    almacenId, listaPreciosId, vendedorId, borradorId, categoriaGasto, ncfProveedor, fechaGasto,
   } = input;
 
   // ── Pago: 1 línea = pago single; 2+ líneas con valor = pago dividido ────────
@@ -153,6 +157,9 @@ export function buildPayload(input: BuildPayloadInput) {
     almacenId:      almacenId      || undefined,
     listaPreciosId: listaPreciosId || undefined,
     vendedorId:     vendedorId     || undefined,
+    categoriaGasto: categoriaGasto?.trim() || undefined,
+    ncfProveedor:   ncfProveedor?.trim() || undefined,
+    fechaGasto:     fechaGasto || undefined,
     // Dependiente resumen — denormalizado a nivel factura (resumen de los beneficiarios por línea)
     dependienteId:     dependienteIdResumen,
     dependienteNombre: dependienteNombreResumen,
