@@ -40,10 +40,16 @@ export function TicketWidget() {
   const [agentTyping, setAgentTyping] = useState(false);
   const [espera, setEspera] = useState<Espera | null>(null);
   const [readByAgentAt, setReadByAgentAt] = useState<string | null>(null);
+  const [showRating, setShowRating] = useState(false);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [ratingValue, setRatingValue] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [ratingLoading, setRatingLoading] = useState(false);
   const ticketIdRef = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTypingSentRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevStatusRef = useRef<string | null>(null);
 
   async function poll() {
     const res = await fetch('/api/zero-tickets/tickets');
@@ -72,6 +78,37 @@ export function TicketWidget() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [open]);
+
+  useEffect(() => {
+    const justClosed = status === 'cerrado' && prevStatusRef.current !== 'cerrado';
+    prevStatusRef.current = status;
+    if (!justClosed) return;
+
+    fetch('/api/zero-tickets/tickets/rating')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.canRate) setShowRating(true);
+      })
+      .catch(() => {});
+  }, [status]);
+
+  async function submitRating() {
+    if (ratingValue < 1 || ratingLoading) return;
+    setRatingLoading(true);
+    try {
+      const res = await fetch('/api/zero-tickets/tickets/rating', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: ratingValue, comment: ratingComment.trim() || undefined }),
+      });
+      if (res.ok) {
+        setShowRating(false);
+        setRatingSubmitted(true);
+      }
+    } finally {
+      setRatingLoading(false);
+    }
+  }
 
   function onInputChange(value: string) {
     setInput(value);
@@ -223,6 +260,47 @@ export function TicketWidget() {
       {status === 'cerrado' && (
         <div style={{ padding: '6px 10px', fontSize: 12, color: '#92400e', background: '#fef3c7', textAlign: 'center' }}>
           Este ticket fue cerrado. Escribe para reabrirlo.
+        </div>
+      )}
+
+      {showRating && (
+        <div style={{ padding: 10, background: '#f5f3ff', borderTop: '1px solid #ddd6fe', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 12, color: '#5b21b6', fontWeight: 600 }}>¿Cómo calificás la atención recibida?</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onClick={() => setRatingValue(n)}
+                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', padding: 0, lineHeight: 1, color: n <= ratingValue ? '#f59e0b' : '#d1d5db' }}
+                aria-label={`${n} estrella${n > 1 ? 's' : ''}`}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={ratingComment}
+            onChange={(e) => setRatingComment(e.target.value)}
+            placeholder="Comentario (opcional)"
+            rows={2}
+            style={{ resize: 'none', border: '1px solid #ddd6fe', borderRadius: 6, padding: 6, fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+          />
+          <button
+            onClick={submitRating}
+            disabled={ratingValue < 1 || ratingLoading}
+            style={{
+              border: 'none', background: ratingValue < 1 || ratingLoading ? '#c4b5fd' : '#7c3aed', color: 'white',
+              borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: ratingValue < 1 || ratingLoading ? 'default' : 'pointer',
+            }}
+          >
+            {ratingLoading ? 'Enviando...' : 'Enviar calificación'}
+          </button>
+        </div>
+      )}
+
+      {ratingSubmitted && (
+        <div style={{ padding: '6px 10px', fontSize: 12, color: '#166534', background: '#dcfce7', textAlign: 'center' }}>
+          ¡Gracias por tu calificación!
         </div>
       )}
 
