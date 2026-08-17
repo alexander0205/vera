@@ -21,6 +21,7 @@ import {
   generarAsientoFactura, generarAsientoPago,
   generarAsientoNotaCredito, generarAsientoAnulacion,
   generarAsientoCompra, generarAsientoGastoCaja, generarAsientoPagoProveedor,
+  generarAsientoGastoDoc,
   VENTA_ASENTABLE_SQL,
   type MotivoSalto,
 } from './asientos';
@@ -206,7 +207,31 @@ export async function generarAsientosPendientes(
 
   await procesar(gastos, 'gasto_caja', (id) => generarAsientoGastoCaja(teamId, id, userId));
 
-  resumen.hayMas = [docs, notas, pagos, anulados, compras, pagosProveedores, gastos]
+  // ── Gastos documentales (e43/e47) SIN caja y sin asiento ──────────────────
+  // Cubre el negocio sin módulo de caja: su gasto no genera movimiento, así que
+  // no lo asienta `gasto_caja`. Se excluyen los que SÍ tienen movimiento de caja
+  // vinculado (ecf_document_id) para no asentar dos veces el mismo gasto.
+  const gastosDoc = await db.execute(sql`
+    SELECT d.id
+    FROM ecf_documents d
+    LEFT JOIN contabilidad_asientos a
+      ON a.team_id = d.team_id AND a.origen_tipo = 'gasto_doc' AND a.origen_id = d.id
+    WHERE d.team_id = ${teamId}
+      AND a.id IS NULL
+      AND d.tipo_ecf IN ('43', '47')
+      AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+      AND d.monto_total > 0
+      AND NOT EXISTS (
+        SELECT 1 FROM caja_movimientos m
+        WHERE m.team_id = d.team_id AND m.ecf_document_id = d.id AND m.tipo = 'GASTO'
+      )
+    ORDER BY d.created_at, d.id
+    LIMIT ${TOPE_POR_BARRIDO}
+  `);
+
+  await procesar(gastosDoc, 'gasto_doc', (id) => generarAsientoGastoDoc(teamId, id, userId));
+
+  resumen.hayMas = [docs, notas, pagos, anulados, compras, pagosProveedores, gastos, gastosDoc]
     .some((s) => (s as unknown as unknown[]).length === TOPE_POR_BARRIDO);
 
   return resumen;
@@ -249,7 +274,7 @@ export interface LineaDetalle {
 
 /** Los orígenes que admite el CHECK de `contabilidad_asientos`, y que el libro
  *  diario deja filtrar. */
-export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'depreciacion', 'pago_proveedor', 'cierre'] as const;
+export const ORIGENES = ['factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'gasto_doc', 'depreciacion', 'pago_proveedor', 'cierre'] as const;
 export type OrigenTipo = (typeof ORIGENES)[number];
 
 export interface FiltrosLibro {
@@ -484,6 +509,19 @@ export async function contarPendientes(teamId: number): Promise<number> {
           ON a.team_id = m.team_id AND a.origen_tipo = 'gasto_caja' AND a.origen_id = m.id
         WHERE m.team_id = ${teamId} AND a.id IS NULL
           AND m.tipo = 'GASTO' AND m.monto_centavos > 0)
+      +
+      -- Gastos documentales (e43/e47) sin caja vinculada
+      (SELECT count(*) FROM ecf_documents d
+        LEFT JOIN contabilidad_asientos a
+          ON a.team_id = d.team_id AND a.origen_tipo = 'gasto_doc' AND a.origen_id = d.id
+        WHERE d.team_id = ${teamId} AND a.id IS NULL
+          AND d.tipo_ecf IN ('43', '47')
+          AND d.estado NOT IN ('ANULADO', 'RECHAZADO')
+          AND d.monto_total > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM caja_movimientos m
+            WHERE m.team_id = d.team_id AND m.ecf_document_id = d.id AND m.tipo = 'GASTO'
+          ))
     )::int AS total
   `);
   return total;

@@ -849,6 +849,65 @@ export async function generarAsientoGastoCaja(
     : { creado: true, asientoId };
 }
 
+/**
+ * Asiento de un GASTO documental (e43/e47) que NO pasó por caja. Cuando la caja
+ * está habilitada, el gasto genera un movimiento y su asiento sale por
+ * `generarAsientoGastoCaja`; este cubre el caso SIN caja, para que un negocio
+ * sin el módulo igual tenga el rastro contable. El barrido solo lo invoca para
+ * documentos sin movimiento de caja vinculado (evita doble asiento).
+ * Debe cuenta de gastos / Haber caja (contado) o cuentas por pagar (crédito).
+ * El monto total se lleva a gasto (los gastos menores no separan crédito de
+ * ITBIS); refinar el ITBIS adelantado queda para después.
+ */
+export async function generarAsientoGastoDoc(
+  teamId: number,
+  docId: number,
+  userId: number | null = null,
+): Promise<ResultadoGeneracion> {
+  const cfg = await getConfig(teamId);
+  if (!cfg.activa) return { creado: false, motivo: 'contabilidad-apagada' };
+
+  const filas = await db.execute(sql`
+    SELECT d.id, d.monto_total AS "montoTotal", d.tipo_pago AS "tipoPago",
+           to_char(coalesce(d.fecha_gasto, d.fecha_emision, d.created_at) AT TIME ZONE 'America/Santo_Domingo', 'YYYY-MM-DD') AS fecha,
+           d.razon_social_comprador AS "proveedor",
+           (SELECT pr.metodo FROM pagos_recibidos pr WHERE pr.ecf_document_id = d.id ORDER BY pr.id LIMIT 1) AS "metodoPago"
+    FROM ecf_documents d
+    WHERE d.team_id = ${teamId} AND d.id = ${docId}
+  `);
+  const g = (filas as unknown as {
+    id: number; montoTotal: number; tipoPago: number | null; fecha: string; proveedor: string | null; metodoPago: string | null;
+  }[])[0];
+
+  if (!g) return { creado: false, motivo: 'no-es-gasto' };
+  if (g.montoTotal <= 0) return { creado: false, motivo: 'sin-monto' };
+
+  const cuentaGasto = cfg.cuentaGastosId ?? await cuentaPorCodigo(teamId, '6101');
+  if (!cuentaGasto) return { creado: false, motivo: 'sin-cuenta-gastos' };
+
+  const esContado = (g.tipoPago ?? 1) === 1;
+  const cuentaHaber = esContado
+    ? (await resolverCuentaCobro(teamId, (g.metodoPago ?? 'efectivo') as ClaveMetodo)) ??
+      await cuentaPorCodigo(teamId, '1101')
+    : cfg.cuentaPorPagarId ?? await cuentaPorCodigo(teamId, '2101');
+  if (!cuentaHaber) return { creado: false, motivo: esContado ? 'sin-cuenta-cobro' : 'sin-cuenta-por-pagar' };
+
+  const concepto = `Gasto ${g.id}${g.proveedor ? ` · ${g.proveedor.slice(0, 60)}` : ''}`;
+  const asientoId = await insertarAsiento(
+    teamId,
+    { fecha: g.fecha, concepto, origenTipo: 'gasto_doc', origenId: g.id },
+    [
+      { cuentaId: cuentaGasto, debeCents: g.montoTotal, haberCents: 0, descripcion: 'Gasto' },
+      { cuentaId: cuentaHaber, debeCents: 0, haberCents: g.montoTotal, descripcion: esContado ? 'Pago del gasto' : 'Deuda por gasto' },
+    ],
+    userId,
+  );
+
+  return asientoId === null
+    ? { creado: false, motivo: 'ya-tiene-asiento' }
+    : { creado: true, asientoId };
+}
+
 // ─── Asiento manual ──────────────────────────────────────────────────────────
 
 /** Error de validación de un asiento manual. La API lo traduce a 400. */
