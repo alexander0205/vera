@@ -611,7 +611,9 @@ export default function NuevaFacturaForm({
 
   // ── Pago recibido ──────────────────────────────────────────────────────────
   // Al editar un borrador con split, restauramos las líneas desde initialData.
-  const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? false);
+  // Un gasto normalmente ya se pagó al registrarlo (saliste con el dinero), así
+  // que arranca como pagado; una venta arranca sin cobro. Se puede desmarcar.
+  const [pagoRecibido, setPagoRecibido] = useState(initialData?.pagoRecibido ?? esGasto);
   const [pagoFecha, setPagoFecha]       = useState(
     initialData?.pagoFecha ?? new Date().toISOString().slice(0, 10),
   );
@@ -1019,6 +1021,20 @@ export default function NuevaFacturaForm({
   const totales = useMemo(() => calcularTotales(items), [items]);
   const totalRetenciones = useMemo(() => retenciones.reduce((s, r) => s + r.monto, 0), [retenciones]);
   const totalNeto = totales.total - totalRetenciones;
+
+  // Gasto pagado en efectivo por defecto: el monto de pago sigue al total, para
+  // que registrar el gasto baje la caja sin escribir nada. Solo mientras haya una
+  // sola línea en efectivo; si el usuario cambia el método o agrega líneas (pago
+  // dividido / a crédito), se respeta lo que puso y deja de autocompletarse.
+  useEffect(() => {
+    if (!esGasto || !pagoRecibido || initialData) return;
+    if (pagoLineas.length !== 1 || pagoLineas[0].metodo !== 'efectivo') return;
+    const objetivo = totalNeto > 0 ? totalNeto.toFixed(2) : '';
+    if (pagoLineas[0].valor !== objetivo) {
+      setPagoLineas([{ ...pagoLineas[0], valor: objetivo }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esGasto, pagoRecibido, totalNeto]);
 
   // Motivo (código de modificación) obligatorio para notas 33/34 — también al
   // guardar como borrador: la DGII lo exige y evita notas incompletas que luego
@@ -1908,6 +1924,7 @@ export default function NuevaFacturaForm({
               // Una Nota de Crédito acredita al cliente — no se cobra ningún pago al
               // crearla. Ocultar el card "Pago".
               showPago={tipoEcf !== '34'}
+              pagoLabel={esGasto ? 'Pagado (sale de la caja)' : undefined}
               pagoRecibido={pagoRecibido} setPagoRecibido={setPagoRecibido}
               pagoFecha={pagoFecha} setPagoFecha={setPagoFecha}
               pagoLineas={pagoLineas} setPagoLineas={setPagoLineas}
