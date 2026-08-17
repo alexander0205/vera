@@ -932,7 +932,10 @@ export async function POST(request: NextRequest) {
             createdBy:            user.id,
             dependienteId:        data.dependienteId ?? null,
             dependienteNombre:    data.dependienteNombre ?? null,
-            turnoCajaId:          turnoBorradorId,
+            // Gasto: el documento NO se ata al turno — si no, aparece en los
+            // "Comprobantes del turno" del cierre como si fuera una venta. La
+            // salida de efectivo se refleja aparte, como movimiento GASTO.
+            turnoCajaId:          esGasto ? null : turnoBorradorId,
             stockDescontado:      esFacturaDefinitivaNueva,
             ...extraFields,
           }).returning();
@@ -1359,7 +1362,9 @@ export async function POST(request: NextRequest) {
         lineasJson:           lineasJsonParaGuardar,
         tipoPago:             data.tipoPago ?? 1,
         fechaLimitePago:      data.fechaLimitePago ?? null,
-        turnoCajaId:          turnoCaja?.id ?? null,
+        // Gasto: el documento NO se ata al turno (no debe salir en los
+        // "Comprobantes del turno"); su salida de efectivo va como movimiento GASTO.
+        turnoCajaId:          esGasto ? null : (turnoCaja?.id ?? null),
         createdBy:            user.id,
         dependienteId:        data.dependienteId ?? null,
         dependienteNombre:    data.dependienteNombre ?? null,
