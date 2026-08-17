@@ -1,11 +1,7 @@
-import { redirect } from 'next/navigation';
-import { getUser } from '@/lib/db/queries';
+import { requireZeroTicketsAgentPage } from '@/lib/auth/zero-tickets-guard';
 
 export default async function ZeroTicketsLayout({ children }: { children: React.ReactNode }) {
-  const user = await getUser();
-  if (!user || user.platformRole !== 'admin') {
-    redirect('/dashboard');
-  }
+  await requireZeroTicketsAgentPage();
 
   return (
     <div className="min-h-screen bg-gray-50">

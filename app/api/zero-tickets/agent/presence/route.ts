@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq, and, gte, sql } from 'drizzle-orm';
-import { getUser } from '@/lib/db/queries';
+import { requireZeroTicketsAgent } from '@/lib/auth/zero-tickets-guard';
 import { db } from '@/lib/db/drizzle';
 import { agentPresence } from '@/lib/db/schema';
 
 const AGENTE_STALE_MIN = 2;
 
 export async function GET() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-  if (user.platformRole !== 'admin') return NextResponse.json({ error: 'Acceso restringido' }, { status: 403 });
+  const auth = await requireZeroTicketsAgent();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
 
   const [mine] = await db.select().from(agentPresence).where(eq(agentPresence.userId, user.id)).limit(1);
 
@@ -23,9 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-  if (user.platformRole !== 'admin') return NextResponse.json({ error: 'Acceso restringido' }, { status: 403 });
+  const auth = await requireZeroTicketsAgent();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
 
   const { available } = (await req.json()) as { available: boolean };
 

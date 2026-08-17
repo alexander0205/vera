@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { desc, eq, sql } from 'drizzle-orm';
-import { getUser } from '@/lib/db/queries';
+import { requireZeroTicketsAgent } from '@/lib/auth/zero-tickets-guard';
 import { db } from '@/lib/db/drizzle';
 import { tickets, teams, users } from '@/lib/db/schema';
 
 export async function GET() {
-  const user = await getUser();
-  if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-  if (user.platformRole !== 'admin') return NextResponse.json({ error: 'Acceso restringido' }, { status: 403 });
+  const auth = await requireZeroTicketsAgent();
+  if (!auth.ok) return auth.response;
 
   const agentUsers = db.select({ id: users.id, name: users.name, email: users.email }).from(users).as('agent_users');
 
