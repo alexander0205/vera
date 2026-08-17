@@ -107,6 +107,16 @@
         "tipo": "nuevo",
         "titulo": "Elige tu plan y empieza gratis, sin tarjeta",
         "detalle": "Si tu empresa todavía no tiene un plan, el sistema te lleva directo a elegirlo: los planes de facturación empiezan con 15 días de prueba y los de colegio con 30, sin pedir tarjeta. Lo que tu empresa ya tiene registrado —clientes, comprobantes, estudiantes— se conserva tal cual. Y tu suscripción ahora se mantiene sincronizada con el sistema de cobros aunque un aviso se pierda por el camino."
+      },
+      {
+        "tipo": "mejora",
+        "titulo": "Un cliente se registra completo de una sola vez",
+        "detalle": "Antes había que guardar el cliente, cerrarlo y volver a abrirlo en editar solo para ponerle los dependientes; y si lo creabas desde una factura salía sin celular, WhatsApp ni dirección. Ahora es el mismo formulario completo en todas partes: la lista de clientes, la factura, la cotización, las facturas recurrentes y el punto de venta."
+      },
+      {
+        "tipo": "arreglo",
+        "titulo": "Crear un cliente ya no te borra la factura recurrente",
+        "detalle": "En una factura recurrente, pulsar «Nuevo cliente» te sacaba de la pantalla y al volver todo lo que habías llenado estaba en blanco. Ahora el cliente se crea sin salir, y queda seleccionado al cerrar."
       }
     ]
   },

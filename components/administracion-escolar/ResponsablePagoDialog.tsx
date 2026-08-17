@@ -196,6 +196,10 @@ export function ResponsablePagoDialog({
                 siga creando responsables sin él. */}
             <ClienteForm
               embebido
+              // Aquí el dependiente es el alumno que se está vinculando y lo
+              // agrega esta ficha al guardar. Dejar la caja de «Agregar» a la
+              // vista invitaría a teclear al mismo niño una segunda vez.
+              dependientesEditables={false}
               key={editando ? `editar-${clienteId}` : (prefill?.rnc ?? 'nuevo')}
               clienteId={editando ? clienteId : undefined}
               valoresIniciales={editando ? undefined : prefill}
