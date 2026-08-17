@@ -350,6 +350,14 @@ export async function POST(request: NextRequest) {
     // no entra a la caja como ingreso — se trata como salida (ver helpers arriba).
     const esGasto = data.tipoEcf === '43' || data.tipoEcf === '47';
 
+    // Salida de dinero para la CAJA: gastos + compras (e41). Una compra a un
+    // proveedor también es efectivo que sale, no un ingreso. Comparte con el gasto
+    // el trato de caja (pago sin turno + movimiento de salida + documento fuera
+    // de los "Comprobantes del turno"), pero NO el de inventario: una compra sí
+    // toca stock (ver `esGasto` en el bloque de descontarInventario más abajo).
+    const esSalidaDinero = data.tipoEcf === '41' || esGasto;
+    const etiquetaSalida = data.tipoEcf === '41' ? 'Compra' : 'Gasto';
+
     // ── Gate: facturas:precio-editar ──────────────────────────────────────────
     // Sin el permiso, cada línea tiene que venir del catálogo y al precio del
     // catálogo. El formulario ya deja los campos en solo lectura; esto es lo que
@@ -793,9 +801,9 @@ export async function POST(request: NextRequest) {
         // Cuando pagoRecibido=true pero pagoValor=0 no tocamos el ledger; el método
         // se persiste en ecfDocuments.pagoMetodo (columna inline) y editar/page.tsx
         // lo recupera desde ahí como fallback.
-        // Gasto: el pago no se ata al turno (no cuenta como ingreso); la salida
-        // de efectivo va como movimiento GASTO más abajo.
-        const turnoPagoBorrador = esGasto ? null : turnoBorradorId;
+        // Gasto/compra: el pago no se ata al turno (no cuenta como ingreso); la
+        // salida de efectivo va como movimiento GASTO más abajo.
+        const turnoPagoBorrador = esSalidaDinero ? null : turnoBorradorId;
         if (data.pagos?.length) {
           try {
             await db.delete(pagosRecibidos)
@@ -943,10 +951,10 @@ export async function POST(request: NextRequest) {
             createdBy:            user.id,
             dependienteId:        data.dependienteId ?? null,
             dependienteNombre:    data.dependienteNombre ?? null,
-            // Gasto: el documento NO se ata al turno — si no, aparece en los
-            // "Comprobantes del turno" del cierre como si fuera una venta. La
+            // Gasto/compra: el documento NO se ata al turno — si no, aparece en
+            // los "Comprobantes del turno" del cierre como si fuera una venta. La
             // salida de efectivo se refleja aparte, como movimiento GASTO.
-            turnoCajaId:          esGasto ? null : turnoBorradorId,
+            turnoCajaId:          esSalidaDinero ? null : turnoBorradorId,
             stockDescontado:      esFacturaDefinitivaNueva,
             ...extraFields,
           }).returning();
@@ -998,7 +1006,7 @@ export async function POST(request: NextRequest) {
       // efectivo se registra UNA vez, tras este INSERT (ver abajo). En el UPDATE
       // de un borrador existente NO se registra, para no acumular salidas al
       // re-guardar.
-      const turnoPagoBorradorNuevo = esGasto ? null : turnoBorradorId;
+      const turnoPagoBorradorNuevo = esSalidaDinero ? null : turnoBorradorId;
       await Promise.all([
         // Descuento de stock al guardar la factura definitiva (sin-ncf). El
         // borrador real (tipo e31/e32/etc, BOR-xxx) no descuenta hasta emitirse.
@@ -1039,15 +1047,15 @@ export async function POST(request: NextRequest) {
               : null),
       ]);
 
-      // Salida de efectivo del gasto guardado como interno (borrador nuevo): se
-      // registra una sola vez, aquí. El path de dedup ya retornó arriba, así que
-      // esto no corre para un borrador deduplicado.
-      if (esGasto) {
+      // Salida de efectivo del gasto/compra guardado como interno (borrador
+      // nuevo): se registra una sola vez, aquí. El path de dedup ya retornó
+      // arriba, así que esto no corre para un borrador deduplicado.
+      if (esSalidaDinero) {
         await registrarSalidaGasto({
           teamId,
           turnoId:     turnoBorradorId,
           montoCents:  Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
-          descripcion: `Gasto ${saved.encf || 'interno'}`,
+          descripcion: `${etiquetaSalida} ${saved.encf || 'interno'}`,
           userId:      user.id,
         });
       }
@@ -1376,9 +1384,9 @@ export async function POST(request: NextRequest) {
         lineasJson:           lineasJsonParaGuardar,
         tipoPago:             data.tipoPago ?? 1,
         fechaLimitePago:      data.fechaLimitePago ?? null,
-        // Gasto: el documento NO se ata al turno (no debe salir en los
+        // Gasto/compra: el documento NO se ata al turno (no debe salir en los
         // "Comprobantes del turno"); su salida de efectivo va como movimiento GASTO.
-        turnoCajaId:          esGasto ? null : (turnoCaja?.id ?? null),
+        turnoCajaId:          esSalidaDinero ? null : (turnoCaja?.id ?? null),
         createdBy:            user.id,
         dependienteId:        data.dependienteId ?? null,
         dependienteNombre:    data.dependienteNombre ?? null,
@@ -1391,9 +1399,9 @@ export async function POST(request: NextRequest) {
     // Pago al emitir: registrar en el ledger (source of truth pagos_recibidos).
     // Split: si vienen varios `pagos`, registrarPagosSplit (valida ≤ saldo y
     // recalcula estado_pago). Si no, flujo single existente.
-    // Gasto: el pago NO se ata al turno (turnoCajaId null) para que no cuente como
-    // ingreso del cierre; la salida de efectivo se registra aparte como GASTO.
-    const turnoParaPago = esGasto ? null : (turnoCaja?.id ?? null);
+    // Gasto/compra: el pago NO se ata al turno (turnoCajaId null) para que no cuente
+    // como ingreso del cierre; la salida de efectivo se registra aparte como GASTO.
+    const turnoParaPago = esSalidaDinero ? null : (turnoCaja?.id ?? null);
     if (data.pagos?.length) {
       try {
         await registrarPagosSplit({
@@ -1422,13 +1430,13 @@ export async function POST(request: NextRequest) {
       } catch (e) { console.error('[emitir registrarPago]', e); }
     }
 
-    // Salida de efectivo del gasto: movimiento GASTO del turno (el cierre lo resta).
-    if (esGasto) {
+    // Salida de efectivo del gasto/compra: movimiento GASTO del turno (el cierre lo resta).
+    if (esSalidaDinero) {
       await registrarSalidaGasto({
         teamId,
         turnoId:     turnoCaja?.id ?? null,
         montoCents:  Math.min(porcionEfectivoCents(data), Math.round(totales.montoTotal * 100)),
-        descripcion: `Gasto ${encf}`,
+        descripcion: `${etiquetaSalida} ${encf}`,
         userId:      user.id,
       });
     }
