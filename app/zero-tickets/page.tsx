@@ -75,14 +75,16 @@ export default function ZeroTicketsPage() {
 
   useEffect(() => {
     if (!available) return;
-    const heartbeat = setInterval(() => {
+    const sendHeartbeat = () => {
       fetch('/api/zero-tickets/agent/presence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ available: true }),
       }).catch(() => {});
-    }, 60000);
-    return () => clearInterval(heartbeat);
+    };
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 60000);
+    return () => clearInterval(interval);
   }, [available]);
 
   useEffect(() => {
