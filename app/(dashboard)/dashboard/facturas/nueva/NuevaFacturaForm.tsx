@@ -685,7 +685,10 @@ export default function NuevaFacturaForm({
   // Mirror error → toast (más visible, no requiere scroll para verlo)
   useEffect(() => { if (error) toast.error(error, { duration: 6500 }); }, [error]);
   const [resultado, setResultado]       = useState<ResultadoEmision | null>(null);
-  const [draftKey] = useState(() => `emitedo:draft:${initialData?.id ?? 'new'}`);
+  // Draft por-categoría: sin el sufijo, `new` era una key compartida y un
+  // borrador de gasto (e43/e47) se restauraba en el form de compras/factura,
+  // arrastrándolos a modo gasto. Cada ruta nueva tiene su propio borrador.
+  const [draftKey] = useState(() => `emitedo:draft:${initialData?.id ?? `new-${categoriaId}`}`);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [vistaPrevia, setVistaPrevia]   = useState(false);
   // Vista previa = PDF en blob URL (NO crea factura en DB). Ver /api/pdf/factura/preview.
