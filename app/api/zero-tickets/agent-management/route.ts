@@ -41,13 +41,18 @@ export async function GET() {
       userEmail: users.email,
       addedBy: supportAgents.addedBy,
       addedByName: addedByUsers.name,
+      // Subquery correlacionada — usar nombre literal de tabla (users.id), no
+      // interpolar ${users.id}: Drizzle lo trata como parámetro fijo (el de la
+      // primera fila), no como referencia de columna por fila, y todas las filas
+      // devolverían el mismo avgRating/ratingCount (mismo bug ya documentado en
+      // /api/facturas y /api/zero-tickets/agent/tickets).
       avgRating: sql<string | null>`(
         SELECT AVG(${ticketRatings.rating}) FROM ${ticketRatings}
-        WHERE ${ticketRatings.agentId} = ${users.id}
+        WHERE ${ticketRatings.agentId} = users.id
       )`,
       ratingCount: sql<number>`(
         SELECT COUNT(*) FROM ${ticketRatings}
-        WHERE ${ticketRatings.agentId} = ${users.id}
+        WHERE ${ticketRatings.agentId} = users.id
       )`,
     })
     .from(supportAgents)
