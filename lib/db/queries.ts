@@ -477,6 +477,8 @@ export async function getGastos(teamId: number, limit = 100) {
         rncProveedor:  ecfDocuments.rncComprador,
         ncfProveedor:  ecfDocuments.ncfProveedor,
         categoriaGasto: ecfDocuments.categoriaGasto,
+        pagoMetodo:    ecfDocuments.pagoMetodo,
+        pagoCuenta:    ecfDocuments.pagoCuenta,
         montoTotal:    ecfDocuments.montoTotal,
         fechaGasto:    ecfDocuments.fechaGasto,
         fechaEmision:  ecfDocuments.fechaEmision,

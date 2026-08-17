@@ -28,12 +28,38 @@ const PAGO_STYLE: Record<string, { label: string; bg: string; color: string }> =
   PENDIENTE: { label: 'Por pagar', bg: '#fef2f2', color: '#b91c1c' },
 };
 
-function PagoBadge({ estado, estadoPago }: { estado: string; estadoPago: string }) {
+const METODO_LABEL: Record<string, string> = {
+  efectivo: 'efectivo', transferencia: 'transferencia', tarjeta: 'tarjeta',
+  cheque: 'cheque', deposito: 'depósito', otro: 'otro método',
+};
+
+/** "de dónde salió" el dinero: método + cuenta cuando la hay. */
+function origenPago(metodo: string | null, cuenta: string | null): string | null {
+  if (!metodo) return null;
+  const base = METODO_LABEL[metodo.toLowerCase()] ?? metodo;
+  return cuenta ? `${base} · ${cuenta}` : base;
+}
+
+function PagoBadge({ estado, estadoPago, metodo, cuenta }: {
+  estado: string; estadoPago: string; metodo: string | null; cuenta: string | null;
+}) {
   if (estado === 'ANULADO' || estado === 'RECHAZADO') {
     return <Chip label="Anulado" bg="#f3f4f6" color="#6b7280" />;
   }
   const s = PAGO_STYLE[estadoPago] ?? PAGO_STYLE.PENDIENTE;
-  return <Chip label={s.label} bg={s.bg} color={s.color} />;
+  // "Pagado" a secas se leía como si te hubieran pagado a ti. La línea "Salió de…"
+  // deja claro que el dinero SALIÓ y de qué método/cuenta.
+  const origen = (estadoPago === 'PAGADA' || estadoPago === 'PARCIAL') ? origenPago(metodo, cuenta) : null;
+  return (
+    <Box sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+      <Chip label={s.label} bg={s.bg} color={s.color} />
+      {origen && (
+        <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+          Salió de {origen}
+        </Typography>
+      )}
+    </Box>
+  );
 }
 
 function Chip({ label, bg, color }: { label: string; bg: string; color: string }) {
@@ -146,7 +172,7 @@ export default async function GastosPage() {
                       </TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{g.categoriaGasto || '—'}</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap', color: '#6b7280' }}>{TIPO_LABEL[g.tipoEcf] ?? g.tipoEcf}</TableCell>
-                      <TableCell align="center"><PagoBadge estado={g.estado} estadoPago={g.estadoPago} /></TableCell>
+                      <TableCell align="center"><PagoBadge estado={g.estado} estadoPago={g.estadoPago} metodo={g.pagoMetodo} cuenta={g.pagoCuenta} /></TableCell>
                       <TableCell align="right" sx={{ fontWeight: 700, color: anulado ? '#9ca3af' : '#111827', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                         {fmtDOP(g.montoTotal)}
                       </TableCell>
