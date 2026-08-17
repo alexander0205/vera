@@ -87,6 +87,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (err && typeof err === 'object' && 'code' in err && err.code === '23505') {
+      return NextResponse.json({ error: 'Este ticket ya fue calificado' }, { status: 409 });
+    }
     console.error('[zero-tickets/tickets/rating POST]', err);
     return NextResponse.json({ error: 'Error interno' }, { status: 500 });
   }
