@@ -3,9 +3,10 @@
  * Da a un negocio —tenga o no caja habilitada— dónde ver y sumar sus egresos,
  * sin depender del módulo de Caja. Compras (e41) tiene su propia pantalla.
  */
+import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Receipt } from 'lucide-react';
+import { Plus, Receipt, ArrowUpRight } from 'lucide-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Table from '@mui/material/Table';
@@ -22,10 +23,13 @@ const TIPO_LABEL: Record<string, string> = {
   '47': 'Pagos al exterior',
 };
 
-const PAGO_STYLE: Record<string, { label: string; bg: string; color: string }> = {
-  PAGADA:    { label: 'Pagado',   bg: '#ecfdf5', color: '#047857' },
-  PARCIAL:   { label: 'Parcial',  bg: '#fffbeb', color: '#b45309' },
-  PENDIENTE: { label: 'Por pagar', bg: '#fef2f2', color: '#b91c1c' },
+// Un gasto liquidado NO va en verde: el verde en la app significa dinero que
+// ENTRA (ventas cobradas). Se usa un neutro (slate) + flecha de salida para
+// que no se confunda con un ingreso. "Por pagar" queda en ámbar (pendiente).
+const PAGO_STYLE: Record<string, { label: string; bg: string; color: string; salida: boolean }> = {
+  PAGADA:    { label: 'Pagado',   bg: '#f1f5f9', color: '#475569', salida: true },
+  PARCIAL:   { label: 'Parcial',  bg: '#fff7ed', color: '#c2410c', salida: true },
+  PENDIENTE: { label: 'Por pagar', bg: '#fffbeb', color: '#b45309', salida: false },
 };
 
 const METODO_LABEL: Record<string, string> = {
@@ -47,12 +51,12 @@ function PagoBadge({ estado, estadoPago, metodo, cuenta }: {
     return <Chip label="Anulado" bg="#f3f4f6" color="#6b7280" />;
   }
   const s = PAGO_STYLE[estadoPago] ?? PAGO_STYLE.PENDIENTE;
-  // "Pagado" a secas se leía como si te hubieran pagado a ti. La línea "Salió de…"
-  // deja claro que el dinero SALIÓ y de qué método/cuenta.
-  const origen = (estadoPago === 'PAGADA' || estadoPago === 'PARCIAL') ? origenPago(metodo, cuenta) : null;
+  // "Pagado" a secas se leía como si te hubieran pagado a ti. La flecha de salida
+  // + la línea "Salió de…" dejan claro que el dinero SALIÓ y de qué método/cuenta.
+  const origen = s.salida ? origenPago(metodo, cuenta) : null;
   return (
     <Box sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
-      <Chip label={s.label} bg={s.bg} color={s.color} />
+      <Chip label={s.label} bg={s.bg} color={s.color} icon={s.salida ? <ArrowUpRight size={11} /> : undefined} />
       {origen && (
         <Typography sx={{ fontSize: '0.6875rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>
           Salió de {origen}
@@ -62,12 +66,12 @@ function PagoBadge({ estado, estadoPago, metodo, cuenta }: {
   );
 }
 
-function Chip({ label, bg, color }: { label: string; bg: string; color: string }) {
+function Chip({ label, bg, color, icon }: { label: string; bg: string; color: string; icon?: ReactNode }) {
   return (
     <Box component="span" sx={{
-      display: 'inline-block', px: 1, py: '2px', borderRadius: '999px',
+      display: 'inline-flex', alignItems: 'center', gap: 0.25, px: 1, py: '2px', borderRadius: '999px',
       fontSize: '0.6875rem', fontWeight: 600, bgcolor: bg, color,
-    }}>{label}</Box>
+    }}>{icon}{label}</Box>
   );
 }
 
