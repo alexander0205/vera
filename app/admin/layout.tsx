@@ -28,7 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Typography sx={{ fontWeight: 700, fontFamily: 'var(--font-display)', fontSize: { xs: '0.875rem', sm: '1rem' }, color: '#fff' }}>Zero Admin</Typography>
         </Box>
         <Box component="nav" sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 }, overflowX: 'auto', order: { xs: 3, sm: 2 }, width: { xs: '100%', sm: 'auto' }, ml: { sm: 1 } }}>
-          {[['Dashboard','/admin'],['Usuarios','/admin/usuarios'],['Empresas','/admin/empresas'],['Logs','/admin/logs']].map(([label, href]) => (
+          {[['Dashboard','/admin'],['Usuarios','/admin/usuarios'],['Empresas','/admin/empresas'],['WhatsApp','/admin/whatsapp'],['Logs','/admin/logs']].map(([label, href]) => (
             <Box key={href} component="a" href={href} sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, color: '#d1d5db', '&:hover': { color: '#fff' }, textDecoration: 'none', whiteSpace: 'nowrap' }}>
               {label}
             </Box>
