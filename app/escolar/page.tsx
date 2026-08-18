@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { GraduationCap, MessageCircle, Mail, ArrowRight, Check } from 'lucide-react';
-import { getTeamForUser } from '@/lib/db/queries';
+import { getUser, getTeamForUser } from '@/lib/db/queries';
 import { getPlan } from '@/lib/config/plans';
 import { estadoConfiguracion } from '@/lib/administracion-escolar/configurado';
 import { SOPORTE, enlaceWhatsapp, enlaceCorreo } from '@/lib/config/soporte';
@@ -60,7 +60,17 @@ const PASOS = [
 
 export default async function EscolarPage() {
   const equipo = await getTeamForUser();
-  if (!equipo) redirect('/sign-in');
+  /**
+   * A `/sign-in` solo quien no tiene sesión.
+   *
+   * Antes iba aquí cualquiera cuyo team no se pudiera resolver, y eso es otra
+   * cosa: la sesión está viva y la pantalla de entrar le dice que no. Se lee
+   * como un deslogueo, se reporta como un deslogueo, y se busca en el sitio
+   * equivocado. `/sin-acceso` dice lo que pasa de verdad.
+   */
+  if (!equipo) {
+    redirect(await getUser() ? '/sin-acceso' : '/sign-in');
+  }
 
   const estado = await estadoConfiguracion(equipo.id);
 

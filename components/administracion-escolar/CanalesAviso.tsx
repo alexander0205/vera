@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { CheckCircle2, ExternalLink, Loader2, Mail, MessageCircle, Smartphone } from 'lucide-react';
+import { SaludWhatsApp } from './SaludWhatsApp';
 import { Button } from '@/components/ui/button';
 import type { CanalesActivos } from '@/lib/administracion-escolar/canales';
 
@@ -298,6 +299,11 @@ export function CanalesAviso() {
         Aquí se enlaza cada canal una sola vez. Qué se avisa y cuándo se decide en{' '}
         <span className="font-medium text-gray-700">Conceptos</span>.
       </p>
+
+      {/* Lo primero, porque es lo que nadie pregunta y todos asumen: que los
+          avisos que se mandaron llegaron. Un canal roto se ve igual que uno
+          sano hasta que se mira aquí. */}
+      <SaludWhatsApp />
 
       {errorCanal && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

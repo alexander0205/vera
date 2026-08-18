@@ -212,3 +212,82 @@ export async function enviarEnlaceFormularioEmail(opts: EnlaceFormularioEmail & 
   });
   assertSent(res, `enviarEnlaceFormularioEmail(${opts.email})`);
 }
+
+// ─── Comprobante subido por un padre ─────────────────────────────────────────
+
+/**
+ * Le avisa al colegio que hay un comprobante esperando.
+ *
+ * Es el único empujón del flujo: el padre transfiere y sube la foto, pero su
+ * deuda NO baja hasta que alguien del colegio la mire. Sin este correo, el
+ * comprobante se queda en una pestaña que nadie abre y el padre —que ya pagó—
+ * sigue recibiendo avisos de cobro. Por eso va al correo del colegio y no a una
+ * notificación dentro de la aplicación.
+ */
+export interface ComprobanteRecibidoEmail {
+  colegio: string;
+  responsable: string;
+  estudiantes: string[];
+  monto: string;
+  referencia: string;
+  /** A la pantalla de aprobación, ya filtrada por pendientes. */
+  url: string;
+}
+
+export function armarComprobanteRecibidoEmail(opts: ComprobanteRecibidoEmail): {
+  asunto: string; html: string;
+} {
+  const responsable = escapar(opts.responsable);
+  const colegio = escapar(opts.colegio);
+  const alumnos = opts.estudiantes.map(escapar).join(', ');
+
+  // El monto va en el asunto: quien lo lee en el móvil decide si abrirlo ahora
+  // por la cifra, no por el nombre.
+  const asunto = `${opts.colegio} — Comprobante de ${opts.monto} por revisar`;
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;">
+      <h2 style="color:#2a45c4;font-size:18px;margin:0 0 4px;">${colegio}</h2>
+      <p style="font-size:15px;color:#111;line-height:1.6;margin:0 0 16px;">
+        <b>${responsable}</b> subió un comprobante de transferencia.
+        El pago queda <b>pendiente</b> hasta que lo apruebes.
+      </p>
+
+      <table style="width:100%;border-collapse:collapse;font-size:14px;color:#111;margin-bottom:20px;">
+        <tr><td style="padding:6px 0;color:#6b7280;">Monto</td>
+            <td style="padding:6px 0;text-align:right;font-weight:700;">${escapar(opts.monto)}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280;">Referencia</td>
+            <td style="padding:6px 0;text-align:right;font-family:monospace;">${escapar(opts.referencia)}</td></tr>
+        ${alumnos ? `<tr><td style="padding:6px 0;color:#6b7280;">Estudiantes</td>
+            <td style="padding:6px 0;text-align:right;">${alumnos}</td></tr>` : ''}
+      </table>
+
+      <a href="${opts.url}"
+         style="display:inline-block;background:#2a45c4;color:#fff;text-decoration:none;
+                padding:11px 20px;border-radius:8px;font-size:14px;font-weight:600;">
+        Revisar el comprobante
+      </a>
+
+      <p style="font-size:12px;color:#6b7280;line-height:1.6;margin-top:24px;">
+        Compara la foto con tu estado de cuenta antes de aprobar. Al aprobarlo se
+        registra el cobro; mientras tanto la deuda del padre sigue abierta y le
+        seguirán saliendo los avisos.
+      </p>
+    </div>
+  `;
+
+  return { asunto, html };
+}
+
+export async function enviarComprobanteRecibidoEmail(
+  opts: ComprobanteRecibidoEmail & { email: string },
+) {
+  const { asunto, html } = armarComprobanteRecibidoEmail(opts);
+  const res = await resend.emails.send({
+    from: 'Zero <noreply@zero.com.do>',
+    to: opts.email,
+    subject: asunto,
+    html,
+  });
+  assertSent(res, `enviarComprobanteRecibidoEmail(${opts.email})`);
+}

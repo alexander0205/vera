@@ -13,6 +13,7 @@ const BASE: FilaAviso = {
   cargoId: 1, teamId: 9, estudianteId: 3164, clientId: 1689,
   estudiante: 'Zahel Ferreras', concepto: 'Matrícula',
   saldoCentavos: 175000,
+  ecfDocumentId: null,
   fechaEmision: '2026-09-28',
   fechaVencimiento: '2026-10-03',
   cobraMora: true,
