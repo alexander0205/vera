@@ -17,14 +17,21 @@ import { Loader2, ArrowRight } from 'lucide-react';
 import { guardarTamano } from './actions';
 import type { ActionState } from '@/lib/auth/middleware';
 
-export function PasoTamano({ razonSocial, pregunta }: {
+export function PasoTamano({ razonSocial, pregunta, tamanoActual }: {
   razonSocial: string;
   pregunta: { titulo: string; ayuda: string; opciones: Array<{ valor: number; etiqueta: string }> };
+  tamanoActual?: number | null;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     guardarTamano, { error: '' },
   );
-  const [elegido, setElegido] = useState<number | null>(null);
+  // Al volver atrás se re-marca lo elegido antes. Solo si sigue siendo una
+  // opción válida: si cambió la línea (colegio ↔ facturación) la pregunta es
+  // otra y el número viejo ya no está entre estas opciones.
+  const inicial = pregunta.opciones.some(o => o.valor === tamanoActual)
+    ? tamanoActual!
+    : null;
+  const [elegido, setElegido] = useState<number | null>(inicial);
 
   return (
     <div>
