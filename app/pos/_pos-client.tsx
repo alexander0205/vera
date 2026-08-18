@@ -978,6 +978,17 @@ function Venta({
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); escanear(); } }}
+          /**
+           * `id` a mano, no el que inventa MUI.
+           *
+           * Sin él, MUI lo genera con `useId`, que depende de la posición en el
+           * árbol ENTERO: cualquier cambio por encima del POS —una capa del
+           * layout, el loader de cambio de módulo— le daba al servidor un id
+           * distinto del que calculaba el cliente, y React avisaba de un
+           * desajuste de hidratación nada más cargar la pantalla. Escrito a
+           * mano, el campo deja de depender de lo que pase más arriba.
+           */
+          id="pos-buscar-producto"
           placeholder="Buscar o escanear (nombre, referencia o código de barras)…"
           autoFocus
           sx={{
@@ -1387,6 +1398,7 @@ function CarritoPanel({
             <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Lista de precio</Typography>
             <TextField
               select
+              id="pos-lista-precio"
               value={listaPreciosId}
               onChange={(e) => onSelectLista(e.target.value === 'general' ? 'general' : Number(e.target.value))}
               fullWidth
@@ -1400,6 +1412,7 @@ function CarritoPanel({
             <Typography component="label" sx={{ mb: 0.5, display: 'block', fontSize: 12, fontWeight: 500, color: '#6b7280' }}>Numeración</Typography>
             <TextField
               select
+              id="pos-numeracion"
               value={tipoEcf}
               onChange={(e) => onSelectTipoEcf(e.target.value)}
               fullWidth
