@@ -22,6 +22,9 @@ interface Props {
   /** Si false, oculta el card "Pago" entero. Útil para facturas recurrentes
    *  (plantillas que no registran pago directo). Default true. */
   showPago?: boolean;
+  /** Texto del toggle de pago. Para un gasto es "Pagado" (yo pagué), no
+   *  "pago recibido" (me pagaron). Default 'Registrar pago recibido'. */
+  pagoLabel?: string;
   /** Optional pago recibido block — rendered inline when enabled. */
   pagoRecibido?: boolean;
   setPagoRecibido?: (v: boolean) => void;
@@ -67,6 +70,7 @@ const sectionHeaderSx = {
 export function ResumenSidebar({
   totales, retenciones, totalNeto, totalLabel = 'Total', items,
   showPago = true,
+  pagoLabel = 'Registrar pago recibido',
   pagoRecibido = false, setPagoRecibido,
   pagoFecha = '', setPagoFecha,
   pagoLineas = [{ metodo: 'efectivo', valor: '' }], setPagoLineas,
@@ -310,7 +314,7 @@ export function ResumenSidebar({
                 }
                 label={
                   <Typography sx={{ fontSize: '0.875rem', color: '#374151' }}>
-                    Registrar pago recibido
+                    {pagoLabel}
                   </Typography>
                 }
                 sx={{ m: 0 }}

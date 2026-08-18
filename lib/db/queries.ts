@@ -337,6 +337,9 @@ async function computeDashboardStats(teamId: number) {
   const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const seisMesesAtras = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   const noAnulado = sql`${ecfDocuments.estado} <> 'ANULADO'`;
+  // Ingreso = solo ventas. Compras/gastos (41/43/47) es dinero que sale, no que
+  // entra: no debe inflar los montos de ingreso ni el ranking de clientes.
+  const soloIngreso = sql`${ecfDocuments.tipoEcf} NOT IN ('41', '43', '47')`;
 
   const [
     facturasTotal, facturasMes, montoMesRows, montoMesAnteriorRows,
@@ -363,7 +366,7 @@ async function computeDashboardStats(teamId: number) {
       db
         .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
         .from(ecfDocuments)
-        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, startOfMonth), noAnulado)),
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, startOfMonth), noAnulado, soloIngreso)),
       // Ingresos del mes anterior — referencia para el % de variación.
       db
         .select({ total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)` })
@@ -373,6 +376,7 @@ async function computeDashboardStats(teamId: number) {
           gte(ecfDocuments.createdAt, startOfPrevMonth),
           lt(ecfDocuments.createdAt, startOfMonth),
           noAnulado,
+          soloIngreso,
         )),
       // Secuencias disponibles
       db
@@ -393,7 +397,7 @@ async function computeDashboardStats(teamId: number) {
           monto: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
         })
         .from(ecfDocuments)
-        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, seisMesesAtras), noAnulado))
+        .where(and(eq(ecfDocuments.teamId, teamId), gte(ecfDocuments.createdAt, seisMesesAtras), noAnulado, soloIngreso))
         .groupBy(sql`date_trunc('month', ${ecfDocuments.createdAt})`)
         .orderBy(sql`date_trunc('month', ${ecfDocuments.createdAt})`),
       // Desglose por tipo de comprobante, este mes.
@@ -420,6 +424,7 @@ async function computeDashboardStats(teamId: number) {
           eq(ecfDocuments.teamId, teamId),
           gte(ecfDocuments.createdAt, startOfMonth),
           noAnulado,
+          soloIngreso,
           sql`${ecfDocuments.razonSocialComprador} is not null and ${ecfDocuments.razonSocialComprador} <> ''`,
         ))
         .groupBy(ecfDocuments.razonSocialComprador, ecfDocuments.rncComprador)
@@ -476,6 +481,72 @@ export async function getEcfDocuments(teamId: number, limit = 50, tipos?: string
     .where(where)
     .orderBy(desc(ecfDocuments.createdAt))
     .limit(limit);
+}
+
+/**
+ * Listado de GASTOS (e43 menores / e47 pagos al exterior) con totales, para la
+ * pantalla propia de Gastos (independiente de la caja). Compras (e41) tiene su
+ * propia pantalla de "Facturas recibidas"; aquí no se mezclan.
+ * Los totales excluyen anulados/rechazados; la lista los muestra igual.
+ * Montos en CENTAVOS.
+ */
+export async function getGastos(teamId: number, limit = 100) {
+  const TIPOS = ['43', '47'];
+  const base = and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.tipoEcf, TIPOS));
+  const vivos = and(base, sql`${ecfDocuments.estado} NOT IN ('ANULADO', 'RECHAZADO')`);
+
+  const [docs, totRows, porCategoria] = await Promise.all([
+    db
+      .select({
+        id:            ecfDocuments.id,
+        encf:          ecfDocuments.encf,
+        tipoEcf:       ecfDocuments.tipoEcf,
+        estado:        ecfDocuments.estado,
+        estadoPago:    ecfDocuments.estadoPago,
+        proveedor:     ecfDocuments.razonSocialComprador,
+        rncProveedor:  ecfDocuments.rncComprador,
+        ncfProveedor:  ecfDocuments.ncfProveedor,
+        categoriaGasto: ecfDocuments.categoriaGasto,
+        pagoMetodo:    ecfDocuments.pagoMetodo,
+        pagoCuenta:    ecfDocuments.pagoCuenta,
+        montoTotal:    ecfDocuments.montoTotal,
+        fechaGasto:    ecfDocuments.fechaGasto,
+        fechaEmision:  ecfDocuments.fechaEmision,
+        createdAt:     ecfDocuments.createdAt,
+      })
+      .from(ecfDocuments)
+      .where(base)
+      .orderBy(desc(ecfDocuments.createdAt))
+      .limit(limit),
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        count: sql<number>`count(*)`,
+      })
+      .from(ecfDocuments)
+      .where(vivos),
+    db
+      .select({
+        categoria: ecfDocuments.categoriaGasto,
+        total:     sql<number>`coalesce(sum(${ecfDocuments.montoTotal}), 0)`,
+        count:     sql<number>`count(*)`,
+      })
+      .from(ecfDocuments)
+      .where(vivos)
+      .groupBy(ecfDocuments.categoriaGasto)
+      .orderBy(sql`coalesce(sum(${ecfDocuments.montoTotal}), 0) desc`),
+  ]);
+
+  return {
+    docs,
+    totalCents: Number(totRows[0]?.total ?? 0),
+    count:      Number(totRows[0]?.count ?? 0),
+    porCategoria: porCategoria.map(c => ({
+      categoria:  c.categoria ?? 'Sin categoría',
+      totalCents: Number(c.total ?? 0),
+      count:      Number(c.count ?? 0),
+    })),
+  };
 }
 
 /**
@@ -794,6 +865,9 @@ export async function getCuentasPorCobrar(
         AND d.mora_origen_id IS NULL
         -- Las NC no son cuentas por cobrar: acreditan contra su factura padre.
         AND d.tipo_ecf != '34'
+        -- Compras/gastos (41/43/47) no son ventas ni cuentas por cobrar: son
+        -- dinero que sale, no que se espera cobrar.
+        AND d.tipo_ecf NOT IN ('41', '43', '47')
         ${opts.clientId ? sql`AND d.client_id = ${opts.clientId}` : sql``}
         ${opts.docId ? sql`AND d.id = ${opts.docId}` : sql``}
         ${opts.search?.trim()
