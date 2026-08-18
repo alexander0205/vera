@@ -64,6 +64,8 @@ export default function ZeroTicketsPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTypingSentRef = useRef(0);
 
+  const [me, setMe] = useState<{ name: string | null; email: string } | null>(null);
+
   const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([]);
   const [showCannedDropdown, setShowCannedDropdown] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
@@ -97,10 +99,16 @@ export default function ZeroTicketsPage() {
     if (res.ok) setCannedResponses((await res.json()).cannedResponses);
   }
 
+  async function loadMe() {
+    const res = await fetch('/api/user');
+    if (res.ok) setMe(await res.json());
+  }
+
   useEffect(() => {
     loadTickets();
     loadPresence();
     loadCannedResponses();
+    loadMe();
     const interval = setInterval(() => {
       loadTickets();
       loadPresence();
@@ -212,8 +220,18 @@ export default function ZeroTicketsPage() {
     }
   }
 
+  function aplicarVariables(content: string, ticket: TicketRow, agentName: string): string {
+    return content
+      .replace(/\{agente\}/g, agentName)
+      .replace(/\{cliente\}/g, ticket.userName ?? ticket.userEmail)
+      .replace(/\{colegio\}/g, ticket.teamName);
+  }
+
   function insertCannedResponse(cr: CannedResponse) {
-    setReply((prev) => (prev.trim() ? `${prev}\n${cr.content}` : cr.content));
+    const content = selected
+      ? aplicarVariables(cr.content, selected, me?.name ?? me?.email ?? 'Soporte')
+      : cr.content;
+    setReply((prev) => (prev.trim() ? `${prev}\n${content}` : content));
     setShowCannedDropdown(false);
   }
 
@@ -548,6 +566,9 @@ export default function ZeroTicketsPage() {
                 rows={3}
                 className="w-full border rounded px-3 py-2 text-sm"
               />
+              <div className="text-[10px] text-gray-400">
+                Variables disponibles: {'{agente}'} · {'{cliente}'} · {'{colegio}'}
+              </div>
               <div className="flex justify-end gap-2">
                 {editingId && (
                   <button onClick={resetCannedForm} className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
