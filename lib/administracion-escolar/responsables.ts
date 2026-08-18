@@ -243,7 +243,8 @@ export interface DetalleResponsable {
    * se entera hasta que falta el dinero.
    */
   recurrentes: {
-    matriculaId: number; alumno: string; periodo: string | null;
+    matriculaId: number;
+    estudianteId: number; alumno: string; periodo: string | null;
     facturaRecurrenteId: number | null; nombre: string | null; estado: string | null;
     diaCobro: number | null; proximaEmision: string | null;
   }[];
@@ -355,6 +356,7 @@ export async function detalleResponsable(
     // La mensualidad automática de cada matrícula activa de sus hijos.
     db.execute(sql`
       SELECT m.id AS matricula_id, m.factura_recurrente_id,
+             e.id AS estudiante_id,
              e.nombres || ' ' || COALESCE(e.apellidos, '') AS alumno,
              pe.nombre AS periodo,
              fr.nombre, fr.estado, fr.dia_cobro, fr.proxima_emision
@@ -440,6 +442,10 @@ export async function detalleResponsable(
     })),
     recurrentes: filas(recurrentes).map((r) => ({
       matriculaId: Number(r.matricula_id),
+      // Para poder ir a su ficha desde aquí: el nombre del alumno se leía y no
+      // llevaba a ningún sitio, que es donde se va a mirar por qué su plan está
+      // pausado.
+      estudianteId: Number(r.estudiante_id),
       alumno: String(r.alumno ?? '').trim(),
       periodo: (r.periodo as string) ?? null,
       facturaRecurrenteId: r.factura_recurrente_id == null ? null : Number(r.factura_recurrente_id),

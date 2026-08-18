@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import useSWR from 'swr';
+import useSWR, { mutate as revalidar } from 'swr';
+import { toast } from 'sonner';
 import {
   AlertTriangle, ArrowLeft, CalendarDays, Download, HandCoins, Loader2, Mail,
   MessageCircle, Pencil, Receipt, Smartphone,
@@ -12,6 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { useVolver } from '@/lib/hooks/useVolver';
 import { useTabUrl } from '@/lib/hooks/useUrlEstado';
+import { EnlacePagoFamilia } from '@/components/administracion-escolar/EnlacePagoFamilia';
+import { PeriodosDeLaFamilia } from '@/components/administracion-escolar/PeriodosDeLaFamilia';
+import { FacturarCargosDialog, type FacturaCreada } from '@/components/administracion-escolar/FacturarCargosDialog';
+import { usePermissions } from '@/lib/hooks/usePermissions';
 import type { DetalleResponsable } from '@/lib/administracion-escolar/responsables';
 
 /**
@@ -63,6 +68,23 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
   const volver = useVolver('/escolar/responsables');
   const [vista, setVista] = useTabUrl('v', VISTAS, 'cuenta');
   const [hijoAbierto, setHijoAbierto] = useState<string | null>(null);
+
+  const { permissions } = usePermissions();
+  // Facturar toca dos módulos: mueve dinero en el escolar y emite un documento
+  // en Facturación. Sin las dos, las casillas no se pintan.
+  const puedeFacturar = permissions.includes('administracion-escolar:pagos')
+    && permissions.includes('facturas:crear');
+
+  /**
+   * Lo que se va a facturar: cargos ya existentes, o UNA cuota adelantada.
+   *
+   * Se guardan aparte porque no se combinan —el motor admite un solo previsto
+   * por documento— y porque abrir el diálogo con los dos llenos facturaría de
+   * más sin que nadie lo hubiera marcado.
+   */
+  const [cargosAFacturar, setCargosAFacturar] = useState<number[]>([]);
+  const [previsto, setPrevisto] = useState<
+    { matriculaId: number; cuotaId: number; conceptoId: number } | null>(null);
 
   const { data, error, isLoading } = useSWR<DetalleResponsable>(
     `/api/administracion-escolar/responsables/${clientId}`, traer,
@@ -136,13 +158,25 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
         <ArrowLeft className="h-4 w-4" />Volver a responsables
       </button>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center">
+      {/* Violeta, y no el azul del sistema, en toda la cabecera.
+          Esta ficha y la del alumno tienen la misma forma —avatar redondo,
+          nombre, chips, deuda— y quien llega desde un hijo no distinguía en
+          qué de las dos estaba: leía «Debe RD$14,800» creyendo que era del
+          niño cuando es de la familia entera. El color es lo que se ve antes
+          de leer, así que la diferencia va ahí: barra, avatar y etiqueta. */}
+      <div className="overflow-hidden rounded-xl border border-violet-200 bg-violet-50/40">
+        <div className="h-1 bg-violet-400" />
+        <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-zero-100 text-lg font-semibold text-zero-700">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-violet-100 text-lg font-semibold text-violet-700">
               {c.razonSocial.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()}
             </div>
             <div className="min-w-0">
+              {/* Dice qué se está mirando antes que a quién: es la línea que
+                  faltaba para no confundirla con la ficha de un alumno. */}
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600">
+                Familia · responsable de pago
+              </p>
               <p className="truncate text-lg font-bold text-gray-900">{c.razonSocial}</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <Chip k="RNC / Cédula" v={c.rnc ?? '—'} />
@@ -150,7 +184,7 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
                   pendiente + deudaFacturas > 0
                     ? 'border-red-200 bg-red-50 text-red-600'
-                    : 'border-zero-200 bg-zero-50 text-zero-700'}`}>
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
                   <span className="text-[11px] opacity-70">Debe</span>
                   <b className="font-semibold">
                     {pendiente + deudaFacturas > 0 ? fmtDOP(pendiente + deudaFacturas) : 'Al día'}
@@ -160,8 +194,8 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
             </div>
           </div>
 
-          <div className="shrink-0 md:min-w-[200px] md:border-l md:border-gray-100 md:pl-4">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Se le puede avisar por</p>
+          <div className="shrink-0 md:min-w-[200px] md:border-l md:border-violet-200/70 md:pl-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-violet-500">Se le puede avisar por</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {canales.map((x) => (
                 <span key={x.label} title={x.valor ? `${x.label}: ${x.valor}` : `Sin ${x.label}`}>
@@ -169,6 +203,13 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
                 </span>
               ))}
               {sinCanal && <span className="text-[11px] font-medium text-red-600">No se le puede avisar</span>}
+            </div>
+            {/* Su enlace de pago, al lado de por dónde escribirle: el caso en
+                que hace falta es siempre el mismo —el padre llama diciendo que
+                no le llegó— y entonces hay que copiarlo y mandárselo por donde
+                sea que sí se le pueda escribir. */}
+            <div className="mt-2">
+              <EnlacePagoFamilia clientId={clientId} />
             </div>
           </div>
 
@@ -254,47 +295,17 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
         )}
       </Panel>
 
-      {/* La mensualidad automática: es lo que explica por qué aparecen cargos
-          sin que nadie los cree — y, sobre todo, por qué DEJAN de aparecer.
-          Un plan pausado no avisa a nadie; la familia simplemente deja de
-          recibir facturas. */}
-      {data.recurrentes.length > 0 && (
-        <Panel titulo="Mensualidad automática">
-          <div className="divide-y divide-gray-100">
-            {data.recurrentes.map((r) => (
-              <div key={r.matriculaId} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
-                <span className="font-medium text-gray-900">{r.alumno}</span>
-                <span className="text-xs text-gray-500">{r.periodo ?? 'sin período'}</span>
-                {!r.facturaRecurrenteId ? (
-                  <span className="ml-auto text-xs text-amber-700">
-                    Sin plan: sus mensualidades no se facturan solas
-                  </span>
-                ) : (
-                  <>
-                    <Badge className={r.estado === 'activa'
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'border-amber-200 bg-amber-50 text-amber-700'}>
-                      {r.estado === 'activa' ? 'Activa' : (r.estado ?? 'pausada')}
-                    </Badge>
-                    <span className="text-xs text-gray-500">
-                      {r.diaCobro ? `cobra el día ${r.diaCobro}` : 'sin día de cobro'}
-                    </span>
-                    <span className="ml-auto text-xs text-gray-600">
-                      {r.proximaEmision
-                        ? `próxima ${fmtFechaCorta(r.proximaEmision)}`
-                        : 'sin próxima emisión'}
-                    </span>
-                    <Link href={`/dashboard/facturas-recurrentes/${r.facturaRecurrenteId}`}
-                      className="shrink-0 text-xs text-zero-600 hover:underline">
-                      Ver plan
-                    </Link>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
+      {/* Los meses de todos los hijos, cada uno con los suyos.
+          Antes esto era una sola línea por hijo —«sin plan», «activa»— y para
+          ver de qué meses se trataba había que entrar ficha por ficha. El
+          cobro no se hace por alumno: el padre llama una vez y pregunta por
+          los dos. Aquí se marcan cargos de los dos y sale UNA factura. */}
+      <PeriodosDeLaFamilia
+        clientId={clientId}
+        puedeFacturar={puedeFacturar}
+        onFacturar={(ids) => { setPrevisto(null); setCargosAFacturar(ids); }}
+        onFacturarPrevisto={(p) => { setCargosAFacturar([]); setPrevisto(p); }}
+      />
 
       {/* El detalle, en pestañas: cinco tablas apiladas eran una pared. */}
       <div className="rounded-xl border border-gray-200 bg-white">
@@ -510,6 +521,26 @@ export default function FamiliaPerfilClient({ clientId }: { clientId: number }) 
           )}
         </div>
       </div>
+
+      {/* Quién cabe en la misma factura lo decide el prefill, no esta pantalla:
+          todos los que salen aquí comparten responsable de pago, que es justo
+          su condición. */}
+      <FacturarCargosDialog
+        open={cargosAFacturar.length > 0 || previsto != null}
+        onOpenChange={(o) => { if (!o) { setCargosAFacturar([]); setPrevisto(null); } }}
+        cargoIds={cargosAFacturar}
+        previsto={previsto}
+        onFacturado={(creada: FacturaCreada) => {
+          setCargosAFacturar([]);
+          setPrevisto(null);
+          toast.success(creada.encf ? `Factura ${creada.encf} creada` : 'Factura creada');
+          // Las dos: la cabecera saca la deuda de una consulta y los meses de
+          // otra, y dejar una sin refrescar enseña la factura hecha encima de
+          // la deuda vieja.
+          void revalidar(`/api/administracion-escolar/responsables/${clientId}`);
+          void revalidar(`/api/administracion-escolar/responsables/${clientId}/periodos`);
+        }}
+      />
     </section>
   );
 }
@@ -556,8 +587,8 @@ function exportar(vista: (typeof VISTAS)[number], d: DetalleResponsable) {
 
 function Chip({ k, v }: { k: string; v: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs">
-      <span className="text-gray-400">{k}</span>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-2.5 py-1 text-xs">
+      <span className="text-violet-400">{k}</span>
       <b className="font-semibold text-gray-800">{v}</b>
     </span>
   );
