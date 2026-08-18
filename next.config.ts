@@ -19,12 +19,18 @@ const appVersion = JSON.parse(readFileSync('./package.json', 'utf8')).version ??
  * otro host, y con `'self'` a secas el navegador la bloquea. No es un fallo
  * cosmético: la precarga es la que hace que navegar entre módulos sea
  * instantáneo.
+ *
+ * `googletagmanager.com` y `google-analytics.com` — Google Analytics, que se
+ * carga SOLO en la web pública (ver `components/analytics/google-analytics.tsx`).
+ * La cabecera es una sola para todo el sitio, así que la lista permite el
+ * origen en todas partes; lo que decide dónde se mide es dónde se monta la
+ * etiqueta, y no está montada en el panel ni en las rutas con token.
  */
 const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.zero.com.do https://api.stripe.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com; frame-src 'self' blob: https://js.stripe.com; object-src 'none'; base-uri 'self'",
   },
   {
     key: 'Strict-Transport-Security',

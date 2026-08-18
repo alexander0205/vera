@@ -25,7 +25,7 @@ const CORREO = 'soporte@zero.com.do';
 export default function PrivacidadPage() {
   return (
     <article>
-      <Cabecera titulo="Política de Privacidad" actualizado="14 de agosto de 2026">
+      <Cabecera titulo="Política de Privacidad" actualizado="18 de agosto de 2026">
         <p>
           Zero es un sistema de facturación electrónica, punto de venta y administración
           escolar para la República Dominicana, operado por <strong>Yisrael Technology LLC</strong>.
@@ -143,6 +143,10 @@ export default function PrivacidadPage() {
             detalle: 'Solo si eliges entrar con Google. Recibimos de ellos tu nombre, correo y foto; no les mandamos nada tuyo.',
           },
           {
+            que: 'Google Analytics',
+            detalle: 'Visitas a las páginas públicas de zero.com.do —la portada, los precios, el contacto, estos documentos y las pantallas de acceso— para saber cuánta gente llega y por dónde. No está puesto dentro del sistema: ni el panel, ni el punto de venta, ni las pantallas de colegio, ni los enlaces de pago que reciben las familias.',
+          },
+          {
             que: 'SIGERD (MINERD)',
             detalle: 'Solo si tu colegio activa la importación de datos oficiales. Los datos vienen de ellos hacia Zero.',
           },
@@ -230,10 +234,23 @@ export default function PrivacidadPage() {
 
       <Seccion n={10} titulo="Cookies">
         <p>
-          Usamos las cookies imprescindibles para mantener tu sesión abierta y para
-          recordar preferencias tuyas dentro del sistema, como la empresa con la que estás
-          trabajando. <strong>No usamos cookies de publicidad ni de seguimiento entre
-          sitios.</strong>
+          Dentro del sistema usamos las cookies imprescindibles para mantener tu sesión
+          abierta y para recordar preferencias tuyas, como la empresa con la que estás
+          trabajando.
+        </p>
+        <p>
+          En las páginas públicas de zero.com.do —la portada, los precios, el contacto,
+          estos documentos y las pantallas de acceso— Google Analytics deja además sus
+          cookies de medición, que sirven para contar visitas y distinguir una sesión de
+          otra. Nos dicen qué páginas se ven y desde dónde se llega; no llevan tu nombre ni
+          tu correo, y de la dirección de las páginas solo viajan los parámetros de campaña
+          (los <span className="whitespace-nowrap">utm_*</span>), nunca los enlaces con
+          clave como el de recuperar la contraseña o el de pago que recibe una familia.
+        </p>
+        <p>
+          <strong>No usamos cookies de publicidad ni le vendemos tus datos a nadie.</strong>{' '}
+          Si prefieres no aparecer en esa medición, puedes bloquearla desde tu navegador o
+          con la extensión oficial de Google; el sistema funciona igual.
         </p>
       </Seccion>
 

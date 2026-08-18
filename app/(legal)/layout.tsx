@@ -12,6 +12,7 @@
 
 import Link from 'next/link';
 import { LogoZero } from '@/components/marca-zero';
+import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -37,6 +38,8 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
           © {new Date().getFullYear()} Zero · Yisrael Technology LLC
         </div>
       </footer>
+
+      <GoogleAnalytics />
     </div>
   );
 }

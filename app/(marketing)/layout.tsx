@@ -12,6 +12,7 @@
  */
 
 import type { Metadata } from 'next';
+import { GoogleAnalytics } from '@/components/analytics/google-analytics';
 import { CabeceraMarketing } from './_cabecera';
 import { PieMarketing } from './_pie';
 
@@ -32,6 +33,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <CabeceraMarketing />
       <main className="flex-1">{children}</main>
       <PieMarketing />
+      <GoogleAnalytics />
     </div>
   );
 }
