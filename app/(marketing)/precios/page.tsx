@@ -18,14 +18,18 @@ import {
 } from '@/lib/config/plans';
 import { MODULE_LABELS, type ModuleKey } from '@/lib/config/modules';
 import { PRUEBA, diasDePrueba } from '@/lib/config/suscripcion';
-import { Contenedor, IconoWhatsApp, Iconos, LazoDeFondo, LlamadoFinal, TarjetasContacto } from '../_piezas';
+import { Contenedor, IconoWhatsApp, Iconos, LazoDeFondo, TarjetasContacto } from '../_piezas';
 import { Acordeon, type Pregunta } from '../_acordeon';
 import { Planes, type Celda, type Grupo, type LineaVista, type PlanVista } from './_planes';
+import { CierreDePrecios, PerfilProvider } from './_perfil';
 
 export const metadata: Metadata = {
   title: 'Planes y precios',
+  // Sin cifras de colegio tampoco aquí: la descripción es lo que Google enseña
+  // debajo del enlace, y prometer «los precios de los colegios» para que al
+  // entrar no haya ninguno es la peor forma de recibir a un director.
   description:
-    'Los ocho planes de Zero con sus precios, topes y funcionalidades: facturación electrónica, punto de venta y colegios. Sin contrato mínimo.',
+    'Planes de facturación electrónica y punto de venta con sus precios y topes. Los tramos de colegio se arman según el tamaño del colegio. Sin contrato mínimo.',
 };
 
 // ─── Traductores de catálogo a celda ─────────────────────────────────────────
@@ -207,7 +211,18 @@ function vistaDeLinea(lineaKey: string): LineaVista | null {
       key: plan.key,
       nombre: plan.name,
       descripcion: plan.ui.description,
-      precio,
+      // Un colegio no se vende por catálogo: lo que paga depende de cuántos
+      // estudiantes tiene, de cuánta implementación necesita y de lo que ya
+      // trae puesto. Publicar la cifra hace que el colegio de 600 se descarte
+      // solo y que el de 80 crea que le sobra; lo que se quiere es la
+      // conversación, no el número.
+      //
+      // Va en `null` desde el servidor y no escondido con CSS: todo lo que se
+      // le pase al componente cliente viaja dentro del HTML de una página
+      // pública, así que una cifra «oculta» seguiría ahí para quien mire el
+      // fuente. El precio sigue intacto en el catálogo para Stripe y para las
+      // pantallas con sesión.
+      precio: esColegio ? null : precio,
       destacado: plan.ui.highlighted,
       topes,
       // «Todo X, más» sale del plan anterior de la misma línea, no de un texto
@@ -309,7 +324,7 @@ export default function PreciosPage() {
   ];
 
   return (
-    <>
+    <PerfilProvider>
       {/* Sin `overflow-hidden`, por lo mismo que en la portada: recortaba el
           lazo de fondo con una línea recta. El desborde horizontal lo tapa el
           layout. */}
@@ -421,14 +436,9 @@ export default function PreciosPage() {
           <TarjetasContacto />
         </Contenedor>
         <Contenedor className="py-14">
-          <LlamadoFinal
-            titulo="Armemos tu plan juntos"
-            detalle="30 minutos con un especialista: vemos tu operación y te dejamos el presupuesto por escrito."
-            accion="Solicitar demo"
-            href="/contacto"
-          />
+          <CierreDePrecios />
         </Contenedor>
       </section>
-    </>
+    </PerfilProvider>
   );
 }

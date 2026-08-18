@@ -17,7 +17,14 @@ import { ComparativaIndustrias } from './_industrias';
 
 // ─── Cifras derivadas del catálogo ───────────────────────────────────────────
 
-const PRECIO_MINIMO = Math.min(...PLANS.map(p => p.price));
+/**
+ * El «desde» se calcula SIN los tramos de colegio, que en el sitio público no
+ * llevan precio (ver `precios/page.tsx`): hoy el mínimo lo pone igual el plan
+ * de entrada de facturación, pero atado a `PLANS` entero bastaría con abaratar
+ * un tramo escolar para que la portada publicara una cifra de colegio que la
+ * página de precios ya no enseña.
+ */
+const PRECIO_MINIMO = Math.min(...PLANS.filter(p => p.familia !== 'colegio').map(p => p.price));
 const CANTIDAD_PLANES = PLANS.length;
 const HAY_SIN_TOPE = PLANS.some(p => p.limits.docs === -1);
 const PRECIO_POS = ADDONS.find(a => a.key === 'pos')?.price ?? 0;

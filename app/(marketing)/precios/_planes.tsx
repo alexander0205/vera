@@ -10,6 +10,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { usePerfil } from './_perfil';
 import Link from 'next/link';
 import { LazoZero } from '@/lib/marca/isotipo';
 import { Cheque, Contenedor, Iconos } from '../_piezas';
@@ -35,7 +36,13 @@ export type PlanVista = {
   key: string;
   nombre: string;
   descripcion: string;
-  precio: number;
+  /**
+   * `null` = este plan no publica precio, y en su lugar va la invitación a
+   * hablar con un representante. Hoy son los tramos de colegio: el servidor
+   * ni siquiera manda la cifra (ver `page.tsx`), así que aquí no hay nada que
+   * esconder — si no vino, no existe.
+   */
+  precio: number | null;
   destacado: boolean;
   /**
    * `sinTope` en vez de la palabra: el lazo ES el infinito de la marca, y en
@@ -104,7 +111,10 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
   const negocio = lineas.filter(l => !l.esColegio);
   const colegio = lineas.filter(l => l.esColegio);
 
-  const [perfil, setPerfil] = useState<'pyme' | 'colegio'>('pyme');
+  // El perfil no se guarda aquí: lo comparte la página entera, porque la
+  // banda de cierre se pinta muy por debajo de este componente y tiene que
+  // ofrecerle al colegio lo mismo que las tarjetas. Ver `_perfil.tsx`.
+  const { perfil, elegirPerfil: fijarPerfil } = usePerfil();
   const [lineaNegocio, setLineaNegocio] = useState(negocio[0]?.key ?? '');
   const [vistaTabla, setVistaTabla] = useState(lineas[0]?.key ?? '');
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({});
@@ -117,7 +127,7 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
   const tabla = lineas.find(l => l.key === vistaTabla) ?? lineas[0];
 
   function elegirPerfil(p: 'pyme' | 'colegio') {
-    setPerfil(p);
+    fijarPerfil(p);
     // La tabla de abajo sigue al perfil: quedarse comparando planes de colegio
     // después de decir «soy una pyme» es exactamente lo que confunde.
     const destino = p === 'colegio' ? colegio[0] : negocio.find(l => l.key === lineaNegocio) ?? negocio[0];
@@ -232,12 +242,27 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                   {p.descripcion}
                 </div>
 
-                <div className="mt-4 flex items-baseline gap-1">
-                  <span className={`font-[family-name:var(--font-display)] text-[28px] font-semibold tracking-[-1px] ${oscuro ? 'text-white' : 'text-[#0f1118]'}`}>
-                    {usd(p.precio)}
-                  </span>
-                  <span className={`text-[12.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>/ mes</span>
-                </div>
+                {/* Sin cifra, pero con motivo: una tarjeta que enseña el
+                    tramo entero y deja el precio en blanco parece un olvido, y
+                    el visitante se va a buscarlo a otro lado. Decir de qué
+                    depende convierte la ausencia en una razón. */}
+                {p.precio === null ? (
+                  <div className="mt-4">
+                    <div className={`font-[family-name:var(--font-display)] text-[19px] font-semibold leading-tight tracking-[-.6px] ${oscuro ? 'text-white' : 'text-[#0f1118]'}`}>
+                      Precio a la medida
+                    </div>
+                    <p className={`mt-1.5 text-pretty text-[11.5px] leading-snug ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>
+                      Depende de cuántos estudiantes tienes y de la implementación que necesites.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex items-baseline gap-1">
+                    <span className={`font-[family-name:var(--font-display)] text-[28px] font-semibold tracking-[-1px] ${oscuro ? 'text-white' : 'text-[#0f1118]'}`}>
+                      {usd(p.precio)}
+                    </span>
+                    <span className={`text-[12.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>/ mes</span>
+                  </div>
+                )}
 
                 <div className={`mt-4 flex flex-col gap-2 border-y py-3.5 ${oscuro ? 'border-white/15' : 'border-[#edeff5]'}`}>
                   {p.topes.map(t => (
@@ -258,16 +283,23 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                   ))}
                 </div>
 
-                {/* Un colegio no se compra solo: son US$135–500 al mes, hay
-                    que migrar matrículas y alguien tiene que enseñárselo a la
-                    secretaria. Ahí la demo es el camino honesto. Los planes de
+                {/* Un colegio no se compra solo: hay que migrar matrículas,
+                    alguien tiene que enseñárselo a la secretaria y el precio
+                    se arma con sus números. Ahí la conversación es el camino
+                    honesto, y por eso el botón la ofrece en vez de mandar a un
+                    registro que no va a poder completar. Los planes de
                     facturación sí se compran solos —hay prueba de verdad, con
                     su tarjeta y su reloj en Stripe—, y mandarlos a un
                     formulario sería ponerle una cita a algo que ya funciona
-                    sin nosotros. */}
+                    sin nosotros.
+
+                    El `?perfil=colegio` llega al formulario de contacto: quien
+                    viene de esta tarjeta ya dijo que es un colegio, y volver a
+                    preguntárselo le enseña de entrada las preguntas de una
+                    pyme. */}
                 <Link
-                  href={esColegio ? '/contacto' : '/sign-up'}
-                  className={`mt-4 flex h-11 items-center justify-center rounded-xl font-[family-name:var(--font-display)] text-[13.5px] font-semibold transition ${
+                  href={esColegio ? '/contacto?perfil=colegio' : '/sign-up'}
+                  className={`mt-4 flex h-11 items-center justify-center rounded-xl px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight transition ${
                     p.destacado
                       ? 'border-[1.5px] border-zero-600 bg-zero-600 text-white hover:border-zero-700 hover:bg-zero-700'
                       : oscuro
@@ -275,7 +307,7 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                         : 'border-[1.5px] border-[#dce1f0] bg-white text-[#102a72] hover:border-zero-600 hover:text-zero-600'
                   }`}
                 >
-                  {esColegio ? 'Solicitar demo' : `Empieza gratis ${linea.diasPrueba} días`}
+                  {esColegio ? 'Hablar con un representante' : `Empieza gratis ${linea.diasPrueba} días`}
                 </Link>
 
                 <div className={`mt-5 text-[11px] font-semibold uppercase tracking-[.5px] ${oscuro ? 'text-white/70' : 'text-gray-500'}`}>
@@ -359,9 +391,15 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
                   <div className={`font-[family-name:var(--font-display)] text-xs font-semibold leading-tight ${p.destacado ? 'text-zero-600' : 'text-[#4a5164]'}`}>
                     {p.nombre}
                   </div>
-                  <div className={`mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold ${p.destacado ? 'text-zero-600' : 'text-[#0f1118]'}`}>
-                    {usd(p.precio)}
-                  </div>
+                  {p.precio === null ? (
+                    <div className={`mt-1 text-pretty text-[10.5px] font-semibold leading-tight ${p.destacado ? 'text-zero-600' : 'text-[#4a5164]'}`}>
+                      Precio a la medida
+                    </div>
+                  ) : (
+                    <div className={`mt-1 font-[family-name:var(--font-display)] text-[13px] font-semibold ${p.destacado ? 'text-zero-600' : 'text-[#0f1118]'}`}>
+                      {usd(p.precio)}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -434,8 +472,13 @@ export function Planes({ lineas }: { lineas: LineaVista[] }) {
             </div>
           </div>
         </div>
+        {/* El pie de la tabla habla de la tabla que se está viendo: repetir
+            «precios mensuales en dólares» sobre cuatro columnas sin una sola
+            cifra es contradecirse en la misma pantalla. */}
         <p className="mt-3 text-[11.5px] text-gray-500">
-          Precios mensuales en dólares estadounidenses, sin ITBIS. El lazo de Zero indica sin tope.
+          {tabla.esColegio
+            ? 'El precio de cada tramo se arma con los números de tu colegio. El lazo de Zero indica sin tope.'
+            : 'Precios mensuales en dólares estadounidenses, sin ITBIS. El lazo de Zero indica sin tope.'}
         </p>
       </Contenedor>
     </>
@@ -478,8 +521,12 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
         <h2 className="mt-3.5 font-[family-name:var(--font-display)] text-[clamp(1.4rem,4vw,1.7rem)] font-semibold leading-tight tracking-[-1px]">
           ¿Cuál plan me toca?
         </h2>
+        {/* En colegio la promesa es el TRAMO, no la cifra: prometer «con su
+            precio» y luego enseñar una invitación a hablar sería quedarle mal
+            al visitante en la misma pantalla. */}
         <p className="mt-3 text-pretty text-[13.5px] leading-relaxed text-[#5c6373]">
-          Mueve dos barras y te decimos el plan exacto de <strong className="font-semibold">{linea.nombre}</strong> con su precio.
+          Mueve dos barras y te decimos el plan exacto de <strong className="font-semibold">{linea.nombre}</strong>
+          {linea.esColegio ? ' que te toca.' : ' con su precio.'}
         </p>
 
         {esColegio ? (
@@ -515,13 +562,33 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
               <div className="mt-1 font-[family-name:var(--font-display)] text-[23px] font-semibold tracking-[-.7px]">
                 {linea.nombre} · {sugerido.nombre}
               </div>
-              <div className="mt-4 flex items-baseline gap-1.5">
-                <span className="font-[family-name:var(--font-display)] text-[38px] font-semibold tracking-[-1.5px] tabular-nums">
-                  {usd(sugerido.precio)}
-                </span>
-                <span className="text-[13px] text-white/70">/ mes</span>
-              </div>
-              <div className="mt-1 text-[11.5px] text-white/60">Sin costo de instalación</div>
+              {/* El recomendador sigue haciendo su trabajo —dice qué tramo le
+                  toca y qué trae— y solo se calla el número. Es el sitio donde
+                  más se nota la ausencia, porque el visitante acaba de mover
+                  la barra hasta sus estudiantes, así que aquí es donde más
+                  falta hace explicar de qué depende. */}
+              {sugerido.precio === null ? (
+                <>
+                  <div className="mt-4 font-[family-name:var(--font-display)] text-[22px] font-semibold leading-tight tracking-[-.8px]">
+                    Precio a la medida
+                  </div>
+                  <p className="mt-2 text-pretty text-[12.5px] leading-relaxed text-white/70">
+                    El de un colegio no sale de una lista: depende de cuántos estudiantes tiene, de
+                    cuánto hay que migrar y de lo que ya tenga puesto. Escríbenos y lo armamos con
+                    tus números.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="mt-4 flex items-baseline gap-1.5">
+                    <span className="font-[family-name:var(--font-display)] text-[38px] font-semibold tracking-[-1.5px] tabular-nums">
+                      {usd(sugerido.precio)}
+                    </span>
+                    <span className="text-[13px] text-white/70">/ mes</span>
+                  </div>
+                  <div className="mt-1 text-[11.5px] text-white/60">Sin costo de instalación</div>
+                </>
+              )}
               <div className="my-4 h-px bg-white/15" />
               <div className="flex flex-col gap-2.5">
                 {sugerido.topes.map(t => (
@@ -546,13 +613,19 @@ function Recomendador({ linea, perfil }: { linea: LineaVista; perfil: 'pyme' | '
           )}
 
           <Link
-            href="/contacto"
-            className="mt-6 flex h-11 items-center justify-center rounded-xl bg-white font-[family-name:var(--font-display)] text-[13.5px] font-semibold text-[#102a72] transition hover:-translate-y-0.5"
+            href={linea.esColegio ? '/contacto?perfil=colegio' : '/contacto'}
+            className="mt-6 flex h-11 items-center justify-center rounded-xl bg-white px-3 text-center font-[family-name:var(--font-display)] text-[13.5px] font-semibold leading-tight text-[#102a72] transition hover:-translate-y-0.5"
           >
-            {sugerido ? 'Solicitar este plan' : 'Hablar con ventas'}
+            {!sugerido
+              ? 'Hablar con ventas'
+              : sugerido.precio === null
+                ? 'Hablar con un representante'
+                : 'Solicitar este plan'}
           </Link>
           <div className="mt-3 text-center text-[11px] text-white/55">
-            Precios en dólares, sin ITBIS. Facturación mensual.
+            {linea.esColegio
+              ? 'Sin costo de instalación. Facturación mensual.'
+              : 'Precios en dólares, sin ITBIS. Facturación mensual.'}
           </div>
         </div>
       </div>

@@ -14,7 +14,7 @@
  * su mensaje se muestra igual que cualquier otro error.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CONTACTO, Cheque, IconoWhatsApp, Iconos } from '../_piezas';
 
 type Perfil = 'pyme' | 'colegio';
@@ -49,6 +49,24 @@ export function FormularioContacto() {
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
+
+  /**
+   * El perfil puede venir dado desde fuera (`/contacto?perfil=colegio`).
+   *
+   * Las tarjetas de colegio de `/precios` no llevan precio y mandan aquí: quien
+   * llega por ese camino ya dijo que es un colegio, y recibirlo con las
+   * preguntas de una pyme —tamaño del equipo en vez de estudiantes— es hacerle
+   * repetir lo que acaba de decir.
+   *
+   * Se lee del `location` en un efecto y no con `useSearchParams` a propósito:
+   * el hook obliga a colgar el formulario de un `Suspense`, y su fallback se
+   * vería en la página que más convierte del sitio. Aquí el servidor pinta el
+   * formulario completo y el ajuste ocurre al montar.
+   */
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('perfil');
+    if (p === 'pyme' || p === 'colegio') setPerfil(p);
+  }, []);
 
   function cambiarPerfil(p: Perfil) {
     setPerfil(p);
