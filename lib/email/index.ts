@@ -82,7 +82,7 @@ export async function enviarAlertaEmail(asunto: string, mensaje: string): Promis
 }
 
 export async function sendEmailVerificationEmail(email: string, token: string, name: string | null) {
-  const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/verify-email?token=${encodeURIComponent(token)}`;
+  const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   const safeName = escapeHtml(name);
   const res = await resend.emails.send({
     from: 'Zero <noreply@zero.com.do>',
