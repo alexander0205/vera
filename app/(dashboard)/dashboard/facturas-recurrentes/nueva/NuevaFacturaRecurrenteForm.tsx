@@ -30,6 +30,7 @@ import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
 import { SectionCard } from '../../facturas/nueva/sections/SectionCard';
 import { AccordionSection } from '../../facturas/nueva/sections/AccordionSection';
 import { ClienteSection } from '../../facturas/nueva/sections/ClienteSection';
+import { ModalNuevoCliente } from '../../facturas/nueva/modals/ModalNuevoCliente';
 import { ItemsTable } from '../../facturas/nueva/sections/ItemsTable';
 import { ColumnasToggle } from '../../facturas/nueva/sections/ColumnasToggle';
 import { Terminos, Notas } from '../../facturas/nueva/sections/TerminosNotas';
@@ -290,6 +291,11 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
     }
   }, [contextoEscolar, initialPlan?.items]);
   const [items, dispatchItems] = useItemsState(initialItems);
+
+  // Crear cliente sin salir de aquí. Antes esto navegaba a /clientes/nuevo, y
+  // volver dejaba el formulario de la suscripción en blanco: había que teclearlo
+  // todo otra vez.
+  const [showNuevoCliente, setShowNuevoCliente] = useState(false);
 
   // ── Beneficiarios (dependientes del cliente) — igual que en factura ──────────
   const [dependientesCliente, setDependientesCliente] = useState<
@@ -723,7 +729,7 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
                     buscarClientes={buscarClientes}
                     onSelectCliente={seleccionarCliente}
                     onClearCliente={limpiarCliente}
-                    onOpenNuevoCliente={() => router.push('/dashboard/clientes/nuevo')}
+                    onOpenNuevoCliente={() => setShowNuevoCliente(true)}
                     regla={regla}
                     rncManual={rncManual} rncManualNombre={rncManualNombre}
                     setRncManual={setRncManual} setRncManualNombre={setRncManualNombre}
@@ -1324,6 +1330,12 @@ export default function NuevaFacturaRecurrenteForm({ initialPerfil, initialPlan,
           />
         </Box>
       </Box>
+
+      <ModalNuevoCliente
+        open={showNuevoCliente}
+        onClose={() => setShowNuevoCliente(false)}
+        onCreated={(c) => { seleccionarCliente(c); setShowNuevoCliente(false); }}
+      />
 
       {proximamenteDialog}
     </Box>

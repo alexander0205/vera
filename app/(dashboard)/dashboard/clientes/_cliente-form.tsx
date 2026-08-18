@@ -20,6 +20,21 @@ interface Dependiente {
   apellido: string;
 }
 
+/**
+ * Lo mínimo que necesita quien crea un cliente desde otra pantalla (factura,
+ * cotización, POS) para pintarlo en el selector sin volver a pedirlo.
+ *
+ * Vive aquí y no en el diálogo porque el diálogo importa este formulario: al
+ * revés sería un ciclo.
+ */
+export interface ClienteCreado {
+  id:          number;
+  razonSocial: string;
+  rnc:         string | null;
+  email:       string | null;
+  telefono:    string | null;
+}
+
 const EMPTY_FORM = { razonSocial: '', rnc: '', email: '', telefono: '', celular: '', whatsapp: '', direccion: '', descripcion: '' };
 type ClienteForm = typeof EMPTY_FORM;
 
@@ -68,7 +83,8 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
  *   - Crear:  se acumulan en memoria y se guardan tras crear el cliente.
  */
 export default function ClienteForm({
-  clienteId, embebido = false, valoresIniciales, onGuardado, onCancelar,
+  clienteId, embebido = false, dependientesEditables = true,
+  valoresIniciales, onGuardado, onCancelar,
 }: {
   clienteId?: number;
   /**
@@ -78,6 +94,15 @@ export default function ClienteForm({
    * separaría del original al primer campo nuevo.
    */
   embebido?: boolean;
+  /**
+   * Si se pueden agregar dependientes desde aquí.
+   *
+   * Apagado solo en la ficha del alumno: ahí el dependiente es el alumno que
+   * se está vinculando y lo agrega la propia ficha al guardar, así que la caja
+   * de «Nombre / Apellido / Agregar» crearía un segundo hijo por error. En
+   * todos los demás sitios va encendida — es lo que evita el crear-y-editar.
+   */
+  dependientesEditables?: boolean;
   /**
    * Datos con los que arrancar el formulario al CREAR.
    *
@@ -89,9 +114,10 @@ export default function ClienteForm({
   /**
    * Devuelve también el nombre: quien lo embebe lo necesita para pintarlo, y
    * pedirlo otra vez al servidor era un viaje para leer lo que se acaba de
-   * escribir aquí mismo.
+   * escribir aquí mismo. El tercer argumento trae además RNC, email y teléfono,
+   * que es lo que el selector de la factura pinta bajo el nombre.
    */
-  onGuardado?: (clienteId: number, razonSocial: string) => void;
+  onGuardado?: (clienteId: number, razonSocial: string, cliente: ClienteCreado) => void;
   onCancelar?: () => void;
 }) {
   const router = useRouter();
@@ -258,7 +284,16 @@ export default function ClienteForm({
         }
       }
 
-      if (onGuardado) { onGuardado(id, form.razonSocial.trim()); return; }
+      if (onGuardado) {
+        onGuardado(id, form.razonSocial.trim(), {
+          id,
+          razonSocial: form.razonSocial.trim(),
+          rnc:      form.rnc.trim()      || null,
+          email:    form.email.trim()    || null,
+          telefono: form.telefono.trim() || null,
+        });
+        return;
+      }
       router.push('/dashboard/clientes');
       router.refresh();
     } catch (e: unknown) {
@@ -364,9 +399,9 @@ export default function ClienteForm({
             Dependientes
           </Typography>
           <Typography sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
-            {embebido
-              ? 'El alumno se agrega solo al guardar. Aquí se ven los que ya tiene este contacto.'
-              : 'Personas asociadas al cliente. Puedes agregarlas desde ya.'}
+            {dependientesEditables
+              ? 'Personas asociadas al cliente. Puedes agregarlas desde ya.'
+              : 'El alumno se agrega solo al guardar. Aquí se ven los que ya tiene este contacto.'}
           </Typography>
         </Box>
 
@@ -376,7 +411,7 @@ export default function ClienteForm({
           </Box>
         )}
 
-        {!embebido && (
+        {dependientesEditables && (
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1, alignItems: { sm: 'flex-end' } }}>
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
             <Typography component="label" sx={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151' }}>
@@ -424,7 +459,9 @@ export default function ClienteForm({
         {dependientes.length === 0 ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, py: 4, textAlign: 'center', fontSize: '0.875rem', color: '#9ca3af' }}>
             <Users size={32} style={{ color: '#d1d5db' }} />
-            <Typography sx={{ fontSize: '0.875rem', color: 'inherit' }}>Sin dependientes. Agrega el primero arriba.</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: 'inherit' }}>
+              {dependientesEditables ? 'Sin dependientes. Agrega el primero arriba.' : 'Sin dependientes.'}
+            </Typography>
           </Box>
         ) : (
           <Box
