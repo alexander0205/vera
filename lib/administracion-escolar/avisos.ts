@@ -1,5 +1,6 @@
 import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
+import { getOCrearLink, urlDelLink } from './link-pago';
 import {
   adminEscolarAvisosEnviados, adminEscolarCargos, adminEscolarConceptoCuotas,
   adminEscolarConceptosPago, adminEscolarEstudiantes, clients,
@@ -62,6 +63,16 @@ export interface FilaAviso {
    * le llegaría todo duplicado.
    */
   destinatario: string | null;
+  /**
+   * La factura que cubre este cargo, si ya se emitió.
+   *
+   * Decide si el aviso lleva enlace de pago. Un cargo sin factura NO se puede
+   * cobrar —el cobro es de un documento, ver aprobarComprobante()—, así que
+   * mandarle el enlace es llevar al padre a una página donde transfiere, sube
+   * su comprobante, y el colegio no puede aplicarlo. Le queda un pago en el
+   * aire y al colegio una explicación que dar.
+   */
+  ecfDocumentId: number | null;
   /** Los cuatro son distintos y no siempre coinciden. Uno por canal. */
   email: string | null;
   whatsapp: string | null;
@@ -201,6 +212,7 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
       apellidos: adminEscolarEstudiantes.apellidos,
       concepto: adminEscolarConceptosPago.nombre,
       saldoCentavos: adminEscolarCargos.saldoCentavos,
+      ecfDocumentId: adminEscolarCargos.ecfDocumentId,
       fechaEmision: adminEscolarConceptoCuotas.fechaEmision,
       fechaVencimiento: adminEscolarCargos.fechaVencimiento,
       cobraMora: adminEscolarConceptosPago.cobraMora,
@@ -252,12 +264,12 @@ export async function candidatos(teamId: number): Promise<FilaAviso[]> {
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-function enLetra(iso: string): string {
+export function enLetra(iso: string): string {
   const [, m, d] = iso.split('-').map(Number);
   return `${d} de ${MESES[m - 1]}`;
 }
 
-const pesos = (c: number) => `RD$${(c / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+export const pesos = (c: number) => `RD$${(c / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
 /**
  * El texto de cada aviso.
@@ -322,12 +334,14 @@ export interface EnvioHecho {
 async function reservar(
   teamId: number, cargoId: number, aviso: Aviso, offsetDias: number,
   canal: Canal, destino: string | null,
-): Promise<boolean> {
+): Promise<number | null> {
   const filas = await db.insert(adminEscolarAvisosEnviados)
     .values({ teamId, cargoId, tipo: aviso, offsetDias, canal, destino })
     .onConflictDoNothing()
     .returning({ id: adminEscolarAvisosEnviados.id });
-  return filas.length > 0;
+  // Devuelve el id, no un booleano: hace falta para colgarle después el
+  // `mensajeId` y poder preguntar si el aviso llegó de verdad.
+  return filas[0]?.id ?? null;
 }
 
 async function liberar(cargoId: number, aviso: Aviso, offsetDias: number, canal: Canal) {
@@ -370,7 +384,10 @@ export interface OpcionesDespacho {
   restantePorCanal?: Partial<Record<Canal, number>>;
   enviar: {
     correo: (destino: string, texto: string, p: AvisoPendiente) => Promise<void>;
-    whatsapp: (destino: string, texto: string) => Promise<void>;
+    // Lleva el aviso entero, no solo el texto: fuera de la ventana de 24 h
+    // WhatsApp solo admite plantillas, y para elegir la plantilla y rellenar
+    // sus variables hace falta saber de qué aviso se trata.
+    whatsapp: (destino: string, texto: string, p: AvisoPendiente, enlace: string | null) => Promise<string | null>;
     sms: (destino: string, texto: string) => Promise<void>;
   };
 }
@@ -415,12 +432,44 @@ export async function despachar(
     for (const x of previos) yaSalio.add(`${x.cargoId}:${x.tipo}:${x.offsetDias}:${x.canal}`);
   }
 
+  /** clientId → URL de su enlace de pago, dentro de esta tanda. */
+  const enlaces = new Map<number, string>();
+
   for (const p of pendientes) {
     // Se corta la tanda, no se marca nada: lo que queda sigue pendiente para
     // la corrida siguiente. Cortar aquí y no dentro del canal evita partir un
     // mismo aviso entre dos tandas.
     if (salidos >= limite) break;
     const { largo, corto } = redactar(p, opts.colegio);
+
+    // El enlace de pago va pegado al aviso: sin él el padre sabe que debe pero
+    // no tiene a dónde ir, y termina llamando al colegio. Solo en `largo`
+    // —correo y WhatsApp—; en SMS los 60 caracteres de la URL se comen la mitad
+    // del mensaje y lo parten en dos, que se cobran como dos.
+    //
+    // Se memoriza por responsable dentro de la tanda: una familia con tres
+    // hijos genera tres avisos y el enlace es el mismo, así que sin la caché
+    // serían tres consultas para devolver la misma fila.
+    let conEnlace = largo;
+    let enlace: string | null = null;
+    // Sin factura no hay nada que cobrar todavía: el aviso sale igual —la deuda
+    // existe— pero sin enlace, porque el enlace promete algo que no se puede
+    // cumplir.
+    if (!opts.dryRun && p.fila.clientId != null && p.fila.ecfDocumentId != null) {
+      try {
+        let link = enlaces.get(p.fila.clientId);
+        if (!link) {
+          link = urlDelLink((await getOCrearLink(p.fila.teamId, p.fila.clientId)).token);
+          enlaces.set(p.fila.clientId, link);
+        }
+        enlace = link;
+        conEnlace = `${largo}\n\nPaga o sube tu comprobante aquí: ${link}`;
+      } catch (err) {
+        // Que no se pueda crear el enlace no puede impedir el aviso: el padre
+        // prefiere enterarse de que debe, aunque sea sin botón.
+        console.error('[avisos] no se pudo crear el enlace de pago:', err);
+      }
+    }
 
     for (const canal of p.canales) {
       // Cuota del mes agotada en este canal: se salta el canal, NO el aviso.
@@ -457,8 +506,8 @@ export async function despachar(
         continue;
       }
 
-      const nuevo = await reservar(p.fila.teamId, p.fila.cargoId, p.aviso, p.offsetDias, canal, destino);
-      if (!nuevo) continue;  // ya había salido
+      const reservaId = await reservar(p.fila.teamId, p.fila.cargoId, p.aviso, p.offsetDias, canal, destino);
+      if (reservaId == null) continue;  // ya había salido
 
       // La pausa va ANTES del envío y no después: así el último mensaje de la
       // tanda no deja la función esperando por nada.
@@ -466,8 +515,18 @@ export async function despachar(
       salidos++;
 
       try {
-        if (canal === 'correo') await opts.enviar.correo(destino, largo, p);
-        else if (canal === 'whatsapp') await opts.enviar.whatsapp(destino, largo);
+        if (canal === 'correo') await opts.enviar.correo(destino, conEnlace, p);
+        else if (canal === 'whatsapp') {
+          // Se guarda el id que devuelve el CRM. El 201 solo dice que Meta
+          // aceptó la petición; con este id se puede volver a preguntar más
+          // tarde si el mensaje LLEGÓ, y soltar la reserva si no.
+          const mensajeId = await opts.enviar.whatsapp(destino, conEnlace, p, enlace);
+          if (mensajeId) {
+            await db.update(adminEscolarAvisosEnviados)
+              .set({ mensajeId })
+              .where(eq(adminEscolarAvisosEnviados.id, reservaId));
+          }
+        }
         // Al SMS se le quitan los acentos que GSM-7 no tiene. No es cosmética:
         // una sola `í` o `ó` —"Matrícula", "Psicopedagógico"— tumba el límite
         // de 160 a 70 caracteres y el mismo aviso pasa a cobrarse como tres.

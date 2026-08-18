@@ -11,6 +11,45 @@ export interface WhatsAppTeamConfig {
   numeroWhatsapp: string | null;
 }
 
+/** Quién manda el mensaje: el número del propio negocio, o el de Zero. */
+export interface RemitenteWhatsApp {
+  apiKey: string;
+  /** true = número del negocio · false = número de Zero (respaldo). */
+  propio: boolean;
+}
+
+/**
+ * Decide con qué número sale un mensaje. Puro y sin base de datos: es la regla
+ * que decide de quién parece venir un aviso, y quería poder probarla sola.
+ *
+ * Por defecto sale por el de Zero. Conectar el número propio es una mejora que
+ * el negocio hace cuando quiere y como quiere, no un requisito para que le
+ * funcionen los avisos: pedirle a un colegio que abra una cuenta de Meta
+ * Business antes de poder recordar una mensualidad es pedirle que no los use.
+ *
+ * El suyo gana en cuanto lo conecta. Y conviene que lo conecte, porque con el
+ * de Zero: las respuestas de los padres llegan a NUESTRO buzón, no al suyo; la
+ * calificación del número la comparten todos los colegios —si los padres de uno
+ * reportan, Meta frena los envíos de TODOS—; y lo pagamos nosotros.
+ *
+ * Ojo con `conectado`: hay filas con negocio creado y número sin conectar
+ * todavía. Esas NO valen como remitente, y sin este chequeo el aviso saldría
+ * con una llave que el CRM contesta con 409.
+ */
+export function elegirRemitente(
+  propia: WhatsAppTeamConfig | null,
+  llaveZero: string | undefined,
+): RemitenteWhatsApp | null {
+  if (propia?.conectado) return { apiKey: propia.apiKey, propio: true };
+  if (llaveZero) return { apiKey: llaveZero, propio: false };
+  return null;
+}
+
+/** `elegirRemitente` con la config del team ya buscada. Devuelve null si no hay ninguna vía. */
+export async function resolverRemitente(teamId: number): Promise<RemitenteWhatsApp | null> {
+  return elegirRemitente(await getWhatsAppConfig(teamId), process.env.CRM_ZERO_API_KEY);
+}
+
 export async function getWhatsAppConfig(teamId: number): Promise<WhatsAppTeamConfig | null> {
   const [row] = await db.select().from(whatsappConfig).where(eq(whatsappConfig.teamId, teamId)).limit(1);
   if (!row) return null;
