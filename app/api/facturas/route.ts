@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     conditions.push(
       or(
         like(ecfDocuments.encf, `%${search}%`),
+        like(ecfDocuments.codigo, `%${search}%`),
         like(ecfDocuments.razonSocialComprador, `%${search}%`),
       )!,
     );
