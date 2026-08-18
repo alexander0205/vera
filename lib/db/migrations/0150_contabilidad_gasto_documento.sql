@@ -2,8 +2,11 @@
 -- caja, el gasto ya se asienta vía su movimiento (origen 'gasto_caja'); sin
 -- caja no dejaba rastro contable. Se añade 'gasto_doc' al CHECK de origen.
 -- Mismo patrón que 0088/0089; los valores anteriores no cambian.
+-- IF EXISTS porque estas migraciones se corren a mano, de una en una, y
+-- repetir una es cuestión de subir dos veces la misma flecha. Sin esto, la
+-- segunda pasada muere al no encontrar una constraint que la primera ya quitó.
 ALTER TABLE contabilidad_asientos
-  DROP CONSTRAINT contabilidad_asientos_origen_chk;
+  DROP CONSTRAINT IF EXISTS contabilidad_asientos_origen_chk;
 ALTER TABLE contabilidad_asientos
   ADD CONSTRAINT contabilidad_asientos_origen_chk
     CHECK (origen_tipo IN ('factura', 'pago', 'nota', 'anulacion', 'manual', 'compra', 'gasto_caja', 'depreciacion', 'gasto_doc'));

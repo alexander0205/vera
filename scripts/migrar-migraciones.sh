@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Las ocho migraciones de WhatsApp + enlace de pago, en orden.
+# Las migraciones de la 0140 en adelante, en orden.
 #
 #   0140  whatsapp_plantillas_aviso        qué plantilla usa cada aviso
 #   0141  whatsapp_plantillas              almacén local de plantillas
@@ -12,6 +12,9 @@
 #   0145  admin_escolar_cuentas_banco      varias cuentas por colegio
 #   0146  + documento por cuenta           el RNC puede diferir por banco
 #   0147  + plantilla_con_link             la gemela con botón «Ver factura»
+#   0148  campos del formulario de gastos
+#   0149  caja_movimientos.ecf_document_id  reconciliar la salida al editar
+#   0150  contabilidad: origen 'gasto_doc'  asiento del gasto sin caja
 #
 # Uso:
 #   POSTGRES_URL="postgres://…" bash scripts/migrar-0140-0147.sh
@@ -30,16 +33,20 @@ set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIGS="$RAIZ/lib/db/migrations"
-ARCHIVOS=(
-  0140_whatsapp_plantillas_aviso.sql
-  0141_whatsapp_plantillas.sql
-  0142_whatsapp_plantilla_boton.sql
-  0143_escolar_link_pago.sql
-  0144_avisos_entrega.sql
-  0145_escolar_cuentas_banco.sql
-  0146_cuenta_documento.sql
-  0147_plantilla_con_link.sql
-)
+# Se descubren, no se escriben.
+#
+# La lista escrita a mano fue justo lo que hizo falta arreglar: llegaron tres
+# migraciones nuevas en otra rama con los mismos números 0140-0142 que ya
+# estaban aplicadas, y el script las habría ignorado en silencio porque no
+# estaban en su lista. Se ordena por nombre, que es el orden en que van.
+ARCHIVOS=()
+while IFS= read -r f; do ARCHIVOS+=("$(basename "$f")"); done \
+  < <(find "$MIGS" -maxdepth 1 -name '01[4-9][0-9]_*.sql' -o -maxdepth 1 -name '0[2-9][0-9][0-9]_*.sql' | sort)
+
+if [ ${#ARCHIVOS[@]} -eq 0 ]; then
+  echo "No se encontró ninguna migración en $MIGS" >&2
+  exit 1
+fi
 
 COMPROBACION="SELECT
   (SELECT count(*) FROM information_schema.tables  WHERE table_name='whatsapp_plantillas_aviso')  AS m0140,
@@ -49,7 +56,11 @@ COMPROBACION="SELECT
   (SELECT count(*) FROM information_schema.columns WHERE table_name='admin_escolar_avisos_enviados' AND column_name='estado_entrega') AS m0144,
   (SELECT count(*) FROM information_schema.tables  WHERE table_name='admin_escolar_cuentas_banco') AS m0145,
   (SELECT count(*) FROM information_schema.columns WHERE table_name='admin_escolar_cuentas_banco' AND column_name='documento') AS m0146,
-  (SELECT count(*) FROM information_schema.columns WHERE table_name='whatsapp_plantillas_aviso' AND column_name='plantilla_con_link') AS m0147;"
+  (SELECT count(*) FROM information_schema.columns WHERE table_name='whatsapp_plantillas_aviso' AND column_name='plantilla_con_link') AS m0147,
+  (SELECT count(*) FROM information_schema.columns WHERE table_name='ecf_documents' AND column_name='categoria_gasto') AS m0148,
+  (SELECT count(*) FROM information_schema.columns WHERE table_name='caja_movimientos' AND column_name='ecf_document_id') AS m0149,
+  (SELECT count(*) FROM pg_constraint WHERE conname='contabilidad_asientos_origen_chk'
+     AND pg_get_constraintdef(oid) LIKE '%gasto_doc%') AS m0150;"
 
 if [ -z "${POSTGRES_URL:-}" ]; then
   echo "Falta POSTGRES_URL." >&2
@@ -89,4 +100,4 @@ done
 echo
 echo "── Después ─────────────────────────────────────────────"
 psql "$POSTGRES_URL" -X -q -c "$COMPROBACION"
-echo "   (los ocho tienen que dar 1)"
+echo "   (todos tienen que dar 1)"

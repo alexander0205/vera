@@ -34,6 +34,7 @@ import { mapToEcfApiDto } from '@/lib/ecf-api/emision-mapper';
 import { withRequestAuditContext } from '@/lib/db/audit-context';
 import { requireTurnoAbierto, configCaja } from '@/lib/caja/guard';
 import { registrarMovimiento } from '@/lib/caja/core';
+import { enviarAlertaEmail } from '@/lib/email';
 import { labelMetodo } from '@/lib/pagos/metodos';
 import { getAmbienteTenant, mensajeAmbienteNoProduccion } from '@/lib/ecf-api/ambiente';
 import { esTipoVentaFiscal } from '@/lib/ecf/categorias';
@@ -255,6 +256,40 @@ function porcionEfectivoCents(data: {
   return 0;
 }
 
+/**
+ * Avisa de que la caja quedó descuadrada por un gasto.
+ *
+ * Se manda por correo y no se lanza: quien cierra el turno se va a encontrar
+ * efectivo de más y no tiene forma de saber de dónde salió. El aviso lleva el
+ * turno y el monto exactos para poder cuadrarlo a mano.
+ *
+ * No se espera (`void`): esto ya está dentro del camino de error de una
+ * petición que sí tiene que contestar.
+ */
+async function avisarDescuadre(o: {
+  teamId: number; turnoId: number | null | undefined;
+  montoCents: number; concepto: string; error: unknown;
+}): Promise<void> {
+  try {
+    await enviarAlertaEmail(
+      '⚠️ Caja descuadrada: no se registró la salida de un gasto',
+      [
+        `Empresa: ${o.teamId}`,
+        `Turno: ${o.turnoId ?? '(sin turno)'}`,
+        `Monto que NO salió de la caja: RD$${(o.montoCents / 100).toFixed(2)}`,
+        `Concepto: ${o.concepto}`,
+        '',
+        'El gasto quedó registrado, pero su salida de efectivo no. Al cerrar el',
+        'turno va a sobrar ese monto. Hay que registrarlo a mano como salida.',
+        '',
+        `Error: ${o.error instanceof Error ? o.error.message : String(o.error)}`,
+      ].join('\n'),
+    );
+  } catch {
+    // Si tampoco se puede avisar, ya está en el log y no hay más que hacer.
+  }
+}
+
 /** Registra la salida de efectivo de un gasto/compra como movimiento GASTO del turno. */
 async function registrarSalidaGasto(opts: {
   teamId: number; turnoId: number | null | undefined;
@@ -274,7 +309,17 @@ async function registrarSalidaGasto(opts: {
       createdBy:     opts.userId,
     });
   } catch (e) {
+    /**
+     * El documento NO muere porque la caja falle — el gasto es real y ya está
+     * registrado. Pero el efectivo entonces no sale del cajón, y al cerrar el
+     * turno va a SOBRAR dinero sin que nadie sepa por qué. Una línea de consola
+     * no la lee nadie: esto se avisa.
+     */
     console.error('[ecf/emitir] registrar salida de gasto en caja falló', e);
+    void avisarDescuadre({
+      teamId: opts.teamId, turnoId: opts.turnoId,
+      montoCents: opts.montoCents, concepto: opts.descripcion, error: e,
+    });
   }
 }
 
@@ -290,17 +335,26 @@ async function reconciliarSalidaBorrador(opts: {
   montoCents: number; descripcion: string; userId: number;
 }): Promise<void> {
   try {
+    // El `teamId` va en el WHERE, no solo en la firma: esto BORRA registros de
+    // dinero, y un borrado sin ámbito de empresa es de las cosas que funcionan
+    // hasta el día que dejan de funcionar. Hoy el id de documento es global y
+    // no se cruzaría, pero eso es una propiedad del esquema, no una garantía
+    // de esta consulta.
     const movs = await db
       .select({ id: cajaMovimientos.id, turnoId: cajaMovimientos.turnoId })
       .from(cajaMovimientos)
       .where(and(
+        eq(cajaMovimientos.teamId, opts.teamId),
         eq(cajaMovimientos.ecfDocumentId, opts.ecfDocumentId),
         eq(cajaMovimientos.tipo, 'GASTO'),
       ));
     const yaEnOtroTurno   = movs.some(m => m.turnoId !== opts.turnoActualId);
     const idsTurnoActual  = movs.filter(m => m.turnoId === opts.turnoActualId).map(m => m.id);
     if (idsTurnoActual.length) {
-      await db.delete(cajaMovimientos).where(inArray(cajaMovimientos.id, idsTurnoActual));
+      await db.delete(cajaMovimientos).where(and(
+        eq(cajaMovimientos.teamId, opts.teamId),
+        inArray(cajaMovimientos.id, idsTurnoActual),
+      ));
     }
     if (!yaEnOtroTurno && opts.montoCents > 0 && opts.turnoActualId) {
       await registrarSalidaGasto({
@@ -313,7 +367,13 @@ async function reconciliarSalidaBorrador(opts: {
       });
     }
   } catch (e) {
+    // Igual que arriba: el borrador se guarda, pero la salida de caja queda a
+    // medias y el turno cierra descuadrado.
     console.error('[ecf/emitir] reconciliar salida de gasto/compra falló', e);
+    void avisarDescuadre({
+      teamId: opts.teamId, turnoId: opts.turnoActualId,
+      montoCents: opts.montoCents, concepto: opts.descripcion, error: e,
+    });
   }
 }
 
