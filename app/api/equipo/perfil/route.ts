@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db/drizzle';
 import { teams, teamMembers, users } from '@/lib/db/schema';
 import { getUser, getTeamIdForUser } from '@/lib/db/queries';
+import { getTeamModules } from '@/lib/auth/modules';
 import { METODO_PAGO_VALUES } from '@/lib/pagos/metodos';
 
 const MAX_IMG_SIZE = 1_000_000; // 1 MB en base64
@@ -164,12 +165,19 @@ export async function GET(_req: NextRequest) {
   const teamId = await getTeamIdForUser();
   if (!teamId) return NextResponse.json({ error: 'Sin equipo' }, { status: 403 });
 
-  const [[team], [member]] = await Promise.all([
+  const [[team], [member], modulosEfectivos] = await Promise.all([
     db.select().from(teams).where(eq(teams.id, teamId)).limit(1),
     db.select({ role: teamMembers.role }).from(teamMembers)
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.teamId, teamId)))
       .limit(1),
+    // El toggle POS de esta pantalla lee la columna legacy `pos_habilitado`, que
+    // el onboarding nunca escribe: cuando el plan elegido ya incluye POS el
+    // acceso a /pos sale de `getTeamModules` (plan → módulos), no de esa columna,
+    // así que el toggle salía apagado con el módulo activo. Reflejar el estado
+    // efectivo: encendido si lo enciende la columna legacy O el plan.
+    getTeamModules(teamId),
   ]);
+  const posEfectivo = team.posHabilitado || modulosEfectivos.includes('pos');
 
   return NextResponse.json({
     razonSocial:       team.razonSocial,
@@ -203,8 +211,8 @@ export async function GET(_req: NextRequest) {
     cajaLimiteHoras:       team.cajaLimiteHoras,
     cajaAvisoMinutos:      team.cajaAvisoMinutos,
     cajaGraciaHoras:       team.cajaGraciaHoras,
-    // Módulo POS
-    posHabilitado:         team.posHabilitado,
+    // Módulo POS — estado efectivo (columna legacy o módulo del plan)
+    posHabilitado:         posEfectivo,
     posEscolarHabilitado:  team.posEscolarHabilitado,
     plazoPagoDefaultDias:  team.plazoPagoDefaultDias,
     // Métodos que obligan emisión a la DGII (bloquean borrador)
