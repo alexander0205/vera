@@ -176,6 +176,20 @@ export function TicketWidget() {
     }
     let stream: MediaStream | null = null;
     let video: HTMLVideoElement | null = null;
+
+    // Corta el stream Y suelta la referencia del <video> — algunos navegadores
+    // (Firefox sobre todo) no apagan el indicador de "compartiendo pantalla"
+    // hasta que ningún elemento sigue apuntando al stream via srcObject, no
+    // alcanza con solo llamar track.stop().
+    function stopSharing() {
+      stream?.getTracks().forEach((t) => t.stop());
+      stream = null;
+      if (video) {
+        video.pause();
+        video.srcObject = null;
+      }
+    }
+
     setLoading(true);
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -204,9 +218,9 @@ export function TicketWidget() {
       if (!ctx) throw new Error('no 2d context');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Corta la sesión de screen-share apenas tenemos el frame.
-      stream.getTracks().forEach((t) => t.stop());
-      stream = null;
+      // Corta la sesión de screen-share apenas tenemos el frame — antes de
+      // subir el archivo, no después.
+      stopSharing();
 
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('no blob');
@@ -216,7 +230,7 @@ export function TicketWidget() {
     } catch {
       // El usuario canceló el picker nativo o denegó el permiso, o se agotó el tiempo de espera — no alertamos.
     } finally {
-      stream?.getTracks().forEach((t) => t.stop());
+      stopSharing();
       setLoading(false);
     }
   }
