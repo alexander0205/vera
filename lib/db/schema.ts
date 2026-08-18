@@ -2323,6 +2323,18 @@ export const adminEscolarAvisosEnviados = pgTable('admin_escolar_avisos_enviados
   destino: varchar('destino', { length: 200 }),
   /** Qué se mandó, en palabras: «Acta de nacimiento», «Ficha de datos». */
   detalle: varchar('detalle', { length: 200 }),
+  /**
+   * El id del mensaje en el CRM. Sin esto no se puede volver a preguntar si
+   * LLEGÓ: el 201 del envío solo dice que Meta aceptó la petición, y un aviso
+   * que falla después queda marcado como enviado para siempre —esta tabla es la
+   * de idempotencia— así que el cron no lo reintenta y el padre nunca se entera.
+   */
+  mensajeId: varchar('mensaje_id', { length: 80 }),
+  /** enviado | entregado | leido | fallido · null = todavía sin preguntar. */
+  estadoEntrega: varchar('estado_entrega', { length: 16 }),
+  /** El motivo real de Meta cuando falla. */
+  errorEntrega: text('error_entrega'),
+  revisadoAt: timestamp('revisado_at'),
   enviadoAt: timestamp('enviado_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('admin_escolar_avisos_unico').on(t.cargoId, t.tipo, t.offsetDias, t.canal),
@@ -2388,6 +2400,170 @@ export const adminEscolarPagos = pgTable('admin_escolar_pagos', {
   index('admin_escolar_pagos_estudiante_idx').on(t.estudianteId),
   index('admin_escolar_pagos_cargo_idx').on(t.cargoId),
 ]);
+
+// ─── Link de pago del padre ──────────────────────────────────────────────────
+
+/**
+ * Lo que NO se multiplica: el contacto del colegio.
+ *
+ * El documento (RNC o cédula) y el teléfono son del colegio, no de la cuenta.
+ * Repetirlos en cada cuenta serían tres oportunidades de que uno quede mal
+ * escrito, y el padre vería tres RNC distintos del mismo colegio.
+ *
+ * Aparte de `teams` porque son datos del colegio como RECEPTOR de
+ * transferencias, no como contribuyente.
+ */
+export const adminEscolarDatosPago = pgTable('admin_escolar_datos_pago', {
+  id:                  serial('id').primaryKey(),
+  teamId:              integer('team_id').notNull().unique().references(() => teams.id, { onDelete: 'cascade' }),
+  /**
+   * El documento por defecto. Lo heredan las cuentas que no digan otro, que es
+   * lo normal: escribir el mismo RNC en las tres son tres sitios donde
+   * equivocarse.
+   */
+  documento:           varchar('documento', { length: 20 }),
+  telefonoAyuda:       varchar('telefono_ayuda', { length: 40 }),
+  horarioAyuda:        varchar('horario_ayuda', { length: 120 }),
+  instrucciones:       text('instrucciones'),
+  aceptaTransferencia: boolean('acepta_transferencia').notNull().default(true),
+  creadoEn:            timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn:       timestamp('actualizado_en').notNull().defaultNow(),
+});
+
+/**
+ * Las cuentas a las que el padre puede transferir.
+ *
+ * Varias porque un colegio cobra por más de un banco: el padre que tiene
+ * Popular no quiere pagar comisión interbancaria por mandar a un BHD, así que
+ * se le ofrecen las dos y elige la suya.
+ *
+ * El titular SÍ va por cuenta —una puede estar a nombre del colegio y otra de
+ * la fundación— y el padre necesita saber a quién le manda dinero.
+ */
+export const adminEscolarCuentasBanco = pgTable('admin_escolar_cuentas_banco', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  banco:         varchar('banco', { length: 120 }).notNull(),
+  tipoCuenta:    varchar('tipo_cuenta', { length: 40 }),
+  numeroCuenta:  varchar('numero_cuenta', { length: 60 }).notNull(),
+  titular:       varchar('titular', { length: 200 }),
+  /**
+   * RNC o cédula del TITULAR de esta cuenta, que no siempre es el del colegio:
+   * una cuenta puede estar a nombre de la fundación y otra del dueño. El padre
+   * lo teclea en la app del banco al registrar el beneficiario, así que un
+   * documento que no cuadra con el titular hace que el banco rebote la
+   * transferencia. Vacío = hereda el del colegio.
+   */
+  documento:     varchar('documento', { length: 20 }),
+  /** En qué orden se le enseñan al padre. La primera es la que más se usa. */
+  orden:         smallint('orden').notNull().default(0),
+  /**
+   * Se apaga en vez de borrarse: una cuenta cerrada sigue apareciendo en
+   * comprobantes viejos, y borrarla dejaría al colegio sin saber qué es ese
+   * número al revisar un pago de hace tres meses.
+   */
+  activa:        boolean('activa').notNull().default(true),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [
+  // La misma cuenta dos veces es un error de dedo, no una cuenta más.
+  uniqueIndex('admin_escolar_cuentas_banco_uq').on(t.teamId, t.banco, t.numeroCuenta),
+  index('admin_escolar_cuentas_banco_team_idx').on(t.teamId, t.activa, t.orden),
+]);
+
+/**
+ * El enlace que se le manda al padre.
+ *
+ * La llave es `clients` y no `adminEscolarTutores`: quien paga es el contacto
+ * de Facturación al que apunta `estudiantes.facturarAClientId`, que es a quien
+ * el motor de avisos ya le escribe. Un alumno puede tener cuatro tutores y no
+ * se le cobra a los cuatro.
+ *
+ * UNO por responsable, no uno por aviso: el mismo padre recibe el enlace muchas
+ * veces al año y tiene que caer siempre en la misma página con la MISMA
+ * referencia, o el colegio recibe transferencias con referencias distintas del
+ * mismo padre y no puede casarlas.
+ */
+export const adminEscolarLinksPago = pgTable('admin_escolar_links_pago', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  clientId:      integer('client_id').notNull().references(() => clients.id, { onDelete: 'cascade' }),
+  /** Va en la URL. Es la única credencial de la página: largo y aleatorio. */
+  token:         varchar('token', { length: 48 }).notNull().unique(),
+  /** Lo que el padre escribe en el concepto de la transferencia (ZER-8F32A1). */
+  referencia:    varchar('referencia', { length: 24 }).notNull(),
+  /** abierto | revocado */
+  estado:        varchar('estado', { length: 20 }).notNull().default('abierto'),
+  ultimoAcceso:  timestamp('ultimo_acceso'),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('admin_escolar_links_pago_client_uq').on(t.teamId, t.clientId),
+  index('admin_escolar_links_pago_team_idx').on(t.teamId),
+]);
+
+/** Un cargo tal como estaba cuando el padre subió el comprobante. */
+export interface CargoDelComprobante {
+  cargoId: number;
+  estudiante: string;
+  concepto: string;
+  montoCentavos: number;
+  fechaVencimiento: string | null;
+}
+
+/**
+ * Alguien DICE que transfirió, y trae una foto. No mueve un peso.
+ *
+ * No es un pago a propósito: el cobro de verdad vive en `pagos_recibidos`,
+ * atado a la factura, y el saldo del cargo se deriva de ahí. Meter esto como
+ * pago escolar le daría al colegio dos verdades de cuánto le deben.
+ */
+export const adminEscolarComprobantes = pgTable('admin_escolar_comprobantes', {
+  id:            serial('id').primaryKey(),
+  teamId:        integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  linkId:        integer('link_id').references(() => adminEscolarLinksPago.id, { onDelete: 'set null' }),
+  clientId:      integer('client_id').references(() => clients.id, { onDelete: 'set null' }),
+
+  montoCentavos: integer('monto_centavos').notNull(),
+  referencia:    varchar('referencia', { length: 120 }),
+  bancoOrigen:   varchar('banco_origen', { length: 120 }),
+  nota:          text('nota'),
+
+  /** s3 | db — igual que los comprobantes de facturación. */
+  storage:       varchar('storage', { length: 10 }).notNull().default('s3'),
+  archivoKey:    varchar('archivo_key', { length: 300 }),
+  archivoBase64: text('archivo_base64'),
+  archivoMime:   varchar('archivo_mime', { length: 80 }).notNull(),
+  archivoNombre: varchar('archivo_nombre', { length: 200 }),
+  archivoBytes:  integer('archivo_bytes').notNull().default(0),
+
+  /**
+   * Foto de qué se debía al subirlo. Para cuando el colegio revise, el cargo
+   * pudo cambiar de monto, quedar facturado o anularse — y sin esto no hay
+   * forma de saber qué creyó el padre que estaba pagando.
+   */
+  cargos:        jsonb('cargos').$type<CargoDelComprobante[]>().notNull().default([]),
+
+  /** pendiente | aprobado | rechazado */
+  estado:        varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  revisadoPor:   integer('revisado_por').references(() => users.id),
+  revisadoEn:    timestamp('revisado_en'),
+  motivoRechazo: text('motivo_rechazo'),
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+}, (t) => [
+  index('admin_escolar_comprobantes_team_estado_idx').on(t.teamId, t.estado),
+  index('admin_escolar_comprobantes_link_idx').on(t.linkId),
+  index('admin_escolar_comprobantes_client_idx').on(t.clientId),
+]);
+
+export type AdminEscolarCuentaBanco   = typeof adminEscolarCuentasBanco.$inferSelect;
+export type NewAdminEscolarCuentaBanco = typeof adminEscolarCuentasBanco.$inferInsert;
+export type AdminEscolarDatosPago     = typeof adminEscolarDatosPago.$inferSelect;
+export type NewAdminEscolarDatosPago  = typeof adminEscolarDatosPago.$inferInsert;
+export type AdminEscolarLinkPago      = typeof adminEscolarLinksPago.$inferSelect;
+export type NewAdminEscolarLinkPago   = typeof adminEscolarLinksPago.$inferInsert;
+export type AdminEscolarComprobante   = typeof adminEscolarComprobantes.$inferSelect;
+export type NewAdminEscolarComprobante = typeof adminEscolarComprobantes.$inferInsert;
 
 export type AdminEscolarPeriodo    = typeof adminEscolarPeriodos.$inferSelect;
 export type NewAdminEscolarPeriodo = typeof adminEscolarPeriodos.$inferInsert;
@@ -3173,6 +3349,84 @@ export const whatsappConfig = pgTable('whatsapp_config', {
   conectado:      boolean('conectado').notNull().default(false),
   numeroWhatsapp: text('numero_whatsapp'),
 
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+});
+
+/** Una variable del cuerpo. Meta solo conoce la posición; el resto es nuestro. */
+export interface VariablePlantilla {
+  pos: number;
+  nombre: string;
+  tipo: 'texto' | 'monto' | 'fecha';
+  ejemplo: string;
+}
+
+/**
+ * El botón de una plantilla. Meta admite UNA variable en la URL y solo al
+ * final, siempre numerada `{{1}}` aunque el cuerpo tenga otras.
+ */
+export interface BotonPlantilla {
+  /** Máx. 25 caracteres. */
+  texto: string;
+  url: string;
+  /** La URL completa con la variable resuelta. Meta lo exige si hay variable. */
+  ejemplo: string;
+}
+
+/**
+ * El contenido de las plantillas de WhatsApp.
+ *
+ * Meta manda sobre el ESTADO (aprobada / en revisión / rechazada); esta tabla
+ * manda sobre el CONTENIDO, porque el CRM no lo devuelve. Se cruzan por
+ * (nombre, idioma). Ver lib/whatsapp/plantillas.ts.
+ */
+export const whatsappPlantillas = pgTable('whatsapp_plantillas', {
+  id:        serial('id').primaryKey(),
+  nombre:    varchar('nombre', { length: 128 }).notNull(),
+  idioma:    varchar('idioma', { length: 8 }).notNull().default('es'),
+  categoria: varchar('categoria', { length: 24 }).notNull().default('utility'),
+
+  cuerpo:     text('cuerpo').notNull(),
+  encabezado: text('encabezado'),
+  pie:        text('pie'),
+
+  /** NULL = disponible para todos los negocios. */
+  teamId: integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+
+  /** Mientras es borrador no existe en Meta y se puede editar. */
+  borrador:   boolean('borrador').notNull().default(true),
+  metaId:     varchar('meta_id', { length: 128 }),
+  metaEstado: varchar('meta_estado', { length: 32 }),
+
+  variables: jsonb('variables').$type<VariablePlantilla[]>().notNull().default([]),
+  /** Botón de enlace. NULL = sin botón. */
+  boton: jsonb('boton').$type<BotonPlantilla | null>(),
+
+  creadoEn:      timestamp('creado_en').notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
+});
+
+/**
+ * Qué plantilla aprobada usa cada aviso escolar.
+ *
+ * `teamId` NULL es la asignación por defecto de la plataforma: la que se usa
+ * cuando el colegio no tiene la suya. Ver lib/whatsapp/plantillas.ts.
+ */
+export const whatsappPlantillasAviso = pgTable('whatsapp_plantillas_aviso', {
+  id:      serial('id').primaryKey(),
+  teamId:  integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+  /** Uno de los 5 huecos: al-emitir, al-vencer-*, antes-mora. */
+  aviso:            varchar('aviso', { length: 32 }).notNull(),
+  plantillaNombre:  varchar('plantilla_nombre', { length: 128 }).notNull(),
+  /**
+   * La versión con botón «Ver factura», para cuando el cargo YA está facturado.
+   *
+   * Vacío = ese colegio no tiene versión con enlace y usa siempre la de arriba.
+   * Un cargo sin factura no se puede cobrar, así que mandarle el enlace lleva
+   * al padre a transferir para que nadie pueda aplicarlo.
+   */
+  plantillaConLink: varchar('plantilla_con_link', { length: 128 }),
+  idioma:           varchar('idioma', { length: 8 }).notNull().default('es'),
   creadoEn:      timestamp('creado_en').notNull().defaultNow(),
   actualizadoEn: timestamp('actualizado_en').notNull().defaultNow(),
 });
