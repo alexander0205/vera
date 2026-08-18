@@ -8,7 +8,11 @@
 
 ## Por qué les pedimos esto
 
-Zero emite las facturas, cobra y avisa a las familias **por sí solo**. Para que lo haga bien necesita saber tres cosas: **a quién** se le cobra, **qué** se le cobra y **cuándo**. Este documento es la lista completa de lo que hace falta para configurarlo.
+Zero emite las facturas, cobra y avisa a las familias **por sí solo**. Para que lo haga bien necesita saber tres cosas: **a quién** se le cobra, **qué** se le cobra y **cuándo**.
+
+**Este documento no es un formulario de alta: es para que el sistema se adapte a ustedes.** No queremos que cambien su manera de trabajar para que les cuadre el programa. Queremos entender cómo cobran, qué le exigen a cada familia y en qué orden hacen las cosas, y ajustar Zero a eso. Todo lo que hay aquí —el tarifario, el calendario, los descuentos, los requisitos de inscripción, los formularios— se configura centro por centro.
+
+Por eso vale más una respuesta larga que una corta. Si en algún punto su caso no encaja con lo que preguntamos, **escríbanlo tal cual**: ese desajuste es justo lo que necesitamos saber. Es más barato adaptarlo ahora que descubrirlo el día que salga la primera factura.
 
 Vale la pena hacerlo con calma una sola vez: cada dato que llegue incompleto se convierte después en una factura mal emitida, en un aviso que no sale, o en un padre al que se le cobra algo que ya pagó.
 
@@ -229,6 +233,113 @@ Lista del personal que va a entrar a Zero, con:
 
 ---
 
+## 9. Documentos e inscripción: lo que hoy se pide en papel
+
+Esta parte no es económica, pero es la que más tiempo de secretaría se come: perseguir actas de nacimiento, récords de notas y fotos 2x2 por WhatsApp, guardarlas en la galería de un teléfono personal, y no saber a quién le falta qué hasta que empiezan las clases.
+
+**Zero lo hace así:** por cada estudiante genera un enlace —y su código QR— que la familia abre en el teléfono. Ahí ve la lista de lo que le falta, le da a la cámara y sube cada papel. Todo cae directo en el expediente del alumno dentro del sistema, donde ustedes lo consultan, lo aprueban o lo devuelven con el motivo. La familia no necesita cuenta ni contraseña, y ningún documento pasa por el teléfono de nadie.
+
+El enlace **caduca**, se puede **revocar**, y se puede acotar a **un solo documento**: si a un estudiante solo le falta el certificado médico, se manda un enlace que pide eso y nada más — quien lo reciba no ve el resto del expediente.
+
+Para configurarlo necesitamos tres cosas.
+
+### 9.1 Los listados de requisitos
+
+No todos entregan lo mismo. Lo normal son tres o cuatro situaciones distintas:
+
+- **Nuevo ingreso**
+- **Reinscripción** (el que ya estaba el año pasado)
+- **Traslado de otro centro**
+- Las que ustedes manejen
+
+Díganos **cómo llaman** a cada una. Al matricular a un estudiante se elige una y el sistema le arma su lista sola.
+
+### 9.2 Qué lleva cada listado
+
+Por cada papel que piden, esto:
+
+| Columna | Qué poner | Ejemplo |
+|---|---|---|
+| **Documento** | El nombre tal como lo dicen ustedes | Acta de nacimiento |
+| **Listado** | En cuál de los de arriba entra | Nuevo ingreso |
+| **Nivel** | Vacío si se le pide a todos | Solo Inicial |
+| **¿Obligatorio?** | `Requerido` o `Si aplica` | Requerido |
+| **Cuántos** | Si piden más de uno | 2 |
+| **Qué debe leer el padre** | La instrucción para que no lo mande mal | «Original con sello, legible» |
+
+Dos avisos sobre esa tabla:
+
+- **«Si aplica» no es «opcional».** Es un papel que hay que resolver: o llega, o alguien del colegio marca que ese estudiante no lo necesita y por qué. Los opcionales de verdad no hace falta ponerlos en la lista.
+- **La columna de la instrucción es la que evita el 80% de las devoluciones.** «Las dos caras», «foto reciente con fondo blanco», «firmado por el pediatra», «no sirve la foto de la pantalla». Esa frase se le enseña a la familia justo encima del botón de la cámara.
+
+**Lista de arranque para que la marquen y corrijan** — díganos cuáles piden, quiten los que no y agreguen los que falten:
+
+| Documento | Suele pedirse en | Instrucción típica |
+|---|---|---|
+| Acta de nacimiento | Nuevo ingreso | Original o copia con sello, las dos caras si las tiene |
+| Foto 2x2 del estudiante | Todos | Reciente, fondo blanco, de frente |
+| Récord de notas del año anterior | Nuevo ingreso, traslado | Con sello y firma del centro anterior |
+| Certificado médico | Todos | Del año en curso, firmado por el médico |
+| Tarjeta de vacunas | Inicial y Primaria | Todas las páginas con sellos |
+| Cédula del padre, madre o tutor | Todos | Las dos caras |
+| Carta de no deuda del centro anterior | Traslado | |
+| Certificación de conducta | Traslado, Secundaria | |
+| Copia del seguro médico | Si aplica | |
+| Sentencia de custodia o guarda | Si aplica | Solo si hay una |
+| Autorización de retiro por terceros | Todos | Con nombre y cédula de quien puede retirar |
+
+### 9.3 Los formularios que llenan los padres
+
+La ficha de inscripción, la autorización de imagen, la ficha médica, el permiso de excursión — todo lo que hoy se imprime y se devuelve a mano.
+
+Zero los convierte en un formulario que se llena desde el teléfono. Se guarda solo mientras la familia escribe, así que puede dejarlo a medias y volver después sin perder nada. Al terminar, la respuesta queda en el expediente del estudiante.
+
+**Mándenos los formularios que usan hoy** — escaneados, en foto, en Word, como los tengan. No hay que transcribirlos: nosotros los pasamos.
+
+El formulario admite: texto corto y largo, correo, teléfono, número, fecha, hora, sí/no, escoger de una lista, marcar varias opciones, nombre completo, dirección, **subir un archivo** y **firma dibujada en la pantalla con el dedo** — que es la que sustituye la hoja impresa devuelta a mano.
+
+Y díganos, por cada formulario:
+
+- **Quién debe llenarlo:** todos, solo los nuevos, solo un nivel
+- **Qué debe decir al terminar:** el mensaje que ve el padre al enviarlo
+- **A qué correo avisamos** cuando llega una respuesta
+- **¿En dos idiomas?** Se puede mostrar en español e inglés a la vez, si tienen familias que lo necesiten
+- **¿Tiene fecha de cierre?** Por ejemplo, la ficha de inscripción hasta el 15 de agosto
+
+### 9.4 Quién revisa y quién aprueba
+
+En Zero **subir un documento y darlo por bueno son dos actos distintos**, y el segundo queda con nombre y fecha. Lo que entra por el enlace de la familia queda como *recibido*; alguien del colegio lo mira y lo pasa a *aprobado*, o lo *rechaza* escribiendo el motivo — y la familia recibe el aviso de que tiene que volver a mandarlo.
+
+Necesitamos saber **quién hace esa revisión** (puede ser más de una persona, y puede ser distinta por nivel). Si no nos dicen nada, lo dejamos abierto a quien administre el sistema.
+
+### 9.5 La foto del estudiante
+
+Aparte de la 2x2 que manda la familia, el colegio puede tomar la foto **en el momento**: se escanea un QR desde cualquier teléfono, sale el nombre del alumno en pantalla, se dispara y la foto queda en su ficha. No hace falta instalar nada ni pasar fotos al ordenador después.
+
+Díganos si la quieren usar y para qué la necesitan —carnet, expediente, lista de clase—, porque de eso depende el encuadre que le pidamos a quien la tome.
+
+---
+
+## 10. Lo que no cabe en las tablas de arriba
+
+Las secciones anteriores preguntan lo que sabemos preguntar. Esta es para lo demás.
+
+Cuéntennos **cómo trabajan ustedes**, aunque no encaje en ninguna columna. Un párrafo suelto vale; no hace falta ordenarlo.
+
+Algunas cosas que casi siempre aparecen aquí y que conviene decir desde el principio:
+
+- **Excepciones que hacen a mano.** «Al hermano del profesor no se le cobra inscripción», «a esta familia le aceptamos que pague el 5», «al que trae dos hijos le hacemos un arreglo distinto cada año». Si existen, el sistema tiene que poder hacerlas — y si no lo decimos ahora, se convierten en una pelea todos los meses.
+- **Cosas que dependen de una persona.** Lo que hoy sabe solo la secretaria, o lo que está en un cuaderno. Es lo primero que se pierde al cambiar de sistema.
+- **Lo que hoy les duele.** El reporte que arman a mano cada mes, la llamada que repiten cincuenta veces, lo que nunca cuadra. Muchas veces es lo que más rápido se arregla.
+- **Cómo se comunican con las familias hoy.** Grupo de WhatsApp, circular impresa, agenda del estudiante, correo. Y quién escribe.
+- **Fechas que no se pueden mover.** El día del consejo, el cierre de notas, la asamblea de padres, la semana en que se cobra la excursión.
+- **Otros sistemas que usan.** Contabilidad, nómina, plataforma de notas, control de asistencia. Aunque no los vayamos a tocar, saber qué hay evita duplicar trabajo.
+- **Lo que probaron antes y no funcionó.** Si ya intentaron sistematizar esto alguna vez, qué pasó. Sirve más de lo que parece.
+
+**Y lo más importante: si algo de lo que preguntamos arriba no aplica en su centro, dígannoslo.** Una sección en blanco nos deja adivinando; un «esto nosotros no lo hacemos así, lo hacemos asá» nos deja configurando.
+
+---
+
 ## Resumen de lo que hay que enviar
 
 - [ ] **1.** Estudiantes con nivel, tanda, grado y sección
@@ -240,16 +351,20 @@ Lista del personal que va a entrar a Zero, con:
 - [ ] **6.** Recargo por atraso: cuánto y a los cuántos días
 - [ ] **7.** Todo lo ya cobrado del 2026–2027, más las deudas vivas de años anteriores
 - [ ] **8.** RNC y logo del colegio, cuentas de banco, y usuarios con su nivel de acceso
+- [ ] **9.** Listados de requisitos, qué papel lleva cada uno, los formularios que usan hoy y quién los aprueba
+- [ ] **10.** Sus excepciones, sus manías y lo que hoy les duele — lo que no cupo en ninguna tabla
 
 ---
 
 ## Qué pasa después
 
 1. **Ustedes envían.** Como puedan, en el formato que tengan.
-2. **Nosotros cargamos y configuramos** el tarifario, el calendario y los descuentos.
+2. **Nosotros cargamos y configuramos** el tarifario, el calendario, los descuentos, los requisitos de inscripción y los formularios — **y ajustamos el sistema a lo que nos hayan contado en el punto 10**.
 3. **Revisamos juntos** una muestra: tomamos tres o cuatro familias reales y comprobamos que lo que el sistema dice que deben es exactamente lo que deben. Aquí es donde se atrapan los errores, antes de que le lleguen a nadie.
 4. **Prueba en frío:** se emiten las facturas de un mes **sin enviarlas**, para revisarlas.
 5. **Arranque:** se activan los avisos automáticos y las familias empiezan a recibir su factura y su enlace de pago.
+
+El **punto 9 va por su cuenta**: no depende de lo económico y se puede ir armando en paralelo. Si nos lo mandan temprano, las familias pueden estar entregando sus papeles por el enlace mientras nosotros todavía cargamos el tarifario.
 
 Los puntos 1, 2, 3 y 4 son los que nos permiten empezar. Los demás se pueden ir completando mientras tanto — pero el **punto 7 tiene que estar antes de emitir la primera factura**, porque es lo único que impide cobrar dos veces.
 
