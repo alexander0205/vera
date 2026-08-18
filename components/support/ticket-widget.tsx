@@ -50,6 +50,7 @@ export function TicketWidget() {
   const lastTypingSentRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevStatusRef = useRef<string | null>(null);
+  const [canCapture, setCanCapture] = useState(false);
 
   async function poll() {
     const res = await fetch('/api/zero-tickets/tickets');
@@ -68,6 +69,12 @@ export function TicketWidget() {
 
   useEffect(() => {
     poll();
+  }, []);
+
+  useEffect(() => {
+    setCanCapture(
+      typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia)
+    );
   }, []);
 
   useEffect(() => {
@@ -136,10 +143,7 @@ export function TicketWidget() {
     }
   }
 
-  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+  async function uploadFile(file: File) {
     setLoading(true);
     try {
       const form = new FormData();
@@ -148,6 +152,60 @@ export function TicketWidget() {
       if (res.ok) await poll();
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    await uploadFile(file);
+  }
+
+  async function captureScreenshot() {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
+      window.alert('Tu navegador no soporta captura de pantalla. Usá el botón de adjuntar archivo.');
+      return;
+    }
+    let stream: MediaStream | null = null;
+    let video: HTMLVideoElement | null = null;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+
+      video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+
+      await new Promise<void>((resolve, reject) => {
+        if (!video) return reject(new Error('no video element'));
+        video.onloadedmetadata = () => resolve();
+        video.onerror = () => reject(new Error('video load error'));
+        video.play().catch(reject);
+      });
+
+      // Asegura que haya al menos un frame pintado antes de capturar.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('no 2d context');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Corta la sesión de screen-share apenas tenemos el frame.
+      stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('no blob');
+
+      const file = new File([blob], 'captura.png', { type: 'image/png' });
+      await uploadFile(file);
+    } catch {
+      // El usuario canceló el picker nativo o denegó el permiso — no es un error real, no alertamos.
+    } finally {
+      stream?.getTracks().forEach((t) => t.stop());
     }
   }
 
@@ -218,7 +276,19 @@ export function TicketWidget() {
               )}
               {m.content}
               {isScreenshotRequest && !mine && (
-                <div style={{ marginTop: 6 }}>
+                <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {canCapture && (
+                    <button
+                      onClick={captureScreenshot}
+                      disabled={loading}
+                      style={{
+                        background: 'white', color: '#0f766e', border: 'none', borderRadius: 6,
+                        padding: '6px 10px', fontSize: 12, cursor: loading ? 'default' : 'pointer', fontWeight: 600,
+                      }}
+                    >
+                      📸 Capturar pantalla
+                    </button>
+                  )}
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     style={{
@@ -319,6 +389,16 @@ export function TicketWidget() {
         >
           📎
         </button>
+        {canCapture && (
+          <button
+            onClick={captureScreenshot}
+            title="Capturar pantalla"
+            disabled={loading}
+            style={{ border: 'none', background: 'none', fontSize: 18, padding: '0 8px', cursor: loading ? 'default' : 'pointer' }}
+          >
+            📸
+          </button>
+        )}
         <input
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
