@@ -4,6 +4,7 @@ import { getUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { ticketAttachments, ticketMessages, tickets } from '@/lib/db/schema';
 import { leerAdjuntoTicket } from '@/lib/storage/tickets';
+import { isZeroTicketsAgent } from '@/lib/auth/zero-tickets-guard';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getUser();
@@ -24,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!row) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
   const esDueño = row.ticket.userId === user.id;
-  const esAgente = user.platformRole === 'admin';
+  const esAgente = esDueño ? false : await isZeroTicketsAgent(user);
   if (!esDueño && !esAgente) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 });
 
   const { attachment } = row;
