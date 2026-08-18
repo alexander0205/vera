@@ -47,6 +47,9 @@ export interface LineaPrefill {
 export interface OpcionCargo {
   /** 0 en una cuota que TODAVÍA no es cargo (ver `previstoCuotaId`). */
   cargoId: number;
+  /** De qué hijo es. En una factura de hermanos, es cómo se agrupa. */
+  estudianteId: number;
+  estudianteNombre: string;
   /**
    * Cuota del calendario que aún no se ha devengado.
    *
@@ -81,7 +84,18 @@ export interface Comprador {
 }
 
 export interface PrefillFactura {
+  /** El alumno del cargo que se pidió. Los demás hermanos van en `estudiantes`. */
   estudiante: { id: number; nombre: string };
+  /**
+   * Todos los alumnos que caben en esta factura: el del clic y sus hermanos con
+   * el MISMO responsable de pago. Uno solo en el caso corriente.
+   */
+  estudiantes: {
+    id: number;
+    nombre: string;
+    matriculaId: number;
+    contexto: { periodo: string | null; servicio: string | null; grado: string | null; curso: string | null };
+  }[];
   matriculaId: number;
   /**
    * Dónde está matriculado, para poder distinguir la línea. Dos hermanos en el
@@ -164,48 +178,143 @@ export async function prefillDeCargos(
   if (pedidos.some((c) => !COBRABLES.includes(c.estado))) {
     return { ok: false, status: 409, error: 'Alguno de esos cargos no está pendiente de cobro' };
   }
-  // Una factura es de UN comprador. Mezclar alumnos aquí acabaría cobrándole a
-  // un tutor la mensualidad del hijo de otro.
-  const estudianteId = baseEstudianteId;
-  if (pedidos.some((c) => c.estudianteId !== estudianteId)) {
-    return { ok: false, status: 400, error: 'Los cargos son de estudiantes distintos' };
+  /**
+   * Varios hermanos SÍ, alumnos de familias distintas NO.
+   *
+   * Una factura es de un comprador. Antes eso se hacía cumplir prohibiendo
+   * mezclar alumnos, y de paso prohibía el caso normal: un padre con dos hijos
+   * paga las dos mensualidades de una vez, no con dos facturas y dos
+   * transferencias.
+   *
+   * La regla de verdad no es «un alumno», es «un pagador»: se permite mezclar
+   * mientras todos apunten al MISMO `facturar_a_client_id`. Con esa condición,
+   * cobrarle a alguien el hijo de otro deja de ser posible por construcción.
+   */
+  const estudianteIds = [...new Set(pedidos.map((c) => c.estudianteId).concat(
+    baseEstudianteId != null ? [baseEstudianteId] : [],
+  ))];
+
+  const pagadores = await db
+    .select({
+      id: adminEscolarEstudiantes.id,
+      nombres: adminEscolarEstudiantes.nombres,
+      apellidos: adminEscolarEstudiantes.apellidos,
+      facturarAClientId: adminEscolarEstudiantes.facturarAClientId,
+    })
+    .from(adminEscolarEstudiantes)
+    .where(and(
+      eq(adminEscolarEstudiantes.teamId, teamId),
+      inArray(adminEscolarEstudiantes.id, estudianteIds),
+    ));
+
+  if (pagadores.length !== estudianteIds.length) {
+    return { ok: false, status: 404, error: 'Estudiante no encontrado' };
   }
+
+  if (estudianteIds.length > 1) {
+    const sinPagador = pagadores.filter((p) => p.facturarAClientId == null);
+    if (sinPagador.length > 0) {
+      return {
+        ok: false, status: 400,
+        error: `Para facturar a varios hermanos juntos, todos necesitan responsable de pago. Le falta a ${sinPagador.map((p) => p.nombres).join(', ')}.`,
+      };
+    }
+    const distintos = new Set(pagadores.map((p) => p.facturarAClientId));
+    if (distintos.size > 1) {
+      return {
+        ok: false, status: 400,
+        error: 'Esos alumnos le facturan a responsables distintos: no caben en la misma factura.',
+      };
+    }
+  }
+
+  const estudianteId = baseEstudianteId;
   const matriculaId = baseMatriculaId;
+
+  /**
+   * Los hermanos, para OFRECERLOS aunque no se hayan pedido.
+   *
+   * Se entra por un hijo —desde su ficha— y desde ahí hay que poder añadir la
+   * mensualidad del otro sin salir. Sin esto, el padre con dos hijos sigue
+   * necesitando dos facturas: el modal solo sabría del alumno del clic.
+   *
+   * Solo se AÑADEN a la lista de opciones, sin marcar. Lo que se cobra sigue
+   * siendo lo que el usuario marque.
+   */
+  const pagadorComun = pagadores.find((p) => p.id === estudianteId)?.facturarAClientId ?? null;
+  if (pagadorComun != null) {
+    const hermanos = await db
+      .select({ id: adminEscolarEstudiantes.id })
+      .from(adminEscolarEstudiantes)
+      .where(and(
+        eq(adminEscolarEstudiantes.teamId, teamId),
+        eq(adminEscolarEstudiantes.facturarAClientId, pagadorComun),
+      ));
+    for (const h of hermanos) {
+      if (!estudianteIds.includes(h.id)) estudianteIds.push(h.id);
+    }
+  }
 
   const advertencias: string[] = [];
 
-  // ── El alumno y su dependiente (beneficiario de cada línea) ────────────────
-  const [est] = await db
+  // ── Cada alumno con su dependiente (el beneficiario de SUS líneas) ─────────
+  //
+  // Por alumno y no una vez: en una factura de dos hermanos cada línea tiene
+  // que decir de quién es. Sin eso, el padre recibe «Mensualidad de octubre»
+  // dos veces seguidas y no sabe cuál es de cuál.
+  const alumnos = await db
     .select({
+      id: adminEscolarEstudiantes.id,
       nombres: adminEscolarEstudiantes.nombres,
       apellidos: adminEscolarEstudiantes.apellidos,
       dependienteId: adminEscolarEstudiantes.dependienteId,
       facturarAClientId: adminEscolarEstudiantes.facturarAClientId,
       dependienteNombre: dependientes.nombre,
       dependienteApellido: dependientes.apellido,
+      // De qué contacto cuelga el beneficiario. No siempre es el que paga.
+      dependienteClientId: dependientes.clientId,
     })
     .from(adminEscolarEstudiantes)
     .leftJoin(dependientes, eq(adminEscolarEstudiantes.dependienteId, dependientes.id))
     .where(and(
-      eq(adminEscolarEstudiantes.id, estudianteId),
       eq(adminEscolarEstudiantes.teamId, teamId),
-    ))
-    .limit(1);
+      inArray(adminEscolarEstudiantes.id, estudianteIds),
+    ));
+
+  const est = alumnos.find((a) => a.id === estudianteId);
   if (!est) return { ok: false, status: 404, error: 'Estudiante no encontrado' };
 
-  const dependiente = est.dependienteId
-    ? {
-        id: est.dependienteId,
-        nombre: `${est.dependienteNombre ?? ''} ${est.dependienteApellido ?? ''}`.trim(),
-      }
-    : null;
-  if (!dependiente) {
-    advertencias.push('El estudiante no está vinculado a un dependiente de Contactos: las líneas quedarán sin beneficiario.');
+  /** estudianteId → su beneficiario en Contactos, para las líneas. */
+  const dependientePorAlumno = new Map<number, { id: number; nombre: string } | null>(
+    alumnos.map((a) => [
+      a.id,
+      a.dependienteId
+        ? { id: a.dependienteId, nombre: `${a.dependienteNombre ?? ''} ${a.dependienteApellido ?? ''}`.trim() }
+        : null,
+    ]),
+  );
+
+  const dependiente = dependientePorAlumno.get(estudianteId) ?? null;
+
+  const sinDependiente = alumnos.filter((a) => !dependientePorAlumno.get(a.id));
+  if (sinDependiente.length > 0) {
+    advertencias.push(
+      sinDependiente.length === alumnos.length && alumnos.length === 1
+        ? 'El estudiante no está vinculado a un dependiente de Contactos: las líneas quedarán sin beneficiario.'
+        : `Sin dependiente en Contactos: ${sinDependiente.map((a) => a.nombres).join(', ')}. Sus líneas quedarán sin beneficiario.`,
+    );
   }
 
-  // ── Dónde está matriculado, para poder distinguir la línea ────────────────
-  const [ctx] = await db
+  // ── Dónde está matriculado cada uno, para poder distinguir la línea ───────
+  //
+  // Se piden las matrículas de TODOS los alumnos, no solo la del cargo en que
+  // se hizo clic: es de donde salen los demás cargos cobrables que el modal
+  // ofrece marcar. Dos hermanos en el mismo colegio generan líneas idénticas si
+  // solo dicen «Pago de colegiatura — Octubre».
+  const matriculas = await db
     .select({
+      id: adminEscolarMatriculas.id,
+      estudianteId: adminEscolarMatriculas.estudianteId,
       periodo: adminEscolarPeriodos.nombre,
       servicio: adminEscolarServicios.nombre,
       grado: adminEscolarGrados.nombre,
@@ -217,17 +326,31 @@ export async function prefillDeCargos(
     .leftJoin(adminEscolarGrados, eq(adminEscolarCursos.gradoId, adminEscolarGrados.id))
     .leftJoin(adminEscolarServicios, eq(adminEscolarGrados.servicioId, adminEscolarServicios.id))
     .where(and(
-      eq(adminEscolarMatriculas.id, matriculaId),
       eq(adminEscolarMatriculas.teamId, teamId),
-    ))
-    .limit(1);
+      inArray(adminEscolarMatriculas.estudianteId, estudianteIds),
+    ));
 
-  const contexto = {
-    periodo: ctx?.periodo ?? null,
-    servicio: ctx?.servicio ?? null,
-    grado: ctx?.grado ?? null,
-    curso: ctx?.curso ?? null,
-  };
+  const ctxDe = (m: (typeof matriculas)[number] | undefined) => ({
+    periodo: m?.periodo ?? null,
+    servicio: m?.servicio ?? null,
+    grado: m?.grado ?? null,
+    curso: m?.curso ?? null,
+  });
+
+  const contexto = ctxDe(matriculas.find((m) => m.id === matriculaId));
+
+  /**
+   * Los alumnos de esta factura, cada uno con dónde está matriculado.
+   *
+   * Se manda la matrícula ACTIVA de cada uno —la del período del cargo que se
+   * pidió— y no todas: un alumno de tercer año tiene tres matrículas y enseñar
+   * las tres en el modal es ruido.
+   */
+  const matriculaDe = new Map<number, number>();
+  for (const m of matriculas) {
+    if (m.estudianteId === estudianteId) { matriculaDe.set(m.estudianteId, matriculaId); continue; }
+    if (!matriculaDe.has(m.estudianteId)) matriculaDe.set(m.estudianteId, m.id);
+  }
 
   // ── A quién se le puede facturar ───────────────────────────────────────────
   //
@@ -302,10 +425,33 @@ export async function prefillDeCargos(
     advertencias.push('Ningún tutor del alumno está vinculado a un contacto: no se puede emitir la factura hasta arreglarlo.');
   }
 
+  /**
+   * Beneficiarios que cuelgan de OTRO contacto.
+   *
+   * El motor de emisión rechaza la factura con «uno o más beneficiarios no
+   * pertenecen a este cliente», y lo hace bien: un beneficiario es de un
+   * contacto. Lo que estaba mal era enterarse al final, después de elegir los
+   * cargos, el comprobante y darle a crear.
+   *
+   * Pasa justo en el caso nuevo: al marcar dos hermanos con el mismo
+   * responsable de pago, sus fichas de beneficiario pueden seguir repartidas
+   * entre el contacto del padre y el de la madre.
+   */
+  const ajenos = comprador
+    ? alumnos.filter((a) => a.dependienteId != null && a.dependienteClientId !== comprador.clienteId)
+    : [];
+  if (ajenos.length > 0) {
+    advertencias.push(
+      `El beneficiario de ${ajenos.map((a) => a.nombres).join(', ')} cuelga de otro contacto, no de ${comprador!.razonSocial}. `
+      + 'Muévelo en Contactos o la factura se rechazará al crearla.',
+    );
+  }
+
   // ── Todo lo cobrable de esa matrícula, no solo lo que se pidió ─────────────
   const filas = await db
     .select({
       id: adminEscolarCargos.id,
+      estudianteId: adminEscolarCargos.estudianteId,
       mes: adminEscolarCargos.mes,
       anio: adminEscolarCargos.anio,
       saldoCentavos: adminEscolarCargos.saldoCentavos,
@@ -325,7 +471,9 @@ export async function prefillDeCargos(
     .leftJoin(products, eq(adminEscolarConceptosPago.productId, products.id))
     .where(and(
       eq(adminEscolarCargos.teamId, teamId),
-      eq(adminEscolarCargos.matriculaId, matriculaId),
+      // De todos los hermanos, no solo del alumno del cargo pedido: es lo que
+      // deja marcar la mensualidad de los dos en el mismo modal.
+      inArray(adminEscolarCargos.estudianteId, estudianteIds),
       inArray(adminEscolarCargos.estado, COBRABLES),
       isNull(adminEscolarCargos.ecfDocumentId),
     ))
@@ -342,8 +490,13 @@ export async function prefillDeCargos(
       : 'exento';
     if (!f.productId) faltaProducto = true;
 
+    const suyo = dependientePorAlumno.get(f.estudianteId) ?? null;
+    const alumno = alumnos.find((a) => a.id === f.estudianteId);
+
     return {
       cargoId: f.id,
+      estudianteId: f.estudianteId,
+      estudianteNombre: `${alumno?.nombres ?? ''} ${alumno?.apellidos ?? ''}`.trim(),
       seleccionado: pedidosSet.has(f.id),
       concepto: f.conceptoNombre ?? 'Cargo escolar',
       esMensualidad: f.conceptoTipo === 'mensualidad',
@@ -358,8 +511,9 @@ export async function prefillDeCargos(
         precioUnitarioItem: f.saldoCentavos / 100,
         tasaItbis,
         indicadorBienoServicio: f.productTipo === 'bien' ? '1' : '2',
-        dependienteId: dependiente?.id ?? null,
-        dependienteNombre: dependiente?.nombre ?? '',
+        // El beneficiario es el alumno de ESTE cargo, no el del clic.
+        dependienteId: suyo?.id ?? null,
+        dependienteNombre: suyo?.nombre ?? '',
       },
     };
   });
@@ -417,6 +571,8 @@ export async function prefillDeCargos(
 
     opciones.unshift({
       cargoId: 0,
+      estudianteId,
+      estudianteNombre: `${est.nombres} ${est.apellidos}`.trim(),
       previstoCuotaId: cuota.cuotaId,
       conceptoId: linea.conceptoId,
       seleccionado: true,
@@ -439,9 +595,16 @@ export async function prefillDeCargos(
     });
   }
 
-  // Primero los meses en orden y al final lo que no cae en ningún mes: leer
-  // "Diciembre, Evaluaciones, Inscripción, Febrero" no tiene ningún orden.
+  // Primero agrupado por hijo —el del clic arriba, que es lo que se vino a
+  // hacer— y dentro de cada uno los meses en orden, con lo que no cae en ningún
+  // mes al final: leer "Diciembre, Evaluaciones, Inscripción, Febrero" no tiene
+  // ningún orden.
   opciones.sort((a, b) => {
+    if (a.estudianteId !== b.estudianteId) {
+      if (a.estudianteId === estudianteId) return -1;
+      if (b.estudianteId === estudianteId) return 1;
+      return a.estudianteNombre.localeCompare(b.estudianteNombre, 'es');
+    }
     if ((a.mes == null) !== (b.mes == null)) return a.mes == null ? 1 : -1;
     if (a.anio !== b.anio) return a.anio - b.anio;
     return (a.mes ?? 0) - (b.mes ?? 0);
@@ -455,6 +618,12 @@ export async function prefillDeCargos(
     ok: true,
     datos: {
       estudiante: { id: estudianteId, nombre: `${est.nombres} ${est.apellidos}`.trim() },
+      estudiantes: alumnos.map((a) => ({
+        id: a.id,
+        nombre: `${a.nombres} ${a.apellidos}`.trim(),
+        matriculaId: matriculaDe.get(a.id) ?? matriculaId,
+        contexto: ctxDe(matriculas.find((m) => m.id === matriculaDe.get(a.id))),
+      })),
       matriculaId,
       contexto,
       comprador,

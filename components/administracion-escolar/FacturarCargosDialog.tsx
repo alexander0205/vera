@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ExternalLink, Eye, Loader2, Square, SquareCheck, UserX } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Eye, Loader2, Square, SquareCheck, UserX, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RncSearch } from '@/components/RncSearch';
@@ -43,6 +43,9 @@ interface LineaPrefill {
 
 interface OpcionCargo {
   cargoId: number;
+  /** De qué hijo es. En una factura de hermanos, es cómo se agrupa. */
+  estudianteId: number;
+  estudianteNombre: string;
   previstoCuotaId?: number;
   conceptoId?: number;
   seleccionado: boolean;
@@ -65,10 +68,14 @@ interface Comprador {
   relacion: string | null;
 }
 
+type Contexto = { periodo: string | null; servicio: string | null; grado: string | null; curso: string | null };
+
 interface Prefill {
   estudiante: { id: number; nombre: string };
+  /** El del clic y sus hermanos con el mismo responsable de pago. */
+  estudiantes: { id: number; nombre: string; matriculaId: number; contexto: Contexto }[];
   matriculaId: number;
-  contexto: { periodo: string | null; servicio: string | null; grado: string | null; curso: string | null };
+  contexto: Contexto;
   comprador: Comprador | null;
   compradores: Comprador[];
   opciones: OpcionCargo[];
@@ -119,7 +126,8 @@ function tituloImpreso(o: OpcionCargo): string {
 }
 
 /** Dónde está matriculado. Va debajo del título, como en la factura. */
-function descripcionLinea(c: Prefill['contexto']): string {
+function descripcionLinea(c: Contexto | undefined): string {
+  if (!c) return '';
   return [c.periodo, c.servicio, [c.grado, c.curso].filter(Boolean).join(' ')]
     .filter(Boolean).join(' · ');
 }
@@ -204,6 +212,31 @@ export function FacturarCargosDialog({ open, onOpenChange, cargoIds, previsto, o
     [prefill, marcados],
   );
 
+  /** Lo que se le debe y todavía no está en la factura. */
+  const pendientes = useMemo(
+    () => (prefill?.opciones ?? []).filter((o) => o.cargoId > 0 && !marcados.has(o.cargoId)),
+    [prefill, marcados],
+  );
+
+  const hijosPendientes = useMemo(() => {
+    const vistos = new Map<number, string>();
+    for (const o of pendientes) if (!vistos.has(o.estudianteId)) vistos.set(o.estudianteId, o.estudianteNombre);
+    return [...vistos].map(([id, nombre]) => ({ id, nombre }));
+  }, [pendientes]);
+
+  /**
+   * Los hijos que de verdad entran en la factura.
+   *
+   * No son todos los del prefill: el modal ofrece los cargos de los hermanos,
+   * pero el usuario puede acabar cobrando solo los de uno. Lo que decide cómo
+   * se agrupa y qué dicen las notas es lo MARCADO, no lo ofrecido.
+   */
+  const hijosElegidos = useMemo(() => {
+    const vistos = new Map<number, string>();
+    for (const o of elegidas) if (!vistos.has(o.estudianteId)) vistos.set(o.estudianteId, o.estudianteNombre);
+    return [...vistos].map(([id, nombre]) => ({ id, nombre }));
+  }, [elegidas]);
+
   // Los tutores del alumno más lo que se haya buscado a mano en esta sesión.
   const candidatos = useMemo(
     () => [...(prefill?.compradores ?? []), ...otros],
@@ -223,7 +256,14 @@ export function FacturarCargosDialog({ open, onOpenChange, cargoIds, previsto, o
     // Dos hermanos en el mismo colegio generan facturas idénticas si la línea
     // solo dice "Pago de colegiatura — Octubre". Con el año escolar, el nivel y
     // el grado, cada documento se explica solo meses después.
-    const descripcion = prefill ? descripcionLinea(prefill.contexto) : '';
+    /**
+     * Dónde está matriculado el alumno de CADA línea, no el del clic.
+     *
+     * Con hermanos en grados distintos, una sola descripción para todas las
+     * líneas pone «Segundo» debajo de la mensualidad del que va en Quinto.
+     */
+    const ctxDe = (estudianteId: number) =>
+      descripcionLinea(prefill?.estudiantes.find((e) => e.id === estudianteId)?.contexto);
     // Vence el más lejano de los cargos incluidos: la factura no puede vencer
     // antes que la deuda que cubre.
     const vencimientos = elegidas.map((o) => o.fechaVencimiento).filter((f): f is string => !!f);
@@ -235,7 +275,7 @@ export function FacturarCargosDialog({ open, onOpenChange, cargoIds, previsto, o
       precioUnitarioItem: o.linea.precioUnitarioItem,
       tasaItbis: tasaANumero(o.linea.tasaItbis),
       indicadorBienoServicio: parseInt(o.linea.indicadorBienoServicio, 10) as 1 | 2,
-      descripcionItem: descripcion || undefined,
+      descripcionItem: ctxDe(o.estudianteId) || undefined,
       productoId: o.linea.productoId ?? undefined,
       dependienteId: o.linea.dependienteId ?? undefined,
       dependienteNombre: o.linea.dependienteNombre || undefined,
@@ -254,12 +294,17 @@ export function FacturarCargosDialog({ open, onOpenChange, cargoIds, previsto, o
       fechaLimitePago: fechaLimitePago || undefined,
       items,
       clientId: comprador?.clienteId,
-      dependienteId: prefill?.opciones[0]?.linea.dependienteId ?? undefined,
-      dependienteNombre: prefill?.opciones[0]?.linea.dependienteNombre || undefined,
-      notas: `Cargos escolares de ${prefill?.estudiante.nombre ?? ''}`.trim(),
+      // El beneficiario de CABECERA solo cuando la factura es de un hijo. Con
+      // hermanos cada línea lleva el suyo, y poner uno arriba diría que toda la
+      // factura es de ese.
+      dependienteId: hijosElegidos.length === 1
+        ? elegidas[0]?.linea.dependienteId ?? undefined : undefined,
+      dependienteNombre: hijosElegidos.length === 1
+        ? elegidas[0]?.linea.dependienteNombre || undefined : undefined,
+      notas: `Cargos escolares de ${hijosElegidos.map((h) => h.nombre).join(' y ')}`.trim(),
       lineasJson: JSON.stringify(elegidas.map((o) => ({
         nombreItem: tituloLinea(o),
-        descripcionItem: descripcion,
+        descripcionItem: ctxDe(o.estudianteId),
         cantidadItem: 1,
         precioUnitarioItem: o.linea.precioUnitarioItem,
         descuentoPct: 0,
@@ -460,7 +505,9 @@ export function FacturarCargosDialog({ open, onOpenChange, cargoIds, previsto, o
       >
         <ModalHeader
           title="Facturar"
-          subtitle={prefill ? prefill.estudiante.nombre : undefined}
+          subtitle={hijosElegidos.length > 0
+            ? hijosElegidos.map((h) => h.nombre).join(' y ')
+            : prefill?.estudiante.nombre}
         />
 
         <div className="max-h-[70vh] overflow-y-auto px-6 py-3.5 space-y-3">
@@ -474,6 +521,21 @@ export function FacturarCargosDialog({ open, onOpenChange, cargoIds, previsto, o
 
           {prefill && !cargando && (
             <>
+              {/* Lo que va a salir mal, ANTES de elegir nada.
+                  El prefill ya las traía y nadie las pintaba: se descubrían al
+                  darle a Crear factura, con el trabajo hecho y un mensaje del
+                  motor que no dice qué arreglar ni dónde. */}
+              {prefill.advertencias.length > 0 && (
+                <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  {prefill.advertencias.map((a) => (
+                    <p key={a} className="flex gap-2 text-xs text-amber-900">
+                      <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      <span>{a}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+
               {/* A quién y con qué comprobante, juntos: son la misma decisión.
                   El comprador manda — sin su RNC no hay comprobante fiscal que
                   ofrecer, así que ni se enseña. */}
@@ -589,39 +651,108 @@ export function FacturarCargosDialog({ open, onOpenChange, cargoIds, previsto, o
                     <p className="px-3 py-4 text-center text-sm text-gray-400">
                       No has elegido nada. Añádelo de los pendientes de abajo.
                     </p>
-                  ) : elegidas.map((o) => (
-                    <div key={o.cargoId || `p-${o.previstoCuotaId}`}
-                      className="border-b border-gray-100 last:border-b-0">
-                      {/* De qué mes es, como cabecera: es lo que se busca al
-                          repasar la factura. Debajo, el renglón tal cual se va
-                          a imprimir, que es largo y no sirve para orientarse. */}
-                      <div className="bg-gray-50 px-3 py-1.5">
-                        <p className="truncate text-xs font-medium text-gray-700">
-                          {o.mes ? `${MESES[o.mes]} ${o.anio} · ` : ''}{o.concepto}
-                        </p>
+                  ) : hijosElegidos.map((hijo) => {
+                    const suyas = elegidas.filter((o) => o.estudianteId === hijo.id);
+                    const suSubtotal = suyas.reduce((n, o) => n + o.saldoCentavos, 0);
+                    return (
+                      <div key={hijo.id} className="border-b border-gray-200 last:border-b-0">
+                        {/* La cabecera del hijo solo aparece cuando hay más de
+                            uno: en el caso normal —un alumno— sobra y solo
+                            aleja los renglones del título del modal. */}
+                        {hijosElegidos.length > 1 && (
+                          <div className="flex items-baseline justify-between gap-3 bg-zero-50 px-3 py-1.5">
+                            <p className="truncate text-xs font-semibold text-zero-800">{hijo.nombre}</p>
+                            <span className="shrink-0 text-xs font-medium text-zero-800">
+                              {fmtDOP(suSubtotal)}
+                            </span>
+                          </div>
+                        )}
+                        {suyas.map((o) => (
+                          <div key={o.cargoId || `p-${o.previstoCuotaId}`}
+                            className="group relative border-b border-gray-100 last:border-b-0">
+                            {/* Quitar solo lo que es un cargo de verdad: el
+                                previsto se pidió a propósito al abrir y quitarlo
+                                dejaría el modal sin el motivo por el que se abrió. */}
+                            {o.cargoId > 0 && elegidas.length > 1 && (
+                              <button type="button" title="Quitar de la factura"
+                                onClick={() => setMarcados((prev) => {
+                                  const s = new Set(prev); s.delete(o.cargoId); return s;
+                                })}
+                                className="absolute right-2 top-1.5 text-gray-300 opacity-0 transition group-hover:opacity-100 hover:text-red-600">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {/* De qué mes es, como cabecera: es lo que se busca
+                                al repasar la factura. Debajo, el renglón tal
+                                cual se va a imprimir, que es largo y no sirve
+                                para orientarse. */}
+                            <div className="bg-gray-50 px-3 py-1.5">
+                              <p className="truncate text-xs font-medium text-gray-700">
+                                {o.mes ? `${MESES[o.mes]} ${o.anio} · ` : ''}{o.concepto}
+                              </p>
+                            </div>
+                            {/* El importe va con el renglón impreso, no en la
+                                cabecera: es lo que se compara contra el papel. */}
+                            <div className="flex items-start justify-between gap-3 px-3 py-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm text-gray-800">{tituloImpreso(o)}</p>
+                                <p className="text-xs text-gray-400">
+                                  {descripcionLinea(prefill.estudiantes.find((e) => e.id === o.estudianteId)?.contexto)}
+                                </p>
+                              </div>
+                              <span className="shrink-0 text-sm font-medium text-gray-900">
+                                {fmtDOP(o.saldoCentavos)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      {/* El importe va con el renglón impreso, no en la
-                          cabecera: es lo que se compara contra el papel. */}
-                      <div className="flex items-start justify-between gap-3 px-3 py-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-gray-800">{tituloImpreso(o)}</p>
-                          <p className="text-xs text-gray-400">{descripcionLinea(prefill.contexto)}</p>
-                        </div>
-                        <span className="shrink-0 text-sm font-medium text-gray-900">
-                          {fmtDOP(o.saldoCentavos)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="mt-2 flex justify-between px-1 text-sm">
                   <span className="text-gray-500">
                     {elegidas.length} {elegidas.length === 1 ? 'concepto' : 'conceptos'}
+                    {hijosElegidos.length > 1 && <> · {hijosElegidos.length} hijos</>}
                     {itbis > 0 && <> · ITBIS {fmtDOP(itbis)}</>}
                   </span>
                   <span className="font-medium text-gray-900">{fmtDOP(subtotal + itbis)}</span>
                 </div>
               </div>
+
+              {/* 4 · Lo demás que se le debe, para poder meterlo en la MISMA
+                  factura. Incluye lo de los hermanos: un padre con dos hijos
+                  viene a ponerse al día una vez, no dos. Sin esto el mensaje de
+                  arriba prometía unos pendientes que no estaban en ningún sitio. */}
+              {pendientes.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-gray-500">
+                    También se le debe · márcalo para cobrarlo en esta factura
+                  </p>
+                  <div className="rounded-lg border border-gray-200">
+                    {hijosPendientes.map((hijo) => (
+                      <div key={hijo.id} className="border-b border-gray-200 last:border-b-0">
+                        {hijosPendientes.length > 1 && (
+                          <p className="truncate bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-600">
+                            {hijo.nombre}
+                          </p>
+                        )}
+                        {pendientes.filter((o) => o.estudianteId === hijo.id).map((o) => (
+                          <button key={o.cargoId} type="button"
+                            onClick={() => setMarcados((prev) => new Set(prev).add(o.cargoId))}
+                            className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-left last:border-b-0 hover:bg-gray-50">
+                            <Square className="h-4 w-4 shrink-0 text-gray-300" />
+                            <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
+                              {o.mes ? `${MESES[o.mes]} ${o.anio} · ` : ''}{o.concepto}
+                            </span>
+                            <span className="shrink-0 text-sm text-gray-600">{fmtDOP(o.saldoCentavos)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             </>
           )}
