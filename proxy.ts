@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { signToken, verifyToken } from '@/lib/auth/session';
 import {
-  moduleForHost, esHostApp, esRutaDeCuenta, moduloDeRuta, hostDeModulo, MODULE_HOME,
+  moduleForHost, esHostApp, esRutaDeCuenta, MODULE_HOME,
 } from '@/lib/config/modules';
 
 const protectedRoutes = ['/dashboard', '/pos', '/cuenta', '/escolar'];
@@ -58,38 +58,23 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(destino);
   }
 
-  // ── Y al revés: las rutas de módulo NO viven en app.zero.com.do ──────────
+  // ── NO se fuerza el salto de ruta de módulo a su subdominio ──────────────
   //
-  // Simétrico al bloque de arriba y por el mismo motivo. Tras entrar,
-  // `redirect('/dashboard')` es una ruta RELATIVA, así que dejaba al usuario
-  // en el host donde entró: el panel de facturación acababa sirviéndose en
-  // app.zero.com.do, que solo debería tener entrar, registrarse y cuenta.
+  // Antes aquí se redirigía CADA ruta de módulo (`/dashboard*`, `/pos*`,
+  // `/escolar*`) a su host propio (facturacion./pos./colegio.) cuando se pedía
+  // desde otro host. Eso rompía la navegación de App Router: un `<Link>` o el
+  // `redirect('/dashboard')` de un server-action hacen un fetch RSC
+  // same-origin (`?_rsc=`), y al responder un 307 cross-origin el navegador lo
+  // bloquea por CORS ("Redirect is not allowed for a preflight request") →
+  // "Failed to fetch RSC payload" → transición sucia que acababa en /sign-in.
+  // Solo pasaba en producción (en dev todo es un host, no hay cruce de origen).
   //
-  // Se arregla aquí y no en el `redirect` de la acción de login porque hay
-  // más puertas que esa —el final del onboarding, un marcador viejo, el
-  // enlace de un correo— y todas apuntan a rutas, que no saben de hosts.
-  //
-  // Igual que arriba, todo depende de que el host de destino esté configurado
-  // y sea distinto del actual: sin `FACTURACION_HOST` esto no hace nada, y
-  // nunca se redirige a sí mismo.
-  // Y no solo desde `app.`: CADA ruta de módulo va a su host, venga de donde
-  // venga. `pos.zero.com.do/dashboard/suscripcion` servía la pantalla de
-  // suscripción —que es de Facturación— desde el host del punto de venta,
-  // porque la regla de abajo solo mira `/dashboard` EXACTO y esta ruta tiene
-  // cola. Cualquier enlace, marcador o correo con una ruta profunda entraba
-  // por la puerta equivocada.
-  //
-  // `destino !== hostActual` es lo que evita el bucle y lo que hace que un
-  // host sin configurar no haga nada.
-  {
-    const destino = hostDeModulo(moduloDeRuta(pathname));
-    if (destino && destino !== hostActual) {
-      const url = new URL(request.url);
-      url.host = destino;
-      url.protocol = 'https:';
-      return NextResponse.redirect(url);
-    }
-  }
+  // Como es un ÚNICO deployment sirviendo todos los hostnames, no hay nada que
+  // ganar forzando el salto: cada host puede servir cualquier ruta con el mismo
+  // código. Los subdominios siguen vivos para quien entra directo (el rewrite
+  // de la raíz de abajo), y los enlaces entre módulos que deben cambiar de host
+  // ya usan URL absoluta (`moduleUrl()`), que es navegación dura y sí cruza
+  // orígenes sin CORS. Ver decisión "Plan A" (aviso a Alex).
 
   // Home del módulo según el host. Solo se toca la raíz (y /dashboard exacto
   // en el host POS) — las rutas profundas quedan protegidas por los guards de
