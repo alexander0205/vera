@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { fmtDOP, fmtFechaCorta } from '@/lib/utils/format';
 import { CalendarDays, Loader2, Receipt, Search, UserRound, Wallet } from 'lucide-react';
+import { ComprobantesClient } from './_comprobantes-client';
 
 interface Pago {
   id: number;
@@ -56,6 +57,15 @@ export default function PagosEscolaresClient() {
 
   // El listado viene paginado del servidor: un colegio cobra miles de pagos al
   // año y traerlos todos dejaba la pantalla en blanco.
+  // Dos vistas de lo mismo visto desde dos momentos: lo que YA entró, y lo que
+  // dice una familia que mandó y falta comprobar. El correo que le llega al
+  // colegio apunta aquí con ?tab=comprobantes.
+  const [tab, setTab] = useState<'aplicados' | 'comprobantes'>(() => {
+    if (typeof window === 'undefined') return 'aplicados';
+    return new URLSearchParams(window.location.search).get('tab') === 'comprobantes'
+      ? 'comprobantes' : 'aplicados';
+  });
+
   const [pagina, setPagina] = useState(1);
   const [paginaInfo, setPaginaInfo] = useState({ total: 0, paginas: 1, porPagina: 50 });
 
@@ -103,9 +113,28 @@ export default function PagosEscolaresClient() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Pagos escolares</h1>
-          <p className="text-sm text-gray-500 mt-1">Pagos aplicados a inscripción, mensualidades y otros cargos</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {tab === 'aplicados'
+              ? 'Pagos aplicados a inscripción, mensualidades y otros cargos'
+              : 'Transferencias que las familias dicen haber hecho, esperando que las verifiques'}
+          </p>
         </div>
       </div>
+
+      <div className="flex gap-1 border-b border-gray-200">
+        {([['aplicados', 'Pagos aplicados'], ['comprobantes', 'Por aprobar']] as const).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setTab(k)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
+              tab === k
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-gray-500 hover:text-gray-900'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'comprobantes' ? <ComprobantesClient /> : <>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Wallet} label="Pagos" value={String(pagos.length)} />
@@ -194,6 +223,7 @@ export default function PagosEscolaresClient() {
           />
         </CardContent>
       </Card>
+      </>}
     </section>
   );
 }

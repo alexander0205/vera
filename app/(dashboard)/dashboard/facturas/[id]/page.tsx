@@ -38,7 +38,7 @@ import { ComprobantesCard } from '@/components/pagos/ComprobantesCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EntityNotes } from '@/components/entity-notes';
 import { EntityHistory } from '@/components/entity-history';
-import { StickyNote, History as HistoryIcon } from 'lucide-react';
+import { StickyNote, History as HistoryIcon, Link2 } from 'lucide-react';
 import { useDefaultPrinter } from '@/lib/hooks/useDefaultPrinter';
 import { usePermissions } from '@/lib/hooks/usePermissions';
 import { useVolver } from '@/lib/hooks/useVolver';
@@ -555,7 +555,28 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
 
   // ─── Permisos del usuario (gating de UI) ─────────────────────────────────────
   // El rol `user` puede crear/emitir/exportar pero NO editar ni anular facturas.
-  const { can } = usePermissions();
+  const { can, modules } = usePermissions();
+  /** El enlace de pago es del módulo escolar: sin él no hay página que ofrecer. */
+  const esColegio = modules.includes('escolar');
+
+  /**
+   * Copia al portapapeles el enlace de pago del comprador.
+   *
+   * Se copia en vez de abrirlo: lo que se quiere hacer con él es pegarlo en un
+   * WhatsApp o un correo, no mirarlo. El servidor lo crea si no existe y
+   * comprueba que el contacto sea responsable de un alumno de este colegio.
+   */
+  async function copiarEnlacePago() {
+    try {
+      const r = await fetch(`/api/administracion-escolar/link-pago?facturaId=${docId}`);
+      const d = await r.json();
+      if (!r.ok) { toast.error(d.error ?? 'No se pudo obtener el enlace'); return; }
+      await navigator.clipboard.writeText(d.url);
+      toast.success(`Enlace copiado · referencia ${d.referencia}`);
+    } catch {
+      toast.error('No se pudo copiar el enlace');
+    }
+  }
   const { tipoVisible, enProduccion, ambiente } = useTiposDisponibles();
   const canCreate = can('facturas:crear');
   const canEdit   = can('facturas:editar');
@@ -1122,6 +1143,22 @@ export function DocumentoDetalle({ variant = 'factura' }: { variant?: DocVariant
                 >
                   <Copy className="h-4 w-4 text-gray-500" />
                   Duplicar
+                </DropdownMenuItem>
+              )}
+              {/* El enlace de pago del padre. Solo en colegios: en una empresa
+                  normal el comprador no tiene una página donde ver su deuda y
+                  subir un comprobante.
+
+                  Va aquí y no solo en la ficha del alumno porque el caso de uso
+                  empieza en la factura: alguien la mira, ve que está pendiente,
+                  y quiere mandársela por donde sea. */}
+              {esColegio && (
+                <DropdownMenuItem
+                  onSelect={copiarEnlacePago}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Link2 className="h-4 w-4 text-gray-500" />
+                  Copiar enlace de pago
                 </DropdownMenuItem>
               )}
               {canCreate && puedeCrearNota && (

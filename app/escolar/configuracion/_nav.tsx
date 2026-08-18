@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BellRing, Coins, DownloadCloud, Layers, Tag } from 'lucide-react';
+import { BellRing, Coins, DownloadCloud, Landmark, Layers, Tag } from 'lucide-react';
 
 /**
  * Sub-navegación de Configuración escolar, con rutas de verdad.
@@ -28,6 +28,8 @@ export const TABS = [
   // esta configuración y no tenía sentido dejarlo enterrado en una pestaña.
   { href: '/escolar/configuracion/avisos', label: 'Avisos', icon: BellRing,
     hint: 'Por dónde le escribe el colegio a los tutores: WhatsApp y SMS.' },
+  { href: '/escolar/configuracion/cobros', label: 'Cobros', icon: Landmark,
+    hint: 'La cuenta a la que las familias transfieren desde su enlace de pago.' },
   // SIGERD vive aquí y no en el menú principal: traer datos del MINERD se hace
   // al montar el colegio y una vez al año, no a diario.
   { href: '/escolar/configuracion/sigerd', label: 'SIGERD', icon: DownloadCloud,
