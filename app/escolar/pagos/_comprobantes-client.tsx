@@ -10,12 +10,17 @@
  * Aprobar registra el cobro contra la factura del cargo. Lo que no tiene
  * factura no se puede cobrar, y eso se dice DESPUÉS de aprobar, con el detalle
  * de qué quedó fuera: esconderlo haría creer que la deuda bajó cuando no bajó.
+ *
+ * El botón de aprobar no cobra: abre el diálogo donde se ve el reparto y se
+ * corrige el monto. Rechazar sí decide en el sitio — no mueve dinero, solo
+ * necesita el motivo que el padre va a leer.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { AprobarComprobanteDialog } from '@/components/administracion-escolar/AprobarComprobanteDialog';
 import { fmtDOP } from '@/lib/utils/format';
 import {
   CheckCircle2, Clock, FileText, Loader2, Paperclip, XCircle, AlertTriangle, ExternalLink,
@@ -67,6 +72,7 @@ export function ComprobantesClient() {
   const [ocupado, setOcupado] = useState<number | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [viendo, setViendo] = useState<Comprobante | null>(null);
+  const [aprobando, setAprobando] = useState<Comprobante | null>(null);
   const [rechazando, setRechazando] = useState<number | null>(null);
   const [motivo, setMotivo] = useState('');
 
@@ -86,29 +92,17 @@ export function ComprobantesClient() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  async function decidir(id: number, accion: 'aprobar' | 'rechazar', motivoTexto?: string) {
+  async function rechazar(id: number, motivoTexto: string) {
     setOcupado(id); setAviso(null); setError(null);
     try {
       const r = await fetch(`/api/administracion-escolar/comprobantes/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion, motivo: motivoTexto }),
+        body: JSON.stringify({ accion: 'rechazar', motivo: motivoTexto }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error ?? 'No se pudo procesar'); return; }
 
-      if (accion === 'aprobar') {
-        const partes = [`Cobro registrado: ${fmtDOP(d.aplicadoCentavos ?? 0)}`];
-        if (d.sinAplicarCentavos > 0) {
-          partes.push(
-            `Quedaron ${fmtDOP(d.sinAplicarCentavos)} sin aplicar` +
-            (d.cargosSinFactura?.length
-              ? `: ${d.cargosSinFactura.join(', ')} todavía no está facturado. Factura el cargo y registra el cobro en la factura.`
-              : ' porque las facturas ya estaban saldadas.'),
-          );
-        }
-        setAviso(partes.join('. '));
-      }
       setRechazando(null); setMotivo('');
       await cargar();
     } catch {
@@ -117,6 +111,28 @@ export function ComprobantesClient() {
       setOcupado(null);
     }
   }
+
+  /**
+   * El resultado lo cuenta el SERVIDOR, no el diálogo: entre la previa y el
+   * clic pudo cobrarse una de esas facturas en caja, y lo que hay que leer es
+   * lo que acabó entrando, no lo que se prometió.
+   */
+  const trasAprobar = useCallback(async (r: {
+    aplicadoCentavos: number; sinAplicarCentavos: number; cargosSinFactura: string[];
+  }) => {
+    setError(null);
+    const partes = [`Cobro registrado: ${fmtDOP(r.aplicadoCentavos)}`];
+    if (r.sinAplicarCentavos > 0) {
+      partes.push(
+        `Quedaron ${fmtDOP(r.sinAplicarCentavos)} sin aplicar` +
+        (r.cargosSinFactura.length
+          ? `: ${r.cargosSinFactura.join(', ')} todavía no está facturado. Factura el cargo y registra el cobro en la factura.`
+          : ' porque las facturas ya estaban saldadas.'),
+      );
+    }
+    setAviso(partes.join('. '));
+    await cargar();
+  }, [cargar]);
 
   const pendientes = filas.filter((f) => f.estado === 'pendiente');
   const montoPendiente = pendientes.reduce((s, f) => s + f.montoCentavos, 0);
@@ -228,7 +244,7 @@ export function ComprobantesClient() {
                         Rechazar
                       </Button>
                       <Button size="sm" disabled={ocupado === c.id}
-                        onClick={() => decidir(c.id, 'aprobar')}>
+                        onClick={() => setAprobando(c)}>
                         {ocupado === c.id
                           ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                           : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
@@ -250,7 +266,7 @@ export function ComprobantesClient() {
                       <Button variant="outline" size="sm"
                         onClick={() => { setRechazando(null); setMotivo(''); }}>Cancelar</Button>
                       <Button size="sm" disabled={!motivo.trim() || ocupado === c.id}
-                        onClick={() => decidir(c.id, 'rechazar', motivo)}>
+                        onClick={() => rechazar(c.id, motivo)}>
                         Confirmar rechazo
                       </Button>
                     </div>
@@ -261,6 +277,13 @@ export function ComprobantesClient() {
           );
         })
       )}
+
+      <AprobarComprobanteDialog
+        comprobante={aprobando}
+        abierto={aprobando !== null}
+        onCerrar={() => setAprobando(null)}
+        onAprobado={trasAprobar}
+      />
 
       {/* Ver el archivo sin salir de la cola. */}
       {viendo && (

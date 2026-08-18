@@ -157,6 +157,164 @@ export interface ResultadoAprobacion {
   cargosSinFactura: string[];
 }
 
+/** Lo que el revisor puede corregir antes de que el cobro entre. */
+export interface AjustesAprobacion {
+  /** El padre declara un monto; el revisor mira el papel del banco. Manda el papel. */
+  montoCentavos?: number;
+  fechaPago?: string;
+  metodo?: string;
+  referencia?: string;
+}
+
+export interface DestinoAplicacion {
+  facturaId: number;
+  encf: string | null;
+  codigo: string | null;
+  montoCentavos: number;
+  /** De qué es esa factura, para reconocerla sin abrirla. */
+  detalle: string;
+}
+
+export interface PlanAplicacion {
+  montoCentavos: number;
+  destinos: DestinoAplicacion[];
+  aplicadoCentavos: number;
+  sinAplicarCentavos: number;
+  cargosSinFactura: string[];
+}
+
+/**
+ * A dónde iría este dinero, sin escribir nada.
+ *
+ * Es la MISMA función que usa la aprobación para decidir. Separarlas sería
+ * repetir el cálculo dos veces, y entonces la pantalla podría prometer un
+ * reparto y la base hacer otro — que es justo lo que la previa existe para
+ * impedir.
+ */
+async function planDeAplicacion(
+  teamId: number,
+  cargos: CargoDelComprobante[],
+  montoCentavos: number,
+): Promise<PlanAplicacion> {
+  const idsCargo = cargos.map((x) => x.cargoId);
+
+  // Se releen los cargos, no se usa la foto: entre que el padre subió el papel
+  // y el colegio lo mira pudo facturarse, pagarse en caja o anularse. La foto
+  // sirve para saber qué creyó pagar, no para decidir dónde va el dinero.
+  const vivos = idsCargo.length === 0 ? [] : await db
+    .select({
+      id:               adminEscolarCargos.id,
+      ecfDocumentId:    adminEscolarCargos.ecfDocumentId,
+      saldoCentavos:    adminEscolarCargos.saldoCentavos,
+      fechaVencimiento: adminEscolarCargos.fechaVencimiento,
+      concepto:         adminEscolarConceptosPago.nombre,
+      nombres:          adminEscolarEstudiantes.nombres,
+      encf:             ecfDocuments.encf,
+      codigo:           ecfDocuments.codigo,
+    })
+    .from(adminEscolarCargos)
+    .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
+    .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
+    .leftJoin(ecfDocuments, eq(adminEscolarCargos.ecfDocumentId, ecfDocuments.id))
+    .where(and(
+      eq(adminEscolarCargos.teamId, teamId),
+      inArray(adminEscolarCargos.id, idsCargo),
+    ))
+    .orderBy(asc(adminEscolarCargos.fechaVencimiento), asc(adminEscolarCargos.id));
+
+  const pagables   = vivos.filter((v) => v.ecfDocumentId != null && v.saldoCentavos > 0);
+  const sinFactura = vivos.filter((v) => v.ecfDocumentId == null && v.saldoCentavos > 0);
+
+  // Saldo REAL de cada factura, no el del cargo: una factura puede cubrir
+  // varios cargos, y registrar la suma de los cargos la pasaría de largo.
+  const facturaIds = [...new Set(pagables.map((p) => p.ecfDocumentId!))];
+  // `ecf_documents` no guarda el saldo: se calcula igual que en
+  // sincronizarSaldosDesdeFacturas — total menos lo cobrado menos las notas de
+  // crédito. Sin restar las NC, una nota que ya redujo la factura haría creer
+  // que queda hueco y `registrarPago` rechazaría el cobro entero.
+  const saldos = facturaIds.length === 0 ? [] : await db
+    .select({
+      id: ecfDocuments.id,
+      saldo: sql<number>`(
+        ${ecfDocuments.montoTotal}
+        - COALESCE((SELECT SUM(monto_centavos) FROM pagos_recibidos
+                    WHERE pagos_recibidos.ecf_document_id = ecf_documents.id), 0)
+        - COALESCE((SELECT SUM(nc.monto_total) FROM ecf_documents nc
+                    WHERE nc.team_id = ecf_documents.team_id
+                      AND nc.tipo_ecf = '34'
+                      AND nc.credito_generado_cents IS NULL
+                      AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
+                      AND nc.codigo_modificacion IS DISTINCT FROM 2
+                      AND (nc.origen_documento_id = ecf_documents.id
+                           OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf))
+                   ), 0)
+      )::int`,
+    })
+    .from(ecfDocuments)
+    .where(and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.id, facturaIds)));
+  const saldoDe = new Map(saldos.map((s) => [s.id, Math.max(0, s.saldo)]));
+
+  const { asignaciones, sobrante } = repartir(
+    montoCentavos,
+    pagables.map((p) => ({ facturaId: p.ecfDocumentId!, saldo: saldoDe.get(p.ecfDocumentId!) ?? 0 })),
+  );
+
+  // Cómo se llama cada factura en la pantalla. Un e-NCF no le dice nada a
+  // nadie; el concepto y el alumno sí.
+  const porFactura = new Map<number, { encf: string | null; codigo: string | null; detalle: string[] }>();
+  for (const p of pagables) {
+    const k = p.ecfDocumentId!;
+    const e = porFactura.get(k) ?? { encf: p.encf, codigo: p.codigo, detalle: [] };
+    e.detalle.push(`${p.concepto} · ${p.nombres}`);
+    porFactura.set(k, e);
+  }
+
+  const destinos: DestinoAplicacion[] = asignaciones.map((a) => {
+    const f = porFactura.get(a.facturaId);
+    return {
+      facturaId: a.facturaId,
+      encf: f?.encf ?? null,
+      codigo: f?.codigo ?? null,
+      montoCentavos: a.monto,
+      detalle: [...new Set(f?.detalle ?? [])].join(', '),
+    };
+  });
+
+  return {
+    montoCentavos,
+    destinos,
+    aplicadoCentavos: destinos.reduce((s, d) => s + d.montoCentavos, 0),
+    sinAplicarCentavos: sobrante,
+    cargosSinFactura: [...new Set(sinFactura.map((s) => `${s.concepto} · ${s.nombres}`))],
+  };
+}
+
+/**
+ * La previa de aprobar: a dónde iría el dinero, sin tocar nada.
+ *
+ * Existe porque aprobar era un clic a ciegas que contaba el resultado DESPUÉS.
+ * Quien revisa tiene el papel del banco delante y a veces dice otra cosa que
+ * lo que el padre escribió — y corregirlo obligaba a rechazar y pedirle que
+ * lo volviera a subir.
+ */
+export async function previsualizarAprobacion(
+  teamId: number, id: number, montoCentavos?: number,
+): Promise<PlanAplicacion & { declaradoCentavos: number; referencia: string | null; estado: string }> {
+  const [c] = await db
+    .select()
+    .from(adminEscolarComprobantes)
+    .where(and(
+      eq(adminEscolarComprobantes.id, id),
+      eq(adminEscolarComprobantes.teamId, teamId),
+    ))
+    .limit(1);
+  if (!c) throw new ComprobanteError('Comprobante no encontrado');
+
+  const monto = montoCentavos != null && montoCentavos > 0 ? montoCentavos : c.montoCentavos;
+  const plan = await planDeAplicacion(teamId, c.cargos, monto);
+  return { ...plan, declaradoCentavos: c.montoCentavos, referencia: c.referencia, estado: c.estado };
+}
+
 /**
  * Aprueba: registra el cobro contra las facturas de los cargos que cubre.
  *
@@ -164,9 +322,12 @@ export interface ResultadoAprobacion {
  * una deuda. Si el padre transfirió menos que el total —cosa normal— lo que
  * llega tapa las cuotas más atrasadas primero, no las que él eligió: no eligió
  * nada, solo mandó un monto.
+ *
+ * `ajustes` es lo que el revisor corrigió mirando el papel del banco. El monto
+ * del comprobante es lo que el padre DECLARÓ, y no siempre coincide.
  */
 export async function aprobarComprobante(
-  teamId: number, id: number, usuarioId: number,
+  teamId: number, id: number, usuarioId: number, ajustes: AjustesAprobacion = {},
 ): Promise<ResultadoAprobacion> {
   /**
    * Se reclama ANTES de tocar dinero, no después.
@@ -202,93 +363,37 @@ export async function aprobarComprobante(
    * factura no hay nada.
    */
   try {
-    const idsCargo = c.cargos.map((x) => x.cargoId);
+    const monto = ajustes.montoCentavos != null && ajustes.montoCentavos > 0
+      ? ajustes.montoCentavos
+      : c.montoCentavos;
 
-    // Se releen los cargos, no se usa la foto: entre que el padre subió el papel
-    // y el colegio lo mira pudo facturarse, pagarse en caja o anularse. La foto
-    // sirve para saber qué creyó pagar, no para decidir dónde va el dinero.
-    const vivos = idsCargo.length === 0 ? [] : await db
-      .select({
-        id:               adminEscolarCargos.id,
-        ecfDocumentId:    adminEscolarCargos.ecfDocumentId,
-        saldoCentavos:    adminEscolarCargos.saldoCentavos,
-        fechaVencimiento: adminEscolarCargos.fechaVencimiento,
-        concepto:         adminEscolarConceptosPago.nombre,
-        nombres:          adminEscolarEstudiantes.nombres,
-      })
-      .from(adminEscolarCargos)
-      .innerJoin(adminEscolarConceptosPago, eq(adminEscolarCargos.conceptoId, adminEscolarConceptosPago.id))
-      .innerJoin(adminEscolarEstudiantes, eq(adminEscolarCargos.estudianteId, adminEscolarEstudiantes.id))
-      .where(and(
-        eq(adminEscolarCargos.teamId, teamId),
-        inArray(adminEscolarCargos.id, idsCargo),
-      ))
-      .orderBy(asc(adminEscolarCargos.fechaVencimiento), asc(adminEscolarCargos.id));
+    const plan = await planDeAplicacion(teamId, c.cargos, monto);
 
-    const pagables = vivos.filter((v) => v.ecfDocumentId != null && v.saldoCentavos > 0);
-    const sinFactura = vivos.filter((v) => v.ecfDocumentId == null && v.saldoCentavos > 0);
+    const fecha = ajustes.fechaPago?.trim() || new Date().toISOString().slice(0, 10);
+    const metodo = ajustes.metodo?.trim() || 'transferencia';
+    const referencia = ajustes.referencia?.trim() || c.referencia;
 
-    // Saldo REAL de cada factura, no el del cargo: una factura puede cubrir
-    // varios cargos, y registrar la suma de los cargos la pasaría de largo.
-    const facturaIds = [...new Set(pagables.map((p) => p.ecfDocumentId!))];
-    // `ecf_documents` no guarda el saldo: se calcula igual que en
-    // sincronizarSaldosDesdeFacturas — total menos lo cobrado menos las notas de
-    // crédito. Sin restar las NC, una nota que ya redujo la factura haría creer
-    // que queda hueco y `registrarPago` rechazaría el cobro entero.
-    const saldos = facturaIds.length === 0 ? [] : await db
-      .select({
-        id: ecfDocuments.id,
-        saldo: sql<number>`(
-          ${ecfDocuments.montoTotal}
-          - COALESCE((SELECT SUM(monto_centavos) FROM pagos_recibidos
-                      WHERE pagos_recibidos.ecf_document_id = ecf_documents.id), 0)
-          - COALESCE((SELECT SUM(nc.monto_total) FROM ecf_documents nc
-                      WHERE nc.team_id = ecf_documents.team_id
-                        AND nc.tipo_ecf = '34'
-                        AND nc.credito_generado_cents IS NULL
-                        AND nc.estado NOT IN ('ANULADO', 'RECHAZADO')
-                        AND nc.codigo_modificacion IS DISTINCT FROM 2
-                        AND (nc.origen_documento_id = ecf_documents.id
-                             OR (ecf_documents.encf LIKE 'E%' AND nc.ncf_modificado = ecf_documents.encf))
-                     ), 0)
-        )::int`,
-      })
-      .from(ecfDocuments)
-      .where(and(eq(ecfDocuments.teamId, teamId), inArray(ecfDocuments.id, facturaIds)));
-    const saldoDe = new Map(saldos.map((s) => [s.id, Math.max(0, s.saldo)]));
-
-    const hoy = new Date().toISOString().slice(0, 10);
-    const { asignaciones, sobrante } = repartir(
-      c.montoCentavos,
-      pagables.map((p) => ({ facturaId: p.ecfDocumentId!, saldo: saldoDe.get(p.ecfDocumentId!) ?? 0 })),
-    );
-
-    const tocadas = new Set<number>();
-    let aplicado = 0;
-    for (const a of asignaciones) {
+    for (const d of plan.destinos) {
       await registrarPago({
         teamId,
-        ecfDocumentId: a.facturaId,
-        montoCentavos: a.monto,
-        metodo: 'transferencia',
-        referencia: c.referencia,
-        fechaPago: hoy,
+        ecfDocumentId: d.facturaId,
+        montoCentavos: d.montoCentavos,
+        metodo,
+        referencia,
+        fechaPago: fecha,
         notas: `Comprobante #${c.id} aprobado`,
         createdBy: usuarioId,
       });
-      aplicado += a.monto;
-      tocadas.add(a.facturaId);
     }
-    const restante = sobrante;
 
     // Baja el saldo de los cargos desde lo que acaba de entrar en las facturas.
-    if (tocadas.size > 0) await sincronizarSaldosDesdeFacturas(teamId);
+    if (plan.destinos.length > 0) await sincronizarSaldosDesdeFacturas(teamId);
 
     return {
-      aplicadoCentavos: aplicado,
-      sinAplicarCentavos: restante,
-      facturasTocadas: tocadas.size,
-      cargosSinFactura: sinFactura.map((s) => `${s.concepto} · ${s.nombres}`),
+      aplicadoCentavos: plan.aplicadoCentavos,
+      sinAplicarCentavos: plan.sinAplicarCentavos,
+      facturasTocadas: new Set(plan.destinos.map((d) => d.facturaId)).size,
+      cargosSinFactura: plan.cargosSinFactura,
     };
   } catch (e) {
     await db.update(adminEscolarComprobantes)
