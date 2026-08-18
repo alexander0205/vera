@@ -46,8 +46,12 @@ const campo =
   'h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-[15px] text-gray-900 ' +
   'placeholder:text-gray-400 outline-none transition focus:border-zero-500 focus:ring-4 focus:ring-zero-500/10';
 
-export function PasoEmpresa({ rncActual, razonSocialActual }: {
+export function PasoEmpresa({
+  rncActual, razonSocialActual, nombreComercialActual, lineaActual, rncManualActual, volviendo,
+}: {
   rncActual: string | null; razonSocialActual: string | null;
+  nombreComercialActual?: string | null; lineaActual?: LineaKey | null;
+  rncManualActual?: boolean; volviendo?: boolean;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     guardarEmpresa, { error: '' },
@@ -57,14 +61,18 @@ export function PasoEmpresa({ rncActual, razonSocialActual }: {
   const [buscando, setBuscando] = useState(false);
   const [hallazgo, setHallazgo] = useState<Hallazgo | null>(null);
   const [aMano, setAMano] = useState(false);
-  const [linea, setLinea] = useState<LineaKey>('erp');
+  const [linea, setLinea] = useState<LineaKey>(lineaActual ?? 'erp');
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
+  // Modo "volviendo": la empresa ya se confirmó y el usuario regresó a cambiar
+  // la línea. Se muestra el formulario con lo guardado, sin obligar a re-buscar
+  // el RNC; puede pulsar «Buscar otro RNC» para cambiar de empresa por completo.
+  const [volver, setVolver] = useState(!!volviendo);
 
   async function buscar() {
     const limpio = rnc.replace(/\D/g, '');
     if (limpio.length < 9) { setErrorBusqueda('El RNC debe tener 9 u 11 dígitos'); return; }
 
-    setBuscando(true); setErrorBusqueda(null); setHallazgo(null); setAMano(false);
+    setBuscando(true); setErrorBusqueda(null); setHallazgo(null); setAMano(false); setVolver(false);
     try {
       const r = await fetch(`/api/onboarding/rnc?rnc=${limpio}`);
       const d = await r.json();
@@ -81,33 +89,42 @@ export function PasoEmpresa({ rncActual, razonSocialActual }: {
 
   const confirmado = hallazgo?.encontrado === true;
 
+  // Volviendo de un paso posterior a cambiar solo la línea: la empresa ya está
+  // confirmada, no se le vuelve a poner la búsqueda de RNC por delante.
+  const modoVolver = volver && !confirmado && !aMano;
+
   return (
     <div>
       <h1 className="font-[family-name:var(--font-display)] text-[30px] font-semibold tracking-[-0.02em] text-gray-950">
-        Empecemos por tu RNC
+        {modoVolver ? '¿Qué haces?' : 'Empecemos por tu RNC'}
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-gray-500">
-        Con eso buscamos tu empresa en el padrón de la DGII y llenamos el resto nosotros.
+        {modoVolver
+          ? 'Cambia lo que haces y vuelve a ver el plan que te toca.'
+          : 'Con eso buscamos tu empresa en el padrón de la DGII y llenamos el resto nosotros.'}
       </p>
 
       {/* La búsqueda vive fuera del <form>: pulsar Enter aquí tiene que buscar,
-          no enviar el paso con los campos todavía vacíos. */}
-      <div className="mt-8 flex gap-3">
-        <input
-          value={rnc}
-          onChange={(e) => setRnc(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscar(); } }}
-          inputMode="numeric" maxLength={13} placeholder="131793916"
-          aria-label="RNC" className={campo}
-        />
-        <button
-          type="button" onClick={buscar} disabled={buscando}
-          className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-zero-600 px-6 text-[15px] font-semibold text-white transition hover:bg-zero-700 disabled:opacity-60"
-        >
-          {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-          Buscar
-        </button>
-      </div>
+          no enviar el paso con los campos todavía vacíos. En modo volver se
+          oculta: se llega con «Buscar otro RNC», que reactiva este bloque. */}
+      {!modoVolver && (
+        <div className="mt-8 flex gap-3">
+          <input
+            value={rnc}
+            onChange={(e) => setRnc(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscar(); } }}
+            inputMode="numeric" maxLength={13} placeholder="131793916"
+            aria-label="RNC" className={campo}
+          />
+          <button
+            type="button" onClick={buscar} disabled={buscando}
+            className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-zero-600 px-6 text-[15px] font-semibold text-white transition hover:bg-zero-700 disabled:opacity-60"
+          >
+            {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Buscar
+          </button>
+        </div>
+      )}
 
       {errorBusqueda && (
         <p role="alert" className="mt-3 text-sm text-red-600">{errorBusqueda}</p>
@@ -123,10 +140,38 @@ export function PasoEmpresa({ rncActual, razonSocialActual }: {
         </div>
       )}
 
-      {(confirmado || aMano) && (
+      {(confirmado || aMano || volver) && (
         <form action={formAction} className="mt-8 space-y-6">
           <input type="hidden" name="rnc" value={rnc.replace(/\D/g, '')} />
           {aMano && <input type="hidden" name="manual" value="on" />}
+
+          {/* Al volver, la empresa ya está confirmada: se reenvía lo guardado y
+              se preserva si el RNC se había tecleado a mano. */}
+          {volver && !confirmado && !aMano && (
+            <>
+              <input type="hidden" name="razonSocial" value={razonSocialActual ?? ''} />
+              <input type="hidden" name="nombreComercial" value={nombreComercialActual ?? ''} />
+              {rncManualActual && <input type="hidden" name="manual" value="on" />}
+              <div className="rounded-2xl border border-gray-200 bg-white p-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Tu empresa
+                </p>
+                <p className="mt-2 font-[family-name:var(--font-display)] text-[19px] font-semibold text-gray-950">
+                  {razonSocialActual}
+                </p>
+                {nombreComercialActual && (
+                  <p className="text-sm text-gray-500">{nombreComercialActual}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setVolver(false); setHallazgo(null); }}
+                  className="mt-3 text-sm font-medium text-zero-600 transition hover:text-zero-700"
+                >
+                  Buscar otro RNC
+                </button>
+              </div>
+            </>
+          )}
 
           {confirmado && (
             <div className="rounded-2xl border border-gray-200 bg-white p-5">

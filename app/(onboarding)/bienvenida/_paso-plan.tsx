@@ -145,7 +145,7 @@ export function PasoPlan({ plan, linea, tamano, razonSocial }: {
           {BILLING_ENABLED && (
             <>
               {' · '}
-              <Link href="/pricing" className="font-medium text-gray-500 underline underline-offset-2 hover:text-gray-700">
+              <Link href="/precios" className="font-medium text-gray-500 underline underline-offset-2 hover:text-gray-700">
                 Ver todos los planes
               </Link>
             </>
