@@ -4,13 +4,15 @@ import { planesDeFamilia, tramoPorEstudiantes } from '@/lib/config/plans';
 /**
  * Los tramos de colegio y lo que traen dentro.
  *
- * Esto existe por un desajuste real: los topes decían 150/300/500/800 mientras
- * los avisos de WhatsApp seguían calculados sobre 100/225/400/650. Nada
- * fallaba, nada avisaba — pero el colegio que llenaba su tramo recibía 2
- * avisos por estudiante en vez de 3, y los avisos cuestan dinero de verdad.
- *
  * Un número suelto en un objeto de configuración no se rompe solo: se queda
  * viejo. Estas pruebas son lo que hace que se rompa.
+ *
+ * Sobre los avisos de WhatsApp: NO están calculados sobre el techo del tramo
+ * sino sobre el colegio típico de cada banda —100, 225, 400 y 650—, a tres por
+ * estudiante al mes. Es una decisión de precio tomada a conciencia, no un
+ * descuido, así que aquí no se exige que cubran el techo: se exige que la
+ * cobertura real siga siendo la que alguien decidió, para que si un día se
+ * mueve un tramo alguien vuelva a mirar este número.
  */
 
 const TRAMOS = planesDeFamilia('colegio');
@@ -29,14 +31,41 @@ describe('tramos de colegio', () => {
   });
 
   /**
-   * El candado que faltaba. Si alguien mueve un tramo y no mueve su cuota de
-   * avisos, esto se cae aquí y no en la factura de un colegio.
+   * El colegio TÍPICO sobre el que se dimensionó cada cuota. Si alguien mueve
+   * un tramo sin volver a mirar los avisos, esto se cae aquí y no en la
+   * factura de WhatsApp a fin de mes.
    */
-  it('los avisos alcanzan para 3 por estudiante HASTA EL TOPE del tramo', () => {
+  const TIPICO: Record<string, number> = {
+    'colegio-basico': 100, 'colegio-intermedio': 225,
+    'colegio-avanzado': 400, 'colegio-institucional': 650,
+  };
+
+  it('los avisos dan 3 por estudiante al colegio típico de cada banda', () => {
     for (const p of TRAMOS) {
-      expect(p.limits.whatsappMensajes).toBe(p.limits.estudiantes * AVISOS_POR_ESTUDIANTE);
-      expect(p.limits.smsMensajes).toBe(p.limits.estudiantes * AVISOS_POR_ESTUDIANTE);
+      expect(p.limits.whatsappMensajes).toBe(TIPICO[p.key] * AVISOS_POR_ESTUDIANTE);
+      expect(p.limits.smsMensajes).toBe(p.limits.whatsappMensajes);
     }
+  });
+
+  /**
+   * Y lo que eso significa para quien llena su tramo, escrito con número
+   * porque es la pregunta que va a llegar por soporte: «pagué el Básico de 150
+   * y me quedé sin mensajes». Son 2 por estudiante, no 3. Está asumido.
+   */
+  it('el colegio que llena su tramo recibe entre 2 y 2.5 avisos por estudiante', () => {
+    for (const p of TRAMOS) {
+      const enElTecho = p.limits.whatsappMensajes / p.limits.estudiantes;
+      expect(enElTecho).toBeGreaterThanOrEqual(2);
+      expect(enElTecho).toBeLessThan(AVISOS_POR_ESTUDIANTE);
+    }
+  });
+
+  it('el típico de cada banda cae dentro de su propia banda', () => {
+    TRAMOS.forEach((p, i) => {
+      const piso = i === 0 ? 1 : TRAMOS[i - 1].limits.estudiantes + 1;
+      expect(TIPICO[p.key]).toBeGreaterThanOrEqual(piso);
+      expect(TIPICO[p.key]).toBeLessThanOrEqual(p.limits.estudiantes);
+    });
   });
 
   it('lo que se le enseña al cliente dice el mismo número que se aplica', () => {
@@ -58,7 +87,7 @@ describe('tramos de colegio', () => {
   });
 
   it('e-CF sin tope en los cuatro', () => {
-    // Un colegio de 400 alumnos emite ~1,000 comprobantes en el mes de
+    // Un colegio de 441 alumnos emite ~1,000 comprobantes en el mes de
     // inscripción; cualquier tope lo dejaría sin facturar.
     for (const p of TRAMOS) expect(p.limits.docs).toBe(-1);
   });
