@@ -30,6 +30,13 @@ interface Espera {
   esperaMinutos: number | null;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
 export function TicketWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<TicketMessage[]>([]);
@@ -169,6 +176,7 @@ export function TicketWidget() {
     }
     let stream: MediaStream | null = null;
     let video: HTMLVideoElement | null = null;
+    setLoading(true);
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
 
@@ -176,12 +184,15 @@ export function TicketWidget() {
       video.srcObject = stream;
       video.muted = true;
 
-      await new Promise<void>((resolve, reject) => {
-        if (!video) return reject(new Error('no video element'));
-        video.onloadedmetadata = () => resolve();
-        video.onerror = () => reject(new Error('video load error'));
-        video.play().catch(reject);
-      });
+      await withTimeout(
+        new Promise<void>((resolve, reject) => {
+          if (!video) return reject(new Error('no video element'));
+          video.onloadedmetadata = () => resolve();
+          video.onerror = () => reject(new Error('video load error'));
+          video.play().catch(reject);
+        }),
+        8000,
+      );
 
       // Asegura que haya al menos un frame pintado antes de capturar.
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -203,9 +214,10 @@ export function TicketWidget() {
       const file = new File([blob], 'captura.png', { type: 'image/png' });
       await uploadFile(file);
     } catch {
-      // El usuario canceló el picker nativo o denegó el permiso — no es un error real, no alertamos.
+      // El usuario canceló el picker nativo o denegó el permiso, o se agotó el tiempo de espera — no alertamos.
     } finally {
       stream?.getTracks().forEach((t) => t.stop());
+      setLoading(false);
     }
   }
 
