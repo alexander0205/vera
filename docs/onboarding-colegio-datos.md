@@ -10,7 +10,9 @@
 
 Zero emite las facturas, cobra y avisa a las familias **por sí solo**. Para que lo haga bien necesita saber tres cosas: **a quién** se le cobra, **qué** se le cobra y **cuándo**.
 
-**Este documento no es un formulario de alta: es para que el sistema se adapte a ustedes.** No queremos que cambien su manera de trabajar para que les cuadre el programa. Queremos entender cómo cobran, qué le exigen a cada familia y en qué orden hacen las cosas, y ajustar Zero a eso. Todo lo que hay aquí —el tarifario, el calendario, los descuentos, los requisitos de inscripción, los formularios— se configura centro por centro.
+**El trato es este: ustedes nos cuentan cómo funciona su colegio una vez, y nosotros les entregamos el sistema montado.** Configurado con su tarifario, su calendario, sus descuentos, sus requisitos de inscripción y sus formularios — listo para usarse. A partir de ahí ustedes no configuran nada: entran a manejar sus finanzas y sus datos, y ya está.
+
+**Por eso este documento no es un formulario de alta: es para que el sistema se adapte a ustedes.** No queremos que cambien su manera de trabajar para que les cuadre el programa. Queremos entender cómo cobran, qué le exigen a cada familia y en qué orden hacen las cosas, y ajustar Zero a eso. Todo lo que hay aquí —el tarifario, el calendario, los descuentos, los requisitos de inscripción, los formularios— se configura centro por centro.
 
 Por eso vale más una respuesta larga que una corta. Si en algún punto su caso no encaja con lo que preguntamos, **escríbanlo tal cual**: ese desajuste es justo lo que necesitamos saber. Es más barato adaptarlo ahora que descubrirlo el día que salga la primera factura.
 
@@ -363,9 +365,26 @@ Algunas cosas que casi siempre aparecen aquí y que conviene decir desde el prin
 3. **Revisamos juntos** una muestra: tomamos tres o cuatro familias reales y comprobamos que lo que el sistema dice que deben es exactamente lo que deben. Aquí es donde se atrapan los errores, antes de que le lleguen a nadie.
 4. **Prueba en frío:** se emiten las facturas de un mes **sin enviarlas**, para revisarlas.
 5. **Arranque:** se activan los avisos automáticos y las familias empiezan a recibir su factura y su enlace de pago.
+6. **Se lo entregamos montado.** El trabajo de configurar termina aquí y no vuelve a caer sobre ustedes.
 
 El **punto 9 va por su cuenta**: no depende de lo económico y se puede ir armando en paralelo. Si nos lo mandan temprano, las familias pueden estar entregando sus papeles por el enlace mientras nosotros todavía cargamos el tarifario.
 
 Los puntos 1, 2, 3 y 4 son los que nos permiten empezar. Los demás se pueden ir completando mientras tanto — pero el **punto 7 tiene que estar antes de emitir la primera factura**, porque es lo único que impide cobrar dos veces.
+
+## Y a partir de ahí
+
+Terminado el arranque, **ustedes no vuelven a configurar nada**. Lo que hacen con Zero es lo suyo:
+
+- Ver quién debe, cuánto y desde cuándo, en cualquier momento y sin armar un reporte
+- Cobrar y registrar los pagos — en caja, por transferencia o por el enlace del padre
+- Revisar y aprobar los documentos que van entrando de las familias
+- Matricular a los que llegan y dar de baja a los que se van
+- Sacar las cuentas del centro cuando las necesiten
+
+Lo demás corre solo: las facturas salen el día que toca, los avisos se mandan, la mora se aplica y el enlace de pago se actualiza sin que nadie lo toque.
+
+Y cuando algo cambie —suben la mensualidad, abren un grado, cambian de banco, agregan un requisito nuevo— eso sí lo pueden tocar ustedes desde el sistema, o nos lo dicen y lo hacemos nosotros. Lo que no queremos es que tengan que aprenderse una herramienta de configuración para operar su colegio.
+
+---
 
 Cualquier duda sobre un punto concreto, escríbannos y lo resolvemos por teléfono en cinco minutos. Es preferible una llamada a un dato asumido.
