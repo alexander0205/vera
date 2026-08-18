@@ -161,7 +161,37 @@ export const getTeamForUser = cache(async () => {
     }
   });
 
-  return result?.team || null;
+  if (result?.team) return result.team;
+
+  /**
+   * El admin de plataforma no es miembro del team en el que entró.
+   *
+   * `getTeamIdForUser` ya lo contempla —le deja activar cualquier empresa sin
+   * membresía— pero esto salía de `team_members`, así que devolvía null y
+   * quien lo llamaba lo leía como «no hay sesión». En `/escolar` eso era un
+   * `redirect('/sign-in')`: el admin entraba a un colegio ajeno y la pantalla
+   * le decía que iniciara sesión, con la sesión intacta. Se veía como un
+   * deslogueo y no lo era — las demás rutas del módulo cargaban bien porque
+   * pasan por `getTeamIdForUser`.
+   *
+   * Sin este bloque, las dos funciones responden cosas distintas sobre el
+   * mismo team activo, y cuál de las dos use cada pantalla decide si el admin
+   * puede entrar. Eso no es una regla, es una casualidad.
+   */
+  if (user.platformRole === 'admin') {
+    return (await db.query.teams.findFirst({
+      where: eq(teams.id, teamId),
+      with: {
+        teamMembers: {
+          with: {
+            user: { columns: { id: true, name: true, email: true } },
+          },
+        },
+      },
+    })) ?? null;
+  }
+
+  return null;
 });
 
 /**
