@@ -65,11 +65,13 @@ describe('tramoPorFacturas', () => {
 
 describe('planSugerido', () => {
   it('para colegio pregunta por estudiantes, no por facturas', () => {
-    // 300 estudiantes es el tramo Intermedio. Si se equivocara de familia,
-    // 300 caería en un plan de e-CF y el colegio se quedaría sin su módulo.
-    expect(planSugerido('erp-colegio', 300)?.key).toBe('colegio-intermedio');
-    expect(planSugerido('erp-colegio', 150)?.key).toBe('colegio-basico');
-    expect(planSugerido('erp-colegio', 800)?.key).toBe('colegio-institucional');
+    // 225 estudiantes es el tramo Intermedio. Si se equivocara de familia,
+    // 225 caería en un plan de e-CF y el colegio se quedaría sin su módulo.
+    expect(planSugerido('erp-colegio', 225)?.key).toBe('colegio-intermedio');
+    expect(planSugerido('erp-colegio', 100)?.key).toBe('colegio-basico');
+    expect(planSugerido('erp-colegio', 650)?.key).toBe('colegio-institucional');
+    // El borde: 101 ya no cabe en Básico.
+    expect(planSugerido('erp-colegio', 101)?.key).toBe('colegio-intermedio');
   });
 
   it('POS y ERP comparten la familia de e-CF', () => {
@@ -80,7 +82,7 @@ describe('planSugerido', () => {
   it('devuelve las CLAVES de los planes, no sus nombres', () => {
     // Guardar el nombre en vez de la clave es el fallo que dejó a cinco de los
     // ocho planes cayendo a Gratis después de cobrar.
-    const plan = planSugerido('erp-colegio', 500);
+    const plan = planSugerido('erp-colegio', 400);
     expect(plan?.key).toBe('colegio-avanzado');
     expect(plan?.name).toBe('Avanzado');
   });

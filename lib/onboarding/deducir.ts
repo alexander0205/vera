@@ -104,12 +104,15 @@ export function preguntaDeTamano(linea: LineaKey): {
     return {
       titulo: '¿Cuántos estudiantes tiene el colegio?',
       ayuda: 'Es lo que decide tu plan. Si creces durante el año, se cambia sin perder nada.',
-      opciones: [
-        { valor: 150, etiqueta: 'Hasta 150' },
-        { valor: 300, etiqueta: 'Hasta 300' },
-        { valor: 500, etiqueta: 'Hasta 500' },
-        { valor: 800, etiqueta: 'Hasta 800' },
-      ],
+      // Una opción por tramo, sacada del catálogo. Escritas a mano se
+      // quedaron en 150/300/500/800 cuando los planes pasaron a
+      // 100/225/400/650, y el colegio elegía un tamaño que ya no existía —
+      // dos opciones distintas caían en el mismo plan y otro tramo no salía
+      // nunca. El test «sin escalones muertos» es el que caza eso.
+      opciones: planesDeFamilia('colegio').map(p => ({
+        valor: p.limits.estudiantes,
+        etiqueta: `Hasta ${p.limits.estudiantes}`,
+      })),
     };
   }
   return {

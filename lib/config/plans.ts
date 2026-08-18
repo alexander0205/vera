@@ -172,56 +172,67 @@ export const PLANS: PlanDef[] = [
   // Se cobra POR TRAMO DE ESTUDIANTES, no por consumo. Los cuatro llevan
   // e-CF ILIMITADO: un colegio de 441 alumnos emite ~1,000 comprobantes en el
   // mes de inscripción, así que cualquier tope lo dejaría sin facturar.
+  //
+  // `estudiantes` es el techo del tramo — 100, 225, 400, 650 — y de ahí sale
+  // todo lo demás: los avisos de WhatsApp son TRES POR ESTUDIANTE AL MES
+  // (la factura, el recordatorio y el vencido), así que 300 = 3×100 y
+  // 1,950 = 3×650. Si un día se mueve un tramo hay que mover su cuota de
+  // avisos con él, o el colegio del techo se queda sin mensajes a mitad de
+  // mes — y esos sí cuestan dinero.
+  //
+  // Antes los topes eran 150/300/500/800 mientras los avisos seguían
+  // calculados sobre 100/225/400/650: el colegio que llenaba su tramo
+  // recibía 2 avisos por estudiante en vez de 3.
   {
     key: 'colegio-basico', familia: 'colegio',
     modulos: [...MODULES_BASE, 'escolar', 'pos'],
     name: 'Básico', price: 135, priceEnvKey: 'STRIPE_PRICE_COLEGIO_BASICO',
-    limits: { docs: -1, users: 2, trialDocs: -1, estudiantes: 150, whatsappMensajes: 300, smsMensajes: 300 },
+    limits: { docs: -1, users: 2, trialDocs: -1, estudiantes: 100, whatsappMensajes: 300, smsMensajes: 300 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description: 'Hasta 150 estudiantes',
+      description: 'Hasta 100 estudiantes',
       badgeColor: 'bg-gray-100 text-gray-700 border-gray-200',
       highlighted: false,
-      marketingFeatures: ['Hasta 150 estudiantes', 'e-CF ilimitados', '2 usuarios', '300 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '8 horas de implementación'],
+      marketingFeatures: ['Hasta 100 estudiantes', 'e-CF ilimitados', '2 usuarios', '300 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '8 horas de implementación'],
     },
   },
   {
     key: 'colegio-intermedio', familia: 'colegio',
     modulos: [...MODULES_BASE, 'escolar', 'pos'],
     name: 'Intermedio', price: 237, priceEnvKey: 'STRIPE_PRICE_COLEGIO_INTERMEDIO',
-    limits: { docs: -1, users: 3, trialDocs: -1, estudiantes: 300, whatsappMensajes: 675, smsMensajes: 675 },
+    limits: { docs: -1, users: 3, trialDocs: -1, estudiantes: 225, whatsappMensajes: 675, smsMensajes: 675 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description: 'De 151 a 300 estudiantes',
+      description: 'De 101 a 225 estudiantes',
       badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
       highlighted: true,
-      marketingFeatures: ['Hasta 300 estudiantes', 'e-CF ilimitados', '3 usuarios', '675 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '10.5 horas de implementación'],
+      marketingFeatures: ['Hasta 225 estudiantes', 'e-CF ilimitados', '3 usuarios', '675 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '10.5 horas de implementación'],
     },
   },
   {
     key: 'colegio-avanzado', familia: 'colegio',
     modulos: [...MODULES_BASE, 'escolar', 'pos'],
     name: 'Avanzado', price: 350, priceEnvKey: 'STRIPE_PRICE_COLEGIO_AVANZADO',
-    limits: { docs: -1, users: 5, trialDocs: -1, estudiantes: 500, whatsappMensajes: 1200, smsMensajes: 1200 },
+    limits: { docs: -1, users: 5, trialDocs: -1, estudiantes: 400, whatsappMensajes: 1200, smsMensajes: 1200 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description: 'De 301 a 500 estudiantes',
+      description: 'De 226 a 400 estudiantes',
       badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
       highlighted: false,
-      marketingFeatures: ['Hasta 500 estudiantes', 'e-CF ilimitados', '5 usuarios', '1,200 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '14 horas de implementación'],
+      marketingFeatures: ['Hasta 400 estudiantes', 'e-CF ilimitados', '5 usuarios', '1,200 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '14 horas de implementación'],
     },
   },
   {
     key: 'colegio-institucional', familia: 'colegio',
     modulos: [...MODULES_BASE, 'escolar', 'pos'],
     name: 'Institucional', price: 500, priceEnvKey: 'STRIPE_PRICE_COLEGIO_INSTITUCIONAL',
-    limits: { docs: -1, users: 9, trialDocs: -1, estudiantes: 800, whatsappMensajes: 1950, smsMensajes: 1950 },
+    limits: { docs: -1, users: 9, trialDocs: -1, estudiantes: 650, whatsappMensajes: 1950, smsMensajes: 1950 },
     features: ['contabilidad-avanzada', 'clientes', 'productos', 'cotizaciones', 'reportes', 'roles-usuarios', 'caja', 'facturas-recurrentes', 'inventario-avanzado', 'actividad', 'impresoras'],
     ui: {
-      description: 'De 501 a 800 estudiantes',
+      description: 'De 401 a 650 estudiantes',
       badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
       highlighted: false,
-      marketingFeatures: ['Hasta 800 estudiantes', 'e-CF ilimitados', '9 usuarios', '1,950 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '19 horas de implementación'],
+      marketingFeatures: ['Hasta 650 estudiantes', 'e-CF ilimitados', '9 usuarios', '1,950 avisos WhatsApp/mes', 'Recordatorios automáticos por WhatsApp, SMS y correo', '19 horas de implementación'],
     },
   },
 ];
@@ -400,7 +411,7 @@ export function familiasOfrecibles(desde: FamiliaPlan): FamiliaPlan[] {
 /**
  * Tramo escolar que le toca a un colegio por su cantidad de estudiantes.
  *
- * Devuelve null si se pasa del tope del tramo más alto (800): ahí no hay plan
+ * Devuelve null si se pasa del tope del tramo más alto (650): ahí no hay plan
  * de catálogo y toca cotizar a mano. Es mejor que caerse al tramo más caro
  * calladamente y cobrar de menos.
  */

@@ -15,13 +15,33 @@
  */
 
 import { useEffect, useState } from 'react';
+import { planesDeFamilia } from '@/lib/config/plans';
 import { CONTACTO, Cheque, IconoWhatsApp, Iconos } from '../_piezas';
 
 type Perfil = 'pyme' | 'colegio';
 
+/**
+ * Los tramos de colegio SALEN DEL CATÁLOGO, no de una lista escrita aquí.
+ *
+ * Estaban a mano y se quedaron en 150/300/500 cuando los planes pasaron a
+ * 100/225/400/650: el visitante marcaba «301 a 500» y llegaba al buzón un
+ * tramo que ya no existía. Derivarlos cuesta cuatro líneas y no se vuelve a
+ * desincronizar.
+ *
+ * La última opción es abierta —«Más de N»— porque por encima del tramo mayor
+ * no hay plan de catálogo: eso se cotiza hablando.
+ */
+function tramosDeColegio(): string[] {
+  const planes = planesDeFamilia('colegio');
+  const topes = planes.map(p => p.limits.estudiantes);
+  return topes.map((tope, i) =>
+    i === 0 ? `Hasta ${tope} estudiantes` : `${topes[i - 1] + 1} a ${tope}`,
+  ).concat(`Más de ${topes[topes.length - 1]}`);
+}
+
 const TAMANOS: Record<Perfil, string[]> = {
   pyme: ['1 a 3 usuarios', '4 a 8 usuarios', 'Más de 8'],
-  colegio: ['Hasta 150 estudiantes', '151 a 300', '301 a 500', 'Más de 500'],
+  colegio: tramosDeColegio(),
 };
 
 const TEMAS: Record<Perfil, string[]> = {
