@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -84,7 +85,7 @@ function Field({ label, field, type = 'text', placeholder, form, setForm }: {
  */
 export default function ClienteForm({
   clienteId, embebido = false, dependientesEditables = true,
-  valoresIniciales, onGuardado, onCancelar,
+  valoresIniciales, onGuardado, onCancelar, onSucioChange,
 }: {
   clienteId?: number;
   /**
@@ -119,6 +120,14 @@ export default function ClienteForm({
    */
   onGuardado?: (clienteId: number, razonSocial: string, cliente: ClienteCreado) => void;
   onCancelar?: () => void;
+  /**
+   * Avisa si hay algo escrito que se perdería al cerrar.
+   *
+   * Lo escucha el diálogo para preguntar antes de descartar. Quien monta este
+   * formulario no puede saberlo por su cuenta —los campos viven aquí dentro—, y
+   * sin el aviso el botón Cancelar se llevaba diez campos sin abrir la boca.
+   */
+  onSucioChange?: (sucio: boolean) => void;
 }) {
   const router = useRouter();
   const volverPagina = useVolver('/dashboard/clientes');
@@ -141,6 +150,16 @@ export default function ClienteForm({
   const createdIdRef = useRef<number | null>(null);
   const tempIdRef    = useRef(-1);
 
+  /**
+   * Lo que había en pantalla al abrir, para saber si el usuario escribió algo.
+   *
+   * Se compara contra esto y no contra el formulario vacío porque en edición
+   * todos los campos llegan llenos: con el vacío como referencia, abrir la
+   * ficha de un cliente y cerrarla sin tocar nada ya contaba como «cambios sin
+   * guardar» y preguntaba en balde.
+   */
+  const inicialRef = useRef<ClienteForm>({ ...EMPTY_FORM, ...valoresIniciales });
+
   // ID efectivo del cliente para operaciones de dependientes en vivo.
   const persistedId = clienteId ?? createdIdRef.current;
 
@@ -160,7 +179,7 @@ export default function ClienteForm({
         if (cancel) return;
         if (!cRes.ok) { setError(cData.error ?? 'Error cargando el cliente'); return; }
         const c = cData.cliente;
-        setForm({
+        const cargado: ClienteForm = {
           razonSocial: c.razonSocial ?? '',
           rnc:         c.rnc         ?? '',
           email:       c.email       ?? '',
@@ -169,7 +188,11 @@ export default function ClienteForm({
           whatsapp:    formatTelefonoDO(c.whatsapp ?? ''),
           direccion:   c.direccion   ?? '',
           descripcion: c.descripcion ?? '',
-        });
+        };
+        // La referencia se mueve a lo recién cargado: a partir de aquí «cambió»
+        // significa distinto de lo que tiene el cliente en la base, no distinto de vacío.
+        inicialRef.current = cargado;
+        setForm(cargado);
         setDependientes(dData.dependientes ?? []);
       } finally {
         if (!cancel) setLoading(false);
@@ -177,6 +200,20 @@ export default function ClienteForm({
     })();
     return () => { cancel = true; };
   }, [isEdit, clienteId]);
+
+  /**
+   * Cuenta el dependiente a medio teclear y los que aún no se han guardado
+   * (id < 0): son datos escritos, y al cerrar se van igual que los campos.
+   */
+  const sucio = useMemo(() => {
+    const inicial = inicialRef.current;
+    return (Object.keys(EMPTY_FORM) as (keyof ClienteForm)[]).some((k) => form[k] !== inicial[k])
+      || dependientes.some((d) => d.id < 0)
+      || depForm.nombre.trim()   !== ''
+      || depForm.apellido.trim() !== '';
+  }, [form, dependientes, depForm]);
+
+  useEffect(() => { onSucioChange?.(sucio); }, [sucio, onSucioChange]);
 
   async function recargarDependientes(id: number) {
     try {
@@ -294,6 +331,10 @@ export default function ClienteForm({
         });
         return;
       }
+      // En página propia, guardar saca al usuario de la pantalla: sin este aviso
+      // el listado aparece igual que antes y no queda señal de que el guardado
+      // llegó a ocurrir. Quien nos embebe (`onGuardado`) ya avisa a su manera.
+      toast.success(isEdit ? 'Cliente actualizado' : `Cliente «${form.razonSocial.trim()}» creado`);
       router.push('/dashboard/clientes');
       router.refresh();
     } catch (e: unknown) {

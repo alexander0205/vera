@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { Users, Plus, Pencil, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { ImportModal } from '@/components/import-modal';
-import { ClienteDialog } from '@/components/shared/cliente-dialog';
 import { DataTable, type DataTableColumn, type RowAction } from '@/components/data-table';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -33,11 +33,10 @@ function initials(name: string) {
 }
 
 export default function ClientesPage() {
+  const router = useRouter();
   const [clientes, setClientes]         = useState<Cliente[]>([]);
   const [loading, setLoading]           = useState(true);
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [showForm, setShowForm]         = useState(false);
-  const [editTarget, setEditTarget]     = useState<Cliente | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null);
   const [showImport, setShowImport]     = useState(false);
   const [deleting, setDeleting]         = useState(false);
@@ -61,16 +60,22 @@ export default function ClientesPage() {
     return () => clearTimeout(t);
   }, [search, cargar]);
 
+  /**
+   * Crear y editar son pantalla propia, no modal.
+   *
+   * Desde aquí el usuario no está a mitad de nada —está en el listado—, así que
+   * el modal no ganaba nada y sí perdía: la ficha es larga y un clic fuera o un
+   * Escape la cerraba con todo dentro. Una página no se cierra sola, aguanta
+   * una recarga y su enlace se puede pasar a otro. El modal se queda donde de
+   * verdad hace falta (POS y factura nueva), donde salir de la pantalla costaría
+   * la venta a medias.
+   */
   function abrirNuevo() {
-    setEditTarget(null);
-    setOpError(null);
-    setShowForm(true);
+    router.push('/dashboard/clientes/nuevo');
   }
 
   function abrirEdicion(c: Cliente) {
-    setEditTarget(c);
-    setOpError(null);
-    setShowForm(true);
+    router.push(`/dashboard/clientes/${c.id}/editar`);
   }
 
   async function handleEliminar() {
@@ -183,20 +188,6 @@ export default function ClientesPage() {
         ]}
         onDone={() => cargar(search)}
       />
-
-      {/* Crear / Editar — el MISMO modal que la factura, la cotización y el POS.
-          Esta pantalla tenía su propia copia, con los dependientes en una
-          pestaña que decía «Guarda el cliente primero»: había que crear, cerrar,
-          volver a abrir y editar para ponerle un hijo. */}
-      {showForm && (
-        <ClienteDialog
-          open
-          clienteId={editTarget?.id}
-          onClose={() => setShowForm(false)}
-          onCreated={() => cargar(search)}
-          onActualizado={() => cargar(search)}
-        />
-      )}
 
       {/* Modal: Confirmar eliminación */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth

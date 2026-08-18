@@ -322,6 +322,25 @@ export function RncSearch({
         value={query}
         onChange={(e) => handleInput(e.target.value)}
         onFocus={() => { if (results.length > 0) { calcRect(); setOpen(true); } }}
+        /**
+         * Escape cierra el desplegable, y ahí se queda.
+         *
+         * Este campo es el PRIMERO del formulario de cliente, y el desplegable
+         * de la DGII tapa lo que viene debajo. El usuario pulsa Escape para
+         * quitarlo de en medio —lo natural— y antes esa tecla subía hasta el
+         * diálogo que lo contenía y se llevaba la ficha entera con todo lo
+         * tecleado. Ese era el «se cierra solo» que reportaban las familias.
+         *
+         * Con el desplegable cerrado no se detiene nada: el segundo Escape
+         * sigue llegando a quien lo hospede, que es lo que se espera.
+         */
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && open) {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+          }
+        }}
         onBlur={() => {
           setTimeout(() => {
             setOpen(false);
